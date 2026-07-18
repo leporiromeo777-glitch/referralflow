@@ -1,0 +1,291 @@
+# ReferralFlow — contesto per Claude Code
+
+Piattaforma multi-studio per la gestione delle referral tra studi medici svizzeri.
+Ogni studio ha i suoi utenti, medici invianti, pazienti, referral e agenda: il login apre
+la pagina del proprio studio (tabella `studios`, `studio_id` su tutte le anagrafiche,
+recinto in ogni query tramite `session.studioId`). Gli studi possono affidarsi pazienti
+a vicenda (pagina «Inviati», `origin_studio_id`, canale `piattaforma`).
+Sta *sopra* gli strumenti già in uso (Cassa dei Medici per agenda/fatturazione, HIN per la
+comunicazione sicura): non li sostituisce. Cliente pilota reale: Centro Cardiologico Ticino
+(slug `centro-cardiologico-ticino`). Obiettivo: rivendere ad altri studi specialistici del Ticino.
+
+## Stack
+- Next.js 14 (App Router) + TypeScript, server actions
+- PostgreSQL via `pg`
+- Auth: cookie httpOnly firmato con `jose`, password argon2id con `@node-rs/argon2`
+- Allegati: `@aws-sdk/client-s3` (object storage svizzero) con fallback su `./uploads` in dev
+
+## Comandi
+- `npm run dev` — sviluppo su http://localhost:3000
+- `npm run build` — build di produzione
+- `npm run create-studio -- "<Nome>" <slug> [email-notifiche]` — crea uno studio della piattaforma
+- `npm run create-user -- <email> <password> [ruolo] [slug-studio]` — crea/aggiorna un utente
+  (ruoli: segretaria, medico, admin; l'admin gestisce gli accessi da `/impostazioni/utenti`)
+- Schema: `psql "$DATABASE_URL" -f db/schema.sql` (+ `db/seed.sql` per dati demo)
+- DB esistente da versione precedente: applicare in ordine le `db/migrations/00X_*.sql`
+  mancanti (ultima: `016_2fa.sql`)
+- Pubblicazione: checklist completa in `DEPLOY.md`
+
+## NON rompere
+- Non toccare `experimental.serverComponentsExternalPackages: ['@node-rs/argon2', 'pg']`
+  in `next.config.mjs`: senza, il build fallisce sui binari nativi.
+- Serve Node 20+ (per `--env-file` e i binari argon2).
+- Le pagine che leggono dal DB hanno `export const dynamic = 'force-dynamic'`: mantienilo,
+  evita che Next provi a prerenderarle al build.
+- `src/lib/auth.ts` e `src/lib/storage.ts` sono lato server (`import 'server-only'`): non importarli
+  in componenti client. Il middleware verifica il JWT da solo (non importa `auth.ts`, che è nativo).
+
+## Vincoli di dominio (nLPD)
+- Dati sanitari sensibili: hosting di app, DB e allegati in Svizzera.
+- Mai dati clinici in mail in chiaro: usare HIN o avviso neutro con link al portale.
+- Link pubblici `/invia/[token]` e `/portale/[token]`: token casuale lungo con scadenza
+  (180 giorni) e rotazione dalla pagina Medici. Eventuale auth vera per i medici in futuro.
+- Non mettere dati paziente in URL, log o notifiche in chiaro. Le mail di notifica
+  (`src/lib/notify.ts`) sono avvisi neutri: mai nomi di pazienti o dati clinici.
+- L'URL del feed iCal dell'agenda è una credenziale: non mostrarlo per intero né loggarlo.
+
+## Architettura
+- `src/lib/` — db, auth, storage, status (macchina degli stati), format (utility date/età),
+  notify (avviso neutro via SMTP), ical (parser iCal senza dipendenze), agenda-sync (sync feed)
+- `src/app/(app)/` — area interna dietro login (dashboard, referral, medici, statistiche,
+  programma del giorno + configurazione feed agenda, `/inviati` monitoraggio dei pazienti
+  affidati ad altri studi, `/impostazioni/utenti` gestione accessi — solo admin)
+- **Recinto multi-studio**: la sessione (`SessionUser`) porta `studioId`/`studioNome`;
+  ogni query dell'area interna filtra per `studio_id`. Sessioni senza `studioId`
+  (pre-migrazione 007) invalidate da middleware e `getSession`.
+- `src/app/invia|portale/[token]/` — pagine pubbliche per il medico inviante (lo studio si
+  ricava dal token). Modulo generico per il sito web dello studio: `/invia?s=<slug-studio>`
+- Supporto 24/7 (menu profilo + pagina login) da env `SUPPORT_PHONE`/`SUPPORT_EMAIL`
+- Pannello del titolare `/piattaforma` (env `PLATFORM_OWNER_EMAIL` = email dell'account
+  che lo vede): studi, invianti registrati, attivazioni incompiute, attiva/disattiva studio
+- `src/app/api/attachments/[id]/` — download allegati autenticato
+- `src/app/api/agenda-demo/` — feed iCal di esempio (404 in produzione)
+- Il middleware protegge tutto tranne `/login`, `/invia/*`, `/portale/*`, `/api/*`
+  (le API verificano la sessione da sole): le pagine interne nuove sono protette di default
+- Ogni cambio di stato è registrato in `referral_status_history` (audit nLPD + statistiche)
+
+## Ciclo di vita referral
+ricevuta → triage → da_prenotare → prenotata → vista → referto_inviato → chiusa
+(definito in `src/lib/status.ts`: STATUS, NEXT_STATUS, NEXT_ACTION, URGENZA)
+
+## Prossimi lavori (in ordine di valore)
+1. Stripe su «Attiva il tuo studio» (le BASI ci sono già — migrazioni 012+013:
+   attivazione self-service intestata al medico titolare, `studios.abbonamento`
+   pilota|prova|attivo|sospeso, `trial_until` 60gg, `stripe_customer_id` vuoto,
+   banner prova in scadenza SENZA blocco, gestione manuale del piano da
+   /piattaforma. Stripe aggiunge solo il checkout sopra questi campi.
+   PREREQUISITI lato utente: ditta/Sagl + AGB + contratto trattamento dati
+   validati da un legale — non accendere i pagamenti prima).
+2. Fase 2 cartella digitale — 2FA e cifratura at-rest: FATTE (2026-07-18, vedi sotto).
+   Restano: contratto di trattamento dati standard con gli studi (stesso passaggio legale
+   di Stripe — modelli FMH e bozza precompilata in `docs/legale/`), pagina pubblica
+   «Sicurezza». Fase 3 (quando gli studi la chiedono): note di visita strutturate
+   (= cartella primaria ex art. 67 LSan), integrazione HIN, export PDF/A.
+3. Richiami automatici al paziente (SMS alla scadenza del follow-up — dopo attivazione eCall).
+3. Smistamento suggerito per parole chiave (quesito → servizio/medico).
+4. Chat AI su «Affida paziente» (fase 2 — serve chiave API Anthropic).
+5. Referto strutturato: modelli + dettatura vocale + invio HIN (grande valore per i medici,
+   dipende da account HIN e da un servizio di trascrizione svizzero/UE per la nLPD).
+6. Migrazione a Next 16 (advisory residue di `npm audit`; riguardano feature non usate).
+
+SMS: ATTIVI via eCall REST v2 (Basic auth, `SMS_API_TOKEN=utente:password`, driver
+`src/lib/sms.ts` con normalizzazione numeri). Account eCall in testing fino al 15.08.2026
+(poi comprare punti); mittente = numero verificato (l'alfanumerico va autorizzato da eCall).
+
+## Automazioni attive (cron sulla VM, /etc/cron.d/referralflow via cron-hit.sh)
+- Sync agenda ogni 15 min → `/api/cron/agenda` (tutti i feed attivi, tutti gli studi)
+- Promemoria SMS ogni ora → `/api/reminders/run`
+- Watchdog referral ferme ogni mattina → `/api/cron/watchdog` (soglie in `src/lib/watchdog.ts`:
+  ricevuta/triage 3g, da_prenotare 14g, misurate da `updated_at`; email neutra per studio +
+  badge «⏰ ferma» in coda)
+- Report mensile il 1° del mese → `/api/cron/report` (aggregati del mese precedente per studio)
+- Tutti protetti da `?key=REMINDER_SECRET`; backup notturno DB locale (14g) + off-site su
+  Exoscale SOS `referralflow-backups` (60g); allegati di produzione su SOS `referralflow-uploads`
+
+Fatti di recente: 2FA + cifratura at-rest — Fase 2 sicurezza (2026-07-18, migrazione 016:
+`users.totp_secret`/`totp_enabled_at` + `user_recovery_codes` con hash monouso; `src/lib/totp.ts`
+TOTP RFC 6238 con crypto nativo, verificato coi vettori ufficiali; pagina `/sicurezza` per TUTTI
+i ruoli — eccezioni nel middleware per medico/inviante, link nel menu profilo — con attivazione
+in 3 tempi: QR generato in locale (libreria `qrcode`, il segreto non esce mai) → primo codice
+→ codici di recupero mostrati UNA volta e 2FA accesa solo dopo «Ho salvato i codici»
+(`finishSetup` — NON accendere prima: il refresh post-action farebbe sparire i codici, bug
+trovato e corretto); login a due passaggi via cookie `rf_2fa` firmato 5 min (`createPending2fa`)
+→ `/login/verifica` (esclusa dal middleware perché inizia per «login») che accetta TOTP o
+codice di recupero, con rate-limit dedicato chiave `2fa:<email>`; disattivazione solo con
+codice valido. Cifratura at-rest: `S3_SSE=AES256` nel .env attiva l'header SSE su `putFile`
+(gated via env: accenderla in produzione solo dopo verifica che SOS la accetti); bozza DPA
+aggiornata (2FA e SSE ora reali nell'Allegato 1)), cartella documenti del paziente — Fase 1 cartella digitale (migrazione 014:
+`patient_documents` con categoria/nota, `document_access_log` — ogni caricamento/lettura/invio
+tracciato, conservazione ≥1 anno ex art. 4 OPDa, il log sopravvive al documento —,
+`consenso_trasmissione` su referrals/external_referrals; lib `src/lib/cartella.ts` con
+`isUuid` guardia sui parametri UUID da URL/form; sezione «Cartella del paziente» nel
+dettaglio referral con upload categorizzato e download via `/api/documents/[id]` che
+logga la lettura; bottone «Affida questo paziente» → `/affida?paz=` propagato a tutti i
+percorsi d'invio; form piattaforma ed esterno con prefill paziente + checkbox documenti
+della cartella + spunta consenso OBBLIGATORIA se si allegano documenti — art. 321 CP /
+art. 20 LSan TI, respinta server-side senza consenso; i documenti viaggiano senza copia,
+stesso storage_key. BASE LEGALE verificata con ricerca approfondita 2026-07-16: la
+cartella elettronica è espressamente ammessa dall'art. 64 cpv. 2 LSan TI su «sistema
+informatico sicuro»; conservazione ≥10 anni art. 67 LSan, FMH raccomanda 20; niente
+certificazione DEP necessaria — binario separato, obbligo studi ~2030; per posizionarla
+come cartella primaria servono ancora: DPA con gli studi + 2FA + cifratura at-rest
+dichiarata — vedi Prossimi lavori), basi abbonamento senza pagamenti (migrazione 013: `studios.titolare`
+— l'attivazione chiede il MEDICO TITOLARE, la sua email diventa l'admin: sarà lui
+l'intestatario dell'abbonamento —, `abbonamento` pilota|prova|attivo|sospeso,
+`trial_until`: self-service = prova 60gg, banner per l'admin negli ultimi 14 giorni
+e a prova scaduta — mai blocchi automatici —, colonna Piano con form «cambia» in
+/piattaforma per fattura manuale/proroghe, `stripe_customer_id` predisposto; menu
+dell'inviante ripulito dalle voci di studio), funnel di attivazione self-service (migrazione 012: `studio_activations`,
+`studios.attivo` + `created_via`, `external_referrals.converted_referral_id`; /attiva crea
+lo studio da solo — dati → codice 6 cifre via email → studio + admin + login immediato,
+prefill da `?da=<token-affido>`; alla creazione gli affidi esterni pendenti o presi in
+carico indirizzati a quell'email diventano referral vere nella nuova coda, allegati
+compresi, con avviso ai mittenti — il paziente è già lì al primo accesso; card di
+benvenuto «primi passi» sulla coda con `?benvenuto=1`; /affido/[token] con box «che
+cos'è questo link» e CTA post-risposta; affidi convertiti → il vecchio link mostra
+«è nella vostra coda» e spariscono dai doppioni negli Inviati; /piattaforma per il
+titolare — gate su env `PLATFORM_OWNER_EMAIL` — con studi, invianti, attivazioni
+incompiute da richiamare e interruttore attiva/disattiva per studio; studio disattivato:
+login bloccato, escluso da /affida, selettori e moduli pubblici; badge «ora su
+ReferralFlow ✓» in /affida quando l'email di uno studio esterno corrisponde a uno
+studio attivo — l'affido passa alla piattaforma; /impostazioni/studio per l'admin
+— nome, specialità, telefono, email notifiche —; notifica email al supporto per ogni
+nuovo studio e ogni nuovo inviante registrato — `notifySupporto` in notify.ts), login per i medici invianti (migrazione 011: ruolo `inviante` senza
+studio — `users.studio_id` nullable con check —, `inviante_profiles` per l'annuario,
+`login_verifications`; registrazione self-service dal portale token: codice 6 cifre via
+email all'indirizzo in anagrafica → account + profilo; area `/invii` trasversale agli
+studi con match per email del medico, profilo modificabile con visibilità annuario;
+sezione «Annuario» su /affida con `affidaDaAnnuario` che crea la voce di rubrica dal
+profilo; pagina pubblica `/registrazione` per richieste senza token → email al supporto,
+verifica manuale MedReg; recinto middleware inviante → solo /invii; informativa privacy
+`/privacy` linkata da tutte le pagine pubbliche), affidi a studi esterni (migrazione 010: `external_studios` rubrica per
+studio, `external_referrals` con token 60gg + stato inviato/preso_in_carico/rifiutato,
+`external_attachments`; sezione rubrica su `/affida`, form `/affida/esterno`, email neutra
+con link sicuro `notifyAffidoEsterno` — senza SMTP l'invio viene annullato —, pagina pubblica
+`/affido/[token]` con risposta e allegati via `/api/affido/[token]/[att]`, avviso al mittente
+`notifyRispostaAffido`, sezione «Affidati a studi esterni» negli Inviati, pitch ReferralFlow
+in fondo alla pagina pubblica come canale di acquisizione; `/affido/` escluso nel middleware),
+«Affida paziente» fase 1 (migrazione 009: `studio_partners` +
+`studios.specialita`; pagina `/affida` con studi amici in cima — stella `togglePartner` —,
+ricerca per nome/specialità, storico invii per studio, bottone → `/inviati/nuova?studio=<id>`
+preselezionato, blocco «Invita uno studio» via mailto; fase 2 = chat AI sopra questa pagina,
+serve chiave API Anthropic), disdetta con conferma della segreteria (il paziente NON disdice più con un
+tasto: «Devo disdire — chiama lo studio» apre la telefonata via `tel:` e registra
+`appt_response='disdetta_da_confermare'` + email alla segreteria; la segreteria conferma o
+annulla dal dettaglio referral; solo alla conferma lo slot si libera nella Lista d'attesa;
+telefono dello studio da `studios.telefono`), collaborazione tra funzioni (promemoria SMS
+segnala la preparazione se assegnata e salta gli appuntamenti disdetti/da confermare;
+avanzamento di una referral affidata → email allo studio mittente, `notifyOriginStudio`;
+scheda pre-visita mostra stato preparazione), lista d'attesa intelligente (`/lista-attesa`: slot liberati da disdette +
+coda da_prenotare ordinata per urgenza/attesa con telefono), scheda paziente pre-visita nel
+Programma e storico paziente (`src/lib/patient-history.ts`, abbinamento query-time per
+cognome/nome/data_nascita, «visite precedenti» nel dettaglio referral), preparazioni alla visita
+(migrazione 008: tabella `preparazioni` + `referrals.preparazione_id`; libreria in
+`/impostazioni/preparazioni` solo admin, assegnazione dal dettaglio referral, invio SMS al
+paziente, testo mostrato su `/appuntamento/[token]`); piattaforma multi-studio (migrazione 007: tabella `studios`, recinto
+per studio ovunque, gestione utenti per l'admin, referral tra studi con monitoraggio
+«Inviati», supporto 24/7, moduli pubblici per-studio), follow-up alla chiusura (obbligatorio: no / 6 / 12 / N mesi, scadenza
+dall'ultima visita; pagina `/richiami` con «Segna gestito» e badge in nav; migrazione 004),
+azione rapida nella coda + vincoli server su transizioni/appuntamento/referto,
+scheda per medico inviante (`/medici/[id]`, metriche + storico), login per i
+cardiologi interni (ruolo `medico` → solo il proprio `/programma`, recinto nel middleware, account
+creati/collegati da `/programma/feed`), menu profilo e campanella nuove richieste nel topbar
+(`AutoRefresh` ogni 60s), avviso email alla segreteria per le richieste dal form pubblico
+(`notifyStudio`, env `STUDIO_NOTIFY_EMAIL`), notifiche reali all'inviante, scadenza + rotazione
+token pubblici, programma del giorno da feed iCal Cassa dei Medici.
+
+## Visione di lungo periodo
+Quando più studi useranno ReferralFlow: pagina «Esplora» per i medici invianti (cerca la
+prestazione → studi che la offrono, ordinati per trasparenza sui tempi: primo slot libero,
+presa in carico mediana). I registri ufficiali (MedReg, Refdata/GLN, elenco HIN) servono per
+i contatti; i dati di servizio nascono solo dall'uso della piattaforma. Predisporre `gln`
+sulle anagrafiche quando si toccherà quello schema.
+
+## Convenzioni
+- UI e testi in italiano, sentence case, tono asciutto.
+- Palette e stili in `src/app/globals.css` — design «premium minimale» (2026-07-17):
+  bianco caldo #f4f3ef, verde profondo `--cta` #0d5c48 per azioni e blocchi di pregio
+  (NIENTE nero: l'utente vuole il verde), bottoni a pillola (radius 999px), card 20px,
+  h1 29px. I colori semantici urgenze restano. `.prog-dark` = pannello verde del
+  Programma (stile mockup). `.attiva-hero` = hero verde della pagina di vendita.
+  Grafici: SVG server-side in `statistiche/page.tsx` (componente BarChart, no dipendenze).
+  Ogni pagina tiene la riga di spiegazione sotto il titolo (piace all'utente).
+- Medici invianti (2026-07-17, stile mockup «Search»): pagina a schede con `.msearch`
+  (barra di ricerca), `.mchips` (filtri per specialità, solo se presenti), `.mcount`
+  e `.mcard` con avatar. Logica avatar (`MediciList.tsx`, client): se l'email del
+  `referring_doctor` combacia con un utente `role='inviante'` (ha l'app) e ha caricato
+  una foto → `.mavatar-img` da `/api/inviante-avatar/[userId]`; se ha l'app senza foto
+  → `.mavatar-app` con iniziali (verde); se non è registrato → `.mavatar-empty` icona
+  omino grigia. La foto la carica l'inviante dalla sua area `/invii` (campo `foto` in
+  `aggiornaProfilo`, `inviante_profiles.avatar_key`, migrazione 015). Badge «✓ su
+  ReferralFlow» vs «solo contatto». La specialità mostrata viene dal profilo inviante.
+- Intestazioni di pagina per zona (`src/app/(app)/PageHero.tsx`, classi `.page-hero`
+  + `.hero-{green|amber|blue|slate}` in globals.css): ogni area ha il suo accento
+  — così le pagine non si somigliano tutte, restando in palette. Verde=operativo
+  (Coda, Programma), ambra=attesa/priorità (Lista d'attesa), blu=controlli futuri
+  (Follow-up), ardesia=monitoraggio/annuario (Inviati, Medici). Statistiche usa
+  `.hero-solid` (hero verde pieno con i 4 KPI dentro). L'eyebrow è l'etichetta di
+  zona in alto; il titolo e la spiegazione restano dentro l'hero. Usare PageHero per
+  le nuove pagine dell'area interna, scegliendo la zona per significato (non a caso).
+- Le «caselle» metriche (`.metrics`/`.metric`) restano SOLO dove i numeri sono il
+  fulcro: Coda e Follow-up. Su Inviati il riepilogo è la barra compatta `StatStrip`
+  (`.statbar`, numeri in linea con divisori, tono `alert`/`warn` colora solo la cifra).
+- Disdette = scheda della Coda (2026-07-18): la vecchia pagina «Lista d'attesa» è
+  stata unita alla Coda come secondo tab. La Coda (`(app)/page.tsx`) ha `?vista=coda`
+  (default) | `?vista=disdette`; tab `.coda-tabs`/`.coda-tab` dentro il pannello verde,
+  badge sul tab Disdette (conteggio `disdetto`+`disdetta_da_confermare`). Il tab Disdette
+  mostra slot liberati (con pairing «chi chiamare») + disdette da confermare; tolto il
+  doppione «prossimi da chiamare» (era già il filtro «Da prenotare» della Coda). `/lista-attesa`
+  ora fa `redirect('/?vista=disdette')`; voce di menu rimossa dal layout; il badge disdette
+  non è più nella nav. La nota «foglio» qui sotto è STORICA (la vecchia pagina a sé).
+- Lista d'attesa (2026-07-17, STORICO — ora è la scheda Disdette della Coda): layout «foglio» stile mockup — intestazione colorata
+  in cima (`.sheet-top.sheet-green`, VERDE come Coda/Programma — non ambra: l'utente
+  l'ha corretto, il verde resta il colore delle pagine operative — testo bianco, hero
+  inline + `.sheet-stats` coi 3 numeri) e sotto un pannello bianco `.sheet` (angoli
+  arrotondati 28px, `margin-top:-22px` per «salire» sopra la parte colorata) che
+  contiene le liste. Contenuto nel `.content` (non full-bleed). `.sheet-amber` resta
+  disponibile in CSS per altre pagine; per cambiare l'accento basta la classe
+  `.sheet-{colore}` sul `.sheet-top`. Le tre sezioni (slot liberati, disdette da
+  confermare, prossimi da chiamare) restano tutte e tre — decisione dell'utente dopo
+  discussione sulla sovrapposizione con la Coda: «lasciamola così». Ogni slot liberato
+  è abbinato al prossimo paziente da chiamare in ordine di priorità (`suggerimenti`,
+  pairing per indice tra `slots` e `attesa`) con un avviso `.suggest-box` sotto la riga:
+  «Appuntamento disdetto il [data]: chiama [nome] per riempire il posto» + tasto ☎
+  diretto + link alla sua referral.
+- Follow-up (2026-07-17): stesso layout «pannello verde + schede bianche fluttuanti»
+  di Coda, riusando le classi `.coda-top`/`.coda-hero`/`.coda-eyebrow`/`.coda-lede`
+  (ormai condivise, non solo di Coda) + una riga di numeri con divisori dentro il
+  pannello verde (`.rc-stats`/`.rc-stat`, stile «Tasks Pending/In Progress/Completed»)
+  per Da richiamare/Programmati/Totale. Sotto, `.stat-grid.stat-grid-2` (2 colonne)
+  con due schede-stat NUOVE: «Ricontattati questo mese» (conta `follow_up_done_at`
+  su referral+appuntamenti negli ultimi 30 giorni) e «Tempo medio di richiamo»
+  (giorni medi tra scadenza `follow_up_due` e gestione effettiva, ultimi 90 giorni,
+  clampato a 0 se gestito in anticipo) — un dato di efficienza, non solo di volume.
+  La versione «questa settimana» è stata tolta su richiesta dell'utente e sostituita
+  col tempo medio.
+- Programma (2026-07-17, layout stile mockup «Today»): striscia settimanale
+  (`.cal`/`.cal-strip`, `align-items:center`) con NUMERO sopra e giorno sotto; il
+  giorno scelto è una pillola verticale verde più alta che sporge (padding maggiore
+  su `.cal-day.sel`), oggi = numero verde, puntino sotto i giorni con appuntamenti;
+  frecce = settimana ±7. Sotto `.day-sub` (data estesa + sincronizza). Gli
+  appuntamenti sono una TIMELINE verticale unica in ordine d'orario (`.tl`/`.tl-item`
+  con `.tl-node`, linea = `.tl::before`): il «prossimo» (primo non completato,
+  `featuredId`) è la card verde in evidenza (`.tl-card`, testo bianco, «Completa»
+  bianco), gli altri voci semplici; completati = nodo grigio + barrato. Il medico
+  che vede il paziente è mostrato in `.tl-sub` (niente più raggruppamento per medico
+  né `.prog-dark`). «Da assegnare» resta una sezione separata sotto.
+- Coda (dashboard `/`): layout ispirato a una dashboard app (2026-07-17). `.coda-top`
+  = PANNELLO VERDE arrotondato e CONTENUTO (border-radius 24px desktop / 18px mobile,
+  NON full-bleed — l'utente lo vuole come una scheda col cream attorno) dietro
+  hero+schede+filtri; sotto resta il cream della pagina per la lista. Hero inline in bianco (`.coda-hero`,
+  niente PageHero). Le metriche sono `.stat-grid`/`.stat-card` — TUTTE bianche (l'utente
+  le vuole bianche sul verde), badge-icona SVG inline, «Urgenti» in `.alert` quando >0.
+  Filtri `.qf-row`/`.qf-btn` (pulsanti quadrati stile «Scenes», scroll orizzontale su
+  mobile) al posto dei vecchi select; ogni chip è un Link con querystring
+  `?stato=`/`?urgenza=`; l'attivo resta bianco con badge verde pieno + anello
+  (`box-shadow 0 0 0 2px var(--cta)`), non riempito. Sezione lista con `.coda-list-head`.
+  La `margin-top` negativa di `.coda-top` va tenuta uguale al padding-top di `.content`
+  (36px desktop, 20px ≤640) per far arrivare il verde sotto la topbar senza buchi.
+- Preferire server components + server actions; client components solo dove serve interattività.
+- Mobile: sotto gli 860px la navigazione diventa hamburger (checkbox CSS-only `#navtoggle`
+  nel layout; `NavLink` chiude il menu al tocco); campanella e profilo restano in barra.

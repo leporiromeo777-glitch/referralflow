@@ -1,0 +1,25 @@
+# Dipendenze e build
+node_modules
+.next
+out
+tsconfig.tsbuildinfo
+
+# Segreti e configurazione locale (MAI su GitHub)
+.env
+.env.local
+.env*.local
+
+# Dati locali (documenti caricati in sviluppo: possono contenere dati di pazienti)
+uploads
+
+# Strumenti locali / editor
+.claude
+.vscode
+.idea
+
+# File temporanei e di sistema
+*.log
+_*.cjs
+rf_page_tmp.html
+Thumbs.db
+.DS_Store
