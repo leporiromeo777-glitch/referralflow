@@ -57,6 +57,15 @@ FFMPEG_TIMEOUT_S = 600
 # 1.0 = disattivato. Sovrascrivibile con REFERTI_ATEMPO.
 ATEMPO = float(os.environ.get("REFERTI_ATEMPO", "0.8"))
 
+# Riduzione del rumore di fondo (afftdn) tra passa-alto e normalizzazione:
+# SPERIMENTALE, spenta di default. Ipotesi da misurare (2026-07-24): nel test
+# manuale il passaggio per un MP3 intermedio ha ridotto le divergenze da
+# 65-70 a 42, probabilmente per l'effetto anti-rumore della compressione;
+# un denoiser vero dovrebbe dare lo stesso beneficio in modo controllato.
+# Attivare con REFERTI_DENOISE=1. Decisione sul default solo dopo il
+# confronto a quattro celle (atempo × denoise) sul dettato di prova.
+DENOISE = os.environ.get("REFERTI_DENOISE", "0") == "1"
+
 # ── Trascrizione (SPEC §4) ───────────────────────────────────────────────────
 # whisper.cpp come binario locale; su Mac arriva da `brew install whisper-cpp`.
 # Un dettato lungo su large-v3 può richiedere minuti: timeout largo.
@@ -93,7 +102,13 @@ def preprocessa(ingresso: Path, uscita: Path, file_id: str) -> None:
     risente) + loudnorm EBU R128 (dettati a volume disomogeneo), poi
     16 kHz mono PCM 16 bit: il formato d'ingresso di whisper.cpp."""
     inizio = time.monotonic()
-    filtri = "highpass=f=80,loudnorm=I=-16:TP=-1.5:LRA=11"
+    # Ordine: rallenta → passa-alto → (denoise) → normalizza. Il denoise
+    # prima di loudnorm, così la normalizzazione alza la voce già ripulita
+    # e non il rumore.
+    filtri = "highpass=f=80"
+    if DENOISE:
+        filtri += ",afftdn=nf=-25"
+    filtri += ",loudnorm=I=-16:TP=-1.5:LRA=11"
     if ATEMPO != 1.0:
         filtri = f"atempo={ATEMPO},{filtri}"
     comando = [
@@ -293,6 +308,9 @@ def main(argv: list[str]) -> int:
         return 1
 
     file_id = file_id_di(ingresso)
+    # La configurazione nel log (mai contenuti): serve a sapere, a posteriori,
+    # con quali impostazioni è stata prodotta una corsa.
+    log.info("fase=avvio file=%s atempo=%s denoise=%d", file_id, ATEMPO, int(DENOISE))
     wav = ingresso.with_name(f"{file_id}.wav")
     txt_a = ingresso.with_name(f"{file_id}.txt")
     txt_b = ingresso.with_name(f"{file_id}.b.txt")
