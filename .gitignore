@@ -23,3 +23,10 @@ _*.cjs
 rf_page_tmp.html
 Thumbs.db
 .DS_Store
+
+# Pipeline referti: la configurazione reale resta sul Mac dello studio
+pipeline-referti/correzioni.json
+
+# Python (pipeline referti)
+__pycache__/
+*.pyc

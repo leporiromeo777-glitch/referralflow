@@ -1,0 +1,16 @@
+{
+  "_nota": "MODELLO — il correzioni.json reale citato dalla SPEC (§4, 'già fornito') non era allegato. Copiare questo file in correzioni.json e sostituire le voci con quelle validate sui referti reali. Le sostituzioni non possono contenere cifre (vincolo §2.4): la pipeline le rifiuta al caricamento.",
+  "sostituzioni": {
+    "eco color dopler": "ecocolordoppler",
+    "eco cardiogramma": "ecocardiogramma",
+    "fibrillazione atriali": "fibrillazione atriale"
+  },
+  "intervalli_numerici": {
+    "frequenza_cardiaca": { "min": 35, "max": 180, "unita": "bpm" },
+    "pressione_sistolica": { "min": 70, "max": 220, "unita": "mmHg" },
+    "pressione_diastolica": { "min": 40, "max": 130, "unita": "mmHg" },
+    "frazione_eiezione": { "min": 10, "max": 80, "unita": "%" },
+    "saturazione": { "min": 70, "max": 100, "unita": "%" }
+  },
+  "margine_limite_pct": 15
+}

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ch.referralflow.referti</string>
+
+  <!-- Adattare il percorso alla posizione reale del progetto sul Mac mini. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/env</string>
+    <string>python3</string>
+    <string>/Users/studio/pipeline-referti/run.py</string>
+    <string>--watch</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/studio/pipeline-referti</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <!-- Unica connessione di rete ammessa: il PostgreSQL di ReferralFlow (§2.1). -->
+    <key>DATABASE_URL</key>
+    <string>postgres://UTENTE:PASSWORD@IP-LOCALE:5432/referralflow</string>
+    <key>REFERTI_STUDIO_SLUG</key>
+    <string>centro-cardiologico-ticino</string>
+    <key>WHISPER_BIN</key>
+    <string>/Users/studio/whisper.cpp/build/bin/whisper-cli</string>
+    <key>WHISPER_MODEL</key>
+    <string>/Users/studio/whisper.cpp/models/ggml-large-v3.bin</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+
+  <!-- Solo log tecnici (§2.2): mai contenuto clinico su stdout/stderr. -->
+  <key>StandardOutPath</key>
+  <string>/Users/studio/referti/log/launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/studio/referti/log/launchd.err.log</string>
+</dict>
+</plist>

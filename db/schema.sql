@@ -371,3 +371,21 @@ create index on appointments (starts_at);
 create index on appointments (studio_id, starts_at);
 create index on appointments (provider_id, starts_at);
 create index on appointments (follow_up_due) where follow_up_done_at is null;
+
+-- Bozze dei referti vocali dalla pipeline locale di trascrizione
+-- (pipeline-referti/, migrazione 019). Solo bozze da confermare.
+create table referti_vocali_bozze (
+  id             uuid primary key default gen_random_uuid(),
+  studio_id      uuid not null references studios(id),
+  file_id        text not null,
+  payload        jsonb not null,
+  richiede_revisione boolean not null default true,
+  -- da_revisionare | confermata | scartata
+  stato          text not null default 'da_revisionare',
+  ricevuta_il    timestamptz not null default now(),
+  revisionata_da uuid references users(id),
+  revisionata_il timestamptz,
+  unique (studio_id, file_id)
+);
+
+create index on referti_vocali_bozze (studio_id, stato);
