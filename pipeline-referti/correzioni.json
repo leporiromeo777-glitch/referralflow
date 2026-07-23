@@ -1,0 +1,99 @@
+{
+  "_nota": "Sostituzioni deterministiche applicate PRIMA di passare il testo al modello. Non toccano numeri. Il confronto e' case-insensitive ma la sostituzione mantiene la maiuscola iniziale se presente nell'originale.",
+  "_regola": "Aggiungere qui solo errori RICORRENTI e NON AMBIGUI. Se una parola potrebbe legittimamente comparire nel suo significato originale, NON metterla qui: lasciala gestire al modello.",
+
+  "termini_clinici": {
+    "ritmo sensuale": "ritmo sinusale",
+    "sensuale regolare": "sinusale regolare",
+    "indocibile": "inducibile",
+    "coronopatia": "coronaropatia",
+    "coronavagia": "coronaropatia",
+    "coromeropatia": "coronaropatia",
+    "coronalopadia": "coronaropatia",
+    "blocco di banca": "blocco di branca",
+    "notobloco": "noto blocco",
+    "notoblocco": "noto blocco",
+    "repolarizzazione": "ripolarizzazione",
+    "retorizzazione": "ripolarizzazione",
+    "isemia": "ischemia",
+    "neurisma": "aneurisma",
+    "aneurismo": "aneurisma",
+    "orta ascendente": "aorta ascendente",
+    "orta discendente": "aorta discendente",
+    "ecco cardiogramma": "ecocardiogramma",
+    "eccocaregramma": "ecocardiogramma",
+    "ecocariogramma": "ecocardiogramma",
+    "caragama": "ecocardiogramma",
+    "carrigan": "elettrocardiogramma",
+    "cinesi segmentaria": "cinesi segmentaria",
+    "postro laterale": "postero-laterale",
+    "posto laterale": "postero-laterale",
+    "approssimale": "prossimale",
+    "approssimata": "prossimale"
+  },
+
+  "linguaggio_comune": {
+    "starbane": "sta bene",
+    "starbake": "sta bene",
+    "profumo di continuare": "possiamo continuare",
+    "gli elementi incontinente": "lievemente incontinente",
+    "la pariente": "la paziente",
+    "nella risione clinica": "nella visione clinica",
+    "in variato": "invariato",
+    "king variato": "invariato",
+    "crederendo": "prevedendo",
+    "ricontinuare": "continuare",
+    "comorvita": "comorbidita",
+    "primetti": "premetti",
+    "ponti fattori": "premetti fattori",
+    "permetti fattori": "premetti fattori",
+    "fattori di discoli": "fattori di rischio",
+    "battini": "battiti",
+    "normo carico": "normocardico",
+    "normal carrico": "normocardico"
+  },
+
+  "istruzioni_dettatura": {
+    "_nota": "Termini con cui il medico impartisce istruzioni. NON sono contenuto clinico. Vanno riconosciuti e isolati, non tradotti in testo.",
+    "elenco": [
+      "scrivi",
+      "fai cosi",
+      "anfai cosi",
+      "anzi fai cosi",
+      "riportami",
+      "premetti",
+      "detto la lettera",
+      "in meditazione a",
+      "in intestazione a",
+      "virgola",
+      "punto",
+      "tra parentesi",
+      "chiusa parentesi",
+      "chiuso parentesi",
+      "a capo",
+      "nell anamnesi prima scrivi",
+      "da qualche parte"
+    ]
+  },
+
+  "controlli_numerici": {
+    "_nota": "Se un valore cade FUORI dall'intervallo, il campo va marcato in rosso nell'interfaccia e richiede conferma esplicita. Il sistema NON corregge mai in automatico.",
+    "frequenza_cardiaca_bpm": { "min": 35, "max": 180 },
+    "pressione_sistolica_mmhg": { "min": 70, "max": 230 },
+    "pressione_diastolica_mmhg": { "min": 40, "max": 140 },
+    "aorta_mm": { "min": 20, "max": 75 },
+    "peso_kg": { "min": 30, "max": 200 },
+    "altezza_cm": { "min": 130, "max": 210 },
+    "eta_anni": { "min": 0, "max": 110 },
+    "frazione_eiezione_pct": { "min": 10, "max": 80 },
+    "stenosi_pct": { "min": 0, "max": 100 }
+  },
+
+  "regole_invariabili": [
+    "Le sostituzioni non toccano MAI cifre, unita di misura, date.",
+    "Ogni numero estratto dall'audio va evidenziato nell'interfaccia e confermato dall'utente, anche se dentro l'intervallo.",
+    "Se la doppia trascrizione produce due valori diversi per lo stesso campo, marcare come DIVERGENZA e mostrare entrambi.",
+    "Nessun testo clinico nei log: solo ID file, timestamp, esito.",
+    "L'audio si cancella solo dopo salvataggio riuscito del referto."
+  ]
+}
