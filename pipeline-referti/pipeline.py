@@ -380,18 +380,30 @@ def _numeri(testo: str) -> list[str]:
     return sorted(re.findall(r"\d+(?:[.,]\d+)?", testo))
 
 
-def correggi_llm(testo: str, file_id: str) -> str:
+def correggi_llm(testo: str, file_id: str, rapporto_scarto: Path) -> str:
     """Correzione col prompt §6.1. Rete di sicurezza sul vincolo §2.4:
     se la firma numerica cambia, o il testo esce troppo accorciato
     (modello che riassume) o troppo allungato (modello che inventa),
     la correzione AI si scarta IN BLOCCO e si tiene il testo d'ingresso.
-    Meglio nessuna correzione che una correzione infedele."""
+    Meglio nessuna correzione che una correzione infedele.
+    Allo scarto per numeri, le differenze finiscono in un file locale
+    accanto agli altri (mai nei log, SPEC §2.2): serve a capire se è stata
+    una manomissione vera o un falso allarme del controllo."""
     inizio = time.monotonic()
     uscita = chiama_ollama(
         PROMPT_CORREZIONE.replace("{testo}", testo), file_id, "correzione_llm"
     ).strip() + "\n"
     durata = time.monotonic() - inizio
     if _numeri(uscita) != _numeri(testo):
+        prima, dopo = _numeri(testo), _numeri(uscita)
+        rapporto = {
+            "numeri_solo_nel_testo_originale": [n for n in prima if n not in dopo or prima.count(n) > dopo.count(n)],
+            "numeri_solo_nella_correzione_ai": [n for n in dopo if n not in prima or dopo.count(n) > prima.count(n)],
+        }
+        rapporto_scarto.write_text(
+            json.dumps(rapporto, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
         log.warning(
             "fase=correzione_llm file=%s esito=scartata motivo=numeri_cambiati durata=%.1fs",
             file_id, durata,
@@ -519,7 +531,9 @@ def main(argv: list[str]) -> int:
         )
 
         fase = "correzione_llm"
-        finale = correggi_llm(corretto_a, file_id)
+        finale = correggi_llm(
+            corretto_a, file_id, ingresso.with_name(f"{file_id}.scarto_ai.json")
+        )
         txt_finale.write_text(finale, encoding="utf-8")
 
         fase = "ispezione_llm"
