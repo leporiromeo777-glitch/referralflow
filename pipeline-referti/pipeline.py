@@ -48,6 +48,13 @@ log = logging.getLogger("referti")
 
 FFMPEG_TIMEOUT_S = 600
 
+# Rallentamento del dettato prima della trascrizione (stessa voce, tempo più
+# lento). Validato empiricamente il 2026-07-24 sul dettato di prova: con 0.8
+# le divergenze A/B sono scese da 65 a 42 — il medico detta veloce, riportarlo
+# verso una velocità normale rende l'audio più «sicuro» per il modello.
+# 1.0 = disattivato. Sovrascrivibile con REFERTI_ATEMPO.
+ATEMPO = float(os.environ.get("REFERTI_ATEMPO", "0.8"))
+
 # ── Trascrizione (SPEC §4) ───────────────────────────────────────────────────
 # whisper.cpp come binario locale; su Mac arriva da `brew install whisper-cpp`.
 # Un dettato lungo su large-v3 può richiedere minuti: timeout largo.
@@ -76,13 +83,16 @@ def preprocessa(ingresso: Path, uscita: Path, file_id: str) -> None:
     risente) + loudnorm EBU R128 (dettati a volume disomogeneo), poi
     16 kHz mono PCM 16 bit: il formato d'ingresso di whisper.cpp."""
     inizio = time.monotonic()
+    filtri = "highpass=f=80,loudnorm=I=-16:TP=-1.5:LRA=11"
+    if ATEMPO != 1.0:
+        filtri = f"atempo={ATEMPO},{filtri}"
     comando = [
         "ffmpeg",
         "-hide_banner",
         "-nostdin",
         "-y",
         "-i", str(ingresso),
-        "-af", "highpass=f=80,loudnorm=I=-16:TP=-1.5:LRA=11",
+        "-af", filtri,
         "-ar", "16000",
         "-ac", "1",
         "-c:a", "pcm_s16le",
@@ -205,6 +215,9 @@ def main(argv: list[str]) -> int:
     ingresso = Path(argv[1])
     if not ingresso.is_file():
         log.error("fase=avvio file=? esito=errore motivo=file_inesistente")
+        return 1
+    if not 0.5 <= ATEMPO <= 1.5:
+        log.error("fase=avvio file=? esito=errore motivo=atempo_non_valido")
         return 1
     if shutil.which(WHISPER_BIN) is None:
         log.error("fase=avvio file=? esito=errore motivo=whisper_mancante")
