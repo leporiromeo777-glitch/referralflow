@@ -101,9 +101,9 @@ più semplice o più performante.
          │
 [4] trascrizione B               stessa cosa, parametri leggermente diversi
          │
-[5] confronto A/B                individua i punti dove divergono → lista DIVERGENZE
+[5] dizionario                   sostituzioni deterministiche (correzioni.json), su A e B
          │
-[6] dizionario                   sostituzioni deterministiche (correzioni.json)
+[6] confronto A/B                individua i punti dove divergono → lista DIVERGENZE
          │
 [7] correzione LLM               gemma3:12b via Ollama, prompt §6.1
          │
@@ -129,11 +129,20 @@ Dove le due versioni divergono, quasi sempre c'è un problema audio. È un rilev
 dubbi, non un meccanismo di voto: **il sistema non sceglie mai quale versione è giusta**,
 mostra entrambe all'utente.
 
-**Nota sulle divergenze:** il confronto avviene al passo [5], ma il testo viene poi
-modificato dal dizionario [6] e dalla correzione LLM [7]: qualsiasi posizione numerica
-(offset, numero di riga) calcolata al passo [5] non punta più al punto giusto nel testo
-finale. Le divergenze si conservano quindi come **frammenti testuali con qualche parola
-di contesto attorno** (`contesto`, `versione_a`, `versione_b`), mai come offset.
+**Nota sull'ordine [5]-[6]** (invertito rispetto alla prima stesura, 2026-07-24):
+il dizionario si applica a ENTRAMBE le trascrizioni prima del confronto. Due ragioni,
+scoperte in fase di collaudo: (a) le àncore delle divergenze vengono ritagliate dal
+testo su cui si lavora da lì in poi — se il dizionario girasse dopo, un'àncora che
+taglia a metà una frase del dizionario non combacerebbe più col testo corretto;
+(b) un errore ricorrente corretto in modo identico in A e in B non è un dubbio da
+mostrare al revisore, è rumore. I numeri non ne risentono: il dizionario non li
+tocca mai (§2.4), quindi ogni divergenza numerica sopravvive intatta.
+
+**Nota sulle divergenze:** il testo viene modificato dalla correzione LLM [7] dopo
+il confronto: qualsiasi posizione numerica (offset, numero di riga) calcolata al
+passo [6] non punta più al punto giusto nel testo finale. Le divergenze si
+conservano quindi come **frammenti testuali con qualche parola di contesto attorno**
+(`contesto`, `versione_a`, `versione_b`), mai come offset.
 L'interfaccia di revisione le ritrova nel testo corretto cercando il frammento;
 se un'àncora non si ritrova più (perché la correzione l'ha toccata), la divergenza
 si mostra comunque in lista, senza evidenziazione nel testo. Non si scarta mai.

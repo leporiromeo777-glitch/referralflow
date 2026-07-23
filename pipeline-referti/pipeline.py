@@ -8,14 +8,16 @@ Fasi implementate:
   3. doppia trascrizione e confronto: seconda passata con parametri diversi,
      le differenze diventano la lista DIVERGENZE (rilevatore di dubbi,
      non meccanismo di voto: il sistema non sceglie mai la versione giusta)
+  4. dizionario: sostituzioni deterministiche da correzioni.json
+     (termini_clinici + linguaggio_comune); mai su testo con cifre
 
 Uso:
     python3 pipeline.py <file_audio>
 
 Accanto al file d'ingresso compaiono <file_id>.wav (audio pulito),
 <file_id>.txt (trascrizione di lavoro, passata A), <file_id>.b.txt
-(passata B) e <file_id>.divergenze.json. Il file_id deriva dal contenuto,
-non dal nome.
+(passata B), <file_id>.divergenze.json e <file_id>.corretto.txt.
+Il file_id deriva dal contenuto, non dal nome.
 
 Il modello va messo in modelli/ggml-large-v3.bin accanto a questo script
 (percorsi e binario sovrascrivibili con REFERTI_MODELLO e REFERTI_WHISPER).
@@ -66,6 +68,14 @@ PERCORSO_MODELLO = Path(
     )
 )
 WHISPER_TIMEOUT_S = 1800
+
+# ── Dizionario (SPEC §3, passo 6) ────────────────────────────────────────────
+PERCORSO_CORREZIONI = Path(
+    os.environ.get(
+        "REFERTI_CORREZIONI",
+        str(Path(__file__).resolve().parent / "correzioni.json"),
+    )
+)
 
 
 def file_id_di(percorso: Path) -> str:
@@ -207,6 +217,54 @@ def confronta(testo_a: str, testo_b: str) -> list[dict]:
     return divergenze
 
 
+def carica_sostituzioni() -> list[tuple[re.Pattern, str]]:
+    """Sostituzioni da correzioni.json (termini_clinici + linguaggio_comune),
+    compilate come regex: frasi intere con confini di parola, spazi che
+    accettano anche gli a-capo, confronto senza maiuscole/minuscole.
+    Le chiavi più lunghe si applicano per prime («sensuale regolare» prima
+    di «sensuale»). Regola invariabile del file: mai cifre — qualsiasi voce
+    che ne contenga viene scartata per principio (SPEC §2.4)."""
+    config = json.loads(PERCORSO_CORREZIONI.read_text(encoding="utf-8"))
+    voci: dict[str, str] = {}
+    for sezione in ("termini_clinici", "linguaggio_comune"):
+        for da, a in config.get(sezione, {}).items():
+            if da.startswith("_"):
+                continue
+            if any(c.isdigit() for c in da + a):
+                continue
+            voci[da] = a
+    compilate = []
+    for da in sorted(voci, key=len, reverse=True):
+        pattern = re.compile(
+            r"\b" + re.escape(da).replace(r"\ ", r"\s+") + r"\b",
+            re.IGNORECASE | re.UNICODE,
+        )
+        compilate.append((pattern, voci[da]))
+    return compilate
+
+
+def applica_correzioni(testo: str, sostituzioni: list[tuple[re.Pattern, str]]) -> tuple[str, int]:
+    """Applica il dizionario mantenendo la maiuscola iniziale dell'originale.
+    Una frase corretta a cavallo di un a-capo viene ricomposta su una riga:
+    accettato — succede in modo identico nel testo e nelle àncore delle
+    divergenze, quindi restano allineati. Restituisce (testo, n. sostituzioni)."""
+    totale = 0
+
+    def _con_maiuscola(match: re.Match, nuovo: str) -> str:
+        originale = match.group(0)
+        if originale[:1].isupper():
+            return nuovo[:1].upper() + nuovo[1:]
+        return nuovo
+
+    for pattern, nuovo in sostituzioni:
+        def _sostituisci(m: re.Match, nuovo=nuovo) -> str:
+            nonlocal totale
+            totale += 1
+            return _con_maiuscola(m, nuovo)
+        testo = pattern.sub(_sostituisci, testo)
+    return testo, totale
+
+
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
         print(__doc__, file=sys.stderr)
@@ -225,12 +283,21 @@ def main(argv: list[str]) -> int:
     if not PERCORSO_MODELLO.is_file():
         log.error("fase=avvio file=? esito=errore motivo=modello_mancante")
         return 1
+    try:
+        sostituzioni = carica_sostituzioni()
+    except FileNotFoundError:
+        log.error("fase=avvio file=? esito=errore motivo=correzioni_mancanti")
+        return 1
+    except (json.JSONDecodeError, AttributeError, TypeError):
+        log.error("fase=avvio file=? esito=errore motivo=correzioni_non_valide")
+        return 1
 
     file_id = file_id_di(ingresso)
     wav = ingresso.with_name(f"{file_id}.wav")
     txt_a = ingresso.with_name(f"{file_id}.txt")
     txt_b = ingresso.with_name(f"{file_id}.b.txt")
     div_json = ingresso.with_name(f"{file_id}.divergenze.json")
+    txt_corretto = ingresso.with_name(f"{file_id}.corretto.txt")
 
     fase = "preprocessing"
     try:
@@ -239,12 +306,24 @@ def main(argv: list[str]) -> int:
         trascrivi(wav, txt_a, file_id, fase)
         fase = "trascrizione_b"
         trascrivi(wav, txt_b, file_id, fase)
+        # Dizionario PRIMA del confronto (ordine invertito rispetto alla prima
+        # stesura della SPEC, deviazione documentata in §3): così le àncore
+        # delle divergenze nascono già dal testo corretto e combaciano per
+        # costruzione, e gli errori ricorrenti corretti in entrambe le passate
+        # non generano false divergenze. I .txt grezzi restano su disco.
+        fase = "dizionario"
+        inizio = time.monotonic()
+        corretto_a, n_sost = applica_correzioni(txt_a.read_text(encoding="utf-8"), sostituzioni)
+        corretto_b, _ = applica_correzioni(txt_b.read_text(encoding="utf-8"), sostituzioni)
+        txt_corretto.write_text(corretto_a, encoding="utf-8")
+        log.info(
+            "fase=dizionario file=%s esito=ok sostituzioni=%d durata=%.1fs",
+            file_id, n_sost, time.monotonic() - inizio,
+        )
+
         fase = "confronto"
         inizio = time.monotonic()
-        divergenze = confronta(
-            txt_a.read_text(encoding="utf-8"),
-            txt_b.read_text(encoding="utf-8"),
-        )
+        divergenze = confronta(corretto_a, corretto_b)
         div_json.write_text(
             json.dumps(divergenze, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
