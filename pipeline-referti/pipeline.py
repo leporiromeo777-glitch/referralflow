@@ -10,13 +10,17 @@ Fasi implementate:
      non meccanismo di voto: il sistema non sceglie mai la versione giusta)
   4. dizionario: sostituzioni deterministiche da correzioni.json
      (termini_clinici + linguaggio_comune); mai su testo con cifre
+  5. correzione LLM (prompt SPEC §6.1) e ispezione (prompt §6.2) via Ollama
+     locale (gemma3:12b); se l'AI tocca un numero o accorcia troppo il
+     testo, la sua correzione viene scartata in blocco (SPEC §2.4)
 
 Uso:
     python3 pipeline.py <file_audio>
 
 Accanto al file d'ingresso compaiono <file_id>.wav (audio pulito),
 <file_id>.txt (trascrizione di lavoro, passata A), <file_id>.b.txt
-(passata B), <file_id>.divergenze.json e <file_id>.corretto.txt.
+(passata B), <file_id>.divergenze.json, <file_id>.corretto.txt (dopo il
+dizionario), <file_id>.finale.txt (dopo l'AI) e <file_id>.dubbi.json.
 Il file_id deriva dal contenuto, non dal nome.
 
 Il modello va messo in modelli/ggml-large-v3.bin accanto a questo script
@@ -33,6 +37,8 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 # ── Logging (SPEC §2.2) ──────────────────────────────────────────────────────
@@ -76,7 +82,51 @@ PERCORSO_MODELLO = Path(
 )
 WHISPER_TIMEOUT_S = 1800
 
-# ── Dizionario (SPEC §3, passo 6) ────────────────────────────────────────────
+# ── LLM locale via Ollama (SPEC §4, §6, §7.3) ───────────────────────────────
+OLLAMA_URL = os.environ.get("REFERTI_OLLAMA", "http://localhost:11434")
+MODELLO_LLM = os.environ.get("REFERTI_LLM", "gemma3:12b")
+OLLAMA_TIMEOUT_S = 300
+OLLAMA_TENTATIVI = 3
+
+# I prompt di SPEC §6: VALIDATI SU REFERTI REALI, copiati carattere per
+# carattere. NON riscriverli, NON «migliorarli» (SPEC §0.3). Il segnaposto
+# {testo} si riempie con str.replace, mai con format (il testo può contenere
+# graffe).
+PROMPT_CORREZIONE = """Sei un correttore di trascrizioni mediche in italiano. Il testo qui sotto è un referto cardiologico dettato a voce e trascritto automaticamente, quindi contiene errori di riconoscimento.
+
+Correggi SOLO:
+- termini medici e anatomici evidentemente storpiati
+- nomi di farmaci
+- refusi grammaticali che nascono dalla trascrizione
+
+NON modificare MAI:
+- numeri, dosaggi, misure, percentuali, date
+- anche se un numero ti sembra implausibile, lascialo com'è
+
+Regole obbligatorie:
+1. Se un segmento è incomprensibile, lascialo esattamente com'è. Non inventare cosa poteva essere.
+2. Se un termine è ambiguo e potresti sbagliare, lascialo com'è.
+3. Distingui sempre aorta ascendente e discendente: se il testo è incoerente su questo punto, non scegliere tu, lascia com'è.
+4. Mantieni le istruzioni di dettatura ("scrivi", "fai così", "riportami...") esattamente dove sono, senza eseguirle e senza rimuoverle.
+5. Non aggiungere, non riassumere, non riorganizzare. Non aggiungere frasi di cortesia o conclusioni.
+
+Restituisci solo il testo corretto, senza commenti.
+
+TESTO:
+{testo}"""
+
+PROMPT_ISPEZIONE = """Leggi il testo qui sotto ed elenca i segmenti che risultano incomprensibili o privi di senso medico.
+
+NON correggere nulla. NON riscrivere il testo. NON proporre alternative.
+
+Restituisci solo un elenco puntato dei segmenti problematici, citandoli testualmente.
+Se non ce ne sono, scrivi esattamente: nessuno
+
+TESTO:
+{testo}"""
+
+
+# ── Dizionario (SPEC §3, passo 5) ────────────────────────────────────────────
 PERCORSO_CORREZIONI = Path(
     os.environ.get(
         "REFERTI_CORREZIONI",
@@ -278,6 +328,119 @@ def applica_correzioni(testo: str, sostituzioni: list[tuple[re.Pattern, str]]) -
     return testo, totale
 
 
+def ollama_pronto() -> str | None:
+    """Controllo d'avvio: Ollama raggiungibile e modello scaricato.
+    Restituisce il motivo dell'errore, o None se tutto è a posto."""
+    try:
+        with urllib.request.urlopen(OLLAMA_URL + "/api/tags", timeout=5) as r:
+            dati = json.loads(r.read().decode("utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return "ollama_non_raggiungibile"
+    nomi = [m.get("name", "") for m in dati.get("models", [])]
+    if not any(n == MODELLO_LLM or n.startswith(MODELLO_LLM + ":") for n in nomi):
+        return "modello_llm_mancante"
+    return None
+
+
+def chiama_ollama(prompt: str, file_id: str, fase: str) -> str:
+    """Una chiamata a /api/generate con 3 tentativi e pausa crescente
+    (SPEC §7.2). Temperatura 0: stessa domanda, stessa risposta."""
+    corpo = json.dumps({
+        "model": MODELLO_LLM,
+        "prompt": prompt,
+        "stream": False,
+        "options": {"temperature": 0},
+    }).encode("utf-8")
+    for tentativo in range(1, OLLAMA_TENTATIVI + 1):
+        try:
+            richiesta = urllib.request.Request(
+                OLLAMA_URL + "/api/generate",
+                data=corpo,
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(richiesta, timeout=OLLAMA_TIMEOUT_S) as r:
+                risposta = json.loads(r.read().decode("utf-8"))
+            testo = risposta.get("response", "")
+            if isinstance(testo, str) and testo.strip():
+                return testo
+        except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError):
+            pass
+        if tentativo < OLLAMA_TENTATIVI:
+            time.sleep(5 * tentativo)
+    log.error(
+        "fase=%s file=%s esito=errore motivo=ollama_non_risponde tentativi=%d",
+        fase, file_id, OLLAMA_TENTATIVI,
+    )
+    raise RuntimeError("ollama non risponde")
+
+
+def _numeri(testo: str) -> list[str]:
+    """Tutti i numeri del testo (con eventuale decimale), ordinati: la firma
+    numerica che la correzione AI non deve mai alterare."""
+    return sorted(re.findall(r"\d+(?:[.,]\d+)?", testo))
+
+
+def correggi_llm(testo: str, file_id: str) -> str:
+    """Correzione col prompt §6.1. Rete di sicurezza sul vincolo §2.4:
+    se la firma numerica cambia, o il testo esce troppo accorciato
+    (modello che riassume) o troppo allungato (modello che inventa),
+    la correzione AI si scarta IN BLOCCO e si tiene il testo d'ingresso.
+    Meglio nessuna correzione che una correzione infedele."""
+    inizio = time.monotonic()
+    uscita = chiama_ollama(
+        PROMPT_CORREZIONE.replace("{testo}", testo), file_id, "correzione_llm"
+    ).strip() + "\n"
+    durata = time.monotonic() - inizio
+    if _numeri(uscita) != _numeri(testo):
+        log.warning(
+            "fase=correzione_llm file=%s esito=scartata motivo=numeri_cambiati durata=%.1fs",
+            file_id, durata,
+        )
+        return testo
+    if not 0.6 <= len(uscita) / max(len(testo), 1) <= 1.4:
+        log.warning(
+            "fase=correzione_llm file=%s esito=scartata motivo=lunghezza_anomala durata=%.1fs",
+            file_id, durata,
+        )
+        return testo
+    log.info("fase=correzione_llm file=%s esito=ok durata=%.1fs", file_id, durata)
+    return uscita
+
+
+def _parse_ispezione(uscita: str) -> list[str]:
+    """Dall'elenco puntato del prompt §6.2 alla lista dei segmenti dubbi.
+    «nessuno» (anche con punto) = lista vuota; righe di cornice tipo
+    «Ecco i segmenti:» scartate."""
+    dubbi: list[str] = []
+    for riga in uscita.strip().splitlines():
+        r = riga.strip()
+        r = re.sub(r"^[-*•–—]+\s*", "", r)
+        r = re.sub(r"^\d+[.)]\s*", "", r)
+        r = r.strip().strip('"«»""')
+        if not r or r.endswith(":"):
+            continue
+        if r.lower().rstrip(".") == "nessuno":
+            continue
+        dubbi.append(r)
+    return dubbi[:100]
+
+
+def ispeziona_llm(testo: str, file_id: str) -> list[str]:
+    """Ispezione col prompt §6.2: SOLO elenco dei segmenti dubbi, nessuna
+    modifica al testo (compito separato apposta: un 12B non riesce a
+    trasformare e annotare insieme)."""
+    inizio = time.monotonic()
+    uscita = chiama_ollama(
+        PROMPT_ISPEZIONE.replace("{testo}", testo), file_id, "ispezione_llm"
+    )
+    dubbi = _parse_ispezione(uscita)
+    log.info(
+        "fase=ispezione_llm file=%s esito=ok dubbi=%d durata=%.1fs",
+        file_id, len(dubbi), time.monotonic() - inizio,
+    )
+    return dubbi
+
+
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
         print(__doc__, file=sys.stderr)
@@ -304,6 +467,10 @@ def main(argv: list[str]) -> int:
     except (json.JSONDecodeError, AttributeError, TypeError):
         log.error("fase=avvio file=? esito=errore motivo=correzioni_non_valide")
         return 1
+    motivo = ollama_pronto()
+    if motivo:
+        log.error("fase=avvio file=? esito=errore motivo=%s", motivo)
+        return 1
 
     file_id = file_id_di(ingresso)
     # La configurazione nel log (mai contenuti): serve a sapere, a posteriori,
@@ -314,6 +481,8 @@ def main(argv: list[str]) -> int:
     txt_b = ingresso.with_name(f"{file_id}.b.txt")
     div_json = ingresso.with_name(f"{file_id}.divergenze.json")
     txt_corretto = ingresso.with_name(f"{file_id}.corretto.txt")
+    txt_finale = ingresso.with_name(f"{file_id}.finale.txt")
+    dubbi_json = ingresso.with_name(f"{file_id}.dubbi.json")
 
     fase = "preprocessing"
     try:
@@ -347,6 +516,17 @@ def main(argv: list[str]) -> int:
         log.info(
             "fase=confronto file=%s esito=ok divergenze=%d durata=%.1fs",
             file_id, len(divergenze), time.monotonic() - inizio,
+        )
+
+        fase = "correzione_llm"
+        finale = correggi_llm(corretto_a, file_id)
+        txt_finale.write_text(finale, encoding="utf-8")
+
+        fase = "ispezione_llm"
+        dubbi = ispeziona_llm(finale, file_id)
+        dubbi_json.write_text(
+            json.dumps(dubbi, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
         )
     except subprocess.TimeoutExpired:
         log.error("fase=%s file=%s esito=errore motivo=timeout", fase, file_id)

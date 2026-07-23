@@ -9,11 +9,11 @@ codice — si copia sul Mac mini per l'uso.
 
 | Fase | Contenuto | Stato |
 |---|---|---|
-| 1 | Preprocessing ffmpeg → WAV 16 kHz mono | **fatta — testata su dettato reale** |
+| 1 | Preprocessing ffmpeg → WAV 16 kHz mono | **fatta — testata; rallentamento 0.8 + denoise di serie (23 div. contro 65)** |
 | 2 | Trascrizione whisper.cpp | **fatta — testata su dettato reale** |
-| 3 | Doppia trascrizione + divergenze | **fatta — testata su dettato reale (65 div., 42 col rallentamento)** |
-| 4 | Dizionario `correzioni.json` | **fatta — da testare su un dettato reale** |
-| 5 | Correzione + ispezione LLM | da fare |
+| 3 | Doppia trascrizione + divergenze | **fatta — testata su dettato reale** |
+| 4 | Dizionario `correzioni.json` | **fatta — testata su dettato reale** |
+| 5 | Correzione + ispezione LLM | **fatta — da testare su un dettato reale** |
 | 6 | Estrazione campi + controlli numerici | da fare |
 | 7 | Watcher + gestione errori | da fare |
 | 8 | Invio a ReferralFlow + cancellazione audio | da fare (endpoint già pronto) |
@@ -38,6 +38,15 @@ curl -L -o ~/referti-pipeline/modelli/ggml-large-v3.bin \
 Il modello pesa ~3,1 GB (download una volta sola). Binario e percorso del
 modello sono sovrascrivibili con le variabili `REFERTI_WHISPER` e
 `REFERTI_MODELLO`.
+
+Per la fase 5 serve anche Ollama (app macOS) col modello per la correzione:
+
+```bash
+ollama pull gemma3:12b
+```
+
+(~8 GB, una volta sola; l'app deve essere in esecuzione — icona nella barra
+menu. URL e modello sovrascrivibili con `REFERTI_OLLAMA` e `REFERTI_LLM`.)
 
 ## Prova su un dettato reale
 
