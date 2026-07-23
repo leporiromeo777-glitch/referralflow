@@ -5,20 +5,28 @@ Fasi implementate:
   1. preprocessing audio: passa-alto 80 Hz + normalizzazione EBU R128,
      esporta WAV 16 kHz mono per whisper.cpp
   2. trascrizione: whisper.cpp (whisper-cli), modello ggml-large-v3, lingua it
+  3. doppia trascrizione e confronto: seconda passata con parametri diversi,
+     le differenze diventano la lista DIVERGENZE (rilevatore di dubbi,
+     non meccanismo di voto: il sistema non sceglie mai la versione giusta)
 
 Uso:
     python3 pipeline.py <file_audio>
 
-Accanto al file d'ingresso compaiono <file_id>.wav (audio pulito) e
-<file_id>.txt (trascrizione). Il file_id deriva dal contenuto, non dal nome.
+Accanto al file d'ingresso compaiono <file_id>.wav (audio pulito),
+<file_id>.txt (trascrizione di lavoro, passata A), <file_id>.b.txt
+(passata B) e <file_id>.divergenze.json. Il file_id deriva dal contenuto,
+non dal nome.
 
 Il modello va messo in modelli/ggml-large-v3.bin accanto a questo script
 (percorsi e binario sovrascrivibili con REFERTI_MODELLO e REFERTI_WHISPER).
 """
 
+import difflib
 import hashlib
+import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -100,11 +108,19 @@ def preprocessa(ingresso: Path, uscita: Path, file_id: str) -> None:
     log.info("fase=preprocessing file=%s esito=ok durata=%.1fs", file_id, durata)
 
 
-def trascrivi(wav: Path, uscita_txt: Path, file_id: str) -> None:
-    """Trascrizione con whisper.cpp, lingua italiana, parametri di default
-    (sarà la «passata A»; la B con parametri diversi arriva in Fase 3).
-    Il testo esce direttamente su file (-otxt): stdout/stderr di whisper
-    contengono la trascrizione e vengono scartati (SPEC §2.2)."""
+# Parametri delle due passate. A (beam search) è la trascrizione di lavoro;
+# B (greedy) diverge da A soprattutto dove l'audio è incerto: è questo che la
+# rende un buon rilevatore di dubbi.
+FLAG_PASSATA = {
+    "trascrizione_a": [],
+    "trascrizione_b": ["-bs", "1"],
+}
+
+
+def trascrivi(wav: Path, uscita_txt: Path, file_id: str, fase: str) -> None:
+    """Trascrizione con whisper.cpp, lingua italiana. Il testo esce
+    direttamente su file (-otxt): stdout/stderr di whisper contengono la
+    trascrizione e vengono scartati (SPEC §2.2)."""
     inizio = time.monotonic()
     base = uscita_txt.with_suffix("")  # -of vuole il percorso senza estensione
     comando = [
@@ -115,6 +131,7 @@ def trascrivi(wav: Path, uscita_txt: Path, file_id: str) -> None:
         "-otxt",
         "-of", str(base),
         "-np",
+        *FLAG_PASSATA[fase],
     ]
     esito = subprocess.run(
         comando,
@@ -125,14 +142,59 @@ def trascrivi(wav: Path, uscita_txt: Path, file_id: str) -> None:
     durata = time.monotonic() - inizio
     if esito.returncode != 0:
         log.error(
-            "fase=trascrizione file=%s esito=errore codice=%d durata=%.1fs",
-            file_id, esito.returncode, durata,
+            "fase=%s file=%s esito=errore codice=%d durata=%.1fs",
+            fase, file_id, esito.returncode, durata,
         )
         raise RuntimeError("whisper fallito")
     if not uscita_txt.exists() or not uscita_txt.read_text(encoding="utf-8").strip():
-        log.error("fase=trascrizione file=%s esito=errore motivo=testo_vuoto", file_id)
+        log.error("fase=%s file=%s esito=errore motivo=testo_vuoto", fase, file_id)
         raise RuntimeError("trascrizione vuota")
-    log.info("fase=trascrizione file=%s esito=ok durata=%.1fs", file_id, durata)
+    log.info("fase=%s file=%s esito=ok durata=%.1fs", fase, file_id, durata)
+
+
+# ── Confronto A/B (SPEC §3, passo 5) ────────────────────────────────────────
+# Allineamento parola per parola: dove le due passate non coincidono c'è
+# quasi sempre un problema audio. Le divergenze si conservano come frammenti
+# testuali con contesto (mai offset: il testo cambierà con dizionario e
+# correzione LLM). Il contesto è ritagliato dal testo A originale, così la
+# pagina di revisione lo ritrova con una ricerca esatta.
+
+PAROLE_DI_CONTESTO = 4
+
+
+def _normalizza(parola: str) -> str:
+    """Minuscole e via la punteggiatura: «Aorta,» e «aorta» non sono una
+    divergenza. I numeri restano intatti (7,5 ≠ 75)."""
+    if any(c.isdigit() for c in parola):
+        return parola.lower()
+    return re.sub(r"[^\w]+", "", parola.lower(), flags=re.UNICODE)
+
+
+def confronta(testo_a: str, testo_b: str) -> list[dict]:
+    tok_a = [(m.group(0), m.start(), m.end()) for m in re.finditer(r"\S+", testo_a)]
+    tok_b = [m.group(0) for m in re.finditer(r"\S+", testo_b)]
+    norm_a = [_normalizza(t[0]) for t in tok_a]
+    norm_b = [_normalizza(w) for w in tok_b]
+
+    divergenze: list[dict] = []
+    sm = difflib.SequenceMatcher(a=norm_a, b=norm_b, autojunk=False)
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == "equal":
+            continue
+        # Differenze di sola punteggiatura/maiuscole: non sono dubbi.
+        if " ".join(norm_a[i1:i2]).strip() == " ".join(norm_b[j1:j2]).strip():
+            continue
+        seg_a = testo_a[tok_a[i1][1]:tok_a[i2 - 1][2]] if i2 > i1 else ""
+        seg_b = " ".join(tok_b[j1:j2])
+        ctx_i1 = max(0, i1 - PAROLE_DI_CONTESTO)
+        ctx_i2 = min(len(tok_a), i2 + PAROLE_DI_CONTESTO)
+        contesto = testo_a[tok_a[ctx_i1][1]:tok_a[ctx_i2 - 1][2]] if ctx_i2 > ctx_i1 else ""
+        divergenze.append({
+            "contesto": contesto,
+            "versione_a": seg_a,
+            "versione_b": seg_b,
+        })
+    return divergenze
 
 
 def main(argv: list[str]) -> int:
@@ -153,13 +215,31 @@ def main(argv: list[str]) -> int:
 
     file_id = file_id_di(ingresso)
     wav = ingresso.with_name(f"{file_id}.wav")
-    txt = ingresso.with_name(f"{file_id}.txt")
+    txt_a = ingresso.with_name(f"{file_id}.txt")
+    txt_b = ingresso.with_name(f"{file_id}.b.txt")
+    div_json = ingresso.with_name(f"{file_id}.divergenze.json")
 
     fase = "preprocessing"
     try:
         preprocessa(ingresso, wav, file_id)
-        fase = "trascrizione"
-        trascrivi(wav, txt, file_id)
+        fase = "trascrizione_a"
+        trascrivi(wav, txt_a, file_id, fase)
+        fase = "trascrizione_b"
+        trascrivi(wav, txt_b, file_id, fase)
+        fase = "confronto"
+        inizio = time.monotonic()
+        divergenze = confronta(
+            txt_a.read_text(encoding="utf-8"),
+            txt_b.read_text(encoding="utf-8"),
+        )
+        div_json.write_text(
+            json.dumps(divergenze, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        log.info(
+            "fase=confronto file=%s esito=ok divergenze=%d durata=%.1fs",
+            file_id, len(divergenze), time.monotonic() - inizio,
+        )
     except subprocess.TimeoutExpired:
         log.error("fase=%s file=%s esito=errore motivo=timeout", fase, file_id)
         return 1

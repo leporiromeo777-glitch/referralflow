@@ -10,8 +10,8 @@ codice — si copia sul Mac mini per l'uso.
 | Fase | Contenuto | Stato |
 |---|---|---|
 | 1 | Preprocessing ffmpeg → WAV 16 kHz mono | **fatta — testata su dettato reale** |
-| 2 | Trascrizione whisper.cpp | **fatta — da testare su un dettato reale** |
-| 3 | Doppia trascrizione + divergenze | da fare |
+| 2 | Trascrizione whisper.cpp | **fatta — testata su dettato reale** |
+| 3 | Doppia trascrizione + divergenze | **fatta — da testare su un dettato reale** |
 | 4 | Dizionario `correzioni.json` | da fare |
 | 5 | Correzione + ispezione LLM | da fare |
 | 6 | Estrazione campi + controlli numerici | da fare |
