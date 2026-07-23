@@ -26,6 +26,10 @@ create table studios (
   abbonamento  text not null default 'pilota',
   trial_until  date,
   stripe_customer_id text,
+  -- Endpoint bozze referto (pipeline di trascrizione locale): solo l'hash
+  -- sha256 del token, il chiaro si vede una volta sola alla generazione.
+  referti_token_hash   text unique,
+  referti_token_set_at timestamptz,
   created_at   timestamptz not null default now()
 );
 
@@ -371,3 +375,23 @@ create index on appointments (starts_at);
 create index on appointments (studio_id, starts_at);
 create index on appointments (provider_id, starts_at);
 create index on appointments (follow_up_due) where follow_up_done_at is null;
+
+-- Bozze di referto dalla pipeline locale di trascrizione (docs/trascrizione/SPEC.md):
+-- il Mac mini dello studio le POSTa su /api/referti/bozza, un umano le conferma
+-- o le scarta da /referti. Il payload della pipeline resta intatto come riferimento.
+create table referti_bozze (
+  id          uuid primary key default gen_random_uuid(),
+  studio_id   uuid not null references studios(id) on delete cascade,
+  file_id     text not null,
+  payload     jsonb not null,
+  stato       text not null default 'bozza'
+                check (stato in ('bozza', 'confermata', 'scartata')),
+  testo_finale     text,
+  campi_confermati jsonb,
+  reviewed_by uuid references users(id) on delete set null,
+  reviewed_at timestamptz,
+  created_at  timestamptz not null default now(),
+  unique (studio_id, file_id)
+);
+
+create index on referti_bozze (studio_id, stato, created_at);

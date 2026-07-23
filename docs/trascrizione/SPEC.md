@@ -322,23 +322,25 @@ Il JSON finale inviato a ReferralFlow contiene:
 `richiede_revisione` è **sempre true**. Non esiste un percorso in cui un referto
 venga considerato pronto senza passare da un umano.
 
-### 8.1 Lato ReferralFlow (da costruire, repo ReferralFlow)
+### 8.1 Lato ReferralFlow (COSTRUITO — repo ReferralFlow, migrazione 019)
 
-Questa parte **non esiste ancora** e va sviluppata nel repo ReferralFlow, non qui:
+Questa parte esiste nel repo ReferralFlow. Com'è fatta, e cosa deve fare la pipeline:
 
-- **Migrazione**: tabella `referti_bozze` — `studio_id`, payload JSON della pipeline,
-  stato (`bozza` / `confermata` / `scartata`), timestamp. Le bozze non toccano i
-  record definitivi finché un umano non conferma (§2.5).
-- **Endpoint**: `POST /api/referti/bozza`, autenticato con un token dedicato in header
-  (variabile d'ambiente sul server e sul Mac mini, stile `REMINDER_SECRET`; un token
-  per studio). Risponde 201 solo a bozza effettivamente scritta: è questa risposta
-  che autorizza il passo [12].
-- **Pagina di revisione** nell'area interna: testo corretto con divergenze evidenziate
-  (ricerca del frammento `contesto`), segmenti dubbi, allarmi numerici, campi estratti
-  modificabili, conferma o scarto.
-
-Finché l'endpoint non esiste, la Fase 8 (§9) non è implementabile: la pipeline si
-sviluppa e si testa fino alla Fase 7 con i JSON che restano in `output/`.
+- **Endpoint**: `POST /api/referti/bozza` con header `Authorization: Bearer <token>`.
+  Il token si genera dall'admin dello studio in *Impostazioni → Dati dello studio →
+  Trascrizione referti*: viene mostrato **una volta sola** (sul server resta solo
+  l'hash sha256) e va copiato subito nella configurazione della pipeline sul Mac
+  mini. Rigenerarlo invalida il precedente.
+- **Risposte**: `201` = bozza scritta; `200` con `duplicato: true` = quel `file_id`
+  era già stato consegnato (retry). **Entrambe autorizzano il passo [12]**; qualsiasi
+  altra risposta no: il JSON resta in `output/` e l'audio non si cancella. Il corpo
+  deve avere `richiede_revisione: true`, altrimenti `400`.
+- **Idempotenza**: la coppia (studio, `file_id`) è univoca — reinviare non duplica.
+- **Revisione**: le bozze arrivano nella pagina «Bozze di referto» (`/referti`)
+  dell'area interna: testo con divergenze e segmenti dubbi evidenziati (ricerca del
+  frammento `contesto`), allarmi numerici, campi estratti correggibili, conferma o
+  scarto. Il payload della pipeline resta salvato intatto; le correzioni umane
+  finiscono in campi separati (§2.5: nessun dato diventa definitivo da solo).
 
 ---
 

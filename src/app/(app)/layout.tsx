@@ -23,10 +23,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // scheda «Disdette» dentro la Coda.
   let nuove = 0;
   let richiamiScaduti = 0;
+  // Bozze di referto dalla pipeline di trascrizione: la voce «Referti» compare
+  // solo se lo studio la usa (token generato) o se ci sono bozze in coda.
+  let refertiBozze = 0;
+  let refertiAttivi = false;
   if (session && !isMedico && !isInviante) {
-    const [c] = await query<{ nuove: number; richiami: number }>(
+    const [c] = await query<{ nuove: number; richiami: number; referti: number; referti_attivi: boolean }>(
       `select
          (select count(*) from referrals where status = 'ricevuta' and studio_id = $1)::int as nuove,
+         (select count(*) from referti_bozze where studio_id = $1 and stato = 'bozza')::int as referti,
+         (select referti_token_set_at is not null from studios where id = $1) as referti_attivi,
          ((select count(*) from referrals
             where studio_id = $1
               and follow_up_due <= current_date and follow_up_done_at is null)
@@ -38,6 +44,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     );
     nuove = c?.nuove ?? 0;
     richiamiScaduti = c?.richiami ?? 0;
+    refertiBozze = c?.referti ?? 0;
+    refertiAttivi = c?.referti_attivi ?? false;
   }
 
   const supportEmail = process.env.SUPPORT_EMAIL;
@@ -79,6 +87,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {!isMedico && !isInviante && (
             <NavLink href="/richiami">
               Follow-up{richiamiScaduti > 0 ? <span className="nav-count">{richiamiScaduti}</span> : null}
+            </NavLink>
+          )}
+          {!isMedico && !isInviante && (refertiAttivi || refertiBozze > 0) && (
+            <NavLink href="/referti">
+              Referti{refertiBozze > 0 ? <span className="nav-count">{refertiBozze}</span> : null}
             </NavLink>
           )}
           {!isMedico && !isInviante && <NavLink href="/inviati">Pazienti inviati</NavLink>}

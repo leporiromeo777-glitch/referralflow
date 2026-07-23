@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
 import { query } from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { updateStudio } from './actions';
+import { updateStudio, generaRefertiToken, revocaRefertiToken } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,11 +20,18 @@ export default async function ImpostazioniStudio({
   const [studio] = await query<{
     nome: string; slug: string; specialita: string | null;
     telefono: string | null; notify_email: string | null;
+    referti_token_set_at: string | null;
   }>(
-    'select nome, slug, specialita, telefono, notify_email from studios where id = $1',
+    `select nome, slug, specialita, telefono, notify_email,
+            referti_token_set_at::text
+       from studios where id = $1`,
     [session.studioId]
   );
   if (!studio) redirect('/');
+
+  // Token appena generato: si mostra una volta sola (cookie flash di 2 minuti),
+  // poi resta solo l'hash in tabella.
+  const tokenNuovo = cookies().get('rf_referti_token')?.value ?? null;
 
   return (
     <>
@@ -75,6 +83,45 @@ export default async function ImpostazioniStudio({
           le richieste arrivano direttamente nella coda:
         </p>
         <p><a href={`/invia?s=${studio.slug}`} target="_blank">/invia?s={studio.slug}</a></p>
+      </div>
+
+      <div className="card">
+        <h2>Trascrizione referti (pipeline locale)</h2>
+        <p className="muted">
+          Token con cui il computer dello studio invia le bozze di referto
+          trascritte a <code>/api/referti/bozza</code> (arrivano in «Bozze di
+          referto»). È una credenziale: si mostra una volta sola alla
+          generazione — copiala subito nella configurazione della pipeline.
+          Rigenerarla invalida la precedente.
+        </p>
+
+        {tokenNuovo && (
+          <div className="card notice">
+            <p><strong>Nuovo token generato.</strong> Copialo ora: non verrà più mostrato.</p>
+            <p><code style={{ wordBreak: 'break-all' }}>{tokenNuovo}</code></p>
+          </div>
+        )}
+
+        {studio.referti_token_set_at && !tokenNuovo && (
+          <p className="muted">
+            Un token è attivo (generato il{' '}
+            {new Date(studio.referti_token_set_at).toLocaleDateString('it-CH')}).
+            Per motivi di sicurezza non è più visibile: se l'hai perso, rigeneralo.
+          </p>
+        )}
+
+        <div className="form-actions" style={{ display: 'flex', gap: 8 }}>
+          <form action={generaRefertiToken}>
+            <button className="btn btn-primary" type="submit">
+              {studio.referti_token_set_at ? 'Rigenera token' : 'Genera token'}
+            </button>
+          </form>
+          {studio.referti_token_set_at && (
+            <form action={revocaRefertiToken}>
+              <button className="btn" type="submit">Revoca (disattiva l'invio)</button>
+            </form>
+          )}
+        </div>
       </div>
     </>
   );

@@ -2,6 +2,8 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
+import { cookies } from 'next/headers';
+import { createHash, randomBytes } from 'crypto';
 import { query } from '@/lib/db';
 import { getSession, createSession } from '@/lib/auth';
 
@@ -32,4 +34,51 @@ export async function updateStudio(formData: FormData) {
 
   revalidatePath('/impostazioni/studio');
   redirect('/impostazioni/studio?ok=1');
+}
+
+// ─── Token per l'endpoint bozze referto (pipeline di trascrizione locale) ───
+// Il token è una credenziale: in tabella sta solo l'hash sha256, il chiaro si
+// mostra UNA volta sola dopo la generazione (cookie flash di 2 minuti, mai in
+// URL né nei log — stessa regola dell'URL del feed iCal). Rigenerare il token
+// invalida il precedente sul Mac mini.
+const TOKEN_FLASH_COOKIE = 'rf_referti_token';
+
+export async function generaRefertiToken() {
+  const session = await getSession();
+  if (!session) redirect('/login');
+  if (session.role !== 'admin') redirect('/');
+
+  const token = 'rfb_' + randomBytes(32).toString('hex');
+  const hash = createHash('sha256').update(token).digest('hex');
+  await query(
+    `update studios set referti_token_hash = $2, referti_token_set_at = now()
+      where id = $1`,
+    [session.studioId, hash]
+  );
+
+  cookies().set(TOKEN_FLASH_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/impostazioni/studio',
+    maxAge: 120,
+  });
+
+  revalidatePath('/impostazioni/studio');
+  redirect('/impostazioni/studio');
+}
+
+export async function revocaRefertiToken() {
+  const session = await getSession();
+  if (!session) redirect('/login');
+  if (session.role !== 'admin') redirect('/');
+
+  await query(
+    `update studios set referti_token_hash = null, referti_token_set_at = null
+      where id = $1`,
+    [session.studioId]
+  );
+
+  revalidatePath('/impostazioni/studio');
+  redirect('/impostazioni/studio');
 }

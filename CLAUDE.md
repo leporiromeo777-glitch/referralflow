@@ -23,7 +23,7 @@ comunicazione sicura): non li sostituisce. Cliente pilota reale: Centro Cardiolo
   (ruoli: segretaria, medico, admin; l'admin gestisce gli accessi da `/impostazioni/utenti`)
 - Schema: `psql "$DATABASE_URL" -f db/schema.sql` (+ `db/seed.sql` per dati demo)
 - DB esistente da versione precedente: applicare in ordine le `db/migrations/00X_*.sql`
-  mancanti (ultima: `016_2fa.sql`)
+  mancanti (ultima: `019_referti_bozze.sql`)
 - Pubblicazione: checklist completa in `DEPLOY.md`
 
 ## NON rompere
@@ -102,7 +102,19 @@ SMS: ATTIVI via eCall REST v2 (Basic auth, `SMS_API_TOKEN=utente:password`, driv
 - Tutti protetti da `?key=REMINDER_SECRET`; backup notturno DB locale (14g) + off-site su
   Exoscale SOS `referralflow-backups` (60g); allegati di produzione su SOS `referralflow-uploads`
 
-Fatti di recente: 2FA + cifratura at-rest — Fase 2 sicurezza (2026-07-18, migrazione 016:
+Fatti di recente: ricezione bozze di referto dalla pipeline di trascrizione locale
+(2026-07-23, migrazione 019: `referti_bozze` + `studios.referti_token_hash`; la SPEC
+della pipeline che gira sul Mac mini dello studio è `docs/trascrizione/SPEC.md` — fonte
+di verità, prompt in §6 da NON toccare. Endpoint `POST /api/referti/bozza` con Bearer
+token per studio, solo hash sha256 in tabella, token generato/revocato dall'admin in
+/impostazioni/studio e mostrato UNA volta via cookie flash; 201 = scritta, 200 =
+`file_id` duplicato (retry idempotenti), entrambi autorizzano la pipeline a cancellare
+l'audio. Pagina `/referti` (voce in nav solo se token attivo o bozze presenti, badge
+conteggio) + dettaglio con divergenze/segmenti dubbi evidenziati nel testo (`<mark>`,
+classi `.ref-mark-*`), allarmi numerici, campi estratti correggibili; conferma/scarto
+con `confermaBozza`/`scartaBozza` — il payload della pipeline resta intatto, le
+correzioni umane vanno in `testo_finale`/`campi_confermati`. Mai contenuti clinici nei
+log dell'endpoint), 2FA + cifratura at-rest — Fase 2 sicurezza (2026-07-18, migrazione 016:
 `users.totp_secret`/`totp_enabled_at` + `user_recovery_codes` con hash monouso; `src/lib/totp.ts`
 TOTP RFC 6238 con crypto nativo, verificato coi vettori ufficiali; pagina `/sicurezza` per TUTTI
 i ruoli — eccezioni nel middleware per medico/inviante, link nel menu profilo — con attivazione

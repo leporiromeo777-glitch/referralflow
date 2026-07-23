@@ -1118,3 +1118,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 .tl-card .scheda-toggle::before { color: #bfe0d3; }
 .tl-card .complete summary.btn { background: #fff; border-color: #fff; color: var(--primary-ink); }
 .tl-card .scheda { margin-top: 4px; }
+
+/* Bozze di referto (/referti): evidenziazioni nel testo trascritto.
+   Divergenze tra le due trascrizioni = ambra, segmenti dubbi = rosso. */
+.ref-mark-div { background: var(--warn-bg); color: inherit; padding: 0 3px; border-radius: 4px; }
+.ref-mark-dubbio { background: var(--danger-bg); color: inherit; padding: 0 3px; border-radius: 4px; }
