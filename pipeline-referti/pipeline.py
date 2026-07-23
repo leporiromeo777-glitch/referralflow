@@ -57,14 +57,12 @@ FFMPEG_TIMEOUT_S = 600
 # 1.0 = disattivato. Sovrascrivibile con REFERTI_ATEMPO.
 ATEMPO = float(os.environ.get("REFERTI_ATEMPO", "0.8"))
 
-# Riduzione del rumore di fondo (afftdn) tra passa-alto e normalizzazione:
-# SPERIMENTALE, spenta di default. Ipotesi da misurare (2026-07-24): nel test
-# manuale il passaggio per un MP3 intermedio ha ridotto le divergenze da
-# 65-70 a 42, probabilmente per l'effetto anti-rumore della compressione;
-# un denoiser vero dovrebbe dare lo stesso beneficio in modo controllato.
-# Attivare con REFERTI_DENOISE=1. Decisione sul default solo dopo il
-# confronto a quattro celle (atempo × denoise) sul dettato di prova.
-DENOISE = os.environ.get("REFERTI_DENOISE", "0") == "1"
+# Riduzione del rumore di fondo (afftdn) tra passa-alto e normalizzazione.
+# Validata il 2026-07-24 col confronto a quattro celle sul dettato di prova
+# (divergenze A/B): 65 liscio, 52 solo denoise, 70 solo atempo, 23 con
+# atempo+denoise insieme — la combinazione è l'impostazione di serie.
+# Spegnere con REFERTI_DENOISE=0. Ogni ritocco futuro va rimisurato così.
+DENOISE = os.environ.get("REFERTI_DENOISE", "1") == "1"
 
 # ── Trascrizione (SPEC §4) ───────────────────────────────────────────────────
 # whisper.cpp come binario locale; su Mac arriva da `brew install whisper-cpp`.

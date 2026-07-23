@@ -95,7 +95,7 @@ più semplice o più performante.
 ```
 [1] cartella_ingresso/           file audio nuovo rilevato
          │
-[2] preprocessing audio          rallenta (atempo 0.8) + normalizza + passa-alto → WAV 16kHz mono
+[2] preprocessing audio          rallenta (0.8) + passa-alto + denoise + normalizza → WAV 16kHz mono
          │
 [3] trascrizione A               whisper.cpp large-v3, lingua it
          │
@@ -118,11 +118,16 @@ più semplice o più performante.
 [12] cancellazione audio         solo se [11] ha avuto successo
 ```
 
-**Nota sul passaggio 2:** il rallentamento (tempo 0.8×, stessa voce) è stato
-validato empiricamente il 2026-07-24 sul dettato di prova: il medico detta molto
-veloce e riportare il parlato verso una velocità normale ha ridotto le divergenze
-A/B da 65 a 42. Configurabile (`REFERTI_ATEMPO`, 1.0 = spento); se il numero di
-divergenze è il termometro, ogni ritocco futuro va misurato allo stesso modo.
+**Nota sul passaggio 2:** rallentamento (atempo 0.8×, stessa voce — il medico
+detta molto veloce) e riduzione del rumore (afftdn) validati il 2026-07-24 con
+un confronto a quattro celle sul dettato di prova, usando il numero di
+divergenze A/B come termometro: 65 senza nulla, 52 solo denoise, 70 solo
+rallentamento, **23 con entrambi** — la combinazione è il default. Entrambi
+configurabili (`REFERTI_ATEMPO`, 1.0 = spento; `REFERTI_DENOISE`, 0 = spento).
+Ogni ritocco futuro al preprocessing va misurato allo stesso modo, mai a
+orecchio. Il conteggio è riproducibile a parità di catena audio, ma piccole
+perturbazioni del segnale lo spostano: confrontare solo corse sulla stessa
+identica catena.
 
 **Nota sui passaggi 3-4:** la doppia trascrizione serve a individuare i punti incerti.
 Dove le due versioni divergono, quasi sempre c'è un problema audio. È un rilevatore di
