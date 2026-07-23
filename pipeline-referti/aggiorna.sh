@@ -12,6 +12,7 @@ mkdir -p "$DEST"
 curl -fsSL "$BASE/aggiorna.sh" -o "$DEST/aggiorna.sh.nuovo" && mv "$DEST/aggiorna.sh.nuovo" "$DEST/aggiorna.sh"
 curl -fsSL "$BASE/pipeline.py" -o "$DEST/pipeline.py"
 curl -fsSL "$BASE/correzioni.json" -o "$DEST/correzioni.json"
+curl -fsSL "$BASE/CLAUDE.md" -o "$DEST/CLAUDE.md"
 
-echo "Aggiornati: pipeline.py, correzioni.json (e aggiorna.sh stesso)"
+echo "Aggiornati: pipeline.py, correzioni.json, CLAUDE.md (e aggiorna.sh stesso)"
 grep -m1 "Fasi implementate" -A 8 "$DEST/pipeline.py" | sed 's/^# \{0,2\}//'
