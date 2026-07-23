@@ -9,8 +9,8 @@ codice — si copia sul Mac mini per l'uso.
 
 | Fase | Contenuto | Stato |
 |---|---|---|
-| 1 | Preprocessing ffmpeg → WAV 16 kHz mono | **fatta — da testare su un dettato reale** |
-| 2 | Trascrizione whisper.cpp | da fare |
+| 1 | Preprocessing ffmpeg → WAV 16 kHz mono | **fatta — testata su dettato reale** |
+| 2 | Trascrizione whisper.cpp | **fatta — da testare su un dettato reale** |
 | 3 | Doppia trascrizione + divergenze | da fare |
 | 4 | Dizionario `correzioni.json` | da fare |
 | 5 | Correzione + ispezione LLM | da fare |
@@ -26,15 +26,27 @@ codice — si copia sul Mac mini per l'uso.
 - ffmpeg: `brew install ffmpeg`
 - (dalle fasi 2 e 5: whisper.cpp con `ggml-large-v3`, Ollama con `gemma3:12b`)
 
-## Fase 1 — prova su un dettato reale
+## Installazione (fasi 1–2)
+
+```bash
+brew install ffmpeg python whisper-cpp
+mkdir -p ~/referti-pipeline/modelli
+curl -L -o ~/referti-pipeline/modelli/ggml-large-v3.bin \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin
+```
+
+Il modello pesa ~3,1 GB (download una volta sola). Binario e percorso del
+modello sono sovrascrivibili con le variabili `REFERTI_WHISPER` e
+`REFERTI_MODELLO`.
+
+## Prova su un dettato reale
 
 ```bash
 python3 pipeline.py /percorso/del/dettato.m4a
 ```
 
-Il WAV pulito compare accanto al file d'ingresso, chiamato `<file_id>.wav`
-(l'ID deriva dal contenuto: nei log non passa mai il nome del file, che
-potrebbe contenere il nome del paziente). Verifica ascoltandolo che la voce
-sia integra e il volume uniforme, poi dai l'ok per la Fase 2.
+Accanto al file d'ingresso compaiono `<file_id>.wav` (audio pulito) e
+`<file_id>.txt` (trascrizione). L'ID deriva dal contenuto: nei log non passa
+mai il nome del file, che potrebbe contenere il nome del paziente.
 
 Nessuna dipendenza Python da installare: solo libreria standard.
