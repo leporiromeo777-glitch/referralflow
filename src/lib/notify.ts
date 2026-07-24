@@ -270,6 +270,81 @@ export async function notifyRispostaAffido(externalReferralId: string): Promise<
   }
 }
 
+// Consulto rapido: avvisa la segreteria che è arrivata una domanda clinica
+// dal portale di un inviante. Testo neutro: solo il nome del medico, mai la
+// domanda (contenuto clinico) né dati del paziente.
+export async function notifyConsultoStudio(studioId: string, medicoNome: string): Promise<void> {
+  const host = process.env.SMTP_HOST;
+  const base = process.env.APP_BASE_URL;
+  const [studio] = await query<{ notify_email: string | null }>(
+    'select notify_email from studios where id = $1',
+    [studioId]
+  );
+  const to = studio?.notify_email || process.env.STUDIO_NOTIFY_EMAIL;
+  if (!host || !to) return;
+
+  const testo = [
+    `Un medico inviante ha aperto un consulto rapido (domanda scritta, senza visita).`,
+    '',
+    `Medico: ${medicoNome}`,
+    '',
+    base ? `Rispondete dalla pagina Consulti: ${base.replace(/\/$/, '')}/consulti` : '',
+    `Questo messaggio non contiene dati del paziente.`,
+  ].filter(Boolean).join('\n');
+
+  try {
+    await transporter().sendMail({
+      from: process.env.SMTP_FROM || 'no-reply@referralflow.ch',
+      to,
+      subject: 'Nuovo consulto rapido da un medico inviante',
+      text: testo,
+    });
+  } catch (e: any) {
+    console.error('Avviso consulto fallito:', e?.message || e);
+  }
+}
+
+// La risposta al consulto è pronta: avviso neutro all'inviante col link al
+// suo portale (la risposta si legge solo lì, mai in email).
+export async function notifyConsultoRisposta(consultoId: string): Promise<void> {
+  const host = process.env.SMTP_HOST;
+  const base = process.env.APP_BASE_URL;
+
+  const [doc] = await query<DocRow>(
+    `select d.nome, d.email, d.token, (d.token_expires_at > now()) as token_valido,
+            s.nome as studio_nome
+       from consulti c
+       join referring_doctors d on d.id = c.referring_doctor_id
+       join studios s on s.id = c.studio_id
+      where c.id = $1`,
+    [consultoId]
+  );
+  if (!doc || !doc.email || !host || !base) return;
+
+  const link = doc.token_valido ? `${base.replace(/\/$/, '')}/portale/${doc.token}` : null;
+  const testo = [
+    `Gentile ${doc.nome},`,
+    '',
+    `c'è una risposta a un suo consulto rapido da: ${doc.studio_nome}.`,
+    link
+      ? `Può leggerla nel suo portale riservato:\n${link}`
+      : `Il suo link al portale è scaduto: contatti la segreteria dello studio per riceverne uno nuovo.`,
+    '',
+    `Questo messaggio non contiene dati clinici. Non risponda a questa email.`,
+  ].join('\n');
+
+  try {
+    await transporter().sendMail({
+      from: process.env.SMTP_FROM || 'no-reply@referralflow.ch',
+      to: doc.email,
+      subject: 'Risposta disponibile a un suo consulto',
+      text: testo,
+    });
+  } catch (e: any) {
+    console.error('Avviso risposta consulto fallito:', e?.message || e);
+  }
+}
+
 // Ritorna il canale effettivo della notifica: 'email' se inviata, 'portale'
 // se solo registrata (SMTP non configurato, medico senza email, o errore).
 export async function notifyReferrer(referralId: string, tipo: string): Promise<string> {

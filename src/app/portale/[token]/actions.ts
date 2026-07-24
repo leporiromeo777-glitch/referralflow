@@ -4,7 +4,53 @@ import { randomInt } from 'crypto';
 import { redirect } from 'next/navigation';
 import { query } from '@/lib/db';
 import { hashPassword, createSession } from '@/lib/auth';
-import { sendPlain, notifySupporto } from '@/lib/notify';
+import { sendPlain, notifySupporto, notifyConsultoStudio } from '@/lib/notify';
+import { putFile } from '@/lib/storage';
+import { isAllowedPublicUpload, MAX_UPLOAD_SIZE } from '@/lib/upload';
+
+// Consulto rapido: domanda scritta dello specialista senza aprire una referral.
+// Il token del portale identifica medico e studio; limiti anti-abuso perché la
+// rotta è pubblica (come i moduli d'invio).
+const MAX_CONSULTO_FILES = 3;
+
+export async function inviaConsulto(formData: FormData) {
+  const token = String(formData.get('token') ?? '');
+  const [doc] = await query<{ id: string; nome: string; studio_id: string }>(
+    `select id, nome, studio_id from referring_doctors
+      where token = $1 and token_expires_at > now()`,
+    [token]
+  );
+  if (!doc) redirect('/');
+
+  const domanda = String(formData.get('domanda') ?? '').trim();
+  if (!domanda) redirect(`/portale/${token}?consulto=vuoto`);
+  if (domanda.length > 4000) redirect(`/portale/${token}?consulto=lungo`);
+
+  const [consulto] = await query<{ id: string }>(
+    `insert into consulti (studio_id, referring_doctor_id, domanda)
+     values ($1, $2, $3) returning id`,
+    [doc.studio_id, doc.id, domanda]
+  );
+
+  const files = formData.getAll('allegati').filter(
+    (f): f is File => f instanceof File && f.size > 0
+  );
+  for (const file of files.slice(0, MAX_CONSULTO_FILES)) {
+    if (file.size > MAX_UPLOAD_SIZE || !isAllowedPublicUpload(file)) continue;
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const ext = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')) : '';
+    const key = await putFile(buffer, file.type || 'application/octet-stream', ext);
+    await query(
+      'insert into consulto_attachments (consulto_id, filename, storage_key) values ($1,$2,$3)',
+      [consulto.id, file.name, key]
+    );
+  }
+
+  // Avviso neutro alla segreteria (mai la domanda in email). Non bloccante.
+  await notifyConsultoStudio(doc.studio_id, doc.nome);
+
+  redirect(`/portale/${token}?consulto=ok`);
+}
 
 // Registrazione self-service del medico inviante dal suo portale.
 // Il token del portale è la garanzia (glielo ha dato uno studio che lo conosce);

@@ -395,3 +395,33 @@ create table referti_bozze (
 );
 
 create index on referti_bozze (studio_id, stato, created_at);
+
+-- Consulto rapido tra medici (eConsult): domanda breve dal portale
+-- dell'inviante, risposta scritta dello specialista da /consulti;
+-- convertibile in referral quando serve la visita.
+create table consulti (
+  id                  uuid primary key default gen_random_uuid(),
+  studio_id           uuid not null references studios(id) on delete cascade,
+  referring_doctor_id uuid not null references referring_doctors(id) on delete cascade,
+  domanda             text not null,
+  risposta            text,
+  stato               text not null default 'aperto'
+                        check (stato in ('aperto', 'risposto', 'convertito')),
+  answered_by         uuid references users(id) on delete set null,
+  answered_at         timestamptz,
+  converted_referral_id uuid references referrals(id) on delete set null,
+  created_at          timestamptz not null default now()
+);
+
+create index on consulti (studio_id, stato, created_at);
+create index on consulti (referring_doctor_id, created_at);
+
+create table consulto_attachments (
+  id          uuid primary key default gen_random_uuid(),
+  consulto_id uuid not null references consulti(id) on delete cascade,
+  filename    text not null,
+  storage_key text not null,
+  uploaded_at timestamptz not null default now()
+);
+
+create index on consulto_attachments (consulto_id);

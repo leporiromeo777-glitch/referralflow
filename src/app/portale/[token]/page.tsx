@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import { query } from '@/lib/db';
 import { STATUS } from '@/lib/status';
 import { dataOra } from '@/lib/format';
-import { richiediCodice, completaRegistrazione } from './actions';
+import { richiediCodice, completaRegistrazione, inviaConsulto } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,11 +11,22 @@ type Row = {
   quesito: string | null; appuntamento_at: string | null; created_at: string;
 };
 
+type ConsultoRow = {
+  id: string; domanda: string; risposta: string | null; stato: string;
+  created_at: string; answered_at: string | null;
+};
+
+const CONSULTO_STATO: Record<string, { label: string; tone: string }> = {
+  aperto: { label: 'in attesa di risposta', tone: 'warn' },
+  risposto: { label: 'risposto', tone: 'success' },
+  convertito: { label: 'convertito in visita', tone: 'accent' },
+};
+
 export default async function Portale({
   params, searchParams,
 }: {
   params: { token: string };
-  searchParams: { reg?: string };
+  searchParams: { reg?: string; consulto?: string };
 }) {
   const [doc] = await query<{
     id: string; nome: string; email: string | null;
@@ -58,6 +69,15 @@ export default async function Portale({
     [doc.id]
   );
 
+  const consulti = await query<ConsultoRow>(
+    `select id, domanda, risposta, stato, created_at::text, answered_at::text
+       from consulti
+      where referring_doctor_id = $1
+      order by created_at desc
+      limit 50`,
+    [doc.id]
+  );
+
   return (
     <main className="public wide">
       <div className="brand brand-lg center">Referral<span>Flow</span></div>
@@ -85,6 +105,66 @@ export default async function Portale({
           </table>
         </div>
       )}
+      <div className="card">
+        <h2>Consulto rapido</h2>
+        <p className="muted">
+          Una domanda clinica breve allo specialista, senza inviare il paziente:
+          la risposta scritta arriva qui. Se poi serve la visita, ci pensiamo noi.
+        </p>
+
+        {searchParams.consulto === 'ok' && (
+          <p className="success">Domanda inviata: riceverà un avviso quando c'è la risposta.</p>
+        )}
+        {searchParams.consulto === 'vuoto' && (
+          <p className="error">Scriva la domanda prima di inviare.</p>
+        )}
+        {searchParams.consulto === 'lungo' && (
+          <p className="error">La domanda è troppo lunga (massimo 4000 caratteri).</p>
+        )}
+
+        <form action={inviaConsulto} className="form">
+          <input type="hidden" name="token" value={params.token} />
+          <label>La sua domanda
+            <textarea
+              name="domanda" rows={3} required maxLength={4000}
+              placeholder="Es. paziente in terapia con…, il tracciato allegato richiede una visita?"
+            />
+          </label>
+          <label>Allegati (ECG, esami — facoltativi, max 3 file da 10 MB)
+            <input type="file" name="allegati" multiple accept=".pdf,.png,.jpg,.jpeg" />
+          </label>
+          <div className="form-actions">
+            <button className="btn btn-primary" type="submit">Invia la domanda</button>
+          </div>
+        </form>
+
+        {consulti.length > 0 && (
+          <div className="consulti-list">
+            {consulti.map((c) => (
+              <div key={c.id} className="consulto-item">
+                <div className="consulto-head">
+                  <span className={`badge badge-${CONSULTO_STATO[c.stato]?.tone ?? 'warn'}`}>
+                    {CONSULTO_STATO[c.stato]?.label ?? c.stato}
+                  </span>
+                  <span className="muted small">{dataOra(c.created_at)}</span>
+                </div>
+                <p className="consulto-domanda">{c.domanda}</p>
+                {c.risposta && (
+                  <p className="consulto-risposta">
+                    <strong>Risposta{c.answered_at ? ` (${dataOra(c.answered_at)})` : ''}:</strong> {c.risposta}
+                  </p>
+                )}
+                {c.stato === 'convertito' && (
+                  <p className="muted small">
+                    Da questa domanda è nata una richiesta di visita: la trova nella tabella qui sopra.
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="card notice reg-box">
         {account ? (
           <p className="muted">

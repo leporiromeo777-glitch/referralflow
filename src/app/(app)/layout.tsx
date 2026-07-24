@@ -27,12 +27,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // solo se lo studio la usa (token generato) o se ci sono bozze in coda.
   let refertiBozze = 0;
   let refertiAttivi = false;
+  // Consulti rapidi (eConsult) in attesa di risposta.
+  let consultiAperti = 0;
   if (session && !isMedico && !isInviante) {
-    const [c] = await query<{ nuove: number; richiami: number; referti: number; referti_attivi: boolean }>(
+    const [c] = await query<{ nuove: number; richiami: number; referti: number; referti_attivi: boolean; consulti: number }>(
       `select
          (select count(*) from referrals where status = 'ricevuta' and studio_id = $1)::int as nuove,
          (select count(*) from referti_bozze where studio_id = $1 and stato = 'bozza')::int as referti,
          (select referti_token_set_at is not null from studios where id = $1) as referti_attivi,
+         (select count(*) from consulti where studio_id = $1 and stato = 'aperto')::int as consulti,
          ((select count(*) from referrals
             where studio_id = $1
               and follow_up_due <= current_date and follow_up_done_at is null)
@@ -46,6 +49,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     richiamiScaduti = c?.richiami ?? 0;
     refertiBozze = c?.referti ?? 0;
     refertiAttivi = c?.referti_attivi ?? false;
+    consultiAperti = c?.consulti ?? 0;
   }
 
   const supportEmail = process.env.SUPPORT_EMAIL;
@@ -92,6 +96,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {!isMedico && !isInviante && (refertiAttivi || refertiBozze > 0) && (
             <NavLink href="/referti">
               Referti{refertiBozze > 0 ? <span className="nav-count">{refertiBozze}</span> : null}
+            </NavLink>
+          )}
+          {!isMedico && !isInviante && (
+            <NavLink href="/consulti">
+              Consulti{consultiAperti > 0 ? <span className="nav-count">{consultiAperti}</span> : null}
             </NavLink>
           )}
           {!isMedico && !isInviante && <NavLink href="/inviati">Pazienti inviati</NavLink>}

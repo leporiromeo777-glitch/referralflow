@@ -286,6 +286,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
   color: var(--danger); background: var(--danger-bg); border: 1px solid #f0d4d4;
   font-size: 13.5px; padding: 10px 14px; border-radius: var(--radius); margin: 0 0 14px;
 }
+.success {
+  color: var(--success); background: var(--success-bg); border: 1px solid #cde8da;
+  font-size: 13.5px; padding: 10px 14px; border-radius: var(--radius); margin: 0 0 14px;
+}
 .empty {
   background: var(--surface); border: 1.5px dashed var(--line-strong); border-radius: 14px;
   padding: 36px 28px; text-align: center; color: var(--muted);
@@ -1123,3 +1127,14 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
    Divergenze tra le due trascrizioni = ambra, segmenti dubbi = rosso. */
 .ref-mark-div { background: var(--warn-bg); color: inherit; padding: 0 3px; border-radius: 4px; }
 .ref-mark-dubbio { background: var(--danger-bg); color: inherit; padding: 0 3px; border-radius: 4px; }
+
+/* Consulto rapido: storico delle domande sul portale dell'inviante e
+   dettaglio interno. La risposta è nel riquadro chiaro, mai in email. */
+.consulti-list { margin-top: 18px; display: flex; flex-direction: column; gap: 12px; }
+.consulto-item { border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+.consulto-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.consulto-domanda { margin: 0; white-space: pre-wrap; }
+.consulto-risposta {
+  margin: 10px 0 0; padding: 10px 14px; border-radius: 10px;
+  background: var(--surface); white-space: pre-wrap;
+}
