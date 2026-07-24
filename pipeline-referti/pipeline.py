@@ -15,21 +15,26 @@ Fasi implementate:
      testo, la sua correzione viene scartata in blocco (SPEC §2.4)
   6. estrazione campi (prompt §6.3, modalità JSON) + controlli numerici
      dagli intervalli di correzioni.json → allarmi (mai correzioni)
+  7. modalità servizio: sorveglia ~/referti/ingresso/, elabora in coda,
+     esiti in output/, falliti in errori/ col log accanto — la coda non
+     si blocca mai; audio in archivio_temp/ fino al salvataggio confermato
 
 Uso:
-    python3 pipeline.py <file_audio>
+    python3 pipeline.py <file_audio>     una corsa su un file (test)
+    python3 pipeline.py --servizio       sorveglianza continua di ~/referti/
 
-Accanto al file d'ingresso compaiono <file_id>.wav (audio pulito),
-<file_id>.txt (trascrizione di lavoro, passata A), <file_id>.b.txt
-(passata B), <file_id>.divergenze.json, <file_id>.corretto.txt (dopo il
-dizionario), <file_id>.finale.txt (dopo l'AI) e <file_id>.dubbi.json.
-Il file_id deriva dal contenuto, non dal nome.
+Nella corsa singola i file di lavoro nascono accanto all'ingresso
+(<file_id>.wav, .txt, .b.txt, .divergenze.json, .corretto.txt,
+.finale.txt, .dubbi.json, .campi.json, .allarmi.json, .payload.json).
+Il file_id deriva dal contenuto, non dal nome. In modalità servizio le
+cartelle sono quelle della SPEC §5 (base cambiabile con REFERTI_BASE).
 
 Il modello va messo in modelli/ggml-large-v3.bin accanto a questo script
 (percorsi e binario sovrascrivibili con REFERTI_MODELLO e REFERTI_WHISPER).
 """
 
 import difflib
+import errno
 import hashlib
 import json
 import logging
@@ -41,6 +46,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 
 # ── Logging (SPEC §2.2) ──────────────────────────────────────────────────────
@@ -609,24 +615,29 @@ def controlla_valori(campi: dict, testo: str, controlli: dict, file_id: str) -> 
     return allarmi
 
 
-def main(argv: list[str]) -> int:
-    if len(argv) != 2:
-        print(__doc__, file=sys.stderr)
-        return 2
+class ErroreElaborazione(Exception):
+    """Fallimento di una fase su un singolo file: porta con sé fase e tipo
+    (mai contenuti). In modalità servizio manda il file in errori/."""
 
-    ingresso = Path(argv[1])
-    if not ingresso.is_file():
-        log.error("fase=avvio file=? esito=errore motivo=file_inesistente")
-        return 1
+    def __init__(self, fase: str, tipo: str, file_id: str | None = None):
+        super().__init__(f"{fase}:{tipo}")
+        self.fase = fase
+        self.tipo = tipo
+        self.file_id = file_id
+
+
+def controlli_avvio():
+    """Verifiche una-volta-sola prima di lavorare: strumenti, modelli,
+    configurazione. Restituisce (sostituzioni, controlli) o None."""
     if not 0.5 <= ATEMPO <= 1.5:
         log.error("fase=avvio file=? esito=errore motivo=atempo_non_valido")
-        return 1
+        return None
     if shutil.which(WHISPER_BIN) is None:
         log.error("fase=avvio file=? esito=errore motivo=whisper_mancante")
-        return 1
+        return None
     if not PERCORSO_MODELLO.is_file():
         log.error("fase=avvio file=? esito=errore motivo=modello_mancante")
-        return 1
+        return None
     try:
         sostituzioni = carica_sostituzioni()
         controlli = {
@@ -637,34 +648,37 @@ def main(argv: list[str]) -> int:
         }
     except FileNotFoundError:
         log.error("fase=avvio file=? esito=errore motivo=correzioni_mancanti")
-        return 1
+        return None
     except (json.JSONDecodeError, AttributeError, TypeError):
         log.error("fase=avvio file=? esito=errore motivo=correzioni_non_valide")
-        return 1
+        return None
     motivo = ollama_pronto()
     if motivo:
         log.error("fase=avvio file=? esito=errore motivo=%s", motivo)
-        return 1
+        return None
+    return sostituzioni, controlli
 
+
+def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli) -> tuple[str, dict]:
+    """L'intera catena su un file audio. I file intermedi nascono in dir_out;
+    il risultato è (file_id, payload SPEC §8). Su errore alza
+    ErroreElaborazione dopo aver loggato (mai contenuti nei log)."""
     file_id = file_id_di(ingresso)
     # La configurazione nel log (mai contenuti): serve a sapere, a posteriori,
     # con quali impostazioni è stata prodotta una corsa.
     log.info("fase=avvio file=%s atempo=%s denoise=%d", file_id, ATEMPO, int(DENOISE))
-    wav = ingresso.with_name(f"{file_id}.wav")
-    txt_a = ingresso.with_name(f"{file_id}.txt")
-    txt_b = ingresso.with_name(f"{file_id}.b.txt")
-    div_json = ingresso.with_name(f"{file_id}.divergenze.json")
-    txt_corretto = ingresso.with_name(f"{file_id}.corretto.txt")
-    txt_finale = ingresso.with_name(f"{file_id}.finale.txt")
-    dubbi_json = ingresso.with_name(f"{file_id}.dubbi.json")
+
+    def percorso(suffisso: str) -> Path:
+        return dir_out / f"{file_id}{suffisso}"
 
     fase = "preprocessing"
     try:
-        preprocessa(ingresso, wav, file_id)
+        preprocessa(ingresso, percorso(".wav"), file_id)
         fase = "trascrizione_a"
-        trascrivi(wav, txt_a, file_id, fase)
+        trascrivi(percorso(".wav"), percorso(".txt"), file_id, fase)
         fase = "trascrizione_b"
-        trascrivi(wav, txt_b, file_id, fase)
+        trascrivi(percorso(".wav"), percorso(".b.txt"), file_id, fase)
+
         # Dizionario PRIMA del confronto (ordine invertito rispetto alla prima
         # stesura della SPEC, deviazione documentata in §3): così le àncore
         # delle divergenze nascono già dal testo corretto e combaciano per
@@ -672,9 +686,11 @@ def main(argv: list[str]) -> int:
         # non generano false divergenze. I .txt grezzi restano su disco.
         fase = "dizionario"
         inizio = time.monotonic()
-        corretto_a, n_sost = applica_correzioni(txt_a.read_text(encoding="utf-8"), sostituzioni)
-        corretto_b, _ = applica_correzioni(txt_b.read_text(encoding="utf-8"), sostituzioni)
-        txt_corretto.write_text(corretto_a, encoding="utf-8")
+        corretto_a, n_sost = applica_correzioni(
+            percorso(".txt").read_text(encoding="utf-8"), sostituzioni)
+        corretto_b, _ = applica_correzioni(
+            percorso(".b.txt").read_text(encoding="utf-8"), sostituzioni)
+        percorso(".corretto.txt").write_text(corretto_a, encoding="utf-8")
         log.info(
             "fase=dizionario file=%s esito=ok sostituzioni=%d durata=%.1fs",
             file_id, n_sost, time.monotonic() - inizio,
@@ -683,7 +699,7 @@ def main(argv: list[str]) -> int:
         fase = "confronto"
         inizio = time.monotonic()
         divergenze = confronta(corretto_a, corretto_b)
-        div_json.write_text(
+        percorso(".divergenze.json").write_text(
             json.dumps(divergenze, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
@@ -693,41 +709,177 @@ def main(argv: list[str]) -> int:
         )
 
         fase = "correzione_llm"
-        finale = correggi_llm(
-            corretto_a, file_id, ingresso.with_name(f"{file_id}.scarto_ai.json")
-        )
-        txt_finale.write_text(finale, encoding="utf-8")
+        finale = correggi_llm(corretto_a, file_id, percorso(".scarto_ai.json"))
+        percorso(".finale.txt").write_text(finale, encoding="utf-8")
 
         fase = "ispezione_llm"
         dubbi = ispeziona_llm(finale, file_id)
-        dubbi_json.write_text(
+        percorso(".dubbi.json").write_text(
             json.dumps(dubbi, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
 
         fase = "estrazione"
         campi = estrai_campi(finale, file_id)
-        ingresso.with_name(f"{file_id}.campi.json").write_text(
+        percorso(".campi.json").write_text(
             json.dumps(campi, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
 
         fase = "controlli"
         allarmi = controlla_valori(campi, finale, controlli, file_id)
-        ingresso.with_name(f"{file_id}.allarmi.json").write_text(
+        percorso(".allarmi.json").write_text(
             json.dumps(allarmi, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
     except subprocess.TimeoutExpired:
         log.error("fase=%s file=%s esito=errore motivo=timeout", fase, file_id)
-        return 1
-    except RuntimeError:
-        return 1  # già loggato nella fase che ha fallito
+        raise ErroreElaborazione(fase, "timeout", file_id) from None
+    except RuntimeError as e:
+        # già loggato nella fase che ha fallito
+        raise ErroreElaborazione(fase, type(e).__name__, file_id) from None
+    except ErroreElaborazione:
+        raise
     except Exception as e:
         # Mai str(e): può contenere percorsi o contenuti.
         log.error("fase=%s file=%s esito=errore tipo=%s", fase, file_id, type(e).__name__)
+        raise ErroreElaborazione(fase, type(e).__name__, file_id) from None
+
+    # richiede_revisione è SEMPRE true: non esiste un percorso in cui un
+    # referto sia pronto senza passare da un umano (SPEC §8).
+    payload = {
+        "file_id": file_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "testo_corretto": finale,
+        "campi_estratti": campi,
+        "divergenze": divergenze,
+        "segmenti_dubbi": dubbi,
+        "allarmi_numerici": allarmi,
+        "richiede_revisione": True,
+    }
+    return file_id, payload
+
+
+# ── Modalità servizio (SPEC §3 passo 1, §5, §7) ─────────────────────────────
+# Sorveglianza di ~/referti/ingresso/ con un ciclo di scansione in puro
+# Python (deviazione documentata in SPEC §4: niente libreria watchdog —
+# zero dipendenze, robusto coi file ancora in copia, la latenza di qualche
+# secondo è irrilevante). Un file che fallisce va in errori/ col suo .log
+# e la coda prosegue: non si blocca mai (§7.1).
+
+INTERVALLO_SCANSIONE_S = 15
+SPAZIO_MINIMO_BYTE = 500 * 1024 * 1024  # sotto il mezzo GB ci si ferma (§7.2)
+
+
+def _pulisci_intermedi(cartella: Path, file_id: str) -> None:
+    for p in cartella.glob(f"{file_id}*"):
+        try:
+            p.unlink()
+        except OSError:
+            pass
+
+
+def _processa_uno(audio: Path, cartelle: dict, sostituzioni, controlli) -> None:
+    lavoro = cartelle["lavorazione"] / audio.name
+    shutil.move(str(audio), str(lavoro))
+    try:
+        file_id, payload = elabora(lavoro, cartelle["lavorazione"], sostituzioni, controlli)
+        uscita = cartelle["output"] / f"{file_id}.json"
+        provvisorio = uscita.with_suffix(".json.tmp")
+        provvisorio.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        provvisorio.replace(uscita)  # mai un JSON scritto a metà in output/
+        # L'audio resta in archivio_temp/ finché ReferralFlow non conferma
+        # il salvataggio (Fase 8): MAI cancellato prima (§2.3).
+        shutil.move(str(lavoro), str(cartelle["archivio_temp"] / lavoro.name))
+        _pulisci_intermedi(cartelle["lavorazione"], file_id)
+        log.info("fase=servizio file=%s esito=ok", file_id)
+    except ErroreElaborazione as e:
+        shutil.move(str(lavoro), str(cartelle["errori"] / lavoro.name))
+        # Il .log accanto al file rispetta §2.2/§7.4: fase, tipo, timestamp.
+        (cartelle["errori"] / (lavoro.name + ".log")).write_text(
+            f"{datetime.now(timezone.utc).isoformat(timespec='seconds')} "
+            f"file_id={e.file_id or '?'} fase={e.fase} tipo={e.tipo}\n",
+            encoding="utf-8",
+        )
+        if e.file_id:
+            _pulisci_intermedi(cartelle["lavorazione"], e.file_id)
+        log.error(
+            "fase=servizio file=%s esito=errore fase_fallita=%s", e.file_id or "?", e.fase
+        )
+
+
+def servizio(sostituzioni, controlli) -> int:
+    base = Path(os.environ.get("REFERTI_BASE", str(Path.home() / "referti")))
+    cartelle = {
+        nome: base / nome
+        for nome in ("ingresso", "lavorazione", "errori", "archivio_temp", "output")
+    }
+    for c in [base, *cartelle.values()]:
+        c.mkdir(parents=True, exist_ok=True)
+        os.chmod(c, 0o700)  # solo l'utente proprietario (SPEC §5)
+    log.info("fase=servizio esito=avviato intervallo=%ds", INTERVALLO_SCANSIONE_S)
+
+    in_attesa: dict[Path, int] = {}
+    while True:
+        try:
+            if shutil.disk_usage(base).free < SPAZIO_MINIMO_BYTE:
+                # Disco pieno: fermare tutto e segnalare, non tentare di
+                # procedere (§7.2). L'audio resta dov'è.
+                log.error("fase=servizio esito=fermato motivo=disco_pieno")
+                return 1
+            for f in sorted(cartelle["ingresso"].iterdir()):
+                if not f.is_file() or f.name.startswith("."):
+                    continue
+                dimensione = f.stat().st_size
+                if dimensione == 0 or in_attesa.get(f) != dimensione:
+                    # Copia forse ancora in corso: si riguarda al giro dopo,
+                    # si lavora solo quando la dimensione è stabile.
+                    in_attesa[f] = dimensione
+                    continue
+                in_attesa.pop(f, None)
+                _processa_uno(f, cartelle, sostituzioni, controlli)
+            in_attesa = {p: d for p, d in in_attesa.items() if p.exists()}
+            time.sleep(INTERVALLO_SCANSIONE_S)
+        except KeyboardInterrupt:
+            log.info("fase=servizio esito=fermato motivo=richiesta_utente")
+            return 0
+        except OSError as e:
+            if e.errno == errno.ENOSPC:
+                log.error("fase=servizio esito=fermato motivo=disco_pieno")
+                return 1
+            log.error("fase=servizio esito=errore tipo=%s", type(e).__name__)
+            time.sleep(INTERVALLO_SCANSIONE_S)
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) != 2:
+        print(__doc__, file=sys.stderr)
+        return 2
+
+    ambiente = controlli_avvio()
+    if ambiente is None:
         return 1
-    return 0
+    sostituzioni, controlli = ambiente
+
+    if argv[1] == "--servizio":
+        return servizio(sostituzioni, controlli)
+
+    ingresso = Path(argv[1])
+    if not ingresso.is_file():
+        log.error("fase=avvio file=? esito=errore motivo=file_inesistente")
+        return 1
+    try:
+        file_id, payload = elabora(ingresso, ingresso.parent, sostituzioni, controlli)
+        ingresso.with_name(f"{file_id}.payload.json").write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        return 0
+    except ErroreElaborazione:
+        return 1
 
 
 if __name__ == "__main__":

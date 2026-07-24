@@ -15,7 +15,7 @@ codice — si copia sul Mac mini per l'uso.
 | 4 | Dizionario `correzioni.json` | **fatta — testata su dettato reale** |
 | 5 | Correzione + ispezione LLM | **fatta — da testare su un dettato reale** |
 | 6 | Estrazione campi + controlli numerici | **fatta — da testare su un dettato reale** |
-| 7 | Watcher + gestione errori | da fare |
+| 7 | Watcher + gestione errori | **fatta — da testare su un dettato reale** |
 | 8 | Invio a ReferralFlow + cancellazione audio | da fare (endpoint già pronto) |
 | 9 | plist launchd | da fare |
 

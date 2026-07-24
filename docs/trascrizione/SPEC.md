@@ -162,9 +162,17 @@ si mostra comunque in lista, senza evidenziazione nel testo. Non si scarta mai.
 | Trascrizione | `whisper.cpp` con modello `ggml-large-v3` | binario locale, no pip whisper (troppo lento su Metal) |
 | LLM | Ollama, modello `gemma3:12b` | API locale su `http://localhost:11434` |
 | Audio | `ffmpeg` via subprocess | per normalizzazione e conversione |
-| Watcher | `watchdog` | sorveglia la cartella |
+| Watcher | scansione periodica (stdlib) | ogni 15 s; scelta rivista, vedi nota |
 | Avvio automatico | `launchd` (plist) | **non** nohup, **non** screen |
 | Config | `correzioni.json` | non hardcodare le sostituzioni; **il file va fornito prima della Fase 4** — senza, le fasi 4 e 10 non sono implementabili |
+
+**Nota sul watcher** (scelta rivista in Fase 7, 2026-07-24): al posto della
+libreria `watchdog` si usa un ciclo di scansione in puro Python: zero dipendenze
+da installare, gestione naturale dei file ancora in copia (si elabora solo
+quando la dimensione è stabile tra due giri), e la latenza di qualche secondo è
+irrilevante per un processo notturno. Un file che fallisce va in `errori/` col
+suo `.log` accanto e la coda prosegue; sotto i 500 MB liberi il servizio si
+ferma e segnala (§7.2).
 
 **Non usare:** LangChain, LlamaIndex, o qualsiasi framework di orchestrazione.
 Il flusso è lineare e va scritto esplicitamente. Un framework qui aggiunge solo
