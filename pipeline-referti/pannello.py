@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Pannello locale della pipeline referti.
+"""Pannello locale della pipeline referti — pagina unica.
 
 Gira SOLO su questo Mac: ascolta su 127.0.0.1 e non è raggiungibile dalla
 rete. Qui i contenuti clinici si possono mostrare perché non lasciano mai
 il computer (il disco è cifrato con FileVault). La conferma clinica dei
 referti resta in ReferralFlow: questo è lo strumento d'esercizio dello
-studio — coda, errori, dizionario, anteprima delle bozze non ancora inviate.
+studio — dettati trascinati dentro, coda, bozze con audio, errori,
+dizionario.
 
 Uso:
     python3 pannello.py          poi si apre http://127.0.0.1:8737
@@ -17,8 +18,8 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 import urllib.parse
-from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -32,26 +33,29 @@ SEZIONI = {
     "linguaggio_comune": "Linguaggio comune",
 }
 TIPI_AUDIO = {
-    ".mp3": "audio/mpeg", ".m4a": "audio/mp4",
-    ".wav": "audio/wav", ".aac": "audio/aac",
+    ".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".wav": "audio/wav",
+    ".aac": "audio/aac", ".ogg": "audio/ogg", ".flac": "audio/flac",
+    ".aiff": "audio/aiff", ".caf": "audio/x-caf", ".mp4": "audio/mp4",
 }
+MAX_CARICO_BYTE = 500 * 1024 * 1024
 
 STILE = """
 :root {
   --accent: #1789d6; --bg: #f5f5f7; --card: #ffffff;
   --surface: rgba(255, 255, 255, 0.72); --text: #1d1d1f; --muted: #86868b;
   --hairline: rgba(0, 0, 0, 0.08); --warn: #c77700; --bad: #d70015;
-  --riemp: rgba(120, 120, 128, 0.10);
+  --riemp: rgba(120, 120, 128, 0.10); --accent-velo: rgba(23, 137, 214, 0.08);
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #000; --card: #1c1c1e; --surface: rgba(22, 22, 24, 0.72);
     --text: #f5f5f7; --muted: #98989d; --hairline: rgba(255, 255, 255, 0.12);
     --accent: #3fa4ea; --warn: #ff9f0a; --bad: #ff453a;
-    --riemp: rgba(120, 120, 128, 0.22);
+    --riemp: rgba(120, 120, 128, 0.22); --accent-velo: rgba(63, 164, 234, 0.12);
   }
 }
 * { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
 body { margin: 0; background: var(--bg); color: var(--text);
   font: 15px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
   -webkit-font-smoothing: antialiased; }
@@ -66,14 +70,20 @@ header b::before { content: ""; display: inline-block; width: 9px; height: 9px;
 header a { color: var(--muted); text-decoration: none; font-size: 14px;
   padding: 6px 14px; border-radius: 999px; transition: color .18s, background .18s; }
 header a:hover { color: var(--text); background: var(--riemp); }
-header a.qui { background: var(--accent); color: #fff; }
-main { max-width: 920px; margin: 34px auto 40px; padding: 0 20px; }
-h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; margin: 0 0 22px; }
+main { max-width: 920px; margin: 30px auto 40px; padding: 0 20px; }
+h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; margin: 0 0 20px; }
 .card { background: var(--card); border: 1px solid var(--hairline); border-radius: 20px;
   padding: 20px 24px; margin-bottom: 16px;
   box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 10px 30px rgba(0,0,0,.05); }
 h2 { font-size: 12px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase;
   color: var(--muted); margin: 0 0 12px; }
+.drop { border: 2px dashed rgba(23, 137, 214, 0.45); border-radius: 24px;
+  background: var(--card); padding: 36px 24px; text-align: center;
+  color: var(--muted); transition: all .18s; margin-bottom: 16px; cursor: pointer; }
+.drop b { display: block; color: var(--text); font-size: 17px; font-weight: 600; margin-bottom: 4px; }
+.drop.drag { border-color: var(--accent); background: var(--accent-velo);
+  transform: scale(1.01); }
+.drop .stato { margin-top: 10px; font-size: 13px; color: var(--accent); white-space: pre-line; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 14px; margin-bottom: 16px; }
 .stat { background: var(--card); border: 1px solid var(--hairline); border-radius: 20px;
@@ -83,6 +93,13 @@ h2 { font-size: 12px; font-weight: 600; letter-spacing: 0.07em; text-transform: 
 .stat .l { color: var(--muted); font-size: 13px; margin-top: 2px; line-height: 1.3; }
 .stat.bad .n { color: var(--bad); }
 .stat.zero .n { color: var(--muted); }
+details.card > summary { cursor: pointer; font-weight: 600; list-style: none;
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+details.card > summary::before { content: "›"; color: var(--muted);
+  font-weight: 700; transition: transform .15s; display: inline-block; }
+details[open].card > summary::before { transform: rotate(90deg); }
+details.card > summary .muted { font-weight: 400; }
+details.card[open] > summary { margin-bottom: 14px; }
 table { border-collapse: collapse; width: 100%; }
 td, th { text-align: left; padding: 10px 12px 10px 0; border-bottom: 1px solid var(--hairline);
   vertical-align: top; }
@@ -104,7 +121,7 @@ pre.log { font: 11.5px/1.8 ui-monospace, "SF Mono", Menlo, monospace;
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.07); }
 mark.div { background: rgba(255, 159, 10, 0.25); color: inherit; padding: 0 3px; border-radius: 4px; }
 mark.dub { background: rgba(255, 69, 58, 0.22); color: inherit; padding: 0 3px; border-radius: 4px; }
-.avviso { background: rgba(23, 137, 214, 0.10); border: 1px solid rgba(23, 137, 214, 0.28);
+.avviso { background: var(--accent-velo); border: 1px solid rgba(23, 137, 214, 0.28);
   border-radius: 14px; padding: 10px 14px; margin-bottom: 14px; font-size: 14px; }
 .errore-msg { background: rgba(255, 69, 58, 0.12); border: 1px solid rgba(255, 69, 58, 0.3);
   border-radius: 14px; padding: 10px 14px; margin-bottom: 14px; font-size: 14px; }
@@ -112,6 +129,44 @@ mark.dub { background: rgba(255, 69, 58, 0.22); color: inherit; padding: 0 3px; 
 audio { width: 100%; margin-top: 4px; }
 .firma { color: var(--muted); font-size: 12px; text-align: center; margin-top: 34px; }
 """
+
+SCRIPT = """
+const zona = document.getElementById('zona');
+const scelta = document.getElementById('scelta');
+const stato = document.getElementById('statocarico');
+const ESTENSIONI = %s;
+
+function estensioneOk(nome) {
+  const p = nome.lastIndexOf('.');
+  return p > -1 && ESTENSIONI.includes(nome.slice(p).toLowerCase());
+}
+
+async function carica(files) {
+  const buoni = [...files].filter(f => estensioneOk(f.name));
+  const scartati = [...files].length - buoni.length;
+  let fatti = 0;
+  for (const f of buoni) {
+    stato.textContent = `Carico ${f.name}… (${fatti + 1}/${buoni.length})`;
+    try {
+      const r = await fetch('/carica?nome=' + encodeURIComponent(f.name), { method: 'POST', body: f });
+      if (r.ok) fatti++;
+    } catch (e) {}
+  }
+  stato.textContent = (fatti ? `✓ ${fatti} dettato/i in coda.` : '') +
+    (scartati ? ` ${scartati} file ignorati (non sono audio).` : '') || 'Nessun file caricato.';
+  if (fatti) setTimeout(() => location.reload(), 900);
+}
+
+['dragenter', 'dragover'].forEach(ev => zona.addEventListener(ev, e => {
+  e.preventDefault(); zona.classList.add('drag');
+}));
+['dragleave', 'drop'].forEach(ev => zona.addEventListener(ev, e => {
+  e.preventDefault(); zona.classList.remove('drag');
+}));
+zona.addEventListener('drop', e => carica(e.dataTransfer.files));
+zona.addEventListener('click', () => scelta.click());
+scelta.addEventListener('change', () => carica(scelta.files));
+""" % json.dumps(sorted(TIPI_AUDIO))
 
 
 def e(testo) -> str:
@@ -131,79 +186,6 @@ def scrivi_locali(dati: dict) -> None:
         json.dumps(dati, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     provvisorio.replace(LOCALI)
-
-
-def pagina(titolo: str, attiva: str, corpo: str) -> bytes:
-    voci = [("/", "Coda"), ("/bozze", "Bozze"), ("/errori", "Errori"), ("/dizionario", "Dizionario")]
-    nav = " ".join(
-        f'<a href="{url}" class="{"qui" if url == attiva else ""}">{nome}</a>'
-        for url, nome in voci
-    )
-    return f"""<!doctype html><html lang="it"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{e(titolo)} — Pipeline referti</title><style>{STILE}</style></head>
-<body><header><b>Pipeline referti</b> {nav}</header>
-<main><h1>{e(titolo)}</h1>{corpo}
-<p class="firma">Pannello locale · visibile solo da questo computer · la conferma dei referti si fa in ReferralFlow</p>
-</main></body></html>""".encode("utf-8")
-
-
-# ── Pagine ───────────────────────────────────────────────────────────────────
-
-def pagina_coda() -> bytes:
-    conta = {}
-    for nome in ("ingresso", "lavorazione", "errori", "archivio_temp", "output"):
-        c = BASE / nome
-        conta[nome] = len([p for p in c.iterdir() if p.is_file() and not p.name.startswith(".") and not p.name.endswith(".log")]) if c.is_dir() else 0
-    righe_log = ""
-    registro = BASE / "log" / "servizio.log"
-    if registro.is_file():
-        code = registro.read_text(encoding="utf-8").splitlines()[-25:]
-        righe_log = "\n".join(reversed(code))
-    def tessera(numero: int, etichetta: str, critico: bool = False) -> str:
-        classe = "stat bad" if critico and numero > 0 else ("stat zero" if numero == 0 else "stat")
-        return f'<div class="{classe}"><div class="n">{numero}</div><div class="l">{etichetta}</div></div>'
-
-    corpo = f"""
-<div class="stats">
-{tessera(conta['ingresso'], 'In attesa di elaborazione')}
-{tessera(conta['lavorazione'], 'In lavorazione')}
-{tessera(conta['output'], 'Pronte per l’invio')}
-{tessera(conta['archivio_temp'], 'Audio in archivio')}
-{tessera(conta['errori'], 'In errore', critico=True)}
-</div>
-<div class="card"><h2>Come funziona</h2>
-<p class="muted">Il medico deposita i dettati in <b>{e(BASE)}/ingresso</b> — il servizio fa il resto da solo.</p></div>
-<div class="card"><h2>Registro del servizio · più recente in alto</h2>
-{'<pre class="log">' + e(righe_log) + '</pre>' if righe_log else '<p class="muted">Nessun registro: il servizio non è ancora stato avviato in questa cartella.</p>'}
-</div>"""
-    return pagina("Coda", "/", corpo)
-
-
-def _bozze_pendenti() -> list[dict]:
-    out = BASE / "output"
-    bozze = []
-    if out.is_dir():
-        for p in sorted(out.glob("*.json")):
-            d = leggi_json(p, None)
-            if isinstance(d, dict) and d.get("file_id"):
-                bozze.append(d)
-    return bozze
-
-
-def pagina_bozze() -> bytes:
-    bozze = _bozze_pendenti()
-    if not bozze:
-        corpo = '<div class="card"><p class="muted">Nessuna bozza in attesa di invio. Quelle già consegnate si rivedono e si confermano in ReferralFlow, pagina «Bozze di referto».</p></div>'
-        return pagina("Bozze in attesa di invio", "/bozze", corpo)
-    righe = ""
-    for d in bozze:
-        paz = (d.get("campi_estratti") or {}).get("nome_paziente") or "—"
-        righe += f"""<tr><td><a href="/bozza?id={e(d['file_id'])}">{e(paz)}</a>
-<div class="muted">{e(d.get('timestamp') or '')}</div></td>
-<td class="num">{len(d.get('divergenze') or [])} divergenze<br>{len(d.get('segmenti_dubbi') or [])} dubbi<br>{len(d.get('allarmi_numerici') or [])} allarmi</td></tr>"""
-    corpo = f'<div class="card"><table>{righe}</table><p class="muted">Queste bozze partiranno da sole appena ReferralFlow è raggiungibile e configurato.</p></div>'
-    return pagina("Bozze in attesa di invio", "/bozze", corpo)
 
 
 def _evidenzia(testo: str, divergenze: list, dubbi: list) -> str:
@@ -230,47 +212,91 @@ def _evidenzia(testo: str, divergenze: list, dubbi: list) -> str:
     return "".join(pezzi)
 
 
-def pagina_bozza(file_id: str) -> bytes | None:
-    d = leggi_json(BASE / "output" / f"{file_id}.json", None)
-    if not isinstance(d, dict):
-        return None
-    audio = next((BASE / "archivio_temp").glob(file_id + ".*"), None) if (BASE / "archivio_temp").is_dir() else None
-    campi = d.get("campi_estratti") or {}
-    divergenze = d.get("divergenze") or []
-    dubbi = d.get("segmenti_dubbi") or []
-    allarmi = d.get("allarmi_numerici") or []
+# ── Sezioni della pagina unica ───────────────────────────────────────────────
 
-    blocco_audio = (
-        f'<div class="card"><h2>Audio originale (l\'input)</h2>'
-        f'<audio controls preload="none" src="/audio?id={e(file_id)}" style="width:100%"></audio></div>'
-        if audio else ""
-    )
-    righe_campi = "".join(
-        f"<tr><td>{e(k.replace('_', ' '))}</td><td>{e(json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list)) else v)}</td></tr>"
-        for k, v in campi.items()
-    )
-    righe_div = "".join(
-        f'<li><span class="muted">…{e(dv.get("contesto") or "")}…</span><br><b>A:</b> {e(dv.get("versione_a") or "—")} · <b>B:</b> {e(dv.get("versione_b") or "—")}</li>'
-        for dv in divergenze if isinstance(dv, dict)
-    )
-    righe_allarmi = "".join(
-        f"<li><b>{e(a.get('campo'))}</b>: {e(a.get('valore'))} <span class=\"muted\">({e(a.get('stato'))}{', atteso ' + e(a.get('intervallo')) if a.get('intervallo') else ''})</span></li>"
-        for a in allarmi if isinstance(a, dict)
-    )
-    corpo = f"""
-<div class="avviso">Bozza in attesa di invio a ReferralFlow — la conferma si farà lì. Ricevuta: {e(d.get('timestamp') or '?')}</div>
-{blocco_audio}
-{'<div class="card"><h2>⚠ Allarmi numerici</h2><ul>' + righe_allarmi + '</ul></div>' if righe_allarmi else ''}
-<div class="card"><h2>Testo del referto</h2>
+def sez_drop() -> str:
+    return """
+<div class="drop" id="zona">
+<b>Trascina qui i dettati vocali</b>
+memo vocali, m4a, mp3, wav… — finiscono in coda e il servizio li elabora da solo<br>
+<span class="muted">(oppure clicca per sceglierli)</span>
+<div class="stato" id="statocarico"></div>
+<input type="file" id="scelta" multiple accept="audio/*,.m4a,.mp3,.wav,.aac,.ogg,.flac,.aiff,.caf" hidden>
+</div>"""
+
+
+def sez_stats() -> str:
+    conta = {}
+    for nome in ("ingresso", "lavorazione", "errori", "archivio_temp", "output"):
+        c = BASE / nome
+        conta[nome] = len([p for p in c.iterdir() if p.is_file() and not p.name.startswith(".") and not p.name.endswith(".log")]) if c.is_dir() else 0
+
+    def tessera(numero: int, etichetta: str, critico: bool = False) -> str:
+        classe = "stat bad" if critico and numero > 0 else ("stat zero" if numero == 0 else "stat")
+        return f'<div class="{classe}"><div class="n">{numero}</div><div class="l">{etichetta}</div></div>'
+
+    return f"""
+<div class="stats">
+{tessera(conta['ingresso'], 'In attesa di elaborazione')}
+{tessera(conta['lavorazione'], 'In lavorazione')}
+{tessera(conta['output'], 'Pronte per l’invio')}
+{tessera(conta['archivio_temp'], 'Audio in archivio')}
+{tessera(conta['errori'], 'In errore', critico=True)}
+</div>"""
+
+
+def sez_bozze() -> str:
+    out = BASE / "output"
+    bozze = []
+    if out.is_dir():
+        for p in sorted(out.glob("*.json")):
+            d = leggi_json(p, None)
+            if isinstance(d, dict) and d.get("file_id"):
+                bozze.append(d)
+    if not bozze:
+        return '<div class="card"><h2>Bozze in attesa di invio</h2><p class="muted">Nessuna: quelle già consegnate si rivedono e si confermano in ReferralFlow.</p></div>'
+
+    blocchi = ""
+    for d in bozze:
+        fid = d["file_id"]
+        campi = d.get("campi_estratti") or {}
+        divergenze = d.get("divergenze") or []
+        dubbi = d.get("segmenti_dubbi") or []
+        allarmi = d.get("allarmi_numerici") or []
+        paz = campi.get("nome_paziente") or "Paziente non indicato"
+        audio_file = next((BASE / "archivio_temp").glob(fid + ".*"), None) if (BASE / "archivio_temp").is_dir() else None
+        audio_html = (
+            f'<h2>Audio originale</h2><audio controls preload="none" src="/audio?id={e(fid)}"></audio>'
+            if audio_file else ""
+        )
+        righe_campi = "".join(
+            f"<tr><td>{e(k.replace('_', ' '))}</td><td>{e(json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list)) else v)}</td></tr>"
+            for k, v in campi.items()
+        )
+        righe_div = "".join(
+            f'<li><span class="muted">…{e(dv.get("contesto") or "")}…</span><br><b>A:</b> {e(dv.get("versione_a") or "—")} · <b>B:</b> {e(dv.get("versione_b") or "—")}</li>'
+            for dv in divergenze if isinstance(dv, dict)
+        )
+        righe_allarmi = "".join(
+            f"<li><b>{e(a.get('campo'))}</b>: {e(a.get('valore'))} <span class=\"muted\">({e(a.get('stato'))}{', atteso ' + e(a.get('intervallo')) if a.get('intervallo') else ''})</span></li>"
+            for a in allarmi if isinstance(a, dict)
+        )
+        riassunto = f"{len(divergenze)} divergenze · {len(dubbi)} dubbi · {len(allarmi)} allarmi"
+        blocchi += f"""
+<details class="card"><summary>{e(paz)}
+<span class="muted">{e(d.get('timestamp') or '')} · {e(riassunto)}</span></summary>
+{audio_html}
+{'<h2 style="margin-top:14px">⚠ Allarmi numerici</h2><ul>' + righe_allarmi + '</ul>' if righe_allarmi else ''}
+<h2 style="margin-top:14px">Testo del referto</h2>
 <p class="muted">Evidenziati: <mark class="div">divergenze tra le due trascrizioni</mark> e <mark class="dub">segmenti dubbi</mark>.</p>
-<pre>{_evidenzia(d.get('testo_corretto') or '', divergenze, dubbi)}</pre></div>
-{'<div class="card"><h2>Divergenze (A contro B)</h2><ul>' + righe_div + '</ul></div>' if righe_div else ''}
-<div class="card"><h2>Campi estratti</h2><table>{righe_campi or '<tr><td class="muted">nessuno</td></tr>'}</table></div>
-<p><a class="btn btn-secondario" href="/bozze">← Tutte le bozze</a></p>"""
-    return pagina("Bozza " + file_id[:8], "/bozze", corpo)
+<pre>{_evidenzia(d.get('testo_corretto') or '', divergenze, dubbi)}</pre>
+{'<h2>Divergenze (A contro B)</h2><ul>' + righe_div + '</ul>' if righe_div else ''}
+<h2>Campi estratti</h2><table>{righe_campi or '<tr><td class="muted">nessuno</td></tr>'}</table>
+</details>"""
+    return f'<h2 style="margin:22px 4px 10px">Bozze in attesa di invio · {len(bozze)}</h2>' + blocchi
 
 
-def pagina_errori(msg: str = "") -> bytes:
+def sez_errori() -> str:
     cart = BASE / "errori"
     voci = ""
     if cart.is_dir():
@@ -282,14 +308,23 @@ def pagina_errori(msg: str = "") -> bytes:
             voci += f"""<tr><td>{e(p.name)}<div class="muted">{e(diagnosi)}</div></td>
 <td><form method="post" action="/riprova"><input type="hidden" name="nome" value="{e(p.name)}">
 <button class="btn btn-secondario" type="submit">Riprova</button></form></td></tr>"""
-    corpo = (f'<div class="avviso">{e(msg)}</div>' if msg else "") + (
-        f'<div class="card"><table>{voci}</table><p class="muted">«Riprova» rimette il file in coda (gli errori d\'invio tornano tra le bozze).</p></div>'
-        if voci else '<div class="card"><p class="muted">Nessun file in errore.</p></div>'
-    )
-    return pagina("Errori", "/errori", corpo)
+    if not voci:
+        return ""
+    return f"""<div class="card" id="errori"><h2>Errori</h2>
+<table>{voci}</table><p class="muted">«Riprova» rimette il file in coda (gli errori d’invio tornano tra le bozze).</p>
+</div>"""
 
 
-def pagina_dizionario(msg: str = "", errore: str = "") -> bytes:
+def sez_registro() -> str:
+    registro = BASE / "log" / "servizio.log"
+    if not registro.is_file():
+        return '<div class="card"><h2>Registro del servizio</h2><p class="muted">Il servizio non è ancora stato avviato in questa cartella.</p></div>'
+    code = registro.read_text(encoding="utf-8").splitlines()[-25:]
+    return f"""<details class="card"><summary>Registro del servizio <span class="muted">ultime {len(code)} righe · più recente in alto</span></summary>
+<pre class="log">{e(chr(10).join(reversed(code)))}</pre></details>"""
+
+
+def sez_dizionario() -> str:
     repo = leggi_json(CORREZIONI, {})
     locali = leggi_json(LOCALI, {})
     opzioni = "".join(f'<option value="{s}">{n}</option>' for s, n in SEZIONI.items())
@@ -305,22 +340,40 @@ def pagina_dizionario(msg: str = "", errore: str = "") -> bytes:
             if da.startswith("_"):
                 continue
             righe_repo += f'<tr><td>{e(da)}</td><td>{e(a)}</td><td class="muted">{e(SEZIONI[sezione])}</td></tr>'
-    corpo = f"""
-{f'<div class="errore-msg">{e(errore)}</div>' if errore else ''}
-{f'<div class="avviso">{e(msg)}</div>' if msg else ''}
-<div class="card"><h2>Aggiungi una correzione</h2>
+    n_locali = sum(len(locali.get(s) or {}) for s in SEZIONI)
+    return f"""
+<div class="card" id="dizionario"><h2>Dizionario · aggiungi una correzione</h2>
 <p class="muted">Solo errori RICORRENTI e NON ambigui: se una parola potrebbe comparire legittimamente col suo significato originale, non metterla qui. Mai numeri. Il servizio la usa dal giro successivo.</p>
 <form method="post" action="/dizionario/aggiungi" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
 <input name="da" placeholder="come esce sbagliato" required maxlength="80">
 <span>→</span>
 <input name="a" placeholder="come dev'essere" required maxlength="80">
 <select name="sezione">{opzioni}</select>
-<button class="btn" type="submit">Aggiungi</button></form></div>
-<div class="card"><h2>Voci dello studio ({sum(len(locali.get(s) or {}) for s in SEZIONI)})</h2>
-<table>{righe_locali or '<tr><td class="muted">nessuna — quelle che aggiungi compaiono qui</td></tr>'}</table></div>
-<div class="card"><h2>Voci di base del progetto</h2><table>{righe_repo}</table>
-<p class="muted">Queste arrivano dal repo con gli aggiornamenti; a parità di voce, vincono le voci dello studio.</p></div>"""
-    return pagina("Dizionario delle correzioni", "/dizionario", corpo)
+<button class="btn" type="submit">Aggiungi</button></form>
+</div>
+<details class="card"><summary>Voci dello studio <span class="muted">{n_locali}</span></summary>
+<table>{righe_locali or '<tr><td class="muted">nessuna — quelle che aggiungi compaiono qui</td></tr>'}</table></details>
+<details class="card"><summary>Voci di base del progetto <span class="muted">dal repo · a parità di voce vincono quelle dello studio</span></summary>
+<table>{righe_repo}</table></details>"""
+
+
+def pagina_unica(msg: str = "", err: str = "") -> bytes:
+    banner = (
+        (f'<div class="errore-msg">{e(err)}</div>' if err else "")
+        + (f'<div class="avviso">{e(msg)}</div>' if msg else "")
+    )
+    corpo = (
+        banner + sez_drop() + sez_stats() + sez_bozze()
+        + sez_errori() + sez_dizionario() + sez_registro()
+    )
+    return f"""<!doctype html><html lang="it"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pipeline referti</title><style>{STILE}</style></head>
+<body><header><b>Pipeline referti</b>
+<a href="#dizionario">Dizionario</a></header>
+<main><h1>Referti dettati</h1>{corpo}
+<p class="firma">Pannello locale · visibile solo da questo computer · la conferma dei referti si fa in ReferralFlow</p>
+</main><script>{SCRIPT}</script></body></html>""".encode("utf-8")
 
 
 # ── Server ───────────────────────────────────────────────────────────────────
@@ -348,14 +401,7 @@ class Pannello(BaseHTTPRequestHandler):
         q = urllib.parse.parse_qs(url.query)
         prendi = lambda k: (q.get(k) or [""])[0]
         if url.path == "/":
-            return self._rispondi(pagina_coda())
-        if url.path == "/bozze":
-            return self._rispondi(pagina_bozze())
-        if url.path == "/bozza":
-            fid = prendi("id")
-            corpo = pagina_bozza(fid) if fid.isalnum() else None
-            if corpo:
-                return self._rispondi(corpo)
+            return self._rispondi(pagina_unica(prendi("msg"), prendi("err")))
         if url.path == "/audio":
             fid = prendi("id")
             if fid.isalnum() and (BASE / "archivio_temp").is_dir():
@@ -363,18 +409,45 @@ class Pannello(BaseHTTPRequestHandler):
                 if audio:
                     tipo = TIPI_AUDIO.get(audio.suffix.lower(), "application/octet-stream")
                     return self._rispondi(audio.read_bytes(), tipo)
-        if url.path == "/errori":
-            return self._rispondi(pagina_errori(prendi("msg")))
-        if url.path == "/dizionario":
-            return self._rispondi(pagina_dizionario(prendi("msg"), prendi("err")))
-        self._rispondi(pagina("Non trovato", "/", '<div class="card"><p>Pagina inesistente.</p></div>'), stato=404)
+            return self._rispondi(b"non trovato", "text/plain", 404)
+        self._reindirizza("/")
 
     def do_POST(self):
+        url = urllib.parse.urlparse(self.path)
+
+        if url.path == "/carica":
+            q = urllib.parse.parse_qs(url.query)
+            nome = os.path.basename((q.get("nome") or [""])[0]).strip()
+            n = int(self.headers.get("Content-Length", 0))
+            estensione = Path(nome).suffix.lower()
+            if not nome or estensione not in TIPI_AUDIO or n <= 0 or n > MAX_CARICO_BYTE:
+                return self._rispondi(b'{"errore":"file_non_valido"}', "application/json", 400)
+            ingresso = BASE / "ingresso"
+            ingresso.mkdir(parents=True, exist_ok=True)
+            if (ingresso / nome).exists():
+                nome = f"{int(time.time())}-{nome}"
+            # Prima su file nascosto (il servizio ignora i nomi che iniziano
+            # per punto), poi rinomina: mai un file letto a metà.
+            parziale = ingresso / ("." + nome + ".part")
+            rimasti = n
+            with open(parziale, "wb") as f:
+                while rimasti > 0:
+                    blocco = self.rfile.read(min(65536, rimasti))
+                    if not blocco:
+                        break
+                    f.write(blocco)
+                    rimasti -= len(blocco)
+            if rimasti != 0:
+                parziale.unlink(missing_ok=True)
+                return self._rispondi(b'{"errore":"caricamento_incompleto"}', "application/json", 400)
+            parziale.replace(ingresso / nome)
+            return self._rispondi(b'{"esito":"in_coda"}', "application/json", 201)
+
         n = int(self.headers.get("Content-Length", 0))
         dati = urllib.parse.parse_qs(self.rfile.read(n).decode("utf-8"))
         prendi = lambda k: (dati.get(k) or [""])[0].strip()
 
-        if self.path == "/riprova":
+        if url.path == "/riprova":
             nome = os.path.basename(prendi("nome"))
             origine = BASE / "errori" / nome
             if nome and origine.is_file():
@@ -386,32 +459,32 @@ class Pannello(BaseHTTPRequestHandler):
                 registro = BASE / "errori" / (nome + ".log")
                 if registro.is_file():
                     registro.unlink()
-                return self._reindirizza("/errori?msg=" + urllib.parse.quote("Rimesso in coda: riparte al prossimo giro del servizio."))
-            return self._reindirizza("/errori")
+                return self._reindirizza("/?msg=" + urllib.parse.quote("Rimesso in coda: riparte al prossimo giro del servizio.") + "#errori")
+            return self._reindirizza("/")
 
-        if self.path == "/dizionario/aggiungi":
+        if url.path == "/dizionario/aggiungi":
             da, a, sezione = prendi("da"), prendi("a"), prendi("sezione")
             if sezione not in SEZIONI:
                 sezione = "termini_clinici"
             if not da or not a:
-                return self._reindirizza("/dizionario?err=" + urllib.parse.quote("Servono entrambe le caselle."))
+                return self._reindirizza("/?err=" + urllib.parse.quote("Servono entrambe le caselle.") + "#dizionario")
             if any(c.isdigit() for c in da + a):
-                return self._reindirizza("/dizionario?err=" + urllib.parse.quote("Le correzioni non possono contenere numeri: è una regola fissa del sistema."))
+                return self._reindirizza("/?err=" + urllib.parse.quote("Le correzioni non possono contenere numeri: è una regola fissa del sistema.") + "#dizionario")
             if da.lower() == a.lower():
-                return self._reindirizza("/dizionario?err=" + urllib.parse.quote("Le due voci sono uguali."))
+                return self._reindirizza("/?err=" + urllib.parse.quote("Le due voci sono uguali.") + "#dizionario")
             locali = leggi_json(LOCALI, {})
             locali.setdefault(sezione, {})[da.lower()] = a
             scrivi_locali(locali)
-            return self._reindirizza("/dizionario?msg=" + urllib.parse.quote(f"Aggiunta: «{da}» → «{a}». Attiva dal prossimo giro."))
+            return self._reindirizza("/?msg=" + urllib.parse.quote(f"Aggiunta: «{da}» → «{a}». Attiva dal prossimo giro.") + "#dizionario")
 
-        if self.path == "/dizionario/rimuovi":
+        if url.path == "/dizionario/rimuovi":
             da, sezione = prendi("da"), prendi("sezione")
             locali = leggi_json(LOCALI, {})
             if sezione in SEZIONI and da in (locali.get(sezione) or {}):
                 del locali[sezione][da]
                 scrivi_locali(locali)
-                return self._reindirizza("/dizionario?msg=" + urllib.parse.quote(f"Tolta: «{da}»."))
-            return self._reindirizza("/dizionario")
+                return self._reindirizza("/?msg=" + urllib.parse.quote(f"Tolta: «{da}».") + "#dizionario")
+            return self._reindirizza("/#dizionario")
 
         self._reindirizza("/")
 
