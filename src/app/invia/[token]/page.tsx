@@ -3,6 +3,7 @@ import { query } from '@/lib/db';
 import { createPublicReferral } from './actions';
 import { catturaAttiva } from '@/lib/impegnativa';
 import { CatturaImpegnativa } from './CatturaImpegnativa';
+import { slotProposti } from '@/lib/slot';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,14 +13,20 @@ export default async function InviaReferral({
   params: { token: string };
   searchParams: { ok?: string; error?: string };
 }) {
-  const [doc] = await query<{ nome: string; studio: string | null; scaduto: boolean; studio_nome: string }>(
-    `select d.nome, d.studio, (d.token_expires_at <= now()) as scaduto, s.nome as studio_nome
+  const [doc] = await query<{
+    nome: string; studio: string | null; scaduto: boolean;
+    studio_nome: string; studio_id: string;
+  }>(
+    `select d.nome, d.studio, (d.token_expires_at <= now()) as scaduto,
+            s.nome as studio_nome, s.id as studio_id
        from referring_doctors d
        join studios s on s.id = d.studio_id
       where d.token = $1`,
     [params.token]
   );
   if (!doc) notFound();
+
+  const slots = doc.scaduto ? [] : await slotProposti(doc.studio_id);
 
   if (doc.scaduto) {
     return (
@@ -88,6 +95,27 @@ export default async function InviaReferral({
               <input type="file" name="allegati" multiple accept=".pdf,.png,.jpg,.jpeg" />
             </label>
           </fieldset>
+
+          {slots.length > 0 && (
+            <fieldset>
+              <legend>Quando preferirebbe? (facoltativo)</legend>
+              <p className="muted small">
+                Slot indicativi liberi. La segreteria conferma e ricontatta il paziente.
+              </p>
+              <div className="slot-scelta">
+                {slots.map((s) => (
+                  <label key={s.iso} className="slot-opt">
+                    <input type="radio" name="slot_proposto" value={s.iso} />
+                    <span>{s.label}</span>
+                  </label>
+                ))}
+                <label className="slot-opt">
+                  <input type="radio" name="slot_proposto" value="" defaultChecked />
+                  <span>Indifferente</span>
+                </label>
+              </div>
+            </fieldset>
+          )}
 
           <div className="form-actions">
             <button className="btn btn-primary" type="submit">Invia referral</button>

@@ -5,6 +5,7 @@ import { query } from '@/lib/db';
 import { notifyStudio } from '@/lib/notify';
 import { putFile } from '@/lib/storage';
 import { isAllowedPublicUpload } from '@/lib/upload';
+import { slotValido } from '@/lib/slot';
 
 const MAX_FILE = 10 * 1024 * 1024; // 10 MB
 const MAX_FILES = 5;
@@ -60,10 +61,12 @@ export async function createWebsiteReferral(formData: FormData) {
      values ($1,$2,$3,$4,$5) returning id`,
     [studio.id, cognome, nome, dataNascita, telefono]
   );
+  const slotScelto = await slotValido(studio.id, String(formData.get('slot_proposto') ?? ''));
+
   const [ref] = await query<{ id: string }>(
-    `insert into referrals (studio_id, patient_id, referring_doctor_id, quesito, urgenza, status, canale)
-     values ($1,$2,$3,$4,$5::urgenza,'ricevuta'::referral_status,'sito') returning id`,
-    [studio.id, patient.id, doc.id, quesito, urgenza]
+    `insert into referrals (studio_id, patient_id, referring_doctor_id, quesito, urgenza, status, canale, slot_proposto)
+     values ($1,$2,$3,$4,$5::urgenza,'ricevuta'::referral_status,'sito',$6) returning id`,
+    [studio.id, patient.id, doc.id, quesito, urgenza, slotScelto]
   );
   await query(
     `insert into referral_status_history (referral_id, to_status, nota)

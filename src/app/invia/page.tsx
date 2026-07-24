@@ -1,5 +1,6 @@
 import { query } from '@/lib/db';
 import { createWebsiteReferral } from './actions';
+import { slotProposti } from '@/lib/slot';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,6 +46,7 @@ export default async function InviaPubblico({
   }
 
   const base = `/invia?s=${studio.slug}`;
+  const slots = searchParams.ok ? [] : await slotProposti(studio.id);
 
   return (
     <main className="public">
@@ -111,6 +113,27 @@ export default async function InviaPubblico({
               <input type="file" name="allegati" multiple accept=".pdf,.png,.jpg,.jpeg" />
             </label>
           </fieldset>
+
+          {slots.length > 0 && (
+            <fieldset>
+              <legend>Quando preferirebbe? (facoltativo)</legend>
+              <p className="muted small">
+                Slot indicativi liberi. La segreteria conferma e ricontatta il paziente.
+              </p>
+              <div className="slot-scelta">
+                {slots.map((s) => (
+                  <label key={s.iso} className="slot-opt">
+                    <input type="radio" name="slot_proposto" value={s.iso} />
+                    <span>{s.label}</span>
+                  </label>
+                ))}
+                <label className="slot-opt">
+                  <input type="radio" name="slot_proposto" value="" defaultChecked />
+                  <span>Indifferente</span>
+                </label>
+              </div>
+            </fieldset>
+          )}
 
           <div className="form-actions">
             <button className="btn btn-primary" type="submit">Invia referral</button>

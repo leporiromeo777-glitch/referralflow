@@ -5,6 +5,7 @@ import { query } from '@/lib/db';
 import { notifyStudio } from '@/lib/notify';
 import { putFile } from '@/lib/storage';
 import { isAllowedPublicUpload } from '@/lib/upload';
+import { slotValido } from '@/lib/slot';
 
 const MAX_FILE = 10 * 1024 * 1024; // 10 MB
 const MAX_FILES = 5;
@@ -26,15 +27,19 @@ export async function createPublicReferral(formData: FormData) {
   const quesito = String(formData.get('quesito') ?? '').trim() || null;
   const urgenza = String(formData.get('urgenza') ?? 'normale');
 
+  // Slot indicativo scelto dall'inviante: riverificato lato server (deve essere
+  // uno di quelli realmente proposti per lo studio).
+  const slotScelto = await slotValido(doc.studio_id, String(formData.get('slot_proposto') ?? ''));
+
   const [patient] = await query<{ id: string }>(
     `insert into patients (studio_id, cognome, nome, data_nascita, telefono)
      values ($1,$2,$3,$4,$5) returning id`,
     [doc.studio_id, cognome, nome, dataNascita, telefono]
   );
   const [ref] = await query<{ id: string }>(
-    `insert into referrals (studio_id, patient_id, referring_doctor_id, quesito, urgenza, status, canale)
-     values ($1,$2,$3,$4,$5::urgenza,'ricevuta'::referral_status,'form') returning id`,
-    [doc.studio_id, patient.id, doc.id, quesito, urgenza]
+    `insert into referrals (studio_id, patient_id, referring_doctor_id, quesito, urgenza, status, canale, slot_proposto)
+     values ($1,$2,$3,$4,$5::urgenza,'ricevuta'::referral_status,'form',$6) returning id`,
+    [doc.studio_id, patient.id, doc.id, quesito, urgenza, slotScelto]
   );
   await query(
     `insert into referral_status_history (referral_id, to_status, nota)

@@ -82,3 +82,45 @@ export async function revocaRefertiToken() {
   revalidatePath('/impostazioni/studio');
   redirect('/impostazioni/studio');
 }
+
+// ─── Finestre di disponibilità (slot proposto all'invio) ───
+// Lo studio dichiara quando visita (giorno + fascia oraria + durata slot). I
+// moduli d'invio ne ricavano i primi slot liberi. È indicativo: non tocca
+// l'agenda della Cassa dei Medici.
+export async function aggiungiFinestra(formData: FormData) {
+  const session = await getSession();
+  if (!session) redirect('/login');
+  if (session.role !== 'admin') redirect('/');
+
+  const giorno = parseInt(String(formData.get('giorno') ?? ''), 10);
+  const oraInizio = String(formData.get('ora_inizio') ?? '');
+  const oraFine = String(formData.get('ora_fine') ?? '');
+  const durata = parseInt(String(formData.get('durata_min') ?? '30'), 10);
+
+  const oraOk = /^\d{2}:\d{2}$/;
+  if (!Number.isInteger(giorno) || giorno < 1 || giorno > 7) redirect('/impostazioni/studio?err=finestra');
+  if (!oraOk.test(oraInizio) || !oraOk.test(oraFine)) redirect('/impostazioni/studio?err=finestra');
+  if (oraFine <= oraInizio) redirect('/impostazioni/studio?err=finestra');
+  if (!Number.isInteger(durata) || durata < 5 || durata > 240) redirect('/impostazioni/studio?err=finestra');
+
+  await query(
+    `insert into slot_finestre (studio_id, giorno, ora_inizio, ora_fine, durata_min)
+     values ($1, $2, $3, $4, $5)`,
+    [session.studioId, giorno, oraInizio, oraFine, durata]
+  );
+
+  revalidatePath('/impostazioni/studio');
+  redirect('/impostazioni/studio?ok=finestra');
+}
+
+export async function rimuoviFinestra(formData: FormData) {
+  const session = await getSession();
+  if (!session) redirect('/login');
+  if (session.role !== 'admin') redirect('/');
+
+  const id = String(formData.get('id') ?? '');
+  await query('delete from slot_finestre where id = $1 and studio_id = $2', [id, session.studioId]);
+
+  revalidatePath('/impostazioni/studio');
+  redirect('/impostazioni/studio?ok=finestra');
+}

@@ -27,6 +27,8 @@ type Detail = {
   preparazione_id: string | null; preparazione_sent_at: string | null;
   questionario: { motivo?: string; farmaci?: string; allergie?: string; note?: string } | null;
   questionario_at: string | null;
+  slot_proposto: string | null;
+  slot_proposto_local: string | null;
 };
 type Prep = { id: string; nome: string };
 type HistoryRow = {
@@ -51,7 +53,9 @@ export default async function ReferralDetail({
             os.nome as origin_studio_nome,
             r.appt_response, r.reminder_sent_at::text,
             r.preparazione_id, r.preparazione_sent_at::text,
-            r.questionario, r.questionario_at::text
+            r.questionario, r.questionario_at::text,
+            r.slot_proposto::text,
+            to_char(r.slot_proposto at time zone 'Europe/Zurich', 'YYYY-MM-DD"T"HH24:MI') as slot_proposto_local
      from referrals r
      join patients p on p.id = r.patient_id
      left join referring_doctors d on d.id = r.referring_doctor_id
@@ -121,6 +125,12 @@ export default async function ReferralDetail({
             <dt>Telefono paziente</dt><dd>{ref.telefono ?? '—'}</dd>
             <dt>Canale d'arrivo</dt><dd>{ref.canale ?? '—'}</dd>
             <dt>Appuntamento</dt><dd>{ref.appuntamento_at ? dataOra(ref.appuntamento_at) : '—'}</dd>
+            {ref.slot_proposto && ref.status !== 'prenotata' && (
+              <>
+                <dt>Slot preferito dall'inviante</dt>
+                <dd>{dataOra(ref.slot_proposto)} <span className="muted small">(indicativo)</span></dd>
+              </>
+            )}
             {ref.status === 'prenotata' && (
               <>
                 <dt>Conferma paziente</dt>
@@ -197,8 +207,14 @@ export default async function ReferralDetail({
                   {searchParams.err === 'appuntamento' && (
                     <p className="error">Per prenotare serve la data e l'ora dell'appuntamento.</p>
                   )}
+                  {ref.slot_proposto_local && (
+                    <p className="muted small">
+                      L'inviante ha indicato una preferenza: già compilata qui sotto, modificabile.
+                    </p>
+                  )}
                   <label>Data e ora appuntamento (obbligatoria)
-                    <input type="datetime-local" name="appuntamento_at" required />
+                    <input type="datetime-local" name="appuntamento_at" required
+                      defaultValue={ref.slot_proposto_local ?? undefined} />
                   </label>
                 </>
               )}
