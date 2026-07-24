@@ -38,7 +38,7 @@ TIPI_AUDIO = {
 
 STILE = """
 :root {
-  --accent: #0d5c48; --bg: #f5f5f7; --card: #ffffff;
+  --accent: #1789d6; --bg: #f5f5f7; --card: #ffffff;
   --surface: rgba(255, 255, 255, 0.72); --text: #1d1d1f; --muted: #86868b;
   --hairline: rgba(0, 0, 0, 0.08); --warn: #c77700; --bad: #d70015;
   --riemp: rgba(120, 120, 128, 0.10);
@@ -47,7 +47,7 @@ STILE = """
   :root {
     --bg: #000; --card: #1c1c1e; --surface: rgba(22, 22, 24, 0.72);
     --text: #f5f5f7; --muted: #98989d; --hairline: rgba(255, 255, 255, 0.12);
-    --accent: #30a583; --warn: #ff9f0a; --bad: #ff453a;
+    --accent: #3fa4ea; --warn: #ff9f0a; --bad: #ff453a;
     --riemp: rgba(120, 120, 128, 0.22);
   }
 }
@@ -100,11 +100,11 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1p
 pre { white-space: pre-wrap; font: 14px/1.7 -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--riemp); border-radius: 14px; padding: 16px; }
 pre.log { font: 11.5px/1.8 ui-monospace, "SF Mono", Menlo, monospace;
-  background: #0b0c0e; color: #8fe3c0; border-radius: 14px; padding: 16px;
+  background: #0b0c0e; color: #8fcdf0; border-radius: 14px; padding: 16px;
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.07); }
 mark.div { background: rgba(255, 159, 10, 0.25); color: inherit; padding: 0 3px; border-radius: 4px; }
 mark.dub { background: rgba(255, 69, 58, 0.22); color: inherit; padding: 0 3px; border-radius: 4px; }
-.avviso { background: rgba(48, 165, 131, 0.12); border: 1px solid rgba(48, 165, 131, 0.3);
+.avviso { background: rgba(23, 137, 214, 0.10); border: 1px solid rgba(23, 137, 214, 0.28);
   border-radius: 14px; padding: 10px 14px; margin-bottom: 14px; font-size: 14px; }
 .errore-msg { background: rgba(255, 69, 58, 0.12); border: 1px solid rgba(255, 69, 58, 0.3);
   border-radius: 14px; padding: 10px 14px; margin-bottom: 14px; font-size: 14px; }
