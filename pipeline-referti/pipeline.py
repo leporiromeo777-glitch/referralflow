@@ -13,6 +13,8 @@ Fasi implementate:
   5. correzione LLM (prompt SPEC §6.1) e ispezione (prompt §6.2) via Ollama
      locale (gemma3:12b); se l'AI tocca un numero o accorcia troppo il
      testo, la sua correzione viene scartata in blocco (SPEC §2.4)
+  6. estrazione campi (prompt §6.3, modalità JSON) + controlli numerici
+     dagli intervalli di correzioni.json → allarmi (mai correzioni)
 
 Uso:
     python3 pipeline.py <file_audio>
@@ -124,6 +126,32 @@ Se non ce ne sono, scrivi esattamente: nessuno
 
 TESTO:
 {testo}"""
+
+PROMPT_ESTRAZIONE = """Leggi il referral qui sotto ed estrai i dati. Rispondi SOLO con un oggetto JSON valido, senza testo prima o dopo, senza backtick.
+
+Chiavi richieste:
+- nome_paziente
+- data_nascita
+- medico_inviante
+- medico_destinatario
+- motivo_clinico (la ragione clinica, non la formula di cortesia)
+- esami_richiesti
+- fattori_rischio
+- urgenza_testuale (le parole esatte del testo, senza interpretarle)
+- valori_numerici (oggetto con i valori clinici trovati e la loro unità)
+
+Se un dato non è presente, il valore deve essere esattamente: "non indicato"
+
+Non dedurre, non inferire, non completare. Se non c'è, non c'è.
+
+TESTO:
+{testo}"""
+
+CAMPI_RICHIESTI = [
+    "nome_paziente", "data_nascita", "medico_inviante", "medico_destinatario",
+    "motivo_clinico", "esami_richiesti", "fattori_rischio", "urgenza_testuale",
+    "valori_numerici",
+]
 
 
 # ── Dizionario (SPEC §3, passo 5) ────────────────────────────────────────────
@@ -342,15 +370,18 @@ def ollama_pronto() -> str | None:
     return None
 
 
-def chiama_ollama(prompt: str, file_id: str, fase: str) -> str:
+def chiama_ollama(prompt: str, file_id: str, fase: str, formato_json: bool = False) -> str:
     """Una chiamata a /api/generate con 3 tentativi e pausa crescente
     (SPEC §7.2). Temperatura 0: stessa domanda, stessa risposta."""
-    corpo = json.dumps({
+    richiesta_dati = {
         "model": MODELLO_LLM,
         "prompt": prompt,
         "stream": False,
         "options": {"temperature": 0},
-    }).encode("utf-8")
+    }
+    if formato_json:
+        richiesta_dati["format"] = "json"  # SPEC §6.3: output JSON garantito
+    corpo = json.dumps(richiesta_dati).encode("utf-8")
     for tentativo in range(1, OLLAMA_TENTATIVI + 1):
         try:
             richiesta = urllib.request.Request(
@@ -453,6 +484,112 @@ def ispeziona_llm(testo: str, file_id: str) -> list[str]:
     return dubbi
 
 
+def estrai_campi(testo: str, file_id: str) -> dict:
+    """Estrazione col prompt §6.3. JSON non parsabile → un solo retry
+    (SPEC §7.2). Campi assenti riempiti con «non indicato»: mai dedotti."""
+    inizio = time.monotonic()
+    prompt = PROMPT_ESTRAZIONE.replace("{testo}", testo)
+    dati = None
+    for _ in range(2):
+        uscita = chiama_ollama(prompt, file_id, "estrazione", formato_json=True)
+        try:
+            candidato = json.loads(uscita)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(candidato, dict):
+            dati = candidato
+            break
+    if dati is None:
+        log.error("fase=estrazione file=%s esito=errore motivo=json_non_parsabile", file_id)
+        raise RuntimeError("estrazione non parsabile")
+
+    for chiave in CAMPI_RICHIESTI:
+        if chiave not in dati or dati[chiave] in (None, ""):
+            dati[chiave] = {} if chiave == "valori_numerici" else "non indicato"
+    if not isinstance(dati["valori_numerici"], dict):
+        dati["valori_numerici"] = {}
+
+    presenti = sum(
+        1 for c in CAMPI_RICHIESTI
+        if c != "valori_numerici" and dati[c] != "non indicato"
+    )
+    log.info(
+        "fase=estrazione file=%s esito=ok campi_presenti=%d valori=%d durata=%.1fs",
+        file_id, presenti, len(dati["valori_numerici"]), time.monotonic() - inizio,
+    )
+    return dati
+
+
+def _primo_numero(valore) -> float | None:
+    """Il primo numero dentro un valore estratto, comunque sia fatto
+    (numero, stringa «70 bpm», oggetto {valore, unita})."""
+    if isinstance(valore, bool):
+        return None
+    if isinstance(valore, (int, float)):
+        return float(valore)
+    if isinstance(valore, str):
+        m = re.search(r"\d+(?:[.,]\d+)?", valore)
+        return float(m.group(0).replace(",", ".")) if m else None
+    if isinstance(valore, dict):
+        for v in valore.values():
+            n = _primo_numero(v)
+            if n is not None:
+                return n
+    return None
+
+
+def controlla_valori(campi: dict, testo: str, controlli: dict, file_id: str) -> list[dict]:
+    """Controlli numerici (SPEC §3 passo 10): si SEGNALA, mai si corregge
+    (§2.4). Tre tipi di allarme: «fuori» dall'intervallo, «limite» (entro il
+    10% dell'ampiezza dal bordo), «non_trovato_nel_testo» (valore estratto
+    che nel testo non c'è: possibile allucinazione dell'estrazione)."""
+    inizio = time.monotonic()
+    allarmi: list[dict] = []
+    numeri_testo = {float(n.replace(",", ".")) for n in _numeri(testo)}
+
+    def _norm_nome(s: str) -> str:
+        return re.sub(r"[^a-z0-9]+", "_", s.lower()).strip("_")
+
+    basi = {
+        ctrl: re.sub(r"_(bpm|mmhg|pct|mm|kg|cm|anni)$", "", ctrl)
+        for ctrl in controlli
+    }
+    for nome, valore in (campi.get("valori_numerici") or {}).items():
+        n = _primo_numero(valore)
+        if n is None:
+            continue
+        if n not in numeri_testo:
+            allarmi.append({
+                "campo": nome, "valore": n,
+                "intervallo": None, "stato": "non_trovato_nel_testo",
+            })
+        nome_n = _norm_nome(nome)
+        for ctrl, base in basi.items():
+            if base not in nome_n and nome_n not in base:
+                continue
+            minimo, massimo = controlli[ctrl].get("min"), controlli[ctrl].get("max")
+            if minimo is None or massimo is None:
+                continue
+            margine = (massimo - minimo) * 0.10
+            intervallo = f"{minimo}-{massimo}"
+            if n < minimo or n > massimo:
+                stato = "fuori"
+            elif n < minimo + margine or n > massimo - margine:
+                stato = "limite"
+            else:
+                break
+            allarmi.append({
+                "campo": nome, "valore": n,
+                "intervallo": intervallo, "stato": stato,
+            })
+            break
+    log.info(
+        "fase=controlli file=%s esito=ok allarmi=%d durata=%.1fs",
+        file_id, len(allarmi), time.monotonic() - inizio,
+    )
+    return allarmi
+
+
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
         print(__doc__, file=sys.stderr)
@@ -473,6 +610,12 @@ def main(argv: list[str]) -> int:
         return 1
     try:
         sostituzioni = carica_sostituzioni()
+        controlli = {
+            k: v
+            for k, v in json.loads(PERCORSO_CORREZIONI.read_text(encoding="utf-8"))
+            .get("controlli_numerici", {}).items()
+            if not k.startswith("_") and isinstance(v, dict)
+        }
     except FileNotFoundError:
         log.error("fase=avvio file=? esito=errore motivo=correzioni_mancanti")
         return 1
@@ -540,6 +683,20 @@ def main(argv: list[str]) -> int:
         dubbi = ispeziona_llm(finale, file_id)
         dubbi_json.write_text(
             json.dumps(dubbi, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        fase = "estrazione"
+        campi = estrai_campi(finale, file_id)
+        ingresso.with_name(f"{file_id}.campi.json").write_text(
+            json.dumps(campi, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        fase = "controlli"
+        allarmi = controlla_valori(campi, finale, controlli, file_id)
+        ingresso.with_name(f"{file_id}.allarmi.json").write_text(
+            json.dumps(allarmi, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
     except subprocess.TimeoutExpired:
