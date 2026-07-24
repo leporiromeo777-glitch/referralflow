@@ -21,9 +21,14 @@ comunicazione sicura): non li sostituisce. Cliente pilota reale: Centro Cardiolo
 - `npm run create-studio -- "<Nome>" <slug> [email-notifiche]` — crea uno studio della piattaforma
 - `npm run create-user -- <email> <password> [ruolo] [slug-studio]` — crea/aggiorna un utente
   (ruoli: segretaria, medico, admin; l'admin gestisce gli accessi da `/impostazioni/utenti`)
-- Schema: `psql "$DATABASE_URL" -f db/schema.sql` (+ `db/seed.sql` per dati demo)
+- Schema: `psql "$DATABASE_URL" -f db/schema.sql` (+ `db/seed-demo.sql` per dati demo
+  multi-studio: crea prima lo studio slug `studio-demo` e un admin; il vecchio
+  `db/seed.sql` è pre-migrazione 007 e non funziona più)
 - DB esistente da versione precedente: applicare in ordine le `db/migrations/0XX_*.sql`
   mancanti (ultima: `022_slot_proposti.sql`)
+- Anteprima locale sul Mac mini dello studio: `bash mac/avvia-anteprima.sh`
+  (installa Node+Postgres, prepara DB e dati demo, avvia su http://localhost:3000;
+  vedi `mac/LEGGIMI.md` — obiettivo: Mac mini come server dello studio)
 - Pubblicazione: checklist completa in `DEPLOY.md`
 
 ## NON rompere

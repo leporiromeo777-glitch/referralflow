@@ -149,19 +149,6 @@ create table inviante_profiles (
   created_at timestamptz not null default now()
 );
 
--- Codici di verifica per la registrazione self-service dal portale invianti.
-create table login_verifications (
-  id                  uuid primary key default gen_random_uuid(),
-  referring_doctor_id uuid not null references referring_doctors(id) on delete cascade,
-  email               text not null,
-  code                text not null,
-  expires_at          timestamptz not null default (now() + interval '15 minutes'),
-  used_at             timestamptz,
-  created_at          timestamptz not null default now()
-);
-
-create index on login_verifications (referring_doctor_id);
-
 -- Reset password self-service: token via email, salvato solo come hash,
 -- a scadenza breve e usa-e-getta.
 create table password_resets (
@@ -201,6 +188,20 @@ create table referring_doctors (
   token_expires_at timestamptz not null default (now() + interval '180 days'),
   created_at  timestamptz not null default now()
 );
+
+-- Codici di verifica per la registrazione self-service dal portale invianti.
+-- (Definita qui, dopo referring_doctors, perché la referenzia.)
+create table login_verifications (
+  id                  uuid primary key default gen_random_uuid(),
+  referring_doctor_id uuid not null references referring_doctors(id) on delete cascade,
+  email               text not null,
+  code                text not null,
+  expires_at          timestamptz not null default (now() + interval '15 minutes'),
+  used_at             timestamptz,
+  created_at          timestamptz not null default now()
+);
+
+create index on login_verifications (referring_doctor_id);
 
 create table patients (
   id            uuid primary key default gen_random_uuid(),
