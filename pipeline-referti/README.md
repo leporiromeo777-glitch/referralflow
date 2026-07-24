@@ -17,7 +17,7 @@ codice — si copia sul Mac mini per l'uso.
 | 6 | Estrazione campi + controlli numerici | **fatta — da testare su un dettato reale** |
 | 7 | Watcher + gestione errori | **fatta — da testare su un dettato reale** |
 | 8 | Invio a ReferralFlow + cancellazione audio | **fatta — attende deploy endpoint in produzione + token** |
-| 9 | plist launchd | da fare |
+| 9 | plist launchd | **fatta — installa-avvio.sh (servizio + pannello all’accensione)** |
 
 ## Requisiti sul Mac mini
 
@@ -72,3 +72,16 @@ audio riascoltabile e punti evidenziati, errori con «Riprova», dizionario
 con aggiunta di correzioni dello studio (`correzioni-locali.json`, mai
 sovrascritto dagli aggiornamenti; il servizio le ricarica a ogni giro).
 La conferma clinica dei referti resta in ReferralFlow.
+
+## Avvio automatico (Fase 9)
+
+```bash
+bash ~/referti-pipeline/installa-avvio.sh
+```
+
+Installa due LaunchAgent (servizio e pannello): partono al login e si
+riavviano da soli; se Ollama non è ancora pronto, il servizio riprova ogni
+minuto. Lo script scrive anche `VERSIONI.md` (SPEC §4.1). Per attivare
+l'invio a ReferralFlow: crea `~/referti-pipeline/invio.conf` con
+`REFERTI_FLOW_URL=…` e `REFERTI_FLOW_TOKEN=…` e rilancia lo script.
+Per fermare tutto: `launchctl unload ~/Library/LaunchAgents/ch.referralflow.*.plist`
