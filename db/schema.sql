@@ -283,6 +283,10 @@ create table referrals (
   preparazione_sent_at timestamptz,
   -- Consenso del paziente alla trasmissione di documenti con l'invio (Fase 14).
   consenso_trasmissione timestamptz,
+  -- Questionario pre-visita compilato dal paziente dal promemoria (anamnesi
+  -- breve: motivo/sintomi, farmaci, allergie, note).
+  questionario        jsonb,
+  questionario_at     timestamptz,
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now()
 );

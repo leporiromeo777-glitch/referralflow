@@ -25,6 +25,8 @@ type Detail = {
   origin_studio_nome: string | null;
   appt_response: string | null; reminder_sent_at: string | null;
   preparazione_id: string | null; preparazione_sent_at: string | null;
+  questionario: { motivo?: string; farmaci?: string; allergie?: string; note?: string } | null;
+  questionario_at: string | null;
 };
 type Prep = { id: string; nome: string };
 type HistoryRow = {
@@ -48,7 +50,8 @@ export default async function ReferralDetail({
             d.nome as medico_nome, d.studio as medico_studio,
             os.nome as origin_studio_nome,
             r.appt_response, r.reminder_sent_at::text,
-            r.preparazione_id, r.preparazione_sent_at::text
+            r.preparazione_id, r.preparazione_sent_at::text,
+            r.questionario, r.questionario_at::text
      from referrals r
      join patients p on p.id = r.patient_id
      left join referring_doctors d on d.id = r.referring_doctor_id
@@ -137,6 +140,20 @@ export default async function ReferralDetail({
               </>
             )}
           </dl>
+
+          {ref.questionario && (ref.questionario.motivo || ref.questionario.farmaci
+            || ref.questionario.allergie || ref.questionario.note) && (
+            <div className="quest-box">
+              <p className="quest-title">
+                Questionario del paziente
+                {ref.questionario_at ? ` · ${dataOra(ref.questionario_at)}` : ''}
+              </p>
+              {ref.questionario.motivo && <p><strong>Disturbi:</strong> {ref.questionario.motivo}</p>}
+              {ref.questionario.farmaci && <p><strong>Farmaci:</strong> {ref.questionario.farmaci}</p>}
+              {ref.questionario.allergie && <p><strong>Allergie:</strong> {ref.questionario.allergie}</p>}
+              {ref.questionario.note && <p><strong>Altro:</strong> {ref.questionario.note}</p>}
+            </div>
+          )}
 
           {ref.status === 'prenotata' && ref.appt_response === 'disdetta_da_confermare' && (
             <div className="disdetta-box">

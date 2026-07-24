@@ -1,9 +1,11 @@
 import { notFound } from 'next/navigation';
 import { query } from '@/lib/db';
-import { rispondiAppuntamento } from './actions';
+import { rispondiAppuntamento, salvaQuestionario } from './actions';
 import { CallButton } from './CallButton';
 
 export const dynamic = 'force-dynamic';
+
+type Questionario = { motivo?: string; farmaci?: string; allergie?: string; note?: string };
 
 // Pagina pubblica per il paziente: conferma dell'appuntamento, oppure
 // segnalazione di disdetta con telefonata allo studio (la disdetta vera
@@ -17,6 +19,8 @@ type Row = {
   studio_nome: string;
   studio_telefono: string | null;
   prep_testo: string | null;
+  questionario: Questionario | null;
+  questionario_at: string | null;
 };
 
 function dataEstesa(d: string): string {
@@ -26,14 +30,16 @@ function dataEstesa(d: string): string {
 }
 
 export default async function Appuntamento({
-  params,
+  params, searchParams,
 }: {
   params: { token: string };
+  searchParams: { ok?: string; quest?: string };
 }) {
   const [ref] = await query<Row>(
     `select r.appuntamento_at::text, r.status, r.appt_response, s.nome as studio_nome,
             s.telefono as studio_telefono,
-            pr.testo as prep_testo
+            pr.testo as prep_testo,
+            r.questionario, r.questionario_at::text
        from referrals r
        join studios s on s.id = r.studio_id
        left join preparazioni pr on pr.id = r.preparazione_id
@@ -41,6 +47,8 @@ export default async function Appuntamento({
     [params.token]
   );
   if (!ref) notFound();
+
+  const q: Questionario = ref.questionario ?? {};
 
   const attivo =
     ref.status === 'prenotata' &&
@@ -113,8 +121,47 @@ export default async function Appuntamento({
         </div>
       )}
 
+      {attivo && (
+        <div className="card notice">
+          <h2>Prima della visita</h2>
+          <p className="muted">
+            Qualche informazione ci aiuta ad arrivare preparati. È facoltativo e può
+            aggiornarlo fino al giorno della visita.
+          </p>
+          {searchParams.quest === 'ok' && (
+            <p className="success">Grazie, le informazioni sono state salvate.</p>
+          )}
+          <form action={salvaQuestionario} className="form">
+            <input type="hidden" name="token" value={params.token} />
+            <label>Motivo della visita o disturbi che avverte
+              <textarea name="motivo" rows={2} maxLength={2000} defaultValue={q.motivo ?? ''}
+                placeholder="Es. affanno sotto sforzo da un mese…" />
+            </label>
+            <label>Farmaci che sta assumendo
+              <textarea name="farmaci" rows={2} maxLength={2000} defaultValue={q.farmaci ?? ''}
+                placeholder="Nome e dosaggio, se li conosce" />
+            </label>
+            <div className="grid2">
+              <label>Allergie note
+                <input name="allergie" maxLength={2000} defaultValue={q.allergie ?? ''}
+                  placeholder="Farmaci, mezzo di contrasto…" />
+              </label>
+              <label>Altro da segnalare
+                <input name="note" maxLength={2000} defaultValue={q.note ?? ''} />
+              </label>
+            </div>
+            <div className="form-actions">
+              <button className="btn btn-primary" type="submit">
+                {ref.questionario_at ? 'Aggiorna le informazioni' : 'Salva le informazioni'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       <p className="muted small center">
-        Questa pagina non contiene dati medici ed è conforme alla nLPD.
+        Le informazioni che inserisce sono trattate in modo conforme alla nLPD,
+        conservate in Svizzera e visibili solo allo studio.
         {' '}<a href="/privacy">Informativa privacy</a>
       </p>
     </main>

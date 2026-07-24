@@ -27,6 +27,7 @@ type Appt = {
   prep_inviata: boolean;
   completed_at: string | null;
   follow_up_months: number | null;
+  questionario: { motivo?: string; farmaci?: string; allergie?: string; note?: string } | null;
 };
 type Provider = { id: string; nome: string };
 type Feed = { id: string; nome: string; last_synced_at: string | null; last_status: string | null };
@@ -109,6 +110,7 @@ export default async function Programma({
             d.nome as medico_nome,
             pp.nome as prep_nome,
             (r.preparazione_sent_at is not null) as prep_inviata,
+            r.questionario,
             a.completed_at::text, a.follow_up_months
        from appointments a
        left join providers pr on pr.id = a.provider_id
@@ -271,6 +273,16 @@ export default async function Programma({
                             <p><strong>Inviata da:</strong> {a.medico_nome ?? 'medico non indicato'}</p>
                             {s && s.visitePrecedenti > 0 && (
                               <p><strong>Visite precedenti:</strong> {s.visitePrecedenti} (già seguito qui)</p>
+                            )}
+                            {a.questionario && (a.questionario.motivo || a.questionario.farmaci
+                              || a.questionario.allergie || a.questionario.note) && (
+                              <div className="quest-box">
+                                <p className="quest-title">Questionario del paziente</p>
+                                {a.questionario.motivo && <p><strong>Disturbi:</strong> {a.questionario.motivo}</p>}
+                                {a.questionario.farmaci && <p><strong>Farmaci:</strong> {a.questionario.farmaci}</p>}
+                                {a.questionario.allergie && <p><strong>Allergie:</strong> {a.questionario.allergie}</p>}
+                                {a.questionario.note && <p><strong>Altro:</strong> {a.questionario.note}</p>}
+                              </div>
                             )}
                             {a.prep_nome && (
                               <p>
