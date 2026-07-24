@@ -13,6 +13,7 @@ curl -fsSL "$BASE/aggiorna.sh" -o "$DEST/aggiorna.sh.nuovo" && mv "$DEST/aggiorn
 curl -fsSL "$BASE/pipeline.py" -o "$DEST/pipeline.py"
 curl -fsSL "$BASE/correzioni.json" -o "$DEST/correzioni.json"
 curl -fsSL "$BASE/pannello.py" -o "$DEST/pannello.py"
+curl -fsSL "$BASE/palestra.py" -o "$DEST/palestra.py"
 curl -fsSL "$BASE/CLAUDE.md" -o "$DEST/CLAUDE.md"
 # correzioni-locali.json NON si tocca: sono le voci aggiunte dallo studio.
 
