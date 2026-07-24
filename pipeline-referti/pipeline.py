@@ -554,19 +554,38 @@ def controlla_valori(campi: dict, testo: str, controlli: dict, file_id: str) -> 
         ctrl: re.sub(r"_(bpm|mmhg|pct|mm|kg|cm|anni)$", "", ctrl)
         for ctrl in controlli
     }
+    # Unità → controllo, solo dove l'unità è inequivocabile (mm = aorta;
+    # mmhg no: sistolica o diastolica?). Serve per la forma invertita.
+    per_unita: dict[str, list[str]] = {}
+    for ctrl in controlli:
+        m = re.search(r"_(bpm|mmhg|pct|mm|kg|cm|anni)$", ctrl)
+        if m:
+            per_unita.setdefault(m.group(1), []).append(ctrl)
+
     for nome, valore in (campi.get("valori_numerici") or {}).items():
         n = _primo_numero(valore)
         if n is None:
-            continue
+            # Forma invertita, vista su dettati reali: {"57": "mm"} —
+            # il numero nella chiave, l'unità nel valore.
+            n = _primo_numero(nome)
+            if n is None:
+                continue
+            nome = str(valore) if isinstance(valore, str) and valore.strip() else "valore"
         if n not in numeri_testo:
             allarmi.append({
                 "campo": nome, "valore": n,
                 "intervallo": None, "stato": "non_trovato_nel_testo",
             })
         nome_n = _norm_nome(nome)
-        for ctrl, base in basi.items():
-            if base not in nome_n and nome_n not in base:
-                continue
+        candidati = [
+            ctrl for ctrl, base in basi.items()
+            if base in nome_n or nome_n in base
+        ]
+        if not candidati and nome_n in per_unita and len(per_unita[nome_n]) == 1:
+            # Il nome è solo un'unità («mm»): se identifica un unico
+            # controllo, si usa quello; se è ambigua, meglio non indovinare.
+            candidati = per_unita[nome_n]
+        for ctrl in candidati:
             minimo, massimo = controlli[ctrl].get("min"), controlli[ctrl].get("max")
             if minimo is None or massimo is None:
                 continue
