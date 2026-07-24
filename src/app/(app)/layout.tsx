@@ -15,27 +15,28 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const session = await getSession();
   const isMedico = session?.role === 'medico';
   const isAdmin = session?.role === 'admin';
-  // L'inviante non ha studio: topbar minimale, nessuna query recintata.
   const isInviante = session?.role === 'inviante';
+  const full = !!session && !isMedico && !isInviante;
 
-  // Nuove richieste da smistare (campanella) e richiami scaduti (badge
-  // Follow-up), solo segreteria/admin. Le disdette hanno il loro badge sulla
-  // scheda «Disdette» dentro la Coda.
   let nuove = 0;
   let richiamiScaduti = 0;
-  // Bozze di referto dalla pipeline di trascrizione: la voce «Referti» compare
-  // solo se lo studio la usa (token generato) o se ci sono bozze in coda.
   let refertiBozze = 0;
   let refertiAttivi = false;
-  // Consulti rapidi (eConsult) in attesa di risposta.
   let consultiAperti = 0;
-  if (session && !isMedico && !isInviante) {
-    const [c] = await query<{ nuove: number; richiami: number; referti: number; referti_attivi: boolean; consulti: number }>(
+  let oggiCount = 0;
+  if (full) {
+    const [c] = await query<{
+      nuove: number; richiami: number; referti: number; referti_attivi: boolean;
+      consulti: number; da_prenotare: number; disdette: number;
+    }>(
       `select
          (select count(*) from referrals where status = 'ricevuta' and studio_id = $1)::int as nuove,
          (select count(*) from referti_bozze where studio_id = $1 and stato = 'bozza')::int as referti,
          (select referti_token_set_at is not null from studios where id = $1) as referti_attivi,
          (select count(*) from consulti where studio_id = $1 and stato = 'aperto')::int as consulti,
+         (select count(*) from referrals where studio_id = $1 and status = 'da_prenotare')::int as da_prenotare,
+         (select count(*) from referrals where studio_id = $1 and status = 'prenotata'
+            and appt_response in ('disdetto','disdetta_da_confermare'))::int as disdette,
          ((select count(*) from referrals
             where studio_id = $1
               and follow_up_due <= current_date and follow_up_done_at is null)
@@ -43,19 +44,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               where studio_id = $1
                 and follow_up_due <= current_date and follow_up_done_at is null
                 and referral_id is null))::int as richiami`,
-      [session.studioId]
+      [session!.studioId]
     );
     nuove = c?.nuove ?? 0;
     richiamiScaduti = c?.richiami ?? 0;
     refertiBozze = c?.referti ?? 0;
     refertiAttivi = c?.referti_attivi ?? false;
     consultiAperti = c?.consulti ?? 0;
+    // «Oggi» raccoglie tutto ciò che è azionabile: badge complessivo.
+    oggiCount = nuove + (c?.da_prenotare ?? 0) + (c?.disdette ?? 0) + richiamiScaduti + consultiAperti + refertiBozze;
   }
 
   const supportEmail = process.env.SUPPORT_EMAIL;
 
-  // Prova in scadenza: avviso discreto all'admin negli ultimi 14 giorni
-  // (e dopo la scadenza). Nessun blocco: l'abbonamento si concorda a voce.
   let provaAvviso: { scadenza: string; scaduta: boolean } | null = null;
   if (session && isAdmin) {
     const [s] = await query<{ giorni: number | null; scadenza: string | null }>(
@@ -69,89 +70,116 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     }
   }
 
+  const home = isInviante ? '/invii' : isMedico ? '/programma' : '/';
+  const badge = (n: number) => (n > 0 ? <span className="side-count">{n}</span> : null);
+
   return (
-    <>
+    <div className="shell">
       <AutoRefresh seconds={60} />
-      <header className="topbar">
-        <div className="brand">
-          <Link href={isInviante ? '/invii' : isMedico ? '/programma' : '/'}>Referral<span>Flow</span></Link>
+
+      {/* Hamburger (mobile): checkbox CSS-only che apre la barra laterale. */}
+      <input type="checkbox" id="navtoggle" className="nav-toggle" aria-label="Apri il menu" />
+
+      <aside className="side">
+        <div className="side-brand">
+          <Link href={home}>Referral<span>Flow</span></Link>
           {isInviante ? <em>Area medici invianti</em>
             : session?.studioNome ? <em>{session.studioNome}</em> : null}
         </div>
 
-        {/* Hamburger (solo mobile): checkbox CSS-only, le voci si aprono a tendina. */}
-        {!isInviante && (
-          <input type="checkbox" id="navtoggle" className="nav-toggle" aria-label="Apri il menu" />
-        )}
+        <nav className="side-nav">
+          {full && (
+            <>
+              <div className="side-group">
+                <span className="side-label">Oggi</span>
+                <NavLink href="/" className="side-link">Oggi{badge(oggiCount)}</NavLink>
+                <NavLink href="/coda" className="side-link">Coda</NavLink>
+                <NavLink href="/programma" className="side-link">Programma</NavLink>
+                <NavLink href="/richiami" className="side-link">Follow-up{badge(richiamiScaduti)}</NavLink>
+                <NavLink href="/consulti" className="side-link">Consulti{badge(consultiAperti)}</NavLink>
+                {(refertiAttivi || refertiBozze > 0) && (
+                  <NavLink href="/referti" className="side-link">Referti{badge(refertiBozze)}</NavLink>
+                )}
+              </div>
 
-        <nav className="topnav">
-          {/* L'inviante ha solo la sua area /invii: niente voci dello studio. */}
-          {!isMedico && !isInviante && <NavLink href="/">Coda</NavLink>}
-          {!isInviante && <NavLink href="/programma">Programma</NavLink>}
-          {!isMedico && !isInviante && (
-            <NavLink href="/richiami">
-              Follow-up{richiamiScaduti > 0 ? <span className="nav-count">{richiamiScaduti}</span> : null}
-            </NavLink>
+              <div className="side-group">
+                <span className="side-label">Pazienti</span>
+                <NavLink href="/pazienti" className="side-link">Cerca paziente</NavLink>
+              </div>
+
+              <div className="side-group">
+                <span className="side-label">Rete</span>
+                <NavLink href="/medici" className="side-link">Medici invianti</NavLink>
+                <NavLink href="/inviati" className="side-link">Pazienti inviati</NavLink>
+                <NavLink href="/affida" className="side-link">Affida paziente</NavLink>
+              </div>
+
+              <div className="side-group">
+                <span className="side-label">Studio</span>
+                <NavLink href="/statistiche" className="side-link">Statistiche</NavLink>
+                {isAdmin && <NavLink href="/impostazioni/studio" className="side-link">Impostazioni</NavLink>}
+              </div>
+            </>
           )}
-          {!isMedico && !isInviante && (refertiAttivi || refertiBozze > 0) && (
-            <NavLink href="/referti">
-              Referti{refertiBozze > 0 ? <span className="nav-count">{refertiBozze}</span> : null}
-            </NavLink>
-          )}
-          {!isMedico && !isInviante && (
-            <NavLink href="/consulti">
-              Consulti{consultiAperti > 0 ? <span className="nav-count">{consultiAperti}</span> : null}
-            </NavLink>
-          )}
-          {!isMedico && !isInviante && <NavLink href="/inviati">Pazienti inviati</NavLink>}
-          {!isMedico && !isInviante && <NavLink href="/medici">Medici invianti</NavLink>}
-          {!isMedico && !isInviante && <NavLink href="/statistiche">Statistiche</NavLink>}
-          {!isMedico && !isInviante && (
-            <NavLink className="btn btn-primary" href="/referral/nuova">+ Nuova referral</NavLink>
+
+          {isMedico && (
+            <div className="side-group">
+              <NavLink href="/programma" className="side-link">Programma</NavLink>
+            </div>
           )}
         </nav>
 
-        {/* Sempre visibili, anche su mobile: campanella, profilo, hamburger. */}
-        <div className="topbar-actions">
-          {!isMedico && !isInviante && (
-            <Link className="bell" href="/" title={`${nuove} nuove richieste da smistare`}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-                <path d="M13.7 21a2 2 0 0 1-3.4 0" />
-              </svg>
-              {nuove > 0 && <span className="bell-badge">{nuove}</span>}
-            </Link>
-          )}
-
-          {session && (
-            <Link className="avatar" href="/profilo" title={session.email}>
-              {iniziali(session.email)}
-            </Link>
-          )}
-
-          {!isInviante && (
-            <label htmlFor="navtoggle" className="hamburger" aria-hidden="true">
-              <span></span><span></span><span></span>
-            </label>
-          )}
-        </div>
-      </header>
-      <main className="content">
-        {provaAvviso && (
-          <div className="card notice" style={{ marginBottom: 16 }}>
-            <p className="muted">
-              {provaAvviso.scaduta
-                ? <>La prova gratuita è terminata il {provaAvviso.scadenza}. Lo studio
-                    resta operativo: vi contatteremo per l'abbonamento — oppure scriveteci voi
-                    {supportEmail ? <> a <a href={`mailto:${supportEmail}`}>{supportEmail}</a></> : null}.</>
-                : <>Prova gratuita fino al {provaAvviso.scadenza}. Poi l'abbonamento si
-                    concorda con noi — nessun rinnovo automatico, nessun blocco improvviso.</>}
-            </p>
-          </div>
+        {full && (
+          <Link href="/referral/nuova" className="btn btn-primary side-cta">+ Nuova referral</Link>
         )}
-        {children}
-      </main>
-    </>
+      </aside>
+
+      <div className="main-col">
+        <header className="mtop">
+          <label htmlFor="navtoggle" className="hamburger" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </label>
+          <div className="mtop-brand">
+            <Link href={home}>Referral<span>Flow</span></Link>
+          </div>
+          <div className="mtop-actions">
+            {full && (
+              <Link className="bell" href="/coda?stato=ricevuta" title={`${nuove} nuove richieste da smistare`}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+                </svg>
+                {nuove > 0 && <span className="bell-badge">{nuove}</span>}
+              </Link>
+            )}
+            {session && (
+              <Link className="avatar" href="/profilo" title={session.email}>
+                {iniziali(session.email)}
+              </Link>
+            )}
+          </div>
+        </header>
+
+        {/* Copertura mobile: tocca fuori per chiudere il menu. */}
+        <label htmlFor="navtoggle" className="nav-scrim" aria-hidden="true"></label>
+
+        <main className="content">
+          {provaAvviso && (
+            <div className="card notice" style={{ marginBottom: 16 }}>
+              <p className="muted">
+                {provaAvviso.scaduta
+                  ? <>La prova gratuita è terminata il {provaAvviso.scadenza}. Lo studio
+                      resta operativo: vi contatteremo per l'abbonamento — oppure scriveteci voi
+                      {supportEmail ? <> a <a href={`mailto:${supportEmail}`}>{supportEmail}</a></> : null}.</>
+                  : <>Prova gratuita fino al {provaAvviso.scadenza}. Poi l'abbonamento si
+                      concorda con noi — nessun rinnovo automatico, nessun blocco improvviso.</>}
+              </p>
+            </div>
+          )}
+          {children}
+        </main>
+      </div>
+    </div>
   );
 }

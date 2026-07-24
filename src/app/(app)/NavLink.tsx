@@ -20,13 +20,14 @@ export function NavLink({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  // La coda (/) comprende anche il dettaglio delle referral.
+  // La home «Oggi» (/) è attiva solo sulla home; le altre voci sul loro ramo.
   const active = href === '/'
-    ? pathname === '/' || pathname.startsWith('/referral')
+    ? pathname === '/'
     : pathname.startsWith(href);
+  const base = className ?? 'navlink';
   return (
     <Link
-      className={className ?? `navlink${active ? ' active' : ''}`}
+      className={`${base}${active ? ' active' : ''}`}
       href={href}
       onClick={chiudiMenu}
     >

@@ -152,7 +152,7 @@ export async function completaAttivazione(formData: FormData) {
     studioId: studio.id,
     studioNome: studio.nome,
   });
-  redirect('/?benvenuto=1');
+  redirect('/coda?benvenuto=1');
 }
 
 // Slug leggibile dal nome, unico sulla piattaforma (studio-rossi, studio-rossi-2…).

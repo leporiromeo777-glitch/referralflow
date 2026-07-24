@@ -100,7 +100,7 @@ export default async function ReferralDetail({
   return (
     <>
       <div className="page-head">
-        <Link href="/" className="back">← Coda</Link>
+        <Link href="/coda" className="back">← Coda</Link>
         <h1>
           {ref.cognome} {ref.nome}
           {ref.data_nascita ? <span className="age">, {eta(ref.data_nascita)}</span> : null}
