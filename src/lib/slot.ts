@@ -19,7 +19,7 @@ export async function slotProposti(studioId: string): Promise<SlotProposto[]> {
   const rows = await query<{ iso: string }>(
     `with giorni as (
        select d::date as d
-         from generate_series(current_date + 1, current_date + $2, interval '1 day') d
+         from generate_series(current_date + 1, current_date + $2::int, interval '1 day') d
      ),
      slot as (
        select ((g.d + f.ora_inizio) + make_interval(mins => s.n * f.durata_min))
@@ -49,7 +49,7 @@ export async function slotProposti(studioId: string): Promise<SlotProposto[]> {
              and r.status in ('ricevuta','triage','da_prenotare')
         )
       order by inizio
-      limit $4`,
+      limit $4::int`,
     [studioId, ORIZZONTE_GIORNI, TZ, MAX_SLOT]
   );
 
