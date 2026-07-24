@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation';
 import { query } from '@/lib/db';
 import { createPublicReferral } from './actions';
+import { catturaAttiva } from '@/lib/impegnativa';
+import { CatturaImpegnativa } from './CatturaImpegnativa';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,6 +59,8 @@ export default async function InviaReferral({
             {doc.studio ? ` · ${doc.studio}` : ''}.
           </p>
           {searchParams.error === 'nome' && <p className="error">Inserisci cognome e nome del paziente.</p>}
+
+          {catturaAttiva() && <CatturaImpegnativa token={params.token} />}
 
           <fieldset>
             <legend>Paziente</legend>

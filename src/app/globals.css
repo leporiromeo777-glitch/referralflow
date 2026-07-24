@@ -1138,3 +1138,13 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
   margin: 10px 0 0; padding: 10px 14px; border-radius: 10px;
   background: var(--surface); white-space: pre-wrap;
 }
+
+/* Cattura AI dell'impegnativa: riquadro sopra il modulo d'invio. */
+.cattura {
+  border: 1.5px dashed var(--line-strong); border-radius: 14px;
+  padding: 14px 16px; margin-bottom: 18px; background: var(--surface);
+}
+.cattura-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
+.cattura-btn { cursor: pointer; display: inline-flex; }
+.cattura-btn.is-busy { opacity: .7; cursor: default; }
+.cattura p { margin: 10px 0 0; }

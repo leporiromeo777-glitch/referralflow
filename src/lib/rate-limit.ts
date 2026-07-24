@@ -83,3 +83,13 @@ export function clearLoginAttempts(email: string): void {
   // L'IP non si azzera al login riuscito: un successo non lo rende fidato per
   // sempre (potrebbe essere una rete condivisa con un tentativo in corso).
 }
+
+// Cattura AI dell'impegnativa: ogni chiamata costa (API a pagamento). Limite
+// per token del modulo d'invio, così un link condiviso non può bruciare credito.
+const catturaByToken = makeLimiter(12, 15 * 60 * 1000, 15 * 60 * 1000);
+export function isCatturaLocked(token: string): boolean {
+  return catturaByToken.isLocked(token) !== null;
+}
+export function recordCattura(token: string): void {
+  catturaByToken.recordFailure(token);
+}
