@@ -37,30 +37,80 @@ TIPI_AUDIO = {
 }
 
 STILE = """
-:root { --cta: #0d5c48; --fondo: #f4f3ef; --linea: #ddd9d0; }
+:root {
+  --accent: #0d5c48; --bg: #f5f5f7; --card: #ffffff;
+  --surface: rgba(255, 255, 255, 0.72); --text: #1d1d1f; --muted: #86868b;
+  --hairline: rgba(0, 0, 0, 0.08); --warn: #c77700; --bad: #d70015;
+  --riemp: rgba(120, 120, 128, 0.10);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000; --card: #1c1c1e; --surface: rgba(22, 22, 24, 0.72);
+    --text: #f5f5f7; --muted: #98989d; --hairline: rgba(255, 255, 255, 0.12);
+    --accent: #30a583; --warn: #ff9f0a; --bad: #ff453a;
+    --riemp: rgba(120, 120, 128, 0.22);
+  }
+}
 * { box-sizing: border-box; }
-body { font: 15px/1.5 -apple-system, sans-serif; margin: 0; background: var(--fondo); color: #22251f; }
-header { background: var(--cta); color: #fff; padding: 14px 22px; display: flex; gap: 18px; align-items: baseline; flex-wrap: wrap; }
-header b { font-size: 17px; }
-header a { color: #dcebe4; text-decoration: none; }
-header a.qui { color: #fff; border-bottom: 2px solid #fff; }
-main { max-width: 880px; margin: 22px auto; padding: 0 16px; }
-.card { background: #fff; border: 1px solid var(--linea); border-radius: 16px; padding: 16px 20px; margin-bottom: 16px; }
-h1 { font-size: 22px; margin: 4px 0 14px; }
-h2 { font-size: 16px; margin: 0 0 8px; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased; }
+header { position: sticky; top: 0; z-index: 10;
+  backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
+  background: var(--surface); border-bottom: 1px solid var(--hairline);
+  display: flex; align-items: center; gap: 6px; padding: 10px 22px; flex-wrap: wrap; }
+header b { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; margin-right: 14px; }
+header b::before { content: ""; display: inline-block; width: 9px; height: 9px;
+  border-radius: 50%; background: var(--accent); margin-right: 9px;
+  box-shadow: 0 0 10px var(--accent); }
+header a { color: var(--muted); text-decoration: none; font-size: 14px;
+  padding: 6px 14px; border-radius: 999px; transition: color .18s, background .18s; }
+header a:hover { color: var(--text); background: var(--riemp); }
+header a.qui { background: var(--accent); color: #fff; }
+main { max-width: 920px; margin: 34px auto 40px; padding: 0 20px; }
+h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; margin: 0 0 22px; }
+.card { background: var(--card); border: 1px solid var(--hairline); border-radius: 20px;
+  padding: 20px 24px; margin-bottom: 16px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 10px 30px rgba(0,0,0,.05); }
+h2 { font-size: 12px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--muted); margin: 0 0 12px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px; margin-bottom: 16px; }
+.stat { background: var(--card); border: 1px solid var(--hairline); border-radius: 20px;
+  padding: 16px 20px 14px; box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 10px 30px rgba(0,0,0,.05); }
+.stat .n { font-size: 34px; font-weight: 700; letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums; }
+.stat .l { color: var(--muted); font-size: 13px; margin-top: 2px; line-height: 1.3; }
+.stat.bad .n { color: var(--bad); }
+.stat.zero .n { color: var(--muted); }
 table { border-collapse: collapse; width: 100%; }
-td, th { text-align: left; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--linea); vertical-align: top; }
-.muted { color: #6b6f66; font-size: 13px; }
-.btn { display: inline-block; background: var(--cta); color: #fff; border: 0; border-radius: 999px; padding: 7px 16px; font-size: 14px; cursor: pointer; text-decoration: none; }
-.btn-secondario { background: #fff; color: var(--cta); border: 1px solid var(--cta); }
-input, select { padding: 7px 10px; border: 1px solid var(--linea); border-radius: 10px; font-size: 14px; }
-pre { white-space: pre-wrap; font: 14px/1.6 -apple-system, sans-serif; background: #faf9f6; border-radius: 10px; padding: 12px; }
-pre.log { font-family: ui-monospace, monospace; font-size: 12px; }
-mark.div { background: #faf0dc; padding: 0 3px; border-radius: 4px; }
-mark.dub { background: #fbeaea; padding: 0 3px; border-radius: 4px; }
-.avviso { background: #eef6f2; border: 1px solid #cfe3da; border-radius: 10px; padding: 8px 12px; margin-bottom: 12px; }
-.errore-msg { background: #fbeaea; border: 1px solid #f0d4d4; border-radius: 10px; padding: 8px 12px; margin-bottom: 12px; }
+td, th { text-align: left; padding: 10px 12px 10px 0; border-bottom: 1px solid var(--hairline);
+  vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+a { color: var(--accent); }
+.muted { color: var(--muted); font-size: 13px; }
+.btn { display: inline-block; background: var(--accent); color: #fff; border: 0;
+  border-radius: 999px; padding: 8px 18px; font-size: 14px; font-weight: 500;
+  cursor: pointer; text-decoration: none; transition: filter .15s, transform .15s; }
+.btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+.btn-secondario { background: var(--riemp); color: var(--text); }
+input, select { padding: 9px 14px; border: 1px solid var(--hairline); border-radius: 12px;
+  font-size: 14px; background: var(--card); color: var(--text); accent-color: var(--accent); }
+input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+pre { white-space: pre-wrap; font: 14px/1.7 -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--riemp); border-radius: 14px; padding: 16px; }
+pre.log { font: 11.5px/1.8 ui-monospace, "SF Mono", Menlo, monospace;
+  background: #0b0c0e; color: #8fe3c0; border-radius: 14px; padding: 16px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.07); }
+mark.div { background: rgba(255, 159, 10, 0.25); color: inherit; padding: 0 3px; border-radius: 4px; }
+mark.dub { background: rgba(255, 69, 58, 0.22); color: inherit; padding: 0 3px; border-radius: 4px; }
+.avviso { background: rgba(48, 165, 131, 0.12); border: 1px solid rgba(48, 165, 131, 0.3);
+  border-radius: 14px; padding: 10px 14px; margin-bottom: 14px; font-size: 14px; }
+.errore-msg { background: rgba(255, 69, 58, 0.12); border: 1px solid rgba(255, 69, 58, 0.3);
+  border-radius: 14px; padding: 10px 14px; margin-bottom: 14px; font-size: 14px; }
 .num { font-variant-numeric: tabular-nums; }
+audio { width: 100%; margin-top: 4px; }
+.firma { color: var(--muted); font-size: 12px; text-align: center; margin-top: 34px; }
 """
 
 
@@ -94,7 +144,7 @@ def pagina(titolo: str, attiva: str, corpo: str) -> bytes:
 <title>{e(titolo)} — Pipeline referti</title><style>{STILE}</style></head>
 <body><header><b>Pipeline referti</b> {nav}</header>
 <main><h1>{e(titolo)}</h1>{corpo}
-<p class="muted">Pannello locale: visibile solo da questo computer. La conferma dei referti si fa in ReferralFlow.</p>
+<p class="firma">Pannello locale · visibile solo da questo computer · la conferma dei referti si fa in ReferralFlow</p>
 </main></body></html>""".encode("utf-8")
 
 
@@ -110,16 +160,21 @@ def pagina_coda() -> bytes:
     if registro.is_file():
         code = registro.read_text(encoding="utf-8").splitlines()[-25:]
         righe_log = "\n".join(reversed(code))
+    def tessera(numero: int, etichetta: str, critico: bool = False) -> str:
+        classe = "stat bad" if critico and numero > 0 else ("stat zero" if numero == 0 else "stat")
+        return f'<div class="{classe}"><div class="n">{numero}</div><div class="l">{etichetta}</div></div>'
+
     corpo = f"""
-<div class="card"><h2>Stato della coda</h2><table>
-<tr><td>In attesa di elaborazione (ingresso)</td><td class="num">{conta['ingresso']}</td></tr>
-<tr><td>In lavorazione</td><td class="num">{conta['lavorazione']}</td></tr>
-<tr><td>Bozze pronte, in attesa di invio a ReferralFlow</td><td class="num">{conta['output']}</td></tr>
-<tr><td>Audio in archivio (in attesa di conferma del server)</td><td class="num">{conta['archivio_temp']}</td></tr>
-<tr><td>In errore</td><td class="num">{conta['errori']}</td></tr>
-</table>
-<p class="muted">Il medico deposita i dettati in {e(BASE)}/ingresso — il servizio fa il resto.</p></div>
-<div class="card"><h2>Registro del servizio (più recente in alto)</h2>
+<div class="stats">
+{tessera(conta['ingresso'], 'In attesa di elaborazione')}
+{tessera(conta['lavorazione'], 'In lavorazione')}
+{tessera(conta['output'], 'Pronte per l’invio')}
+{tessera(conta['archivio_temp'], 'Audio in archivio')}
+{tessera(conta['errori'], 'In errore', critico=True)}
+</div>
+<div class="card"><h2>Come funziona</h2>
+<p class="muted">Il medico deposita i dettati in <b>{e(BASE)}/ingresso</b> — il servizio fa il resto da solo.</p></div>
+<div class="card"><h2>Registro del servizio · più recente in alto</h2>
 {'<pre class="log">' + e(righe_log) + '</pre>' if righe_log else '<p class="muted">Nessun registro: il servizio non è ancora stato avviato in questa cartella.</p>'}
 </div>"""
     return pagina("Coda", "/", corpo)
