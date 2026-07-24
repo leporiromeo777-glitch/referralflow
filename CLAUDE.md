@@ -22,8 +22,8 @@ comunicazione sicura): non li sostituisce. Cliente pilota reale: Centro Cardiolo
 - `npm run create-user -- <email> <password> [ruolo] [slug-studio]` — crea/aggiorna un utente
   (ruoli: segretaria, medico, admin; l'admin gestisce gli accessi da `/impostazioni/utenti`)
 - Schema: `psql "$DATABASE_URL" -f db/schema.sql` (+ `db/seed.sql` per dati demo)
-- DB esistente da versione precedente: applicare in ordine le `db/migrations/00X_*.sql`
-  mancanti (ultima: `019_referti_bozze.sql`)
+- DB esistente da versione precedente: applicare in ordine le `db/migrations/0XX_*.sql`
+  mancanti (ultima: `022_slot_proposti.sql`)
 - Pubblicazione: checklist completa in `DEPLOY.md`
 
 ## NON rompere
@@ -102,7 +102,25 @@ SMS: ATTIVI via eCall REST v2 (Basic auth, `SMS_API_TOKEN=utente:password`, driv
 - Tutti protetti da `?key=REMINDER_SECRET`; backup notturno DB locale (14g) + off-site su
   Exoscale SOS `referralflow-backups` (60g); allegati di produzione su SOS `referralflow-uploads`
 
-Fatti di recente: ricezione bozze di referto dalla pipeline di trascrizione locale
+Fatti di recente: quattro strumenti ispirati alla ricerca di mercato (2026-07-24):
+(1) Consulto rapido tra medici / eConsult (migrazione 020: `consulti` +
+`consulto_attachments`): domanda clinica scritta dell'inviante dal portale token,
+risposta dello specialista da `/consulti` (badge in nav, notifiche neutre), con
+conversione in referral (la domanda → quesito, allegati al seguito). (2) Cattura AI
+dell'impegnativa sul modulo `/invia/[token]`: `src/lib/impegnativa.ts` legge foto/PDF
+con `@anthropic-ai/sdk` (claude-opus-5, blocco documento/immagine + json_schema via
+zod) e precompila i campi; API `/api/invia/[token]/cattura` autorizzata dal token,
+rate-limit per token, file letto in memoria e scartato (nessuna persistenza, mai dati
+paziente in URL o log). SPENTA se manca `ANTHROPIC_API_KEY` — accenderla richiede la
+stessa validazione legale di Stripe (DPA col subfornitore + informativa). (3) Questionario
+pre-visita (migrazione 021: `referrals.questionario` jsonb + `questionario_at`): il
+paziente compila una breve anamnesi dal promemoria `/appuntamento/[token]`, visibile
+nella scheda pre-visita del Programma e nel dettaglio referral. (4) Slot proposto
+all'invio (migrazione 022: `slot_finestre` + `referrals.slot_proposto`): finestre di
+disponibilità per studio in `/impostazioni/studio`, `src/lib/slot.ts` calcola i primi
+slot liberi in SQL con fuso Europe/Zurich (finestre meno l'agenda), selettore sui moduli
+`/invia`, slot precompilato nella prenotazione — indicativo, NESSUNA scrittura sull'agenda
+Cassa dei Medici. Prima ancora: ricezione bozze di referto dalla pipeline di trascrizione locale
 (2026-07-23, migrazione 019: `referti_bozze` + `studios.referti_token_hash`; la SPEC
 della pipeline che gira sul Mac mini dello studio è `docs/trascrizione/SPEC.md` — fonte
 di verità, prompt in §6 da NON toccare. Endpoint `POST /api/referti/bozza` con Bearer
