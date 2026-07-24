@@ -1,0 +1,199 @@
+<title>Software per studi medici — mappa di mercato 2026</title>
+<style>
+:root {
+  --accent: #1789d6; --bg: #f5f5f7; --card: #ffffff; --text: #1d1d1f;
+  --muted: #86868b; --hairline: rgba(0,0,0,.08); --riemp: rgba(120,120,128,.10);
+  --rosso: #d70015; --ambra: #c77700; --verde: #2e7d5b;
+  --rosso-velo: rgba(215,0,21,.07); --ambra-velo: rgba(199,119,0,.08); --verde-velo: rgba(46,125,91,.08);
+  --accent-velo: rgba(23,137,214,.08);
+}
+@media (prefers-color-scheme: dark) { :root {
+  --accent: #3fa4ea; --bg: #0b0b0d; --card: #1c1c1e; --text: #f5f5f7;
+  --muted: #98989d; --hairline: rgba(255,255,255,.12); --riemp: rgba(120,120,128,.22);
+  --rosso: #ff453a; --ambra: #ff9f0a; --verde: #4cc38a;
+  --rosso-velo: rgba(255,69,58,.10); --ambra-velo: rgba(255,159,10,.10); --verde-velo: rgba(76,195,138,.10);
+  --accent-velo: rgba(63,164,234,.12);
+} }
+:root[data-theme="dark"] {
+  --accent: #3fa4ea; --bg: #0b0b0d; --card: #1c1c1e; --text: #f5f5f7;
+  --muted: #98989d; --hairline: rgba(255,255,255,.12); --riemp: rgba(120,120,128,.22);
+  --rosso: #ff453a; --ambra: #ff9f0a; --verde: #4cc38a;
+  --rosso-velo: rgba(255,69,58,.10); --ambra-velo: rgba(255,159,10,.10); --verde-velo: rgba(76,195,138,.10);
+  --accent-velo: rgba(63,164,234,.12);
+}
+:root[data-theme="light"] {
+  --accent: #1789d6; --bg: #f5f5f7; --card: #ffffff; --text: #1d1d1f;
+  --muted: #86868b; --hairline: rgba(0,0,0,.08); --riemp: rgba(120,120,128,.10);
+  --rosso: #d70015; --ambra: #c77700; --verde: #2e7d5b;
+  --rosso-velo: rgba(215,0,21,.07); --ambra-velo: rgba(199,119,0,.08); --verde-velo: rgba(46,125,91,.08);
+  --accent-velo: rgba(23,137,214,.08);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.6 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  -webkit-font-smoothing: antialiased; }
+main { max-width: 880px; margin: 0 auto; padding: 48px 20px 80px; }
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 10px; }
+h1 { font-size: clamp(28px, 5vw, 40px); font-weight: 700; letter-spacing: -.03em;
+  line-height: 1.15; margin: 0 0 10px; text-wrap: balance; }
+.sotto { color: var(--muted); font-size: 15px; margin: 0 0 34px; }
+h2 { font-size: 22px; font-weight: 700; letter-spacing: -.02em; margin: 46px 0 6px; text-wrap: balance; }
+h2 .n { color: var(--muted); font-weight: 600; font-size: 15px; margin-left: 6px; }
+h3 { font-size: 13px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--muted); margin: 26px 0 10px; }
+p { max-width: 68ch; }
+.lede { font-size: 17px; }
+.card { background: var(--card); border: 1px solid var(--hairline); border-radius: 18px;
+  padding: 18px 22px; margin: 14px 0; box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.04); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 22px 0; }
+.stat { background: var(--card); border: 1px solid var(--hairline); border-radius: 18px; padding: 16px 18px; }
+.stat .num { font-size: 30px; font-weight: 700; letter-spacing: -.03em; font-variant-numeric: tabular-nums; color: var(--accent); }
+.stat .lab { color: var(--muted); font-size: 13px; line-height: 1.35; margin-top: 2px; }
+.tavola { overflow-x: auto; background: var(--card); border: 1px solid var(--hairline);
+  border-radius: 18px; padding: 6px 18px; margin: 12px 0; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th { text-align: left; font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--muted); font-weight: 600; padding: 12px 14px 8px 0; border-bottom: 1px solid var(--hairline); }
+td { text-align: left; padding: 9px 14px 9px 0; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+td b { font-weight: 600; }
+td.prezzo { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mut { color: var(--muted); font-size: 13px; }
+.riv { border-left: 4px solid var(--hairline); }
+.riv.rossa { border-left-color: var(--rosso); background: linear-gradient(var(--rosso-velo), var(--rosso-velo)), var(--card); }
+.riv.ambra { border-left-color: var(--ambra); background: linear-gradient(var(--ambra-velo), var(--ambra-velo)), var(--card); }
+.riv.verde { border-left-color: var(--verde); background: linear-gradient(var(--verde-velo), var(--verde-velo)), var(--card); }
+.riv h4 { margin: 0 0 4px; font-size: 16px; font-weight: 700; }
+.riv .tag { font-size: 11.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
+.riv.rossa .tag { color: var(--rosso); } .riv.ambra .tag { color: var(--ambra); } .riv.verde .tag { color: var(--verde); }
+.riv p { margin: 6px 0 0; font-size: 14.5px; }
+.box { background: var(--accent-velo); border: 1px solid var(--hairline); border-radius: 18px; padding: 18px 22px; margin: 18px 0; }
+.box p { margin: 6px 0; }
+ul { padding-left: 20px; } li { margin: 5px 0; max-width: 68ch; }
+li::marker { color: var(--accent); }
+.fonte { color: var(--muted); font-size: 12.5px; margin-top: 40px; border-top: 1px solid var(--hairline); padding-top: 14px; }
+</style>
+
+<main>
+<div class="eyebrow">Ricerca di mercato · ReferralFlow</div>
+<h1>Software per l'amministrazione degli studi medici: la mappa del mondo, 2026</h1>
+<p class="sotto">Censimento in tre ricerche parallele — Svizzera, internazionale, Italia e nicchie — condotto il 24 luglio 2026. Circa 90 prodotti censiti.</p>
+
+<div class="stats">
+  <div class="stat"><div class="num">~90</div><div class="lab">software censiti in 3 mercati</div></div>
+  <div class="stat"><div class="num">1</div><div class="lab">concorrente diretto in Svizzera (solo tedesco)</div></div>
+  <div class="stat"><div class="num">0</div><div class="lab">piattaforme di referral tra studi in Italia e Svizzera italiana</div></div>
+  <div class="stat"><div class="num">16,7%</div><div class="lab">crescita annua del referral management negli USA</div></div>
+</div>
+
+<div class="box">
+<p><b>La sintesi in 30 secondi.</b> I gestionali completi per studi medici sono un mercato affollatissimo in ogni paese. Ma la categoria specifica di ReferralFlow — la gestione <i>tracciata</i> degli invii tra studi, sopra gli strumenti già in uso — è matura solo negli USA e nel Regno Unito, ha un solo modello nazionale in Europa (Paesi Bassi), <b>e in Italia e nella Svizzera italiana è vuota</b>. Il concorrente più vicino (Meditransfer, Zurigo) copre solo metà del problema, in tedesco. Le scelte già fatte da ReferralFlow — account gratuito per l'inviante, chiusura del cerchio fino al referto, strato leggero sopra agenda e fatturazione esistenti — sono esattamente i tratti dei vincitori americani della categoria.</p>
+</div>
+
+<h2>I vicini di casa: concorrenti, minacce, complementi</h2>
+
+<div class="card riv rossa"><span class="tag">Concorrente diretto</span>
+<h4>Meditransfer — Zurigo</h4>
+<p>Ricezione digitale strutturata degli invii per studi e cliniche: modulo pubblico brandizzato per gli invianti, triage e stati, notifiche senza nomi paziente, server svizzeri, conformità nDSG. Prezzi chiari: CHF 49 / 99 / 199 al mese. <b>Dove ReferralFlow è più avanti:</b> ciclo di vita completo fino a referto e follow-up, SMS e portale paziente, affidi tra studi, agenda iCal, bozze di referto dalla trascrizione — e l'italiano: Meditransfer esiste solo in tedesco e non ha ancora API verso i gestionali.</p></div>
+
+<div class="card riv ambra"><span class="tag">Da monitorare</span>
+<h4>docbox (Visionary AG) — Zurigo, dal 2002</h4>
+<p>«La più grande piattaforma medica svizzera»: invio elettronico dallo studio direttamente nei sistemi ospedalieri (80% delle registrazioni operatorie Hirslanden), integrata con HIN. Fortissima sul flusso studio→ospedale; copre poco il lavoro dello studio specialistico <i>ricevente</i>, che è il cuore di ReferralFlow. Minaccia strutturale a lungo termine, non rivale immediato negli studi ticinesi.</p></div>
+
+<div class="card riv ambra"><span class="tag">Da monitorare</span>
+<h4>Ecosistema Cassa dei Medici (Rockethealth / MediOnline)</h4>
+<p>Il partner dichiarato di ReferralFlow (agenda, fatturazione, incasso — 23'000+ professionisti amministrati). Se estendesse Rockethealth alla gestione invianti diventerebbe un concorrente con base clienti enorme anche in Ticino. Da coltivare come alleato prima che ci pensi.</p></div>
+
+<div class="card riv ambra"><span class="tag">Da monitorare</span>
+<h4>OneDoc + Medicosearch — Ginevra/Berna</h4>
+<p>Dopo la fusione (maggio 2025) possiede la relazione col paziente e le agende di migliaia di studi svizzeri (~350'000 prenotazioni/mese). Non fa referral tra medici, ma è il candidato naturale a salirci — e insieme un possibile complemento per la visione «Esplora» (trasparenza sui primi slot liberi). Stesso posizionamento di ReferralFlow: sopra il gestionale, senza sostituirlo.</p></div>
+
+<div class="card riv ambra"><span class="tag">Da monitorare</span>
+<h4>Doctolib — Parigi</h4>
+<p>Il caso più importante d'Europa: partito dall'agenda, oggi è un gestionale completo sostitutivo in Francia e Germania (0→475 €/medico/mese), con messaggistica tra professionisti (ex Siilo, 550'000 medici) e una rete di referral basica nel piano gratuito tedesco. Insegna che <b>chi possiede l'agenda può risalire l'intero stack</b> — referral compresi.</p></div>
+
+<div class="card riv verde"><span class="tag">Modelli da studiare</span>
+<h4>LeadingReach, ReferralMD (USA) · ZorgDomein (Paesi Bassi) · NHS e-RS e Cinapsis (UK)</h4>
+<p>La categoria matura altrove: LeadingReach cresce col «LinkedIn sanitario» dei referral (account <b>gratuito per l'inviante</b>, Free/99/149 $ al mese — la stessa mossa di ReferralFlow); ReferralMD aggiunge cattura AI dei fax e analisi dei flussi; Blockit chiude il referral con l'appuntamento già fissato; ZorgDomein è lo standard nazionale olandese. Tendenza 2025-26: i player puri vengono acquisiti (par8o) — il valore sta nella rete e nella chiusura del cerchio, non nel software da solo.</p></div>
+
+<h2>Svizzera <span class="n">· il mercato di casa</span></h2>
+
+<h3>Gestionali di studio completi (PIS)</h3>
+<div class="tavola"><table>
+<tr><th>Software</th><th>Chi è / cosa fa</th><th>Note</th></tr>
+<tr><td><b>Rockethealth + MediOnline</b><br><span class="mut">Cassa dei Medici</span></td><td>Cartella, agenda, fatturazione TARMED/TARDOC con incasso delegato alla cooperativa; MediWin CB in graduale sostituzione</td><td>L'ecosistema su cui ReferralFlow già si appoggia; agenzia in Ticino</td></tr>
+<tr><td><b>vitomed</b><br><span class="mut">Vitodata</span></td><td>Cartella, agenda, laboratorio, fatturazione, <b>eReferral integrato</b></td><td>~5'000 medici, 60% specialisti; il metro di paragone funzionale</td></tr>
+<tr><td><b>Axenita</b> (ex Achilles)<br><span class="mut">Axon Lab</span></td><td>Cloud completo multi-sede con documentazione AI</td><td>1'400+ studi</td></tr>
+<tr><td><b>curaMED + curaBILL</b><br><span class="mut">Swisscom Health</span></td><td>Gestionale web + fatturazione/incasso (erede di TriaMed)</td><td>Datacenter svizzeri, forte in psichiatria</td></tr>
+<tr><td><b>tomedo</b></td><td>Unico nativo macOS/iOS, con AI integrata</td><td>CHF 300–500/mese; il challenger tecnologico</td></tr>
+<tr><td><b>amétiq siMed</b></td><td>Cartella + agenda + fatturazione, app mobile</td><td>7'000+ utenti, cardiologia inclusa</td></tr>
+<tr><td><b>AESKULAP</b> <span class="mut">(Kern Concept)</span></td><td>Modulare Windows, licenza una tantum</td><td>1'300+ studi, Svizzera tedesca</td></tr>
+<tr><td><b>WinMed</b> <span class="mut">(TMR)</span></td><td>Cartella a episodi SOAP, dal 1993</td><td>2'000+ medici, anche in francese</td></tr>
+<tr><td><b>Elexis</b></td><td>Open source con supporto commerciale (Medelexis)</td><td>Base gratuita, supporto da CHF 1'200/anno</td></tr>
+<tr><td><b>Altri</b></td><td>E-PAT, Swiss-MR, delemed pex II, inSuite, Medicloud MED, Pracmedio, E-Medicus, LUNA, praxistar, Nereida, Misa, ePaad, PRAXSYS</td><td>Catalogo ufficiale: FMH Services Softwarekatalog</td></tr>
+<tr><td><b>Romandia/Ticino</b></td><td>Mediway (Logival — standard romando), MedicApp, Idocteur, Pulse, Handylife, Aptimea, EasyGest, envymed, Carefolio, DNAMED (in italiano, per terapisti)</td><td>Mercato frammentato per lingua</td></tr>
+</table></div>
+
+<h3>Prenotazione, referral e dettatura</h3>
+<div class="tavola"><table>
+<tr><th>Segmento</th><th>Chi c'è</th></tr>
+<tr><td><b>Prenotazione online</b></td><td>OneDoc (+ Medicosearch, acquisita 5/2025), Doctena. La prenotazione pura è ormai commodity.</td></tr>
+<tr><td><b>Referral / invii</b></td><td>docbox (studio→ospedale), Meditransfer (ricezione invii, solo DE), eReferral dentro vitomed, portali invianti dei grandi ospedali. <b>Nella Svizzera italiana: nessuno.</b></td></tr>
+<tr><td><b>Dettatura e trascrizione</b></td><td>Voicepoint (leader storico, Dragon/Philips), Medicusdata, Diktus, Softtrend; ambient AI: Cairone, Haidy/44ai, Nixi, DuraEdge (on-device), Mena Health (coding TARDOC). Tema ricorrente: residenza dei dati in Svizzera — <b>ReferralFlow l'ha risolto alla radice: tutto sul Mac dello studio.</b></td></tr>
+<tr><td><b>Infrastruttura</b></td><td>HIN (identità e posta sicura, 120+ app), EPD/DEP (obbligo studi ~2030), catalogo FMH. Ospedali: KISIM, Dedalus, Nexus, Epic.</td></tr>
+</table></div>
+
+<h2>Internazionale <span class="n">· i giganti e i modelli</span></h2>
+
+<h3>Gestionali + cartella clinica (practice management / EHR)</h3>
+<div class="tavola"><table>
+<tr><th>Software</th><th>Profilo</th><th class="prezzo">Prezzo indicativo</th></tr>
+<tr><td><b>Epic / Oracle Health / MEDITECH</b> <span class="mut">USA</span></td><td>Enterprise ospedaliero; Epic è anche piattaforma di distribuzione per gli AI scribe</td><td class="prezzo">progetti milionari</td></tr>
+<tr><td><b>athenahealth</b> <span class="mut">USA</span></td><td>Cloud ambulatoriale + incassi integrati</td><td class="prezzo">4–10% delle riscossioni</td></tr>
+<tr><td><b>eClinicalWorks</b> <span class="mut">USA</span></td><td>180'000+ medici, scribe AI proprio</td><td class="prezzo">449–599 $/medico/mese</td></tr>
+<tr><td><b>Tebra, DrChrono, Practice Fusion, AdvancedMD, ModMed, Elation, NextGen</b> <span class="mut">USA</span></td><td>Fascia studi piccoli e medi, per specialità</td><td class="prezzo">99–599 $/mese</td></tr>
+<tr><td><b>Jane, Cliniko, SimplePractice, Semble, Meddbase</b> <span class="mut">CA/AU/UK</span></td><td>Studio singolo e cliniche private; Jane ha la UX migliore della categoria</td><td class="prezzo">10–99 $/mese</td></tr>
+<tr><td><b>CGM, medatixx, Dedalus, tomedo</b> <span class="mut">DE/IT</span></td><td>Oligopolio europeo legacy (CGM ~19,5% e medatixx ~16% del mercato tedesco) sotto attacco dei cloud-native</td><td class="prezzo">licenze tradizionali</td></tr>
+<tr><td><b>Doctolib</b> <span class="mut">FR</span></td><td>Da agenda a gestionale completo; ~6,4 mld $ di valutazione, IPO attesa</td><td class="prezzo">0 → 475 €/medico/mese</td></tr>
+</table></div>
+
+<h3>Le altre tre categorie in breve</h3>
+<div class="card"><ul>
+<li><b>Agende e patient engagement:</b> Doctolib (60% delle prenotazioni online francesi), Docplanner/MioDottore (il n.2, forte dove Doctolib non c'è — Italia inclusa), Zocdoc (50–180 $ a prenotazione, receptionist AI «Zo»), Accurx (standard NHS), Phreesia, Luma Health, Artera. Trend: agenti AI che rispondono al telefono e riempiono i buchi in agenda.</li>
+<li><b>Referral management (la categoria di ReferralFlow):</b> ReferralMD (freemium, cattura fax con AI), LeadingReach (Free/99/149 $, effetto rete), Blockit/Alluvium (chiude col­l'appuntamento fissato), Aidin e CarePort (post-acuti), HealthViewX (da 30 $/utente), Honey Health (agenti AI pagati a compito), RubiconMD e AristaMD (eConsult: evita fino al 70% dei referral). In Europa continentale: solo posta sicura nazionale (HIN, KIM, MSSanté) — <b>nessun LeadingReach europeo.</b></li>
+<li><b>AI scribe e dettatura:</b> Microsoft Dragon Copilot, Abridge (5,3 mld $, 200+ health system), Ambience, Suki, Nabla (free fino a 30 consulti/mese), Heidi, Corti (il «fornitore di motori» europeo), Tandem (125 €/mese), Freed (39 $/mese). La nota automatica è ormai commodity; si vince su integrazione, lingua e residenza dei dati.</li>
+</ul></div>
+
+<h2>Italia <span class="n">· il mercato della lingua</span></h2>
+<div class="tavola"><table>
+<tr><th>Software</th><th>Profilo</th><th class="prezzo">Prezzo indicativo</th></tr>
+<tr><td><b>GipoNext</b> <span class="mut">Docplanner</span></td><td>Il n.1 per poliambulatori: agenda, CRM, accettazione, refertazione AI</td><td class="prezzo">da ~200 €/mese</td></tr>
+<tr><td><b>MioDottore + TuoTempo</b> <span class="mut">Docplanner</span></td><td>Marketplace pazienti n.1 + CRM recall/liste d'attesa</td><td class="prezzo">~69–100 €/mese +</td></tr>
+<tr><td><b>Doctolib Italia</b></td><td>Agenda, telemedicina, messaggistica tra professionisti</td><td class="prezzo">da 139 €/mese</td></tr>
+<tr><td><b>ArzaMed</b></td><td>Gestionale con verticale cardiologia (referti ECG/Holter in cartella)</td><td class="prezzo">da ~80 €/mese</td></tr>
+<tr><td><b>AlfaDocs</b></td><td>Modulare, Sistema TS, FSE 2.0, firma elettronica</td><td class="prezzo">da 109 €/mese</td></tr>
+<tr><td><b>Appuntoo</b></td><td>Low-cost multi-professione, promemoria WhatsApp</td><td class="prezzo">0–80 €/mese</td></tr>
+<tr><td><b>Millewin</b> <span class="mut">Dedalus</span>, <b>Medico 2000</b>, <b>CGM PROFIM</b></td><td>Il mondo a sé della medicina generale convenzionata</td><td class="prezzo">licenza + canone</td></tr>
+<tr><td><b>Minori</b></td><td>DBMedica, MedMaker, MediStudio, MEG, ResMedica, Doctivo, Ambulatorio Facile; enterprise: Dedalus, AlmavivA</td><td class="prezzo">—</td></tr>
+</table></div>
+
+<div class="card"><ul>
+<li><b>Refertazione vocale in italiano:</b> Dragon Medical One (ora anche in italiano), Refertius, Reconice, VoisisMed, Vera, S-AI. Standard nei capitolati RIS/PACS pubblici, <b>rara nei piccoli ambulatori privati</b> — dove lavora la pipeline di ReferralFlow.</li>
+<li><b>Cardiologia ambulatoriale:</b> Suitestensa CVIS (Esaote), Cardioline ECGWebApp, PQRST (refertazione a esame, ~14,6 €/ECG), GE MUSE. Buco dichiarato: manca il gestionale leggero che unisca agenda, referto strutturato e <b>rapporto con gli invianti</b>.</li>
+<li><b>Teleconsulto tra medici:</b> Doctolib Connect/Siilo (informale), ZorgDomein (modello NL), Ultraspecialisti e Top Doctors (second opinion). Il consulto documentato e auditabile tra studi resta scoperto.</li>
+<li><b>Liste d'attesa e richiami:</b> TuoTempo, Sm@rtHealth, CalendarSMS, DottAi. Il pairing «slot disdetto → prossimo paziente prioritario da chiamare» <b>non è emerso in nessun gestionale italiano</b> — ReferralFlow ce l'ha già.</li>
+</ul></div>
+
+<h2>Che cosa insegna tutto questo a ReferralFlow</h2>
+
+<div class="card"><ul>
+<li><b>La categoria è vuota proprio dove siete.</b> Referral tracciato tra studi: maturo negli USA, nazionale in UK e NL, un solo player in CH (tedesco, parziale), <b>zero in Italia e Svizzera italiana</b>. Primo arrivato = standard di fatto locale.</li>
+<li><b>Le mosse dei vincitori sono già nella piattaforma:</b> account gratuito per l'inviante (LeadingReach), chiusura del cerchio fino al referto, layer sopra gli strumenti esistenti (OneDoc docet). Le prossime dal mercato: cattura AI dei documenti in ingresso (ReferralMD), referral chiuso con appuntamento già fissato (Blockit) — in rotta con la visione «Esplora» e la trasparenza sui primi slot.</li>
+<li><b>Le funzioni distintive reggono il confronto mondiale:</b> pipeline di trascrizione tutta locale (nessun censito la offre così), pairing disdette→richiami, watchdog delle pratiche ferme, monitoraggio degli affidi. Sono argomenti di vendita, non dettagli.</li>
+<li><b>Due minacce da non perdere di vista:</b> chi possiede l'agenda risale lo stack (Doctolib, OneDoc); chi possiede la fatturazione pure (Cassa dei Medici). Coltivare la Cassa come alleato — integrazione, non concorrenza — è la mossa difensiva più importante.</li>
+<li><b>Prezzi di riferimento per il listino:</b> Meditransfer 49–199 CHF/mese; gestionali cloud CH 160–500 CHF/mese; SaaS italiani 35–200 €/mese; LeadingReach 0/99/149 $. Un piano ReferralFlow tra 100 e 250 CHF/studio/mese sta comodamente nel mercato, con l'inviante sempre gratuito.</li>
+</ul></div>
+
+<p class="fonte">Metodo: tre ricerche web indipendenti condotte in parallelo il 24.07.2026 (mercato svizzero in DE/FR/IT; mercato internazionale USA/EU; mercato italiano e nicchie), con verifica incrociata su cataloghi ufficiali (FMH Services Softwarekatalog), siti dei produttori, comparatori e stampa di settore. I prezzi sono indicativi e vanno verificati sui listini correnti. Rapporto ad uso interno ReferralFlow.</p>
+</main>
