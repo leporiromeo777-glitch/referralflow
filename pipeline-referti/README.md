@@ -16,7 +16,7 @@ codice — si copia sul Mac mini per l'uso.
 | 5 | Correzione + ispezione LLM | **fatta — da testare su un dettato reale** |
 | 6 | Estrazione campi + controlli numerici | **fatta — da testare su un dettato reale** |
 | 7 | Watcher + gestione errori | **fatta — da testare su un dettato reale** |
-| 8 | Invio a ReferralFlow + cancellazione audio | da fare (endpoint già pronto) |
+| 8 | Invio a ReferralFlow + cancellazione audio | **fatta — attende deploy endpoint in produzione + token** |
 | 9 | plist launchd | da fare |
 
 ## Requisiti sul Mac mini

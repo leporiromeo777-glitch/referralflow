@@ -18,6 +18,9 @@ Fasi implementate:
   7. modalità servizio: sorveglia ~/referti/ingresso/, elabora in coda,
      esiti in output/, falliti in errori/ col log accanto — la coda non
      si blocca mai; audio in archivio_temp/ fino al salvataggio confermato
+  8. invio a ReferralFlow (POST /api/referti/bozza, Bearer token per
+     studio): solo il 2xx del server autorizza la cancellazione di audio
+     e bozza; server giù = si riprova al giro dopo; FileVault obbligatorio
 
 Uso:
     python3 pipeline.py <file_audio>     una corsa su un file (test)
@@ -770,6 +773,15 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli) -> tuple[str
 INTERVALLO_SCANSIONE_S = 15
 SPAZIO_MINIMO_BYTE = 500 * 1024 * 1024  # sotto il mezzo GB ci si ferma (§7.2)
 
+# ── Invio a ReferralFlow (SPEC §3 passi 11-12, §8.1) ────────────────────────
+# Senza URL+token configurati l'invio resta spento: le bozze si accumulano
+# in output/ e nulla viene mai cancellato. Il token si genera in ReferralFlow
+# da Impostazioni → Dati dello studio ed è una credenziale: vive solo nella
+# configurazione del servizio, mai nei log.
+FLOW_URL = os.environ.get("REFERTI_FLOW_URL", "").rstrip("/")
+FLOW_TOKEN = os.environ.get("REFERTI_FLOW_TOKEN", "")
+FLOW_TIMEOUT_S = 60
+
 
 def _pulisci_intermedi(cartella: Path, file_id: str) -> None:
     for p in cartella.glob(f"{file_id}*"):
@@ -792,8 +804,13 @@ def _processa_uno(audio: Path, cartelle: dict, sostituzioni, controlli) -> None:
         )
         provvisorio.replace(uscita)  # mai un JSON scritto a metà in output/
         # L'audio resta in archivio_temp/ finché ReferralFlow non conferma
-        # il salvataggio (Fase 8): MAI cancellato prima (§2.3).
-        shutil.move(str(lavoro), str(cartelle["archivio_temp"] / lavoro.name))
+        # il salvataggio: MAI cancellato prima (§2.3). Rinominato col
+        # file_id: l'invio lo ritrova, e il nome originale (che può
+        # contenere il nome del paziente) sparisce dall'archivio.
+        shutil.move(
+            str(lavoro),
+            str(cartelle["archivio_temp"] / (file_id + lavoro.suffix.lower())),
+        )
         _pulisci_intermedi(cartelle["lavorazione"], file_id)
         log.info("fase=servizio file=%s esito=ok", file_id)
     except ErroreElaborazione as e:
@@ -811,16 +828,90 @@ def _processa_uno(audio: Path, cartelle: dict, sostituzioni, controlli) -> None:
         )
 
 
+def invia_bozze(cartelle: dict) -> None:
+    """Prova a consegnare ogni bozza in output/ a ReferralFlow. Solo un 2xx
+    del server (201 scritta, 200 duplicato) autorizza la cancellazione di
+    audio e bozza (SPEC §3 passo 12): qualsiasi altro esito lascia tutto
+    dov'è. Server irraggiungibile: si riprova al giro successivo (§7.2).
+    Errori 4xx (token, payload): bozza in errori/, audio MAI cancellato."""
+    if not FLOW_URL or not FLOW_TOKEN:
+        return
+    for bozza in sorted(cartelle["output"].glob("*.json")):
+        file_id = bozza.stem
+        richiesta = urllib.request.Request(
+            FLOW_URL + "/api/referti/bozza",
+            data=bozza.read_bytes(),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {FLOW_TOKEN}",
+            },
+        )
+        try:
+            with urllib.request.urlopen(richiesta, timeout=FLOW_TIMEOUT_S) as r:
+                codice = r.status
+        except urllib.error.HTTPError as e:
+            if 400 <= e.code < 500 and e.code != 429:
+                # Non passerà da solo (token errato, payload rifiutato):
+                # la bozza va in errori/ per diagnosi, l'audio resta.
+                shutil.move(str(bozza), str(cartelle["errori"] / bozza.name))
+                (cartelle["errori"] / (bozza.name + ".log")).write_text(
+                    f"{datetime.now(timezone.utc).isoformat(timespec='seconds')} "
+                    f"file_id={file_id} fase=invio tipo=http_{e.code}\n",
+                    encoding="utf-8",
+                )
+                log.error("fase=invio file=%s esito=errore codice=%d", file_id, e.code)
+            else:
+                log.warning("fase=invio file=%s esito=rinviato codice=%d", file_id, e.code)
+            continue
+        except (urllib.error.URLError, TimeoutError, OSError):
+            # ReferralFlow non raggiungibile: inutile insistere sulle altre
+            # bozze in questo giro. L'audio NON si cancella (§7.2).
+            log.warning("fase=invio esito=rinviato motivo=non_raggiungibile")
+            return
+        if codice in (200, 201):
+            # Salvataggio confermato: ORA (e solo ora) si cancella (§2.3).
+            # Unlink semplice: la protezione dei dati a riposo è FileVault,
+            # verificato all'avvio del servizio.
+            for audio in cartelle["archivio_temp"].glob(file_id + ".*"):
+                audio.unlink()
+            bozza.unlink()
+            log.info("fase=invio file=%s esito=ok codice=%d", file_id, codice)
+        else:
+            log.warning("fase=invio file=%s esito=rinviato codice=%d", file_id, codice)
+
+
+def filevault_attivo() -> bool:
+    """Prerequisito §2.3: su macOS il disco deve essere cifrato (FileVault).
+    Fuori da macOS (solo collaudo) serve l'esplicito REFERTI_SENZA_FILEVAULT=1."""
+    if sys.platform != "darwin":
+        return os.environ.get("REFERTI_SENZA_FILEVAULT") == "1"
+    try:
+        esito = subprocess.run(
+            ["fdesetup", "status"], capture_output=True, text=True, timeout=10
+        )
+        return esito.returncode == 0 and "On" in esito.stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
 def servizio(sostituzioni, controlli) -> int:
     base = Path(os.environ.get("REFERTI_BASE", str(Path.home() / "referti")))
     cartelle = {
         nome: base / nome
         for nome in ("ingresso", "lavorazione", "errori", "archivio_temp", "output")
     }
+    if not filevault_attivo():
+        # Senza cifratura del disco la cancellazione post-invio non protegge
+        # nulla: il servizio si rifiuta di partire (§2.3).
+        log.error("fase=servizio esito=fermato motivo=filevault_spento")
+        return 1
     for c in [base, *cartelle.values()]:
         c.mkdir(parents=True, exist_ok=True)
         os.chmod(c, 0o700)  # solo l'utente proprietario (SPEC §5)
-    log.info("fase=servizio esito=avviato intervallo=%ds", INTERVALLO_SCANSIONE_S)
+    log.info(
+        "fase=servizio esito=avviato intervallo=%ds invio=%s",
+        INTERVALLO_SCANSIONE_S, "attivo" if FLOW_URL and FLOW_TOKEN else "spento",
+    )
 
     in_attesa: dict[Path, int] = {}
     while True:
@@ -842,6 +933,7 @@ def servizio(sostituzioni, controlli) -> int:
                 in_attesa.pop(f, None)
                 _processa_uno(f, cartelle, sostituzioni, controlli)
             in_attesa = {p: d for p, d in in_attesa.items() if p.exists()}
+            invia_bozze(cartelle)
             time.sleep(INTERVALLO_SCANSIONE_S)
         except KeyboardInterrupt:
             log.info("fase=servizio esito=fermato motivo=richiesta_utente")
