@@ -59,3 +59,16 @@ Accanto al file d'ingresso compaiono `<file_id>.wav` (audio pulito) e
 mai il nome del file, che potrebbe contenere il nome del paziente.
 
 Nessuna dipendenza Python da installare: solo libreria standard.
+
+## Pannello locale
+
+```bash
+python3.14 ~/referti-pipeline/pannello.py
+```
+
+Apre http://127.0.0.1:8737 nel browser (solo su questo Mac, mai in rete):
+stato della coda e registro del servizio, bozze in attesa di invio con
+audio riascoltabile e punti evidenziati, errori con «Riprova», dizionario
+con aggiunta di correzioni dello studio (`correzioni-locali.json`, mai
+sovrascritto dagli aggiornamenti; il servizio le ricarica a ogni giro).
+La conferma clinica dei referti resta in ReferralFlow.

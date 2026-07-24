@@ -12,7 +12,9 @@ mkdir -p "$DEST"
 curl -fsSL "$BASE/aggiorna.sh" -o "$DEST/aggiorna.sh.nuovo" && mv "$DEST/aggiorna.sh.nuovo" "$DEST/aggiorna.sh"
 curl -fsSL "$BASE/pipeline.py" -o "$DEST/pipeline.py"
 curl -fsSL "$BASE/correzioni.json" -o "$DEST/correzioni.json"
+curl -fsSL "$BASE/pannello.py" -o "$DEST/pannello.py"
 curl -fsSL "$BASE/CLAUDE.md" -o "$DEST/CLAUDE.md"
+# correzioni-locali.json NON si tocca: sono le voci aggiunte dallo studio.
 
-echo "Aggiornati: pipeline.py, correzioni.json, CLAUDE.md (e aggiorna.sh stesso)"
+echo "Aggiornati: pipeline.py, correzioni.json, pannello.py, CLAUDE.md (e aggiorna.sh stesso)"
 grep -m1 "Fasi implementate" -A 8 "$DEST/pipeline.py" | sed 's/^# \{0,2\}//'

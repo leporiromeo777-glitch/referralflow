@@ -405,7 +405,15 @@ Dopo ogni fase: test manuale su un file reale prima di procedere.
 
 ## 10. Cosa NON fare
 
-- Non aggiungere una web UI. L'interfaccia è ReferralFlow, esiste già.
+- La revisione CLINICA e la conferma dei referti restano in ReferralFlow —
+  su questo niente eccezioni. È invece ammesso (revisione 2026-07-24, su
+  richiesta dello studio) il **pannello locale** `pannello.py`: strumento
+  d'esercizio per coda, errori, dizionario e anteprima delle bozze non
+  ancora inviate (audio compreso). Ascolta SOLO su 127.0.0.1: non è
+  raggiungibile dalla rete e nessun contenuto lascia la macchina. Le voci
+  di dizionario dello studio vivono in `correzioni-locali.json` (mai
+  toccato dagli aggiornamenti; a parità di chiave vince sul repo) e il
+  servizio le ricarica a ogni giro.
 - Non aggiungere un database locale. Lo stato sta nelle cartelle.
 - Non aggiungere autenticazione, code di messaggi, Docker, o microservizi.
 - Non aprire una connessione diretta al PostgreSQL di ReferralFlow.

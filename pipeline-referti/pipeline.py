@@ -170,6 +170,15 @@ PERCORSO_CORREZIONI = Path(
         str(Path(__file__).resolve().parent / "correzioni.json"),
     )
 )
+# Voci aggiunte dallo studio dal pannello locale: vivono in un file a parte
+# che aggiorna.sh non tocca mai; a parità di chiave vincono sulle voci del
+# repo. Il servizio le ricarica a ogni giro: niente riavvii.
+PERCORSO_CORREZIONI_LOCALI = Path(
+    os.environ.get(
+        "REFERTI_CORREZIONI_LOCALI",
+        str(Path(__file__).resolve().parent / "correzioni-locali.json"),
+    )
+)
 
 
 def file_id_di(percorso: Path) -> str:
@@ -325,6 +334,10 @@ def carica_sostituzioni() -> list[tuple[re.Pattern, str]]:
     di «sensuale»). Regola invariabile del file: mai cifre — qualsiasi voce
     che ne contenga viene scartata per principio (SPEC §2.4)."""
     config = json.loads(PERCORSO_CORREZIONI.read_text(encoding="utf-8"))
+    if PERCORSO_CORREZIONI_LOCALI.is_file():
+        locali = json.loads(PERCORSO_CORREZIONI_LOCALI.read_text(encoding="utf-8"))
+        for sezione in ("termini_clinici", "linguaggio_comune"):
+            config.setdefault(sezione, {}).update(locali.get(sezione, {}))
     voci: dict[str, str] = {}
     for sezione in ("termini_clinici", "linguaggio_comune"):
         for da, a in config.get(sezione, {}).items():
@@ -905,9 +918,15 @@ def servizio(sostituzioni, controlli) -> int:
         # nulla: il servizio si rifiuta di partire (§2.3).
         log.error("fase=servizio esito=fermato motivo=filevault_spento")
         return 1
-    for c in [base, *cartelle.values()]:
+    for c in [base, *cartelle.values(), base / "log"]:
         c.mkdir(parents=True, exist_ok=True)
         os.chmod(c, 0o700)  # solo l'utente proprietario (SPEC §5)
+    # Registro anche su file (già pulito by design, §2.2): lo leggono il
+    # pannello locale e launchd.
+    su_file = logging.FileHandler(base / "log" / "servizio.log", encoding="utf-8")
+    su_file.setFormatter(logging.Formatter(
+        "%(asctime)s %(levelname)s %(message)s", datefmt="%Y-%m-%dT%H:%M:%S"))
+    log.addHandler(su_file)
     log.info(
         "fase=servizio esito=avviato intervallo=%ds invio=%s",
         INTERVALLO_SCANSIONE_S, "attivo" if FLOW_URL and FLOW_TOKEN else "spento",
@@ -916,6 +935,13 @@ def servizio(sostituzioni, controlli) -> int:
     in_attesa: dict[Path, int] = {}
     while True:
         try:
+            # Dizionario ricaricato a ogni giro: le voci aggiunte dal
+            # pannello valgono subito. Se un file è rotto si tiene l'ultimo
+            # buono e si segnala.
+            try:
+                sostituzioni = carica_sostituzioni()
+            except (OSError, json.JSONDecodeError, AttributeError, TypeError):
+                log.warning("fase=servizio esito=avviso motivo=correzioni_non_ricaricabili")
             if shutil.disk_usage(base).free < SPAZIO_MINIMO_BYTE:
                 # Disco pieno: fermare tutto e segnalare, non tentare di
                 # procedere (§7.2). L'audio resta dov'è.
