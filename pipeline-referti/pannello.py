@@ -95,8 +95,8 @@ h2 { font-size: 12px; font-weight: 600; letter-spacing: 0.07em; text-transform: 
 .stat.zero .n { color: var(--muted); }
 details.card > summary { cursor: pointer; font-weight: 600; list-style: none;
   display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-details.card > summary::before { content: "›"; color: var(--muted);
-  font-weight: 700; transition: transform .15s; display: inline-block; }
+details.card > summary::before { content: "›"; color: var(--accent);
+  font-weight: 700; font-size: 17px; transition: transform .15s; display: inline-block; }
 details[open].card > summary::before { transform: rotate(90deg); }
 details.card > summary .muted { font-weight: 400; }
 details.card[open] > summary { margin-bottom: 14px; }
@@ -341,6 +341,9 @@ def sez_dizionario() -> str:
                 continue
             righe_repo += f'<tr><td>{e(da)}</td><td>{e(a)}</td><td class="muted">{e(SEZIONI[sezione])}</td></tr>'
     n_locali = sum(len(locali.get(s) or {}) for s in SEZIONI)
+    n_repo = sum(
+        1 for s in SEZIONI for k in (repo.get(s) or {}) if not k.startswith("_")
+    )
     return f"""
 <div class="card" id="dizionario"><h2>Dizionario · aggiungi una correzione</h2>
 <p class="muted">Solo errori RICORRENTI e NON ambigui: se una parola potrebbe comparire legittimamente col suo significato originale, non metterla qui. Mai numeri. Il servizio la usa dal giro successivo.</p>
@@ -351,9 +354,11 @@ def sez_dizionario() -> str:
 <select name="sezione">{opzioni}</select>
 <button class="btn" type="submit">Aggiungi</button></form>
 </div>
-<details class="card"><summary>Voci dello studio <span class="muted">{n_locali}</span></summary>
-<table>{righe_locali or '<tr><td class="muted">nessuna — quelle che aggiungi compaiono qui</td></tr>'}</table></details>
-<details class="card"><summary>Voci di base del progetto <span class="muted">dal repo · a parità di voce vincono quelle dello studio</span></summary>
+<details class="card"{' open' if n_locali else ''}><summary>Voci dello studio
+<span class="muted">{n_locali} — {'le tue correzioni' if n_locali else 'quelle che aggiungi compaiono qui'}</span></summary>
+<table>{righe_locali or '<tr><td class="muted">nessuna per ora</td></tr>'}</table></details>
+<details class="card"><summary>Voci di base del progetto
+<span class="muted">{n_repo} voci · clicca per vederle · a parità vince lo studio</span></summary>
 <table>{righe_repo}</table></details>"""
 
 
