@@ -461,15 +461,48 @@ def correggi_llm(testo: str, file_id: str, rapporto_scarto: Path) -> str:
             "fase=correzione_llm file=%s esito=scartata motivo=numeri_cambiati durata=%.1fs",
             file_id, durata,
         )
-        return testo
+        return _correggi_a_blocchi(testo, file_id)
     if not 0.6 <= len(uscita) / max(len(testo), 1) <= 1.4:
         log.warning(
             "fase=correzione_llm file=%s esito=scartata motivo=lunghezza_anomala durata=%.1fs",
             file_id, durata,
         )
-        return testo
+        return _correggi_a_blocchi(testo, file_id)
     log.info("fase=correzione_llm file=%s esito=ok durata=%.1fs", file_id, durata)
     return uscita
+
+
+def _correggi_a_blocchi(testo: str, file_id: str) -> str:
+    """Ripiego chirurgico quando la correzione del testo intero viene
+    scartata (palestra del 2026-07-24: il difetto «3 3» ripetuto non si
+    corregge via prompt). Stesso prompt §6.1, applicato blocco per blocco:
+    ogni blocco con la firma numerica intatta si tiene corretto, ogni
+    blocco dove l'AI ha toccato un numero resta originale. Il danno si
+    limita alla singola frase invece di buttare tutte le correzioni."""
+    inizio = time.monotonic()
+    blocchi = testo.splitlines()
+    if len(blocchi) <= 1:
+        blocchi = re.split(r"(?<=[.!?])\s+", testo)
+    corretti: list[str] = []
+    scartati = 0
+    for blocco in blocchi:
+        if not any(c.isalpha() for c in blocco):
+            corretti.append(blocco)
+            continue
+        uscita = chiama_ollama(
+            PROMPT_CORREZIONE.replace("{testo}", blocco), file_id, "correzione_llm"
+        ).strip()
+        lunghezza_ok = len(blocco) < 40 or 0.5 <= len(uscita) / len(blocco) <= 2.0
+        if _numeri(uscita) == _numeri(blocco) and lunghezza_ok:
+            corretti.append(uscita)
+        else:
+            scartati += 1
+            corretti.append(blocco)
+    log.info(
+        "fase=correzione_llm file=%s esito=ok_a_blocchi blocchi=%d scartati=%d durata=%.1fs",
+        file_id, len(blocchi), scartati, time.monotonic() - inizio,
+    )
+    return "\n".join(corretti) + "\n"
 
 
 def _parse_ispezione(uscita: str) -> list[str]:

@@ -248,6 +248,13 @@ TESTO:
 **Comportamento noto:** il modello è conservativo. Corregge poco ma corregge giusto.
 Tende a ignorare le richieste di annotazione (per questo l'ispezione è separata, §6.2).
 Occasionalmente rimuove un'istruzione di dettatura nonostante la regola 4 — accettabile.
+Deduplica i numeri ripetuti («3 3» → «3») nonostante il divieto: verificato in
+palestra (2026-07-24, `palestra.py` su 8 dettati finti) che una regola aggiuntiva
+nel prompt NON cambia questo comportamento — variante testata e non adottata.
+La protezione sta nel codice: la correzione con firma numerica alterata viene
+scartata; il ripiego riprova con lo STESSO prompt blocco per blocco, tenendo i
+blocchi coi numeri intatti e lasciando originali gli altri. Ogni futura modifica
+al prompt o al modello ripassa dalla palestra prima di entrare in servizio.
 
 ### 6.2 — Ispezione (compito separato, non modifica nulla)
 
