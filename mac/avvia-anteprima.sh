@@ -43,6 +43,13 @@ fi
 cd "$(dirname "$0")/.."
 REPO="$(pwd)"
 
+# ── 2b. Aggiorna il codice all'ultima versione (best-effort) ─────────────────
+# Così basta rilanciare questo comando per avere sempre l'ultima versione.
+if [ -d .git ]; then
+  echo "Cerco aggiornamenti…"
+  git pull --ff-only 2> /dev/null || echo "  (offline o nessun aggiornamento: uso la versione già scaricata)"
+fi
+
 # ── 3. Database dell'app ─────────────────────────────────────────────────────
 createdb referralflow 2> /dev/null || true
 
@@ -62,9 +69,9 @@ NODE_ENV=production
 EOF
 fi
 
-# ── 5. Dipendenze ────────────────────────────────────────────────────────────
-if [ ! -d node_modules ]; then
-  echo "Installo le librerie dell'app (una volta sola)…"; npm install
+# ── 5. Dipendenze (installa/aggiorna se il lockfile è cambiato) ──────────────
+if [ ! -d node_modules ] || [ package-lock.json -nt node_modules ]; then
+  echo "Installo le librerie dell'app…"; npm install
 fi
 
 # ── 6. Schema del database (solo se vuoto) ───────────────────────────────────
@@ -79,9 +86,18 @@ npm run create-studio -- "Centro Cardiologico Ticino (demo)" studio-demo segrete
 npm run create-user   -- admin@demo.ch demo1234 admin studio-demo > /dev/null
 psql referralflow -f db/seed-demo.sql
 
-# ── 8. Compila e avvia ───────────────────────────────────────────────────────
-if [ ! -d .next ]; then
-  echo "Compilo l'app (una volta sola, un paio di minuti)…"; npm run build
+# ── 8. Compila (solo se il codice è cambiato) e avvia ────────────────────────
+# La compilazione va rifatta a ogni aggiornamento del codice, altrimenti
+# resterebbe visibile la versione vecchia: confrontiamo la versione compilata
+# con quella attuale del repo.
+COMMIT="$(git rev-parse HEAD 2> /dev/null || echo nogit)"
+if [ ! -d .next ] || [ "$COMMIT" != "$(cat .build-stamp 2> /dev/null)" ]; then
+  echo "Compilo l'app aggiornata (un paio di minuti)…"
+  rm -rf .next
+  npm run build
+  echo "$COMMIT" > .build-stamp
+else
+  echo "Nessuna modifica al codice: uso la compilazione esistente."
 fi
 
 echo

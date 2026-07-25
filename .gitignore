@@ -23,3 +23,6 @@ _*.cjs
 rf_page_tmp.html
 Thumbs.db
 .DS_Store
+
+# Anteprima locale sul Mac: traccia della versione compilata
+.build-stamp
