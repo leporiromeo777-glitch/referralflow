@@ -18,6 +18,10 @@ export default async function AffidaEsterno({
   const session = await getSession();
   if (!session) redirect('/login');
 
+  // Serve un id valido di studio esterno: senza (o non-uuid) si torna alla
+  // pagina «Affida», non si manda una stringa vuota alla query uuid.
+  if (!searchParams.e || !isUuid(searchParams.e)) redirect('/affida');
+
   const [ext] = await query<{
     id: string; nome: string; specialita: string | null; email: string;
     telefono: string | null; n_precedenti: number;
@@ -28,7 +32,7 @@ export default async function AffidaEsterno({
        left join external_referrals er on er.external_studio_id = es.id
       where es.id = $1 and es.studio_id = $2 and es.attivo = true
       group by es.id`,
-    [searchParams.e ?? '', session.studioId]
+    [searchParams.e, session.studioId]
   );
   if (!ext) notFound();
 
