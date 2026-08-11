@@ -26,6 +26,15 @@ export function verifyPassword(storedHash: string, pw: string) {
   return verify(storedHash, pw);
 }
 
+// I cookie sono «secure» (solo-HTTPS) in produzione — MA non quando l'app è
+// servita su http:// (es. l'anteprima locale sul Mac dello studio): lì un
+// cookie secure verrebbe scartato dal browser e la sessione non reggerebbe la
+// navigazione. Ci si regola sull'APP_BASE_URL.
+export function cookieSecure(): boolean {
+  if ((process.env.APP_BASE_URL ?? '').startsWith('http://')) return false;
+  return process.env.NODE_ENV === 'production';
+}
+
 export async function createSession(user: SessionUser) {
   const token = await new SignJWT({ ...user })
     .setProtectedHeader({ alg: 'HS256' })
@@ -34,7 +43,7 @@ export async function createSession(user: SessionUser) {
     .sign(secret);
   cookies().set(COOKIE, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: cookieSecure(),
     sameSite: 'lax',
     path: '/',
     maxAge: 60 * 60 * 8,
@@ -58,7 +67,7 @@ export async function createPending2fa(userId: string) {
     .sign(secret);
   cookies().set(PENDING_COOKIE, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: cookieSecure(),
     sameSite: 'lax',
     path: '/',
     maxAge: 300,

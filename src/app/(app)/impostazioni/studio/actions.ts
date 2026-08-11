@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import { createHash, randomBytes } from 'crypto';
 import { query } from '@/lib/db';
-import { getSession, createSession } from '@/lib/auth';
+import { getSession, createSession, cookieSecure } from '@/lib/auth';
 
 // L'admin aggiorna i dati del proprio studio (nome, specialità, telefono,
 // email notifiche). Lo slug non si tocca: è nei link già condivisi.
@@ -58,7 +58,7 @@ export async function generaRefertiToken() {
 
   cookies().set(TOKEN_FLASH_COOKIE, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: cookieSecure(),
     sameSite: 'lax',
     path: '/impostazioni/studio',
     maxAge: 120,
