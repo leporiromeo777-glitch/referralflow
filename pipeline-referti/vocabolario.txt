@@ -1,0 +1,86 @@
+# Vocabolario di dominio dato a whisper come prompt iniziale: orienta la
+# trascrizione verso il gergo cardiologico e i farmaci ricorrenti. Una voce per
+# riga; le righe che iniziano con # sono commenti. Le voci dello studio vanno in
+# vocabolario-locali.txt (non sovrascritto dagli aggiornamenti), oppure si
+# aggiungono qui via pull request.
+#
+# ORDINE = PRIORITÀ: whisper accetta un prompt breve e taglia l'eccesso, quindi
+# in cima vanno le parole più spesso sbagliate (farmaci e termini ostici),
+# in fondo quelle generiche.
+
+# Farmaci cardiologici (nomi spesso storpiati dalla trascrizione)
+bisoprololo
+metoprololo
+carvedilolo
+ramipril
+enalapril
+perindopril
+valsartan
+candesartan
+amlodipina
+atorvastatina
+rosuvastatina
+apixaban
+rivaroxaban
+warfarin
+clopidogrel
+furosemide
+spironolattone
+acido acetilsalicilico
+
+# Termini ostici / da distinguere
+Cardio-TAC
+ritmo sinusale
+coronaropatia
+ripolarizzazione
+aneurisma
+aorta ascendente
+aorta discendente
+radice aortica
+extrasistoli ventricolari
+fibrillazione atriale
+flutter atriale
+blocco atrioventricolare
+frazione di eiezione
+insufficienza mitralica
+stenosi aortica
+eco color-Doppler
+
+# Esami e procedure
+ecocardiogramma
+ecocardiogramma transtoracico
+ecocardiogramma transesofageo
+elettrocardiogramma
+Holter
+Holter pressorio
+test da sforzo
+ergometria
+scintigrafia miocardica
+coronarografia
+angioplastica
+risonanza magnetica cardiaca
+
+# Anatomia e reperti
+ventricolo sinistro
+ventricolo destro
+atrio sinistro
+atrio destro
+setto interventricolare
+valvola mitrale
+valvola aortica
+valvola tricuspide
+cinesi parietale
+ipocinesia
+acinesia
+pericardio
+versamento pericardico
+
+# Aritmie e quadri clinici
+tachicardia
+bradicardia
+cardiopatia ischemica
+scompenso cardiaco
+angina instabile
+infarto miocardico
+ipertensione arteriosa
+dislipidemia

@@ -48,6 +48,18 @@ ollama pull gemma3:12b
 (~8 GB, una volta sola; l'app deve essere in esecuzione — icona nella barra
 menu. URL e modello sovrascrivibili con `REFERTI_OLLAMA` e `REFERTI_LLM`.)
 
+## Vocabolario di dominio (affidabilità)
+
+whisper riceve un **prompt di dominio** con i termini cardiologici e i farmaci
+ricorrenti (`vocabolario.txt` + il file locale `vocabolario-locali.txt` + i
+termini «giusti» del dizionario): così sbaglia meno proprio sulle parole
+difficili. È separato dai prompt LLM di SPEC §6 (che non si toccano): qui
+condiziona solo la trascrizione. Per aggiungere termini dello studio, una parola
+per riga in `vocabolario-locali.txt` (non viene sovrascritto dagli
+aggiornamenti). Sovrascrivibile con `REFERTI_VOCABOLARIO` /
+`REFERTI_VOCABOLARIO_LOCALI`. Come ogni modifica alla trascrizione, va
+**misurata** confrontando le divergenze sullo stesso dettato prima/dopo.
+
 ## Prova su un dettato reale
 
 ```bash

@@ -93,6 +93,28 @@ PERCORSO_MODELLO = Path(
 )
 WHISPER_TIMEOUT_S = 1800
 
+# Vocabolario di dominio dato a whisper come «prompt iniziale»: orienta il
+# riconoscimento verso i termini cardiologici e i nomi di farmaci ricorrenti,
+# così whisper sbaglia meno proprio sulle parole difficili. È SEPARATO dai
+# prompt LLM di SPEC §6 (quelli non si toccano): qui condizioniamo solo la
+# trascrizione. Il file base sta nel repo; vocabolario-locali.txt è dello studio
+# (una parola per riga, aggiunto dal pannello) e aggiorna.sh non lo tocca.
+PERCORSO_VOCABOLARIO = Path(
+    os.environ.get(
+        "REFERTI_VOCABOLARIO",
+        str(Path(__file__).resolve().parent / "vocabolario.txt"),
+    )
+)
+PERCORSO_VOCABOLARIO_LOCALI = Path(
+    os.environ.get(
+        "REFERTI_VOCABOLARIO_LOCALI",
+        str(Path(__file__).resolve().parent / "vocabolario-locali.txt"),
+    )
+)
+# whisper accetta un prompt lungo al più ~224 token (n_text_ctx/2): teniamo un
+# margine di sicurezza in caratteri per non farlo troncare a metà parola.
+VOCAB_MAX_CHARS = 1000
+
 # ── LLM locale via Ollama (SPEC §4, §6, §7.3) ───────────────────────────────
 OLLAMA_URL = os.environ.get("REFERTI_OLLAMA", "http://localhost:11434")
 MODELLO_LLM = os.environ.get("REFERTI_LLM", "gemma3:12b")
@@ -246,10 +268,70 @@ FLAG_PASSATA = {
 }
 
 
-def trascrivi(wav: Path, uscita_txt: Path, file_id: str, fase: str) -> None:
+def carica_vocabolario() -> str:
+    """Costruisce il prompt di dominio per whisper: termini del file base +
+    di quello locale dello studio + i termini «giusti» del dizionario (i valori
+    delle correzioni sono esattamente le parole da riconoscere bene). Ritorna
+    stringa vuota se non c'è nulla. Contiene solo gergo clinico generico, mai
+    dati di pazienti."""
+    def da_file(p: Path) -> list[str]:
+        if not p.is_file():
+            return []
+        try:
+            return [
+                r.strip() for r in p.read_text(encoding="utf-8").splitlines()
+                if r.strip() and not r.strip().startswith("#")
+            ]
+        except OSError:
+            return []
+
+    def da_dizionario(p: Path) -> list[str]:
+        # File annidato per sezioni (termini_clinici, linguaggio_comune, …); le
+        # chiavi meta iniziano con «_». Raccoglie i valori «giusti» di ogni sezione.
+        if not p.is_file():
+            return []
+        try:
+            config = json.loads(p.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return []
+        fuori: list[str] = []
+        for chiave, sezione in config.items():
+            if chiave.startswith("_") or not isinstance(sezione, dict):
+                continue
+            fuori.extend(str(v).strip() for v in sezione.values() if str(v).strip())
+        return fuori
+
+    # Priorità (il tetto taglia la coda): prima ciò che è specifico dello studio
+    # — le sue aggiunte al dizionario e al vocabolario —, poi il vocabolario base
+    # (farmaci e termini ostici in testa), infine il dizionario base generico.
+    termini: list[str] = (
+        da_dizionario(PERCORSO_CORREZIONI_LOCALI)
+        + da_file(PERCORSO_VOCABOLARIO_LOCALI)
+        + da_file(PERCORSO_VOCABOLARIO)
+        + da_dizionario(PERCORSO_CORREZIONI)
+    )
+    # dedup senza distinzione di maiuscole, saltando i numeri puri.
+    visti: set[str] = set()
+    puliti: list[str] = []
+    for t in termini:
+        chiave = t.lower()
+        if chiave in visti or t.replace(".", "").replace(",", "").isdigit():
+            continue
+        visti.add(chiave)
+        puliti.append(t)
+    if not puliti:
+        return ""
+    prompt = "Referto cardiologico. Termini ricorrenti: " + ", ".join(puliti) + "."
+    if len(prompt) > VOCAB_MAX_CHARS:
+        prompt = prompt[:VOCAB_MAX_CHARS].rsplit(",", 1)[0] + "."
+    return prompt
+
+
+def trascrivi(wav: Path, uscita_txt: Path, file_id: str, fase: str, prompt: str = "") -> None:
     """Trascrizione con whisper.cpp, lingua italiana. Il testo esce
     direttamente su file (-otxt): stdout/stderr di whisper contengono la
-    trascrizione e vengono scartati (SPEC §2.2)."""
+    trascrizione e vengono scartati (SPEC §2.2). Il prompt di dominio
+    (facoltativo) orienta il riconoscimento verso il gergo cardiologico."""
     inizio = time.monotonic()
     base = uscita_txt.with_suffix("")  # -of vuole il percorso senza estensione
     comando = [
@@ -262,6 +344,8 @@ def trascrivi(wav: Path, uscita_txt: Path, file_id: str, fase: str) -> None:
         "-np",
         *FLAG_PASSATA[fase],
     ]
+    if prompt:
+        comando += ["--prompt", prompt]
     esito = subprocess.run(
         comando,
         stdout=subprocess.DEVNULL,
@@ -723,10 +807,15 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli) -> tuple[str
     fase = "preprocessing"
     try:
         preprocessa(ingresso, percorso(".wav"), file_id)
+        # Vocabolario di dominio per whisper (SPEC §4.2): stesso prompt per le due
+        # passate. Nel log solo il numero di termini, mai il contenuto.
+        vocab = carica_vocabolario()
+        n_vocab = vocab.count(",") + 1 if vocab else 0
+        log.info("fase=vocabolario file=%s termini=%d", file_id, n_vocab)
         fase = "trascrizione_a"
-        trascrivi(percorso(".wav"), percorso(".txt"), file_id, fase)
+        trascrivi(percorso(".wav"), percorso(".txt"), file_id, fase, vocab)
         fase = "trascrizione_b"
-        trascrivi(percorso(".wav"), percorso(".b.txt"), file_id, fase)
+        trascrivi(percorso(".wav"), percorso(".b.txt"), file_id, fase, vocab)
 
         # Dizionario PRIMA del confronto (ordine invertito rispetto alla prima
         # stesura della SPEC, deviazione documentata in §3): così le àncore

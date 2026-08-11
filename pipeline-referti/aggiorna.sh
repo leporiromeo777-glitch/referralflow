@@ -12,11 +12,13 @@ mkdir -p "$DEST"
 curl -fsSL "$BASE/aggiorna.sh" -o "$DEST/aggiorna.sh.nuovo" && mv "$DEST/aggiorna.sh.nuovo" "$DEST/aggiorna.sh"
 curl -fsSL "$BASE/pipeline.py" -o "$DEST/pipeline.py"
 curl -fsSL "$BASE/correzioni.json" -o "$DEST/correzioni.json"
+curl -fsSL "$BASE/vocabolario.txt" -o "$DEST/vocabolario.txt"
 curl -fsSL "$BASE/pannello.py" -o "$DEST/pannello.py"
 curl -fsSL "$BASE/palestra.py" -o "$DEST/palestra.py"
 curl -fsSL "$BASE/installa-avvio.sh" -o "$DEST/installa-avvio.sh"
 curl -fsSL "$BASE/CLAUDE.md" -o "$DEST/CLAUDE.md"
-# correzioni-locali.json NON si tocca: sono le voci aggiunte dallo studio.
+# correzioni-locali.json e vocabolario-locali.txt NON si toccano: sono le voci
+# aggiunte dallo studio dal pannello locale.
 
 echo "Aggiornati: pipeline.py, correzioni.json, pannello.py, CLAUDE.md (e aggiorna.sh stesso)"
 grep -m1 "Fasi implementate" -A 8 "$DEST/pipeline.py" | sed 's/^# \{0,2\}//'
