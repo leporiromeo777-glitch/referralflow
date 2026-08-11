@@ -85,6 +85,13 @@ con aggiunta di correzioni dello studio (`correzioni-locali.json`, mai
 sovrascritto dagli aggiornamenti; il servizio le ricarica a ogni giro).
 La conferma clinica dei referti resta in ReferralFlow.
 
+**Impara dalle conferme**: se in `invio.conf` sono configurati
+`REFERTI_FLOW_URL`/`REFERTI_FLOW_TOKEN`, il pannello mostra le correzioni
+ricorrenti fatte in ReferralFlow (parola sbagliata → giusta) con un tasto
+«Aggiungi al dizionario»: un clic le mette in `correzioni-locali.json` e la
+trascrizione smette di sbagliarle. La persona decide sempre; nulla si aggiunge
+da solo.
+
 ## Avvio automatico (Fase 9)
 
 ```bash

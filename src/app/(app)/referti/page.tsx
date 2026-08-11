@@ -4,6 +4,7 @@ import { query } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { dataOra } from '@/lib/format';
 import { PageHero, StatStrip } from '../PageHero';
+import { ignoraSuggerimento } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,6 +44,16 @@ export default async function Referti() {
   const daRivedere = rows.filter((r) => r.stato === 'bozza');
   const gestite = rows.filter((r) => r.stato !== 'bozza');
 
+  // Suggerimenti per il dizionario, imparati dalle correzioni ricorrenti
+  // (mostrati quando la stessa sostituzione ricorre almeno due volte).
+  const suggerimenti = await query<{ id: string; da: string; a: string; conteggio: number }>(
+    `select id, da, a, conteggio from referti_suggerimenti
+      where studio_id = $1 and not ignorato and not applicato and conteggio >= 2
+      order by conteggio desc, updated_at desc
+      limit 12`,
+    [session.studioId]
+  );
+
   return (
     <>
       <PageHero zone="green" eyebrow="Operativo" title="Bozze di referto">
@@ -56,6 +67,33 @@ export default async function Referti() {
           { label: 'Gestite negli ultimi 30 giorni', value: gestite.length },
         ]}
       />
+
+      {suggerimenti.length > 0 && (
+        <div className="card learn-box">
+          <h2>Impara dalle conferme</h2>
+          <p className="muted">
+            Queste parole vengono corrette spesso a mano. Aggiungile al dizionario
+            della trascrizione (dal pannello sul Mac dello studio) e la trascrizione
+            smetterà di sbagliarle.
+          </p>
+          <ul className="learn-list">
+            {suggerimenti.map((s) => (
+              <li key={s.id} className="learn-item">
+                <span className="learn-pair">
+                  <span className="learn-da">{s.da}</span>
+                  <span className="learn-arr">→</span>
+                  <span className="learn-a">{s.a}</span>
+                </span>
+                <span className="learn-count">×{s.conteggio}</span>
+                <form action={ignoraSuggerimento}>
+                  <input type="hidden" name="id" value={s.id} />
+                  <button className="btn btn-ghost btn-small" type="submit">Ignora</button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {daRivedere.length === 0 && (
         <div className="card"><p className="muted">Nessuna bozza in attesa di revisione.</p></div>

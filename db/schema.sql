@@ -447,3 +447,21 @@ create table slot_finestre (
 );
 
 create index on slot_finestre (studio_id, giorno);
+
+-- Imparare dalle conferme (migrazione 021): sostituzioni ricorrenti estratte dal
+-- confronto tra il testo dell'AI e quello confermato dalla persona; diventano
+-- suggerimenti per il dizionario della trascrizione sul Mac.
+create table referti_suggerimenti (
+  id         uuid primary key default gen_random_uuid(),
+  studio_id  uuid not null references studios(id) on delete cascade,
+  da         text not null,
+  a          text not null,
+  conteggio  int not null default 1,
+  ignorato   boolean not null default false,
+  applicato  boolean not null default false,
+  updated_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  unique (studio_id, da, a)
+);
+
+create index on referti_suggerimenti (studio_id, ignorato, conteggio desc);

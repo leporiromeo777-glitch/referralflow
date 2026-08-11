@@ -5,6 +5,9 @@ import { revalidatePath } from 'next/cache';
 import { query } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
+import { estraiSostituzioni } from '@/lib/referti-learn';
+
+const MAX_SUGGERIMENTI = 30;
 
 // Conferma o scarto di una bozza di referto: l'unico modo in cui una bozza
 // cambia stato è una persona che preme un bottone (SPEC §2.5). Il payload
@@ -32,16 +35,53 @@ export async function confermaBozza(formData: FormData) {
     }
   });
 
-  await query(
+  const [row] = await query<{ ai_text: string | null }>(
     `update referti_bozze
         set stato = 'confermata', testo_finale = $3, campi_confermati = $4,
             reviewed_by = $5, reviewed_at = now()
-      where id = $1 and studio_id = $2 and stato = 'bozza'`,
+      where id = $1 and studio_id = $2 and stato = 'bozza'
+      returning payload ->> 'testo_corretto' as ai_text`,
     [id, session.studioId, testo, JSON.stringify(campi), session.id]
   );
 
+  // Impara dalla correzione: se la persona ha cambiato delle parole, le
+  // sostituzioni ricorrenti diventano suggerimenti per il dizionario della
+  // trascrizione. Non deve mai far fallire la conferma, e mai loggare testo.
+  if (row?.ai_text && row.ai_text !== testo) {
+    try {
+      const sost = estraiSostituzioni(row.ai_text, testo).slice(0, MAX_SUGGERIMENTI);
+      for (const s of sost) {
+        await query(
+          `insert into referti_suggerimenti (studio_id, da, a)
+           values ($1, $2, $3)
+           on conflict (studio_id, da, a) do update
+             set conteggio = referti_suggerimenti.conteggio + 1,
+                 updated_at = now(), ignorato = false`,
+          [session.studioId, s.da, s.a]
+        );
+      }
+    } catch (e: any) {
+      console.error('Estrazione suggerimenti referto fallita:', e?.message || e);
+    }
+  }
+
   revalidatePath('/referti');
   redirect(`/referti/${id}?ok=confermata`);
+}
+
+// Nasconde un suggerimento del dizionario (non utile o già gestito a voce).
+export async function ignoraSuggerimento(formData: FormData) {
+  const session = await getSession();
+  if (!session || !session.studioId) redirect('/login');
+  const id = String(formData.get('id') ?? '');
+  if (isUuid(id)) {
+    await query(
+      'update referti_suggerimenti set ignorato = true where id = $1 and studio_id = $2',
+      [id, session.studioId]
+    );
+  }
+  revalidatePath('/referti');
+  redirect('/referti');
 }
 
 export async function scartaBozza(formData: FormData) {

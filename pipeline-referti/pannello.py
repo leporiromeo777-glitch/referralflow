@@ -20,6 +20,7 @@ import subprocess
 import sys
 import time
 import urllib.parse
+import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -27,6 +28,7 @@ BASE = Path(os.environ.get("REFERTI_BASE", str(Path.home() / "referti")))
 QUI = Path(__file__).resolve().parent
 CORREZIONI = QUI / "correzioni.json"
 LOCALI = QUI / "correzioni-locali.json"
+INVIO_CONF = QUI / "invio.conf"
 PORTA = int(os.environ.get("REFERTI_PANNELLO_PORTA", "8737"))
 SEZIONI = {
     "termini_clinici": "Termine clinico",
@@ -126,6 +128,13 @@ mark.dub { background: rgba(255, 69, 58, 0.22); color: inherit; padding: 0 3px; 
 .errore-msg { background: rgba(255, 69, 58, 0.12); border: 1px solid rgba(255, 69, 58, 0.3);
   border-radius: 14px; padding: 10px 14px; margin-bottom: 14px; font-size: 14px; }
 .num { font-variant-numeric: tabular-nums; }
+.sug-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.sug-item { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.sug-pair { font-size: 15px; }
+.sug-pair s { color: var(--muted); }
+.sug-pair b { color: var(--text); }
+.sug-n { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.sug-item form { margin-left: auto; }
 audio { width: 100%; margin-top: 4px; }
 .firma { color: var(--muted); font-size: 12px; text-align: center; margin-top: 34px; }
 """
@@ -186,6 +195,63 @@ def scrivi_locali(dati: dict) -> None:
         json.dumps(dati, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     provvisorio.replace(LOCALI)
+
+
+# ── Suggerimenti dal server (imparati dalle conferme) ────────────────────────
+def _conf_invio() -> dict:
+    """URL e token di ReferralFlow: da ambiente o da invio.conf (una credenziale,
+    resta sul Mac)."""
+    conf = {}
+    for k in ("REFERTI_FLOW_URL", "REFERTI_FLOW_TOKEN"):
+        if os.environ.get(k):
+            conf[k] = os.environ[k].strip()
+    if INVIO_CONF.is_file():
+        try:
+            for riga in INVIO_CONF.read_text(encoding="utf-8").splitlines():
+                riga = riga.strip()
+                if riga.startswith("REFERTI_FLOW_") and "=" in riga:
+                    chiave, valore = riga.split("=", 1)
+                    conf.setdefault(chiave.strip(), valore.strip())
+        except OSError:
+            pass
+    return conf
+
+
+def carica_suggerimenti() -> list:
+    """Chiede a ReferralFlow le correzioni ricorrenti da insegnare al dizionario.
+    Se l'invio non è configurato o il server non risponde, torna lista vuota
+    (il pannello resta utile lo stesso)."""
+    conf = _conf_invio()
+    url, token = conf.get("REFERTI_FLOW_URL"), conf.get("REFERTI_FLOW_TOKEN")
+    if not url or not token:
+        return []
+    endpoint = url.rstrip("/") + "/api/referti/suggerimenti"
+    try:
+        req = urllib.request.Request(endpoint, headers={"Authorization": f"Bearer {token}"})
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            dati = json.loads(resp.read().decode("utf-8"))
+        return dati.get("suggerimenti", []) if isinstance(dati, dict) else []
+    except Exception:
+        return []
+
+
+def segna_applicato(da: str, a: str) -> None:
+    """Dice al server che questa coppia è stata aggiunta al dizionario, così
+    sparisce dai suggerimenti. Best-effort."""
+    conf = _conf_invio()
+    url, token = conf.get("REFERTI_FLOW_URL"), conf.get("REFERTI_FLOW_TOKEN")
+    if not url or not token:
+        return
+    endpoint = url.rstrip("/") + "/api/referti/suggerimenti"
+    corpo = json.dumps({"da": da, "a": a}).encode("utf-8")
+    try:
+        req = urllib.request.Request(
+            endpoint, data=corpo, method="POST",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        )
+        urllib.request.urlopen(req, timeout=6).read()
+    except Exception:
+        pass
 
 
 def _evidenzia(testo: str, divergenze: list, dubbi: list) -> str:
@@ -324,6 +390,34 @@ def sez_registro() -> str:
 <pre class="log">{e(chr(10).join(reversed(code)))}</pre></details>"""
 
 
+def sez_suggerimenti() -> str:
+    """Correzioni ricorrenti imparate dalle conferme in ReferralFlow: un clic le
+    aggiunge al dizionario locale."""
+    sugg = carica_suggerimenti()
+    righe = []
+    for s in sugg:
+        da, a = str(s.get("da", "")).strip(), str(s.get("a", "")).strip()
+        if not da or not a:
+            continue
+        n = e(str(s.get("conteggio", "")))
+        righe.append(
+            f'<li class="sug-item"><span class="sug-pair"><s>{e(da)}</s> → <b>{e(a)}</b></span>'
+            f'<span class="sug-n">×{n}</span>'
+            f'<form method="post" action="/suggerimenti/aggiungi">'
+            f'<input type="hidden" name="da" value="{e(da)}">'
+            f'<input type="hidden" name="a" value="{e(a)}">'
+            f'<button class="btn" type="submit">Aggiungi al dizionario</button></form></li>'
+        )
+    if not righe:
+        return ""
+    return (
+        '<section class="card" id="suggerimenti"><h2>Impara dalle conferme</h2>'
+        '<p class="muted">Parole corrette spesso in ReferralFlow. Aggiungile al '
+        'dizionario e la trascrizione smetterà di sbagliarle.</p>'
+        f'<ul class="sug-list">{"".join(righe)}</ul></section>'
+    )
+
+
 def sez_dizionario() -> str:
     repo = leggi_json(CORREZIONI, {})
     locali = leggi_json(LOCALI, {})
@@ -369,7 +463,7 @@ def pagina_unica(msg: str = "", err: str = "") -> bytes:
     )
     corpo = (
         banner + sez_drop() + sez_stats() + sez_bozze()
-        + sez_errori() + sez_dizionario() + sez_registro()
+        + sez_errori() + sez_suggerimenti() + sez_dizionario() + sez_registro()
     )
     return f"""<!doctype html><html lang="it"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -480,6 +574,18 @@ class Pannello(BaseHTTPRequestHandler):
             locali = leggi_json(LOCALI, {})
             locali.setdefault(sezione, {})[da.lower()] = a
             scrivi_locali(locali)
+            return self._reindirizza("/?msg=" + urllib.parse.quote(f"Aggiunta: «{da}» → «{a}». Attiva dal prossimo giro.") + "#dizionario")
+
+        if url.path == "/suggerimenti/aggiungi":
+            da, a = prendi("da"), prendi("a")
+            if not da or not a:
+                return self._reindirizza("/#suggerimenti")
+            if any(c.isdigit() for c in da + a) or da.lower() == a.lower():
+                return self._reindirizza("/?err=" + urllib.parse.quote("Suggerimento non valido (numeri o voci uguali).") + "#suggerimenti")
+            locali = leggi_json(LOCALI, {})
+            locali.setdefault("termini_clinici", {})[da.lower()] = a
+            scrivi_locali(locali)
+            segna_applicato(da, a)
             return self._reindirizza("/?msg=" + urllib.parse.quote(f"Aggiunta: «{da}» → «{a}». Attiva dal prossimo giro.") + "#dizionario")
 
         if url.path == "/dizionario/rimuovi":
