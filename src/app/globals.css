@@ -150,6 +150,27 @@ h3 { font-size: 14px; font-weight: 600; margin: 20px 0 10px; color: var(--muted)
   background: var(--primary); color: #fff; font-size: 11px; font-weight: 700;
   display: inline-flex; align-items: center; justify-content: center;
 }
+/* Fisarmonica: intestazioni di zona (Oggi, Pazienti, Rete, Studio). */
+.side-zone { display: flex; flex-direction: column; }
+.side-zonehead {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  background: none; border: 0; cursor: pointer; font: inherit; text-align: left;
+  padding: 10px 12px; border-radius: 10px; color: var(--ink);
+  font-size: 14.5px; font-weight: 600; letter-spacing: -0.01em;
+  transition: background 0.12s, color 0.12s;
+}
+.side-zonehead:hover { background: var(--gray-bg); }
+.side-zonehead.active { color: var(--primary-ink); }
+.side-zonelabel { flex: 1; }
+.side-chev { flex: none; color: var(--muted); transition: transform 0.18s ease; }
+.side-zone.open > .side-zonehead .side-chev { transform: rotate(90deg); color: var(--primary-ink); }
+.side-voci {
+  display: flex; flex-direction: column; gap: 2px;
+  margin: 2px 0 6px 12px; padding-left: 10px;
+  border-left: 1.5px solid var(--line);
+}
+.side-voci .side-link { padding: 7px 10px; font-size: 13.5px; }
+
 .side-cta { margin-top: auto; width: 100%; }
 
 .main-col { min-width: 0; display: flex; flex-direction: column; }

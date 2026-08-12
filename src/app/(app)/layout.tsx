@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { AutoRefresh } from './AutoRefresh';
 import { NavLink } from './NavLink';
+import { SideNav, Zona } from './SideNav';
 
 function iniziali(email: string): string {
   const parte = email.split('@')[0];
@@ -71,7 +72,34 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   const home = isInviante ? '/invii' : isMedico ? '/programma' : '/';
-  const badge = (n: number) => (n > 0 ? <span className="side-count">{n}</span> : null);
+
+  // Le quattro zone della barra laterale (fisarmonica). I badge di zona sono la
+  // somma dei badge delle voci, così da chiusa si vede quanto c'è da fare.
+  const zoneOggi: Zona['voci'] = [
+    { label: 'Panoramica', href: '/' },
+    { label: 'Coda', href: '/coda' },
+    { label: 'Programma', href: '/programma' },
+    { label: 'Follow-up', href: '/richiami', badge: richiamiScaduti },
+    { label: 'Consulti', href: '/consulti', badge: consultiAperti },
+    ...((refertiAttivi || refertiBozze > 0)
+      ? [{ label: 'Referti', href: '/referti', badge: refertiBozze }]
+      : []),
+  ];
+  const zones: Zona[] = [
+    { key: 'oggi', label: 'Oggi', badge: oggiCount, voci: zoneOggi },
+    { key: 'pazienti', label: 'Pazienti', voci: [
+      { label: 'Cerca paziente', href: '/pazienti' },
+    ] },
+    { key: 'rete', label: 'Rete', voci: [
+      { label: 'Medici invianti', href: '/medici' },
+      { label: 'Pazienti inviati', href: '/inviati' },
+      { label: 'Affida paziente', href: '/affida' },
+    ] },
+    { key: 'studio', label: 'Studio', voci: [
+      { label: 'Statistiche', href: '/statistiche' },
+      ...(isAdmin ? [{ label: 'Impostazioni', href: '/impostazioni/studio' }] : []),
+    ] },
+  ];
 
   return (
     <div className="shell">
@@ -87,47 +115,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             : session?.studioNome ? <em>{session.studioNome}</em> : null}
         </div>
 
-        <nav className="side-nav">
-          {full && (
-            <>
-              <div className="side-group">
-                <span className="side-label">Oggi</span>
-                <NavLink href="/" className="side-link">Oggi{badge(oggiCount)}</NavLink>
-                <NavLink href="/coda" className="side-link">Coda</NavLink>
-                <NavLink href="/programma" className="side-link">Programma</NavLink>
-                <NavLink href="/richiami" className="side-link">Follow-up{badge(richiamiScaduti)}</NavLink>
-                <NavLink href="/consulti" className="side-link">Consulti{badge(consultiAperti)}</NavLink>
-                {(refertiAttivi || refertiBozze > 0) && (
-                  <NavLink href="/referti" className="side-link">Referti{badge(refertiBozze)}</NavLink>
-                )}
-              </div>
+        {full && <SideNav zones={zones} />}
 
-              <div className="side-group">
-                <span className="side-label">Pazienti</span>
-                <NavLink href="/pazienti" className="side-link">Cerca paziente</NavLink>
-              </div>
-
-              <div className="side-group">
-                <span className="side-label">Rete</span>
-                <NavLink href="/medici" className="side-link">Medici invianti</NavLink>
-                <NavLink href="/inviati" className="side-link">Pazienti inviati</NavLink>
-                <NavLink href="/affida" className="side-link">Affida paziente</NavLink>
-              </div>
-
-              <div className="side-group">
-                <span className="side-label">Studio</span>
-                <NavLink href="/statistiche" className="side-link">Statistiche</NavLink>
-                {isAdmin && <NavLink href="/impostazioni/studio" className="side-link">Impostazioni</NavLink>}
-              </div>
-            </>
-          )}
-
-          {isMedico && (
+        {isMedico && (
+          <nav className="side-nav">
             <div className="side-group">
               <NavLink href="/programma" className="side-link">Programma</NavLink>
             </div>
-          )}
-        </nav>
+          </nav>
+        )}
 
         {full && (
           <Link href="/referral/nuova" className="btn btn-primary side-cta">+ Nuova referral</Link>
