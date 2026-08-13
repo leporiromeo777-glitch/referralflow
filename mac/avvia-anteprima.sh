@@ -74,10 +74,17 @@ if [ ! -d node_modules ] || [ package-lock.json -nt node_modules ]; then
   echo "Installo le librerie dell'app…"; npm install
 fi
 
-# ── 6. Schema del database (solo se vuoto) ───────────────────────────────────
+# ── 6. Schema del database ───────────────────────────────────────────────────
 if ! psql referralflow -tAc "select to_regclass('public.studios')" | grep -q studios; then
   echo "Preparo le tabelle del database…"
   psql referralflow -v ON_ERROR_STOP=1 -f db/schema.sql
+else
+  # Database già esistente da un avvio precedente: applica le migrazioni
+  # recenti (dalla 019 in poi sono tutte «if not exists», rieseguibili).
+  echo "Aggiorno le tabelle del database…"
+  for m in db/migrations/019_*.sql db/migrations/02*.sql; do
+    [ -f "$m" ] && psql referralflow -q -f "$m" > /dev/null 2>&1 || true
+  done
 fi
 
 # ── 7. Studio + utente demo + contenuti demo (idempotenti) ───────────────────
@@ -85,6 +92,17 @@ echo "Preparo studio e accesso demo…"
 npm run create-studio -- "Centro Cardiologico Ticino (demo)" studio-demo segreteria@demo.ch "Cardiologia: ecocardiogramma, holter, ergometria" > /dev/null
 npm run create-user   -- admin@demo.ch demo1234 admin studio-demo > /dev/null
 psql referralflow -f db/seed-demo.sql
+
+# Token referti dell'anteprima (per collegare la pipeline di trascrizione del
+# Mac a QUESTA anteprima): generato una volta, salvato solo qui, hash nel DB.
+TOKEN_FILE=".referti-token-anteprima"
+if [ ! -f "$TOKEN_FILE" ]; then
+  echo "rfb_anteprima_$(openssl rand -hex 16)" > "$TOKEN_FILE"
+  chmod 600 "$TOKEN_FILE"
+fi
+RFB_TOKEN="$(cat "$TOKEN_FILE")"
+RFB_HASH="$(printf %s "$RFB_TOKEN" | shasum -a 256 | cut -d' ' -f1)"
+psql referralflow -q -c "update studios set referti_token_hash='$RFB_HASH', referti_token_set_at=now() where slug='studio-demo';"
 
 # ── 8. Compila (solo se il codice è cambiato) e avvia ────────────────────────
 # La compilazione va rifatta a ogni aggiornamento del codice, altrimenti
@@ -104,6 +122,14 @@ echo
 echo "────────────────────────────────────────────────────────────"
 echo "  ReferralFlow è pronto:  http://localhost:3000"
 echo "  Accedi con:  admin@demo.ch  /  demo1234"
+echo
+echo "  Trascrizione referti (facoltativo): per far lavorare la"
+echo "  pipeline del Mac sui dettati caricati in questa anteprima,"
+echo "  scrivi in ~/referti-pipeline/invio.conf queste due righe:"
+echo "    REFERTI_FLOW_URL=http://localhost:3000"
+echo "    REFERTI_FLOW_TOKEN=$RFB_TOKEN"
+echo "  poi: bash ~/referti-pipeline/installa-avvio.sh"
+echo
 echo "  Per fermarlo: premi Ctrl-C qui."
 echo "────────────────────────────────────────────────────────────"
 echo
