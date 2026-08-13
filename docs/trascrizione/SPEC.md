@@ -325,6 +325,16 @@ decide. L'ispezione (6.2) lavora sul testo già ripulito. Nel log solo i
 conteggi (`note=N scartate=M`). Questa sezione segue le stesse regole di
 §6: il prompt non si ritocca senza rimisurare su dettati reali.
 
+**Revisione 2 (misurata sul primo dettato reale, 2026-08-13):** la prima
+versione del prompt scambiava la dettatura di una lettera per un'istruzione
+alla segreteria — dopo «scrivi:» il medico dettava «caro collega…» e la
+frase veniva spostata nelle note. Aggiunta al prompt la «distinzione
+fondamentale»: i comandi di dettatura (scrivi/scriva/metti/riporta/vai a
+capo) introducono testo che FA PARTE del referto, e le formule di lettera
+(Caro collega, Cordiali saluti…) non si segnalano mai. Coerente con la
+regola 4 di §6.1 (le istruzioni di dettatura si conservano). Da riverificare
+sullo stesso dettato dopo l'aggiornamento.
+
 ---
 
 ## 7. Gestione errori

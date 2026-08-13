@@ -96,7 +96,9 @@ export async function POST(req: NextRequest) {
   // Retry della pipeline su un file già consegnato: successo, senza doppioni.
   // Caso particolare: se la bozza era stata SCARTATA e lo stesso audio arriva
   // di nuovo, è una persona che l'ha ricaricato apposta (i retry automatici
-  // finiscono al primo 2xx) — la bozza torna tra le «da rivedere».
+  // finiscono al primo 2xx) — la bozza torna tra le «da rivedere», e con la
+  // NUOVA lavorazione: la pipeline potrebbe essere migliorata nel frattempo,
+  // il vecchio risultato di una bozza rifiutata non ha nulla da difendere.
   const [esistente] = await query<{ id: string; stato: string }>(
     'select id, stato from referti_bozze where studio_id = $1 and file_id = $2',
     [studio.id, fileId]
@@ -105,9 +107,11 @@ export async function POST(req: NextRequest) {
     if (esistente.stato === 'scartata') {
       await query(
         `update referti_bozze
-            set stato = 'bozza', reviewed_by = null, reviewed_at = null
+            set stato = 'bozza', payload = $3,
+                testo_finale = null, campi_confermati = null,
+                reviewed_by = null, reviewed_at = null
           where id = $1 and studio_id = $2`,
-        [esistente.id, studio.id]
+        [esistente.id, studio.id, JSON.stringify(payload)]
       );
     }
     await collega(esistente.id);
