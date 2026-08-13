@@ -91,6 +91,8 @@ fi
 echo "Preparo studio e accesso demo…"
 npm run create-studio -- "Centro Cardiologico Ticino (demo)" studio-demo segreteria@demo.ch "Cardiologia: ecocardiogramma, holter, ergometria" > /dev/null
 npm run create-user   -- admin@demo.ch demo1234 admin studio-demo > /dev/null
+# Accesso del dott. Marco Bonomo (vista completa; i suoi dati demo sono nel seed).
+npm run create-user   -- bonomo@demo.ch demo1234 admin studio-demo > /dev/null
 psql referralflow -f db/seed-demo.sql
 
 # Token referti dell'anteprima (per collegare la pipeline di trascrizione del
@@ -122,6 +124,7 @@ echo
 echo "────────────────────────────────────────────────────────────"
 echo "  ReferralFlow è pronto:  http://localhost:3000"
 echo "  Accedi con:  admin@demo.ch  /  demo1234"
+echo "  Accesso del dott. Bonomo:  bonomo@demo.ch  /  demo1234"
 echo
 echo "  Trascrizione referti (facoltativo): per far lavorare la"
 echo "  pipeline del Mac sui dettati caricati in questa anteprima,"

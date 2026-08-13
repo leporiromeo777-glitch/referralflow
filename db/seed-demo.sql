@@ -85,3 +85,96 @@ begin
 
   raise notice 'Dati demo creati.';
 end $$;
+
+-- ── Dati demo del dott. Marco Bonomo ────────────────────────────────────────
+-- Blocco separato e idempotente: gira anche sui database d'anteprima già
+-- creati (guardia sul provider). Pazienti e casi sono inventati.
+do $$
+declare
+  sid uuid;
+  prov uuid;
+  doc_rossi uuid;
+  doc_bianchi uuid;
+  paz_fontana uuid;
+  paz_sala uuid;
+  paz_colombo uuid;
+  paz_ferrari uuid;
+  paz_vanoni uuid;
+  ref_fontana uuid;
+  ref_disdetta uuid;
+begin
+  select id into sid from studios where slug = 'studio-demo';
+  if sid is null then return; end if;
+  if exists (select 1 from providers where studio_id = sid and nome = 'Dr. Bonomo') then
+    raise notice 'Dati demo del dr. Bonomo già presenti.';
+    return;
+  end if;
+
+  insert into providers (studio_id, nome, aliases)
+    values (sid, 'Dr. Bonomo', array['Bonomo', 'Marco Bonomo'])
+    returning id into prov;
+
+  select id into doc_rossi from referring_doctors where studio_id = sid and nome = 'Dr. Rossi' limit 1;
+  select id into doc_bianchi from referring_doctors where studio_id = sid and nome = 'Dr.ssa Bianchi' limit 1;
+
+  -- Pazienti del dr. Bonomo
+  insert into patients (studio_id, cognome, nome, data_nascita, telefono)
+    values (sid, 'Fontana', 'Elio', '1949-02-17', '+41 79 555 55 51') returning id into paz_fontana;
+  insert into patients (studio_id, cognome, nome, data_nascita, telefono)
+    values (sid, 'Sala', 'Pietro', '1958-11-02', '+41 79 555 55 52') returning id into paz_sala;
+  insert into patients (studio_id, cognome, nome, data_nascita, telefono)
+    values (sid, 'Colombo', 'Anna', '1972-06-30', '+41 79 555 55 53') returning id into paz_colombo;
+  insert into patients (studio_id, cognome, nome, data_nascita, telefono)
+    values (sid, 'Ferrari', 'Luca', '1946-09-08', '+41 79 555 55 54') returning id into paz_ferrari;
+  insert into patients (studio_id, cognome, nome, data_nascita, telefono)
+    values (sid, 'Vanoni', 'Marta', '1980-03-25', '+41 79 555 55 55') returning id into paz_vanoni;
+
+  -- Visita di oggi alle 10:30 con questionario pre-visita compilato
+  insert into referrals (studio_id, patient_id, referring_doctor_id, quesito, urgenza, status, canale,
+                         appuntamento_at, questionario, questionario_at)
+    values (sid, paz_fontana, doc_rossi, 'Visita cardiologica ed eco di controllo.', 'normale',
+            'prenotata', 'form', (current_date + interval '10 hours 30 minutes'),
+            '{"motivo":"Un po'' di fiato corto salendo le scale, da un paio di settimane.","farmaci":"Bisoprololo 2,5 mg, ramipril 5 mg.","allergie":"Nessuna nota","note":"Porto gli esami del sangue recenti."}'::jsonb,
+            now() - interval '1 day')
+    returning id into ref_fontana;
+  insert into referral_status_history (referral_id, to_status, nota)
+    values (ref_fontana, 'ricevuta', 'Inviata dal medico di base');
+
+  -- La sua giornata di oggi in agenda
+  insert into appointments (studio_id, provider_id, starts_at, ends_at, paziente_nome, motivo, external_uid, referral_id) values
+    (sid, prov, current_date + interval '9 hours',  current_date + interval '9 hours 45 minutes',  'Sala Pietro',  'Eco da sforzo',      'demo-bonomo-1', null),
+    (sid, prov, current_date + interval '10 hours 30 minutes', current_date + interval '11 hours 15 minutes', 'Fontana Elio', 'Visita + eco', 'demo-bonomo-2', ref_fontana),
+    (sid, prov, current_date + interval '15 hours', current_date + interval '15 hours 30 minutes', 'Colombo Anna', 'Holter 24h',        'demo-bonomo-3', null);
+
+  -- Coda: un urgente da smistare e una richiesta nuova
+  insert into referrals (studio_id, patient_id, referring_doctor_id, quesito, urgenza, status, canale)
+    values (sid, paz_ferrari, doc_rossi, 'Angina da sforzo in peggioramento, chiedo valutazione in tempi brevi.', 'urgente', 'da_prenotare', 'hin');
+  insert into referrals (studio_id, patient_id, referring_doctor_id, quesito, urgenza, status, canale)
+    values (sid, paz_vanoni, doc_bianchi, 'Palpitazioni ricorrenti a riposo.', 'normale', 'ricevuta', 'form');
+
+  -- Un follow-up scaduto (controllo a 6 mesi non ancora richiamato)
+  insert into referrals (studio_id, patient_id, referring_doctor_id, quesito, urgenza, status, canale,
+                         follow_up_months, follow_up_due)
+    values (sid, paz_sala, doc_rossi, 'Controllo post scompenso.', 'normale', 'chiusa', 'telefono',
+            6, current_date - 3);
+
+  -- Una disdetta da confermare (per la scheda Disdette e la lista d''attesa)
+  insert into referrals (studio_id, patient_id, referring_doctor_id, quesito, urgenza, status, canale,
+                         appuntamento_at, appt_response)
+    values (sid, paz_colombo, doc_bianchi, 'Eco di controllo annuale.', 'programmabile', 'prenotata', 'form',
+            current_date + interval '1 day 14 hours', 'disdetta_da_confermare')
+    returning id into ref_disdetta;
+
+  -- Cartella di Fontana Elio: documenti che la segretaria AI può agganciare
+  insert into patient_documents (studio_id, patient_id, filename, storage_key, categoria, nota) values
+    (sid, paz_fontana, 'ECG gennaio 2026.pdf',               'demo/bonomo-ecg-gennaio.pdf',  'ecg',     'Tracciato di gennaio'),
+    (sid, paz_fontana, 'Email dottor Rossi - eco marzo.pdf', 'demo/bonomo-email-rossi.pdf', 'lettera', 'Vecchia email del dottor Rossi con l''eco');
+
+  -- Un consulto rapido in attesa di risposta
+  insert into consulti (studio_id, referring_doctor_id, domanda, stato, created_at)
+    values (sid, doc_rossi,
+            'Uomo 77enne, il tracciato mostra extrasistoli sopraventricolari frequenti in terapia con bisoprololo: aumento il dosaggio o serve una visita dal dr. Bonomo?',
+            'aperto', now() - interval '2 hours');
+
+  raise notice 'Dati demo del dr. Bonomo creati.';
+end $$;
