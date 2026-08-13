@@ -1399,6 +1399,13 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 .seg-cand a:hover { text-decoration: underline; }
 .seg-procurare { border-left: 3px solid var(--warn); }
 
+/* «Da controllare prima di confermare»: l'unica lista che la segretaria deve
+   leggere — linguaggio piano, il dettaglio tecnico sta nella tendina in fondo. */
+.ctrl-box { border-left: 3px solid var(--warn); }
+.ctrl-list { margin: 10px 0 0 20px; padding: 0; line-height: 1.8; }
+.ctrl-list li { font-size: 14.5px; margin-bottom: 6px; }
+mark[title] { cursor: help; }
+
 /* «Impara dalle conferme»: suggerimenti per il dizionario della trascrizione. */
 .learn-box { border-left: 3px solid var(--primary); }
 .learn-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }

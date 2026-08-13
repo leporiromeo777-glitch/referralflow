@@ -29,13 +29,14 @@ type Payload = {
 
 // Evidenzia i frammenti segnalati dentro il testo: prima occorrenza di ogni
 // frammento, senza sovrapposizioni. Un frammento che non si ritrova più
-// (la correzione l'ha toccato) resta comunque nelle liste sotto: non si
-// scarta mai una segnalazione (SPEC §3).
+// (la correzione l'ha toccato) resta comunque nei dettagli tecnici: non si
+// scarta mai una segnalazione (SPEC §3). `spiega` compare al passaggio del
+// mouse (es. cosa ha sentito l'altra trascrizione).
 function evidenzia(
   testo: string,
-  frammenti: { text: string; tipo: 'divergenza' | 'dubbio' }[]
-): { nodi: ReactNode[]; nonTrovati: string[] } {
-  const ranges: { start: number; end: number; tipo: string }[] = [];
+  frammenti: { text: string; tipo: 'divergenza' | 'dubbio'; spiega?: string }[]
+): { nodi: ReactNode[]; nonTrovati: string[]; marcati: number } {
+  const ranges: { start: number; end: number; tipo: string; spiega?: string }[] = [];
   const nonTrovati: string[] = [];
   for (const f of frammenti) {
     const t = f.text.trim();
@@ -46,7 +47,7 @@ function evidenzia(
       continue;
     }
     if (ranges.some((r) => idx < r.end && idx + t.length > r.start)) continue;
-    ranges.push({ start: idx, end: idx + t.length, tipo: f.tipo });
+    ranges.push({ start: idx, end: idx + t.length, tipo: f.tipo, spiega: f.spiega });
   }
   ranges.sort((a, b) => a.start - b.start);
 
@@ -55,14 +56,37 @@ function evidenzia(
   ranges.forEach((r, i) => {
     if (r.start > pos) nodi.push(testo.slice(pos, r.start));
     nodi.push(
-      <mark key={i} className={r.tipo === 'dubbio' ? 'ref-mark-dubbio' : 'ref-mark-div'}>
+      <mark
+        key={i}
+        className={r.tipo === 'dubbio' ? 'ref-mark-dubbio' : 'ref-mark-div'}
+        title={r.spiega}
+      >
         {testo.slice(r.start, r.end)}
       </mark>
     );
     pos = r.end;
   });
   nodi.push(testo.slice(pos));
-  return { nodi, nonTrovati };
+  return { nodi, nonTrovati, marcati: ranges.length };
+}
+
+// Traduce un allarme numerico in una frase semplice per chi rivede la bozza.
+function fraseAllarme(a: Allarme): string {
+  const intervallo = a.intervallo ? String(a.intervallo) : '';
+  switch (a.stato) {
+    case 'fuori':
+      return intervallo
+        ? `di solito questo valore sta tra ${intervallo}: riascolta l'audio su questo numero`
+        : `sembra fuori dai valori consueti: riascolta l'audio su questo numero`;
+    case 'limite':
+      return intervallo
+        ? `è al limite dei valori consueti (${intervallo}): meglio ricontrollarlo`
+        : `è al limite dei valori consueti: meglio ricontrollarlo`;
+    case 'non_trovato_nel_testo':
+      return `questo numero non si ritrova nel testo: controlla che sia giusto`;
+    default:
+      return `da ricontrollare`;
+  }
 }
 
 export default async function RefertoBozza({
@@ -109,12 +133,21 @@ export default async function RefertoBozza({
 
   const frammenti = [
     ...divergenze
-      .map((d) => (typeof d?.contesto === 'string' ? d.contesto : ''))
-      .filter(Boolean)
-      .map((text) => ({ text, tipo: 'divergenza' as const })),
-    ...dubbi.map((text) => ({ text, tipo: 'dubbio' as const })),
+      .filter((d) => typeof d?.contesto === 'string' && d.contesto)
+      .map((d) => ({
+        text: d.contesto as string,
+        tipo: 'divergenza' as const,
+        spiega: d.versione_b
+          ? `L'audio qui non era chiaro. L'altra trascrizione dice: «${d.versione_b}»`
+          : `L'audio qui non era chiaro: riascoltalo.`,
+      })),
+    ...dubbi.map((text) => ({
+      text,
+      tipo: 'dubbio' as const,
+      spiega: 'Questo passaggio sembra poco chiaro: riascolta l’audio.',
+    })),
   ];
-  const { nodi } = evidenzia(p.testo_corretto ?? '', frammenti);
+  const { nodi, marcati } = evidenzia(p.testo_corretto ?? '', frammenti);
 
   // Aggancio dei riferimenti citati nelle note («allega la vecchia email…»):
   // candidati dalla cartella del paziente e dagli allegati delle sue referral.
@@ -223,20 +256,21 @@ export default async function RefertoBozza({
         </div>
       )}
 
-      {allarmi.length > 0 && (
-        <div className="card">
-          <h2>⚠ Allarmi numerici</h2>
-          <p className="muted">
-            Valori fuori o al limite dell'intervallo atteso. Il sistema non li
-            corregge mai: verifica sull'audio o col medico.
-          </p>
-          <ul>
+      {inBozza && (marcati > 0 || allarmi.length > 0) && (
+        <div className="card ctrl-box">
+          <h2>✏️ Da controllare prima di confermare</h2>
+          <ul className="ctrl-list">
+            {marcati > 0 && (
+              <li>
+                Nel testo qui sotto ci sono <strong>{marcati === 1 ? 'un punto evidenziato' : `${marcati} punti evidenziati`}</strong>:
+                lì la trascrizione non è sicura. Riascolta l&apos;audio in quei punti e
+                correggi se serve (passando il mouse sopra vedi perché è segnalato).
+              </li>
+            )}
             {allarmi.map((a, i) => (
               <li key={i}>
-                <strong>{String(a.campo ?? 'valore')}</strong>: {String(a.valore ?? '?')}{' '}
-                <span className="muted">
-                  (atteso {String(a.intervallo ?? '?')} — {String(a.stato ?? 'da verificare')})
-                </span>
+                <strong>{String(a.campo ?? 'valore').replaceAll('_', ' ')}: {String(a.valore ?? '?')}</strong>{' '}
+                — {fraseAllarme(a)}.
               </li>
             ))}
           </ul>
@@ -245,43 +279,10 @@ export default async function RefertoBozza({
 
       <div className="card">
         <h2>Testo del referto</h2>
-        {frammenti.length > 0 && (
-          <p className="muted">
-            Evidenziati: <mark className="ref-mark-div">divergenze tra le due trascrizioni</mark>{' '}
-            e <mark className="ref-mark-dubbio">segmenti dubbi</mark>.
-          </p>
-        )}
         <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
           {inBozza ? nodi : (row.testo_finale ?? p.testo_corretto)}
         </div>
       </div>
-
-      {divergenze.length > 0 && (
-        <div className="card">
-          <h2>Divergenze tra le due trascrizioni</h2>
-          <p className="muted">
-            Dove le due passate di trascrizione non coincidono c'è quasi sempre un
-            problema audio. Il sistema non sceglie mai la versione giusta: decidi tu.
-          </p>
-          <ul>
-            {divergenze.map((d, i) => (
-              <li key={i} style={{ marginBottom: 8 }}>
-                {d.contesto && <div className="muted">…{d.contesto}…</div>}
-                <div><strong>A:</strong> {d.versione_a ?? '—'}</div>
-                <div><strong>B:</strong> {d.versione_b ?? '—'}</div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {dubbi.length > 0 && (
-        <div className="card">
-          <h2>Segmenti dubbi</h2>
-          <p className="muted">Segnalati dall'ispezione come incomprensibili o privi di senso medico.</p>
-          <ul>{dubbi.map((s, i) => <li key={i}>{s}</li>)}</ul>
-        </div>
-      )}
 
       {inBozza ? (
         <form action={confermaBozza} className="card form">
@@ -338,6 +339,54 @@ export default async function RefertoBozza({
             </ul>
           </div>
         )
+      )}
+
+      {(divergenze.length > 0 || dubbi.length > 0 || allarmi.length > 0) && (
+        <div className="card">
+          {/* Il dettaglio tecnico resta disponibile ma chiuso: alla revisione
+              quotidiana bastano le evidenziazioni e la scheda «Da controllare». */}
+          <details className="cestino">
+            <summary className="btn">🔍 Dettagli tecnici delle segnalazioni…</summary>
+            {divergenze.length > 0 && (
+              <>
+                <h3>Le due trascrizioni non coincidono qui</h3>
+                <p className="muted">
+                  Il sistema non sceglie mai la versione giusta: decidi tu, riascoltando.
+                </p>
+                <ul>
+                  {divergenze.map((d, i) => (
+                    <li key={i} style={{ marginBottom: 8 }}>
+                      {d.contesto && <div className="muted">…{d.contesto}…</div>}
+                      <div><strong>A:</strong> {d.versione_a ?? '—'}</div>
+                      <div><strong>B:</strong> {d.versione_b ?? '—'}</div>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {dubbi.length > 0 && (
+              <>
+                <h3>Passaggi segnalati come poco chiari</h3>
+                <ul>{dubbi.map((s, i) => <li key={i}>{s}</li>)}</ul>
+              </>
+            )}
+            {allarmi.length > 0 && (
+              <>
+                <h3>Controlli sui numeri</h3>
+                <ul>
+                  {allarmi.map((a, i) => (
+                    <li key={i}>
+                      <strong>{String(a.campo ?? 'valore')}</strong>: {String(a.valore ?? '?')}{' '}
+                      <span className="muted">
+                        (atteso {String(a.intervallo ?? '?')} — {String(a.stato ?? 'da verificare')})
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </details>
+        </div>
       )}
 
       {inBozza && (
