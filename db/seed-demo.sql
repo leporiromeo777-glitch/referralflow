@@ -105,8 +105,10 @@ declare
 begin
   select id into sid from studios where slug = 'studio-demo';
   if sid is null then return; end if;
-  if exists (select 1 from providers where studio_id = sid and nome = 'Dr. Bonomo') then
-    raise notice 'Dati demo del dr. Bonomo già presenti.';
+  -- Guardia anche sul nome corretto: il blocco successivo rinomina il
+  -- provider in «Dr. Bernasconi» (Bonomo è l'inviante, non il medico interno).
+  if exists (select 1 from providers where studio_id = sid and nome in ('Dr. Bonomo', 'Dr. Bernasconi')) then
+    raise notice 'Dati demo della giornata del medico interno già presenti.';
     return;
   end if;
 
@@ -177,4 +179,53 @@ begin
             'aperto', now() - interval '2 hours');
 
   raise notice 'Dati demo del dr. Bonomo creati.';
+end $$;
+
+-- ── Correzione: Marco Bonomo è il MEDICO INVIANTE ───────────────────────────
+-- (non un medico dello studio: il blocco precedente lo aveva messo tra i
+-- provider — qui si rinomina il provider e si crea l'inviante con token fissi,
+-- così nell'anteprima si può impersonare il dr. Bonomo dai suoi link).
+do $$
+declare
+  sid uuid;
+  doc_bonomo uuid;
+  paz_ortelli uuid;
+  ref_email uuid;
+begin
+  select id into sid from studios where slug = 'studio-demo';
+  if sid is null then return; end if;
+
+  -- Il medico interno della giornata demo si chiama Bernasconi, non Bonomo.
+  update providers set nome = 'Dr. Bernasconi', aliases = array['Bernasconi']
+   where studio_id = sid and nome = 'Dr. Bonomo';
+
+  if exists (select 1 from referring_doctors where studio_id = sid and token = 'tok-bonomo-demo') then
+    raise notice 'Inviante dr. Marco Bonomo già presente.';
+    return;
+  end if;
+
+  insert into referring_doctors (studio_id, nome, studio, email, telefono, token)
+    values (sid, 'Dr. Marco Bonomo', 'Studio Medico Bonomo, Lugano',
+            'marco.bonomo@medico-demo.ch', '+41 91 333 44 55', 'tok-bonomo-demo')
+    returning id into doc_bonomo;
+
+  -- Una referral arrivata via email (HIN) dal dr. Bonomo, da smistare
+  insert into patients (studio_id, cognome, nome, data_nascita, telefono)
+    values (sid, 'Ortelli', 'Rosa', '1954-07-19', '+41 79 666 66 61')
+    returning id into paz_ortelli;
+  insert into referrals (studio_id, patient_id, referring_doctor_id, quesito, urgenza, status, canale)
+    values (sid, paz_ortelli, doc_bonomo,
+            'Dispnea da sforzo recente in paziente ipertesa, chiedo eco e valutazione.',
+            'normale', 'ricevuta', 'hin')
+    returning id into ref_email;
+  insert into referral_status_history (referral_id, to_status, nota)
+    values (ref_email, 'ricevuta', 'Arrivata via email (HIN) dal dr. Marco Bonomo');
+
+  -- E un consulto rapido aperto, sempre dal dr. Bonomo
+  insert into consulti (studio_id, referring_doctor_id, domanda, stato, created_at)
+    values (sid, doc_bonomo,
+            'Paziente 71enne in fibrillazione atriale nota, in apixaban: prima di un''estrazione dentaria devo sospendere e per quanti giorni?',
+            'aperto', now() - interval '1 hour');
+
+  raise notice 'Inviante dr. Marco Bonomo creato (token tok-bonomo-demo).';
 end $$;
