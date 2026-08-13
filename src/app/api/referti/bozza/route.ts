@@ -94,10 +94,23 @@ export async function POST(req: NextRequest) {
   }
 
   // Retry della pipeline su un file già consegnato: successo, senza doppioni.
-  const [esistente] = await query<{ id: string }>(
-    'select id from referti_bozze where studio_id = $1 and file_id = $2',
+  // Caso particolare: se la bozza era stata SCARTATA e lo stesso audio arriva
+  // di nuovo, è una persona che l'ha ricaricato apposta (i retry automatici
+  // finiscono al primo 2xx) — la bozza torna tra le «da rivedere».
+  const [esistente] = await query<{ id: string; stato: string }>(
+    'select id, stato from referti_bozze where studio_id = $1 and file_id = $2',
     [studio.id, fileId]
   );
-  if (esistente) await collega(esistente.id);
+  if (esistente) {
+    if (esistente.stato === 'scartata') {
+      await query(
+        `update referti_bozze
+            set stato = 'bozza', reviewed_by = null, reviewed_at = null
+          where id = $1 and studio_id = $2`,
+        [esistente.id, studio.id]
+      );
+    }
+    await collega(esistente.id);
+  }
   return NextResponse.json({ id: esistente?.id ?? null, duplicato: true }, { status: 200 });
 }

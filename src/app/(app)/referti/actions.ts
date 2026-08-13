@@ -69,6 +69,26 @@ export async function confermaBozza(formData: FormData) {
   redirect(`/referti/${id}?ok=confermata`);
 }
 
+// Riporta tra le «da rivedere» una bozza cestinata per sbaglio («Scarta» si
+// confonde facilmente con «Scarica»: dev'esserci sempre la via del ritorno).
+export async function ripristinaBozza(formData: FormData) {
+  const session = await getSession();
+  if (!session || !session.studioId) redirect('/login');
+
+  const id = String(formData.get('id') ?? '');
+  if (!isUuid(id)) redirect('/referti');
+
+  await query(
+    `update referti_bozze
+        set stato = 'bozza', reviewed_by = null, reviewed_at = null
+      where id = $1 and studio_id = $2 and stato = 'scartata'`,
+    [id, session.studioId]
+  );
+
+  revalidatePath('/referti');
+  redirect(`/referti/${id}`);
+}
+
 // Nasconde un suggerimento del dizionario (non utile o già gestito a voce).
 export async function ignoraSuggerimento(formData: FormData) {
   const session = await getSession();

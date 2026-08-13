@@ -1357,6 +1357,14 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 @keyframes trasc-rota { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .trasc-spin { animation: none; } }
 
+/* Cestino bozza in due passaggi + ripristino. */
+.cestino summary { list-style: none; display: inline-flex; cursor: pointer; }
+.cestino summary::-webkit-details-marker { display: none; }
+.cestino[open] summary { opacity: 0.55; pointer-events: none; }
+.cestino p { margin-top: 12px; }
+.btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn-danger:hover { filter: brightness(0.92); }
+
 /* Note per la segreteria (fase «segretaria» della trascrizione). */
 .seg-note { border-left: 3px solid var(--accent); }
 .seg-note-list { margin: 10px 0 0 20px; padding: 0; line-height: 1.9; }

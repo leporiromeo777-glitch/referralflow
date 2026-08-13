@@ -5,7 +5,7 @@ import { query } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
 import { dataOra } from '@/lib/format';
-import { confermaBozza, scartaBozza } from '../actions';
+import { confermaBozza, scartaBozza, ripristinaBozza } from '../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -289,13 +289,32 @@ export default async function RefertoBozza({
       )}
 
       {inBozza && (
-        <form action={scartaBozza} className="card">
+        <div className="card">
+          {/* Due passaggi apposta: «Scarta» si confonde con «Scarica» e una
+              bozza cestinata per sbaglio sembra sparita nel nulla. */}
+          <details className="cestino">
+            <summary className="btn">🗑 Cestina questa bozza…</summary>
+            <p className="muted">
+              Da cestinare solo se il dettato è di prova, un doppione o l'audio è
+              inutilizzabile. La bozza resta in archivio e si può ripristinare.
+              (Per salvare il referto cerchi «Scarica PDF», in alto.)
+            </p>
+            <form action={scartaBozza}>
+              <input type="hidden" name="id" value={row.id} />
+              <button className="btn btn-danger" type="submit">Sì, cestina davvero</button>
+            </form>
+          </details>
+        </div>
+      )}
+
+      {row.stato === 'scartata' && (
+        <form action={ripristinaBozza} className="card">
           <input type="hidden" name="id" value={row.id} />
           <p className="muted">
-            Se questa bozza non va tenuta (dettato di prova, doppione, audio
-            inutilizzabile), scartala: resta in archivio come «scartata».
+            Questa bozza è stata cestinata. Se è successo per sbaglio, riportala
+            tra quelle da rivedere:
           </p>
-          <button className="btn" type="submit">Scarta la bozza</button>
+          <button className="btn" type="submit">↩ Ripristina la bozza</button>
         </form>
       )}
     </>
