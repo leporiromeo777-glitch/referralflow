@@ -5,6 +5,7 @@ import { getSession } from '@/lib/auth';
 import { dataOra } from '@/lib/format';
 import { PageHero, StatStrip } from '../PageHero';
 import { ignoraSuggerimento } from './actions';
+import { UploadDettato } from './UploadDettato';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,19 +55,53 @@ export default async function Referti() {
     [session.studioId]
   );
 
+  // Dettati caricati dal drag & drop, in attesa che il Mac li trascriva.
+  const inTrascrizione = await query<{ id: string; filename: string; stato: string; created_at: string }>(
+    `select id, filename, stato, created_at::text from referti_audio
+      where studio_id = $1 and stato in ('in_coda', 'elaborazione')
+      order by created_at asc
+      limit 50`,
+    [session.studioId]
+  );
+
   return (
     <>
-      <PageHero zone="green" eyebrow="Operativo" title="Bozze di referto">
-        Le trascrizioni dei referti dettati arrivano qui come bozze: rivedile,
-        correggi il testo e conferma. Nessuna bozza è definitiva senza una persona.
+      <PageHero zone="green" eyebrow="Operativo" title="Referti dettati">
+        Trascina qui il dettato (o mettilo nella cartella condivisa dello studio):
+        la trascrizione parte da sola e torna come bozza da rivedere e confermare.
+        Nessun referto è definitivo senza una persona.
       </PageHero>
+
+      <UploadDettato />
 
       <StatStrip
         items={[
+          { label: 'In trascrizione', value: inTrascrizione.length },
           { label: 'Da rivedere', value: daRivedere.length, tone: daRivedere.length > 0 ? 'warn' : undefined },
           { label: 'Gestite negli ultimi 30 giorni', value: gestite.length },
         ]}
       />
+
+      {inTrascrizione.length > 0 && (
+        <div className="card">
+          <h2>In trascrizione</h2>
+          <p className="muted">
+            Il Mac dello studio li sta lavorando: la bozza compare qui sotto
+            appena pronta (di solito qualche minuto).
+          </p>
+          <ul className="trasc-list">
+            {inTrascrizione.map((a) => (
+              <li key={a.id} className="trasc-item">
+                <span className="trasc-spin" aria-hidden="true"></span>
+                <span className="trasc-nome">{a.filename}</span>
+                <span className="muted small">
+                  {a.stato === 'elaborazione' ? 'in lavorazione' : 'in coda'} · caricato {dataOra(a.created_at)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {suggerimenti.length > 0 && (
         <div className="card learn-box">
@@ -103,10 +138,13 @@ export default async function Referti() {
         <div key={r.id} className={`qrow${r.n_allarmi > 0 ? ' tone-danger' : r.n_divergenze + r.n_dubbi > 0 ? ' tone-warn' : ''}`}>
           <Link className="qrow-link" href={`/referti/${r.id}`}>
             <div className="qrow-top">
-              <strong>{r.paziente && r.paziente !== 'non indicato' ? r.paziente : 'Paziente non indicato'}</strong>
+              <strong>
+                {r.paziente && r.paziente !== 'non indicato' ? r.paziente : 'Paziente non indicato'}
+                {' — referto dettato'}
+              </strong>
               <span className="badge badge-warn">da rivedere</span>
             </div>
-            <div className="qrow-sub">Ricevuta il {dataOra(r.created_at)}</div>
+            <div className="qrow-sub">Trascritto il {dataOra(r.created_at)}</div>
             <div className="qrow-meta">
               {r.n_divergenze > 0 && <span className="badge badge-warn">{r.n_divergenze} divergenze audio</span>}
               {r.n_dubbi > 0 && <span className="badge badge-warn">{r.n_dubbi} segmenti dubbi</span>}
@@ -126,14 +164,17 @@ export default async function Referti() {
             <div key={r.id} className="qrow">
               <Link className="qrow-link" href={`/referti/${r.id}`}>
                 <div className="qrow-top">
-                  <strong>{r.paziente && r.paziente !== 'non indicato' ? r.paziente : 'Paziente non indicato'}</strong>
+                  <strong>
+                    {r.paziente && r.paziente !== 'non indicato' ? r.paziente : 'Paziente non indicato'}
+                    {' — referto dettato'}
+                  </strong>
                   <span className={`badge ${r.stato === 'confermata' ? 'badge-success' : 'badge-danger'}`}>
                     {r.stato}
                   </span>
                 </div>
                 <div className="qrow-sub">
-                  Ricevuta il {dataOra(r.created_at)}
-                  {r.reviewed_at ? ` · gestita il ${dataOra(r.reviewed_at)}` : ''}
+                  Trascritto il {dataOra(r.created_at)}
+                  {r.reviewed_at ? ` · gestito il ${dataOra(r.reviewed_at)}` : ''}
                 </div>
               </Link>
             </div>

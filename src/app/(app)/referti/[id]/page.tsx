@@ -92,6 +92,12 @@ export default async function RefertoBozza({
   );
   if (!row) notFound();
 
+  // Audio collegato (dettato caricato dal drag & drop): riascoltabile qui.
+  const [audio] = await query<{ id: string; filename: string }>(
+    'select id, filename from referti_audio where bozza_id = $1 and studio_id = $2',
+    [params.id, session.studioId]
+  );
+
   const p = row.payload;
   const divergenze = Array.isArray(p.divergenze) ? p.divergenze : [];
   const dubbi = Array.isArray(p.segmenti_dubbi) ? p.segmenti_dubbi.filter((s) => typeof s === 'string') : [];
@@ -116,8 +122,11 @@ export default async function RefertoBozza({
   return (
     <>
       <div className="page-head">
-        <h1>Bozza di referto</h1>
-        <Link className="btn" href="/referti">← Tutte le bozze</Link>
+        <h1>{row.stato === 'confermata' ? 'Referto' : 'Bozza di referto'}</h1>
+        <a className="btn btn-primary" href={`/api/referti/pdf/${row.id}`} target="_blank">
+          Scarica PDF
+        </a>
+        <Link className="btn" href="/referti">← Tutti i referti</Link>
       </div>
       <p className="muted">
         Ricevuta il {dataOra(row.created_at)}.{' '}
@@ -129,10 +138,20 @@ export default async function RefertoBozza({
       </p>
 
       {searchParams.ok === 'confermata' && (
-        <div className="card notice"><p>Bozza confermata ✓</p></div>
+        <div className="card notice"><p>Bozza confermata ✓ — ora puoi scaricare il PDF.</p></div>
       )}
       {searchParams.err === 'testo' && (
         <p className="error">Il testo del referto non può essere vuoto.</p>
+      )}
+
+      {audio && (
+        <div className="card">
+          <h2>Dettato originale</h2>
+          <p className="muted">
+            Riascolta l'audio mentre controlli il testo, soprattutto sui punti evidenziati.
+          </p>
+          <audio controls preload="none" src={`/api/referti/audio/${audio.id}`} />
+        </div>
       )}
 
       {allarmi.length > 0 && (

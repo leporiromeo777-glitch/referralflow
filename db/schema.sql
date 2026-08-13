@@ -465,3 +465,22 @@ create table referti_suggerimenti (
 );
 
 create index on referti_suggerimenti (studio_id, ignorato, conteggio desc);
+
+-- Audio dei referti dal drag & drop della pagina Referti (migrazione 023):
+-- coda che la pipeline del Mac preleva e trascrive; l'audio resta collegato
+-- alla bozza per il riascolto.
+create table referti_audio (
+  id          uuid primary key default gen_random_uuid(),
+  studio_id   uuid not null references studios(id) on delete cascade,
+  filename    text not null,
+  storage_key text not null,
+  content_type text,
+  stato       text not null default 'in_coda'
+                check (stato in ('in_coda', 'elaborazione', 'fatto', 'errore')),
+  bozza_id    uuid references referti_bozze(id) on delete set null,
+  uploaded_by uuid references users(id) on delete set null,
+  updated_at  timestamptz not null default now(),
+  created_at  timestamptz not null default now()
+);
+
+create index on referti_audio (studio_id, stato, created_at);

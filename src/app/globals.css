@@ -1299,6 +1299,34 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
   background: var(--surface); white-space: pre-wrap;
 }
 
+/* Referti dettati: zona di trascinamento + coda di trascrizione. */
+.dropzone {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  border: 2px dashed var(--line-strong); border-radius: 16px;
+  background: var(--surface); color: var(--muted);
+  padding: 22px 24px; margin-bottom: 18px; cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.dropzone:hover, .dropzone.drag { border-color: var(--primary); background: var(--primary-soft); color: var(--primary-ink); }
+.dropzone:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.dz-testo { display: flex; flex-direction: column; gap: 2px; }
+.dz-testo b { color: var(--ink); font-size: 15px; }
+.dz-testo span { font-size: 13px; }
+.dz-stato { margin-left: auto; font-size: 13.5px; }
+.dz-stato.ok { color: var(--success); font-weight: 600; }
+.dz-stato.err { color: var(--danger); font-weight: 600; }
+
+.trasc-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.trasc-item { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.trasc-nome { font-weight: 550; }
+.trasc-spin {
+  width: 14px; height: 14px; flex: none; border-radius: 50%;
+  border: 2px solid var(--line-strong); border-top-color: var(--primary);
+  animation: trasc-rota 0.9s linear infinite;
+}
+@keyframes trasc-rota { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .trasc-spin { animation: none; } }
+
 /* «Impara dalle conferme»: suggerimenti per il dizionario della trascrizione. */
 .learn-box { border-left: 3px solid var(--primary); }
 .learn-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }

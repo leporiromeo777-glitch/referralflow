@@ -92,6 +92,20 @@ ricorrenti fatte in ReferralFlow (parola sbagliata → giusta) con un tasto
 trascrizione smette di sbagliarle. La persona decide sempre; nulla si aggiunge
 da solo.
 
+## Due modi per consegnare un dettato
+
+1. **Cartella condivisa dello studio** — la cartella sorvegliata è
+   `~/referti/ingresso` sul Mac mini. Per usarla da tutti i dispositivi dello
+   studio: Impostazioni di macOS → Generali → Condivisione → Condivisione file,
+   aggiungere la cartella `referti/ingresso` e dare accesso agli utenti dello
+   studio. Chi salva lì un audio (dal Mac della segreteria, dall'iPhone via
+   Files, ecc.) lo vede sparire quando la pipeline lo prende in carico.
+2. **Drag & drop nella pagina «Referti» di ReferralFlow** — con l'invio
+   configurato (`invio.conf`), il servizio controlla a ogni giro anche la coda
+   della piattaforma: scarica i dettati caricati dal browser, li trascrive e
+   la bozza torna collegata al suo audio (riascoltabile nel dettaglio, con
+   scarico del referto in PDF).
+
 ## Avvio automatico (Fase 9)
 
 ```bash

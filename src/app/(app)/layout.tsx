@@ -81,9 +81,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     { label: 'Programma', href: '/programma' },
     { label: 'Follow-up', href: '/richiami', badge: richiamiScaduti },
     { label: 'Consulti', href: '/consulti', badge: consultiAperti },
-    ...((refertiAttivi || refertiBozze > 0)
-      ? [{ label: 'Referti', href: '/referti', badge: refertiBozze }]
-      : []),
+    // Sempre visibile: da qui si caricano i dettati (drag & drop) anche se il
+    // Mac della trascrizione non è ancora configurato.
+    { label: 'Referti', href: '/referti', badge: refertiBozze },
   ];
   const zones: Zona[] = [
     { key: 'oggi', label: 'Oggi', badge: oggiCount, voci: zoneOggi },

@@ -926,11 +926,81 @@ def _pulisci_intermedi(cartella: Path, file_id: str) -> None:
             pass
 
 
+_PREFISSO_PIATTAFORMA = "piattaforma-"
+
+
+def scarica_coda(cartelle: dict) -> None:
+    """Preleva dalla piattaforma gli audio caricati col drag & drop (pagina
+    Referti) e li mette in ingresso/: da lì la catena è identica ai file della
+    cartella condivisa. Il nome locale è piattaforma-<id>.<ext>: l'id permette
+    di ricollegare la bozza all'audio sul server (riascolto). Best-effort: se
+    la piattaforma non risponde, si riprova al giro dopo."""
+    if not FLOW_URL or not FLOW_TOKEN:
+        return
+    try:
+        richiesta = urllib.request.Request(
+            FLOW_URL + "/api/referti/coda",
+            headers={"Authorization": f"Bearer {FLOW_TOKEN}"},
+        )
+        with urllib.request.urlopen(richiesta, timeout=FLOW_TIMEOUT_S) as r:
+            corpo = json.loads(r.read().decode("utf-8"))
+    except Exception:
+        return
+    voci = corpo.get("coda", []) if isinstance(corpo, dict) else []
+    for voce in voci:
+        audio_id = str(voce.get("id", ""))
+        nome = str(voce.get("filename", ""))
+        if not audio_id:
+            continue
+        punto = nome.rfind(".")
+        ext = nome[punto:].lower() if punto != -1 else ".m4a"
+        destinazione = cartelle["ingresso"] / f"{_PREFISSO_PIATTAFORMA}{audio_id}{ext}"
+        # Già scaricato (o già in lavorazione/archivio): non duplicare.
+        occupato = any(
+            any(c.glob(f"{_PREFISSO_PIATTAFORMA}{audio_id}*"))
+            for c in (cartelle["ingresso"], cartelle["lavorazione"], cartelle["errori"])
+        )
+        if occupato:
+            continue
+        provvisorio = destinazione.with_suffix(destinazione.suffix + ".part")
+        try:
+            req = urllib.request.Request(
+                f"{FLOW_URL}/api/referti/coda/{audio_id}",
+                headers={"Authorization": f"Bearer {FLOW_TOKEN}"},
+            )
+            with urllib.request.urlopen(req, timeout=FLOW_TIMEOUT_S * 4) as r, open(provvisorio, "wb") as out:
+                shutil.copyfileobj(r, out)
+            provvisorio.replace(destinazione)
+            log.info("fase=coda_piattaforma esito=scaricato")
+        except Exception:
+            try:
+                provvisorio.unlink(missing_ok=True)
+            except OSError:
+                pass
+            log.warning("fase=coda_piattaforma esito=rinviato")
+            return
+
+
+def _audio_id_da_nome(nome: str) -> str | None:
+    """piattaforma-<uuid>.<ext> → <uuid>; altrimenti None."""
+    if not nome.startswith(_PREFISSO_PIATTAFORMA):
+        return None
+    resto = nome[len(_PREFISSO_PIATTAFORMA):]
+    punto = resto.rfind(".")
+    candidato = resto[:punto] if punto != -1 else resto
+    return candidato if re.fullmatch(r"[0-9a-f-]{36}", candidato) else None
+
+
 def _processa_uno(audio: Path, cartelle: dict, sostituzioni, controlli) -> None:
+    audio_id = _audio_id_da_nome(audio.name)
     lavoro = cartelle["lavorazione"] / audio.name
     shutil.move(str(audio), str(lavoro))
     try:
         file_id, payload = elabora(lavoro, cartelle["lavorazione"], sostituzioni, controlli)
+        if audio_id:
+            # Dettato arrivato dal drag & drop della piattaforma: l'id permette
+            # al server di collegare la bozza all'audio (riascolto nel dettaglio).
+            payload["audio_id"] = audio_id
         uscita = cartelle["output"] / f"{file_id}.json"
         provvisorio = uscita.with_suffix(".json.tmp")
         provvisorio.write_text(
@@ -1082,6 +1152,9 @@ def servizio(sostituzioni, controlli) -> int:
                 _processa_uno(f, cartelle, sostituzioni, controlli)
             in_attesa = {p: d for p, d in in_attesa.items() if p.exists()}
             invia_bozze(cartelle)
+            # Dopo l'invio: prendi eventuali dettati caricati dalla pagina
+            # Referti (drag & drop). Al giro dopo entrano nella catena normale.
+            scarica_coda(cartelle)
             time.sleep(INTERVALLO_SCANSIONE_S)
         except KeyboardInterrupt:
             log.info("fase=servizio esito=fermato motivo=richiesta_utente")

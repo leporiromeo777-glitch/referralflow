@@ -61,6 +61,21 @@ export async function POST(req: NextRequest) {
     richiede_revisione: true,
   };
 
+  // Audio caricato dal drag & drop della piattaforma: la bozza vi si collega
+  // (per il riascolto) e la voce di coda si chiude. Facoltativo e best-effort.
+  const audioId =
+    typeof body?.audio_id === 'string' && /^[0-9a-f-]{36}$/.test(body.audio_id)
+      ? body.audio_id
+      : null;
+  async function collega(bozzaId: string) {
+    if (!audioId) return;
+    await query(
+      `update referti_audio set stato = 'fatto', bozza_id = $3, updated_at = now()
+        where id = $1 and studio_id = $2`,
+      [audioId, studio.id, bozzaId]
+    );
+  }
+
   const [inserita] = await query<{ id: string }>(
     `insert into referti_bozze (studio_id, file_id, payload)
        values ($1, $2, $3)
@@ -68,12 +83,16 @@ export async function POST(req: NextRequest) {
        returning id`,
     [studio.id, fileId, JSON.stringify(payload)]
   );
-  if (inserita) return NextResponse.json({ id: inserita.id }, { status: 201 });
+  if (inserita) {
+    await collega(inserita.id);
+    return NextResponse.json({ id: inserita.id }, { status: 201 });
+  }
 
   // Retry della pipeline su un file già consegnato: successo, senza doppioni.
   const [esistente] = await query<{ id: string }>(
     'select id from referti_bozze where studio_id = $1 and file_id = $2',
     [studio.id, fileId]
   );
+  if (esistente) await collega(esistente.id);
   return NextResponse.json({ id: esistente?.id ?? null, duplicato: true }, { status: 200 });
 }
