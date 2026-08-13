@@ -5,7 +5,7 @@ import { query } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
 import { dataOra } from '@/lib/format';
-import { confermaBozza, scartaBozza, ripristinaBozza } from '../actions';
+import { confermaBozza, scartaBozza, ripristinaBozza, eliminaBozza } from '../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -308,14 +308,29 @@ export default async function RefertoBozza({
       )}
 
       {row.stato === 'scartata' && (
-        <form action={ripristinaBozza} className="card">
-          <input type="hidden" name="id" value={row.id} />
+        <div className="card">
           <p className="muted">
-            Questa bozza è stata cestinata. Se è successo per sbaglio, riportala
-            tra quelle da rivedere:
+            Questa bozza è stata cestinata. Puoi riportarla tra quelle da rivedere,
+            oppure eliminarla per sempre (sparisce anche l'audio collegato).
           </p>
-          <button className="btn" type="submit">↩ Ripristina la bozza</button>
-        </form>
+          <div className="scarta-azioni">
+            <form action={ripristinaBozza}>
+              <input type="hidden" name="id" value={row.id} />
+              <button className="btn" type="submit">↩ Ripristina la bozza</button>
+            </form>
+            <details className="cestino">
+              <summary className="btn">Elimina definitivamente…</summary>
+              <p className="muted">
+                Irreversibile: la bozza, il testo trascritto e l&apos;audio collegato
+                vengono cancellati per sempre. Nessuno potrà più recuperarli.
+              </p>
+              <form action={eliminaBozza}>
+                <input type="hidden" name="id" value={row.id} />
+                <button className="btn btn-danger" type="submit">Sì, elimina per sempre</button>
+              </form>
+            </details>
+          </div>
+        </div>
       )}
     </>
   );

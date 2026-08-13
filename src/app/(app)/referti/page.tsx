@@ -26,7 +26,11 @@ type Row = {
   n_note: number;
 };
 
-export default async function Referti() {
+export default async function Referti({
+  searchParams,
+}: {
+  searchParams: { ok?: string };
+}) {
   const session = await getSession();
   if (!session) redirect('/login');
 
@@ -83,6 +87,10 @@ export default async function Referti() {
       </PageHero>
 
       <UploadDettato />
+
+      {searchParams.ok === 'eliminata' && (
+        <p className="success">Bozza eliminata definitivamente, insieme al suo audio.</p>
+      )}
 
       <StatStrip
         items={[

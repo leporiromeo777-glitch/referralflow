@@ -1357,7 +1357,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 @keyframes trasc-rota { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .trasc-spin { animation: none; } }
 
-/* Cestino bozza in due passaggi + ripristino. */
+/* Cestino bozza in due passaggi + ripristino + eliminazione definitiva. */
+.scarta-azioni { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
 .cestino summary { list-style: none; display: inline-flex; cursor: pointer; }
 .cestino summary::-webkit-details-marker { display: none; }
 .cestino[open] summary { opacity: 0.55; pointer-events: none; }

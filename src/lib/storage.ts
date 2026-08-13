@@ -1,5 +1,5 @@
 import 'server-only';
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -40,6 +40,24 @@ export async function putFile(buffer: Buffer, contentType: string, ext: string):
     await fs.writeFile(full, buffer);
   }
   return key;
+}
+
+// Cancellazione definitiva (es. eliminazione di una bozza scartata con il suo
+// audio). Best-effort: un file già assente non è un errore.
+export async function deleteFile(key: string): Promise<void> {
+  if (s3) {
+    try {
+      await s3.send(new DeleteObjectCommand({ Bucket: process.env.S3_BUCKET, Key: key }));
+    } catch (e: any) {
+      console.error('Cancellazione storage fallita:', e?.name ?? 'errore');
+    }
+    return;
+  }
+  try {
+    await fs.unlink(path.join(LOCAL_DIR, key));
+  } catch {
+    /* già assente */
+  }
 }
 
 export async function getFile(key: string): Promise<{ body: Buffer; contentType?: string }> {

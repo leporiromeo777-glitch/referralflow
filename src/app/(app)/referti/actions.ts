@@ -6,6 +6,7 @@ import { query } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
 import { estraiSostituzioni } from '@/lib/referti-learn';
+import { deleteFile } from '@/lib/storage';
 
 const MAX_SUGGERIMENTI = 30;
 
@@ -87,6 +88,42 @@ export async function ripristinaBozza(formData: FormData) {
 
   revalidatePath('/referti');
   redirect(`/referti/${id}`);
+}
+
+// Eliminazione DEFINITIVA di una bozza scartata: sparisce la bozza, l'audio
+// collegato e il file dallo storage. Irreversibile, e per questo possibile
+// solo sulle bozze già scartate (mai su bozze aperte o confermate).
+export async function eliminaBozza(formData: FormData) {
+  const session = await getSession();
+  if (!session || !session.studioId) redirect('/login');
+
+  const id = String(formData.get('id') ?? '');
+  if (!isUuid(id)) redirect('/referti');
+
+  const [bozza] = await query<{ id: string }>(
+    `select id from referti_bozze
+      where id = $1 and studio_id = $2 and stato = 'scartata'`,
+    [id, session.studioId]
+  );
+  if (!bozza) redirect('/referti');
+
+  // Prima i file audio nello storage, poi le righe (best-effort sui file:
+  // un file già assente non blocca l'eliminazione).
+  const audio = await query<{ id: string; storage_key: string }>(
+    'select id, storage_key from referti_audio where bozza_id = $1 and studio_id = $2',
+    [id, session.studioId]
+  );
+  for (const a of audio) {
+    await deleteFile(a.storage_key);
+  }
+  await query('delete from referti_audio where bozza_id = $1 and studio_id = $2', [id, session.studioId]);
+  await query(
+    "delete from referti_bozze where id = $1 and studio_id = $2 and stato = 'scartata'",
+    [id, session.studioId]
+  );
+
+  revalidatePath('/referti');
+  redirect('/referti?ok=eliminata');
 }
 
 // Nasconde un suggerimento del dizionario (non utile o già gestito a voce).
