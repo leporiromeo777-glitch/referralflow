@@ -15,7 +15,17 @@
 # prossima volta.
 set -euo pipefail
 
-# ── 0. Homebrew ──────────────────────────────────────────────────────────────
+# ── 0. Se il Mac è già «server dello studio», si aggiorna in un altro modo ───
+# L'app gira come servizio automatico sulla stessa porta: questa anteprima
+# manuale andrebbe in conflitto.
+if launchctl list ch.referralflow.app > /dev/null 2>&1; then
+  echo "ReferralFlow gira già come server dello studio (servizio automatico)."
+  echo "  Per aggiornarlo:          bash mac/aggiorna-server.sh"
+  echo "  Per fermare il servizio:  launchctl unload ~/Library/LaunchAgents/ch.referralflow.app.plist"
+  exit 0
+fi
+
+# ── 0b. Homebrew ─────────────────────────────────────────────────────────────
 if ! command -v brew > /dev/null; then
   echo "Manca Homebrew. Installalo da https://brew.sh e rilancia questo comando."
   exit 1

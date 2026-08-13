@@ -29,6 +29,15 @@ comunicazione sicura): non li sostituisce. Cliente pilota reale: Centro Cardiolo
 - Anteprima locale sul Mac mini dello studio: `bash mac/avvia-anteprima.sh`
   (installa Node+Postgres, prepara DB e dati demo, avvia su http://localhost:3000;
   vedi `mac/LEGGIMI.md` — obiettivo: Mac mini come server dello studio)
+- Server interno dello studio (livello 1, FATTO 2026-08-13): `bash mac/installa-server.sh`
+  una volta → servizio launchd `ch.referralflow.app` (server-avvio.sh: attende
+  Postgres, git pull, migrazioni, rebuild su .build-stamp, `npm start`) +
+  backup notturno 02:30 `ch.referralflow.backup` (pg_dump 14gg + rsync uploads
+  in ~/ReferralFlow-backup) + pmset no-sleep/autorestart; APP_BASE_URL riscritto
+  a `http://<nome-mac>.local:3000` (LAN, cookie non-secure ok). Aggiornamento:
+  `bash mac/aggiorna-server.sh` (pull + kickstart). avvia-anteprima.sh si
+  accorge del servizio e rimanda a quello. Livello 2 (esposizione pubblica:
+  dominio, HTTPS, hardening) rimandato ad app assestata + parte legale.
 - Pubblicazione: checklist completa in `DEPLOY.md`
 
 ## NON rompere

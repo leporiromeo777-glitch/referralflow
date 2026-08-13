@@ -2,13 +2,15 @@
 
 Questa cartella serve a far girare **l'app ReferralFlow direttamente sul Mac
 mini dello studio**, così i dati restano in casa (come già succede per i
-referti). Due tappe:
+referti). Tre tappe:
 
 1. **Anteprima locale** — la fai partire e la provi nel browser del Mac, con
-   dati demo. È il passo di adesso.
-2. **Server dello studio** — la stessa app, ma raggiungibile dal vostro
-   dominio così i medici invianti e i pazienti possono aprire i link da fuori.
-   È il passo dopo, lo prepariamo insieme (vedi in fondo).
+   dati demo.
+2. **Server interno dello studio** — la stessa app, sempre accesa e usabile
+   da tutti i computer dello studio, dentro le mura (`installa-server.sh`).
+3. **Raggiungibile da fuori** — dominio + HTTPS perché medici invianti e
+   pazienti aprano i link da casa. È il passo dopo, lo prepariamo insieme
+   (vedi in fondo).
 
 ---
 
@@ -54,7 +56,50 @@ prossima volta. Per ripartire, rilancia lo stesso comando.
 
 ---
 
-## 2. Server dello studio (passo successivo)
+## 2. Server interno dello studio (livello 1)
+
+Quando l'anteprima ti convince, trasformi il Mac nel **server dello studio**:
+l'app resta sempre accesa (parte da sola all'accensione, riparte se cade) e
+si apre **da tutti i computer dello studio**, non solo dal Mac.
+
+Una volta sola, dalla cartella del progetto:
+
+```bash
+bash mac/installa-server.sh
+```
+
+Lo script chiede la password del Mac (per impostarlo a non andare mai in
+stop), installa il servizio automatico e il **backup notturno** (database +
+allegati in `~/ReferralFlow-backup`, ore 02:30, 14 giorni conservati), e alla
+fine stampa l'indirizzo per gli altri computer, del tipo
+`http://nome-del-mac.local:3000`.
+
+Da fare a mano, una volta (lo script te lo ricorda):
+
+- **Login automatico**: Impostazioni di Sistema → Utenti e gruppi → attiva il
+  login automatico su questo utente. Così dopo un riavvio (anche da blackout)
+  riparte tutto senza toccare nulla.
+- **Firewall**: al primo avvio macOS chiede se «node» può accettare
+  connessioni in entrata → **Consenti**.
+- **Ollama**: nelle sue impostazioni attiva l'avvio al login, così le funzioni
+  AI locali sono sempre disponibili.
+- **Cavo di rete**: collega il Mac al router via cavo, non in Wi-Fi.
+
+Da quel momento:
+
+- **Aggiornare l'app**: `bash mac/aggiorna-server.sh` (scarica le novità e
+  riavvia; se il codice è cambiato ricompila da solo, 1-2 minuti).
+- `avvia-anteprima.sh` non serve più: se lo lanci, ti rimanda da solo al
+  comando giusto.
+- Il registro del servizio è in `~/Library/Logs/ReferralFlow/server.log`.
+- Per fermare tutto: `launchctl unload ~/Library/LaunchAgents/ch.referralflow.app.plist`.
+
+L'app resta visibile **solo dentro la rete dello studio**: da fuori nessuno
+la raggiunge (per quello c'è il livello 3, sotto).
+
+---
+
+## 3. Raggiungibile da fuori (passo successivo)
 
 Per far sì che i medici invianti aprano `/invia/…` e i pazienti confermino
 l'appuntamento da fuori, il Mac mini deve essere **raggiungibile dal vostro
