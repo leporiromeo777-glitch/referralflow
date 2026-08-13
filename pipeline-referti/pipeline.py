@@ -955,6 +955,12 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         finale = correggi_llm(corretto_a, file_id, percorso(".scarto_ai.json"))
         percorso(".finale.txt").write_text(finale, encoding="utf-8")
 
+        # Il testo integrale PRIMA della segretaria: il nome del paziente
+        # spesso è dettato solo nell'apertura rivolta alla segreteria
+        # («…in merito al signor X e scrivi»), che la fase successiva toglie
+        # dal corpo. L'estrazione campi e i controlli devono vederlo.
+        testo_integrale = finale
+
         # La «segretaria»: le frasi rivolte alla segreteria escono dal corpo
         # del referto e diventano note. L'ispezione lavora sul testo pulito.
         fase = "segreteria"
@@ -977,7 +983,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
 
         fase = "estrazione"
         _ = notifica and notifica(fase)
-        campi = estrai_campi(finale, file_id)
+        campi = estrai_campi(testo_integrale, file_id)
         percorso(".campi.json").write_text(
             json.dumps(campi, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
@@ -985,7 +991,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
 
         fase = "controlli"
         _ = notifica and notifica(fase)
-        allarmi = controlla_valori(campi, finale, controlli, file_id)
+        allarmi = controlla_valori(campi, testo_integrale, controlli, file_id)
         percorso(".allarmi.json").write_text(
             json.dumps(allarmi, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",

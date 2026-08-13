@@ -335,6 +335,15 @@ capo) introducono testo che FA PARTE del referto, e le formule di lettera
 regola 4 di §6.1 (le istruzioni di dettatura si conservano). Da riverificare
 sullo stesso dettato dopo l'aggiornamento.
 
+**Correzione (secondo dettato reale, 2026-08-13):** l'estrazione campi (6.3)
+e i controlli numerici leggono il testo **integrale di prima della
+segretaria**, non il corpo ripulito. Motivo osservato dal vivo: il nome del
+paziente spesso è dettato solo nell'apertura rivolta alla segreteria
+(«Detto la lettera … in merito al signor X e scrivi»), che questa fase toglie
+dal corpo — estraendo dal testo pulito il nome andava perso e la bozza
+restava senza titolo. Nessun prompt è cambiato: cambia solo quale testo
+vede l'estrazione. L'ispezione (6.2) continua a lavorare sul testo ripulito.
+
 ---
 
 ## 7. Gestione errori
