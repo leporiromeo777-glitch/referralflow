@@ -6,6 +6,7 @@ import { dataOra } from '@/lib/format';
 import { PageHero, StatStrip } from '../PageHero';
 import { ignoraSuggerimento } from './actions';
 import { UploadDettato } from './UploadDettato';
+import { ProgressoTrascrizione } from './ProgressoTrascrizione';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,10 +56,17 @@ export default async function Referti() {
     [session.studioId]
   );
 
-  // Dettati caricati dal drag & drop, in attesa che il Mac li trascriva.
-  const inTrascrizione = await query<{ id: string; filename: string; stato: string; created_at: string }>(
-    `select id, filename, stato, created_at::text from referti_audio
-      where studio_id = $1 and stato in ('in_coda', 'elaborazione')
+  // Dettati caricati dal drag & drop, in attesa che il Mac li trascriva
+  // (con la fase in corso per l'avanzamento; gli errori recenti restano visibili).
+  const inTrascrizione = await query<{
+    id: string; filename: string; stato: string; fase: string | null;
+    fase_at: string | null; created_at: string; bozza_id: string | null;
+  }>(
+    `select id, filename, stato, fase, fase_at::text, created_at::text, bozza_id
+       from referti_audio
+      where studio_id = $1
+        and (stato in ('in_coda', 'elaborazione')
+             or (stato = 'errore' and updated_at > now() - interval '10 minutes'))
       order by created_at asc
       limit 50`,
     [session.studioId]
@@ -82,26 +90,7 @@ export default async function Referti() {
         ]}
       />
 
-      {inTrascrizione.length > 0 && (
-        <div className="card">
-          <h2>In trascrizione</h2>
-          <p className="muted">
-            Il Mac dello studio li sta lavorando: la bozza compare qui sotto
-            appena pronta (di solito qualche minuto).
-          </p>
-          <ul className="trasc-list">
-            {inTrascrizione.map((a) => (
-              <li key={a.id} className="trasc-item">
-                <span className="trasc-spin" aria-hidden="true"></span>
-                <span className="trasc-nome">{a.filename}</span>
-                <span className="muted small">
-                  {a.stato === 'elaborazione' ? 'in lavorazione' : 'in coda'} · caricato {dataOra(a.created_at)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <ProgressoTrascrizione iniziali={inTrascrizione} />
 
       {suggerimenti.length > 0 && (
         <div className="card learn-box">

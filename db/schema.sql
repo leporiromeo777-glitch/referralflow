@@ -477,6 +477,9 @@ create table referti_audio (
   content_type text,
   stato       text not null default 'in_coda'
                 check (stato in ('in_coda', 'elaborazione', 'fatto', 'errore')),
+  -- Fase in corso segnalata dalla pipeline (avanzamento in pagina).
+  fase        text,
+  fase_at     timestamptz,
   bozza_id    uuid references referti_bozze(id) on delete set null,
   uploaded_by uuid references users(id) on delete set null,
   updated_at  timestamptz not null default now(),

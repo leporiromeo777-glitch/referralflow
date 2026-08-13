@@ -792,10 +792,12 @@ def controlli_avvio():
     return sostituzioni, controlli
 
 
-def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli) -> tuple[str, dict]:
+def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=None) -> tuple[str, dict]:
     """L'intera catena su un file audio. I file intermedi nascono in dir_out;
     il risultato è (file_id, payload SPEC §8). Su errore alza
-    ErroreElaborazione dopo aver loggato (mai contenuti nei log)."""
+    ErroreElaborazione dopo aver loggato (mai contenuti nei log).
+    `notifica(fase)`, se passata, viene chiamata a ogni cambio di fase
+    (avanzamento vivo sulla piattaforma per i dettati del drag & drop)."""
     file_id = file_id_di(ingresso)
     # La configurazione nel log (mai contenuti): serve a sapere, a posteriori,
     # con quali impostazioni è stata prodotta una corsa.
@@ -805,6 +807,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli) -> tuple[str
         return dir_out / f"{file_id}{suffisso}"
 
     fase = "preprocessing"
+    _ = notifica and notifica(fase)
     try:
         preprocessa(ingresso, percorso(".wav"), file_id)
         # Vocabolario di dominio per whisper (SPEC §4.2): stesso prompt per le due
@@ -813,8 +816,10 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli) -> tuple[str
         n_vocab = vocab.count(",") + 1 if vocab else 0
         log.info("fase=vocabolario file=%s termini=%d", file_id, n_vocab)
         fase = "trascrizione_a"
+        _ = notifica and notifica(fase)
         trascrivi(percorso(".wav"), percorso(".txt"), file_id, fase, vocab)
         fase = "trascrizione_b"
+        _ = notifica and notifica(fase)
         trascrivi(percorso(".wav"), percorso(".b.txt"), file_id, fase, vocab)
 
         # Dizionario PRIMA del confronto (ordine invertito rispetto alla prima
@@ -823,6 +828,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli) -> tuple[str
         # costruzione, e gli errori ricorrenti corretti in entrambe le passate
         # non generano false divergenze. I .txt grezzi restano su disco.
         fase = "dizionario"
+        _ = notifica and notifica(fase)
         inizio = time.monotonic()
         corretto_a, n_sost = applica_correzioni(
             percorso(".txt").read_text(encoding="utf-8"), sostituzioni)
@@ -835,6 +841,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli) -> tuple[str
         )
 
         fase = "confronto"
+        _ = notifica and notifica(fase)
         inizio = time.monotonic()
         divergenze = confronta(corretto_a, corretto_b)
         percorso(".divergenze.json").write_text(
@@ -847,10 +854,12 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli) -> tuple[str
         )
 
         fase = "correzione_llm"
+        _ = notifica and notifica(fase)
         finale = correggi_llm(corretto_a, file_id, percorso(".scarto_ai.json"))
         percorso(".finale.txt").write_text(finale, encoding="utf-8")
 
         fase = "ispezione_llm"
+        _ = notifica and notifica(fase)
         dubbi = ispeziona_llm(finale, file_id)
         percorso(".dubbi.json").write_text(
             json.dumps(dubbi, ensure_ascii=False, indent=2) + "\n",
@@ -858,6 +867,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli) -> tuple[str
         )
 
         fase = "estrazione"
+        _ = notifica and notifica(fase)
         campi = estrai_campi(finale, file_id)
         percorso(".campi.json").write_text(
             json.dumps(campi, ensure_ascii=False, indent=2) + "\n",
@@ -865,6 +875,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli) -> tuple[str
         )
 
         fase = "controlli"
+        _ = notifica and notifica(fase)
         allarmi = controlla_valori(campi, finale, controlli, file_id)
         percorso(".allarmi.json").write_text(
             json.dumps(allarmi, ensure_ascii=False, indent=2) + "\n",
@@ -971,6 +982,7 @@ def scarica_coda(cartelle: dict) -> None:
             with urllib.request.urlopen(req, timeout=FLOW_TIMEOUT_S * 4) as r, open(provvisorio, "wb") as out:
                 shutil.copyfileobj(r, out)
             provvisorio.replace(destinazione)
+            segnala_fase(audio_id, "scaricato")
             log.info("fase=coda_piattaforma esito=scaricato")
         except Exception:
             try:
@@ -991,12 +1003,34 @@ def _audio_id_da_nome(nome: str) -> str | None:
     return candidato if re.fullmatch(r"[0-9a-f-]{36}", candidato) else None
 
 
+def segnala_fase(audio_id: str | None, fase: str) -> None:
+    """Dice alla piattaforma a che punto è un dettato del drag & drop (solo il
+    nome della fase): la pagina Referti lo mostra come avanzamento. Best-effort
+    e veloce: se la piattaforma non risponde, la lavorazione non si ferma."""
+    if not audio_id or not FLOW_URL or not FLOW_TOKEN:
+        return
+    corpo = json.dumps({"fase": fase}).encode("utf-8")
+    try:
+        req = urllib.request.Request(
+            f"{FLOW_URL}/api/referti/coda/{audio_id}/fase",
+            data=corpo,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {FLOW_TOKEN}",
+            },
+        )
+        urllib.request.urlopen(req, timeout=5).read()
+    except Exception:
+        pass
+
+
 def _processa_uno(audio: Path, cartelle: dict, sostituzioni, controlli) -> None:
     audio_id = _audio_id_da_nome(audio.name)
+    notifica = (lambda fase: segnala_fase(audio_id, fase)) if audio_id else None
     lavoro = cartelle["lavorazione"] / audio.name
     shutil.move(str(audio), str(lavoro))
     try:
-        file_id, payload = elabora(lavoro, cartelle["lavorazione"], sostituzioni, controlli)
+        file_id, payload = elabora(lavoro, cartelle["lavorazione"], sostituzioni, controlli, notifica)
         if audio_id:
             # Dettato arrivato dal drag & drop della piattaforma: l'id permette
             # al server di collegare la bozza all'audio (riascolto nel dettaglio).
@@ -1017,6 +1051,7 @@ def _processa_uno(audio: Path, cartelle: dict, sostituzioni, controlli) -> None:
             str(cartelle["archivio_temp"] / (file_id + lavoro.suffix.lower())),
         )
         _pulisci_intermedi(cartelle["lavorazione"], file_id)
+        _ = notifica and notifica("invio")
         log.info("fase=servizio file=%s esito=ok", file_id)
     except ErroreElaborazione as e:
         shutil.move(str(lavoro), str(cartelle["errori"] / lavoro.name))
@@ -1028,6 +1063,7 @@ def _processa_uno(audio: Path, cartelle: dict, sostituzioni, controlli) -> None:
         )
         if e.file_id:
             _pulisci_intermedi(cartelle["lavorazione"], e.file_id)
+        _ = notifica and notifica("errore")
         log.error(
             "fase=servizio file=%s esito=errore fase_fallita=%s", e.file_id or "?", e.fase
         )

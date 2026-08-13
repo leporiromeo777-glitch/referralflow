@@ -66,7 +66,10 @@ export function UploadDettato() {
         type="file"
         accept={ESTENSIONI.join(',')}
         multiple
-        hidden
+        // display:none inline: l'attributo hidden verrebbe scavalcato dalla
+        // regola CSS dei moduli (display block sugli input) e il campo nativo
+        // resterebbe visibile catturando i clic.
+        style={{ display: 'none' }}
         onChange={(e) => { if (e.target.files?.length) void invia(e.target.files); e.target.value = ''; }}
       />
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor"
