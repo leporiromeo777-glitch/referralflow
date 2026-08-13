@@ -1370,6 +1370,11 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 .seg-note { border-left: 3px solid var(--accent); }
 .seg-note-list { margin: 10px 0 0 20px; padding: 0; line-height: 1.9; }
 .seg-note-list li { font-size: 14.5px; }
+.seg-cand { list-style: none; margin: 4px 0 8px 8px; padding: 6px 12px; border-left: 2px solid var(--line); }
+.seg-cand li { font-size: 13.5px; }
+.seg-cand a { color: var(--primary-ink); font-weight: 550; }
+.seg-cand a:hover { text-decoration: underline; }
+.seg-procurare { border-left: 3px solid var(--warn); }
 
 /* «Impara dalle conferme»: suggerimenti per il dizionario della trascrizione. */
 .learn-box { border-left: 3px solid var(--primary); }

@@ -6,6 +6,7 @@ import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
 import { dataOra } from '@/lib/format';
 import { confermaBozza, scartaBozza, ripristinaBozza, eliminaBozza } from '../actions';
+import { agganciaRiferimenti } from '@/lib/referti-allegati';
 
 export const dynamic = 'force-dynamic';
 
@@ -114,6 +115,15 @@ export default async function RefertoBozza({
   ];
   const { nodi } = evidenzia(p.testo_corretto ?? '', frammenti);
 
+  // Aggancio dei riferimenti citati nelle note («allega la vecchia email…»):
+  // candidati dalla cartella del paziente e dagli allegati delle sue referral.
+  const noteRif = await agganciaRiferimenti(
+    session.studioId,
+    typeof campi.nome_paziente === 'string' ? campi.nome_paziente : null,
+    Array.isArray(p.note_segreteria) ? p.note_segreteria.filter((n): n is string => typeof n === 'string') : []
+  );
+  const daProcurare = noteRif.filter((n) => n.riguardaDocumenti && n.candidati.length === 0);
+
   const inBozza = row.stato === 'bozza';
   const valoriNumerici =
     campi.valori_numerici && typeof campi.valori_numerici === 'object' && !Array.isArray(campi.valori_numerici)
@@ -164,8 +174,47 @@ export default async function RefertoBozza({
             del referto, ricopiala nel testo qui sotto prima di confermare.
           </p>
           <ul className="seg-note-list">
-            {p.note_segreteria.map((n, i) => (
-              <li key={i}>«{n}»</li>
+            {noteRif.map((n, i) => (
+              <li key={i}>
+                «{n.nota}»
+                {n.candidati.length > 0 && (
+                  <ul className="seg-cand">
+                    {n.candidati.map((c) => (
+                      <li key={`${c.tipo}-${c.id}`}>
+                        <a
+                          href={c.tipo === 'cartella' ? `/api/documents/${c.id}` : `/api/attachments/${c.id}`}
+                          target="_blank"
+                        >
+                          📎 {c.filename}
+                        </a>{' '}
+                        <span className="tmeta">
+                          {c.tipo === 'cartella' ? 'dalla cartella del paziente' : 'dagli allegati'}
+                          {c.categoria ? ` · ${c.categoria}` : ''} · {dataOra(c.quando)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {n.riguardaDocumenti && n.candidati.length === 0 && (
+                  <span className="badge badge-warn" style={{ marginLeft: 8 }}>non trovato qui</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {inBozza && daProcurare.length > 0 && (
+        <div className="card seg-procurare">
+          <h2>❓ Da procurare prima dell'invio</h2>
+          <p className="muted">
+            Il medico cita questi riferimenti, ma non risultano né nella cartella del
+            paziente né tra gli allegati: chiedeteli al medico o recuperateli fuori
+            da ReferralFlow (email, archivio).
+          </p>
+          <ul className="seg-note-list">
+            {daProcurare.map((n, i) => (
+              <li key={i}>«{n.nota}»</li>
             ))}
           </ul>
         </div>
