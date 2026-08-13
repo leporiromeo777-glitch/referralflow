@@ -32,10 +32,11 @@ fi
 
 # ── Indirizzo nella rete dello studio ────────────────────────────────────────
 # I link che l'app genera (portale, promemoria) devono usare l'indirizzo
-# visibile dagli altri computer, non «localhost».
+# visibile dagli altri computer, non «localhost». L'indirizzo numerico è
+# quello capito da tutti (il nome «.local» non funziona su alcuni PC Windows).
 NOME="$(scutil --get LocalHostName 2> /dev/null || hostname -s)"
-URL="http://$NOME.local:3000"
 IP="$(ipconfig getifaddr en0 2> /dev/null || ipconfig getifaddr en1 2> /dev/null || true)"
+URL="http://${IP:-$NOME.local}:3000"
 sed -i '' -E "s|^APP_BASE_URL=.*|APP_BASE_URL=$URL|" .env
 
 # ── Servizio dell'app ────────────────────────────────────────────────────────
@@ -119,8 +120,11 @@ echo "  Fatto: ReferralFlow è il server dello studio."
 echo
 echo "  Da questo Mac:            http://localhost:3000"
 echo "  Dagli altri computer:     $URL"
-[ -n "$IP" ] && echo "  (se il nome non funziona:  http://$IP:3000)"
+[ -n "$IP" ] && echo "  (in alternativa:  http://$NOME.local:3000 — solo Mac/iPhone)"
 echo "  Accessi e password: invariati."
+echo
+echo "  Nota: se un giorno l'indirizzo numerico smettesse di funzionare"
+echo "  (il router lo ha cambiato), rilancia questo script: lo aggiorna."
 echo
 echo "  Al primo avvio macOS può chiedere se «node» può accettare"
 echo "  connessioni in entrata: rispondi «Consenti»."
