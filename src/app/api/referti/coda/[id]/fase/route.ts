@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 
 const FASI_VALIDE = new Set([
   'scaricato', 'preprocessing', 'trascrizione_a', 'trascrizione_b',
-  'dizionario', 'confronto', 'correzione_llm', 'ispezione_llm',
+  'dizionario', 'confronto', 'correzione_llm', 'segreteria', 'ispezione_llm',
   'estrazione', 'controlli', 'invio', 'errore',
 ]);
 

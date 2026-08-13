@@ -51,6 +51,11 @@ export async function POST(req: NextRequest) {
     file_id: fileId,
     timestamp: typeof body?.timestamp === 'string' ? body.timestamp.slice(0, 40) : null,
     testo_corretto: testo,
+    // Frasi che il medico ha rivolto alla segreteria, separate dal referto
+    // dalla fase «segretaria» della pipeline (SPEC §6.4).
+    note_segreteria: lista(body?.note_segreteria)
+      .filter((n: unknown): n is string => typeof n === 'string')
+      .map((n: string) => n.slice(0, 2000)),
     campi_estratti:
       body?.campi_estratti && typeof body.campi_estratti === 'object' && !Array.isArray(body.campi_estratti)
         ? body.campi_estratti

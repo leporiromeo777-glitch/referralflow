@@ -18,6 +18,7 @@ type Allarme = { campo?: string; valore?: unknown; intervallo?: string; stato?: 
 
 type Payload = {
   testo_corretto: string;
+  note_segreteria?: string[];
   campi_estratti: Record<string, unknown>;
   divergenze: Divergenza[];
   segmenti_dubbi: string[];
@@ -151,6 +152,22 @@ export default async function RefertoBozza({
             Riascolta l'audio mentre controlli il testo, soprattutto sui punti evidenziati.
           </p>
           <audio controls preload="none" src={`/api/referti/audio/${audio.id}`} />
+        </div>
+      )}
+
+      {Array.isArray(p.note_segreteria) && p.note_segreteria.length > 0 && (
+        <div className="card seg-note">
+          <h2>📋 Note per la segreteria</h2>
+          <p className="muted">
+            Dettando, il medico ha rivolto queste frasi a voi: la «segretaria AI» le ha
+            tolte dal corpo del referto (le trovi qui, testuali). Se una in realtà è parte
+            del referto, ricopiala nel testo qui sotto prima di confermare.
+          </p>
+          <ul className="seg-note-list">
+            {p.note_segreteria.map((n, i) => (
+              <li key={i}>«{n}»</li>
+            ))}
+          </ul>
         </div>
       )}
 

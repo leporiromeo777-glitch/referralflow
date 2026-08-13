@@ -23,6 +23,7 @@ type Row = {
   n_divergenze: number;
   n_dubbi: number;
   n_allarmi: number;
+  n_note: number;
 };
 
 export default async function Referti() {
@@ -34,7 +35,8 @@ export default async function Referti() {
             payload -> 'campi_estratti' ->> 'nome_paziente' as paziente,
             coalesce(jsonb_array_length(payload -> 'divergenze'), 0)::int as n_divergenze,
             coalesce(jsonb_array_length(payload -> 'segmenti_dubbi'), 0)::int as n_dubbi,
-            coalesce(jsonb_array_length(payload -> 'allarmi_numerici'), 0)::int as n_allarmi
+            coalesce(jsonb_array_length(payload -> 'allarmi_numerici'), 0)::int as n_allarmi,
+            coalesce(jsonb_array_length(payload -> 'note_segreteria'), 0)::int as n_note
        from referti_bozze
       where studio_id = $1
         and (stato = 'bozza' or reviewed_at > now() - interval '30 days')
@@ -137,6 +139,7 @@ export default async function Referti() {
             <div className="qrow-meta">
               {r.n_divergenze > 0 && <span className="badge badge-warn">{r.n_divergenze} divergenze audio</span>}
               {r.n_dubbi > 0 && <span className="badge badge-warn">{r.n_dubbi} segmenti dubbi</span>}
+              {r.n_note > 0 && <span className="badge badge-accent">📋 {r.n_note} note per la segreteria</span>}
               {r.n_allarmi > 0 && <span className="badge badge-danger">{r.n_allarmi} allarmi numerici</span>}
               {r.n_divergenze + r.n_dubbi + r.n_allarmi === 0 && (
                 <span className="badge badge-success">nessun punto segnalato</span>

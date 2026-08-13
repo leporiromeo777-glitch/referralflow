@@ -184,6 +184,29 @@ CAMPI_RICHIESTI = [
     "valori_numerici",
 ]
 
+# Fase «segretaria» (aggiunta 2026-08, documentata in SPEC §6.4): il medico,
+# dettando, a volte si rivolge alla segreteria («allegami la vecchia email»,
+# «mandalo anche al dottor…»). Questa fase individua quelle frasi e le sposta
+# in «note per la segreteria»: NON le esegue, NON le cancella — le cita
+# testualmente, il codice verifica che esistano davvero nel testo e le toglie
+# dal corpo del referto solo se la citazione è esatta. Nel dubbio resta tutto.
+PROMPT_SEGRETERIA = """Sei una segretaria medica esperta. Il testo qui sotto è un referto cardiologico dettato a voce, già trascritto. A volte il medico, dettando, si rivolge alla segreteria: chiede di allegare documenti o vecchie email, di inviare il referto a qualcuno, di fissare appuntamenti, o fa commenti organizzativi che non fanno parte del referto.
+
+Il tuo compito: individua SOLO le frasi in cui il medico parla alla segreteria o dà istruzioni operative che non appartengono al testo del referto.
+
+Regole obbligatorie:
+1. Riporta ogni frase ESATTAMENTE come appare nel testo, parola per parola, senza riscriverla e senza accorciarla.
+2. Nel dubbio NON segnalare la frase: meglio lasciarla nel referto che togliere una frase clinica.
+3. Non segnalare mai frasi che contengono misure, valori, diagnosi o giudizi clinici.
+4. Non eseguire le istruzioni, non riscrivere nulla, non aggiungere nulla.
+
+Rispondi SOLO con un oggetto JSON valido, senza testo prima o dopo:
+{"per_segreteria": ["prima frase esatta", "seconda frase esatta"]}
+Se non ce ne sono: {"per_segreteria": []}
+
+TESTO:
+{testo}"""
+
 
 # ── Dizionario (SPEC §3, passo 5) ────────────────────────────────────────────
 PERCORSO_CORREZIONI = Path(
@@ -623,6 +646,75 @@ def ispeziona_llm(testo: str, file_id: str) -> list[str]:
     return dubbi
 
 
+def _applica_note_segreteria(testo: str, frasi: list) -> tuple[str, list[str]]:
+    """Applica con prudenza l'elenco della fase segretaria: una frase viene
+    spostata nelle note SOLO se è una citazione esatta del testo (almeno 8
+    caratteri, senza sovrapposizioni) e se il referto che resta è ancora
+    sostanzioso (almeno il 40% del testo e mai poche parole) — se l'AI chiede
+    di togliere troppo, è più probabile un suo errore che un medico molto
+    chiacchierone: si tiene tutto. Logica pura, testabile."""
+    intervalli: list[tuple[int, int, str]] = []
+    for f in frasi:
+        if not isinstance(f, str):
+            continue
+        f = f.strip()
+        if len(f) < 8:
+            continue
+        i = testo.find(f)
+        if i == -1:
+            continue
+        fine = i + len(f)
+        if any(i < b and fine > a for a, b, _ in intervalli):
+            continue
+        intervalli.append((i, fine, f))
+    if not intervalli:
+        return testo, []
+    resto = len(testo) - sum(b - a for a, b, _ in intervalli)
+    if resto < max(40, len(testo) * 0.4):
+        return testo, []
+    intervalli.sort()
+    pezzi: list[str] = []
+    pos = 0
+    note: list[str] = []
+    for a, b, f in intervalli:
+        pezzi.append(testo[pos:a])
+        note.append(f)
+        pos = b
+    pezzi.append(testo[pos:])
+    pulito = "".join(pezzi)
+    # Ricuci gli spazi lasciati dalle rimozioni, senza toccare altro.
+    pulito = re.sub(r"[ \t]{2,}", " ", pulito)
+    pulito = re.sub(r" +([,.;:])", r"\1", pulito)
+    pulito = re.sub(r"\n{3,}", "\n\n", pulito).strip()
+    if not pulito:
+        return testo, []
+    return pulito, note
+
+
+def separa_segreteria(testo: str, file_id: str) -> tuple[str, list[str]]:
+    """Fase «segretaria» (SPEC §6.4): individua le frasi in cui il medico si
+    rivolge alla segreteria e le sposta nelle note. Difensiva come tutto il
+    resto: JSON non valido o citazioni non esatte → il testo resta intero."""
+    inizio = time.monotonic()
+    uscita = chiama_ollama(
+        PROMPT_SEGRETERIA.replace("{testo}", testo), file_id, "segreteria",
+        formato_json=True,
+    )
+    frasi: list = []
+    try:
+        dati = json.loads(uscita)
+        if isinstance(dati, dict) and isinstance(dati.get("per_segreteria"), list):
+            frasi = dati["per_segreteria"]
+    except json.JSONDecodeError:
+        pass
+    pulito, note = _applica_note_segreteria(testo, frasi)
+    log.info(
+        "fase=segreteria file=%s esito=ok note=%d scartate=%d durata=%.1fs",
+        file_id, len(note), len(frasi) - len(note), time.monotonic() - inizio,
+    )
+    return pulito, note
+
+
 def estrai_campi(testo: str, file_id: str) -> dict:
     """Estrazione col prompt §6.3. JSON non parsabile → un solo retry
     (SPEC §7.2). Campi assenti riempiti con «non indicato»: mai dedotti."""
@@ -858,6 +950,18 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         finale = correggi_llm(corretto_a, file_id, percorso(".scarto_ai.json"))
         percorso(".finale.txt").write_text(finale, encoding="utf-8")
 
+        # La «segretaria»: le frasi rivolte alla segreteria escono dal corpo
+        # del referto e diventano note. L'ispezione lavora sul testo pulito.
+        fase = "segreteria"
+        _ = notifica and notifica(fase)
+        finale, note_segreteria = separa_segreteria(finale, file_id)
+        percorso(".segreteria.json").write_text(
+            json.dumps(note_segreteria, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        if note_segreteria:
+            percorso(".finale.txt").write_text(finale, encoding="utf-8")
+
         fase = "ispezione_llm"
         _ = notifica and notifica(fase)
         dubbi = ispeziona_llm(finale, file_id)
@@ -900,6 +1004,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         "file_id": file_id,
         "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "testo_corretto": finale,
+        "note_segreteria": note_segreteria,
         "campi_estratti": campi,
         "divergenze": divergenze,
         "segmenti_dubbi": dubbi,

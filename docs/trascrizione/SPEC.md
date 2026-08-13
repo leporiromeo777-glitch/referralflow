@@ -301,6 +301,30 @@ TESTO:
 due medici citati nello stesso testo, e date ambigue. Usa la modalità `format: json`
 di Ollama per garantire l'output pulito.
 
+### 6.4 — Segretaria (separa le istruzioni dal referto) — aggiunta 2026-08
+
+Nuova fase tra correzione (6.1) e ispezione (6.2): il medico, dettando, a volte
+si rivolge alla segreteria («allegami la vecchia email», «mandane copia al
+curante»). Questa fase individua quelle frasi e le sposta in
+`note_segreteria` nel payload (§8); il corpo del referto resta senza.
+
+Il prompt è `PROMPT_SEGRETERIA` in `pipeline.py`: chiede SOLO citazioni
+testuali, in JSON `{"per_segreteria": [...]}`, con la regola «nel dubbio non
+segnalare». Le difese sono NEL CODICE, non nel prompt (`_applica_note_segreteria`):
+
+- una frase è spostata solo se è una **citazione esatta** del testo
+  (≥ 8 caratteri, prima occorrenza, senza sovrapposizioni);
+- se il referto rimanente scenderebbe sotto il 40% del testo (o sotto le
+  poche parole), **si tiene tutto**: un'AI che vuole togliere mezzo referto
+  sta sbagliando;
+- JSON non valido o citazioni non trovate → testo intatto, zero note.
+
+Le note NON vengono mai eseguite dalla pipeline: compaiono in ReferralFlow
+nel dettaglio della bozza («Note per la segreteria»), testuali, e la persona
+decide. L'ispezione (6.2) lavora sul testo già ripulito. Nel log solo i
+conteggi (`note=N scartate=M`). Questa sezione segue le stesse regole di
+§6: il prompt non si ritocca senza rimisurare su dettati reali.
+
 ---
 
 ## 7. Gestione errori
