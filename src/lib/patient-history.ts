@@ -45,6 +45,7 @@ export async function visitePrecedenti(args: {
 export type SchedaExtra = {
   allegati: { id: string; filename: string }[];
   visitePrecedenti: number;
+  riassuntoAi: string | null;
 };
 
 export async function schedeProgramma(
@@ -53,7 +54,17 @@ export async function schedeProgramma(
 ): Promise<Map<string, SchedaExtra>> {
   const out = new Map<string, SchedaExtra>();
   if (referralIds.length === 0) return out;
-  for (const id of referralIds) out.set(id, { allegati: [], visitePrecedenti: 0 });
+  for (const id of referralIds) out.set(id, { allegati: [], visitePrecedenti: 0, riassuntoAi: null });
+
+  // Riassunto pre-visita dell'AI locale, se già generato dal dettaglio.
+  const riassunti = await query<{ id: string; riassunto_ai: string | null }>(
+    'select id, riassunto_ai from referrals where studio_id = $1 and id = any($2)',
+    [studioId, referralIds]
+  );
+  for (const r of riassunti) {
+    const e = out.get(r.id);
+    if (e) e.riassuntoAi = r.riassunto_ai;
+  }
 
   const allegati = await query<{ referral_id: string; id: string; filename: string }>(
     `select a.referral_id, a.id, a.filename

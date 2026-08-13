@@ -6,12 +6,14 @@ import { getSession } from '@/lib/auth';
 import { STATUS, NEXT_STATUS, NEXT_ACTION, URGENZA } from '@/lib/status';
 import { eta, dataOra } from '@/lib/format';
 import { visitePrecedenti } from '@/lib/patient-history';
+import { ollamaAttivo } from '@/lib/ollama';
 import { documentiPaziente, CATEGORIE } from '@/lib/cartella';
 import { CartellaUpload } from './CartellaUpload';
 import {
   advanceStatus, uploadAttachment, updateAppointment,
   assegnaPreparazione, inviaPreparazione,
   confermaDisdetta, annullaSegnalazioneDisdetta,
+  generaRiassunto,
 } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -27,6 +29,8 @@ type Detail = {
   preparazione_id: string | null; preparazione_sent_at: string | null;
   questionario: { motivo?: string; farmaci?: string; allergie?: string; note?: string } | null;
   questionario_at: string | null;
+  riassunto_ai: string | null;
+  riassunto_ai_at: string | null;
   slot_proposto: string | null;
   slot_proposto_local: string | null;
 };
@@ -54,6 +58,7 @@ export default async function ReferralDetail({
             r.appt_response, r.reminder_sent_at::text,
             r.preparazione_id, r.preparazione_sent_at::text,
             r.questionario, r.questionario_at::text,
+            r.riassunto_ai, r.riassunto_ai_at::text,
             r.slot_proposto::text,
             to_char(r.slot_proposto at time zone 'Europe/Zurich', 'YYYY-MM-DD"T"HH24:MI') as slot_proposto_local
      from referrals r
@@ -96,6 +101,7 @@ export default async function ReferralDetail({
   );
 
   const next = NEXT_STATUS[ref.status];
+  const aiAttiva = await ollamaAttivo();
 
   return (
     <>
@@ -150,6 +156,34 @@ export default async function ReferralDetail({
               </>
             )}
           </dl>
+
+          <div className="ai-box">
+            <p className="quest-title">
+              Riassunto pre-visita — AI locale
+              {ref.riassunto_ai_at ? ` · generato ${dataOra(ref.riassunto_ai_at)}` : ''}
+            </p>
+            {ref.riassunto_ai ? (
+              <p className="ai-testo">{ref.riassunto_ai}</p>
+            ) : (
+              <p className="muted small">
+                Un paragrafo che raccoglie quesito, questionario, visite precedenti e
+                referti del paziente. Generato sul Mac dello studio: nessun dato esce.
+              </p>
+            )}
+            {aiAttiva ? (
+              <form action={generaRiassunto}>
+                <input type="hidden" name="id" value={ref.id} />
+                <button className="btn btn-small" type="submit">
+                  {ref.riassunto_ai ? 'Rigenera il riassunto' : '✨ Genera il riassunto'}
+                </button>
+              </form>
+            ) : (
+              <p className="tmeta">AI locale spenta: apri Ollama sul Mac dello studio.</p>
+            )}
+            {searchParams.err === 'ai' && (
+              <p className="error">Generazione non riuscita: controlla che Ollama sia acceso e riprova.</p>
+            )}
+          </div>
 
           {ref.questionario && (ref.questionario.motivo || ref.questionario.farmaci
             || ref.questionario.allergie || ref.questionario.note) && (

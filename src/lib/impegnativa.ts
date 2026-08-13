@@ -2,6 +2,7 @@ import 'server-only';
 import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
+import { generaOllama, ollamaAttivo } from './ollama';
 
 // Cattura AI dell'impegnativa: legge una foto o un PDF della richiesta del
 // medico di base ed estrae i campi anagrafici e clinici per PRECOMPILARE il
@@ -16,6 +17,17 @@ import { z } from 'zod';
 
 export function catturaAttiva(): boolean {
   return !!process.env.ANTHROPIC_API_KEY;
+}
+
+// Motore disponibile per la cattura: 'cloud' (API Anthropic, richiede la
+// validazione legale), 'locale' (Ollama sul Mac dello studio: il documento
+// non esce dal computer — niente contratti con terzi), o null (spenta).
+export type MotoreCattura = 'cloud' | 'locale' | null;
+
+export async function motoreCattura(): Promise<MotoreCattura> {
+  if (catturaAttiva()) return 'cloud';
+  if (await ollamaAttivo()) return 'locale';
+  return null;
 }
 
 const CampiSchema = z.object({
@@ -52,15 +64,59 @@ const PROMPT = [
   'Non aggiungere diagnosi o interpretazioni tue: riporta solo ciò che è scritto.',
 ].join(' ');
 
-// Estrae i campi da un file (immagine o PDF). Ritorna null se la chiave non è
-// configurata, il tipo non è ammesso, o il modello rifiuta / non produce output.
+// Variante locale: gemma3 (Ollama sul Mac) legge la FOTO dell'impegnativa e
+// risponde in JSON con le stesse chiavi. Solo immagini: i PDF li legge solo il
+// motore cloud. Difensiva: JSON rotto o campi strani → null, si compila a mano.
+async function estraiImpegnativaLocale(
+  buffer: Buffer,
+  media: string
+): Promise<CampiImpegnativa | null> {
+  if (media === 'application/pdf') return null;
+  const prompt = [
+    PROMPT,
+    '',
+    'Rispondi SOLO con un oggetto JSON valido con esattamente queste chiavi:',
+    '{"cognome": "", "nome": "", "data_nascita": "", "telefono": "", "quesito": "", "urgenza": "normale"}',
+    'urgenza deve essere una tra: urgente, normale, programmabile.',
+  ].join('\n');
+  const uscita = await generaOllama(prompt, {
+    json: true,
+    immagini: [buffer.toString('base64')],
+    timeoutMs: 120_000,
+  });
+  if (!uscita) return null;
+  try {
+    const grezzo = JSON.parse(uscita);
+    const candidato = {
+      cognome: String(grezzo?.cognome ?? '').slice(0, 120),
+      nome: String(grezzo?.nome ?? '').slice(0, 120),
+      data_nascita: String(grezzo?.data_nascita ?? '').slice(0, 10),
+      telefono: String(grezzo?.telefono ?? '').slice(0, 40),
+      quesito: String(grezzo?.quesito ?? '').slice(0, 1000),
+      urgenza: ['urgente', 'normale', 'programmabile'].includes(grezzo?.urgenza)
+        ? grezzo.urgenza
+        : 'normale',
+    };
+    const esito = CampiSchema.safeParse(candidato);
+    return esito.success ? esito.data : null;
+  } catch {
+    return null;
+  }
+}
+
+// Estrae i campi da un file (immagine o PDF). Sceglie il motore disponibile:
+// cloud se c'è la chiave, altrimenti l'AI locale (solo foto). Ritorna null se
+// nessun motore è attivo, il tipo non è ammesso, o la lettura fallisce.
 export async function estraiImpegnativa(
   buffer: Buffer,
   mimeType: string
 ): Promise<CampiImpegnativa | null> {
-  if (!catturaAttiva()) return null;
   const media = MIME_OK[mimeType.toLowerCase()];
   if (!media) return null;
+  if (!catturaAttiva()) {
+    if (await ollamaAttivo()) return estraiImpegnativaLocale(buffer, media);
+    return null;
+  }
 
   const client = new Anthropic();
   const data = buffer.toString('base64');

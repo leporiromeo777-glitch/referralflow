@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
 import { query } from '@/lib/db';
 import { getSession } from '@/lib/auth';
+import { ollamaAttivo } from '@/lib/ollama';
+import { ChiediAiDati } from './ChiediAiDati';
 
 export const dynamic = 'force-dynamic';
 
@@ -117,6 +119,7 @@ export default async function Statistiche() {
   const prenN = Number(prenotate?.n ?? 0);
   const conv = totN ? Math.round((prenN / totN) * 100) : 0;
   const volumeVuoto = settimane.every((s) => Number(s.n) === 0);
+  const aiAttiva = await ollamaAttivo();
 
   return (
     <>
@@ -149,6 +152,8 @@ export default async function Statistiche() {
           </div>
         </div>
       </header>
+
+      {aiAttiva && <ChiediAiDati />}
 
       <div className="card chart-card">
         <h2>Richieste ricevute — ultime 8 settimane</h2>

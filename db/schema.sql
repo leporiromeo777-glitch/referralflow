@@ -211,6 +211,9 @@ create table patients (
   data_nascita  date,
   telefono      text,
   assicurazione text,
+  -- Controllo AI nel tempo sui referti confermati (migrazione 025).
+  controllo_ai    text,
+  controllo_ai_at timestamptz,
   created_at    timestamptz not null default now()
 );
 

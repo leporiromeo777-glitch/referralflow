@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 import { query } from '@/lib/db';
 import { createPublicReferral } from './actions';
-import { catturaAttiva } from '@/lib/impegnativa';
+import { motoreCattura } from '@/lib/impegnativa';
 import { CatturaImpegnativa } from './CatturaImpegnativa';
 import { slotProposti } from '@/lib/slot';
 
@@ -67,7 +67,7 @@ export default async function InviaReferral({
           </p>
           {searchParams.error === 'nome' && <p className="error">Inserisci cognome e nome del paziente.</p>}
 
-          {catturaAttiva() && <CatturaImpegnativa token={params.token} />}
+          {(await motoreCattura()) && <CatturaImpegnativa token={params.token} />}
 
           <fieldset>
             <legend>Paziente</legend>

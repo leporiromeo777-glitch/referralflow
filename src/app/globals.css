@@ -1366,6 +1366,25 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 .btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
 .btn-danger:hover { filter: brightness(0.92); }
 
+/* Riquadri dell'AI locale (riassunto pre-visita, controllo nel tempo). */
+.ai-box {
+  margin-top: 16px; padding: 14px 16px; border-radius: 12px;
+  background: var(--primary-soft); border: 1px solid var(--line);
+}
+.ai-testo { margin: 6px 0 10px; white-space: pre-wrap; }
+.ai-box form { margin-top: 4px; }
+
+/* «Chiedi ai tuoi dati» (statistiche). */
+.chiedi { margin: 18px 0; }
+.chiedi-form { display: flex; gap: 10px; margin: 10px 0; }
+.chiedi-form input { flex: 1; margin: 0; }
+.chiedi-esempi { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.chiedi-esempio {
+  border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+  font: inherit; font-size: 12.5px; border-radius: 999px; padding: 5px 12px; cursor: pointer;
+}
+.chiedi-esempio:hover { color: var(--primary-ink); border-color: var(--primary); }
+
 /* Player del dettato: player nativo + salti rapidi. */
 .audio-dettato audio { width: 100%; }
 .audio-salti { display: flex; gap: 8px; margin-top: 10px; }

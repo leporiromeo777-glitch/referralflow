@@ -10,6 +10,92 @@ import { notifyReferrer, notifyOriginStudio } from '@/lib/notify';
 import { sendSms } from '@/lib/sms';
 import { NEXT_STATUS } from '@/lib/status';
 import { isAllowedInternalUpload, MAX_UPLOAD_SIZE } from '@/lib/upload';
+import { generaOllama } from '@/lib/ollama';
+import { visitePrecedenti } from '@/lib/patient-history';
+
+// Riassunto pre-visita scritto dall'AI locale (Ollama sul Mac dello studio):
+// un paragrafo che raccoglie ciò che ReferralFlow sa già del paziente, così il
+// medico apre la scheda e in dieci secondi ha il quadro. SOLO dai dati
+// forniti, mai inventare; il testo si rigenera quando serve.
+export async function generaRiassunto(formData: FormData) {
+  const session = await getSession();
+  if (!session || !session.studioId) redirect('/login');
+
+  const id = String(formData.get('id') ?? '');
+  const [ref] = await query<{
+    id: string; quesito: string | null; urgenza: string; status: string;
+    appuntamento_at: string | null; questionario: Record<string, string> | null;
+    cognome: string; nome: string; data_nascita: string | null;
+    medico_nome: string | null;
+  }>(
+    `select r.id, r.quesito, r.urgenza::text, r.status::text, r.appuntamento_at::text,
+            r.questionario, p.cognome, p.nome, p.data_nascita::text,
+            d.nome as medico_nome
+       from referrals r
+       join patients p on p.id = r.patient_id
+       left join referring_doctors d on d.id = r.referring_doctor_id
+      where r.id = $1 and r.studio_id = $2`,
+    [id, session.studioId]
+  );
+  if (!ref) redirect('/coda');
+
+  const visite = await visitePrecedenti({
+    studioId: session.studioId,
+    cognome: ref.cognome,
+    nome: ref.nome,
+    dataNascita: ref.data_nascita,
+    escludiReferralId: ref.id,
+  });
+
+  // Ultimi referti confermati dello stesso paziente (match per nome estratto).
+  const referti = await query<{ testo: string; quando: string }>(
+    `select coalesce(testo_finale, payload ->> 'testo_corretto') as testo,
+            to_char(created_at, 'DD.MM.YYYY') as quando
+       from referti_bozze
+      where studio_id = $1 and stato = 'confermata'
+        and (lower(payload -> 'campi_estratti' ->> 'nome_paziente') = lower($2)
+             or lower(payload -> 'campi_estratti' ->> 'nome_paziente') = lower($3))
+      order by created_at desc limit 2`,
+    [session.studioId, `${ref.cognome} ${ref.nome}`, `${ref.nome} ${ref.cognome}`]
+  );
+
+  const q = ref.questionario ?? {};
+  const dati = [
+    `Paziente: ${ref.cognome} ${ref.nome}${ref.data_nascita ? `, nato/a il ${ref.data_nascita}` : ''}.`,
+    ref.medico_nome ? `Inviato da: ${ref.medico_nome}.` : '',
+    ref.quesito ? `Motivo dell'invio: ${ref.quesito} (urgenza ${ref.urgenza}).` : '',
+    q.motivo ? `Dal questionario del paziente — disturbi: ${q.motivo}` : '',
+    q.farmaci ? `Farmaci dichiarati: ${q.farmaci}` : '',
+    q.allergie ? `Allergie dichiarate: ${q.allergie}` : '',
+    q.note ? `Note del paziente: ${q.note}` : '',
+    visite.length > 0
+      ? `Visite precedenti nello studio: ${visite.slice(0, 4).map((v) => `${v.quesito ?? 'visita'} (${v.created_at.slice(0, 10)})`).join('; ')}.`
+      : 'Nessuna visita precedente registrata nello studio.',
+    ...referti.map((r) => `Referto confermato del ${r.quando}: ${r.testo.slice(0, 1200)}`),
+  ].filter(Boolean).join('\n');
+
+  const prompt = [
+    'Sei l\'assistente clinico di uno studio cardiologico. Scrivi un breve riassunto',
+    'pre-visita (4-6 frasi, italiano asciutto) per il medico che sta per vedere il paziente.',
+    'Usa SOLO le informazioni qui sotto: non inventare MAI dati, valori o diagnosi.',
+    'Se un\'informazione non c\'è, non nominarla. Non dare consigli terapeutici.',
+    'Riporta i valori numerici esattamente come sono scritti.',
+    '',
+    'DATI:',
+    dati,
+  ].join('\n');
+
+  const riassunto = await generaOllama(prompt, { timeoutMs: 120_000 });
+  if (riassunto) {
+    await query(
+      'update referrals set riassunto_ai = $3, riassunto_ai_at = now() where id = $1 and studio_id = $2',
+      [id, session.studioId, riassunto.slice(0, 4000)]
+    );
+    revalidatePath(`/referral/${id}`);
+    redirect(`/referral/${id}`);
+  }
+  redirect(`/referral/${id}?err=ai`);
+}
 
 export async function advanceStatus(formData: FormData) {
   const session = await getSession();

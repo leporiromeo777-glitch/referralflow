@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
-import { estraiImpegnativa, catturaAttiva } from '@/lib/impegnativa';
+import { estraiImpegnativa, motoreCattura } from '@/lib/impegnativa';
 import { isAllowedPublicUpload, MAX_UPLOAD_SIZE } from '@/lib/upload';
 import { isCatturaLocked, recordCattura } from '@/lib/rate-limit';
 
@@ -11,7 +11,8 @@ export const runtime = 'nodejs';
 // del modulo (medico noto), limitata per token (l'API costa). Non salva il
 // file: lo legge in memoria, estrae, e lo scarta. La revisione umana resta.
 export async function POST(req: NextRequest, { params }: { params: { token: string } }) {
-  if (!catturaAttiva()) return new NextResponse('Funzione non attiva', { status: 404 });
+  const motore = await motoreCattura();
+  if (!motore) return new NextResponse('Funzione non attiva', { status: 404 });
 
   const token = params.token;
   const [doc] = await query<{ id: string }>(
@@ -36,6 +37,13 @@ export async function POST(req: NextRequest, { params }: { params: { token: stri
   if (file.size > MAX_UPLOAD_SIZE || !isAllowedPublicUpload(file)) {
     return NextResponse.json(
       { ok: false, errore: 'File non valido: PDF o foto (JPG/PNG), max 10 MB.' },
+      { status: 400 }
+    );
+  }
+
+  if (motore === 'locale' && (file.type || '').includes('pdf')) {
+    return NextResponse.json(
+      { ok: false, errore: 'Con l’AI locale serve una foto (JPG/PNG): scatti una foto dell’impegnativa.' },
       { status: 400 }
     );
   }

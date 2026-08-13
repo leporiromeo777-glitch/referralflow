@@ -75,7 +75,7 @@ export default async function Pazienti({
         <ul className="queue">
           {rows.map((p) => (
             <li key={p.id} className="qrow qrow-flex">
-              <Link href={p.referral_id ? `/referral/${p.referral_id}` : '#'} className="qrow-link">
+              <Link href={`/pazienti/${p.id}`} className="qrow-link">
                 <div className="qrow-main">
                   <div className="qrow-top">
                     <span className="pname">

@@ -269,6 +269,12 @@ export default async function Programma({
                         <details className="scheda">
                           <summary className="scheda-toggle">Scheda paziente</summary>
                           <div className="scheda-body">
+                            {s?.riassuntoAi && (
+                              <div className="ai-box">
+                                <p className="quest-title">Riassunto pre-visita — AI locale</p>
+                                <p className="ai-testo">{s.riassuntoAi}</p>
+                              </div>
+                            )}
                             <p><strong>Motivo:</strong> {a.quesito ?? '—'}</p>
                             <p><strong>Inviata da:</strong> {a.medico_nome ?? 'medico non indicato'}</p>
                             {s && s.visitePrecedenti > 0 && (
