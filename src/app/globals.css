@@ -1366,6 +1366,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 .btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
 .btn-danger:hover { filter: brightness(0.92); }
 
+/* Player del dettato: player nativo + salti rapidi. */
+.audio-dettato audio { width: 100%; }
+.audio-salti { display: flex; gap: 8px; margin-top: 10px; }
+
 /* Note per la segreteria (fase «segretaria» della trascrizione). */
 .seg-note { border-left: 3px solid var(--accent); }
 .seg-note-list { margin: 10px 0 0 20px; padding: 0; line-height: 1.9; }

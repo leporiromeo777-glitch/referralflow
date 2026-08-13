@@ -7,6 +7,7 @@ import { isUuid } from '@/lib/cartella';
 import { dataOra } from '@/lib/format';
 import { confermaBozza, scartaBozza, ripristinaBozza, eliminaBozza } from '../actions';
 import { agganciaRiferimenti } from '@/lib/referti-allegati';
+import { AudioDettato } from '../AudioDettato';
 
 export const dynamic = 'force-dynamic';
 
@@ -159,9 +160,11 @@ export default async function RefertoBozza({
         <div className="card">
           <h2>Dettato originale</h2>
           <p className="muted">
-            Riascolta l'audio mentre controlli il testo, soprattutto sui punti evidenziati.
+            Riascolta l'audio mentre controlli il testo, soprattutto sui punti
+            evidenziati: trascina il pallino per tornare a un punto preciso, o
+            usa i salti da 10 secondi.
           </p>
-          <audio controls preload="none" src={`/api/referti/audio/${audio.id}`} />
+          <AudioDettato src={`/api/referti/audio/${audio.id}`} />
         </div>
       )}
 
