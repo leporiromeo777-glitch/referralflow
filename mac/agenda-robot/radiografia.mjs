@@ -14,7 +14,8 @@ import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 import { chromium } from 'playwright';
-import { leggiConf, tentaLogin, radiografiaPagina } from './comune.mjs';
+import { leggiConf, modalitaSolaLettura, radiografiaPagina } from './comune.mjs';
+import { loginRiparabile } from './riparatore.mjs';
 
 const conf = leggiConf();
 const uscita = path.join(os.homedir(), 'agenda-radiografia.txt');
@@ -22,6 +23,7 @@ const sezioni = [];
 
 const browser = await chromium.launch({ headless: false });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+await modalitaSolaLettura(page);
 
 console.log('Apro MediOnline…');
 await page.goto(conf.MEDIONLINE_URL, { waitUntil: 'domcontentloaded' });
@@ -30,7 +32,7 @@ await page.waitForTimeout(1500);
 sezioni.push('########## PAGINA DI LOGIN ##########\n' + (await radiografiaPagina(page)));
 
 console.log('Provo il login automatico…');
-if (await tentaLogin(page, conf)) {
+if (await loginRiparabile(page, conf)) {
   console.log('Login automatico riuscito ✓');
 } else {
   console.log('Login automatico non riuscito: accedi TU nella finestra del browser.');

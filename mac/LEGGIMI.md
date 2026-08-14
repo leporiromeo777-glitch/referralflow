@@ -111,6 +111,13 @@ node mac/agenda-robot/radiografia.mjs   # una volta, guidato
 La radiografia produce `~/agenda-radiografia.txt` (solo struttura, niente
 pazienti) da incollare in chat: serve a costruire il lettore su misura.
 
+Il robot è in **sola lettura**: guarda l'agenda e basta — l'unico modulo che
+compila è il login, non salva né conferma mai nulla su MediOnline, e ogni
+finestra di conferma viene rifiutata in automatico. Se MediOnline cambia
+grafica, il robot prova a **ripararsi da solo** con l'AI locale del Mac (la
+proposta dell'AI viene verificata dal codice prima di essere adottata); se
+non ci riesce, si ferma con un avviso visibile nella pagina dei feed.
+
 ---
 
 ## 3. Raggiungibile da fuori (passo successivo)

@@ -116,9 +116,16 @@ stato del feed se il file è fermo >2h). Fatti: installa.sh (credenziali in
 ~/.referralflow-agenda.conf chmod 600), comune.mjs (login generico +
 radiografia con celle-pazienti redatte, etichette UI e nomi medici visibili),
 radiografia.mjs (browser visibile, l'utente naviga alla vista agenda →
-~/agenda-radiografia.txt da incollare in chat). MANCA: leggi-agenda.mjs (il
-lettore vero) — si scrive DOPO che l'utente manda la radiografia; poi launchd
-ogni 15 min + feed `locale:medionline.ics` in /programma/feed.
+~/agenda-radiografia.txt da incollare in chat), riparatore.mjs
+(auto-riparazione: selettori base → se rotti, l'AI locale gemma propone da
+struttura+screenshot, il codice VERIFICA la proposta e la salva in
+~/.referralflow-agenda-selettori.json — testato: corsa 1 ripara, corsa 2 va
+senza AI). VINCOLO UTENTE esplicito: robot in SOLA LETTURA — compila solo il
+login, clic solo di navigazione hardcoded, mai salvataggi, dialog rifiutati
+(`modalitaSolaLettura`); il riparatore AI trova elementi, non decide azioni.
+MANCA: leggi-agenda.mjs (il lettore vero) — si scrive DOPO che l'utente manda
+la radiografia; poi launchd ogni 15 min + feed `locale:medionline.ics` in
+/programma/feed.
 
 ## Automazioni attive
 Sul Mac server dello studio: launchd `ch.referralflow.automazioni` ogni 15 min

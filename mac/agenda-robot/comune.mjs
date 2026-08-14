@@ -23,30 +23,21 @@ export function leggiConf() {
   return conf;
 }
 
-// Login generico: primo campo testo visibile = utente, campo password =
-// password, poi il bottone d'invio. Se la pagina è diversa dal previsto
-// ritorna false e si procede a mano (nella radiografia) o si segnala errore
-// (nel lettore automatico).
-export async function tentaLogin(page, conf) {
-  try {
-    const utente = page.locator('input[type="text"]:visible, input:not([type]):visible').first();
-    const password = page.locator('input[type="password"]:visible').first();
-    await utente.waitFor({ timeout: 8000 });
-    await utente.fill(conf.MEDIONLINE_UTENTE);
-    await password.fill(conf.MEDIONLINE_PASSWORD);
-    const bottone = page
-      .locator('input[type="submit"]:visible, button[type="submit"]:visible, button:visible')
-      .first();
-    await Promise.all([
-      page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {}),
-      bottone.click(),
-    ]);
-    // Login riuscito se il campo password non c'è più.
-    await page.waitForTimeout(1500);
-    return (await page.locator('input[type="password"]:visible').count()) === 0;
-  } catch {
-    return false;
-  }
+// ── REGOLA FERREA: SOLA LETTURA ──────────────────────────────────────────────
+// Il robot GUARDA l'agenda e basta. Non crea, non modifica, non cancella,
+// non conferma mai nulla su MediOnline. In concreto:
+//   - l'unico modulo che compila è quello di LOGIN;
+//   - gli unici clic ammessi sono quelli di navigazione scritti nel codice
+//     (aprire l'agenda, cambiare giorno) — mai bottoni di salvataggio;
+//   - il riparatore AI (riparatore.mjs) può solo TROVARE elementi: che cosa
+//     farne lo decide il codice fisso, mai l'AI;
+//   - ogni finestra di conferma che dovesse comparire viene RIFIUTATA.
+// Questa funzione va chiamata su ogni pagina appena aperta.
+export async function modalitaSolaLettura(page) {
+  page.on('dialog', (d) => {
+    console.log(`[sola-lettura] finestra «${d.type()}» rifiutata automaticamente`);
+    d.dismiss().catch(() => {});
+  });
 }
 
 // «Radiografia» di una pagina: struttura (tag, id, classi, attributi tecnici)
