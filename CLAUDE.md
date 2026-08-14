@@ -106,7 +106,7 @@ SMS: ATTIVI via eCall REST v2 (Basic auth, `SMS_API_TOKEN=utente:password`, driv
 `src/lib/sms.ts` con normalizzazione numeri). Account eCall in testing fino al 15.08.2026
 (poi comprare punti); mittente = numero verificato (l'alfanumerico va autorizzato da eCall).
 
-## Robot agenda MediOnline (in costruzione, 2026-08-14)
+## Robot agenda MediOnline (OPERATIVO dal 2026-08-14, integrato dallo studio)
 La Cassa dei Medici (MediOnline, ASP.NET WebForms con sessione nell'URL,
 login solo utente+password) non dà all'utente un link iCal per tutti i
 medici → robot Playwright locale in `mac/agenda-robot/` che si logga, legge
@@ -132,10 +132,15 @@ scrive agenda-locale/medionline.ics — filtri AGENDA_COLORI_IGNORA (colore riqu
 alias medici = sigle ASM/M.M./T.M./…) e sveglia /api/cron/agenda con
 REMINDER_SECRET dal .env. attiva-servizio.sh = launchd
 ch.referralflow.agenda-robot ai minuti 1,16,31,46. Collaudato E2E in
-container su finta MediOnline fedele (login a tappe con popup che si
-chiude, griglia 84px/ora): orari esatti, provider abbinato per sigla.
-Prima corsa reale sul Mac ancora da fare (formato del testo eventi e
-lettura data da verificare dal vivo).
+container su finta MediOnline fedele e POI DAL VIVO sul Mac dello studio:
+97 appuntamenti veri su 10 giorni (weekend a 0), 133 riquadri scartati dai
+filtri. Catalogo colori dello studio: tenere verde #2ecc40 (visite), verde
+acceso #01ff70 (colloqui tel.), blu #0074d9 (risonanze), azzurro #7fdbff
+(ICCT emodinamica/CVE), bordeaux #85144b (interventi), rosso solo urgenze;
+ignorare #ffffff #ffdc00 #000000 #dddddd #111111 #b10dc9 + testi
+stop/no coro/non occupare/guardia/picchetto. Feed collegato dallo studio
+(«integrato a ReferralFlow» confermato dall'utente). Da verificare col
+tempo: qualità dell'estrazione del nome paziente dal testo dei riquadri.
 
 ## Automazioni attive
 Sul Mac server dello studio: launchd `ch.referralflow.automazioni` ogni 15 min
