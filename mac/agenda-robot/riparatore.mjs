@@ -166,47 +166,66 @@ export async function loginRiparabile(page, conf) {
   return (await page.locator('input[type="password"]:visible').count()) === 0;
 }
 
-// L'ingresso vero di MediOnline (percorso descritto dall'utente, 2026-08-14):
-// dalla pagina d'ingresso si preme «Collegarsi» in alto, si APRE UN'ALTRA
-// FINESTRA, e lì si fa il login col bottone «Sign-on». Questa funzione
-// percorre tutta la strada e ritorna la finestra su cui proseguire.
-// I due clic sono di navigazione (consentiti dalla regola di sola lettura)
-// e auto-riparabili come tutto il resto.
-export async function accediMediOnline(context, page, conf) {
-  const collegarsi = await trovaElemento(
-    page,
-    'entrata_collegarsi',
-    [
-      'a:has-text("Collegarsi")',
-      'input[value*="Collegarsi" i]:visible',
-      'a:has-text("Anmelden")',
-      'input[value*="Anmelden" i]:visible',
-      'a:has-text("Login")',
-      'button:has-text("Login")',
-      'a:has-text("Connexion")',
-    ],
-    'il bottone o link IN ALTO per collegarsi/accedere (Collegarsi / Anmelden / Login / Connexion)'
-  );
+// L'ingresso vero di MediOnline (verificato sugli screenshot dell'utente,
+// 2026-08-14): pagina d'ingresso → «Collegarsi» → pagina «Area cliente» con
+// i bottoni «Single sign-on» / «Accesso temporaneo» → (eventuale nuova
+// finestra) → campi utente e password. Invece di cablare una sequenza
+// rigida, si cammina a tappe: a ogni pagina, se ci sono i campi password si
+// fa il login; altrimenti si cerca il bottone per AVANZARE («Single
+// sign-on» prima di tutto — MAI «Accesso temporaneo») e si segue l'eventuale
+// finestra nuova. Ogni tappa è auto-riparabile; solo clic di navigazione.
+const SELETTORI_AVANTI = [
+  'input[value*="Single sign-on" i]:visible',
+  'a:has-text("Single sign-on")',
+  'button:has-text("Single sign-on")',
+  'input[value*="sign-on" i]:visible',
+  'a:has-text("Collegarsi")',
+  'input[value*="Collegarsi" i]:visible',
+  'a:has-text("Anmelden")',
+  'input[value*="Anmelden" i]:visible',
+  'a:has-text("Connexion")',
+  'a:has-text("Login")',
+  'button:has-text("Login")',
+];
 
+export async function accediMediOnline(context, page, conf) {
   let dove = page;
-  if (collegarsi) {
-    // Il clic può aprire una nuova finestra: la si aspetta e ci si sposta lì.
+  for (let tappa = 0; tappa < 4; tappa++) {
+    await dove.waitForTimeout(1200);
+    await dove.waitForLoadState('domcontentloaded').catch(() => {});
+
+    // Se i campi del login sono qui, si entra.
+    if ((await dove.locator('input[type="password"]:visible').count()) > 0) {
+      const ok = await loginRiparabile(dove, conf);
+      return { pagina: dove, ok };
+    }
+
+    // Altrimenti si cerca il bottone per avanzare (mai «Accesso temporaneo»).
+    const avanti = await trovaElemento(
+      dove,
+      `accesso_tappa_${tappa}`,
+      SELETTORI_AVANTI,
+      'il bottone per procedere con l\'accesso: «Single sign-on», oppure «Collegarsi» / ' +
+        '«Anmelden» / «Login». MAI il bottone «Accesso temporaneo».'
+    );
+    if (!avanti) {
+      console.log(`[accesso] tappa ${tappa + 1}: nessun bottone per avanzare trovato — mi fermo qui`);
+      return { pagina: dove, ok: false };
+    }
+
     const attesa = context.waitForEvent('page', { timeout: 8000 }).catch(() => null);
-    await collegarsi.click();
+    await avanti.click();
     const nuova = await attesa;
     if (nuova) {
       dove = nuova;
       await modalitaSolaLettura(dove);
       await dove.waitForLoadState('domcontentloaded').catch(() => {});
-      console.log('[accesso] si è aperta una nuova finestra: proseguo lì');
+      console.log(`[accesso] tappa ${tappa + 1}: si è aperta una nuova finestra, proseguo lì`);
     } else {
-      await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
+      await dove.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
+      console.log(`[accesso] tappa ${tappa + 1}: avanzato nella stessa finestra`);
     }
-  } else {
-    console.log('[accesso] bottone «Collegarsi» non trovato: forse il login è già in pagina');
   }
-
-  await dove.waitForTimeout(1000);
-  const ok = await loginRiparabile(dove, conf);
-  return { pagina: dove, ok };
+  console.log('[accesso] troppe tappe senza arrivare al login: mi fermo');
+  return { pagina: dove, ok: false };
 }
