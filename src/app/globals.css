@@ -1406,6 +1406,19 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 .ctrl-list li { font-size: 14.5px; margin-bottom: 6px; }
 mark[title] { cursor: help; }
 
+/* Programma: la timeline lunga scorre dentro il suo riquadro, la pagina
+   resta compatta. All'apertura si posiziona sul prossimo appuntamento. */
+.tl-scroll {
+  max-height: 68vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 14px 16px 14px 10px;
+  background: var(--card, #fff);
+}
+@media (max-width: 640px) { .tl-scroll { max-height: 62vh; } }
+
 /* Testo sincronizzato con l'audio del dettato: ogni parola è cliccabile
    (l'audio salta lì) e quella in riproduzione si illumina. */
 .testo-sync .parola { cursor: pointer; border-radius: 4px; padding: 0 1px; }

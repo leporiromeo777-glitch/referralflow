@@ -6,6 +6,7 @@ import { dataOra } from '@/lib/format';
 import { schedeProgramma } from '@/lib/patient-history';
 import { syncNow, assignProvider, completaAppuntamento, annullaCompletamento } from './actions';
 import { PageHero } from '../PageHero';
+import { VaiAlProssimo } from './VaiAlProssimo';
 
 export const dynamic = 'force-dynamic';
 
@@ -288,12 +289,15 @@ export default async function Programma({
       )}
 
       {assigned.length > 0 && (
+        <div className="tl-scroll">
+        <VaiAlProssimo />
         <ol className="tl">
           {assigned.map((a) => {
             const featured = a.id === featuredId;
             const s = a.referral_id ? schede.get(a.referral_id) : undefined;
             return (
-              <li key={a.id} className={`tl-item${a.completed_at ? ' done' : ''}`}>
+              <li key={a.id} id={featured ? 'prossimo' : undefined}
+                className={`tl-item${a.completed_at ? ' done' : ''}`}>
                 <span className={`tl-node${featured ? ' filled' : ''}${a.completed_at ? ' done' : ''}`} />
                 <div className={`tl-body${featured ? ' tl-card' : ''}`}>
                   <div className="tl-head">
@@ -407,6 +411,7 @@ export default async function Programma({
             );
           })}
         </ol>
+        </div>
       )}
 
       {unassigned.length > 0 && !restrictProviderId && (
