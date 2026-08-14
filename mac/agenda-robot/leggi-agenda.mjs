@@ -56,9 +56,18 @@ async function estraiGiorno(p) {
       if (ore > 23 || minuti > 59) return null;
       return ore * 60 + minuti;
     };
+    // Nel margine ogni blocco-ora ha l'ora grande (td.fs14) e i quarti
+    // «00 15 30 45» piccoli: l'ora del blocco è la cella grande, il blocco
+    // parte al minuto 00. Gli altri formati restano come ripiego.
     const righe = q('.WeekGrid_rowheader')
       .map((el) => {
-        const min = oreDa(el.textContent);
+        let min = null;
+        const cellaOra = el.querySelector('.fs14');
+        if (cellaOra) {
+          const h = parseInt(cellaOra.textContent.replace(/\D/g, ''), 10);
+          if (Number.isFinite(h) && h >= 0 && h <= 23) min = h * 60;
+        }
+        if (min === null) min = oreDa(el.textContent);
         return min === null ? null : { top: el.getBoundingClientRect().top, min };
       })
       .filter(Boolean)
@@ -82,8 +91,12 @@ async function estraiGiorno(p) {
       .filter((i) => i.checked)
       .map((i) => i.parentElement?.querySelector('label')?.textContent.trim() ?? '');
 
-    // La data mostrata (dd.mm.yyyy da qualche parte nell'intestazione).
-    const testata = (document.querySelector('#ctl04_UPHeader') ?? document.body).innerText;
+    // La data mostrata (dd.mm.yyyy): nell'intestazione della pagina o in
+    // quella larga sopra le colonne.
+    const testata =
+      ((document.querySelector('#ctl04_UPHeader')?.innerText ?? '') +
+        ' ' +
+        colonne.map((c) => c.sigla).join(' ')) || document.body.innerText;
     const md = testata.match(/(\d{2})\.(\d{2})\.(\d{4})/);
 
     const arrotonda = (m) => Math.round(m / 5) * 5;
@@ -92,7 +105,12 @@ async function estraiGiorno(p) {
         const r = el.getBoundingClientRect();
         if (r.height < 4 || r.width < 4) return null;
         const cx = (r.left + r.right) / 2;
-        let colonna = colonne.find((c) => cx >= c.left && cx <= c.right)?.sigla ?? '';
+        // Tra le intestazioni che contengono il punto si prende la PIÙ
+        // STRETTA: quella larga quanto la griglia è la riga della data.
+        let colonna =
+          colonne
+            .filter((c) => cx >= c.left && cx <= c.right)
+            .sort((a, b) => a.right - a.left - (b.right - b.left))[0]?.sigla ?? '';
         if (!colonna) {
           const td = el.closest('td');
           if (td && td.parentElement) {
