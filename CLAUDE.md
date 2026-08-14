@@ -106,7 +106,7 @@ SMS: ATTIVI via eCall REST v2 (Basic auth, `SMS_API_TOKEN=utente:password`, driv
 `src/lib/sms.ts` con normalizzazione numeri). Account eCall in testing fino al 15.08.2026
 (poi comprare punti); mittente = numero verificato (l'alfanumerico va autorizzato da eCall).
 
-## Robot agenda MediOnline (lettore OPERATIVO dal 2026-08-14; integrazione: 3 passi utente rimasti)
+## Robot agenda MediOnline (OPERATIVO e INTEGRATO dal 2026-08-14)
 La Cassa dei Medici (MediOnline, ASP.NET WebForms con sessione nell'URL,
 login solo utente+password) non dà all'utente un link iCal per tutti i
 medici → robot Playwright locale in `mac/agenda-robot/` che si logga, legge
@@ -138,11 +138,10 @@ filtri. Catalogo colori dello studio: tenere verde #2ecc40 (visite), verde
 acceso #01ff70 (colloqui tel.), blu #0074d9 (risonanze), azzurro #7fdbff
 (ICCT emodinamica/CVE), bordeaux #85144b (interventi), rosso solo urgenze;
 ignorare #ffffff #ffdc00 #000000 #dddddd #111111 #b10dc9 + testi
-stop/no coro/non occupare/guardia/picchetto. RESTANO all'utente i 3 passi
-d'integrazione: feed locale:medionline.ics (campo location) in
-/programma/feed + sigle negli alias dei medici + attiva-servizio.sh. Da
-verificare col tempo: qualità dell'estrazione del nome paziente dal testo
-dei riquadri.
+stop/no coro/non occupare/guardia/picchetto. INTEGRATO dallo studio
+(feed locale:medionline.ics campo location, sigle negli alias, servizio
+attivo). Da verificare col tempo: qualità dell'estrazione del nome
+paziente dal testo dei riquadri e aggancio alle referral.
 
 ## Automazioni attive
 Sul Mac server dello studio: launchd `ch.referralflow.automazioni` ogni 15 min
