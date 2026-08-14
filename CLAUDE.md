@@ -106,6 +106,20 @@ SMS: ATTIVI via eCall REST v2 (Basic auth, `SMS_API_TOKEN=utente:password`, driv
 `src/lib/sms.ts` con normalizzazione numeri). Account eCall in testing fino al 15.08.2026
 (poi comprare punti); mittente = numero verificato (l'alfanumerico va autorizzato da eCall).
 
+## Robot agenda MediOnline (in costruzione, 2026-08-14)
+La Cassa dei Medici (MediOnline, ASP.NET WebForms con sessione nell'URL,
+login solo utente+password) non dà all'utente un link iCal per tutti i
+medici → robot Playwright locale in `mac/agenda-robot/` che si logga, legge
+l'agenda e scrive un .ics in `agenda-locale/` (gitignored, dati pazienti);
+`syncFeed` accetta URL `locale:<nome>.ics` da quella cartella (avviso nello
+stato del feed se il file è fermo >2h). Fatti: installa.sh (credenziali in
+~/.referralflow-agenda.conf chmod 600), comune.mjs (login generico +
+radiografia con celle-pazienti redatte, etichette UI e nomi medici visibili),
+radiografia.mjs (browser visibile, l'utente naviga alla vista agenda →
+~/agenda-radiografia.txt da incollare in chat). MANCA: leggi-agenda.mjs (il
+lettore vero) — si scrive DOPO che l'utente manda la radiografia; poi launchd
+ogni 15 min + feed `locale:medionline.ics` in /programma/feed.
+
 ## Automazioni attive
 Sul Mac server dello studio: launchd `ch.referralflow.automazioni` ogni 15 min
 (`mac/automazioni.sh`: agenda a ogni giro, promemoria SMS al giro «in punto»,

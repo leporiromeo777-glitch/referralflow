@@ -28,3 +28,6 @@ Thumbs.db
 .build-stamp
 vocabolario-locali.txt
 .referti-token-anteprima
+
+# Calendario scritto dal robot dell'agenda (dati pazienti: mai nel repo)
+agenda-locale

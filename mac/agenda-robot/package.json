@@ -1,0 +1,9 @@
+{
+  "name": "referralflow-agenda-robot",
+  "private": true,
+  "description": "Robot locale che legge l'agenda MediOnline (Cassa dei Medici) e la travasa in ReferralFlow. Gira solo sul Mac dello studio.",
+  "type": "module",
+  "dependencies": {
+    "playwright": "^1.45.0"
+  }
+}

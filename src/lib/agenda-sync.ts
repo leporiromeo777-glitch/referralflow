@@ -1,4 +1,6 @@
 import 'server-only';
+import { readFile, stat } from 'fs/promises';
+import path from 'path';
 import { query } from './db';
 import { parseICal, type ICalEvent } from './ical';
 
@@ -98,24 +100,49 @@ export async function syncFeed(feedId: string): Promise<SyncResult> {
   );
   if (!feed) return { ok: false, total: 0, mapped: 0, unassigned: 0, matchedReferral: 0, error: 'Feed non trovato' };
 
-  const url = normalizeUrl(feed.url);
-  if (!url) {
-    await query('update agenda_feeds set last_status = $2 where id = $1', [feedId, 'URL non valido']);
-    return { ok: false, total: 0, mapped: 0, unassigned: 0, matchedReferral: 0, error: 'URL non valido' };
-  }
-
   let text: string;
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
-    const res = await fetch(url, { signal: controller.signal, cache: 'no-store' });
-    clearTimeout(timer);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    text = await res.text();
-  } catch (e: any) {
-    const msg = e?.name === 'AbortError' ? 'Timeout' : (e?.message || 'Errore di rete');
-    await query('update agenda_feeds set last_status = $2 where id = $1', [feedId, `Errore: ${msg}`]);
-    return { ok: false, total: 0, mapped: 0, unassigned: 0, matchedReferral: 0, error: msg };
+  let avviso = '';
+
+  // «locale:nome.ics» = calendario scritto sul Mac dal robot dell'agenda
+  // (mac/agenda-robot) nella cartella agenda-locale/ del progetto: stessa
+  // catena dei feed remoti, la sorgente è il Mac stesso. Solo nomi di file
+  // semplici, mai percorsi.
+  if (feed.url.trim().startsWith('locale:')) {
+    const nome = feed.url.trim().slice('locale:'.length);
+    if (!/^[\w.-]+\.ics$/.test(nome) || nome.includes('..')) {
+      await query('update agenda_feeds set last_status = $2 where id = $1', [feedId, 'URL non valido']);
+      return { ok: false, total: 0, mapped: 0, unassigned: 0, matchedReferral: 0, error: 'URL non valido' };
+    }
+    const percorso = path.join(process.cwd(), 'agenda-locale', nome);
+    try {
+      text = await readFile(percorso, 'utf-8');
+      // Se il robot è fermo il file invecchia: si importa comunque, ma con
+      // un avviso ben visibile nello stato del feed.
+      const info = await stat(percorso);
+      const oreFa = (Date.now() - info.mtimeMs) / 3_600_000;
+      if (oreFa > 2) avviso = ` · ⚠ file fermo da ${Math.round(oreFa)} ore: robot agenda da controllare`;
+    } catch {
+      await query('update agenda_feeds set last_status = $2 where id = $1', [feedId, 'Errore: file locale assente (robot agenda fermo?)']);
+      return { ok: false, total: 0, mapped: 0, unassigned: 0, matchedReferral: 0, error: 'File locale assente' };
+    }
+  } else {
+    const url = normalizeUrl(feed.url);
+    if (!url) {
+      await query('update agenda_feeds set last_status = $2 where id = $1', [feedId, 'URL non valido']);
+      return { ok: false, total: 0, mapped: 0, unassigned: 0, matchedReferral: 0, error: 'URL non valido' };
+    }
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15000);
+      const res = await fetch(url, { signal: controller.signal, cache: 'no-store' });
+      clearTimeout(timer);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      text = await res.text();
+    } catch (e: any) {
+      const msg = e?.name === 'AbortError' ? 'Timeout' : (e?.message || 'Errore di rete');
+      await query('update agenda_feeds set last_status = $2 where id = $1', [feedId, `Errore: ${msg}`]);
+      return { ok: false, total: 0, mapped: 0, unassigned: 0, matchedReferral: 0, error: msg };
+    }
   }
 
   const events = parseICal(text).filter((e) => e.status !== 'CANCELLED');
@@ -187,7 +214,7 @@ export async function syncFeed(feedId: string): Promise<SyncResult> {
   const unassigned = total - mapped;
   await query(
     'update agenda_feeds set last_synced_at = now(), last_status = $2 where id = $1',
-    [feedId, `OK · ${total} appuntamenti`]
+    [feedId, `OK · ${total} appuntamenti${avviso}`]
   );
 
   return { ok: true, total, mapped, unassigned, matchedReferral };

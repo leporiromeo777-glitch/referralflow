@@ -97,6 +97,20 @@ Da quel momento:
 L'app resta visibile **solo dentro la rete dello studio**: da fuori nessuno
 la raggiunge (per quello c'è il livello 3, sotto).
 
+### Agenda Cassa dei Medici (MediOnline)
+
+Se lo studio non ha un link iCal, c'è il **robot dell'agenda**
+(`mac/agenda-robot/`): legge MediOnline con le credenziali dello studio
+(salvate solo sul Mac) e travasa gli appuntamenti nel Programma. Prima volta:
+
+```bash
+bash mac/agenda-robot/installa.sh
+node mac/agenda-robot/radiografia.mjs   # una volta, guidato
+```
+
+La radiografia produce `~/agenda-radiografia.txt` (solo struttura, niente
+pazienti) da incollare in chat: serve a costruire il lettore su misura.
+
 ---
 
 ## 3. Raggiungibile da fuori (passo successivo)
