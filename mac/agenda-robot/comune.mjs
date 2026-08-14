@@ -5,16 +5,21 @@ import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-// Browser del robot: Playwright installato da installa.sh. AGENDA_BROWSER
-// (percorso di un Chromium) serve solo ai collaudi fuori dal Mac.
-export async function lanciaBrowser(headless) {
+// Browser del robot: Playwright installato da installa.sh. Il portale di
+// login tratta male i browser «senza finestra» (verificato dal vivo:
+// invisibile → pagina d'ingresso monca, visibile → tutto ok), quindi il
+// robot usa SEMPRE una finestra vera — di norma parcheggiata fuori dallo
+// schermo, così non disturba. AGENDA_BROWSER e AGENDA_HEADLESS servono
+// solo ai collaudi fuori dal Mac.
+export async function lanciaBrowser({ fuoriSchermo = false } = {}) {
   let chromium;
   try {
     ({ chromium } = await import('playwright'));
   } catch {
     ({ chromium } = await import('playwright-core'));
   }
-  const opzioni = { headless };
+  const opzioni = { headless: Boolean(process.env.AGENDA_HEADLESS) };
+  if (fuoriSchermo && !opzioni.headless) opzioni.args = ['--window-position=-3000,-3000'];
   if (process.env.AGENDA_BROWSER) opzioni.executablePath = process.env.AGENDA_BROWSER;
   return chromium.launch(opzioni);
 }

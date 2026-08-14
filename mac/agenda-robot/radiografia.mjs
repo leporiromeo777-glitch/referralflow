@@ -20,7 +20,7 @@ const conf = leggiConf();
 const uscita = path.join(os.homedir(), 'agenda-radiografia.txt');
 const sezioni = [];
 
-const browser = await lanciaBrowser(false);
+const browser = await lanciaBrowser();
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 const page = await context.newPage();
 await modalitaSolaLettura(page);

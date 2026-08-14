@@ -113,59 +113,88 @@ function icsTesto(s) {
   return s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
 }
 
-// Con --visibile si apre il browser vero: utile per capire se un blocco
-// dipende dalla modalità invisibile.
+// Con --visibile la finestra del browser resta sullo schermo (utile per
+// guardare cosa fa); di norma è parcheggiata fuori, ma esiste sempre: il
+// portale di login non gradisce i browser senza finestra.
 const visibile = process.argv.includes('--visibile');
-const browser = await lanciaBrowser(!visibile);
+
+// Diagnosi: struttura (senza dati di pazienti) delle finestre aperte, da
+// incollare in chat quando qualcosa si ferma.
+async function scriviDiagnosi(context, motivo) {
+  try {
+    const { radiografiaPagina } = await import('./comune.mjs');
+    const pezzi = [];
+    let n = 0;
+    for (const pg of context.pages()) {
+      if (pg.isClosed()) continue;
+      n++;
+      pezzi.push(
+        `##### DIAGNOSI FINESTRA ${n} — ${pg.url().replace(/\(S\([^)]*\)\)/g, '(S(...))')}\n` +
+          (await radiografiaPagina(pg))
+      );
+    }
+    const percorso = path.join(os.homedir(), 'agenda-robot-diagnosi.txt');
+    writeFileSync(percorso, pezzi.join('\n\n') + '\n', 'utf-8');
+    log(`${motivo}: diagnosi scritta in ${percorso} (solo struttura, da incollare in chat)`);
+  } catch {
+    log(`${motivo} (e diagnosi non scrivibile)`);
+  }
+}
+
+const browser = await lanciaBrowser({ fuoriSchermo: !visibile });
 let esito = 1;
 try {
-  const context = await browser.newContext({
-    viewport: { width: 1600, height: 1200 },
-    // In modalità invisibile il browser si presenterebbe come
-    // «HeadlessChrome»: certi portali gli mostrano pagine diverse.
-    userAgent:
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-  });
+  const context = await browser.newContext({ viewport: { width: 1600, height: 1200 } });
   const page = await context.newPage();
   await modalitaSolaLettura(page);
   await page.goto(conf.MEDIONLINE_URL, { waitUntil: 'domcontentloaded' });
 
-  const { pagina: p, ok } = await accediMediOnline(context, page, conf);
+  let { pagina: p, ok } = await accediMediOnline(context, page, conf);
   if (!ok) {
-    // Diagnosi automatica: la struttura (senza dati di pazienti) delle
-    // finestre aperte, da mandare in chat per capire dove si è fermato.
-    try {
-      const { radiografiaPagina } = await import('./comune.mjs');
-      const pezzi = [];
-      let n = 0;
-      for (const pg of context.pages()) {
-        if (pg.isClosed()) continue;
-        n++;
-        pezzi.push(`##### DIAGNOSI FINESTRA ${n} — ${pg.url().replace(/\(S\([^)]*\)\)/g, '(S(...))')}\n` + (await radiografiaPagina(pg)));
-      }
-      const percorsoDiag = path.join(os.homedir(), 'agenda-robot-diagnosi.txt');
-      writeFileSync(percorsoDiag, pezzi.join('\n\n') + '\n', 'utf-8');
-      log(`login non riuscito: diagnosi scritta in ${percorsoDiag} (solo struttura, da incollare in chat)`);
-    } catch {
-      log('login non riuscito (e diagnosi non scrivibile)');
-    }
+    await scriviDiagnosi(context, 'login non riuscito');
     process.exit(1);
   }
   log('login ok');
 
-  // Menu: Agenda → Appuntamenti. La voce c'è nel DOM anche a menu chiuso:
+  // Menu: Agenda → Appuntamenti. Dopo il login il portale rimescola le
+  // finestre: la voce si cerca in TUTTE quelle aperte, con pazienza (le
+  // pagine arrivano con calma). La voce c'è nel DOM anche a menu chiuso:
   // si usa il click via JavaScript.
-  const voce = await trovaElemento(
-    p,
-    'menu_appuntamenti',
-    ['li#b2 a', 'a[onclick*="AGND_Affiche"]'],
-    'la voce di menu «Appuntamenti» dentro la sezione «Agenda»',
-    async (loc) => (await loc.count()) > 0
-  );
+  const SELETTORI_VOCE = ['li#b2 a', 'a[onclick*="AGND_Affiche"]'];
+  let voce = null;
+  for (let giro = 0; giro < 15 && !voce; giro++) {
+    if (giro > 0) await page.waitForTimeout(2500);
+    for (const pg of context.pages()) {
+      if (pg.isClosed()) continue;
+      for (const sel of SELETTORI_VOCE) {
+        try {
+          if ((await pg.locator(sel).count()) > 0) {
+            p = pg;
+            voce = pg.locator(sel).first();
+            break;
+          }
+        } catch {
+          /* finestra chiusa nel frattempo */
+        }
+      }
+      if (voce) break;
+    }
+  }
   if (!voce) {
-    log('voce di menu Appuntamenti non trovata: mi fermo');
+    // Ultima carta: la riparazione AI sulla finestra del dopo-login.
+    voce = await trovaElemento(
+      p,
+      'menu_appuntamenti',
+      SELETTORI_VOCE,
+      'la voce di menu «Appuntamenti» dentro la sezione «Agenda»',
+      async (loc) => (await loc.count()) > 0
+    );
+  }
+  if (!voce) {
+    await scriviDiagnosi(context, 'voce di menu Appuntamenti non trovata');
     process.exit(1);
   }
+  await modalitaSolaLettura(p);
   await voce.evaluate((el) => el.click());
   await p.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {});
   await p.waitForSelector('.WeekGrid_main', { timeout: 30_000 });
