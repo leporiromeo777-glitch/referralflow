@@ -26,6 +26,15 @@ import { accediMediOnline, trovaElemento } from './riparatore.mjs';
 
 const conf = leggiConf();
 const GIORNI = Math.min(30, Math.max(1, Number(conf.AGENDA_GIORNI || 10)));
+// Colori dei riquadri da NON considerare appuntamenti (blocchi, pause,
+// assenze…): in ~/.referralflow-agenda.conf, es.
+//   AGENDA_COLORI_IGNORA=#ffdc00 #01ff70
+const COLORI_IGNORA = new Set(
+  (conf.AGENDA_COLORI_IGNORA ?? '')
+    .toLowerCase()
+    .split(/[\s,;]+/)
+    .filter((c) => /^#[0-9a-f]{6}$/.test(c))
+);
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DEST_DIR = path.join(REPO, 'agenda-locale');
 const DEST = path.join(DEST_DIR, 'medionline.ics');
@@ -120,10 +129,19 @@ async function estraiGiorno(p) {
         }
         const inizio = arrotonda(primo.min + (r.top - primo.top) / pxAlMinuto);
         const durata = Math.max(5, arrotonda(r.height / pxAlMinuto));
+        // Il colore del riquadro distingue i tipi (visite, blocchi, pause…):
+        // serve per scartare quelli che non sono appuntamenti veri.
+        let colore = '';
+        const inner = el.querySelector('.WeekGrid_event_inner') ?? el;
+        const mc = getComputedStyle(inner).backgroundColor.match(/(\d+),\s*(\d+),\s*(\d+)/);
+        if (mc) {
+          colore = '#' + [mc[1], mc[2], mc[3]].map((n) => (+n).toString(16).padStart(2, '0')).join('');
+        }
         return {
           inizio,
           durata,
           colonna,
+          colore,
           testo: el.textContent.trim().replace(/\s+/g, ' ').slice(0, 200),
         };
       })
@@ -252,6 +270,8 @@ try {
 
   // Giorno per giorno: oggi + i prossimi.
   const perGiorno = [];
+  const censimentoColori = new Map();
+  let scartatiPerColore = 0;
   let dataFallback = new Date();
   for (let g = 0; g < GIORNI; g++) {
     await p.waitForSelector('.WeekGrid_main', { timeout: 30_000 });
@@ -263,8 +283,19 @@ try {
     } else {
       const dataISO = giorno.data ?? dataFallback.toISOString().slice(0, 10);
       if (giorno.data) dataFallback = new Date(giorno.data + 'T12:00:00');
-      perGiorno.push({ data: dataISO, appuntamenti: giorno.appuntamenti });
-      log(`giorno ${g + 1}: ${dataISO} → ${giorno.appuntamenti.length} appuntamenti`);
+      for (const a of giorno.appuntamenti) {
+        censimentoColori.set(a.colore, (censimentoColori.get(a.colore) ?? 0) + 1);
+      }
+      const tenuti = giorno.appuntamenti.filter((a) => {
+        if (COLORI_IGNORA.has(a.colore)) {
+          scartatiPerColore++;
+          return false;
+        }
+        return true;
+      });
+      perGiorno.push({ data: dataISO, appuntamenti: tenuti });
+      log(`giorno ${g + 1}: ${dataISO} → ${tenuti.length} appuntamenti` +
+        (giorno.appuntamenti.length !== tenuti.length ? ` (+${giorno.appuntamenti.length - tenuti.length} scartati per colore)` : ''));
     }
     if (g < GIORNI - 1) {
       const avanti = await trovaElemento(
@@ -313,7 +344,15 @@ try {
   mkdirSync(DEST_DIR, { recursive: true });
   writeFileSync(DEST + '.parziale', righe.join('\r\n') + '\r\n', 'utf-8');
   renameSync(DEST + '.parziale', DEST);
-  log(`scritto medionline.ics: ${totale} appuntamenti su ${perGiorno.length} giorni`);
+  log(`scritto medionline.ics: ${totale} appuntamenti su ${perGiorno.length} giorni` +
+    (scartatiPerColore ? ` (${scartatiPerColore} scartati per colore)` : ''));
+  // Censimento dei colori visti (per decidere quali ignorare): solo colori
+  // e conteggi, nessun contenuto.
+  const riepilogo = [...censimentoColori.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([c, n]) => `${c || 'senza-colore'}×${n}`)
+    .join('  ');
+  if (riepilogo) log(`colori visti: ${riepilogo}`);
 
   // Sveglia subito la sincronizzazione dell'app (se il server è acceso).
   try {
