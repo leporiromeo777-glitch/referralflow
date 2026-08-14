@@ -1409,7 +1409,7 @@ mark[title] { cursor: help; }
 /* Programma: la timeline lunga scorre dentro il suo riquadro, la pagina
    resta compatta. All'apertura si posiziona sul prossimo appuntamento. */
 .tl-scroll {
-  max-height: 68vh;
+  max-height: 44vh;
   overflow-y: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--line);
@@ -1417,7 +1417,7 @@ mark[title] { cursor: help; }
   padding: 14px 16px 14px 10px;
   background: var(--card, #fff);
 }
-@media (max-width: 640px) { .tl-scroll { max-height: 62vh; } }
+@media (max-width: 640px) { .tl-scroll { max-height: 48vh; } }
 
 /* Testo sincronizzato con l'audio del dettato: ogni parola è cliccabile
    (l'audio salta lì) e quella in riproduzione si illumina. */
