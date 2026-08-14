@@ -138,9 +138,11 @@ filtri. Catalogo colori dello studio: tenere verde #2ecc40 (visite), verde
 acceso #01ff70 (colloqui tel.), blu #0074d9 (risonanze), azzurro #7fdbff
 (ICCT emodinamica/CVE), bordeaux #85144b (interventi), rosso solo urgenze;
 ignorare #ffffff #ffdc00 #000000 #dddddd #111111 #b10dc9 + testi
-stop/no coro/non occupare/guardia/picchetto. Feed collegato dallo studio
-(«integrato a ReferralFlow» confermato dall'utente). Da verificare col
-tempo: qualità dell'estrazione del nome paziente dal testo dei riquadri.
+stop/no coro/non occupare/guardia/picchetto. RESTANO all'utente i 3 passi
+d'integrazione: feed locale:medionline.ics (campo location) in
+/programma/feed + sigle negli alias dei medici + attiva-servizio.sh. Da
+verificare col tempo: qualità dell'estrazione del nome paziente dal testo
+dei riquadri.
 
 ## Automazioni attive
 Sul Mac server dello studio: launchd `ch.referralflow.automazioni` ogni 15 min
