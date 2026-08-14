@@ -35,6 +35,15 @@ const COLORI_IGNORA = new Set(
     .split(/[\s,;]+/)
     .filter((c) => /^#[0-9a-f]{6}$/.test(c))
 );
+// Alcuni colori sono «misti» (il rosso è sia «Visita urgenza» sia «Stop» /
+// «non occupare»): i riquadri il cui testo contiene una di queste parole
+// vengono scartati qualunque sia il colore. In conf, separate da virgola:
+//   AGENDA_TESTI_IGNORA=stop, no coro, non occupare
+const TESTI_IGNORA = (conf.AGENDA_TESTI_IGNORA ?? '')
+  .toLowerCase()
+  .split(',')
+  .map((t) => t.trim())
+  .filter((t) => t.length >= 3);
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DEST_DIR = path.join(REPO, 'agenda-locale');
 const DEST = path.join(DEST_DIR, 'medionline.ics');
@@ -288,6 +297,11 @@ try {
       }
       const tenuti = giorno.appuntamenti.filter((a) => {
         if (COLORI_IGNORA.has(a.colore)) {
+          scartatiPerColore++;
+          return false;
+        }
+        const t = a.testo.toLowerCase();
+        if (TESTI_IGNORA.some((parola) => t.includes(parola))) {
           scartatiPerColore++;
           return false;
         }

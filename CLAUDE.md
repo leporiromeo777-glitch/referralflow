@@ -128,7 +128,7 @@ login → menu Agenda→Appuntamenti (li#b2) → vista Multi + oggi → per ogni
 giorno (AGENDA_GIORNI, default 10) legge la griglia DayPilot con geometria
 a runtime (rowheader HH:MM → scala px/minuto, colheader → sigla agenda,
 fallback indice td → sigle spuntate), data da dd.mm.yyyy nell'UPHeader →
-scrive agenda-locale/medionline.ics (LOCATION=sigla, match_field=location,
+scrive agenda-locale/medionline.ics — filtri AGENDA_COLORI_IGNORA (colore riquadro, dal catalogo tipi dello studio) e AGENDA_TESTI_IGNORA (parole per i colori misti, es. rosso=urgenze MA anche Stop) — (LOCATION=sigla, match_field=location,
 alias medici = sigle ASM/M.M./T.M./…) e sveglia /api/cron/agenda con
 REMINDER_SECRET dal .env. attiva-servizio.sh = launchd
 ch.referralflow.agenda-robot ai minuti 1,16,31,46. Collaudato E2E in
