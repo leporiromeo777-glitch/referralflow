@@ -10,7 +10,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { radiografiaPagina } from './comune.mjs';
+import { modalitaSolaLettura, radiografiaPagina } from './comune.mjs';
 
 const PERCORSO_SELETTORI = path.join(os.homedir(), '.referralflow-agenda-selettori.json');
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
@@ -146,8 +146,15 @@ export async function loginRiparabile(page, conf) {
   const invio = await trovaElemento(
     page,
     'login_invio',
-    ['input[type="submit"]:visible', 'button[type="submit"]:visible', 'button:visible'],
-    'il bottone che INVIA il modulo di accesso (Anmelden / Login / Accedi / Entra)'
+    [
+      'input[value*="Sign" i]:visible',
+      'a:has-text("Sign-on")',
+      'button:has-text("Sign")',
+      'input[type="submit"]:visible',
+      'button[type="submit"]:visible',
+      'button:visible',
+    ],
+    'il bottone che INVIA il modulo di accesso (Sign-on / Anmelden / Login / Accedi)'
   );
   if (!invio) return false;
   await Promise.all([
@@ -157,4 +164,49 @@ export async function loginRiparabile(page, conf) {
   await page.waitForTimeout(1500);
   // Login riuscito se il campo password non c'è più.
   return (await page.locator('input[type="password"]:visible').count()) === 0;
+}
+
+// L'ingresso vero di MediOnline (percorso descritto dall'utente, 2026-08-14):
+// dalla pagina d'ingresso si preme «Collegarsi» in alto, si APRE UN'ALTRA
+// FINESTRA, e lì si fa il login col bottone «Sign-on». Questa funzione
+// percorre tutta la strada e ritorna la finestra su cui proseguire.
+// I due clic sono di navigazione (consentiti dalla regola di sola lettura)
+// e auto-riparabili come tutto il resto.
+export async function accediMediOnline(context, page, conf) {
+  const collegarsi = await trovaElemento(
+    page,
+    'entrata_collegarsi',
+    [
+      'a:has-text("Collegarsi")',
+      'input[value*="Collegarsi" i]:visible',
+      'a:has-text("Anmelden")',
+      'input[value*="Anmelden" i]:visible',
+      'a:has-text("Login")',
+      'button:has-text("Login")',
+      'a:has-text("Connexion")',
+    ],
+    'il bottone o link IN ALTO per collegarsi/accedere (Collegarsi / Anmelden / Login / Connexion)'
+  );
+
+  let dove = page;
+  if (collegarsi) {
+    // Il clic può aprire una nuova finestra: la si aspetta e ci si sposta lì.
+    const attesa = context.waitForEvent('page', { timeout: 8000 }).catch(() => null);
+    await collegarsi.click();
+    const nuova = await attesa;
+    if (nuova) {
+      dove = nuova;
+      await modalitaSolaLettura(dove);
+      await dove.waitForLoadState('domcontentloaded').catch(() => {});
+      console.log('[accesso] si è aperta una nuova finestra: proseguo lì');
+    } else {
+      await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
+    }
+  } else {
+    console.log('[accesso] bottone «Collegarsi» non trovato: forse il login è già in pagina');
+  }
+
+  await dove.waitForTimeout(1000);
+  const ok = await loginRiparabile(dove, conf);
+  return { pagina: dove, ok };
 }
