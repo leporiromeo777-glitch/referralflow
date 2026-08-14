@@ -52,32 +52,40 @@ try {
   );
 }
 
+// Più scatti nella stessa corsa: porti il browser su una schermata, premi
+// Invio, la fotografo; navighi altrove, premi ancora Invio… scrivi «fine»
+// per chiudere. Ogni scatto fotografa tutte le finestre ancora aperte.
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-await new Promise((fine) => {
-  rl.question(
-    '\nQuando nel browser vedi l\'AGENDA con tutti i medici della giornata,\n' +
-      'torna qui e premi Invio… ',
-    fine
-  );
-});
-rl.close();
+const chiedi = (testo) => new Promise((fine) => rl.question(testo, fine));
 
-// Alla pressione di Invio si fotografano TUTTE le finestre ancora aperte:
-// l'agenda sta dove sta, e una finestra chiusa nel frattempo non deve
-// far perdere il lavoro.
-let n = 0;
-for (const p of context.pages()) {
-  if (p.isClosed()) continue;
-  n++;
-  try {
-    sezioni.push(
-      `########## FINESTRA ${n} (stato finale) — ${p.url().replace(/\(S\([^)]*\)\)/g, '(S(...))')} ##########\n` +
-        (await radiografiaPagina(p))
-    );
-  } catch {
-    sezioni.push(`########## FINESTRA ${n}: non più leggibile ##########`);
+let scatto = 0;
+for (;;) {
+  const risposta = (
+    await chiedi(
+      scatto === 0
+        ? '\nPorta il browser sulla schermata da fotografare (es. Agenda → Appuntamenti,\n' +
+          'vista con tutti i medici) e premi Invio. Quando hai finito gli scatti, scrivi «fine». '
+        : '\nAltro scatto? Naviga e premi Invio — oppure scrivi «fine»: '
+    )
+  ).trim().toLowerCase();
+  if (risposta === 'fine') break;
+  scatto++;
+  let n = 0;
+  for (const p of context.pages()) {
+    if (p.isClosed()) continue;
+    n++;
+    try {
+      sezioni.push(
+        `########## SCATTO ${scatto} — FINESTRA ${n} — ${p.url().replace(/\(S\([^)]*\)\)/g, '(S(...))')} ##########\n` +
+          (await radiografiaPagina(p))
+      );
+    } catch {
+      sezioni.push(`########## SCATTO ${scatto} — FINESTRA ${n}: non più leggibile ##########`);
+    }
   }
+  console.log(`Scatto ${scatto} fatto ✓`);
 }
+rl.close();
 
 writeFileSync(uscita, sezioni.join('\n\n') + '\n', 'utf-8');
 await browser.close();

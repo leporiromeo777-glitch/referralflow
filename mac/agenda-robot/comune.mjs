@@ -56,17 +56,19 @@ export async function radiografiaPagina(page) {
     let albero = '';
     try {
       albero = await frame.evaluate(() => {
-        const righe = [];
-        function visita(el, prof) {
-          if (prof > 22 || righe.length > 2500) return;
+        // Le griglie dei calendari hanno migliaia di celle identiche: i
+        // sottoalberi ripetuti si comprimono in «(uguale ×N)», così la
+        // fotografia arriva fino in fondo (dove stanno gli appuntamenti).
+        function serializza(el, prof) {
+          if (prof > 24) return null;
           const tag = el.tagName ? el.tagName.toLowerCase() : '';
-          if (!tag || ['script', 'style', 'svg', 'noscript'].includes(tag)) return;
+          if (!tag || ['script', 'style', 'svg', 'noscript'].includes(tag)) return null;
           let r = '  '.repeat(prof) + tag;
           if (el.id) r += '#' + el.id;
           if (el.classList && el.classList.length) r += '.' + [...el.classList].join('.');
-          for (const a of ['name', 'type', 'role', 'colspan', 'rowspan', 'href', 'onclick', 'title']) {
+          for (const a of ['name', 'type', 'role', 'colspan', 'rowspan', 'href', 'onclick', 'title', 'style']) {
             const v = el.getAttribute && el.getAttribute(a);
-            if (v) r += `[${a}≈${v.length > 40 ? v.slice(0, 40) + '…' : v.replace(/[0-9]{2,}/g, 'NN')}]`;
+            if (v) r += `[${a}≈${v.length > 60 ? v.slice(0, 60) + '…' : v.replace(/[0-9]{4,}/g, 'NNNN')}]`;
           }
           const testo = [...el.childNodes]
             .filter((n) => n.nodeType === 3)
@@ -83,11 +85,35 @@ export async function radiografiaPagina(page) {
               r += ` {testo:${testo.length} caratteri}`;                   // celle: mai il contenuto
             }
           }
-          righe.push(r);
-          for (const f of el.children || []) visita(f, prof + 1);
+          const righe = [r];
+          let prec = null;
+          let uguali = 0;
+          const chiudi = () => {
+            if (prec === null) return;
+            righe.push(...prec);
+            if (uguali > 1) righe.push('  '.repeat(prof + 1) + `(uguale ×${uguali})`);
+          };
+          for (const f of el.children || []) {
+            const sotto = serializza(f, prof + 1);
+            if (!sotto) continue;
+            const chiave = sotto.join('\n');
+            if (prec !== null && chiave === prec.join('\n')) {
+              uguali++;
+              continue;
+            }
+            chiudi();
+            prec = sotto;
+            uguali = 1;
+          }
+          chiudi();
+          return righe;
         }
-        visita(document.body || document.documentElement, 0);
-        return righe.join('\n');
+        const tutte = serializza(document.body || document.documentElement, 0) || [];
+        if (tutte.length > 6000) {
+          tutte.length = 6000;
+          tutte.push('… (fotografia tagliata a 6000 righe)');
+        }
+        return tutte.join('\n');
       });
     } catch {
       albero = '(frame non leggibile)';
