@@ -123,9 +123,19 @@ struttura+screenshot, il codice VERIFICA la proposta e la salva in
 senza AI). VINCOLO UTENTE esplicito: robot in SOLA LETTURA — compila solo il
 login, clic solo di navigazione hardcoded, mai salvataggi, dialog rifiutati
 (`modalitaSolaLettura`); il riparatore AI trova elementi, non decide azioni.
-MANCA: leggi-agenda.mjs (il lettore vero) — si scrive DOPO che l'utente manda
-la radiografia; poi launchd ogni 15 min + feed `locale:medionline.ics` in
-/programma/feed.
+FATTO leggi-agenda.mjs (2026-08-14, costruito sulla radiografia vera):
+login → menu Agenda→Appuntamenti (li#b2) → vista Multi + oggi → per ogni
+giorno (AGENDA_GIORNI, default 10) legge la griglia DayPilot con geometria
+a runtime (rowheader HH:MM → scala px/minuto, colheader → sigla agenda,
+fallback indice td → sigle spuntate), data da dd.mm.yyyy nell'UPHeader →
+scrive agenda-locale/medionline.ics (LOCATION=sigla, match_field=location,
+alias medici = sigle ASM/M.M./T.M./…) e sveglia /api/cron/agenda con
+REMINDER_SECRET dal .env. attiva-servizio.sh = launchd
+ch.referralflow.agenda-robot ai minuti 1,16,31,46. Collaudato E2E in
+container su finta MediOnline fedele (login a tappe con popup che si
+chiude, griglia 84px/ora): orari esatti, provider abbinato per sigla.
+Prima corsa reale sul Mac ancora da fare (formato del testo eventi e
+lettura data da verificare dal vivo).
 
 ## Automazioni attive
 Sul Mac server dello studio: launchd `ch.referralflow.automazioni` ogni 15 min

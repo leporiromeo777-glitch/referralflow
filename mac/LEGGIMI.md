@@ -111,6 +111,18 @@ node mac/agenda-robot/radiografia.mjs   # una volta, guidato
 La radiografia produce `~/agenda-radiografia.txt` (solo struttura, niente
 pazienti) da incollare in chat: serve a costruire il lettore su misura.
 
+Quando il lettore è pronto (lo è dal 2026-08-14):
+
+```bash
+node mac/agenda-robot/leggi-agenda.mjs      # prova a mano, guarda l'esito
+bash mac/agenda-robot/attiva-servizio.sh    # poi ogni quarto d'ora da solo
+```
+
+In ReferralFlow → Programma → «Agenda: feed e medici»: aggiungi un feed con
+indirizzo `locale:medionline.ics` e campo del medico «location»; crea i
+medici dello studio e metti le SIGLE delle agende MediOnline (ASM, M.M.,
+T.M., …) tra i loro alias.
+
 Il robot è in **sola lettura**: guarda l'agenda e basta — l'unico modulo che
 compila è il login, non salva né conferma mai nulla su MediOnline, e ogni
 finestra di conferma viene rifiutata in automatico. Se MediOnline cambia

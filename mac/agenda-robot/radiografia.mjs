@@ -13,15 +13,14 @@ import { writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
-import { chromium } from 'playwright';
-import { leggiConf, modalitaSolaLettura, radiografiaPagina } from './comune.mjs';
+import { lanciaBrowser, leggiConf, modalitaSolaLettura, radiografiaPagina } from './comune.mjs';
 import { accediMediOnline } from './riparatore.mjs';
 
 const conf = leggiConf();
 const uscita = path.join(os.homedir(), 'agenda-radiografia.txt');
 const sezioni = [];
 
-const browser = await chromium.launch({ headless: false });
+const browser = await lanciaBrowser(false);
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 const page = await context.newPage();
 await modalitaSolaLettura(page);

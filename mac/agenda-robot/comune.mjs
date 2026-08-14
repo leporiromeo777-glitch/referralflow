@@ -5,6 +5,20 @@ import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+// Browser del robot: Playwright installato da installa.sh. AGENDA_BROWSER
+// (percorso di un Chromium) serve solo ai collaudi fuori dal Mac.
+export async function lanciaBrowser(headless) {
+  let chromium;
+  try {
+    ({ chromium } = await import('playwright'));
+  } catch {
+    ({ chromium } = await import('playwright-core'));
+  }
+  const opzioni = { headless };
+  if (process.env.AGENDA_BROWSER) opzioni.executablePath = process.env.AGENDA_BROWSER;
+  return chromium.launch(opzioni);
+}
+
 export function leggiConf() {
   const percorso = path.join(os.homedir(), '.referralflow-agenda.conf');
   const conf = {};
