@@ -39,6 +39,12 @@ IP="$(ipconfig getifaddr en0 2> /dev/null || ipconfig getifaddr en1 2> /dev/null
 URL="http://${IP:-$NOME.local}:3000"
 sed -i '' -E "s|^APP_BASE_URL=.*|APP_BASE_URL=$URL|" .env
 
+# Chiave che protegge gli endpoint delle automazioni (sync agenda, promemoria,
+# controlli): generata una volta, resta solo in questo .env.
+if ! grep -q '^REMINDER_SECRET=' .env; then
+  echo "REMINDER_SECRET=$(openssl rand -hex 24)" >> .env
+fi
+
 # ── Servizio dell'app ────────────────────────────────────────────────────────
 plist_app="$AGENTS/ch.referralflow.app.plist"
 cat > "$plist_app" << FINE
@@ -91,7 +97,37 @@ cat > "$plist_backup" << FINE
 </plist>
 FINE
 
-chmod 600 "$plist_app" "$plist_backup"
+# ── Automazioni ogni quarto d'ora (agenda, promemoria, controlli) ────────────
+plist_auto="$AGENTS/ch.referralflow.automazioni.plist"
+cat > "$plist_auto" << FINE
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>ch.referralflow.automazioni</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>$REPO/mac/automazioni.sh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Minute</key><integer>15</integer></dict>
+    <dict><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Minute</key><integer>45</integer></dict>
+  </array>
+  <key>StandardOutPath</key><string>$LOGDIR/automazioni.log</string>
+  <key>StandardErrorPath</key><string>$LOGDIR/automazioni.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+</dict>
+</plist>
+FINE
+
+chmod 600 "$plist_app" "$plist_backup" "$plist_auto"
 
 # ── Il Mac non deve mai dormire (e deve riaccendersi dopo un blackout) ───────
 echo "Imposto il Mac per non andare mai in stop (può chiedere la password del Mac)…"
@@ -111,8 +147,10 @@ fi
 
 launchctl unload "$plist_app" 2> /dev/null || true
 launchctl unload "$plist_backup" 2> /dev/null || true
+launchctl unload "$plist_auto" 2> /dev/null || true
 launchctl load -w "$plist_app"
 launchctl load -w "$plist_backup"
+launchctl load -w "$plist_auto"
 
 echo
 echo "────────────────────────────────────────────────────────────"
@@ -137,6 +175,8 @@ echo "  - Collega il Mac al router con il cavo di rete, non in Wi-Fi."
 echo
 echo "  Aggiornare l'app:   bash mac/aggiorna-server.sh"
 echo "  Backup notturno:    ~/ReferralFlow-backup (02:30, 14 giorni)"
+echo "  Automazioni:        agenda ogni 15 min, promemoria ogni ora,"
+echo "                      controlli mattutini (registro: automazioni.log)"
 echo "  Registro servizio:  $LOGDIR/server.log"
 echo "  Fermare tutto:      launchctl unload $plist_app"
 echo "────────────────────────────────────────────────────────────"

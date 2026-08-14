@@ -106,7 +106,12 @@ SMS: ATTIVI via eCall REST v2 (Basic auth, `SMS_API_TOKEN=utente:password`, driv
 `src/lib/sms.ts` con normalizzazione numeri). Account eCall in testing fino al 15.08.2026
 (poi comprare punti); mittente = numero verificato (l'alfanumerico va autorizzato da eCall).
 
-## Automazioni attive (cron sulla VM, /etc/cron.d/referralflow via cron-hit.sh)
+## Automazioni attive
+Sul Mac server dello studio: launchd `ch.referralflow.automazioni` ogni 15 min
+(`mac/automazioni.sh`: agenda a ogni giro, promemoria SMS al giro «in punto»,
+watchdog alle 07, report il 1° alle 08; chiave `REMINDER_SECRET` generata da
+installa-server.sh nel .env). Sulla vecchia VM (cron /etc/cron.d/referralflow
+via cron-hit.sh):
 - Sync agenda ogni 15 min → `/api/cron/agenda` (tutti i feed attivi, tutti gli studi)
 - Promemoria SMS ogni ora → `/api/reminders/run`
 - Watchdog referral ferme ogni mattina → `/api/cron/watchdog` (soglie in `src/lib/watchdog.ts`:
