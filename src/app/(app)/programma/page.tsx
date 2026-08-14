@@ -86,12 +86,21 @@ function meseAnno(day: string): string {
 export default async function Programma({
   searchParams,
 }: {
-  searchParams: { d?: string; err?: string };
+  searchParams: { d?: string; m?: string; err?: string };
 }) {
   const session = await getSession();
   const oggi = localDay(new Date());
   const day = /^\d{4}-\d{2}-\d{2}$/.test(searchParams.d ?? '') ? searchParams.d! : oggi;
   const sid = session?.studioId ?? '';
+
+  // Filtro per medico (?m=<id> | 'na' = da assegnare): la timeline resta una,
+  // ma un clic mostra il programma del singolo medico.
+  const medicoParam = /^[0-9a-f-]{36}$/.test(searchParams.m ?? '')
+    ? searchParams.m!
+    : searchParams.m === 'na'
+      ? 'na'
+      : null;
+  const conFiltro = (d: string) => `/programma?d=${d}${medicoParam ? `&m=${medicoParam}` : ''}`;
 
   // Vista ristretta per il ruolo medico collegato a un provider.
   let restrictProviderId: string | null = null;
@@ -160,10 +169,23 @@ export default async function Programma({
   // Timeline del giorno: appuntamenti assegnati in ordine di orario; il
   // «prossimo» (primo non ancora completato) è la card verde in evidenza.
   // I non assegnati restano in una sezione a parte, sotto.
-  const assigned = appts
+  const tutti = appts
     .filter((a) => a.provider_id)
     .sort((a, b) => (a.starts_at < b.starts_at ? -1 : a.starts_at > b.starts_at ? 1 : 0));
-  const unassigned = appts.filter((a) => !a.provider_id);
+  const tuttiUnassigned = appts.filter((a) => !a.provider_id);
+
+  // Conteggi del giorno per i chip dei medici (dalla lista già caricata).
+  const perMedico = new Map<string, { nome: string; n: number }>();
+  for (const a of tutti) {
+    if (!a.provider_id) continue;
+    const voce = perMedico.get(a.provider_id) ?? { nome: a.provider_nome ?? '—', n: 0 };
+    voce.n++;
+    perMedico.set(a.provider_id, voce);
+  }
+
+  const assigned =
+    medicoParam && medicoParam !== 'na' ? tutti.filter((a) => a.provider_id === medicoParam) : medicoParam === 'na' ? [] : tutti;
+  const unassigned = medicoParam && medicoParam !== 'na' ? [] : tuttiUnassigned;
   const featuredId = assigned.find((a) => !a.completed_at)?.id ?? null;
 
   const lastSync = feeds
@@ -183,10 +205,10 @@ export default async function Programma({
         <div className="cal-head">
           <span className="cal-month">{meseAnno(day)}</span>
           <div className="cal-nav">
-            <Link className="cal-arrow" href={`/programma?d=${shiftDay(day, -7)}`}
+            <Link className="cal-arrow" href={conFiltro(shiftDay(day, -7))}
               aria-label="Settimana precedente">←</Link>
-            {day !== oggi && <Link className="btn btn-ghost btn-small" href="/programma">Oggi</Link>}
-            <Link className="cal-arrow" href={`/programma?d=${shiftDay(day, 7)}`}
+            {day !== oggi && <Link className="btn btn-ghost btn-small" href={conFiltro(oggi)}>Oggi</Link>}
+            <Link className="cal-arrow" href={conFiltro(shiftDay(day, 7))}
               aria-label="Settimana successiva">→</Link>
           </div>
         </div>
@@ -194,7 +216,7 @@ export default async function Programma({
           {settimana.map((g) => {
             const n = perGiorno.get(g) ?? 0;
             return (
-              <Link key={g} href={`/programma?d=${g}`}
+              <Link key={g} href={conFiltro(g)}
                 className={`cal-day${g === day ? ' sel' : ''}${g === oggi ? ' today' : ''}`}
                 title={n > 0 ? `${n} appuntamenti` : 'Nessun appuntamento'}>
                 <span className="cal-num">{numGiorno(g)}</span>
@@ -216,6 +238,31 @@ export default async function Programma({
         </form>
       </div>
 
+      {/* Un programma per medico, senza perdere il colpo d'occhio: chip di
+          filtro (solo dove c'è più di un medico in agenda; il ruolo medico
+          vede già soltanto il suo). */}
+      {!restrictProviderId && (perMedico.size > 1 || (perMedico.size > 0 && tuttiUnassigned.length > 0)) && (
+        <div className="mchips">
+          <Link href={`/programma?d=${day}`} className={`mchip${!medicoParam ? ' active' : ''}`}>
+            Tutti ({tutti.length + tuttiUnassigned.length})
+          </Link>
+          {[...perMedico.entries()]
+            .sort((a, b) => a[1].nome.localeCompare(b[1].nome))
+            .map(([id, v]) => (
+              <Link key={id} href={`/programma?d=${day}&m=${id}`}
+                className={`mchip${medicoParam === id ? ' active' : ''}`}>
+                {v.nome} ({v.n})
+              </Link>
+            ))}
+          {tuttiUnassigned.length > 0 && (
+            <Link href={`/programma?d=${day}&m=na`}
+              className={`mchip${medicoParam === 'na' ? ' active' : ''}`}>
+              Da assegnare ({tuttiUnassigned.length})
+            </Link>
+          )}
+        </div>
+      )}
+
       {searchParams.err === 'followup' && (
         <p className="error">
           Per completare la visita indica se il paziente è da rivedere
@@ -234,6 +281,10 @@ export default async function Programma({
         <div className="empty">
           Nessun appuntamento per questo giorno. Prova «Sincronizza ora» per aggiornare l'agenda.
         </div>
+      )}
+
+      {appts.length > 0 && assigned.length === 0 && unassigned.length === 0 && (
+        <div className="empty">Nessun appuntamento per questo medico in questo giorno.</div>
       )}
 
       {assigned.length > 0 && (
