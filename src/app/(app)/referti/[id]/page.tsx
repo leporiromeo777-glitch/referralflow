@@ -8,6 +8,7 @@ import { dataOra } from '@/lib/format';
 import { confermaBozza, scartaBozza, ripristinaBozza, eliminaBozza } from '../actions';
 import { agganciaRiferimenti } from '@/lib/referti-allegati';
 import { AudioDettato } from '../AudioDettato';
+import { TestoDettato } from '../TestoDettato';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +26,7 @@ type Payload = {
   divergenze: Divergenza[];
   segmenti_dubbi: string[];
   allarmi_numerici: Allarme[];
+  parole?: [string, number][];
 };
 
 // Evidenzia i frammenti segnalati dentro il testo: prima occorrenza di ogni
@@ -35,7 +37,12 @@ type Payload = {
 function evidenzia(
   testo: string,
   frammenti: { text: string; tipo: 'divergenza' | 'dubbio'; spiega?: string }[]
-): { nodi: ReactNode[]; nonTrovati: string[]; marcati: number } {
+): {
+  nodi: ReactNode[];
+  nonTrovati: string[];
+  marcati: number;
+  ranges: { start: number; end: number; tipo: string; spiega?: string }[];
+} {
   const ranges: { start: number; end: number; tipo: string; spiega?: string }[] = [];
   const nonTrovati: string[] = [];
   for (const f of frammenti) {
@@ -67,7 +74,7 @@ function evidenzia(
     pos = r.end;
   });
   nodi.push(testo.slice(pos));
-  return { nodi, nonTrovati, marcati: ranges.length };
+  return { nodi, nonTrovati, marcati: ranges.length, ranges };
 }
 
 // Traduce un allarme numerico in una frase semplice per chi rivede la bozza.
@@ -147,7 +154,15 @@ export default async function RefertoBozza({
       spiega: 'Questo passaggio sembra poco chiaro: riascolta l’audio.',
     })),
   ];
-  const { nodi, marcati } = evidenzia(p.testo_corretto ?? '', frammenti);
+  const { nodi, marcati, ranges } = evidenzia(p.testo_corretto ?? '', frammenti);
+
+  // Tempi parola-per-parola dalla pipeline: se ci sono (e c'è l'audio), il
+  // testo diventa sincronizzato — parola illuminata durante l'ascolto, clic
+  // per saltare. Senza, si mostra il testo semplice di sempre.
+  const parole = (Array.isArray(p.parole) ? p.parole : []).filter(
+    (x): x is [string, number] =>
+      Array.isArray(x) && x.length === 2 && typeof x[0] === 'string' && typeof x[1] === 'number'
+  );
 
   // Aggancio dei riferimenti citati nelle note («allega la vecchia email…»):
   // candidati dalla cartella del paziente e dagli allegati delle sue referral.
@@ -279,9 +294,13 @@ export default async function RefertoBozza({
 
       <div className="card">
         <h2>Testo del referto</h2>
-        <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
-          {inBozza ? nodi : (row.testo_finale ?? p.testo_corretto)}
-        </div>
+        {inBozza && audio && parole.length > 0 ? (
+          <TestoDettato testo={p.testo_corretto ?? ''} parole={parole} ranges={ranges} />
+        ) : (
+          <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+            {inBozza ? nodi : (row.testo_finale ?? p.testo_corretto)}
+          </div>
+        )}
       </div>
 
       {inBozza ? (

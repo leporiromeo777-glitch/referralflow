@@ -1406,6 +1406,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 .ctrl-list li { font-size: 14.5px; margin-bottom: 6px; }
 mark[title] { cursor: help; }
 
+/* Testo sincronizzato con l'audio del dettato: ogni parola è cliccabile
+   (l'audio salta lì) e quella in riproduzione si illumina. */
+.testo-sync .parola { cursor: pointer; border-radius: 4px; padding: 0 1px; }
+.testo-sync .parola:hover { outline: 1px solid var(--cta); }
+.testo-sync .parola-attiva { background: var(--cta); color: #fff; }
+
 /* «Impara dalle conferme»: suggerimenti per il dizionario della trascrizione. */
 .learn-box { border-left: 3px solid var(--primary); }
 .learn-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }

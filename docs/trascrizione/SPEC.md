@@ -390,12 +390,23 @@ Il JSON finale inviato a ReferralFlow contiene:
   "allarmi_numerici": [
     { "campo": "frequenza_cardiaca", "valore": 160, "intervallo": "35-180", "stato": "limite" }
   ],
+  "parole": [ ["Ecocardiogramma", 0.42], ["transtoracico.", 1.31] ],
   "richiede_revisione": true
 }
 ```
 
 `contesto` è il frammento testuale con qualche parola attorno al punto di divergenza
 (vedi la nota in §3), non una posizione numerica.
+
+`parole` (aggiunta 2026-08): il tempo d'inizio in secondi di OGNI parola di
+`testo_corretto` (stesso split sugli spazi), per il testo sincronizzato con
+l'audio nella pagina di revisione. Nasce dal JSON completo della passata A
+(`-ojf`, stessi risultati di trascrizione: cambia solo l'output in più) e da un
+allineamento deterministico con `difflib` (`allinea_parole`): le parole cambiate
+da dizionario/correzione/segretaria ereditano un tempo interpolato dai vicini.
+Se combacia meno di metà del testo la lista resta vuota — meglio niente che
+tempi sbagliati — e la pagina mostra il testo semplice. Mai bloccante: qualsiasi
+errore in questa fase produce `parole: []` e nel log solo `fase=tempi`.
 
 `richiede_revisione` è **sempre true**. Non esiste un percorso in cui un referto
 venga considerato pronto senza passare da un umano.

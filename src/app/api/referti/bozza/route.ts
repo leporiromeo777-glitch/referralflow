@@ -63,6 +63,15 @@ export async function POST(req: NextRequest) {
     divergenze: lista(body?.divergenze),
     segmenti_dubbi: lista(body?.segmenti_dubbi),
     allarmi_numerici: lista(body?.allarmi_numerici),
+    // Tempi parola-per-parola (SPEC §8): [parola, secondi] per ogni parola di
+    // testo_corretto, per il testo sincronizzato con l'audio. Facoltativi.
+    parole: (Array.isArray(body?.parole) ? body.parole.slice(0, 8000) : [])
+      .filter(
+        (p: unknown): p is [string, number] =>
+          Array.isArray(p) && p.length === 2 && typeof p[0] === 'string' &&
+          typeof p[1] === 'number' && Number.isFinite(p[1]) && p[1] >= 0
+      )
+      .map((p: [string, number]) => [p[0].slice(0, 100), p[1]]),
     richiede_revisione: true,
   };
 

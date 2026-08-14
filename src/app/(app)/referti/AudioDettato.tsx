@@ -18,7 +18,8 @@ export function AudioDettato({ src }: { src: string }) {
 
   return (
     <div className="audio-dettato">
-      <audio ref={ref} controls preload="metadata" src={src} />
+      {/* L'id serve al testo sincronizzato (TestoDettato) per pilotare il player. */}
+      <audio ref={ref} id="audio-dettato" controls preload="metadata" src={src} />
       <div className="audio-salti">
         <button type="button" className="btn btn-small" onClick={() => salta(-10)}>
           ⏪ Indietro 10 s

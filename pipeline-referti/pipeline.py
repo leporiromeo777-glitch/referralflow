@@ -355,11 +355,14 @@ def carica_vocabolario() -> str:
     return prompt
 
 
-def trascrivi(wav: Path, uscita_txt: Path, file_id: str, fase: str, prompt: str = "") -> None:
+def trascrivi(wav: Path, uscita_txt: Path, file_id: str, fase: str, prompt: str = "",
+              con_tempi: bool = False) -> None:
     """Trascrizione con whisper.cpp, lingua italiana. Il testo esce
     direttamente su file (-otxt): stdout/stderr di whisper contengono la
     trascrizione e vengono scartati (SPEC §2.2). Il prompt di dominio
-    (facoltativo) orienta il riconoscimento verso il gergo cardiologico."""
+    (facoltativo) orienta il riconoscimento verso il gergo cardiologico.
+    Con `con_tempi` scrive anche il JSON completo (-ojf): stessi risultati,
+    in più i tempi dei singoli token per il testo sincronizzato."""
     inizio = time.monotonic()
     base = uscita_txt.with_suffix("")  # -of vuole il percorso senza estensione
     comando = [
@@ -368,6 +371,7 @@ def trascrivi(wav: Path, uscita_txt: Path, file_id: str, fase: str, prompt: str 
         "-l", "it",
         "-f", str(wav),
         "-otxt",
+        *(["-ojf"] if con_tempi else []),
         "-of", str(base),
         "-np",
         *FLAG_PASSATA[fase],
@@ -391,6 +395,82 @@ def trascrivi(wav: Path, uscita_txt: Path, file_id: str, fase: str, prompt: str 
         log.error("fase=%s file=%s esito=errore motivo=testo_vuoto", fase, file_id)
         raise RuntimeError("trascrizione vuota")
     log.info("fase=%s file=%s esito=ok durata=%.1fs", fase, file_id, durata)
+
+
+# ── Tempi parola-per-parola (SPEC §8, campo «parole») ───────────────────────
+# Dal JSON completo della passata A si ricava quando inizia ogni parola; poi
+# le parole del testo FINALE (già passato da dizionario, correzione e
+# segretaria) vengono allineate a quei tempi con un confronto deterministico
+# (difflib): le parole cambiate ereditano un tempo interpolato dai vicini.
+# Serve al testo sincronizzato della pagina di revisione: clic su una parola
+# → l'audio salta lì. Se l'allineamento non convince, meglio niente.
+
+def parole_da_json(percorso_json: Path) -> list[tuple[str, float]]:
+    """Parole con il tempo d'inizio (in secondi) dal JSON di whisper (-ojf):
+    i token si ricompongono in parole sugli spazi."""
+    dati = json.loads(percorso_json.read_text(encoding="utf-8"))
+    parole: list[tuple[str, float]] = []
+    testo = ""
+    inizio_ms = 0
+
+    def chiudi() -> None:
+        nonlocal testo
+        if testo.strip():
+            parole.append((testo.strip(), inizio_ms / 1000.0))
+        testo = ""
+
+    for seg in dati.get("transcription", []):
+        for tok in seg.get("tokens", []):
+            t = tok.get("text", "")
+            if not t or (t.startswith("[") and t.endswith("]")):
+                continue  # token speciali tipo [_BEG_]
+            if t.startswith(" "):
+                chiudi()
+            if not testo.strip():
+                inizio_ms = int(tok.get("offsets", {}).get("from") or 0)
+            testo += t
+        chiudi()  # il confine di segmento chiude sempre la parola
+    return parole
+
+
+def allinea_parole(testo: str, parole_audio: list[tuple[str, float]]) -> list[list]:
+    """[[parola, secondi], …] per ogni parola di `testo` (split su spazi).
+    Se combacia meno di metà del testo l'allineamento non è affidabile:
+    lista vuota, la pagina mostra il testo semplice."""
+    fin = testo.split()
+    if not fin or not parole_audio:
+        return []
+
+    def norma(w: str) -> str:
+        return re.sub(r"[^\w]+", "", w.lower())
+
+    a = [norma(w) for w, _ in parole_audio]
+    b = [norma(w) for w in fin]
+    tempi: list[float | None] = [None] * len(fin)
+    combaciate = 0
+    for blocco in difflib.SequenceMatcher(None, b, a, autojunk=False).get_matching_blocks():
+        for k in range(blocco.size):
+            tempi[blocco.a + k] = parole_audio[blocco.b + k][1]
+            combaciate += 1
+    if combaciate < len(fin) / 2:
+        return []
+
+    noti = [i for i, t in enumerate(tempi) if t is not None]
+    primo, ultimo = noti[0], noti[-1]
+    prec = primo
+    for i in range(len(tempi)):
+        if tempi[i] is not None:
+            prec = i
+            continue
+        if i < primo:
+            tempi[i] = tempi[primo]
+        elif i > ultimo:
+            tempi[i] = tempi[ultimo]
+        else:
+            succ = next(j for j in noti if j > i)
+            fraz = (i - prec) / (succ - prec)
+            tempi[i] = tempi[prec] + (tempi[succ] - tempi[prec]) * fraz  # type: ignore[operator]
+    return [[w, round(t, 2)] for w, t in zip(fin, tempi)]  # type: ignore[arg-type]
 
 
 # ── Confronto A/B (SPEC §3, passo 5) ────────────────────────────────────────
@@ -914,7 +994,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         log.info("fase=vocabolario file=%s termini=%d", file_id, n_vocab)
         fase = "trascrizione_a"
         _ = notifica and notifica(fase)
-        trascrivi(percorso(".wav"), percorso(".txt"), file_id, fase, vocab)
+        trascrivi(percorso(".wav"), percorso(".txt"), file_id, fase, vocab, con_tempi=True)
         fase = "trascrizione_b"
         _ = notifica and notifica(fase)
         trascrivi(percorso(".wav"), percorso(".b.txt"), file_id, fase, vocab)
@@ -996,6 +1076,15 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             json.dumps(allarmi, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
+
+        # Tempi parola-per-parola per il testo sincronizzato: facoltativi,
+        # mai bloccanti (senza, la pagina mostra il testo semplice).
+        parole: list = []
+        try:
+            parole = allinea_parole(finale, parole_da_json(percorso(".json")))
+            log.info("fase=tempi file=%s esito=ok parole=%d", file_id, len(parole))
+        except Exception as e:
+            log.info("fase=tempi file=%s esito=saltato tipo=%s", file_id, type(e).__name__)
     except subprocess.TimeoutExpired:
         log.error("fase=%s file=%s esito=errore motivo=timeout", fase, file_id)
         raise ErroreElaborazione(fase, "timeout", file_id) from None
@@ -1017,6 +1106,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         "testo_corretto": finale,
         "note_segreteria": note_segreteria,
         "campi_estratti": campi,
+        "parole": parole,
         "divergenze": divergenze,
         "segmenti_dubbi": dubbi,
         "allarmi_numerici": allarmi,
