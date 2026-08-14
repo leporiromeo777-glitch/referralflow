@@ -106,7 +106,7 @@ SMS: ATTIVI via eCall REST v2 (Basic auth, `SMS_API_TOKEN=utente:password`, driv
 `src/lib/sms.ts` con normalizzazione numeri). Account eCall in testing fino al 15.08.2026
 (poi comprare punti); mittente = numero verificato (l'alfanumerico va autorizzato da eCall).
 
-## Robot agenda MediOnline (OPERATIVO dal 2026-08-14, integrato dallo studio)
+## Robot agenda MediOnline (lettore OPERATIVO dal 2026-08-14; integrazione: 3 passi utente rimasti)
 La Cassa dei Medici (MediOnline, ASP.NET WebForms con sessione nell'URL,
 login solo utente+password) non dà all'utente un link iCal per tutti i
 medici → robot Playwright locale in `mac/agenda-robot/` che si logga, legge
