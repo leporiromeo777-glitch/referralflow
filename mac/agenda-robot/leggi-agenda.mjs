@@ -40,11 +40,26 @@ async function estraiGiorno(p) {
   return p.evaluate(() => {
     const q = (s) => [...document.querySelectorAll(s)];
 
-    // Righe orarie: etichetta «HH:MM» + posizione → mappa pixel→minuti.
+    // Righe orarie: etichetta + posizione → mappa pixel→minuti. DayPilot
+    // scrive l'ora in celle separate senza i due punti («7» grande e «00»
+    // piccolo), quindi si accettano «7:00», «7 00», «700» e anche solo «7».
+    const oreDa = (grezzo) => {
+      const t = grezzo.replace(/\s+/g, ' ').trim();
+      let m = t.match(/^(\d{1,2})[:.h ]?(\d{2})$/);
+      if (!m) {
+        const solo = t.match(/^(\d{1,2})$/);
+        if (solo) m = [null, solo[1], '00'];
+      }
+      if (!m) return null;
+      const ore = +m[1];
+      const minuti = +m[2];
+      if (ore > 23 || minuti > 59) return null;
+      return ore * 60 + minuti;
+    };
     const righe = q('.WeekGrid_rowheader')
       .map((el) => {
-        const m = el.textContent.trim().match(/(\d{1,2})[:.h](\d{2})/);
-        return m ? { top: el.getBoundingClientRect().top, min: +m[1] * 60 + +m[2] } : null;
+        const min = oreDa(el.textContent);
+        return min === null ? null : { top: el.getBoundingClientRect().top, min };
       })
       .filter(Boolean)
       .sort((a, b) => a.top - b.top);
@@ -226,6 +241,7 @@ try {
     const giorno = await estraiGiorno(p);
     if (giorno.errore) {
       log(`giorno ${g + 1}: lettura non riuscita (${giorno.errore})`);
+      if (g === 0) await scriviDiagnosi(context, 'griglia non leggibile');
     } else {
       const dataISO = giorno.data ?? dataFallback.toISOString().slice(0, 10);
       if (giorno.data) dataFallback = new Date(giorno.data + 'T12:00:00');

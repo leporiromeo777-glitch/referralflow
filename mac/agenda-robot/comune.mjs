@@ -79,7 +79,7 @@ export async function radiografiaPagina(page) {
         // sottoalberi ripetuti si comprimono in «(uguale ×N)», così la
         // fotografia arriva fino in fondo (dove stanno gli appuntamenti).
         function serializza(el, prof) {
-          if (prof > 24) return null;
+          if (prof > 40) return null;
           const tag = el.tagName ? el.tagName.toLowerCase() : '';
           if (!tag || ['script', 'style', 'svg', 'noscript'].includes(tag)) return null;
           let r = '  '.repeat(prof) + tag;
