@@ -749,7 +749,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 .oggi-seelink:hover { text-decoration: underline; }
 
 .oggi-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px; box-shadow: var(--shadow-sm); }
-.oggi-tl { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+/* Con la giornata piena (30+ appuntamenti dall'agenda) il pannello non deve
+   allungare la pagina: lista corta che scorre per conto suo. */
+.oggi-tl {
+  list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column;
+  max-height: 330px; overflow-y: auto; overscroll-behavior: contain; padding-right: 6px;
+}
 .oggi-tl-item { display: flex; gap: 12px; padding: 9px 0; border-left: 2px solid var(--line); padding-left: 12px; }
 .oggi-tl-item.now { border-left-color: var(--primary); }
 .oggi-tl-item.done { opacity: 0.5; }
@@ -1405,19 +1410,6 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 .ctrl-list { margin: 10px 0 0 20px; padding: 0; line-height: 1.8; }
 .ctrl-list li { font-size: 14.5px; margin-bottom: 6px; }
 mark[title] { cursor: help; }
-
-/* Programma: la timeline lunga scorre dentro il suo riquadro, la pagina
-   resta compatta. All'apertura si posiziona sul prossimo appuntamento. */
-.tl-scroll {
-  max-height: 44vh;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 14px 16px 14px 10px;
-  background: var(--card, #fff);
-}
-@media (max-width: 640px) { .tl-scroll { max-height: 48vh; } }
 
 /* Testo sincronizzato con l'audio del dettato: ogni parola è cliccabile
    (l'audio salta lì) e quella in riproduzione si illumina. */
