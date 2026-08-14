@@ -6,6 +6,7 @@ import { STATUS, URGENZA, NEXT_STATUS, NEXT_ACTION } from '@/lib/status';
 import { isFerma, giorniFermaMax } from '@/lib/watchdog';
 import { eta, giorniDa, dataOra } from '@/lib/format';
 import { advanceStatus } from '../referral/[id]/actions';
+import { StatStrip } from '../PageHero';
 
 export const dynamic = 'force-dynamic';
 
@@ -169,67 +170,53 @@ export default async function Dashboard({
   // Ogni slot liberato è abbinato al prossimo paziente da chiamare, in priorità.
   const suggerimenti = new Map(slots.map((s, i) => [s.id, attesa[i] ?? null]));
 
+  // Estetica minimal (come «Oggi»): intestazione leggera, schede/filtri come
+  // chip di testo, numeri in una riga sottile — niente pannelli pieni.
   const tabs = (
-    <div className="coda-tabs">
-      <Link href="/coda" className={`coda-tab${vista === 'coda' ? ' active' : ''}`}>Coda</Link>
-      <Link href="/coda?vista=disdette" className={`coda-tab${vista === 'disdette' ? ' active' : ''}`}>
-        Disdette
-        {disdetteCount > 0 && <span className="coda-tab-badge">{disdetteCount}</span>}
+    <div className="mchips">
+      <Link href="/coda" className={`mchip${vista === 'coda' ? ' active' : ''}`}>Coda</Link>
+      <Link href="/coda?vista=disdette" className={`mchip${vista === 'disdette' ? ' active' : ''}`}>
+        Disdette{disdetteCount > 0 ? ` (${disdetteCount})` : ''}
       </Link>
     </div>
   );
 
   return (
     <>
-      <div className="coda-top">
-      <div className="coda-hero">
-        {vista === 'coda' ? (
-          <>
-            <span className="coda-eyebrow">Smistamento · in tempo reale</span>
-            <h1>Referral in entrata</h1>
-            <p className="coda-lede">
-              La coda di lavoro dello studio: ogni richiesta con la sua urgenza e il
-              prossimo passo pronto da un clic. Le più urgenti restano in cima.
-            </p>
-          </>
-        ) : (
-          <>
-            <span className="coda-eyebrow">Buchi in agenda · da riempire</span>
-            <h1>Disdette e slot liberi</h1>
-            <p className="coda-lede">
-              Quando un paziente disdice, lo slot liberato compare qui con accanto
-              chi richiamare per riempirlo, in ordine di urgenza e attesa.
-            </p>
-          </>
-        )}
-      </div>
+      <header className="oggi-head">
+        <div>
+          {vista === 'coda' ? (
+            <>
+              <span className="oggi-eyebrow">Smistamento · in tempo reale</span>
+              <h1>Referral in entrata</h1>
+              <p className="oggi-lede">
+                Ogni richiesta con la sua urgenza e il prossimo passo pronto da un clic.
+                Le più urgenti restano in cima.
+              </p>
+            </>
+          ) : (
+            <>
+              <span className="oggi-eyebrow">Buchi in agenda · da riempire</span>
+              <h1>Disdette e slot liberi</h1>
+              <p className="oggi-lede">
+                Quando un paziente disdice, lo slot liberato compare qui con accanto
+                chi richiamare per riempirlo.
+              </p>
+            </>
+          )}
+        </div>
+      </header>
 
       {tabs}
 
       {vista === 'disdette' && (
-        <div className="stat-grid">
-          <div className="stat-card">
-            <span className="stat-badge"><IconCalPlus /></span>
-            <span className="stat-body">
-              <span className="stat-value">{slots.length}</span>
-              <span className="stat-label">Slot liberati</span>
-            </span>
-          </div>
-          <div className={`stat-card${daConfermare.length > 0 ? ' alert' : ''}`}>
-            <span className="stat-badge"><IconAlert /></span>
-            <span className="stat-body">
-              <span className="stat-value">{daConfermare.length}</span>
-              <span className="stat-label">Da confermare</span>
-            </span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-badge"><IconBell /></span>
-            <span className="stat-body">
-              <span className="stat-value">{attesa.length}</span>
-              <span className="stat-label">In attesa</span>
-            </span>
-          </div>
-        </div>
+        <StatStrip
+          items={[
+            { label: 'Slot liberati', value: slots.length },
+            { label: 'Da confermare', value: daConfermare.length, tone: daConfermare.length > 0 ? 'alert' : undefined },
+            { label: 'In attesa', value: attesa.length },
+          ]}
+        />
       )}
 
       {vista === 'coda' && searchParams.benvenuto && (
@@ -264,58 +251,35 @@ export default async function Dashboard({
       )}
 
       {vista === 'coda' && (<>
-      <div className="stat-grid">
-        <div className="stat-card">
-          <span className="stat-badge"><IconInbox /></span>
-          <span className="stat-body">
-            <span className="stat-value">{daGestire}</span>
-            <span className="stat-label">Da gestire</span>
-          </span>
-        </div>
-        <div className={`stat-card${urgenti > 0 ? ' alert' : ''}`}>
-          <span className="stat-badge"><IconAlert /></span>
-          <span className="stat-body">
-            <span className="stat-value">{urgenti}</span>
-            <span className="stat-label">Urgenti aperte</span>
-          </span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-badge"><IconLayers /></span>
-          <span className="stat-body">
-            <span className="stat-value">{tot?.aperte ?? 0}</span>
-            <span className="stat-label">Totale aperte</span>
-          </span>
-        </div>
-      </div>
+      <StatStrip
+        items={[
+          { label: 'Da gestire', value: daGestire },
+          { label: 'Urgenti aperte', value: urgenti, tone: urgenti > 0 ? 'alert' : undefined },
+          { label: 'Totale aperte', value: tot?.aperte ?? 0 },
+        ]}
+      />
 
       {(() => {
         const chips = [
-          { key: 'all', label: 'Tutte', href: '/coda', icon: <IconGrid /> },
-          { key: 'u:urgente', label: 'Urgenti', href: '/coda?urgenza=urgente', icon: <IconAlert /> },
-          { key: 's:ricevuta', label: 'Nuove', href: '/coda?stato=ricevuta', icon: <IconBell /> },
-          { key: 's:da_prenotare', label: 'Da prenotare', href: '/coda?stato=da_prenotare', icon: <IconCalPlus /> },
-          { key: 's:prenotata', label: 'Prenotate', href: '/coda?stato=prenotata', icon: <IconCalCheck /> },
+          { key: 'all', label: 'Tutte', href: '/coda' },
+          { key: 'u:urgente', label: 'Urgenti', href: '/coda?urgenza=urgente' },
+          { key: 's:ricevuta', label: 'Nuove', href: '/coda?stato=ricevuta' },
+          { key: 's:da_prenotare', label: 'Da prenotare', href: '/coda?stato=da_prenotare' },
+          { key: 's:prenotata', label: 'Prenotate', href: '/coda?stato=prenotata' },
         ];
         const activeKey = urgenza ? `u:${urgenza}` : stato ? `s:${stato}` : 'all';
         return (
-          <section className="qf-section">
-            <div className="qf-head">
-              <h2>Filtro rapido</h2>
-            </div>
-            <div className="qf-row">
-              {chips.map((c) => (
-                <Link key={c.key} href={c.href}
-                  className={`qf-btn${c.key === activeKey ? ' active' : ''}`}>
-                  <span className="qf-ico">{c.icon}</span>
-                  <span className="qf-label">{c.label}</span>
-                </Link>
-              ))}
-            </div>
-          </section>
+          <div className="mchips">
+            {chips.map((c) => (
+              <Link key={c.key} href={c.href}
+                className={`mchip${c.key === activeKey ? ' active' : ''}`}>
+                {c.label}
+              </Link>
+            ))}
+          </div>
         );
       })()}
       </>)}
-      </div>
 
       {vista === 'coda' && (
       <>

@@ -4,6 +4,7 @@ import { query } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { eta } from '@/lib/format';
 import { segnaGestito, creaReferralControllo } from './actions';
+import { StatStrip } from '../PageHero';
 
 export const dynamic = 'force-dynamic';
 
@@ -157,48 +158,29 @@ export default async function Richiami() {
 
   return (
     <>
-      <div className="coda-top">
-        <div className="coda-hero">
-          <span className="coda-eyebrow">Controlli da rivedere</span>
+      {/* Estetica minimal (come «Oggi»): intestazione leggera e numeri in
+          una riga sottile — niente pannelli pieni né caselle. */}
+      <header className="oggi-head">
+        <div>
+          <span className="oggi-eyebrow">Controlli da rivedere</span>
           <h1>Follow-up</h1>
-          <p className="coda-lede">
+          <p className="oggi-lede">
             Pazienti da rivedere, in base alla decisione presa alla chiusura della referral.
             «Crea referral di controllo» apre subito la nuova visita; «Segna gestito» se il
             paziente è stato contattato in altro modo.
           </p>
         </div>
-        <div className="rc-stats">
-          <div className="rc-stat">
-            <span className="v">{inRitardo.length}</span>
-            <span className="k">Da richiamare ora</span>
-          </div>
-          <div className="rc-stat">
-            <span className="v">{prossimi.length}</span>
-            <span className="k">Programmati</span>
-          </div>
-          <div className="rc-stat">
-            <span className="v">{rows.length}</span>
-            <span className="k">Totale in agenda</span>
-          </div>
-        </div>
-      </div>
+      </header>
 
-      <div className="stat-grid stat-grid-2">
-        <div className="stat-card">
-          <span className="stat-badge"><IconCalMonth /></span>
-          <span className="stat-body">
-            <span className="stat-value">{ricontattatiMese?.mese ?? 0}</span>
-            <span className="stat-label">Ricontattati questo mese</span>
-          </span>
-        </div>
-        <div className="stat-card">
-          <span className="stat-badge"><IconClock /></span>
-          <span className="stat-body">
-            <span className="stat-value">{tempoRichiamo?.giorni ?? '—'}<small> g</small></span>
-            <span className="stat-label">Tempo medio di richiamo</span>
-          </span>
-        </div>
-      </div>
+      <StatStrip
+        items={[
+          { label: 'Da richiamare ora', value: inRitardo.length, tone: inRitardo.length > 0 ? 'alert' : undefined },
+          { label: 'Programmati', value: prossimi.length },
+          { label: 'Totale in agenda', value: rows.length },
+          { label: 'Ricontattati nel mese', value: ricontattatiMese?.mese ?? 0 },
+          { label: 'Tempo medio di richiamo', value: tempoRichiamo?.giorni != null ? `${tempoRichiamo.giorni} g` : '—' },
+        ]}
+      />
 
       {rows.length === 0 && (
         <div className="empty">
