@@ -376,7 +376,10 @@ try {
       const r = await fetch(`http://localhost:3000/api/cron/agenda?key=${chiave}`, {
         signal: AbortSignal.timeout(60_000),
       });
-      log(`sincronizzazione app: ${r.status}`);
+      log(`sincronizzazione app: ${r.status}${r.status === 200 ? ' — ReferralFlow aggiornato ✓' : ''}`);
+    } else {
+      log('ATTENZIONE: manca REMINDER_SECRET nel .env — ReferralFlow non viene avvisato.');
+      log('Rimedio: cd ~/referralflow && bash mac/installa-server.sh');
     }
   } catch {
     log('sincronizzazione app non raggiungibile (andrà al prossimo giro)');
