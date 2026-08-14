@@ -5,6 +5,7 @@ import { getSession } from '@/lib/auth';
 import { NEXT_STATUS, NEXT_ACTION } from '@/lib/status';
 import { eta, giorniDa, dataOra } from '@/lib/format';
 import { advanceStatus } from './referral/[id]/actions';
+import { aggiungiNota, eliminaNota } from './oggi-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -116,6 +117,54 @@ export default async function Oggi() {
     [sid]
   );
 
+  // Buchi in agenda (oggi e domani): vuoti di 20-120 minuti tra due
+  // appuntamenti dello stesso medico — i posti che una telefonata può
+  // riempire. Il vuoto enorme è di solito pausa o assenza: si ignora.
+  const agenda2g = await query<{
+    provider_id: string; medico: string; giorno: string; starts_at: string; ends_at: string | null;
+  }>(
+    `select a.provider_id, pr.nome as medico, a.starts_at::date::text as giorno,
+            a.starts_at::text, a.ends_at::text
+       from appointments a join providers pr on pr.id = a.provider_id
+      where a.studio_id = $1
+        and a.starts_at >= current_date and a.starts_at < current_date + interval '2 days'
+      order by a.provider_id, a.starts_at`,
+    [sid]
+  );
+  const buchi: { giorno: string; medico: string; dalle: Date; alle: Date; minuti: number }[] = [];
+  for (let i = 1; i < agenda2g.length; i++) {
+    const prev = agenda2g[i - 1];
+    const cur = agenda2g[i];
+    if (prev.provider_id !== cur.provider_id || prev.giorno !== cur.giorno) continue;
+    const fine = new Date(prev.ends_at ?? new Date(prev.starts_at).getTime() + 30 * 60000);
+    const inizio = new Date(cur.starts_at);
+    const minuti = Math.round((inizio.getTime() - fine.getTime()) / 60000);
+    if (minuti >= 20 && minuti <= 120 && inizio.getTime() > Date.now()) {
+      buchi.push({ giorno: cur.giorno, medico: cur.medico, dalle: fine, alle: inizio, minuti });
+    }
+  }
+  buchi.sort((a, b) => a.dalle.getTime() - b.dalle.getTime());
+  buchi.length = Math.min(buchi.length, 6);
+
+  // Chi chiamare per riempirli: la coda «da prenotare» in ordine di priorità.
+  const daChiamare = await query<{
+    id: string; cognome: string; nome: string; telefono: string | null; urgenza: string;
+  }>(
+    `select r.id, p.cognome, p.nome, p.telefono, r.urgenza::text
+       from referrals r join patients p on p.id = r.patient_id
+      where r.studio_id = $1 and r.status = 'da_prenotare'
+      order by case r.urgenza when 'urgente' then 0 when 'normale' then 1 else 2 end,
+               r.created_at asc
+      limit 6`,
+    [sid]
+  );
+
+  // Post-it di squadra.
+  const note = await query<{ id: string; testo: string; autore: string | null; created_at: string }>(
+    'select id, testo, autore, created_at::text from note_squadra where studio_id = $1 order by created_at desc limit 12',
+    [sid]
+  );
+
   // Conteggi complessivi per la striscia di riepilogo.
   const [c] = await query<{ urgenti: number; da_prenotare: number }>(
     `select count(*) filter (where status in ('ricevuta','triage','da_prenotare') and urgenza='urgente')::int as urgenti,
@@ -196,6 +245,8 @@ export default async function Oggi() {
   ];
 
   const prossimo = oggi.find((a) => !a.completed);
+  const now = new Date();
+  const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
   return (
     <div className="oggi">
@@ -284,6 +335,68 @@ export default async function Oggi() {
                 ))}
               </ul>
             )}
+          </div>
+
+          <div className="oggi-panel">
+            <div className="oggi-panel-head">
+              <h2>Buchi in agenda</h2>
+              <Link href="/coda?stato=da_prenotare" className="oggi-seelink">Da prenotare →</Link>
+            </div>
+            {buchi.length === 0 ? (
+              <p className="muted small">Nessun buco da riempire tra oggi e domani.</p>
+            ) : (
+              <ul className="buchi">
+                {buchi.map((b, i) => {
+                  const sugg = daChiamare[i];
+                  const oraB = (d: Date) =>
+                    d.toLocaleTimeString('it-CH', { hour: '2-digit', minute: '2-digit' });
+                  return (
+                    <li key={i} className="buco">
+                      <div className="buco-testa">
+                        <b>{oraB(b.dalle)}–{oraB(b.alle)}</b>
+                        <span>{b.giorno === localToday ? 'oggi' : 'domani'} · {b.medico} · {b.minuti} min</span>
+                      </div>
+                      {sugg && (
+                        <div className="buco-sugg">
+                          → chiama <Link href={`/referral/${sugg.id}`}>{sugg.cognome} {sugg.nome}</Link>
+                          {sugg.urgenza === 'urgente' && <span className="badge badge-danger">urgente</span>}
+                          {sugg.telefono && <a className="buco-tel" href={`tel:${sugg.telefono}`}>☎ {sugg.telefono}</a>}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          <div className="oggi-panel">
+            <div className="oggi-panel-head">
+              <h2>Post-it</h2>
+            </div>
+            {note.length === 0 && (
+              <p className="muted small">Le note volanti della squadra: si scrivono qui e si strappano quando sono fatte.</p>
+            )}
+            {note.length > 0 && (
+              <ul className="postit-list">
+                {note.map((n) => (
+                  <li key={n.id} className="postit">
+                    <span className="postit-testo">
+                      {n.testo}
+                      <span className="postit-meta">{n.autore ?? ''}</span>
+                    </span>
+                    <form action={eliminaNota}>
+                      <input type="hidden" name="id" value={n.id} />
+                      <button className="postit-del" type="submit" title="Fatta: strappa la nota">✕</button>
+                    </form>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <form action={aggiungiNota} className="postit-form">
+              <input name="testo" maxLength={200} required placeholder="Scrivi una nota per la squadra…" />
+              <button className="btn btn-small" type="submit">Attacca</button>
+            </form>
           </div>
         </aside>
       </div>

@@ -490,3 +490,14 @@ create table referti_audio (
 );
 
 create index on referti_audio (studio_id, stato, created_at);
+
+-- Post-it di squadra sulla pagina Oggi (migrazione 026): note volanti della
+-- segreteria, si aggiungono e si strappano.
+create table note_squadra (
+  id         uuid primary key default gen_random_uuid(),
+  studio_id  uuid not null references studios(id),
+  testo      text not null,
+  autore     text,
+  created_at timestamptz not null default now()
+);
+create index on note_squadra (studio_id, created_at desc);

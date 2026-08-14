@@ -1411,6 +1411,29 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 .ctrl-list li { font-size: 14.5px; margin-bottom: 6px; }
 mark[title] { cursor: help; }
 
+/* Oggi — «Buchi in agenda»: i vuoti tra due appuntamenti con accanto chi
+   chiamare per riempirli. */
+.buchi { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.buco { border-left: 2px solid var(--warn, #a9760c); padding-left: 10px; }
+.buco-testa { display: flex; flex-direction: column; }
+.buco-testa b { font-size: 14px; font-variant-numeric: tabular-nums; }
+.buco-testa span { font-size: 12.5px; color: var(--muted); }
+.buco-sugg { font-size: 13px; margin-top: 3px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.buco-tel { white-space: nowrap; }
+
+/* Oggi — post-it di squadra. */
+.postit-list { list-style: none; margin: 0 0 4px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.postit { display: flex; align-items: flex-start; gap: 8px; }
+.postit-testo { flex: 1; font-size: 13.5px; line-height: 1.45; }
+.postit-meta { display: block; font-size: 11.5px; color: var(--muted); }
+.postit-del {
+  border: none; background: none; color: var(--muted); cursor: pointer;
+  font-size: 14px; padding: 2px 4px; border-radius: 6px; flex: none;
+}
+.postit-del:hover { color: var(--danger, #b3564c); background: var(--line); }
+.postit-form { display: flex; gap: 8px; margin-top: 10px; }
+.postit-form input { flex: 1; min-width: 0; }
+
 /* Testo sincronizzato con l'audio del dettato: ogni parola è cliccabile
    (l'audio salta lì) e quella in riproduzione si illumina. */
 .testo-sync .parola { cursor: pointer; border-radius: 4px; padding: 0 1px; }
