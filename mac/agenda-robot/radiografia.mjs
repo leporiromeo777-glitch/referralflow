@@ -32,14 +32,25 @@ await page.waitForTimeout(1500);
 
 sezioni.push('########## PAGINA D\'INGRESSO ##########\n' + (await radiografiaPagina(page)));
 
-console.log('Percorso d\'accesso: «Collegarsi» → nuova finestra → «Sign-on»…');
-const { pagina, ok } = await accediMediOnline(context, page, conf);
-if (ok) {
-  console.log('Login automatico riuscito ✓');
-} else {
-  console.log('Login automatico non riuscito fino in fondo: completa TU nella finestra del browser.');
+console.log('Percorso d\'accesso automatico…');
+// Qualunque cosa vada storta qui, la radiografia deve arrivare comunque in
+// fondo: l'accesso lo si può completare a mano nella finestra del browser.
+try {
+  const { pagina, ok } = await accediMediOnline(context, page, conf);
+  if (ok) {
+    console.log('Login automatico riuscito ✓');
+  } else {
+    console.log('Login automatico non riuscito fino in fondo: completa TU nella finestra del browser.');
+  }
+  if (!pagina.isClosed()) {
+    sezioni.push('########## FINESTRA DI LOGIN/DOPO-LOGIN ##########\n' + (await radiografiaPagina(pagina)));
+  }
+} catch (e) {
+  console.log(
+    'Accesso automatico interrotto (' + String(e?.message ?? e).split('\n')[0] + '): ' +
+      'completa TU il login nella finestra del browser.'
+  );
 }
-sezioni.push('########## FINESTRA DI LOGIN/DOPO-LOGIN ##########\n' + (await radiografiaPagina(pagina)));
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 await new Promise((fine) => {
@@ -51,15 +62,21 @@ await new Promise((fine) => {
 });
 rl.close();
 
-// Alla pressione di Invio si fotografano TUTTE le finestre aperte (compresa
-// quella nuova aperta da «Collegarsi»): l'agenda sta dove sta.
+// Alla pressione di Invio si fotografano TUTTE le finestre ancora aperte:
+// l'agenda sta dove sta, e una finestra chiusa nel frattempo non deve
+// far perdere il lavoro.
 let n = 0;
 for (const p of context.pages()) {
+  if (p.isClosed()) continue;
   n++;
-  sezioni.push(
-    `########## FINESTRA ${n} (stato finale) — ${p.url().replace(/\(S\([^)]*\)\)/g, '(S(...))')} ##########\n` +
-      (await radiografiaPagina(p))
-  );
+  try {
+    sezioni.push(
+      `########## FINESTRA ${n} (stato finale) — ${p.url().replace(/\(S\([^)]*\)\)/g, '(S(...))')} ##########\n` +
+        (await radiografiaPagina(p))
+    );
+  } catch {
+    sezioni.push(`########## FINESTRA ${n}: non più leggibile ##########`);
+  }
 }
 
 writeFileSync(uscita, sezioni.join('\n\n') + '\n', 'utf-8');

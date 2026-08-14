@@ -33,7 +33,10 @@ export function leggiConf() {
 //     farne lo decide il codice fisso, mai l'AI;
 //   - ogni finestra di conferma che dovesse comparire viene RIFIUTATA.
 // Questa funzione va chiamata su ogni pagina appena aperta.
+const giaProtette = new WeakSet();
 export async function modalitaSolaLettura(page) {
+  if (giaProtette.has(page)) return;
+  giaProtette.add(page);
   page.on('dialog', (d) => {
     console.log(`[sola-lettura] finestra «${d.type()}» rifiutata automaticamente`);
     d.dismiss().catch(() => {});

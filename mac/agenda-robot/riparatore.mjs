@@ -188,42 +188,78 @@ const SELETTORI_AVANTI = [
   'button:has-text("Login")',
 ];
 
+// Se la finestra su cui si stava lavorando è stata chiusa (succede: i popup
+// di single sign-on si chiudono da soli dopo aver passato la sessione), si
+// prosegue sulla migliore tra quelle rimaste vive: prima quella coi campi
+// password, altrimenti l'ultima aperta.
+async function finestraViva(context, dove) {
+  if (!dove.isClosed()) return dove;
+  const aperte = context.pages().filter((p) => !p.isClosed());
+  if (aperte.length === 0) return null;
+  for (const p of aperte) {
+    try {
+      if ((await p.locator('input[type="password"]:visible').count()) > 0) {
+        console.log('[accesso] la finestra si è chiusa da sola: proseguo su quella col login');
+        await modalitaSolaLettura(p);
+        return p;
+      }
+    } catch {
+      /* pagina nel frattempo chiusa: si passa alla prossima */
+    }
+  }
+  const ultima = aperte[aperte.length - 1];
+  console.log('[accesso] la finestra si è chiusa da sola: proseguo sull\'ultima rimasta');
+  await modalitaSolaLettura(ultima);
+  return ultima;
+}
+
 export async function accediMediOnline(context, page, conf) {
   let dove = page;
-  for (let tappa = 0; tappa < 4; tappa++) {
-    await dove.waitForTimeout(1200);
-    await dove.waitForLoadState('domcontentloaded').catch(() => {});
+  for (let tappa = 0; tappa < 6; tappa++) {
+    const viva = await finestraViva(context, dove);
+    if (!viva) return { pagina: page, ok: false };
+    dove = viva;
 
-    // Se i campi del login sono qui, si entra.
-    if ((await dove.locator('input[type="password"]:visible').count()) > 0) {
-      const ok = await loginRiparabile(dove, conf);
-      return { pagina: dove, ok };
-    }
-
-    // Altrimenti si cerca il bottone per avanzare (mai «Accesso temporaneo»).
-    const avanti = await trovaElemento(
-      dove,
-      `accesso_tappa_${tappa}`,
-      SELETTORI_AVANTI,
-      'il bottone per procedere con l\'accesso: «Single sign-on», oppure «Collegarsi» / ' +
-        '«Anmelden» / «Login». MAI il bottone «Accesso temporaneo».'
-    );
-    if (!avanti) {
-      console.log(`[accesso] tappa ${tappa + 1}: nessun bottone per avanzare trovato — mi fermo qui`);
-      return { pagina: dove, ok: false };
-    }
-
-    const attesa = context.waitForEvent('page', { timeout: 8000 }).catch(() => null);
-    await avanti.click();
-    const nuova = await attesa;
-    if (nuova) {
-      dove = nuova;
-      await modalitaSolaLettura(dove);
+    try {
+      await dove.waitForTimeout(1200);
       await dove.waitForLoadState('domcontentloaded').catch(() => {});
-      console.log(`[accesso] tappa ${tappa + 1}: si è aperta una nuova finestra, proseguo lì`);
-    } else {
-      await dove.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
-      console.log(`[accesso] tappa ${tappa + 1}: avanzato nella stessa finestra`);
+
+      // Se i campi del login sono qui, si entra.
+      if ((await dove.locator('input[type="password"]:visible').count()) > 0) {
+        const ok = await loginRiparabile(dove, conf);
+        return { pagina: dove, ok };
+      }
+
+      // Altrimenti si cerca il bottone per avanzare (mai «Accesso temporaneo»).
+      const avanti = await trovaElemento(
+        dove,
+        `accesso_tappa_${tappa}`,
+        SELETTORI_AVANTI,
+        'il bottone per procedere con l\'accesso: «Single sign-on», oppure «Collegarsi» / ' +
+          '«Anmelden» / «Login». MAI il bottone «Accesso temporaneo».'
+      );
+      if (!avanti) {
+        console.log(`[accesso] tappa ${tappa + 1}: nessun bottone per avanzare trovato — mi fermo qui`);
+        return { pagina: dove, ok: false };
+      }
+
+      const attesa = context.waitForEvent('page', { timeout: 8000 }).catch(() => null);
+      await avanti.click();
+      const nuova = await attesa;
+      if (nuova) {
+        dove = nuova;
+        await modalitaSolaLettura(dove);
+        await dove.waitForLoadState('domcontentloaded').catch(() => {});
+        console.log(`[accesso] tappa ${tappa + 1}: si è aperta una nuova finestra, proseguo lì`);
+      } else {
+        await dove.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
+        console.log(`[accesso] tappa ${tappa + 1}: avanzato nella stessa finestra`);
+      }
+    } catch (e) {
+      // Una finestra chiusa a metà tappa non deve mai far morire il giro:
+      // al prossimo passaggio finestraViva ripiega su quella giusta.
+      const motivo = String(e?.message ?? e).split('\n')[0].slice(0, 80);
+      console.log(`[accesso] tappa ${tappa + 1}: imprevisto (${motivo}) — riprovo sulla finestra viva`);
     }
   }
   console.log('[accesso] troppe tappe senza arrivare al login: mi fermo');
