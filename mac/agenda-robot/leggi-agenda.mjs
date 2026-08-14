@@ -18,6 +18,7 @@
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { lanciaBrowser, leggiConf, modalitaSolaLettura } from './comune.mjs';
@@ -112,17 +113,42 @@ function icsTesto(s) {
   return s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
 }
 
-const browser = await lanciaBrowser(true);
+// Con --visibile si apre il browser vero: utile per capire se un blocco
+// dipende dalla modalità invisibile.
+const visibile = process.argv.includes('--visibile');
+const browser = await lanciaBrowser(!visibile);
 let esito = 1;
 try {
-  const context = await browser.newContext({ viewport: { width: 1600, height: 1200 } });
+  const context = await browser.newContext({
+    viewport: { width: 1600, height: 1200 },
+    // In modalità invisibile il browser si presenterebbe come
+    // «HeadlessChrome»: certi portali gli mostrano pagine diverse.
+    userAgent:
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+  });
   const page = await context.newPage();
   await modalitaSolaLettura(page);
   await page.goto(conf.MEDIONLINE_URL, { waitUntil: 'domcontentloaded' });
 
   const { pagina: p, ok } = await accediMediOnline(context, page, conf);
   if (!ok) {
-    log('login non riuscito: mi fermo (il feed segnalerà il file fermo)');
+    // Diagnosi automatica: la struttura (senza dati di pazienti) delle
+    // finestre aperte, da mandare in chat per capire dove si è fermato.
+    try {
+      const { radiografiaPagina } = await import('./comune.mjs');
+      const pezzi = [];
+      let n = 0;
+      for (const pg of context.pages()) {
+        if (pg.isClosed()) continue;
+        n++;
+        pezzi.push(`##### DIAGNOSI FINESTRA ${n} — ${pg.url().replace(/\(S\([^)]*\)\)/g, '(S(...))')}\n` + (await radiografiaPagina(pg)));
+      }
+      const percorsoDiag = path.join(os.homedir(), 'agenda-robot-diagnosi.txt');
+      writeFileSync(percorsoDiag, pezzi.join('\n\n') + '\n', 'utf-8');
+      log(`login non riuscito: diagnosi scritta in ${percorsoDiag} (solo struttura, da incollare in chat)`);
+    } catch {
+      log('login non riuscito (e diagnosi non scrivibile)');
+    }
     process.exit(1);
   }
   log('login ok');

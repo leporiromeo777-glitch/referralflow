@@ -221,16 +221,32 @@ export async function accediMediOnline(context, page, conf) {
     dove = viva;
 
     try {
+      await dove.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
       await dove.waitForTimeout(1200);
-      await dove.waitForLoadState('domcontentloaded').catch(() => {});
 
-      // Se i campi del login sono qui, si entra.
-      if ((await dove.locator('input[type="password"]:visible').count()) > 0) {
-        const ok = await loginRiparabile(dove, conf);
-        return { pagina: dove, ok };
+      // Queste pagine caricano con calma (e a volte si ricaricano da sole):
+      // prima di chiamare l'AI si riprova coi selettori di base per qualche
+      // secondo — il più delle volte il bottone stava solo arrivando.
+      let trovatoQualcosa = false;
+      for (let attesa = 0; attesa < 5 && !trovatoQualcosa; attesa++) {
+        if (attesa > 0) await dove.waitForTimeout(2500);
+        if ((await dove.locator('input[type="password"]:visible').count()) > 0) {
+          const ok = await loginRiparabile(dove, conf);
+          return { pagina: dove, ok };
+        }
+        for (const sel of SELETTORI_AVANTI) {
+          try {
+            if ((await dove.locator(sel).count()) > 0 && (await dove.locator(sel).first().isVisible())) {
+              trovatoQualcosa = true;
+              break;
+            }
+          } catch {
+            /* selettore non applicabile qui */
+          }
+        }
       }
 
-      // Altrimenti si cerca il bottone per avanzare (mai «Accesso temporaneo»).
+      // Ora la ricerca vera (con l'eventuale riparazione AI).
       const avanti = await trovaElemento(
         dove,
         `accesso_tappa_${tappa}`,
