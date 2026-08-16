@@ -110,6 +110,19 @@ PERCORSO_VAD = Path(
 USA_VAD = os.environ.get("REFERTI_VAD", "1") != "0" and PERCORSO_VAD.exists()
 VAD_PAD_MS = os.environ.get("REFERTI_VAD_PAD_MS", "120")
 
+# ── Anti-troncamento (loop «incantato» sulla coda del dettato) ───────────────
+# Se la trascrizione A copre molto meno audio del previsto, whisper è quasi
+# certamente caduto in un loop che si è mangiato la coda del dettato (visto
+# dal vivo il 2026-08-17: 338 s di audio, testo fermo a 303 s, 15–22 frasi
+# ripetute rimosse dal deloop, coda mai trascritta). Si riprova UNA volta con
+# -nc: senza il riporto di contesto tra le finestre — il carburante dei loop —
+# la coda torna quasi sempre. Con -nc whisper ignora anche il prompt di
+# vocabolario: lo compensano dizionario e correzione AI. Si tiene la corsa
+# che copre più audio. Soglie regolabili da env per il collaudo.
+TRONC_AUDIO_MIN_S = float(os.environ.get("REFERTI_TRONC_AUDIO_S", "60"))
+TRONC_GAP_MIN_S = float(os.environ.get("REFERTI_TRONC_GAP_S", "20"))
+TRONC_GAP_FRAZ = float(os.environ.get("REFERTI_TRONC_FRAZ", "0.06"))
+
 # Vocabolario di dominio dato a whisper come «prompt iniziale»: orienta il
 # riconoscimento verso i termini cardiologici e i nomi di farmaci ricorrenti,
 # così whisper sbaglia meno proprio sulle parole difficili. È SEPARATO dai
@@ -311,7 +324,23 @@ def preprocessa(ingresso: Path, uscita: Path, file_id: str) -> None:
 FLAG_PASSATA = {
     "trascrizione_a": [],
     "trascrizione_b": ["-bs", "1"],
+    # Corsa di recupero anti-troncamento: come la A, ma senza riporto di
+    # contesto tra le finestre (vedi TRONC_*). Il flag è -mc 0 (max-context
+    # zero): «-nc» NON esiste in whisper-cli 1.9.1 — stampa l'aiuto ed esce
+    # con codice 0, producendo un testo vuoto in 0 secondi.
+    "trascrizione_a_nc": ["-mc", "0"],
 }
+
+
+def _durata_wav_s(wav: Path) -> float:
+    """Durata del WAV 16 kHz mono PCM 16 bit dall'intestazione fissa (44 byte)."""
+    return max(0.0, (wav.stat().st_size - 44) / 32000)
+
+
+def _ultimo_secondo(percorso_json: Path) -> float:
+    """Tempo (s) dell'ultima parola trascritta secondo il JSON di whisper."""
+    parole = parole_da_json(percorso_json)
+    return parole[-1][1] if parole else 0.0
 
 
 def carica_vocabolario() -> str:
@@ -1145,6 +1174,38 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # GPU whisper e gemma non ci stanno insieme (vedi libera_llm).
         libera_llm()
         trascrivi(percorso(".wav"), percorso(".txt"), file_id, fase, vocab, con_tempi=True)
+        # Anti-troncamento (vedi TRONC_*): se la trascrizione copre molto meno
+        # audio del WAV, quasi sempre un loop si è mangiato la coda del
+        # dettato. Corsa di recupero con -nc; vince chi copre più audio.
+        # Mai bloccante: se il recupero fallisce si tiene la corsa originale.
+        try:
+            durata_wav = _durata_wav_s(percorso(".wav"))
+            ultimo_a = _ultimo_secondo(percorso(".json"))
+        except Exception:
+            durata_wav = ultimo_a = 0.0
+        scoperto = durata_wav - ultimo_a
+        if (durata_wav >= TRONC_AUDIO_MIN_S and scoperto >= TRONC_GAP_MIN_S
+                and scoperto / durata_wav >= TRONC_GAP_FRAZ):
+            log.warning(
+                "fase=trascrizione_a file=%s esito=riprovo_troncamento audio_s=%d trascritto_s=%d",
+                file_id, int(durata_wav), int(ultimo_a),
+            )
+            ultimo_nc = 0.0
+            try:
+                trascrivi(percorso(".wav"), percorso(".nc.txt"), file_id,
+                          "trascrizione_a_nc", "", con_tempi=True)
+                ultimo_nc = _ultimo_secondo(percorso(".nc.json"))
+            except Exception:
+                pass
+            if ultimo_nc > ultimo_a:
+                percorso(".nc.txt").replace(percorso(".txt"))
+                percorso(".nc.json").replace(percorso(".json"))
+                log.info(
+                    "fase=trascrizione_a file=%s esito=coda_recuperata trascritto_s=%d",
+                    file_id, int(ultimo_nc),
+                )
+            else:
+                log.info("fase=trascrizione_a file=%s esito=coda_non_recuperata", file_id)
         fase = "trascrizione_b"
         _ = notifica and notifica(fase)
         trascrivi(percorso(".wav"), percorso(".b.txt"), file_id, fase, vocab)
@@ -1265,10 +1326,12 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # Solo segnalazione, mai blocco; facoltativa, mai bloccante.
         avvisi: list[str] = []
         try:
-            durata_wav = max(0.0, (percorso(".wav").stat().st_size - 44) / 32000)
+            durata_wav = _durata_wav_s(percorso(".wav"))
             ultimo = parole_audio[-1][1] if parole_audio else 0.0
             scoperto = durata_wav - ultimo
-            if durata_wav >= 120 and scoperto >= 60 and scoperto / durata_wav >= 0.15:
+            # Soglie abbassate il 2026-08-17: il caso reale (35 s mancanti su
+            # 338, ~10%) passava sotto le vecchie (60 s e 15%) senza avviso.
+            if durata_wav >= 120 and scoperto >= 25 and scoperto / durata_wav >= 0.08:
                 avvisi.append(
                     "Possibile dettato incompleto: l'audio dura circa "
                     f"{int(round(durata_wav / 60))} minuti ma la trascrizione si ferma "
