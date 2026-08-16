@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Palestra della correzione AI — confronta il prompt attuale (§6.1) con una
-variante rinforzata sui numeri, su dettati FINTI con trappole note (la SPEC
-vieta referti reali nei test). Nessun dato clinico vero.
+"""Palestra della correzione AI — confronta il prompt attuale (§6.1, col
+rinforzo sui numeri) con la versione storica senza rinforzo, su dettati FINTI
+con trappole note (la SPEC vieta referti reali nei test). Nessun dato clinico
+vero. Serve anche a confrontare modelli diversi: REFERTI_LLM=<nome> davanti
+al comando.
 
 Misura, per ciascun prompt:
   - numeri intatti: la firma numerica del testo non cambia MAI (il vincolo §2.4)
@@ -25,17 +27,19 @@ from pipeline import (  # noqa: E402
     MODELLO_LLM, PROMPT_CORREZIONE, _numeri, chiama_ollama, ollama_pronto,
 )
 
-# La variante: identica al §6.1 tranne UNA regola in più nel blocco
-# «NON modificare MAI» — vietato togliere o aggiungere numeri, anche
-# ripetuti, fuori posto o dentro segmenti incomprensibili.
-RIGA_ATTUALE = "- anche se un numero ti sembra implausibile, lascialo com'è"
+# Il rinforzo sui numeri è stato ADOTTATO nel §6.1 (2026-08-16: con
+# gemma3:27b porta i numeri intatti a 8/8 — unico a superare il caso
+# «3 3» — ed è neutro su gemma3:12b e mistral-small). La «variante» ora
+# è il prompt storico SENZA il rinforzo, tenuto come controllo di
+# regressione: se un giorno vincesse lei, il rinforzo è da ridiscutere.
 RIGA_RINFORZO = (
     "- anche se un numero ti sembra implausibile, lascialo com'è\n"
     "- non togliere e non aggiungere MAI un numero: ogni numero del testo deve "
     "ricomparire identico nella tua risposta, lo stesso numero di volte, anche "
     "se sembra ripetuto, fuori posto o dentro un segmento incomprensibile"
 )
-PROMPT_VARIANTE = PROMPT_CORREZIONE.replace(RIGA_ATTUALE, RIGA_RINFORZO)
+RIGA_STORICA = "- anche se un numero ti sembra implausibile, lascialo com'è"
+PROMPT_VARIANTE = PROMPT_CORREZIONE.replace(RIGA_RINFORZO, RIGA_STORICA)
 assert PROMPT_VARIANTE != PROMPT_CORREZIONE, "variante non costruita"
 
 # ── I dettati finti con le trappole ──────────────────────────────────────────

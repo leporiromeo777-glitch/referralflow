@@ -240,6 +240,7 @@ Correggi SOLO:
 NON modificare MAI:
 - numeri, dosaggi, misure, percentuali, date
 - anche se un numero ti sembra implausibile, lascialo com'è
+- non togliere e non aggiungere MAI un numero: ogni numero del testo deve ricomparire identico nella tua risposta, lo stesso numero di volte, anche se sembra ripetuto, fuori posto o dentro un segmento incomprensibile
 
 Regole obbligatorie:
 1. Se un segmento è incomprensibile, lascialo esattamente com'è. Non inventare cosa poteva essere.
@@ -257,9 +258,14 @@ TESTO:
 **Comportamento noto:** il modello è conservativo. Corregge poco ma corregge giusto.
 Tende a ignorare le richieste di annotazione (per questo l'ispezione è separata, §6.2).
 Occasionalmente rimuove un'istruzione di dettatura nonostante la regola 4 — accettabile.
-Deduplica i numeri ripetuti («3 3» → «3») nonostante il divieto: verificato in
-palestra (2026-07-24, `palestra.py` su 8 dettati finti) che una regola aggiuntiva
-nel prompt NON cambia questo comportamento — variante testata e non adottata.
+Deduplica i numeri ripetuti («3 3» → «3») nonostante il divieto — tranne con
+l'ultima riga del blocco «NON modificare MAI» (il rinforzo sui numeri): testata
+in palestra il 2026-07-24 su gemma3:12b (nessun effetto, allora non adottata),
+ri-misurata il 2026-08-16 sul confronto a tre modelli — neutra su gemma3:12b e
+mistral-small3.2, ma con gemma3:27b porta i numeri intatti a 8/8, unico esito
+pieno mai registrato — e quindi ADOTTATA (è innocua dove non aiuta). In
+`palestra.py` la «variante» è ora il prompt storico senza rinforzo, come
+controllo di regressione.
 La protezione sta nel codice: la correzione con firma numerica alterata viene
 scartata; il ripiego riprova con lo STESSO prompt blocco per blocco, tenendo i
 blocchi coi numeri intatti e lasciando originali gli altri. Ogni futura modifica

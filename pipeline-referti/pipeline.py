@@ -150,6 +150,7 @@ Correggi SOLO:
 NON modificare MAI:
 - numeri, dosaggi, misure, percentuali, date
 - anche se un numero ti sembra implausibile, lascialo com'è
+- non togliere e non aggiungere MAI un numero: ogni numero del testo deve ricomparire identico nella tua risposta, lo stesso numero di volte, anche se sembra ripetuto, fuori posto o dentro un segmento incomprensibile
 
 Regole obbligatorie:
 1. Se un segmento è incomprensibile, lascialo esattamente com'è. Non inventare cosa poteva essere.
