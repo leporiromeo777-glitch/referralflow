@@ -403,6 +403,22 @@ def trascrivi(wav: Path, uscita_txt: Path, file_id: str, fase: str, prompt: str 
         stderr=subprocess.DEVNULL,
         timeout=WHISPER_TIMEOUT_S,
     )
+    if esito.returncode != 0:
+        # Whisper caduto (tipico: -6/SIGABRT con la GPU ancora occupata dal
+        # modello LLM). Si libera la memoria e si riprova UNA volta prima di
+        # dichiarare il fallimento.
+        log.warning(
+            "fase=%s file=%s esito=riprovo codice=%d durata=%.1fs",
+            fase, file_id, esito.returncode, time.monotonic() - inizio,
+        )
+        libera_llm()
+        time.sleep(10)
+        esito = subprocess.run(
+            comando,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=WHISPER_TIMEOUT_S,
+        )
     durata = time.monotonic() - inizio
     if esito.returncode != 0:
         log.error(
@@ -691,6 +707,28 @@ def ollama_pronto() -> str | None:
     if not any(n == MODELLO_LLM or n.startswith(MODELLO_LLM + ":") for n in nomi):
         return "modello_llm_mancante"
     return None
+
+
+def libera_llm() -> None:
+    """Chiede a Ollama di scaricare SUBITO il modello dalla memoria
+    (keep_alive 0). Sul Mac da 24 GB gemma3:27b (~18 GB residenti) e
+    whisper large-v3 non convivono sulla GPU: se il modello LLM è ancora
+    caricato quando parte una trascrizione — capita quando due dettati
+    arrivano di fila, Ollama tiene il modello 5 minuti dopo l'ultimo uso —
+    whisper fallisce a metà e abortisce in chiusura (SIGABRT/-6, visto dal
+    vivo e riprodotto il 2026-08-16; il file finiva in errori/ e il dettato
+    sembrava «bloccato»). Best-effort: se Ollama non risponde, la
+    trascrizione parte comunque."""
+    corpo = json.dumps({"model": MODELLO_LLM, "keep_alive": 0}).encode("utf-8")
+    try:
+        richiesta = urllib.request.Request(
+            OLLAMA_URL + "/api/generate",
+            data=corpo,
+            headers={"Content-Type": "application/json"},
+        )
+        urllib.request.urlopen(richiesta, timeout=30).read()
+    except (urllib.error.URLError, TimeoutError, OSError):
+        pass
 
 
 def chiama_ollama(prompt: str, file_id: str, fase: str, formato_json: bool = False) -> str:
@@ -1103,6 +1141,9 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         log.info("fase=vocabolario file=%s termini=%d", file_id, n_vocab)
         fase = "trascrizione_a"
         _ = notifica and notifica(fase)
+        # Prima delle trascrizioni: via il modello LLM dalla memoria — sulla
+        # GPU whisper e gemma non ci stanno insieme (vedi libera_llm).
+        libera_llm()
         trascrivi(percorso(".wav"), percorso(".txt"), file_id, fase, vocab, con_tempi=True)
         fase = "trascrizione_b"
         _ = notifica and notifica(fase)
