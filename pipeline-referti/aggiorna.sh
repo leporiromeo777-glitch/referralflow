@@ -20,5 +20,17 @@ curl -fsSL "$BASE/CLAUDE.md" -o "$DEST/CLAUDE.md"
 # correzioni-locali.json e vocabolario-locali.txt NON si toccano: sono le voci
 # aggiunte dallo studio dal pannello locale.
 
+# Rilevatore di voce (VAD Silero): dove c'è silenzio whisper non trascrive —
+# ferma le frasi «inventate» nelle pause. Piccolo, si scarica una volta sola;
+# la pipeline lo usa da sola appena lo trova.
+if [ ! -f "$DEST/modelli/ggml-silero-v5.1.2.bin" ]; then
+  echo "Scarico il rilevatore di voce (VAD)…"
+  mkdir -p "$DEST/modelli"
+  curl -fsSL "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin" \
+    -o "$DEST/modelli/ggml-silero-v5.1.2.bin.parziale" \
+    && mv "$DEST/modelli/ggml-silero-v5.1.2.bin.parziale" "$DEST/modelli/ggml-silero-v5.1.2.bin" \
+    || { rm -f "$DEST/modelli/ggml-silero-v5.1.2.bin.parziale"; echo "  (VAD non scaricato: la pipeline continua senza)"; }
+fi
+
 echo "Aggiornati: pipeline.py, correzioni.json, pannello.py, CLAUDE.md (e aggiorna.sh stesso)"
 grep -m1 "Fasi implementate" -A 8 "$DEST/pipeline.py" | sed 's/^# \{0,2\}//'

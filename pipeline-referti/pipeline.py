@@ -93,6 +93,21 @@ PERCORSO_MODELLO = Path(
 )
 WHISPER_TIMEOUT_S = 1800
 
+# VAD — rilevatore di voce (Silero, incorporato in whisper.cpp): dove c'è
+# silenzio whisper NON trascrive. È l'antidoto principale alle frasi
+# «inventate» nelle pause di riflessione del dettato. Si accende da solo
+# appena il modellino è presente (lo scarica aggiorna.sh); REFERTI_VAD=0 lo
+# spegne. Il padding largo (120 ms) evita di tagliare i bordi di parola.
+# Vale per ENTRAMBE le passate: così il confronto A/B resta coerente.
+PERCORSO_VAD = Path(
+    os.environ.get(
+        "REFERTI_VAD_MODELLO",
+        str(Path(__file__).resolve().parent / "modelli" / "ggml-silero-v5.1.2.bin"),
+    )
+)
+USA_VAD = os.environ.get("REFERTI_VAD", "1") != "0" and PERCORSO_VAD.exists()
+VAD_PAD_MS = os.environ.get("REFERTI_VAD_PAD_MS", "120")
+
 # Vocabolario di dominio dato a whisper come «prompt iniziale»: orienta il
 # riconoscimento verso i termini cardiologici e i nomi di farmaci ricorrenti,
 # così whisper sbaglia meno proprio sulle parole difficili. È SEPARATO dai
@@ -372,6 +387,7 @@ def trascrivi(wav: Path, uscita_txt: Path, file_id: str, fase: str, prompt: str 
         "-f", str(wav),
         "-otxt",
         *(["-ojf"] if con_tempi else []),
+        *(["--vad", "-vm", str(PERCORSO_VAD), "--vad-speech-pad-ms", VAD_PAD_MS] if USA_VAD else []),
         "-of", str(base),
         "-np",
         *FLAG_PASSATA[fase],
@@ -978,7 +994,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
     file_id = file_id_di(ingresso)
     # La configurazione nel log (mai contenuti): serve a sapere, a posteriori,
     # con quali impostazioni è stata prodotta una corsa.
-    log.info("fase=avvio file=%s atempo=%s denoise=%d", file_id, ATEMPO, int(DENOISE))
+    log.info("fase=avvio file=%s atempo=%s denoise=%d vad=%d", file_id, ATEMPO, int(DENOISE), int(USA_VAD))
 
     def percorso(suffisso: str) -> Path:
         return dir_out / f"{file_id}{suffisso}"

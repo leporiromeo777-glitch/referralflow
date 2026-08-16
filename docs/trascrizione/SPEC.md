@@ -129,6 +129,15 @@ orecchio. Il conteggio è riproducibile a parità di catena audio, ma piccole
 perturbazioni del segnale lo spostano: confrontare solo corse sulla stessa
 identica catena.
 
+**VAD (aggiunto 2026-08, DA VALIDARE sul prossimo dettato col conteggio
+divergenze):** rilevatore di voce Silero v5.1.2 incorporato in whisper.cpp
+(`--vad`), attivo su ENTRAMBE le passate (così il confronto A/B resta
+coerente) appena `modelli/ggml-silero-v5.1.2.bin` è presente (lo scarica
+aggiorna.sh; spegnibile con `REFERTI_VAD=0`). Padding 120 ms
+(`REFERTI_VAD_PAD_MS`) per non tagliare i bordi di parola. Scopo: dove c'è
+silenzio whisper non trascrive — è l'antidoto principale alle frasi
+allucinate nelle pause di riflessione del dettato.
+
 **Nota sui passaggi 3-4:** la doppia trascrizione serve a individuare i punti incerti.
 Dove le due versioni divergono, quasi sempre c'è un problema audio. È un rilevatore di
 dubbi, non un meccanismo di voto: **il sistema non sceglie mai quale versione è giusta**,
