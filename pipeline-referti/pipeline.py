@@ -8,8 +8,10 @@ Fasi implementate:
   3. doppia trascrizione e confronto: seconda passata con parametri diversi,
      le differenze diventano la lista DIVERGENZE (rilevatore di dubbi,
      non meccanismo di voto: il sistema non sceglie mai la versione giusta)
-  4. dizionario: sostituzioni deterministiche da correzioni.json
-     (termini_clinici + linguaggio_comune); mai su testo con cifre
+  4. anti-loop e dizionario: prima le ripetizioni consecutive del whisper
+     «incantato» ridotte a una (deterministico, mai su gruppi con cifre,
+     intervento segnalato in bozza), poi sostituzioni deterministiche da
+     correzioni.json (termini_clinici + linguaggio_comune); mai su cifre
   5. correzione LLM (prompt SPEC §6.1) e ispezione (prompt §6.2) via Ollama
      locale (gemma3:12b); se l'AI tocca un numero o accorcia troppo il
      testo, la sua correzione viene scartata in blocco (SPEC §2.4)
@@ -587,6 +589,96 @@ def applica_correzioni(testo: str, sostituzioni: list[tuple[re.Pattern, str]]) -
     return testo, totale
 
 
+# ── Anti-loop (SPEC §3, passo 4b) ────────────────────────────────────────────
+# Quando whisper «si incanta» ripete la stessa frase o lo stesso gruppo di
+# parole decine di volte di fila. È un difetto meccanico e si ripara
+# meccanicamente: niente AI, solo ripetizioni consecutive IDENTICHE, con
+# soglie prudenti perché le ripetizioni brevi possono essere dettatura vera
+# («3 3», «no no no»). I gruppi di parole che contengono cifre non si
+# toccano MAI (§2.4); la frase intera ripetuta si tocca anche con cifre,
+# perché la stessa frase identica 3+ volte di fila non è dettatura.
+
+SOGLIA_LOOP_FRASI = 3    # frase intera identica, consecutiva
+SOGLIA_LOOP_GRUPPI = 4   # gruppo di 2-8 parole senza cifre
+SOGLIA_LOOP_PAROLA = 6   # parola singola senza cifre
+
+
+def _frasi_span(testo: str) -> list[tuple[int, int]]:
+    """Intervalli (inizio, fine) delle frasi: tagli su .!?; e sugli a capo."""
+    spans, inizio = [], 0
+    for m in re.finditer(r"[.!?;]+\s*|\n+", testo):
+        spans.append((inizio, m.end()))
+        inizio = m.end()
+    if inizio < len(testo):
+        spans.append((inizio, len(testo)))
+    return spans
+
+
+def _norma_frase(s: str) -> str:
+    return re.sub(r"[\s.!?;]+", " ", s.lower()).strip()
+
+
+def deduplica_loop(testo: str) -> tuple[str, int, list[str]]:
+    """(testo bonificato, unità rimosse, citazioni delle frasi tenute).
+    Le citazioni servono a segnalare in bozza il punto dell'intervento.
+    Testo senza loop → restituito identico, nessuna citazione."""
+    rimosse = 0
+    citazioni: list[str] = []
+
+    # 1) frase intera ripetuta di fila
+    spans = _frasi_span(testo)
+    norme = [_norma_frase(testo[a:b]) for a, b in spans]
+    da_togliere: list[tuple[int, int]] = []
+    i = 0
+    while i < len(spans):
+        j = i + 1
+        while j < len(norme) and len(norme[i]) >= 3 and norme[j] == norme[i]:
+            j += 1
+        if j - i >= SOGLIA_LOOP_FRASI:
+            da_togliere.append((spans[i][1], spans[j - 1][1]))
+            rimosse += j - i - 1
+            cit = testo[spans[i][0]:spans[i][1]].strip()
+            if cit:
+                citazioni.append(cit[:120])
+        i = j
+    for a, b in reversed(da_togliere):
+        testo = testo[:a] + testo[b:]
+
+    # 2) gruppo di 1-8 parole ripetuto di fila senza punteggiatura di frase.
+    #    Periodo più corto per primo: «x x x x x x» è un loop di 1 parola,
+    #    non di 3. Le finestre con cifre si saltano in blocco.
+    token = [(m.group(0), m.start(), m.end()) for m in re.finditer(r"\S+", testo)]
+    bassi = [t[0].lower() for t in token]
+    con_cifre = [bool(re.search(r"\d", t[0])) for t in token]
+    da_togliere = []
+    i = 0
+    while i < len(token):
+        salto = 1
+        for n in range(1, 9):
+            if i + 2 * n > len(token) or any(con_cifre[i:i + n]):
+                continue
+            r = 1
+            while (i + (r + 1) * n <= len(token)
+                   and bassi[i + r * n:i + (r + 1) * n] == bassi[i:i + n]):
+                r += 1
+            soglia = SOGLIA_LOOP_PAROLA if n == 1 else SOGLIA_LOOP_GRUPPI
+            if r >= soglia:
+                da_togliere.append((token[i + n - 1][2], token[i + r * n - 1][2]))
+                rimosse += (r - 1) * n
+                citazioni.append(testo[token[i][1]:token[i + n - 1][2]][:120])
+                salto = r * n
+                break
+        i += salto
+    for a, b in reversed(da_togliere):
+        testo = testo[:a] + testo[b:]
+
+    uniche: list[str] = []
+    for c in citazioni:
+        if c not in uniche:
+            uniche.append(c)
+    return testo, rimosse, uniche[:5]
+
+
 def ollama_pronto() -> str | None:
     """Controllo d'avvio: Ollama raggiungibile e modello scaricato.
     Restituisce il motivo dell'errore, o None se tutto è a posto."""
@@ -1021,13 +1113,26 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # delle divergenze nascono già dal testo corretto e combaciano per
         # costruzione, e gli errori ricorrenti corretti in entrambe le passate
         # non generano false divergenze. I .txt grezzi restano su disco.
+        # Anti-loop PRIMA di tutto il resto: la frase ripetuta all'infinito
+        # dal whisper «incantato» esce subito, così dizionario, confronto e
+        # correzione AI lavorano sul testo bonificato. I .txt grezzi restano
+        # su disco intatti; l'intervento si segnala in bozza (punti_loop).
+        fase = "deloop"
+        inizio = time.monotonic()
+        grezzo_a, rip_a, punti_loop = deduplica_loop(
+            percorso(".txt").read_text(encoding="utf-8"))
+        grezzo_b, rip_b, _ = deduplica_loop(
+            percorso(".b.txt").read_text(encoding="utf-8"))
+        log.info(
+            "fase=deloop file=%s esito=ok rimosse_a=%d rimosse_b=%d durata=%.1fs",
+            file_id, rip_a, rip_b, time.monotonic() - inizio,
+        )
+
         fase = "dizionario"
         _ = notifica and notifica(fase)
         inizio = time.monotonic()
-        corretto_a, n_sost = applica_correzioni(
-            percorso(".txt").read_text(encoding="utf-8"), sostituzioni)
-        corretto_b, _ = applica_correzioni(
-            percorso(".b.txt").read_text(encoding="utf-8"), sostituzioni)
+        corretto_a, n_sost = applica_correzioni(grezzo_a, sostituzioni)
+        corretto_b, _ = applica_correzioni(grezzo_b, sostituzioni)
         percorso(".corretto.txt").write_text(corretto_a, encoding="utf-8")
         log.info(
             "fase=dizionario file=%s esito=ok sostituzioni=%d durata=%.1fs",
@@ -1073,6 +1178,12 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         fase = "ispezione_llm"
         _ = notifica and notifica(fase)
         dubbi = ispeziona_llm(finale, file_id)
+        # I punti dove l'anti-loop è intervenuto vanno in testa ai segmenti
+        # dubbi: la bozza li evidenzia e il revisore sa che lì c'era una
+        # ripetizione ridotta a una. (Se la correzione ha ritoccato la frase
+        # l'evidenziazione può non agganciarsi: resta comunque in lista.)
+        if punti_loop:
+            dubbi = punti_loop + dubbi
         percorso(".dubbi.json").write_text(
             json.dumps(dubbi, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",

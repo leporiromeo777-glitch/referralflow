@@ -101,6 +101,8 @@ più semplice o più performante.
          │
 [4] trascrizione B               stessa cosa, parametri leggermente diversi
          │
+[4b] anti-loop                   ripetizioni consecutive ridotte a una (deterministico), su A e B
+         │
 [5] dizionario                   sostituzioni deterministiche (correzioni.json), su A e B
          │
 [6] confronto A/B                individua i punti dove divergono → lista DIVERGENZE
@@ -137,6 +139,19 @@ aggiorna.sh; spegnibile con `REFERTI_VAD=0`). Padding 120 ms
 (`REFERTI_VAD_PAD_MS`) per non tagliare i bordi di parola. Scopo: dove c'è
 silenzio whisper non trascrive — è l'antidoto principale alle frasi
 allucinate nelle pause di riflessione del dettato.
+
+**Nota sul passaggio 4b (anti-loop, aggiunto 2026-08-16):** whisper ogni tanto
+«si incanta» e ripete la stessa frase o lo stesso gruppo di parole decine di
+volte di fila (successo su un referto reale, anche con VAD attivo). È un
+difetto meccanico e la cura è meccanica, NON un'AI che giudica cosa eliminare:
+si riducono a una sola le ripetizioni consecutive IDENTICHE — frase intera da
+3 ripetizioni in su; gruppo di 2-8 parole da 4 in su; parola singola da 6 in
+su, e i gruppi di parole con cifre non si toccano mai (§2.4: «3 3» resta suo).
+Gira su A e B prima del dizionario, così confronto e correzione lavorano sul
+testo bonificato; i `.txt` grezzi restano su disco. Ogni intervento è
+segnalato: nel log solo i conteggi (`fase=deloop rimosse_a/b`), in bozza la
+frase tenuta entra in testa ai segmenti dubbi, così il revisore vede DOVE la
+ripetizione è stata ridotta e può controllare l'audio in quel punto.
 
 **Nota sui passaggi 3-4:** la doppia trascrizione serve a individuare i punti incerti.
 Dove le due versioni divergono, quasi sempre c'è un problema audio. È un rilevatore di
