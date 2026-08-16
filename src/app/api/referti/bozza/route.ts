@@ -63,6 +63,11 @@ export async function POST(req: NextRequest) {
     divergenze: lista(body?.divergenze),
     segmenti_dubbi: lista(body?.segmenti_dubbi),
     allarmi_numerici: lista(body?.allarmi_numerici),
+    // Avvisi di lavorazione della pipeline (es. possibile dettato incompleto):
+    // frasi già pronte per chi rivede, mai contenuti clinici.
+    avvisi: lista(body?.avvisi)
+      .filter((a: unknown): a is string => typeof a === 'string')
+      .map((a: string) => a.slice(0, 500)),
     // Tempi parola-per-parola (SPEC §8): [parola, secondi] per ogni parola di
     // testo_corretto, per il testo sincronizzato con l'audio. Facoltativi.
     parole: (Array.isArray(body?.parole) ? body.parole.slice(0, 8000) : [])

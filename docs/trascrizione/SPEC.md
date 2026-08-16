@@ -421,6 +421,7 @@ Il JSON finale inviato a ReferralFlow contiene:
     { "campo": "frequenza_cardiaca", "valore": 160, "intervallo": "35-180", "stato": "limite" }
   ],
   "parole": [ ["Ecocardiogramma", 0.42], ["transtoracico.", 1.31] ],
+  "avvisi": [ "Possibile dettato incompleto: …" ],
   "richiede_revisione": true
 }
 ```
@@ -437,6 +438,17 @@ da dizionario/correzione/segretaria ereditano un tempo interpolato dai vicini.
 Se combacia meno di metà del testo la lista resta vuota — meglio niente che
 tempi sbagliati — e la pagina mostra il testo semplice. Mai bloccante: qualsiasi
 errore in questa fase produce `parole: []` e nel log solo `fase=tempi`.
+
+`avvisi` (aggiunta 2026-08-16): frasi già pronte per chi rivede, MAI contenuti
+clinici. Oggi c'è un solo mittente, la **sentinella di troncamento**: se l'audio
+dura ≥2 minuti e l'ultima parola trascritta lascia scoperti ≥60 secondi E ≥15%
+della durata (dal WAV e dai tempi della passata A), la bozza arriva con
+«Possibile dettato incompleto…» — è il caso del loop che si mangia la coda del
+dettato, visto su un referto reale il 2026-08-16. La pagina di revisione lo
+mostra in un riquadro rosso in cima (`.avviso-box`). Solo segnalazione, mai
+blocco; il calcolo è facoltativo e mai bloccante (log `fase=copertura`). La
+coda silenziosa a fine registrazione può dare un falso allarme: va bene così,
+il revisore riascolta la fine e conferma.
 
 `richiede_revisione` è **sempre true**. Non esiste un percorso in cui un referto
 venga considerato pronto senza passare da un umano.

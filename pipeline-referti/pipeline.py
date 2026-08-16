@@ -1208,11 +1208,43 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # Tempi parola-per-parola per il testo sincronizzato: facoltativi,
         # mai bloccanti (senza, la pagina mostra il testo semplice).
         parole: list = []
+        parole_audio: list = []
         try:
-            parole = allinea_parole(finale, parole_da_json(percorso(".json")))
+            parole_audio = parole_da_json(percorso(".json"))
+            parole = allinea_parole(finale, parole_audio)
             log.info("fase=tempi file=%s esito=ok parole=%d", file_id, len(parole))
         except Exception as e:
             log.info("fase=tempi file=%s esito=saltato tipo=%s", file_id, type(e).__name__)
+
+        # Sentinella di troncamento: quando whisper «si incanta» in un loop,
+        # spesso butta il resto dell'audio dentro il loop e la seconda metà
+        # del dettato non viene mai trascritta. Qui si confronta la durata
+        # del WAV con il tempo dell'ultima parola trascritta: se manca una
+        # coda importante, la bozza arriva con un avviso ben visibile.
+        # Solo segnalazione, mai blocco; facoltativa, mai bloccante.
+        avvisi: list[str] = []
+        try:
+            durata_wav = max(0.0, (percorso(".wav").stat().st_size - 44) / 32000)
+            ultimo = parole_audio[-1][1] if parole_audio else 0.0
+            scoperto = durata_wav - ultimo
+            if durata_wav >= 120 and scoperto >= 60 and scoperto / durata_wav >= 0.15:
+                avvisi.append(
+                    "Possibile dettato incompleto: l'audio dura circa "
+                    f"{int(round(durata_wav / 60))} minuti ma la trascrizione si ferma "
+                    f"verso il minuto {int(ultimo // 60)}. Riascolta la parte finale "
+                    "dell'audio prima di confermare; se manca testo, il dettato va rifatto."
+                )
+                log.warning(
+                    "fase=copertura file=%s esito=avviso audio_s=%d trascritto_s=%d",
+                    file_id, int(durata_wav), int(ultimo),
+                )
+            else:
+                log.info(
+                    "fase=copertura file=%s esito=ok audio_s=%d trascritto_s=%d",
+                    file_id, int(durata_wav), int(ultimo),
+                )
+        except Exception as e:
+            log.info("fase=copertura file=%s esito=saltato tipo=%s", file_id, type(e).__name__)
     except subprocess.TimeoutExpired:
         log.error("fase=%s file=%s esito=errore motivo=timeout", fase, file_id)
         raise ErroreElaborazione(fase, "timeout", file_id) from None
@@ -1238,6 +1270,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         "divergenze": divergenze,
         "segmenti_dubbi": dubbi,
         "allarmi_numerici": allarmi,
+        "avvisi": avvisi,
         "richiede_revisione": True,
     }
     return file_id, payload

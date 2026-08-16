@@ -26,6 +26,7 @@ type Payload = {
   divergenze: Divergenza[];
   segmenti_dubbi: string[];
   allarmi_numerici: Allarme[];
+  avvisi?: string[];
   parole?: [string, number][];
 };
 
@@ -136,6 +137,7 @@ export default async function RefertoBozza({
   const divergenze = Array.isArray(p.divergenze) ? p.divergenze : [];
   const dubbi = Array.isArray(p.segmenti_dubbi) ? p.segmenti_dubbi.filter((s) => typeof s === 'string') : [];
   const allarmi = Array.isArray(p.allarmi_numerici) ? p.allarmi_numerici : [];
+  const avvisi = Array.isArray(p.avvisi) ? p.avvisi.filter((a): a is string => typeof a === 'string') : [];
   const campi = p.campi_estratti && typeof p.campi_estratti === 'object' ? p.campi_estratti : {};
 
   const frammenti = [
@@ -202,6 +204,17 @@ export default async function RefertoBozza({
       )}
       {searchParams.err === 'testo' && (
         <p className="error">Il testo del referto non può essere vuoto.</p>
+      )}
+
+      {inBozza && avvisi.length > 0 && (
+        <div className="card avviso-box">
+          <h2>⚠️ Attenzione</h2>
+          <ul className="ctrl-list">
+            {avvisi.map((a, i) => (
+              <li key={i}>{a}</li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {audio && (
