@@ -289,8 +289,82 @@ export function applicaPiano(frammento: string, piano: Piano): [string, Sostituz
   return [testo, effettive];
 }
 
+const PROMPT_CONTROPROVA = `Questo testo è già stato anonimizzato: i dati identificativi sono stati sostituiti da segnaposto come «Persona 1» o [data di nascita]. Controlla se restano ANCORA nomi o cognomi di persone reali, anche storpiati o scritti male (NON i segnaposto, NON nomi di ospedali, istituti, farmaci o luoghi).
+Rispondi SOLO con un oggetto JSON valido: {"nomi_rimasti": ["..."]}
+Ogni voce deve essere una citazione ESATTA del testo. Se non resta nulla: {"nomi_rimasti": []}
+
+TESTO:
+{testo}`;
+
+async function controprova(testoAnon: string): Promise<string[]> {
+  try {
+    const grezzo = await chiamaOllama(PROMPT_CONTROPROVA.replace('{testo}', testoAnon));
+    const dati = JSON.parse(grezzo);
+    const lista = Array.isArray(dati?.nomi_rimasti) ? dati.nomi_rimasti : [];
+    return lista
+      .filter((x: unknown): x is string => typeof x === 'string' && x.trim().length >= 3)
+      .map((x: string) => x.trim());
+  } catch {
+    return [];
+  }
+}
+
+// Anonimizzazione con CONTROPROVA (aggiunta dopo il caso reale del
+// 2026-08-17: la correzione AI della pipeline riscrive i nomi storpiati in
+// forme nuove, che la prima passata non riconosce più): dopo le sostituzioni
+// il modello rilegge il RISULTATO e segnala i nomi ancora presenti; ognuno
+// viene agganciato — se somiglia a una persona già nota — al suo segnaposto,
+// altrimenti a una «Persona» nuova, e si ricontrolla. Al massimo due giri.
+// Restituisce anche il piano finale: serve al percorso .docx per riscrivere
+// il documento originale con TUTTE le voci, controprova compresa.
+export async function anonimizzaConPiano(
+  testoOriginale: string
+): Promise<{ piano: Piano; esito: EsitoAnonimizza }> {
+  const originale = testoOriginale.slice(0, TESTO_MAX);
+  const piano = await pianoAnonimizzazione(originale);
+  let [testo, sostituzioni] = applicaPiano(originale, piano);
+  let prossima =
+    new Set(piano.voci.filter((v) => v.segnaposto.startsWith('«Persona')).map((v) => v.segnaposto)).size + 1;
+
+  for (let giro = 0; giro < 2; giro++) {
+    const rimasti = await controprova(testo);
+    const presenti = rimasti.filter((n) => testo.toLowerCase().includes(n.toLowerCase()));
+    if (presenti.length === 0) break;
+    for (const nome of presenti) {
+      // Variante di una persona già nota? Stesso segnaposto. Altrimenti nuova.
+      let seg: string | null = null;
+      for (const v of piano.voci) {
+        if (!v.segnaposto.startsWith('«Persona')) continue;
+        for (const pezzoNoto of v.originale.split(/\s+/)) {
+          if (pezzoNoto.length < 5) continue;
+          const max = pezzoNoto.length >= 9 ? 2 : 1;
+          for (const pezzoNuovo of nome.split(/\s+/)) {
+            if (distanza(pezzoNuovo.toLowerCase(), pezzoNoto.toLowerCase(), max) <= max) {
+              seg = v.segnaposto;
+              break;
+            }
+          }
+          if (seg) break;
+        }
+        if (seg) break;
+      }
+      if (!seg) {
+        seg = `«Persona ${prossima}»`;
+        prossima += 1;
+      }
+      piano.voci.push({ originale: nome, segnaposto: seg });
+      for (const pezzo of nome.split(/\s+/)) {
+        if (pezzo.length >= 3) piano.voci.push({ originale: pezzo, segnaposto: seg });
+      }
+    }
+    const [nuovo, effettive] = applicaPiano(testo, piano);
+    testo = nuovo;
+    sostituzioni = sostituzioni.concat(effettive);
+  }
+
+  return { piano, esito: { testo, sostituzioni, modello: MODELLO } };
+}
+
 export async function anonimizza(testoOriginale: string): Promise<EsitoAnonimizza> {
-  const piano = await pianoAnonimizzazione(testoOriginale);
-  const [testo, sostituzioni] = applicaPiano(testoOriginale.slice(0, TESTO_MAX), piano);
-  return { testo, sostituzioni, modello: MODELLO };
+  return (await anonimizzaConPiano(testoOriginale)).esito;
 }

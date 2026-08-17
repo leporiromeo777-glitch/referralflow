@@ -4,9 +4,7 @@ import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import {
   anonimizza,
-  applicaPiano,
-  pianoAnonimizzazione,
-  MODELLO_ANONIMIZZA,
+  anonimizzaConPiano,
   TESTO_MAX,
   type EsitoAnonimizza,
 } from '@/lib/anonimizza';
@@ -59,13 +57,14 @@ async function rispostaDocx(nomeFile: string, buffer: Buffer): Promise<RispostaA
   }
 
   try {
-    const piano = await pianoAnonimizzazione(testo);
-    const [anteprima, sostituzioni] = applicaPiano(testo, piano);
+    // Piano con controprova: le voci scoperte rileggendo il risultato
+    // valgono anche per la riscrittura del pacchetto Word.
+    const { piano, esito } = await anonimizzaConPiano(testo);
     const { anonimizzaDocx } = await import('@/lib/anonimizza-docx');
     const nuovo = await anonimizzaDocx(buffer, piano);
     return {
       ok: true,
-      esito: { testo: anteprima, sostituzioni, modello: MODELLO_ANONIMIZZA },
+      esito,
       file: {
         // Nome NEUTRO, mai derivato dall'originale: i file dei pazienti
         // hanno spesso il nome della persona proprio nel nome del file, e
