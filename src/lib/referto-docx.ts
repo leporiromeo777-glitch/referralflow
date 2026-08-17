@@ -55,6 +55,33 @@ function espandiTesto(xml: string, testo: string): string {
   });
 }
 
+// Ricompone i ritorni a capo tecnici della trascrizione (whisper spezza una
+// riga per segmento audio, anche a metà frase) in paragrafi ordinati: una
+// riga che non finisce con un segno di fine frase scorre in quella dopo;
+// le righe vuote e gli elenchi («- …», «1. …») restano confini veri.
+export function ricomponiParagrafi(testo: string): string {
+  const righe = testo.replace(/\r\n/g, '\n').split('\n');
+  const fineFrase = /[.!?:;]["»)]?\s*$/;
+  const vociElenco = /^\s*(?:[-•–]|\d{1,2}[.)])\s/;
+  const salutoIniziale = /^\s*(?:car[oa]|gentile|egregi[oa]|spett)/i;
+  const out: string[] = [];
+  let corrente = '';
+  const chiudi = () => { if (corrente) { out.push(corrente); corrente = ''; } };
+  for (const grezza of righe) {
+    const riga = grezza.trim();
+    if (!riga) { chiudi(); out.push(''); continue; }
+    const eElenco = vociElenco.test(riga);
+    if (corrente && eElenco) chiudi();
+    const eSaluto = !corrente && salutoIniziale.test(riga) && /,\s*$/.test(riga);
+    corrente = corrente ? `${corrente} ${riga}` : riga;
+    // Una voce d'elenco o il saluto («Caro collega,») chiudono la propria
+    // riga anche senza punto finale.
+    if (fineFrase.test(riga) || eElenco || eSaluto) chiudi();
+  }
+  chiudi();
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 export type DatiReferto = {
   medico: string;
   telefono: string;

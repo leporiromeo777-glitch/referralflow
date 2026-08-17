@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
-import { generaDocxReferto } from '@/lib/referto-docx';
+import { generaDocxReferto, ricomponiParagrafi } from '@/lib/referto-docx';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -64,7 +64,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     data: dataDoc,
     paziente: [pazienteNome, nascita].filter(Boolean).join(' – ') || ' ',
     piede: [pazienteNome, nascita].filter(Boolean).join(', ') + (dataDoc ? `  ${dataDoc}` : ''),
-    testo,
+    testo: ricomponiParagrafi(testo),
   });
 
   const nomeFile = `referto-${dataDoc.replaceAll('.', '-') || 'bozza'}.docx`;

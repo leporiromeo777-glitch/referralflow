@@ -806,6 +806,35 @@ def deduplica_loop(testo: str) -> tuple[str, int, list[str]]:
     for a, b in reversed(da_togliere):
         testo = testo[:a] + testo[b:]
 
+    # 1b) frase QUASI identica ripetuta di fila: whisper «incantato» che
+    #     varia una parola a ogni giro (visto dal vivo il 2026-08-17 sulla
+    #     coda di un dettato lungo: la ripetizione sfuggiva al passo 1
+    #     perché mai perfettamente uguale). Ogni frase si confronta con la
+    #     PRIMA del suo gruppo: somiglianza ≥ 0.9, almeno 3 di fila, frasi
+    #     non troppo corte. Cautela §2.4: il gruppo si tocca solo se tutte
+    #     le copie hanno gli stessi numeri (in un loop vero anche i numeri
+    #     si ripetono uguali); si tiene la prima copia.
+    spans = _frasi_span(testo)
+    frasi = [testo[a:b] for a, b in spans]
+    norme = [_norma_frase(f) for f in frasi]
+    da_togliere = []
+    i = 0
+    while i < len(spans):
+        j = i + 1
+        while (j < len(norme) and len(norme[i]) >= 12
+               and difflib.SequenceMatcher(None, norme[i], norme[j]).ratio() >= 0.9):
+            j += 1
+        if (j - i >= SOGLIA_LOOP_FRASI
+                and all(_numeri(frasi[k]) == _numeri(frasi[i]) for k in range(i, j))):
+            da_togliere.append((spans[i][1], spans[j - 1][1]))
+            rimosse += j - i - 1
+            cit = frasi[i].strip()
+            if cit:
+                citazioni.append(cit[:120])
+        i = j
+    for a, b in reversed(da_togliere):
+        testo = testo[:a] + testo[b:]
+
     # 2) gruppo di 1-8 parole ripetuto di fila senza punteggiatura di frase.
     #    Periodo più corto per primo: «x x x x x x» è un loop di 1 parola,
     #    non di 3. Le finestre con cifre si saltano in blocco.

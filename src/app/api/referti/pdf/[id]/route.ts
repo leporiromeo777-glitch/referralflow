@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { generaPdfReferto } from '@/lib/pdf';
+import { ricomponiParagrafi } from '@/lib/referto-docx';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -48,7 +49,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     studio: b.studio_nome,
     titolo,
     meta,
-    corpo: testo,
+    corpo: ricomponiParagrafi(testo),
     avvertenza: 'Generato da ReferralFlow. Trascrizione automatica rivista da una persona.',
   });
 
