@@ -835,6 +835,43 @@ def deduplica_loop(testo: str) -> tuple[str, int, list[str]]:
     for a, b in reversed(da_togliere):
         testo = testo[:a] + testo[b:]
 
+    # 1c) CICLO di 2-4 frasi ripetuto di fila (A-B-C-A-B-C…): whisper in
+    #     loop che ALTERNA le stesse frasi — visto dal vivo il 2026-08-17
+    #     in coda a un dettato lungo (ciclo di 3 frasi per ~15 giri), che
+    #     sfugge ai passi 1 e 1b perché nessuna frase è uguale alla sua
+    #     consecutiva. Norme identiche ⇒ numeri identici (§2.4): si tiene
+    #     il primo giro del ciclo, il resto va.
+    spans = _frasi_span(testo)
+    norme = [_norma_frase(testo[a:b]) for a, b in spans]
+    da_togliere = []
+    i = 0
+    while i < len(norme):
+        avanzato = False
+        for periodo in (2, 3, 4):
+            if i + 2 * periodo > len(norme):
+                continue
+            if any(len(norme[i + k]) < 3 for k in range(periodo)):
+                continue
+            giri = 1
+            while (i + (giri + 1) * periodo <= len(norme)
+                   and all(norme[i + k] == norme[i + giri * periodo + k]
+                           for k in range(periodo))):
+                giri += 1
+            if giri >= SOGLIA_LOOP_FRASI:
+                da_togliere.append((spans[i + periodo - 1][1],
+                                    spans[i + giri * periodo - 1][1]))
+                rimosse += (giri - 1) * periodo
+                cit = testo[spans[i][0]:spans[i][1]].strip()
+                if cit:
+                    citazioni.append(cit[:120])
+                i = i + giri * periodo
+                avanzato = True
+                break
+        if not avanzato:
+            i += 1
+    for a, b in reversed(da_togliere):
+        testo = testo[:a] + testo[b:]
+
     # 2) gruppo di 1-8 parole ripetuto di fila senza punteggiatura di frase.
     #    Periodo più corto per primo: «x x x x x x» è un loop di 1 parola,
     #    non di 3. Le finestre con cifre si saltano in blocco.
