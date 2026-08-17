@@ -150,6 +150,14 @@ OLLAMA_URL = os.environ.get("REFERTI_OLLAMA", "http://localhost:11434")
 MODELLO_LLM = os.environ.get("REFERTI_LLM", "gemma3:12b")
 OLLAMA_TIMEOUT_S = 300
 OLLAMA_TENTATIVI = 3
+# Finestra di contesto per le fasi AI. Il default di Ollama (4096 token) non
+# basta per i dettati lunghi: caso reale 2026-08-17, dettato di 18 minuti →
+# la correzione intera sfora la finestra, pasticcia i numeri, viene scartata
+# e parte il piano B frase per frase (mezz'ora di chiamate). Con 12288 un
+# dettato fino a ~25 minuti passa in UNA chiamata. Gemma 3 usa la sliding
+# window sulla maggior parte dei livelli: il costo in memoria della finestra
+# larga resta contenuto anche col 27b sul Mac da 24 GB.
+OLLAMA_NUM_CTX = int(os.environ.get("REFERTI_NUM_CTX", "12288"))
 
 # I prompt di SPEC §6: VALIDATI SU REFERTI REALI, copiati carattere per
 # carattere. NON riscriverli, NON «migliorarli» (SPEC §0.3). Il segnaposto
@@ -859,7 +867,7 @@ def chiama_ollama(prompt: str, file_id: str, fase: str, formato_json: bool = Fal
         "model": MODELLO_LLM,
         "prompt": prompt,
         "stream": False,
-        "options": {"temperature": 0},
+        "options": {"temperature": 0, "num_ctx": OLLAMA_NUM_CTX},
     }
     if formato_json:
         richiesta_dati["format"] = "json"  # SPEC §6.3: output JSON garantito
