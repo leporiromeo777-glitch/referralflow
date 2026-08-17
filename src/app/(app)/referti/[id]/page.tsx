@@ -185,7 +185,10 @@ export default async function RefertoBozza({
     <>
       <div className="page-head">
         <h1>{row.stato === 'confermata' ? 'Referto' : 'Bozza di referto'}</h1>
-        <a className="btn btn-primary" href={`/api/referti/pdf/${row.id}`} target="_blank">
+        <a className="btn btn-primary" href={`/api/referti/docx/${row.id}`}>
+          Word in carta intestata
+        </a>
+        <a className="btn" href={`/api/referti/pdf/${row.id}`} target="_blank">
           Scarica PDF
         </a>
         <Link className="btn" href="/referti">← Tutti i referti</Link>
