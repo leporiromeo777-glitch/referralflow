@@ -83,6 +83,11 @@ ricevuta → triage → da_prenotare → prenotata → vista → referto_inviato
 (definito in `src/lib/status.ts`: STATUS, NEXT_STATUS, NEXT_ACTION, URGENZA)
 
 ## Prossimi lavori (in ordine di valore)
+0. Referti Word in carta intestata (bottone nel dettaglio referto, stampo
+   `modelli/referto-carta-intestata.docx`, lib `src/lib/referto-docx.ts`):
+   l'intestazione è FISSA (Dr. Med. Giorgio Moschovitis) — richiesta utente
+   2026-08-17: in futuro deve seguire IL MEDICO CHE FIRMA il referto
+   (più medici per studio → intestazioni per medico).
 1. Stripe su «Attiva il tuo studio» (le BASI ci sono già — migrazioni 012+013:
    attivazione self-service intestata al medico titolare, `studios.abbonamento`
    pilota|prova|attivo|sospeso, `trial_until` 60gg, `stripe_customer_id` vuoto,
