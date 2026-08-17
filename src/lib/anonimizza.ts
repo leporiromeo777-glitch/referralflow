@@ -9,6 +9,12 @@ import 'server-only';
 // contenuto clinico non può essere alterato (stessa filosofia della pipeline
 // di trascrizione). Niente scritture su DB, niente testo nei log.
 //
+// Due tempi, separati apposta: `pianoAnonimizzazione` costruisce UNA volta
+// l'elenco delle sostituzioni (con l'AI), `applicaPiano` lo applica a
+// qualsiasi frammento — al testo intero per l'anteprima, e paragrafo per
+// paragrafo dentro il .docx originale (anonimizza-docx.ts), così logo,
+// intestazione e impaginazione restano intatti.
+//
 // Modello: di default gemma3:12b, NON il 27b — sul Mac da 24 GB il 27b non
 // convive con whisper sulla GPU (visto dal vivo il 2026-08-16): se un
 // dettato è in trascrizione mentre qualcuno anonimizza, col 12b (~8 GB)
@@ -16,6 +22,7 @@ import 'server-only';
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const MODELLO = process.env.ANONIMIZZA_LLM || 'gemma3:12b';
+export const MODELLO_ANONIMIZZA = MODELLO;
 const TIMEOUT_MS = 240_000;
 const TENTATIVI = 2;
 // Un blocco per chiamata: testi lunghi vengono spezzati sui paragrafi per
@@ -51,6 +58,7 @@ type Estratto = {
 };
 
 export type Sostituzione = { originale: string; segnaposto: string };
+export type Piano = { voci: Sostituzione[] };
 export type EsitoAnonimizza = {
   testo: string;
   sostituzioni: Sostituzione[];
@@ -143,10 +151,24 @@ function sostituisci(testo: string, originale: string, segnaposto: string): [str
   return [nuovo, n];
 }
 
-export async function anonimizza(testoOriginale: string): Promise<EsitoAnonimizza> {
-  let testo = testoOriginale.slice(0, TESTO_MAX);
+// Rete di sicurezza deterministica, indipendente dal modello: formati
+// svizzeri riconoscibili a colpo d'occhio.
+const REGOLE: [RegExp, string][] = [
+  [/\b756[.\s]?\d{4}[.\s]?\d{4}[.\s]?\d{2}\b/g, '[n. AVS]'],
+  [/\b[\w.+-]+@[\w-]+\.[\w.]+\b/g, '[email]'],
+  [/(?:\+41|0041)\s?\d{2}[\s./-]?\d{3}[\s./-]?\d{2}[\s./-]?\d{2}\b/g, '[telefono]'],
+  [/\b0\d{2}[\s./-]\d{3}[\s./-]\d{2}[\s./-]\d{2}\b/g, '[telefono]'],
+];
 
-  // 1) Il modello locale individua i dati identificativi, blocco per blocco.
+// Costruisce UNA volta l'elenco ordinato delle sostituzioni letterali.
+// Le persone sono numerate nell'ordine in cui compaiono nel testo; per ogni
+// nome vengono aggiunti anche i singoli pezzi («la signora Rossi» dopo
+// «Maria Rossi») con lo STESSO segnaposto. Le voci restano nel piano anche
+// se nel testo estratto non compaiono: dentro un .docx un nome può vivere
+// solo nell'intestazione, che l'estrazione del testo non sempre vede.
+export async function pianoAnonimizzazione(testoOriginale: string): Promise<Piano> {
+  const testo = testoOriginale.slice(0, TESTO_MAX);
+
   const estratti: Estratto = {
     persone: [], date_nascita: [], indirizzi: [], telefoni: [], email: [], codici: [],
   };
@@ -158,65 +180,57 @@ export async function anonimizza(testoOriginale: string): Promise<EsitoAnonimizz
     });
   }
 
-  const sostituzioni: Sostituzione[] = [];
-  const applica = (voci: string[], segnaposto: string | ((i: number) => string)) => {
-    voci.forEach((voce, i) => {
-      const seg = typeof segnaposto === 'function' ? segnaposto(i) : segnaposto;
-      const [nuovo, n] = sostituisci(testo, voce, seg);
-      if (n > 0) {
-        testo = nuovo;
-        sostituzioni.push({ originale: voce, segnaposto: seg });
-      }
-    });
-  };
-
-  // 2) Le persone per prime, numerate nell'ordine in cui compaiono nel testo.
+  const voci: Sostituzione[] = [];
+  const minuscolo = testo.toLowerCase();
   const persone = estratti.persone
-    .map((p) => ({ p, pos: testo.toLowerCase().indexOf(p.toLowerCase()) }))
-    .filter((x) => x.pos !== -1)
-    .sort((a, b) => a.pos - b.pos)
+    .map((p) => ({ p, pos: minuscolo.indexOf(p.toLowerCase()) }))
+    .sort((a, b) => (a.pos === -1 ? 1 : b.pos === -1 ? -1 : a.pos - b.pos))
     .map((x) => x.p);
   persone.forEach((nome, i) => {
     const seg = `«Persona ${i + 1}»`;
-    const [nuovo, n] = sostituisci(testo, nome, seg);
-    if (n > 0) {
-      testo = nuovo;
-      sostituzioni.push({ originale: nome, segnaposto: seg });
-    }
-    // Anche i pezzi del nome da soli («la signora Rossi» dopo «Maria Rossi»):
-    // stesso segnaposto, così la persona resta riconoscibile come «la stessa».
+    voci.push({ originale: nome, segnaposto: seg });
     for (const pezzo of nome.split(/\s+/)) {
-      if (pezzo.length < 3) continue;
-      const [nuovo2, n2] = sostituisci(testo, pezzo, seg);
-      if (n2 > 0) {
-        testo = nuovo2;
-        sostituzioni.push({ originale: pezzo, segnaposto: seg });
-      }
+      if (pezzo.length >= 3) voci.push({ originale: pezzo, segnaposto: seg });
     }
   });
-
-  applica(estratti.date_nascita, '[data di nascita]');
-  applica(estratti.indirizzi, '[indirizzo]');
-  applica(estratti.telefoni, '[telefono]');
-  applica(estratti.email, '[email]');
-  applica(estratti.codici, '[codice personale]');
-
-  // 3) Rete di sicurezza deterministica, indipendente dal modello: formati
-  // svizzeri riconoscibili a colpo d'occhio.
-  const regole: [RegExp, string][] = [
-    [/\b756[.\s]?\d{4}[.\s]?\d{4}[.\s]?\d{2}\b/g, '[n. AVS]'],
-    [/\b[\w.+-]+@[\w-]+\.[\w.]+\b/g, '[email]'],
-    [/(?:\+41|0041)\s?\d{2}[\s./-]?\d{3}[\s./-]?\d{2}[\s./-]?\d{2}\b/g, '[telefono]'],
-    [/\b0\d{2}[\s./-]\d{3}[\s./-]\d{2}[\s./-]\d{2}\b/g, '[telefono]'],
+  const fissi: [keyof Estratto, string][] = [
+    ['date_nascita', '[data di nascita]'],
+    ['indirizzi', '[indirizzo]'],
+    ['telefoni', '[telefono]'],
+    ['email', '[email]'],
+    ['codici', '[codice personale]'],
   ];
-  for (const [pattern, seg] of regole) {
+  for (const [chiave, seg] of fissi) {
+    for (const voce of estratti[chiave]) voci.push({ originale: voce, segnaposto: seg });
+  }
+  return { voci };
+}
+
+// Applica il piano (voci letterali + regole fisse) a un frammento qualsiasi.
+// Restituisce il testo nuovo e le sostituzioni davvero avvenute qui.
+export function applicaPiano(frammento: string, piano: Piano): [string, Sostituzione[]] {
+  let testo = frammento;
+  const effettive: Sostituzione[] = [];
+  for (const { originale, segnaposto } of piano.voci) {
+    const [nuovo, n] = sostituisci(testo, originale, segnaposto);
+    if (n > 0) {
+      testo = nuovo;
+      effettive.push({ originale, segnaposto });
+    }
+  }
+  for (const [pattern, seg] of REGOLE) {
     let n = 0;
     const nuovo = testo.replace(pattern, () => { n += 1; return seg; });
     if (n > 0) {
       testo = nuovo;
-      sostituzioni.push({ originale: `formato riconosciuto (${n}×)`, segnaposto: seg });
+      effettive.push({ originale: `formato riconosciuto (${n}×)`, segnaposto: seg });
     }
   }
+  return [testo, effettive];
+}
 
+export async function anonimizza(testoOriginale: string): Promise<EsitoAnonimizza> {
+  const piano = await pianoAnonimizzazione(testoOriginale);
+  const [testo, sostituzioni] = applicaPiano(testoOriginale.slice(0, TESTO_MAX), piano);
   return { testo, sostituzioni, modello: MODELLO };
 }

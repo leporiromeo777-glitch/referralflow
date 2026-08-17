@@ -2,17 +2,34 @@
 
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
-import { anonimizza, TESTO_MAX, type EsitoAnonimizza } from '@/lib/anonimizza';
+import {
+  anonimizza,
+  applicaPiano,
+  pianoAnonimizzazione,
+  MODELLO_ANONIMIZZA,
+  TESTO_MAX,
+  type EsitoAnonimizza,
+} from '@/lib/anonimizza';
 
-// Anonimizzazione on-demand: nessuna persistenza — il testo arriva, viene
+// Anonimizzazione on-demand: nessuna persistenza — il documento arriva, viene
 // elaborato in memoria dal modello locale e torna al browser. Niente DB,
 // niente file su disco, niente contenuti nei log (nLPD).
+//
+// Per i .docx la risposta porta anche IL FILE ORIGINALE MODIFICATO (stesso
+// documento, stessi logo/intestazione/impaginazione, solo i dati sostituiti);
+// per PDF e testo il file scaricabile resta il testo semplice.
 
-const FILE_MAX = 15 * 1024 * 1024;
+// Sotto il bodySizeLimit delle server action (12 MB in next.config.mjs).
+const FILE_MAX = 10 * 1024 * 1024;
+
+const MIME_DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 export type RispostaAnonimizza =
-  | { ok: true; esito: EsitoAnonimizza }
+  | { ok: true; esito: EsitoAnonimizza; file?: { nome: string; base64: string; mime: string } }
   | { ok: false; errore: string };
+
+const ERRORE_OLLAMA =
+  'Il modello AI locale non risponde. Controlla che Ollama sia in funzione su questo computer e riprova.';
 
 async function testoDaPdf(buffer: Buffer): Promise<string> {
   const { PDFParse } = await import('pdf-parse');
@@ -25,6 +42,41 @@ async function testoDaPdf(buffer: Buffer): Promise<string> {
   }
 }
 
+// Il percorso Word: piano di sostituzioni calcolato UNA volta sul testo
+// estratto, applicato sia all'anteprima sia dentro il pacchetto .docx.
+async function rispostaDocx(nomeFile: string, buffer: Buffer): Promise<RispostaAnonimizza> {
+  let testo = '';
+  try {
+    const mammoth = (await import('mammoth')).default;
+    const r = await mammoth.extractRawText({ buffer });
+    testo = typeof r?.value === 'string' ? r.value : '';
+  } catch {
+    return { ok: false, errore: 'Non riesco a leggere questo file Word.' };
+  }
+  if (!testo.trim()) return { ok: false, errore: 'Questo file Word sembra vuoto.' };
+  if (testo.length > TESTO_MAX) {
+    return { ok: false, errore: `Il documento è troppo lungo (massimo ${Math.round(TESTO_MAX / 1000)}mila caratteri).` };
+  }
+
+  try {
+    const piano = await pianoAnonimizzazione(testo);
+    const [anteprima, sostituzioni] = applicaPiano(testo, piano);
+    const { anonimizzaDocx } = await import('@/lib/anonimizza-docx');
+    const nuovo = await anonimizzaDocx(buffer, piano);
+    return {
+      ok: true,
+      esito: { testo: anteprima, sostituzioni, modello: MODELLO_ANONIMIZZA },
+      file: {
+        nome: nomeFile.replace(/\.docx$/i, '') + '-anonimizzato.docx',
+        base64: nuovo.toString('base64'),
+        mime: MIME_DOCX,
+      },
+    };
+  } catch {
+    return { ok: false, errore: ERRORE_OLLAMA };
+  }
+}
+
 export async function anonimizzaDocumento(formData: FormData): Promise<RispostaAnonimizza> {
   const session = await getSession();
   if (!session || !session.studioId) redirect('/login');
@@ -34,10 +86,13 @@ export async function anonimizzaDocumento(formData: FormData): Promise<RispostaA
   const file = formData.get('file');
   if (file instanceof File && file.size > 0) {
     if (file.size > FILE_MAX) {
-      return { ok: false, errore: 'Il file supera i 15 MB.' };
+      return { ok: false, errore: 'Il file supera i 10 MB.' };
     }
     const nome = file.name.toLowerCase();
     const buffer = Buffer.from(await file.arrayBuffer());
+    if (nome.endsWith('.docx')) {
+      return rispostaDocx(file.name, buffer);
+    }
     if (nome.endsWith('.pdf')) {
       try {
         testo = await testoDaPdf(buffer);
@@ -51,15 +106,6 @@ export async function anonimizzaDocumento(formData: FormData): Promise<RispostaA
             'Questo PDF non contiene testo selezionabile (probabilmente è una scansione): al momento posso anonimizzare solo PDF con testo.',
         };
       }
-    } else if (nome.endsWith('.docx')) {
-      try {
-        const mammoth = (await import('mammoth')).default;
-        const r = await mammoth.extractRawText({ buffer });
-        testo = typeof r?.value === 'string' ? r.value : '';
-      } catch {
-        return { ok: false, errore: 'Non riesco a leggere questo file Word.' };
-      }
-      if (!testo.trim()) return { ok: false, errore: 'Questo file Word sembra vuoto.' };
     } else if (nome.endsWith('.doc')) {
       return {
         ok: false,
@@ -82,10 +128,6 @@ export async function anonimizzaDocumento(formData: FormData): Promise<RispostaA
     const esito = await anonimizza(testo);
     return { ok: true, esito };
   } catch {
-    return {
-      ok: false,
-      errore:
-        'Il modello AI locale non risponde. Controlla che Ollama sia in funzione su questo computer e riprova.',
-    };
+    return { ok: false, errore: ERRORE_OLLAMA };
   }
 }

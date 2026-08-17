@@ -47,12 +47,22 @@ export function AnonimizzaForm() {
 
   function scarica() {
     if (!risposta?.ok) return;
-    // Il file nasce qui nel browser: nessun passaggio dal server.
-    const blob = new Blob([risposta.esito.testo], { type: 'text/plain;charset=utf-8' });
+    let blob: Blob;
+    let nome: string;
+    if (risposta.file) {
+      // Word: il documento ORIGINALE coi soli dati sostituiti (logo,
+      // intestazione e impaginazione intatti).
+      const bytes = Uint8Array.from(atob(risposta.file.base64), (c) => c.charCodeAt(0));
+      blob = new Blob([bytes], { type: risposta.file.mime });
+      nome = risposta.file.nome;
+    } else {
+      blob = new Blob([risposta.esito.testo], { type: 'text/plain;charset=utf-8' });
+      nome = `${nomeOrigine || 'documento'}-anonimizzato.txt`;
+    }
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${nomeOrigine || 'documento'}-anonimizzato.txt`;
+    a.download = nome;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -118,6 +128,10 @@ export function AnonimizzaForm() {
           <p className="anon-avviso">
             Rileggi prima di condividere: l&apos;AI può lasciarsi sfuggire un dato.
             Sostituzioni fatte: {risposta.esito.sostituzioni.length} (modello locale {risposta.esito.modello}).
+            {risposta.file && (
+              <> «Scarica il file» dà il documento Word originale coi soli dati sostituiti
+              (logo e impaginazione intatti); le correzioni fatte qui sotto valgono solo per «Copia il testo».</>
+            )}
           </p>
           <textarea
             rows={12}
