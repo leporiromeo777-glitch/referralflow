@@ -227,6 +227,7 @@ Il tuo compito: individua SOLO le frasi in cui il medico dà alla segreteria un 
 
 Distinzione fondamentale:
 - I comandi di dettatura come «scrivi», «scriva», «metti», «riporta», «aggiungi», «vai a capo» significano che il testo che li segue FA PARTE del referto: non segnalarlo MAI. Esempio: «scrivi: caro collega, le invio il paziente…» → «caro collega, le invio il paziente…» resta nel referto.
+- ATTENZIONE però: gli STESSI verbi sono un compito per la segreteria quando l'azione è rivolta a una persona esterna o a un altro documento, non al testo che si sta dettando. Esempi da segnalare: «scrivi al dottor Rossi che…», «scrivi una mail alla cardiologia», «riprendi la lettera precedente», «riprendi il referto dell'anno scorso e allegalo», «richiama il paziente per l'appuntamento». La differenza: «scrivi:» seguito dal testo dettato = referto; «scrivi A QUALCUNO» o «riprendi/recupera UN ALTRO documento» = compito per la segreteria.
 - Le aperture e chiusure di lettera dettate («Caro collega», «Gentile dottoressa», «Cordiali saluti», «Distinti saluti») fanno parte del referto: non segnalarle MAI.
 - Un compito per la segreteria è qualcosa che si fa fuori dal documento: «allega la vecchia email», «mandane una copia al curante», «fissagli il controllo tra un mese».
 
@@ -631,6 +632,90 @@ def applica_correzioni(testo: str, sostituzioni: list[tuple[re.Pattern, str]]) -
             totale += 1
             return _con_maiuscola(m, nuovo)
         testo = pattern.sub(_sostituisci, testo)
+    return testo, totale
+
+
+# ── Punteggiatura dettata (SPEC §3, passo 5b — aggiunto 2026-08-17) ──────────
+# Il medico detta i segni a voce e whisper a volte li lascia scritti a parole
+# («il paziente virgola visto oggi aperta parentesi …»). Qui diventano segni
+# veri con REGOLE FISSE, niente AI: su un testo clinico una riscrittura
+# libera può alterare il contenuto, una sostituzione letterale no. Richiesto
+# dal medico dal vivo (2026-08-17). Gira su A e B dopo il dizionario, così
+# il confronto lavora su testi già coerenti. Ordine: locuzioni lunghe prima
+# delle corte («punto e virgola» prima di «virgola» e di «punto»).
+# I segni convertiti nascono marcati con un sentinella (\x00): quando whisper
+# ha messo SIA il segno spurio SIA la parola («stabile, punto» → «stabile,.»),
+# nella sequenza di segni risultante vince quello dettato — il marcato —
+# ovunque si trovi. Il sentinella sparisce prima di restituire il testo.
+_PUNT_M = "\x00"
+_PUNT_LOCUZIONI: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"\bpunto a capo\b", re.IGNORECASE), _PUNT_M + ".\n"),
+    (re.compile(r"\ba capo\b", re.IGNORECASE), "\n"),
+    (re.compile(r"\bpunto e virgola\b", re.IGNORECASE), _PUNT_M + ";"),
+    (re.compile(r"\bpunto esclamativo\b", re.IGNORECASE), _PUNT_M + "!"),
+    (re.compile(r"\bpunto interrogativo\b", re.IGNORECASE), _PUNT_M + "?"),
+    (re.compile(r"\bdue punti\b", re.IGNORECASE), _PUNT_M + ":"),
+    (re.compile(r"\b(?:apert\w+|apri),? (?:la )?parentesi\b|\bparentesi aperta\b", re.IGNORECASE), "("),
+    (re.compile(r"\b(?:chius\w+|chiudi|chiudo),? (?:la )?parentesi\b|\bparentesi chiusa\b", re.IGNORECASE), ")"),
+    # «vergola» non esiste in italiano: è il modo tipico in cui whisper
+    # storpia «virgola» dettata in fretta.
+    (re.compile(r"\b(?:virgola|vergola)\b", re.IGNORECASE), _PUNT_M + ","),
+    (re.compile(r"[ \t]*\btrattino\b[ \t]*", re.IGNORECASE), "-"),
+]
+# «punto» da solo è ambiguo («dal punto di vista», «a questo punto», «punto
+# di repere»): diventa segno solo se NON preceduto da articoli/dimostrativi
+# e NON seguito dalle parole che lo rendono un sostantivo. Le guardie
+# tollerano una virgola spuria di whisper attaccata al contorno
+# («dal, punto, di vista» resta parola come «dal punto di vista»).
+_PUNT_ARTICOLI = ("il", "un", "al", "dal", "nel", "sul", "quel", "ogni", "questo", "stesso")
+_PUNT_PUNTO_GUARDIA = (
+    "".join(f"(?<!\\b{w} )(?<!\\b{w}, )" for w in _PUNT_ARTICOLI)
+    + r"\bpunto\b"
+    + r"(?!\s*,?\s*(?:e|di|del|dell\w*|della|dei|delle|da|dal|dalla|in|su|a)\b)"
+)
+# Prima il caso «punto» + parola (la parola prende la maiuscola), poi il
+# «punto» rimasto (fine testo o già seguito da un segno).
+_PUNT_PUNTO_PAROLA = re.compile(_PUNT_PUNTO_GUARDIA + r"\s+(\w)", re.IGNORECASE)
+_PUNT_PUNTO_SOLO = re.compile(_PUNT_PUNTO_GUARDIA, re.IGNORECASE)
+
+
+def punteggiatura_dettata(testo: str) -> tuple[str, int]:
+    """Trasforma la punteggiatura dettata a parole in segni veri e sistema
+    gli spazi attorno ai segni. Restituisce (testo, n. segni convertiti)."""
+    totale = 0
+    for pattern, segno in _PUNT_LOCUZIONI:
+        testo, n = pattern.subn(segno, testo)
+        totale += n
+    testo, n = _PUNT_PUNTO_PAROLA.subn(lambda m: _PUNT_M + ". " + m.group(1).upper(), testo)
+    totale += n
+    testo, n = _PUNT_PUNTO_SOLO.subn(_PUNT_M + ".", testo)
+    totale += n
+    if totale:
+        # Sequenze di segni sulla stessa riga («stabile,.» da «stabile,
+        # punto»): vince il segno dettato (marcato), ovunque sia; una
+        # sequenza senza segni dettati (es. i «...» di whisper) resta sua.
+        def _vince_dettato(m: re.Match) -> str:
+            run = m.group(0)
+            i = run.rfind(_PUNT_M)
+            return run[i + 1] if i != -1 else run
+
+        testo = re.sub(
+            "[" + _PUNT_M + r".,;:!?](?:[ \t]*[" + _PUNT_M + r".,;:!?])+",
+            _vince_dettato, testo,
+        )
+        testo = testo.replace(_PUNT_M, "")
+        # Segni spuri subito dopo «(», prima di «)» o a inizio riga.
+        testo = re.sub(r"\([ \t]*[.,;:]+[ \t]*", "(", testo)
+        testo = re.sub(r"[,;:]+[ \t]*\)", ")", testo)
+        testo = re.sub(r"(\n)[ \t]*[.,;:!?]+[ \t]*", r"\1", testo)
+        # Spazi: mai prima di , ; : . ! ? ) — mai dopo ( — righe pulite.
+        testo = re.sub(r"[ \t]+([,;:.!?)])", r"\1", testo)
+        testo = re.sub(r"\(\s+", "(", testo)
+        testo = re.sub(r"[ \t]+\n", "\n", testo)
+        testo = re.sub(r"\n[ \t]+", "\n", testo)
+        testo = re.sub(r"[ \t]{2,}", " ", testo)
+        # A inizio riga (dopo un «a capo» dettato) si riparte in maiuscolo.
+        testo = re.sub(r"\n([a-zàèéìíòóùú])", lambda m: "\n" + m.group(1).upper(), testo)
     return testo, totale
 
 
@@ -1235,11 +1320,18 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         inizio = time.monotonic()
         corretto_a, n_sost = applica_correzioni(grezzo_a, sostituzioni)
         corretto_b, _ = applica_correzioni(grezzo_b, sostituzioni)
-        percorso(".corretto.txt").write_text(corretto_a, encoding="utf-8")
         log.info(
             "fase=dizionario file=%s esito=ok sostituzioni=%d durata=%.1fs",
             file_id, n_sost, time.monotonic() - inizio,
         )
+
+        # Punteggiatura dettata (SPEC §3, passo 5b): i segni detti a voce
+        # diventano segni veri, su entrambe le passate prima del confronto.
+        fase = "punteggiatura"
+        corretto_a, n_punt = punteggiatura_dettata(corretto_a)
+        corretto_b, _ = punteggiatura_dettata(corretto_b)
+        percorso(".corretto.txt").write_text(corretto_a, encoding="utf-8")
+        log.info("fase=punteggiatura file=%s esito=ok segni=%d", file_id, n_punt)
 
         fase = "confronto"
         _ = notifica and notifica(fase)

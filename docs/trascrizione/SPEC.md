@@ -105,6 +105,8 @@ più semplice o più performante.
          │
 [5] dizionario                   sostituzioni deterministiche (correzioni.json), su A e B
          │
+[5b] punteggiatura dettata       «virgola», «aperta parentesi», «punto»… → segni veri (deterministico), su A e B
+         │
 [6] confronto A/B                individua i punti dove divergono → lista DIVERGENZE
          │
 [7] correzione LLM               gemma3:12b via Ollama, prompt §6.1
@@ -152,6 +154,30 @@ testo bonificato; i `.txt` grezzi restano su disco. Ogni intervento è
 segnalato: nel log solo i conteggi (`fase=deloop rimosse_a/b`), in bozza la
 frase tenuta entra in testa ai segmenti dubbi, così il revisore vede DOVE la
 ripetizione è stata ridotta e può controllare l'audio in quel punto.
+
+**Nota sul passaggio 3 (recupero anti-troncamento, aggiunto 2026-08-17):**
+quando whisper «si incanta» in un loop, spesso la coda del dettato non viene
+mai trascritta (caso reale: 35 s persi su 338). Dopo la trascrizione A si
+confronta la durata del WAV con il tempo dell'ultima parola (dal JSON `-ojf`):
+se manca una coda importante (soglie `REFERTI_TRONC_*`: audio ≥ 60 s, buco
+≥ 20 s e ≥ 6%), si rifà UNA volta la passata con `-mc 0` — senza riporto di
+contesto tra le finestre, il carburante dei loop; il prompt di vocabolario
+con `-mc 0` non agisce, compensano dizionario e correzione — e si tiene la
+corsa che copre più audio. Mai bloccante. ATTENZIONE: il flag «-nc» NON
+esiste in whisper-cli 1.9.1 (stampa l'aiuto ed esce con codice 0).
+
+**Nota sul passaggio 5b (punteggiatura dettata, aggiunto 2026-08-17, richiesto
+dal medico):** i segni dettati a voce che whisper lascia scritti a parole
+(«virgola», «aperta/chiusa parentesi», «due punti», «punto e virgola»,
+«punto», «a capo», «trattino») diventano segni veri. Deterministico, NIENTE
+AI — su un testo clinico una riscrittura libera può alterare il contenuto,
+una sostituzione letterale no (stessa filosofia del passo 4b). «punto» da
+solo è ambiguo e ha guardie su articoli e complementi («dal punto di vista»,
+«a questo punto», «punto di repere» restano intatti). Gira su A e B dopo il
+dizionario così il confronto lavora su testi coerenti; sistemazione degli
+spazi e maiuscola dopo il punto solo dove la fase è intervenuta. Funzione
+`punteggiatura_dettata` in `pipeline.py`, nel log solo il conteggio
+(`fase=punteggiatura segni=N`).
 
 **Nota sui passaggi 3-4:** la doppia trascrizione serve a individuare i punti incerti.
 Dove le due versioni divergono, quasi sempre c'è un problema audio. È un rilevatore di
@@ -364,6 +390,16 @@ capo) introducono testo che FA PARTE del referto, e le formule di lettera
 (Caro collega, Cordiali saluti…) non si segnalano mai. Coerente con la
 regola 4 di §6.1 (le istruzioni di dettatura si conservano). Da riverificare
 sullo stesso dettato dopo l'aggiornamento.
+
+**Revisione 3 (richiesta dal medico dal vivo, 2026-08-17):** sui dettati
+reali la fase mancava molti compiti perché la revisione 2 aveva insegnato
+che «scrivi» è SEMPRE dettatura. Aggiunta al prompt la controdistinzione:
+gli stessi verbi («scrivi», «riprendi», …) sono un compito per la segreteria
+quando l'azione è rivolta a una persona esterna o a un ALTRO documento
+(«scrivi al dottor Rossi che…», «riprendi la lettera precedente»), mentre
+«scrivi:» seguito dal testo dettato resta referto. Le difese nel codice
+(citazione esatta, soglia 40%, nel dubbio non segnalare) sono invariate.
+Da rimisurare sui prossimi dettati reali.
 
 **Correzione (secondo dettato reale, 2026-08-13):** l'estrazione campi (6.3)
 e i controlli numerici leggono il testo **integrale di prima della
