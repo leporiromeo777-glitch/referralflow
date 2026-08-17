@@ -148,7 +148,10 @@ VOCAB_MAX_CHARS = 1000
 # ── LLM locale via Ollama (SPEC §4, §6, §7.3) ───────────────────────────────
 OLLAMA_URL = os.environ.get("REFERTI_OLLAMA", "http://localhost:11434")
 MODELLO_LLM = os.environ.get("REFERTI_LLM", "gemma3:12b")
-OLLAMA_TIMEOUT_S = 300
+# 900 e non 300: su un dettato di 18 minuti la correzione in chiamata unica
+# col 27b richiede 6-8 minuti di generazione — col vecchio limite di 5 andava
+# in timeout e riprovava da capo all'infinito (visto dal vivo 2026-08-17).
+OLLAMA_TIMEOUT_S = int(os.environ.get("REFERTI_OLLAMA_TIMEOUT", "900"))
 OLLAMA_TENTATIVI = 3
 # Finestra di contesto per le fasi AI. Il default di Ollama (4096 token) non
 # basta per i dettati lunghi: caso reale 2026-08-17, dettato di 18 minuti →
