@@ -148,6 +148,20 @@ VOCAB_MAX_CHARS = 1000
 # ── LLM locale via Ollama (SPEC §4, §6, §7.3) ───────────────────────────────
 OLLAMA_URL = os.environ.get("REFERTI_OLLAMA", "http://localhost:11434")
 MODELLO_LLM = os.environ.get("REFERTI_LLM", "gemma3:12b")
+# Modello PER FASE (scelta del medico, 2026-08-17): la correzione — la fase
+# più lunga, già protetta dal veto sui numeri, dal piano B e dalla revisione
+# umana — può girare sul modello medio (~2× più veloce); la segretaria, che
+# vive solo di comprensione delle regole, resta su quello impostato in
+# REFERTI_LLM (il grande). Ogni fase è regolabile da invio.conf; senza
+# override vale REFERTI_LLM. Occhio ai cambi di modello in memoria: ogni
+# scambio costa ~30-60 s di ricarica, quindi conviene tenere sullo stesso
+# modello le fasi consecutive.
+MODELLO_CORREZIONE = os.environ.get("REFERTI_LLM_CORREZIONE", MODELLO_LLM)
+MODELLO_SEGRETERIA = os.environ.get("REFERTI_LLM_SEGRETERIA", MODELLO_LLM)
+MODELLO_ISPEZIONE = os.environ.get("REFERTI_LLM_ISPEZIONE", MODELLO_LLM)
+MODELLO_ESTRAZIONE = os.environ.get("REFERTI_LLM_ESTRAZIONE", MODELLO_LLM)
+MODELLI_LLM_TUTTI = sorted({MODELLO_LLM, MODELLO_CORREZIONE, MODELLO_SEGRETERIA,
+                            MODELLO_ISPEZIONE, MODELLO_ESTRAZIONE})
 # 900 e non 300: su un dettato di 18 minuti la correzione in chiamata unica
 # col 27b richiede 6-8 minuti di generazione — col vecchio limite di 5 andava
 # in timeout e riprovava da capo all'infinito (visto dal vivo 2026-08-17).
@@ -836,8 +850,9 @@ def ollama_pronto() -> str | None:
     except (OSError, json.JSONDecodeError):
         return "ollama_non_raggiungibile"
     nomi = [m.get("name", "") for m in dati.get("models", [])]
-    if not any(n == MODELLO_LLM or n.startswith(MODELLO_LLM + ":") for n in nomi):
-        return "modello_llm_mancante"
+    for modello in MODELLI_LLM_TUTTI:
+        if not any(n == modello or n.startswith(modello + ":") for n in nomi):
+            return "modello_llm_mancante"
     return None
 
 
@@ -851,23 +866,25 @@ def libera_llm() -> None:
     vivo e riprodotto il 2026-08-16; il file finiva in errori/ e il dettato
     sembrava «bloccato»). Best-effort: se Ollama non risponde, la
     trascrizione parte comunque."""
-    corpo = json.dumps({"model": MODELLO_LLM, "keep_alive": 0}).encode("utf-8")
-    try:
-        richiesta = urllib.request.Request(
-            OLLAMA_URL + "/api/generate",
-            data=corpo,
-            headers={"Content-Type": "application/json"},
-        )
-        urllib.request.urlopen(richiesta, timeout=30).read()
-    except (urllib.error.URLError, TimeoutError, OSError):
-        pass
+    for modello in MODELLI_LLM_TUTTI:
+        corpo = json.dumps({"model": modello, "keep_alive": 0}).encode("utf-8")
+        try:
+            richiesta = urllib.request.Request(
+                OLLAMA_URL + "/api/generate",
+                data=corpo,
+                headers={"Content-Type": "application/json"},
+            )
+            urllib.request.urlopen(richiesta, timeout=30).read()
+        except (urllib.error.URLError, TimeoutError, OSError):
+            pass
 
 
-def chiama_ollama(prompt: str, file_id: str, fase: str, formato_json: bool = False) -> str:
+def chiama_ollama(prompt: str, file_id: str, fase: str, formato_json: bool = False,
+                  modello: str | None = None) -> str:
     """Una chiamata a /api/generate con 3 tentativi e pausa crescente
     (SPEC §7.2). Temperatura 0: stessa domanda, stessa risposta."""
     richiesta_dati = {
-        "model": MODELLO_LLM,
+        "model": modello or MODELLO_LLM,
         "prompt": prompt,
         "stream": False,
         "options": {"temperature": 0, "num_ctx": OLLAMA_NUM_CTX},
@@ -915,7 +932,8 @@ def correggi_llm(testo: str, file_id: str, rapporto_scarto: Path) -> str:
     una manomissione vera o un falso allarme del controllo."""
     inizio = time.monotonic()
     uscita = chiama_ollama(
-        PROMPT_CORREZIONE.replace("{testo}", testo), file_id, "correzione_llm"
+        PROMPT_CORREZIONE.replace("{testo}", testo), file_id, "correzione_llm",
+        modello=MODELLO_CORREZIONE,
     ).strip() + "\n"
     durata = time.monotonic() - inizio
     if _numeri(uscita) != _numeri(testo):
@@ -961,7 +979,8 @@ def _correggi_a_blocchi(testo: str, file_id: str) -> str:
             corretti.append(blocco)
             continue
         uscita = chiama_ollama(
-            PROMPT_CORREZIONE.replace("{testo}", blocco), file_id, "correzione_llm"
+            PROMPT_CORREZIONE.replace("{testo}", blocco), file_id, "correzione_llm",
+            modello=MODELLO_CORREZIONE,
         ).strip()
         lunghezza_ok = len(blocco) < 40 or 0.5 <= len(uscita) / len(blocco) <= 2.0
         if _numeri(uscita) == _numeri(blocco) and lunghezza_ok:
@@ -1000,7 +1019,8 @@ def ispeziona_llm(testo: str, file_id: str) -> list[str]:
     trasformare e annotare insieme)."""
     inizio = time.monotonic()
     uscita = chiama_ollama(
-        PROMPT_ISPEZIONE.replace("{testo}", testo), file_id, "ispezione_llm"
+        PROMPT_ISPEZIONE.replace("{testo}", testo), file_id, "ispezione_llm",
+        modello=MODELLO_ISPEZIONE,
     )
     dubbi = _parse_ispezione(uscita)
     log.info(
@@ -1062,7 +1082,7 @@ def separa_segreteria(testo: str, file_id: str) -> tuple[str, list[str]]:
     inizio = time.monotonic()
     uscita = chiama_ollama(
         PROMPT_SEGRETERIA.replace("{testo}", testo), file_id, "segreteria",
-        formato_json=True,
+        formato_json=True, modello=MODELLO_SEGRETERIA,
     )
     frasi: list = []
     try:
@@ -1086,7 +1106,8 @@ def estrai_campi(testo: str, file_id: str) -> dict:
     prompt = PROMPT_ESTRAZIONE.replace("{testo}", testo)
     dati = None
     for _ in range(2):
-        uscita = chiama_ollama(prompt, file_id, "estrazione", formato_json=True)
+        uscita = chiama_ollama(prompt, file_id, "estrazione", formato_json=True,
+                               modello=MODELLO_ESTRAZIONE)
         try:
             candidato = json.loads(uscita)
         except json.JSONDecodeError:
