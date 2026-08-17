@@ -3,6 +3,9 @@
   "_regola": "Aggiungere qui solo errori RICORRENTI e NON AMBIGUI. Se una parola potrebbe legittimamente comparire nel suo significato originale, NON metterla qui: lasciala gestire al modello.",
 
   "termini_clinici": {
+    "ecocarogramma": "ecocardiogramma",
+    "dipongono": "depongono",
+    "flusolimitante": "flussolimitante",
     "ritmo sensuale": "ritmo sinusale",
     "sensuale regolare": "sinusale regolare",
     "indocibile": "inducibile",
