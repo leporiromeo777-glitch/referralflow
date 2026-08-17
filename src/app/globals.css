@@ -1514,3 +1514,4 @@ mark[title] { cursor: help; }
 .anon-dettagli summary { cursor: pointer; color: var(--muted); }
 .anon-dettagli ul { margin: 8px 0 0; padding-left: 20px; }
 .anon-orig { color: var(--muted); }
+.anon-result-btns { display: flex; gap: 10px; flex-wrap: wrap; }

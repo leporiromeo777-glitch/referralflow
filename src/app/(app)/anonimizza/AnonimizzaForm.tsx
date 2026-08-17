@@ -11,6 +11,7 @@ import { anonimizzaDocumento, type RispostaAnonimizza } from './actions';
 export function AnonimizzaForm() {
   const [testo, setTesto] = useState('');
   const [docFile, setDocFile] = useState<File | null>(null);
+  const [nomeOrigine, setNomeOrigine] = useState<string>('');
   const [risposta, setRisposta] = useState<RispostaAnonimizza | null>(null);
   const [copiato, setCopiato] = useState(false);
   const [inCorso, startTransition] = useTransition();
@@ -36,11 +37,24 @@ export function AnonimizzaForm() {
     const dati = new FormData();
     dati.set('testo', testo);
     if (docFile) dati.set('file', docFile);
+    setNomeOrigine(docFile ? docFile.name.replace(/\.[^.]+$/, '') : 'documento');
     setRisposta(null);
     setCopiato(false);
     startTransition(async () => {
       setRisposta(await anonimizzaDocumento(dati));
     });
+  }
+
+  function scarica() {
+    if (!risposta?.ok) return;
+    // Il file nasce qui nel browser: nessun passaggio dal server.
+    const blob = new Blob([risposta.esito.testo], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${nomeOrigine || 'documento'}-anonimizzato.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function copia() {
@@ -92,9 +106,14 @@ export function AnonimizzaForm() {
         <div className="card anon-result">
           <div className="anon-result-head">
             <h2>Risultato</h2>
-            <button type="button" className="btn btn-primary" onClick={copia}>
-              {copiato ? 'Copiato ✓' : 'Copia il testo'}
-            </button>
+            <div className="anon-result-btns">
+              <button type="button" className="btn" onClick={copia}>
+                {copiato ? 'Copiato ✓' : 'Copia il testo'}
+              </button>
+              <button type="button" className="btn btn-primary" onClick={scarica}>
+                Scarica il file
+              </button>
+            </div>
           </div>
           <p className="anon-avviso">
             Rileggi prima di condividere: l&apos;AI può lasciarsi sfuggire un dato.
