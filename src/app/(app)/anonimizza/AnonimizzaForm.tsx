@@ -1,0 +1,126 @@
+'use client';
+
+import { useRef, useState, useTransition } from 'react';
+import { anonimizzaDocumento, type RispostaAnonimizza } from './actions';
+
+// Tutta l'interattività della pagina: incolla/carica → anonimizza → rivedi e
+// copia. I .txt vengono letti direttamente nel browser (il file non viaggia
+// nemmeno verso il server); i PDF vanno al server locale per l'estrazione del
+// testo, in memoria e senza salvataggi.
+
+export function AnonimizzaForm() {
+  const [testo, setTesto] = useState('');
+  const [pdf, setPdf] = useState<File | null>(null);
+  const [risposta, setRisposta] = useState<RispostaAnonimizza | null>(null);
+  const [copiato, setCopiato] = useState(false);
+  const [inCorso, startTransition] = useTransition();
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  function scegliFile(f: File | undefined) {
+    setRisposta(null);
+    setCopiato(false);
+    if (!f) { setPdf(null); return; }
+    if (f.name.toLowerCase().endsWith('.pdf')) {
+      setPdf(f);
+      setTesto('');
+      return;
+    }
+    // File di testo: letto qui nel browser.
+    setPdf(null);
+    const lettore = new FileReader();
+    lettore.onload = () => setTesto(String(lettore.result ?? ''));
+    lettore.readAsText(f);
+  }
+
+  function invia() {
+    const dati = new FormData();
+    dati.set('testo', testo);
+    if (pdf) dati.set('file', pdf);
+    setRisposta(null);
+    setCopiato(false);
+    startTransition(async () => {
+      setRisposta(await anonimizzaDocumento(dati));
+    });
+  }
+
+  async function copia() {
+    if (risposta?.ok) {
+      await navigator.clipboard.writeText(risposta.esito.testo);
+      setCopiato(true);
+    }
+  }
+
+  const pronto = (testo.trim().length > 0 || pdf) && !inCorso;
+
+  return (
+    <div className="anon-wrap">
+      <div className="card">
+        <label className="anon-label" htmlFor="anon-testo">Testo da anonimizzare</label>
+        <textarea
+          id="anon-testo"
+          rows={12}
+          placeholder="Incolla qui il testo, oppure carica un file qui sotto…"
+          value={pdf ? `PDF selezionato: ${pdf.name}` : testo}
+          disabled={!!pdf}
+          onChange={(e) => { setTesto(e.target.value); setRisposta(null); setCopiato(false); }}
+        />
+        <div className="anon-controls">
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".txt,.md,.pdf,text/plain,application/pdf"
+            onChange={(e) => scegliFile(e.target.files?.[0])}
+          />
+          {pdf && (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => { setPdf(null); if (fileRef.current) fileRef.current.value = ''; }}
+            >
+              Togli il PDF
+            </button>
+          )}
+          <button type="button" className="btn btn-primary" disabled={!pronto} onClick={invia}>
+            {inCorso ? 'Anonimizzo… (può richiedere un minuto)' : 'Anonimizza'}
+          </button>
+        </div>
+      </div>
+
+      {risposta && !risposta.ok && <p className="error">{risposta.errore}</p>}
+
+      {risposta?.ok && (
+        <div className="card anon-result">
+          <div className="anon-result-head">
+            <h2>Risultato</h2>
+            <button type="button" className="btn btn-primary" onClick={copia}>
+              {copiato ? 'Copiato ✓' : 'Copia il testo'}
+            </button>
+          </div>
+          <p className="anon-avviso">
+            Rileggi prima di condividere: l&apos;AI può lasciarsi sfuggire un dato.
+            Sostituzioni fatte: {risposta.esito.sostituzioni.length} (modello locale {risposta.esito.modello}).
+          </p>
+          <textarea
+            rows={12}
+            value={risposta.esito.testo}
+            onChange={(e) =>
+              setRisposta({ ok: true, esito: { ...risposta.esito, testo: e.target.value } })
+            }
+          />
+          {risposta.esito.sostituzioni.length > 0 && (
+            <details className="anon-dettagli">
+              <summary>Cosa è stato sostituito</summary>
+              <ul>
+                {risposta.esito.sostituzioni.map((s, i) => (
+                  <li key={i}>
+                    <span className="anon-orig">{s.originale}</span> → <strong>{s.segnaposto}</strong>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

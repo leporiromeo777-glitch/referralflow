@@ -25,7 +25,7 @@ const SECURITY_HEADERS = [
 const nextConfig = {
   experimental: {
     serverActions: { bodySizeLimit: '12mb' },
-    serverComponentsExternalPackages: ['@node-rs/argon2', 'pg'],
+    serverComponentsExternalPackages: ['@node-rs/argon2', 'pg', 'pdf-parse'],
   },
   async headers() {
     return [{ source: '/:path*', headers: SECURITY_HEADERS }];

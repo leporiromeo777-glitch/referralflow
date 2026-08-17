@@ -97,6 +97,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     ] },
     { key: 'studio', label: 'Studio', voci: [
       { label: 'Statistiche', href: '/statistiche' },
+      { label: 'Anonimizza documenti', href: '/anonimizza' },
       ...(isAdmin ? [{ label: 'Impostazioni', href: '/impostazioni/studio' }] : []),
     ] },
   ];
