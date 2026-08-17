@@ -51,10 +51,24 @@ export async function anonimizzaDocumento(formData: FormData): Promise<RispostaA
             'Questo PDF non contiene testo selezionabile (probabilmente è una scansione): al momento posso anonimizzare solo PDF con testo.',
         };
       }
+    } else if (nome.endsWith('.docx')) {
+      try {
+        const mammoth = (await import('mammoth')).default;
+        const r = await mammoth.extractRawText({ buffer });
+        testo = typeof r?.value === 'string' ? r.value : '';
+      } catch {
+        return { ok: false, errore: 'Non riesco a leggere questo file Word.' };
+      }
+      if (!testo.trim()) return { ok: false, errore: 'Questo file Word sembra vuoto.' };
+    } else if (nome.endsWith('.doc')) {
+      return {
+        ok: false,
+        errore: 'Il vecchio formato .doc non è supportato: salva il documento come .docx e riprova.',
+      };
     } else if (nome.endsWith('.txt') || nome.endsWith('.md') || file.type.startsWith('text/')) {
       testo = buffer.toString('utf-8');
     } else {
-      return { ok: false, errore: 'Formato non supportato: incolla il testo oppure carica un .txt o un PDF.' };
+      return { ok: false, errore: 'Formato non supportato: incolla il testo oppure carica un .txt, un .docx o un PDF.' };
     }
   }
 

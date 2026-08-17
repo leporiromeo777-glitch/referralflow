@@ -5,12 +5,12 @@ import { anonimizzaDocumento, type RispostaAnonimizza } from './actions';
 
 // Tutta l'interattività della pagina: incolla/carica → anonimizza → rivedi e
 // copia. I .txt vengono letti direttamente nel browser (il file non viaggia
-// nemmeno verso il server); i PDF vanno al server locale per l'estrazione del
+// nemmeno verso il server); PDF e Word vanno al server locale per l'estrazione del
 // testo, in memoria e senza salvataggi.
 
 export function AnonimizzaForm() {
   const [testo, setTesto] = useState('');
-  const [pdf, setPdf] = useState<File | null>(null);
+  const [docFile, setDocFile] = useState<File | null>(null);
   const [risposta, setRisposta] = useState<RispostaAnonimizza | null>(null);
   const [copiato, setCopiato] = useState(false);
   const [inCorso, startTransition] = useTransition();
@@ -19,14 +19,14 @@ export function AnonimizzaForm() {
   function scegliFile(f: File | undefined) {
     setRisposta(null);
     setCopiato(false);
-    if (!f) { setPdf(null); return; }
-    if (f.name.toLowerCase().endsWith('.pdf')) {
-      setPdf(f);
+    if (!f) { setDocFile(null); return; }
+    if (/\.(pdf|docx|doc)$/i.test(f.name)) {
+      setDocFile(f);
       setTesto('');
       return;
     }
     // File di testo: letto qui nel browser.
-    setPdf(null);
+    setDocFile(null);
     const lettore = new FileReader();
     lettore.onload = () => setTesto(String(lettore.result ?? ''));
     lettore.readAsText(f);
@@ -35,7 +35,7 @@ export function AnonimizzaForm() {
   function invia() {
     const dati = new FormData();
     dati.set('testo', testo);
-    if (pdf) dati.set('file', pdf);
+    if (docFile) dati.set('file', docFile);
     setRisposta(null);
     setCopiato(false);
     startTransition(async () => {
@@ -50,7 +50,7 @@ export function AnonimizzaForm() {
     }
   }
 
-  const pronto = (testo.trim().length > 0 || pdf) && !inCorso;
+  const pronto = (testo.trim().length > 0 || docFile) && !inCorso;
 
   return (
     <div className="anon-wrap">
@@ -60,24 +60,24 @@ export function AnonimizzaForm() {
           id="anon-testo"
           rows={12}
           placeholder="Incolla qui il testo, oppure carica un file qui sotto…"
-          value={pdf ? `PDF selezionato: ${pdf.name}` : testo}
-          disabled={!!pdf}
+          value={docFile ? `File selezionato: ${docFile.name}` : testo}
+          disabled={!!docFile}
           onChange={(e) => { setTesto(e.target.value); setRisposta(null); setCopiato(false); }}
         />
         <div className="anon-controls">
           <input
             ref={fileRef}
             type="file"
-            accept=".txt,.md,.pdf,text/plain,application/pdf"
+            accept=".txt,.md,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             onChange={(e) => scegliFile(e.target.files?.[0])}
           />
-          {pdf && (
+          {docFile && (
             <button
               type="button"
               className="btn btn-ghost"
-              onClick={() => { setPdf(null); if (fileRef.current) fileRef.current.value = ''; }}
+              onClick={() => { setDocFile(null); if (fileRef.current) fileRef.current.value = ''; }}
             >
-              Togli il PDF
+              Togli il file
             </button>
           )}
           <button type="button" className="btn btn-primary" disabled={!pronto} onClick={invia}>
