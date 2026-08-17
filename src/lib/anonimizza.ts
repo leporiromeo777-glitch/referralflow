@@ -139,6 +139,34 @@ function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// Distanza di battitura (Levenshtein) con uscita anticipata oltre `max`.
+function distanza(a: string, b: string, max: number): number {
+  if (a === b) return 0;
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    let migliore = max + 1;
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (cur[j] < migliore) migliore = cur[j];
+    }
+    if (migliore > max) return max + 1;
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+// Parole comuni con l'iniziale spesso maiuscola nei referti: mai da toccare
+// col confronto fuzzy, anche se somigliano a un cognome.
+const PAROLE_COMUNI = new Set([
+  'signor', 'signora', 'signore', 'dottor', 'dottore', 'dottoressa', 'gentile',
+  'egregio', 'egregia', 'cordiali', 'distinti', 'saluti', 'collega', 'colleghi',
+  'paziente', 'ospedale', 'clinica', 'studio', 'ambulatorio', 'terapia',
+  'controllo', 'referto', 'visita', 'esame', 'quindi', 'inoltre', 'pertanto',
+  'durante', 'presso', 'tramite', 'attuale', 'attualmente', 'lugano', 'ticino',
+]);
+
 // Sostituisce tutte le occorrenze (case-insensitive, a confine di parola) e
 // registra quante ne ha trovate.
 function sostituisci(testo: string, originale: string, segnaposto: string): [string, number] {
@@ -193,6 +221,38 @@ export async function pianoAnonimizzazione(testoOriginale: string): Promise<Pian
       if (pezzo.length >= 3) voci.push({ originale: pezzo, segnaposto: seg });
     }
   });
+
+  // Varianti STORPIATE dei nomi trovati: whisper scrive lo stesso cognome in
+  // modi leggermente diversi dentro lo stesso dettato — trovata una forma,
+  // le quasi-uguali sfuggivano (visto dal vivo su un referto reale il
+  // 2026-08-17: 5 nomi residui). Ogni parola del testo con l'iniziale
+  // maiuscola viene confrontata coi pezzi dei nomi: a distanza di battitura
+  // ≤1 (≤2 se lunga) eredita lo stesso segnaposto. Paletti: pezzi corti
+  // esclusi, parole comuni escluse, e ogni sostituzione resta visibile
+  // nell'elenco «cosa è stato sostituito».
+  const tokenPersona: [string, string][] = [];
+  persone.forEach((nome, i) => {
+    for (const pezzo of nome.split(/\s+/)) {
+      if (pezzo.length >= 5) tokenPersona.push([pezzo.toLowerCase(), `«Persona ${i + 1}»`]);
+    }
+  });
+  if (tokenPersona.length > 0) {
+    const giaCoperte = new Set(voci.map((v) => v.originale.toLowerCase()));
+    const candidate = new Set<string>();
+    for (const m of testo.matchAll(/\b\p{Lu}[\p{L}]{4,}\b/gu)) candidate.add(m[0]);
+    for (const parola of candidate) {
+      const bassa = parola.toLowerCase();
+      if (giaCoperte.has(bassa) || PAROLE_COMUNI.has(bassa)) continue;
+      for (const [pezzo, seg] of tokenPersona) {
+        const max = pezzo.length >= 9 ? 2 : 1;
+        if (distanza(bassa, pezzo, max) <= max) {
+          voci.push({ originale: parola, segnaposto: seg });
+          giaCoperte.add(bassa);
+          break;
+        }
+      }
+    }
+  }
   const fissi: [keyof Estratto, string][] = [
     ['date_nascita', '[data di nascita]'],
     ['indirizzi', '[indirizzo]'],
