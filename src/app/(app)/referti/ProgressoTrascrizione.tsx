@@ -90,7 +90,10 @@ export function ProgressoTrascrizione({ iniziali }: { iniziali: Voce[] }) {
                 <summary>
                   <span className="trasc-spin" aria-hidden="true"></span>
                   <span className="prog-tr-nome">{v.filename}</span>
-                  <span className="prog-tr-fase">{f.label}</span>
+                  <span className="prog-tr-fase">
+                    {f.label}
+                    {v.fase_at ? <span className="muted"> · da {minutiDa(v.fase_at)}</span> : null}
+                  </span>
                   <span className="prog-tr-pct">{f.pct}%</span>
                 </summary>
                 <div className="prog-tr-corpo">
@@ -110,8 +113,10 @@ export function ProgressoTrascrizione({ iniziali }: { iniziali: Voce[] }) {
                     ))}
                   </ol>
                   <p className="muted small">
-                    Le due passate di whisper sono le fasi più lunghe: per un
-                    dettato breve contano qualche minuto l&apos;una.
+                    Le fasi più lunghe sono le due passate di whisper e la
+                    correzione AI: quest&apos;ultima riscrive tutto il testo e
+                    risponde solo alla fine — su un dettato lungo può restare
+                    ferma anche 5–10 minuti pur lavorando.
                   </p>
                 </div>
               </details>
