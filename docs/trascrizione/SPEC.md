@@ -111,6 +111,10 @@ più semplice o più performante.
          │
 [7] correzione LLM               gemma3:12b via Ollama, prompt §6.1
          │
+[7b] pertinenza (evidenziatore)  LLM — frasi FUORI TEMA segnalate, mai rimosse: in pagina spente, decide la persona
+         │
+[7c] senso delle frasi           LLM — frasi storpiate segnalate, proposta di ricostruzione dal glossario (mai applicata da sola)
+         │
 [8] ispezione LLM                gemma3:12b, prompt §6.2 — SOLO ispezione, non modifica
          │
 [9] estrazione campi             gemma3:12b, prompt §6.3 → JSON
@@ -178,6 +182,21 @@ dizionario così il confronto lavora su testi coerenti; sistemazione degli
 spazi e maiuscola dopo il punto solo dove la fase è intervenuta. Funzione
 `punteggiatura_dettata` in `pipeline.py`, nel log solo il conteggio
 (`fase=punteggiatura segni=N`).
+
+**Nota sui passaggi 7b-7c (evidenziatore e senso, richiesti dal medico
+2026-08-17):** i medici dettando a volte DIVAGANO — la fase «pertinenza»
+segnala le frasi fuori tema (citazioni esatte; nel dubbio non segnala; se
+volesse spegnere >35% del testo si ignora tutto) e la pagina di revisione le
+mostra SPENTE: entra nel referto solo l'evidenziato, e la persona
+accende/spegne ogni frase con un clic — l'AI non toglie MAI nulla da sola.
+La fase «senso» controlla frase per frase l'italiano: le frasi storpiate
+vengono segnalate con una proposta di ricostruzione basata sul GLOSSARIO
+dello studio (lo stesso vocabolario dato a whisper); la proposta decade se
+cambia anche un solo numero (§2.4) e non viene mai applicata da sola. Le
+frasi già fuori tema non compaiono anche tra quelle da chiarire. Payload §8:
+`divagazioni` (lista di citazioni) e `frasi_da_chiarire`
+([{frase, proposta}]). Modelli per fase: `REFERTI_LLM_PERTINENZA` /
+`REFERTI_LLM_SENSO` (default: REFERTI_LLM).
 
 **Nota sui passaggi 3-4:** la doppia trascrizione serve a individuare i punti incerti.
 Dove le due versioni divergono, quasi sempre c'è un problema audio. È un rilevatore di

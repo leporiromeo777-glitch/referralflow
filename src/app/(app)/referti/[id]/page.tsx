@@ -9,6 +9,7 @@ import { confermaBozza, scartaBozza, ripristinaBozza, eliminaBozza, riorganizzaB
 import { agganciaRiferimenti } from '@/lib/referti-allegati';
 import { AudioDettato } from '../AudioDettato';
 import { TestoDettato } from '../TestoDettato';
+import { EvidenziatoreTesto } from './EvidenziatoreTesto';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,6 +29,8 @@ type Payload = {
   allarmi_numerici: Allarme[];
   avvisi?: string[];
   parole?: [string, number][];
+  divagazioni?: string[];
+  frasi_da_chiarire?: { frase: string; proposta: string }[];
 };
 
 // Evidenzia i frammenti segnalati dentro il testo: prima occorrenza di ogni
@@ -377,14 +380,16 @@ export default async function RefertoBozza({
 
           <h2 style={{ marginTop: 18 }}>Testo da confermare</h2>
           <p className="muted">
-            Questo è il testo che verrà confermato: sistemalo qui (le evidenziazioni
-            restano nella vista sopra come guida). Con «Riorganizza» l&apos;AI locale
+            Entra nel referto solo ciò che è evidenziato: l&apos;AI spegne le divagazioni,
+            tu puoi riaccenderle con un clic. Con «Riorganizza» l&apos;AI locale
             propone il testo nel formato standard del rapporto — sezioni, diagnosi
             numerate, esami — senza mai cambiare i numeri; resta una proposta da rivedere.
           </p>
-          <textarea name="testo" rows={16} required
-            defaultValue={row.testo_finale ?? p.testo_corretto}
-            style={{ width: '100%', fontFamily: 'inherit', lineHeight: 1.5 }} />
+          <EvidenziatoreTesto
+            testo={row.testo_finale ?? p.testo_corretto ?? ''}
+            divagazioni={Array.isArray(p.divagazioni) ? p.divagazioni : []}
+            frasiDaChiarire={Array.isArray(p.frasi_da_chiarire) ? p.frasi_da_chiarire : []}
+          />
 
           <div className="form-actions">
             <button className="btn btn-primary" type="submit">Conferma il referto</button>

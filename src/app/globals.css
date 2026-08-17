@@ -1515,3 +1515,16 @@ mark[title] { cursor: help; }
 .anon-dettagli ul { margin: 8px 0 0; padding-left: 20px; }
 .anon-orig { color: var(--muted); }
 .anon-result-btns { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* Evidenziatore del referto (/referti/[id]): acceso = dentro, spento = fuori. */
+.evid-box { background: var(--gray-bg, #f2f2ee); border-radius: 14px; padding: 14px 16px; margin: 10px 0 14px; }
+.evid-testo { line-height: 1.9; font-size: 14.5px; }
+.evid-frase { cursor: pointer; border-radius: 4px; padding: 1px 2px; background: #fdf6c9; }
+.evid-frase:hover { outline: 2px solid rgba(13, 92, 72, 0.35); }
+.evid-frase.spenta { background: transparent; color: var(--muted); text-decoration: line-through; }
+.evid-frase.da-chiarire { text-decoration: underline wavy #c77d00; text-underline-offset: 3px; }
+.evid-frase.spenta.da-chiarire { text-decoration: line-through underline wavy #c77d00; }
+.evid-senso ul { margin: 6px 0 0; padding-left: 20px; font-size: 14px; }
+.evid-senso li { margin-bottom: 6px; }
+.evid-orig { color: var(--muted); }
+.evid-applica { padding: 0 8px; font-size: 13px; }

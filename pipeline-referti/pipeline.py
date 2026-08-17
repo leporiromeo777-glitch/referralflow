@@ -160,8 +160,11 @@ MODELLO_CORREZIONE = os.environ.get("REFERTI_LLM_CORREZIONE", MODELLO_LLM)
 MODELLO_SEGRETERIA = os.environ.get("REFERTI_LLM_SEGRETERIA", MODELLO_LLM)
 MODELLO_ISPEZIONE = os.environ.get("REFERTI_LLM_ISPEZIONE", MODELLO_LLM)
 MODELLO_ESTRAZIONE = os.environ.get("REFERTI_LLM_ESTRAZIONE", MODELLO_LLM)
+MODELLO_PERTINENZA = os.environ.get("REFERTI_LLM_PERTINENZA", MODELLO_LLM)
+MODELLO_SENSO = os.environ.get("REFERTI_LLM_SENSO", MODELLO_LLM)
 MODELLI_LLM_TUTTI = sorted({MODELLO_LLM, MODELLO_CORREZIONE, MODELLO_SEGRETERIA,
-                            MODELLO_ISPEZIONE, MODELLO_ESTRAZIONE})
+                            MODELLO_ISPEZIONE, MODELLO_ESTRAZIONE,
+                            MODELLO_PERTINENZA, MODELLO_SENSO})
 # 900 e non 300: su un dettato di 18 minuti la correzione in chiamata unica
 # col 27b richiede 6-8 minuti di generazione — col vecchio limite di 5 andava
 # in timeout e riprovava da capo all'infinito (visto dal vivo 2026-08-17).
@@ -1079,6 +1082,115 @@ def _parse_ispezione(uscita: str) -> list[str]:
     return dubbi[:100]
 
 
+# ── Pertinenza (evidenziatore) e senso delle frasi (2026-08-17) ──────────────
+# Richiesta del medico: (1) i medici dettando a volte DIVAGANO — l'AI segnala
+# le frasi fuori tema, la pagina di revisione le mostra «spente» e la persona
+# decide con un clic cosa entra nel referto (l'AI non toglie MAI nulla da
+# sola); (2) le frasi uscite storpiate e prive di senso dalla trascrizione
+# vengono segnalate frase per frase, con una proposta di ricostruzione basata
+# sul GLOSSARIO dello studio (mai applicata da sola, numeri mai toccati).
+
+PROMPT_PERTINENZA = """Sei un assistente che prepara referti medici. Il testo qui sotto è un referto cardiologico dettato a voce. A volte il medico, parlando, DIVAGA: commenti personali, chiacchiere, riferimenti ad altre faccende che non c'entrano con il paziente né con la lettera al collega.
+
+Il tuo compito: individua SOLO le frasi fuori tema rispetto al referto.
+
+NON segnalare MAI: saluti e formule di cortesia della lettera, dati clinici, valori, diagnosi, farmaci, raccomandazioni al collega o al paziente, la firma.
+
+Regole obbligatorie:
+1. Riporta ogni frase ESATTAMENTE come appare nel testo, parola per parola.
+2. Nel dubbio NON segnalare: meglio una divagazione nel referto che una frase clinica esclusa.
+3. Non segnalare mai frasi che contengono misure, valori o giudizi clinici.
+
+Rispondi SOLO con un oggetto JSON valido:
+{"fuori_tema": ["prima frase esatta", "seconda frase esatta"]}
+Se non ce ne sono: {"fuori_tema": []}
+
+TESTO:
+{testo}"""
+
+
+def trova_divagazioni(testo: str, file_id: str) -> list[str]:
+    """Fase «pertinenza»: l'AI segnala le frasi fuori tema, il testo resta
+    INTATTO — le citazioni finiscono in bozza e la pagina le mostra spente,
+    la persona riaccende con un clic. Difese: solo citazioni esatte; se l'AI
+    volesse spegnere più di un terzo del testo, si ignora tutto."""
+    inizio = time.monotonic()
+    uscita = chiama_ollama(
+        PROMPT_PERTINENZA.replace("{testo}", testo), file_id, "pertinenza",
+        formato_json=True, modello=MODELLO_PERTINENZA,
+    )
+    frasi: list[str] = []
+    try:
+        dati = json.loads(uscita)
+        if isinstance(dati, dict) and isinstance(dati.get("fuori_tema"), list):
+            frasi = [f for f in dati["fuori_tema"] if isinstance(f, str)]
+    except json.JSONDecodeError:
+        pass
+    vere = [f.strip() for f in frasi if len(f.strip()) >= 8 and f.strip() in testo]
+    if sum(len(f) for f in vere) > len(testo) * 0.35:
+        log.warning(
+            "fase=pertinenza file=%s esito=ignorata motivo=esclusione_eccessiva proposte=%d durata=%.1fs",
+            file_id, len(vere), time.monotonic() - inizio,
+        )
+        return []
+    log.info(
+        "fase=pertinenza file=%s esito=ok fuori_tema=%d scartate=%d durata=%.1fs",
+        file_id, len(vere), len(frasi) - len(vere), time.monotonic() - inizio,
+    )
+    return vere[:60]
+
+
+PROMPT_SENSO = """Sei un revisore di trascrizioni mediche in italiano. Il testo qui sotto è un referto dettato a voce e trascritto automaticamente: alcune frasi possono essere uscite STORPIATE, prive di senso in un italiano corretto.
+
+Il tuo compito, frase per frase: individua le frasi che NON hanno senso, anche considerando il contesto del referto. Per ognuna prova a ricostruire il senso più probabile aiutandoti con il GLOSSARIO dei termini dello studio; se non ci riesci, lascia la proposta vuota.
+
+GLOSSARIO: {glossario}
+
+Regole obbligatorie:
+1. «frase» deve essere una citazione ESATTA del testo, parola per parola.
+2. La proposta non deve MAI cambiare i numeri, aggiungerne o toglierne.
+3. Nel dubbio NON segnalare: le frasi corrette, anche se colloquiali o burocratiche, non si toccano.
+
+Rispondi SOLO con un oggetto JSON valido:
+{"frasi": [{"frase": "citazione esatta", "proposta": "ricostruzione oppure stringa vuota"}]}
+Se tutte le frasi hanno senso: {"frasi": []}
+
+TESTO:
+{testo}"""
+
+
+def controlla_senso(testo: str, glossario: str, file_id: str) -> list[dict]:
+    """Fase «senso»: frase per frase, le frasi prive di senso vengono
+    segnalate con una proposta di ricostruzione basata sul glossario dello
+    studio. La proposta è SOLO un suggerimento per chi rivede: mai applicata
+    da sola, e se cambia anche un numero viene azzerata (resta la
+    segnalazione)."""
+    inizio = time.monotonic()
+    prompt = PROMPT_SENSO.replace("{glossario}", glossario or "(vuoto)").replace("{testo}", testo)
+    uscita = chiama_ollama(prompt, file_id, "senso", formato_json=True, modello=MODELLO_SENSO)
+    voci: list[dict] = []
+    try:
+        dati = json.loads(uscita)
+        grezzi = dati.get("frasi") if isinstance(dati, dict) else None
+        for g in grezzi if isinstance(grezzi, list) else []:
+            if not isinstance(g, dict):
+                continue
+            frase = str(g.get("frase", "")).strip()
+            proposta = str(g.get("proposta", "")).strip()
+            if len(frase) < 8 or frase not in testo:
+                continue
+            if proposta and _numeri(proposta) != _numeri(frase):
+                proposta = ""  # veto §2.4: resta la segnalazione, cade la proposta
+            voci.append({"frase": frase[:300], "proposta": proposta[:300]})
+    except json.JSONDecodeError:
+        pass
+    log.info(
+        "fase=senso file=%s esito=ok segnalate=%d con_proposta=%d durata=%.1fs",
+        file_id, len(voci), sum(1 for v in voci if v["proposta"]), time.monotonic() - inizio,
+    )
+    return voci[:50]
+
+
 def ispeziona_llm(testo: str, file_id: str) -> list[str]:
     """Ispezione col prompt §6.2: SOLO elenco dei segmenti dubbi, nessuna
     modifica al testo (compito separato apposta: un 12B non riesce a
@@ -1474,6 +1586,29 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         if note_segreteria:
             percorso(".finale.txt").write_text(finale, encoding="utf-8")
 
+        # L'evidenziatore: le frasi fuori tema restano NEL testo ma la pagina
+        # di revisione le mostra spente; entra nel referto solo l'evidenziato.
+        fase = "pertinenza"
+        _ = notifica and notifica(fase)
+        divagazioni = trova_divagazioni(finale, file_id)
+        percorso(".divagazioni.json").write_text(
+            json.dumps(divagazioni, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        # Il controllo del senso: frasi storpiate segnalate con proposta di
+        # ricostruzione dal glossario (stesso vocabolario dato a whisper).
+        fase = "senso"
+        _ = notifica and notifica(fase)
+        frasi_da_chiarire = controlla_senso(finale, vocab, file_id)
+        # Una frase già segnalata come fuori tema non va anche «chiarita»:
+        # è spenta dall'evidenziatore, il doppione confonderebbe.
+        frasi_da_chiarire = [v for v in frasi_da_chiarire if v["frase"] not in divagazioni]
+        percorso(".senso.json").write_text(
+            json.dumps(frasi_da_chiarire, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
         fase = "ispezione_llm"
         _ = notifica and notifica(fase)
         dubbi = ispeziona_llm(finale, file_id)
@@ -1572,6 +1707,10 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         "segmenti_dubbi": dubbi,
         "allarmi_numerici": allarmi,
         "avvisi": avvisi,
+        # Evidenziatore: frasi fuori tema (spente in pagina, la persona
+        # decide) e frasi prive di senso con proposta dal glossario.
+        "divagazioni": divagazioni,
+        "frasi_da_chiarire": frasi_da_chiarire,
         "richiede_revisione": True,
     }
     return file_id, payload

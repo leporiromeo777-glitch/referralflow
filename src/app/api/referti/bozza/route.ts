@@ -68,6 +68,20 @@ export async function POST(req: NextRequest) {
     avvisi: lista(body?.avvisi)
       .filter((a: unknown): a is string => typeof a === 'string')
       .map((a: string) => a.slice(0, 500)),
+    // Evidenziatore (fase «pertinenza»): frasi fuori tema — la pagina le
+    // mostra spente, entra nel referto solo l'evidenziato, decide la persona.
+    divagazioni: lista(body?.divagazioni)
+      .filter((d: unknown): d is string => typeof d === 'string')
+      .map((d: string) => d.slice(0, 400)),
+    // Fase «senso»: frasi prive di senso con proposta di ricostruzione dal
+    // glossario dello studio (solo suggerimento, mai applicata da sola).
+    frasi_da_chiarire: lista(body?.frasi_da_chiarire)
+      .filter((v: unknown): v is { frase: string; proposta?: string } =>
+        !!v && typeof v === 'object' && typeof (v as any).frase === 'string')
+      .map((v: { frase: string; proposta?: string }) => ({
+        frase: v.frase.slice(0, 400),
+        proposta: typeof v.proposta === 'string' ? v.proposta.slice(0, 400) : '',
+      })),
     // Tempi parola-per-parola (SPEC §8): [parola, secondi] per ogni parola di
     // testo_corretto, per il testo sincronizzato con l'audio. Facoltativi.
     parole: (Array.isArray(body?.parole) ? body.parole.slice(0, 8000) : [])
