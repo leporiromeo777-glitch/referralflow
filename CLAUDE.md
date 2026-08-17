@@ -158,7 +158,14 @@ via cron-hit.sh):
 - Tutti protetti da `?key=REMINDER_SECRET`; backup notturno DB locale (14g) + off-site su
   Exoscale SOS `referralflow-backups` (60g); allegati di produzione su SOS `referralflow-uploads`
 
-Fatti di recente: quattro strumenti ispirati alla ricerca di mercato (2026-07-24):
+Fatti di recente: pagina «Anonimizza documenti» `/anonimizza` (2026-08-17, menu Studio):
+incolla testo o carica .txt/PDF → il modello AI LOCALE (Ollama `ANONIMIZZA_LLM`,
+default gemma3:12b — apposta non il 27b: non si contende la GPU con whisper) individua
+i dati identificativi e il CODICE li sostituisce con segnaposto («Persona N», [data di
+nascita], …) — l'AI non riscrive mai il testo (`src/lib/anonimizza.ts`); rete di
+sicurezza regex (AVS/email/telefoni CH), niente persistenza, il documento non esce mai
+dal Mac (nLPD ok senza validazioni legali). PDF via `pdf-parse` (v2, in
+serverComponentsExternalPackages). Prima ancora: quattro strumenti ispirati alla ricerca di mercato (2026-07-24):
 (1) Consulto rapido tra medici / eConsult (migrazione 020: `consulti` +
 `consulto_attachments`): domanda clinica scritta dell'inviante dal portale token,
 risposta dello specialista da `/consulti` (badge in nav, notifiche neutre), con
