@@ -223,13 +223,14 @@ CAMPI_RICHIESTI = [
 # dal corpo del referto solo se la citazione è esatta. Nel dubbio resta tutto.
 PROMPT_SEGRETERIA = """Sei una segretaria medica esperta. Il testo qui sotto è un referto cardiologico dettato a voce, già trascritto. A volte il medico, dettando, si rivolge alla segreteria: chiede di allegare documenti o vecchie email, di inviare copie a qualcuno, di fissare appuntamenti, o fa commenti organizzativi che non fanno parte del referto.
 
-Il tuo compito: individua SOLO le frasi in cui il medico dà alla segreteria un compito da fare FUORI dal documento (allegare, spedire, telefonare, fissare appuntamenti).
+Il tuo compito: individua SOLO le frasi in cui il medico dà alla segreteria un compito da fare FUORI dal documento (allegare, spedire, telefonare, fissare appuntamenti) oppure un'istruzione su come CONFEZIONARE il documento (a chi indirizzarlo, dove inserire un pezzo di testo, chi firma).
 
 Distinzione fondamentale:
 - I comandi di dettatura come «scrivi», «scriva», «metti», «riporta», «aggiungi», «vai a capo» significano che il testo che li segue FA PARTE del referto: non segnalarlo MAI. Esempio: «scrivi: caro collega, le invio il paziente…» → «caro collega, le invio il paziente…» resta nel referto.
 - ATTENZIONE però: gli STESSI verbi sono un compito per la segreteria quando l'azione è rivolta a una persona esterna o a un altro documento, non al testo che si sta dettando. Esempi da segnalare: «scrivi al dottor Rossi che…», «scrivi una mail alla cardiologia», «riprendi la lettera precedente», «riprendi il referto dell'anno scorso e allegalo», «richiama il paziente per l'appuntamento». La differenza: «scrivi:» seguito dal testo dettato = referto; «scrivi A QUALCUNO» o «riprendi/recupera UN ALTRO documento» = compito per la segreteria.
 - Le aperture e chiusure di lettera dettate («Caro collega», «Gentile dottoressa», «Cordiali saluti», «Distinti saluti») fanno parte del referto: non segnalarle MAI.
 - Un compito per la segreteria è qualcosa che si fa fuori dal documento: «allega la vecchia email», «mandane una copia al curante», «fissagli il controllo tra un mese».
+- Sono compiti per la segreteria anche le istruzioni su come CONFEZIONARE il documento, che non devono restare nel testo finale: a chi va indirizzata o intestata la lettera («detto la lettera all'indirizzo della dottoressa X, in intestazione al signor Y, scrivi»), dove va collocato un pezzo di testo («nell'anamnesi scrivi da qualche parte…», «questo mettilo dopo il paragrafo della terapia»), chi firma il referto («firma dottor X», «qui chiude il referto il dottor X»). Segnala SOLO il pezzo di istruzione, MAI il testo clinico che lo segue o lo precede.
 
 Regole obbligatorie:
 1. Riporta ogni frase ESATTAMENTE come appare nel testo, parola per parola, senza riscriverla e senza accorciarla.
@@ -655,7 +656,10 @@ _PUNT_LOCUZIONI: list[tuple[re.Pattern, str]] = [
     (re.compile(r"\bpunto esclamativo\b", re.IGNORECASE), _PUNT_M + "!"),
     (re.compile(r"\bpunto interrogativo\b", re.IGNORECASE), _PUNT_M + "?"),
     (re.compile(r"\bdue punti\b", re.IGNORECASE), _PUNT_M + ":"),
-    (re.compile(r"\b(?:apert\w+|apri),? (?:la )?parentesi\b|\bparentesi aperta\b", re.IGNORECASE), "("),
+    # «tra parentesi» in dettatura apre quasi sempre un inciso vero (chiuso
+    # poi da «chiusa parentesi»); l'idioma «detto tra parentesi» nei referti
+    # non ricorre.
+    (re.compile(r"\b(?:apert\w+|apri|tra),? (?:la )?parentesi\b|\bparentesi aperta\b", re.IGNORECASE), "("),
     (re.compile(r"\b(?:chius\w+|chiudi|chiudo),? (?:la )?parentesi\b|\bparentesi chiusa\b", re.IGNORECASE), ")"),
     # «vergola» non esiste in italiano: è il modo tipico in cui whisper
     # storpia «virgola» dettata in fretta.
@@ -671,11 +675,11 @@ _PUNT_ARTICOLI = ("il", "un", "al", "dal", "nel", "sul", "quel", "ogni", "questo
 _PUNT_PUNTO_GUARDIA = (
     "".join(f"(?<!\\b{w} )(?<!\\b{w}, )" for w in _PUNT_ARTICOLI)
     + r"\bpunto\b"
-    + r"(?!\s*,?\s*(?:e|di|del|dell\w*|della|dei|delle|da|dal|dalla|in|su|a)\b)"
+    + r"(?!\s*,?\s*(?:e virgola|di|del|dell\w*|della|dei|delle|da|dal|dalla|in|su|a)\b)"
 )
 # Prima il caso «punto» + parola (la parola prende la maiuscola), poi il
 # «punto» rimasto (fine testo o già seguito da un segno).
-_PUNT_PUNTO_PAROLA = re.compile(_PUNT_PUNTO_GUARDIA + r"\s+(\w)", re.IGNORECASE)
+_PUNT_PUNTO_PAROLA = re.compile(_PUNT_PUNTO_GUARDIA + r"[ \t]+(\w)", re.IGNORECASE)
 _PUNT_PUNTO_SOLO = re.compile(_PUNT_PUNTO_GUARDIA, re.IGNORECASE)
 
 
@@ -699,6 +703,9 @@ def punteggiatura_dettata(testo: str) -> tuple[str, int]:
             i = run.rfind(_PUNT_M)
             return run[i + 1] if i != -1 else run
 
+        # Un segno dettato rimasto da solo a inizio riga (il «punto» dettato
+        # dopo una pausa) chiude la riga precedente.
+        testo = re.sub(r"[ \t]*\n[ \t]*" + _PUNT_M + r"([.,;:!?])", r"\1", testo)
         testo = re.sub(
             "[" + _PUNT_M + r".,;:!?](?:[ \t]*[" + _PUNT_M + r".,;:!?])+",
             _vince_dettato, testo,

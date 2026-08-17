@@ -401,6 +401,19 @@ quando l'azione è rivolta a una persona esterna o a un ALTRO documento
 (citazione esatta, soglia 40%, nel dubbio non segnalare) sono invariate.
 Da rimisurare sui prossimi dettati reali.
 
+**Revisione 4 (stessa notte, misurata su un dettato reale anonimizzato
+fornito dal medico):** la rev. 3 da sola trovava ancora 0 note su quel
+dettato. Aggiunta la terza categoria: le istruzioni di CONFEZIONE del
+documento — a chi va indirizzata/intestata la lettera («detto la lettera
+all'indirizzo della dottoressa X, in intestazione a Y, scrivi»), dove
+collocare un pezzo di testo («nell'anamnesi scrivi da qualche parte…»),
+chi firma. Esito misurato: apertura → nota (il corpo parte da «Gentile
+collega»); istruzione di inserimento in anamnesi → nota INSIEME al testo
+da inserire (utile a chi rivede: dice cosa e dove, il testo non va perso
+perché resta visibile nella nota); la firma storpiata («qui è il referto
+X») ancora sfugge — nel flusso vero la segretaria lavora sul testo già
+corretto, da riverificare lì.
+
 **Correzione (secondo dettato reale, 2026-08-13):** l'estrazione campi (6.3)
 e i controlli numerici leggono il testo **integrale di prima della
 segretaria**, non il corpo ripulito. Motivo osservato dal vivo: il nome del
