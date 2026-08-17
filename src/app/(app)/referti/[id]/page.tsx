@@ -5,7 +5,7 @@ import { query } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
 import { dataOra } from '@/lib/format';
-import { confermaBozza, scartaBozza, ripristinaBozza, eliminaBozza } from '../actions';
+import { confermaBozza, scartaBozza, ripristinaBozza, eliminaBozza, riorganizzaBozza } from '../actions';
 import { agganciaRiferimenti } from '@/lib/referti-allegati';
 import { AudioDettato } from '../AudioDettato';
 import { TestoDettato } from '../TestoDettato';
@@ -208,6 +208,30 @@ export default async function RefertoBozza({
       {searchParams.err === 'testo' && (
         <p className="error">Il testo del referto non può essere vuoto.</p>
       )}
+      {searchParams.ok === 'strutturato' && (
+        <div className="card notice"><p>
+          Proposta AI inserita nel «Testo da confermare»: il dettato è stato
+          riorganizzato nel formato standard. Controllala riga per riga prima
+          di confermare — i numeri sono verificati identici dal sistema.
+        </p></div>
+      )}
+      {searchParams.err === 'struttura_numeri' && (
+        <p className="error">
+          Proposta AI scartata: la riorganizzazione avrebbe cambiato dei numeri.
+          Il testo resta com&apos;era.
+        </p>
+      )}
+      {searchParams.err === 'struttura_troppo_corto' && (
+        <p className="error">
+          Proposta AI scartata: il risultato perdeva parte del contenuto.
+          Il testo resta com&apos;era.
+        </p>
+      )}
+      {searchParams.err === 'struttura_ai_non_risponde' && (
+        <p className="error">
+          Il modello AI locale non risponde: riprova tra qualche minuto.
+        </p>
+      )}
 
       {inBozza && avvisi.length > 0 && (
         <div className="card avviso-box">
@@ -354,13 +378,22 @@ export default async function RefertoBozza({
           <h2 style={{ marginTop: 18 }}>Testo da confermare</h2>
           <p className="muted">
             Questo è il testo che verrà confermato: sistemalo qui (le evidenziazioni
-            restano nella vista sopra come guida).
+            restano nella vista sopra come guida). Con «Riorganizza» l&apos;AI locale
+            propone il testo nel formato standard del rapporto — sezioni, diagnosi
+            numerate, esami — senza mai cambiare i numeri; resta una proposta da rivedere.
           </p>
-          <textarea name="testo" rows={16} required defaultValue={p.testo_corretto}
+          <textarea name="testo" rows={16} required
+            defaultValue={row.testo_finale ?? p.testo_corretto}
             style={{ width: '100%', fontFamily: 'inherit', lineHeight: 1.5 }} />
 
           <div className="form-actions">
             <button className="btn btn-primary" type="submit">Conferma il referto</button>
+            {/* Stesso form: la proposta parte dal testo COME LO VEDI adesso
+                nella casella, comprese le correzioni non ancora confermate.
+                Può richiedere uno-due minuti (modello locale). */}
+            <button className="btn" type="submit" formAction={riorganizzaBozza}>
+              Riorganizza nel formato standard (AI)
+            </button>
           </div>
         </form>
       ) : (

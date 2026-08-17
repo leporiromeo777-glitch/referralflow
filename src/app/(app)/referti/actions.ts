@@ -158,3 +158,42 @@ export async function scartaBozza(formData: FormData) {
   revalidatePath('/referti');
   redirect('/referti');
 }
+
+// Riorganizzazione AI nel formato standard dello studio (proposta, mai
+// conferma): il testo riorganizzato finisce in testo_finale della bozza —
+// la casella «Testo da confermare» lo mostra e la persona lo rivede come
+// sempre. Il payload della pipeline resta intatto; solo su stato 'bozza'.
+export async function riorganizzaBozza(formData: FormData) {
+  const session = await getSession();
+  if (!session || !session.studioId) redirect('/login');
+
+  const id = String(formData.get('id') ?? '');
+  if (!isUuid(id)) redirect('/referti');
+
+  const [b] = await query<{ testo_finale: string | null; payload: any }>(
+    `select testo_finale, payload from referti_bozze
+      where id = $1 and studio_id = $2 and stato = 'bozza'`,
+    [id, session.studioId]
+  );
+  if (!b) redirect(`/referti/${id}`);
+
+  // Parte dal testo COME LO VEDE l'utente nella casella (correzioni non
+  // ancora confermate comprese); in mancanza, da quanto salvato.
+  const testo = (
+    String(formData.get('testo') ?? '').trim() ||
+    ((b.testo_finale ?? b.payload?.testo_corretto ?? '') as string).trim()
+  ).slice(0, MAX_TESTO);
+  if (!testo) redirect(`/referti/${id}?err=testo`);
+
+  const { riorganizzaReferto } = await import('@/lib/referto-struttura');
+  const esito = await riorganizzaReferto(testo);
+  if (!esito.ok) redirect(`/referti/${id}?err=struttura_${esito.motivo}`);
+
+  await query(
+    `update referti_bozze set testo_finale = $3
+      where id = $1 and studio_id = $2 and stato = 'bozza'`,
+    [id, session.studioId, esito.testo]
+  );
+  revalidatePath(`/referti/${id}`);
+  redirect(`/referti/${id}?ok=strutturato`);
+}

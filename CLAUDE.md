@@ -87,7 +87,15 @@ ricevuta → triage → da_prenotare → prenotata → vista → referto_inviato
    `modelli/referto-carta-intestata.docx`, lib `src/lib/referto-docx.ts`):
    l'intestazione è FISSA (Dr. Med. Giorgio Moschovitis) — richiesta utente
    2026-08-17: in futuro deve seguire IL MEDICO CHE FIRMA il referto
-   (più medici per studio → intestazioni per medico).
+   (più medici per studio → intestazioni per medico). Nella stessa pagina
+   il bottone «Riorganizza nel formato standard (AI)»: gemma3:27b LOCALE
+   (`src/lib/referto-struttura.ts`, NON il 12b: duplicava le sezioni)
+   rimappa il dettato nel rapporto-tipo del medico (Diagnosi principali
+   numerate con «- attuale:», Diagnosi secondarie, Comorbidità, Anamnesi,
+   Terapia domiciliare, Esami con date, Valutazione, Procedere); veto del
+   codice se cambia anche un solo numero (la numerazione d'elenco a inizio
+   riga è esclusa dal confronto), proposta salvata in testo_finale solo su
+   stato bozza, sempre rivista da una persona.
 1. Stripe su «Attiva il tuo studio» (le BASI ci sono già — migrazioni 012+013:
    attivazione self-service intestata al medico titolare, `studios.abbonamento`
    pilota|prova|attivo|sospeso, `trial_until` 60gg, `stripe_customer_id` vuoto,
