@@ -11,7 +11,6 @@ import { anonimizzaDocumento, type RispostaAnonimizza } from './actions';
 export function AnonimizzaForm() {
   const [testo, setTesto] = useState('');
   const [docFile, setDocFile] = useState<File | null>(null);
-  const [nomeOrigine, setNomeOrigine] = useState<string>('');
   const [risposta, setRisposta] = useState<RispostaAnonimizza | null>(null);
   const [copiato, setCopiato] = useState(false);
   const [inCorso, startTransition] = useTransition();
@@ -37,7 +36,6 @@ export function AnonimizzaForm() {
     const dati = new FormData();
     dati.set('testo', testo);
     if (docFile) dati.set('file', docFile);
-    setNomeOrigine(docFile ? docFile.name.replace(/\.[^.]+$/, '') : 'documento');
     setRisposta(null);
     setCopiato(false);
     startTransition(async () => {
@@ -57,7 +55,8 @@ export function AnonimizzaForm() {
       nome = risposta.file.nome;
     } else {
       blob = new Blob([risposta.esito.testo], { type: 'text/plain;charset=utf-8' });
-      nome = `${nomeOrigine || 'documento'}-anonimizzato.txt`;
+      // Nome neutro: mai quello del file originale (spesso contiene il paziente).
+      nome = 'documento-anonimizzato.txt';
     }
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

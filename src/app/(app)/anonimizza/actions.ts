@@ -67,7 +67,11 @@ async function rispostaDocx(nomeFile: string, buffer: Buffer): Promise<RispostaA
       ok: true,
       esito: { testo: anteprima, sostituzioni, modello: MODELLO_ANONIMIZZA },
       file: {
-        nome: nomeFile.replace(/\.docx$/i, '') + '-anonimizzato.docx',
+        // Nome NEUTRO, mai derivato dall'originale: i file dei pazienti
+        // hanno spesso il nome della persona proprio nel nome del file, e
+        // un documento anonimizzato che si chiama come il paziente non è
+        // anonimo (visto dal vivo al primo uso reale, 2026-08-17).
+        nome: 'documento-anonimizzato.docx',
         base64: nuovo.toString('base64'),
         mime: MIME_DOCX,
       },
