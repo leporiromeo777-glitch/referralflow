@@ -331,6 +331,24 @@ scartata; il ripiego riprova con lo STESSO prompt blocco per blocco, tenendo i
 blocchi coi numeri intatti e lasciando originali gli altri. Ogni futura modifica
 al prompt o al modello ripassa dalla palestra prima di entrare in servizio.
 
+### 6.1b — Correzione «a lista di riparazioni» (metodo di prima scelta dal 2026-08-21)
+
+Idea dell'utente: il modello NON riscrive il testo — elenca solo gli scambi
+«parola storpiata → forma corretta» in JSON (`{"riparazioni": [{"da": …,
+"a": …}]}`, prompt `PROMPT_CORREZIONE_LISTA` in pipeline.py) e il CODICE li
+applica come fa col dizionario. Motivi (referto reale del 2026-08-21):
+la riscrittura integrale è lenta (produce l'intero testo) e può INTRODURRE
+errori («diselettroliemia» riscritta «disidratazione», «ECG» diventato «reg»).
+Guardie nel codice, ogni coppia proposta viene RIFIUTATA se: contiene cifre
+(numeri intoccabili per costruzione); "da" non è citazione esatta nel testo;
+"a" non SOMIGLIA a "da" per distanza di battitura (≤34% della lunghezza —
+respinge «serrada → severa»; eccezione sigle corte maiuscole, «reg → ECG»);
+introduce una «/» (unità di misura); allunga di oltre 2 parole. Collaudo:
+su 46 proposte di medgemma:27b ne passano 3, tutte giuste, numeri 8/8.
+Selettore `REFERTI_CORREZIONE_METODO` = `lista` (default) | `riscrittura`;
+se la lista non è utilizzabile (JSON rotto, modello muto) si ripiega da soli
+sulla riscrittura §6.1, che resta la rete di sicurezza.
+
 ### 6.2 — Ispezione (compito separato, non modifica nulla)
 
 ```

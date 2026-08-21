@@ -115,10 +115,9 @@ export function ProgressoTrascrizione({ iniziali }: { iniziali: Voce[] }) {
                     ))}
                   </ol>
                   <p className="muted small">
-                    Le fasi più lunghe sono le due passate di whisper e la
-                    correzione AI: quest&apos;ultima riscrive tutto il testo e
-                    risponde solo alla fine — su un dettato lungo può restare
-                    ferma anche 5–10 minuti pur lavorando.
+                    Le fasi più lunghe sono le due passate di whisper; le fasi
+                    AI rispondono solo alla fine — su un dettato lungo possono
+                    restare ferme qualche minuto pur lavorando.
                   </p>
                 </div>
               </details>

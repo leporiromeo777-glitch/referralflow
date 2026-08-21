@@ -165,7 +165,22 @@ const PAROLE_COMUNI = new Set([
   'paziente', 'ospedale', 'clinica', 'studio', 'ambulatorio', 'terapia',
   'controllo', 'referto', 'visita', 'esame', 'quindi', 'inoltre', 'pertanto',
   'durante', 'presso', 'tramite', 'attuale', 'attualmente', 'lugano', 'ticino',
+  'persona',
 ]);
+
+// Voci che non devono MAI entrare nel piano: il testo dei segnaposto stessi.
+// Senza questo filtro la controprova può segnalare la parola «Persona» dei
+// segnaposto come nome residuo: nascerebbe la voce «Persona → «Persona N»»,
+// che a ogni passata avvolge i segnaposto già presenti una volta di più
+// (visto dal vivo su un referto reale: «««Persona 7» 7» 7»…).
+function voceVietata(s: string): boolean {
+  const bassa = s.trim().toLowerCase();
+  return (
+    bassa.length < 2 ||
+    s.includes('«') || s.includes('»') || s.includes('[') || s.includes(']') ||
+    /^persona(\s+\d+)?$/.test(bassa)
+  );
+}
 
 // Sostituisce tutte le occorrenze (case-insensitive, a confine di parola) e
 // registra quante ne ha trovate.
@@ -215,10 +230,11 @@ export async function pianoAnonimizzazione(testoOriginale: string): Promise<Pian
     .sort((a, b) => (a.pos === -1 ? 1 : b.pos === -1 ? -1 : a.pos - b.pos))
     .map((x) => x.p);
   persone.forEach((nome, i) => {
+    if (voceVietata(nome)) return;
     const seg = `«Persona ${i + 1}»`;
     voci.push({ originale: nome, segnaposto: seg });
     for (const pezzo of nome.split(/\s+/)) {
-      if (pezzo.length >= 3) voci.push({ originale: pezzo, segnaposto: seg });
+      if (pezzo.length >= 3 && !voceVietata(pezzo)) voci.push({ originale: pezzo, segnaposto: seg });
     }
   });
 
@@ -261,7 +277,9 @@ export async function pianoAnonimizzazione(testoOriginale: string): Promise<Pian
     ['codici', '[codice personale]'],
   ];
   for (const [chiave, seg] of fissi) {
-    for (const voce of estratti[chiave]) voci.push({ originale: voce, segnaposto: seg });
+    for (const voce of estratti[chiave]) {
+      if (!voceVietata(voce)) voci.push({ originale: voce, segnaposto: seg });
+    }
   }
   return { voci };
 }
@@ -328,7 +346,9 @@ export async function anonimizzaConPiano(
 
   for (let giro = 0; giro < 2; giro++) {
     const rimasti = await controprova(testo);
-    const presenti = rimasti.filter((n) => testo.toLowerCase().includes(n.toLowerCase()));
+    const presenti = rimasti.filter(
+      (n) => !voceVietata(n) && testo.toLowerCase().includes(n.toLowerCase())
+    );
     if (presenti.length === 0) break;
     for (const nome of presenti) {
       // Variante di una persona già nota? Stesso segnaposto. Altrimenti nuova.
@@ -354,7 +374,9 @@ export async function anonimizzaConPiano(
       }
       piano.voci.push({ originale: nome, segnaposto: seg });
       for (const pezzo of nome.split(/\s+/)) {
-        if (pezzo.length >= 3) piano.voci.push({ originale: pezzo, segnaposto: seg });
+        if (pezzo.length >= 3 && !voceVietata(pezzo)) {
+          piano.voci.push({ originale: pezzo, segnaposto: seg });
+        }
       }
     }
     const [nuovo, effettive] = applicaPiano(testo, piano);

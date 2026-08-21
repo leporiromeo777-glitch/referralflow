@@ -157,6 +157,10 @@ MODELLO_LLM = os.environ.get("REFERTI_LLM", "gemma3:12b")
 # scambio costa ~30-60 s di ricarica, quindi conviene tenere sullo stesso
 # modello le fasi consecutive.
 MODELLO_CORREZIONE = os.environ.get("REFERTI_LLM_CORREZIONE", MODELLO_LLM)
+# «lista» = il modello elenca le riparazioni e il codice le applica (veloce,
+# numeri intoccabili per costruzione); «riscrittura» = vecchio metodo a
+# riscrittura integrale, che resta comunque come ripiego automatico.
+METODO_CORREZIONE = os.environ.get("REFERTI_CORREZIONE_METODO", "lista")
 MODELLO_SEGRETERIA = os.environ.get("REFERTI_LLM_SEGRETERIA", MODELLO_LLM)
 MODELLO_ISPEZIONE = os.environ.get("REFERTI_LLM_ISPEZIONE", MODELLO_LLM)
 MODELLO_ESTRAZIONE = os.environ.get("REFERTI_LLM_ESTRAZIONE", MODELLO_LLM)
@@ -203,6 +207,30 @@ Regole obbligatorie:
 5. Non aggiungere, non riassumere, non riorganizzare. Non aggiungere frasi di cortesia o conclusioni.
 
 Restituisci solo il testo corretto, senza commenti.
+
+TESTO:
+{testo}"""
+
+PROMPT_CORREZIONE_LISTA = """Sei un correttore di trascrizioni mediche in italiano. Il testo qui sotto è un referto cardiologico dettato a voce e trascritto automaticamente, quindi contiene errori di riconoscimento.
+
+NON riscrivere il testo. Elenca SOLO le riparazioni da fare: parole o brevi espressioni storpiate dalla trascrizione, ciascuna con la forma corretta.
+
+Correggi SOLO:
+- termini medici e anatomici evidentemente storpiati
+- nomi di farmaci
+- refusi grammaticali che nascono dalla trascrizione
+
+Regole obbligatorie:
+1. "da" è una citazione ESATTA del testo (stesse maiuscole e accenti), al massimo 4 parole.
+2. MAI numeri, dosaggi, misure, percentuali o date dentro "da" o "a".
+3. Se un segmento è incomprensibile o ambiguo, non proporre nulla per quel segmento: meglio nessuna riparazione che una riparazione inventata.
+4. Non toccare le istruzioni di dettatura ("scrivi", "fai così", "riportami...").
+5. La forma corretta deve SUONARE come quella storpiata: stai riparando errori di ascolto, non riscrivendo. Se la parola giusta non somiglia a quella trascritta, lasciala stare.
+6. Non toccare unità di misura e abbreviazioni; non accorciare espressioni già corrette; non cambiare lo stile.
+7. Al massimo 40 riparazioni, le più sicure.
+
+Rispondi SOLO con un oggetto JSON valido, senza testo prima o dopo:
+{"riparazioni": [{"da": "parola storpiata", "a": "forma corretta"}]}
 
 TESTO:
 {testo}"""
@@ -764,6 +792,7 @@ def punteggiatura_dettata(testo: str) -> tuple[str, int]:
 # perché la stessa frase identica 3+ volte di fila non è dettatura.
 
 SOGLIA_LOOP_FRASI = 3    # frase intera identica, consecutiva
+SOGLIA_LOOP_CICLI = 2    # ciclo di 2-4 frasi: A-B-A-B basta (referto reale 2026-08-21)
 SOGLIA_LOOP_GRUPPI = 4   # gruppo di 2-8 parole senza cifre
 SOGLIA_LOOP_PAROLA = 6   # parola singola senza cifre
 
@@ -860,14 +889,27 @@ def deduplica_loop(testo: str) -> tuple[str, int, list[str]]:
                    and all(norme[i + k] == norme[i + giri * periodo + k]
                            for k in range(periodo))):
                 giri += 1
-            if giri >= SOGLIA_LOOP_FRASI:
+            if giri >= SOGLIA_LOOP_CICLI:
+                fine = i + giri * periodo
+                # Coda mozza del ciclo: whisper spesso interrompe l'ultimo
+                # giro a metà frase (referto reale 2026-08-21). Le frasi in
+                # coda che sono un troncone di quelle attese del ciclo
+                # vengono tolte con il resto.
+                extra = 0
+                while fine + extra < len(norme):
+                    attesa = norme[i + (extra % periodo)]
+                    corta = norme[fine + extra]
+                    if len(corta) >= 8 and attesa.startswith(corta):
+                        extra += 1
+                    else:
+                        break
                 da_togliere.append((spans[i + periodo - 1][1],
-                                    spans[i + giri * periodo - 1][1]))
-                rimosse += (giri - 1) * periodo
+                                    spans[fine + extra - 1][1]))
+                rimosse += (giri - 1) * periodo + extra
                 cit = testo[spans[i][0]:spans[i][1]].strip()
                 if cit:
                     citazioni.append(cit[:120])
-                i = i + giri * periodo
+                i = fine + extra
                 avanzato = True
                 break
         if not avanzato:
@@ -990,6 +1032,93 @@ def _numeri(testo: str) -> list[str]:
     return sorted(re.findall(r"\d+(?:[.,]\d+)?", testo))
 
 
+def _distanza_battitura(a: str, b: str) -> int:
+    """Distanza di Levenshtein semplice (parole corte: costo trascurabile)."""
+    if a == b:
+        return 0
+    prec = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prec[j] + 1, cur[j - 1] + 1, prec[j - 1] + (ca != cb)))
+        prec = cur
+    return prec[-1]
+
+
+def _riparazione_plausibile(da: str, a: str) -> bool:
+    """Una vera storpiatura di trascrizione SUONA come la parola giusta:
+    accetta solo coppie foneticamente vicine (visto dal vivo il 2026-08-21:
+    il modello proponeva «serrada → severa» — parola sensata ma sbagliata —
+    e ritocchi di stile tipo «grammi → g/dL»). Vietate anche le barre
+    introdotte dal nulla (unità di misura)."""
+    if "/" in a and "/" not in da:
+        return False
+    ba, bb = da.lower(), a.lower()
+    dist = _distanza_battitura(ba, bb)
+    if dist <= max(1, round(max(len(ba), len(bb)) * 0.34)):
+        return True
+    # Sigle: «reg → ECG» (visto dal vivo) suona uguale ma per lettere è
+    # lontano; per le sigle corte tutte maiuscole basta una vicinanza lasca.
+    return a.isupper() and len(a) <= 5 and len(da.split()) == 1 and dist <= 2
+
+
+def _correggi_a_lista(testo: str, file_id: str) -> str | None:
+    """Correzione «a lista di riparazioni» (idea dell'utente, 2026-08-21):
+    il modello NON riscrive il testo — elenca solo gli scambi «parola
+    storpiata → forma giusta» e il CODICE li applica, come già fa col
+    dizionario dello studio. Vantaggi: risposta corta (minuti invece di
+    decine di minuti) e numeri intoccabili PER COSTRUZIONE, perché ogni
+    coppia che contiene cifre viene rifiutata a priori. Ritorna None se il
+    modello non produce una lista utilizzabile: il chiamante ripiega sulla
+    vecchia riscrittura integrale."""
+    inizio = time.monotonic()
+    try:
+        uscita = chiama_ollama(
+            PROMPT_CORREZIONE_LISTA.replace("{testo}", testo), file_id,
+            "correzione_llm", formato_json=True, modello=MODELLO_CORREZIONE,
+        )
+        dati = json.loads(uscita)
+    except (RuntimeError, json.JSONDecodeError):
+        return None
+    coppie = dati.get("riparazioni") if isinstance(dati, dict) else None
+    if not isinstance(coppie, list):
+        return None
+    applicate = 0
+    scartate = 0
+    nuovo = testo
+    for voce in coppie[:60]:
+        if not isinstance(voce, dict):
+            scartate += 1
+            continue
+        da = str(voce.get("da", "")).strip()
+        a = str(voce.get("a", "")).strip()
+        if (not da or not a or da == a or len(da) > 60 or len(a) > 60
+                or re.search(r"\d", da) or re.search(r"\d", a)
+                or len(a.split()) > len(da.split()) + 2
+                or not _riparazione_plausibile(da, a)):
+            scartate += 1
+            continue
+        patt = re.compile(r"(?<!\w)" + re.escape(da) + r"(?!\w)")
+        nuovo, n = patt.subn(lambda _m: a, nuovo)
+        if n > 0:
+            applicate += 1
+        else:
+            scartate += 1
+    if _numeri(nuovo) != _numeri(testo):
+        # Non dovrebbe mai accadere (le coppie con cifre sono rifiutate):
+        # cintura di sicurezza sul vincolo §2.4.
+        log.warning(
+            "fase=correzione_llm file=%s esito=lista_scartata motivo=numeri_cambiati",
+            file_id,
+        )
+        return None
+    log.info(
+        "fase=correzione_llm file=%s esito=ok_lista riparazioni=%d scartate=%d durata=%.1fs",
+        file_id, applicate, scartate, time.monotonic() - inizio,
+    )
+    return nuovo
+
+
 def correggi_llm(testo: str, file_id: str, rapporto_scarto: Path) -> str:
     """Correzione col prompt §6.1. Rete di sicurezza sul vincolo §2.4:
     se la firma numerica cambia, o il testo esce troppo accorciato
@@ -998,7 +1127,18 @@ def correggi_llm(testo: str, file_id: str, rapporto_scarto: Path) -> str:
     Meglio nessuna correzione che una correzione infedele.
     Allo scarto per numeri, le differenze finiscono in un file locale
     accanto agli altri (mai nei log, SPEC §2.2): serve a capire se è stata
-    una manomissione vera o un falso allarme del controllo."""
+    una manomissione vera o un falso allarme del controllo.
+    Dal 2026-08-21 il metodo di prima scelta è la lista di riparazioni
+    (REFERTI_CORREZIONE_METODO=lista): la riscrittura integrale qui sotto
+    scatta solo come ripiego."""
+    if METODO_CORREZIONE == "lista":
+        esito_lista = _correggi_a_lista(testo, file_id)
+        if esito_lista is not None:
+            return esito_lista
+        log.warning(
+            "fase=correzione_llm file=%s esito=lista_fallita ripiego=riscrittura",
+            file_id,
+        )
     inizio = time.monotonic()
     uscita = chiama_ollama(
         PROMPT_CORREZIONE.replace("{testo}", testo), file_id, "correzione_llm",
