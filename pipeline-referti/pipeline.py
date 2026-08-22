@@ -655,6 +655,79 @@ def confronta(testo_a: str, testo_b: str) -> list[dict]:
     return divergenze
 
 
+PROMPT_ARBITRO = """Sei un correttore di trascrizioni mediche in italiano. Lo stesso dettato è stato trascritto DUE volte da due sistemi diversi: nei punti elencati le versioni divergono. Per ogni punto scegli la versione che è italiano corretto e ha senso medico nel contesto dato.
+
+Regole obbligatorie:
+1. Scegli "a" oppure "b". Se nessuna delle due è chiaramente giusta, rispondi "incerto".
+2. Non inventare una terza versione: puoi solo scegliere.
+3. Nel dubbio, "incerto": il punto resterà segnalato a una persona.
+
+Rispondi SOLO con un oggetto JSON valido:
+{"scelte": [{"punto": 1, "scelta": "a"}, {"punto": 2, "scelta": "incerto"}]}
+
+PUNTI:
+{punti}"""
+
+
+def arbitra_divergenze(testo: str, divergenze: list[dict], file_id: str) -> tuple[str, int]:
+    """Mini-GER a due ipotesi (piano precisione 2026-08-23, punto 5): dove le
+    due passate di whisper divergono, il modello vede ENTRAMBE le versioni e
+    sceglie la più sensata; il codice applica solo le scelte «b» (la «a» è
+    già nel testo di lavoro). Paletti: mai punti in cui le versioni portano
+    numeri diversi (il dubbio resta alla persona), mai segmenti lunghi, e la
+    sostituzione avviene solo se il segmento è unico nel testo. Le divergenze
+    restano comunque segnalate in bozza: la scelta è visibile e revocabile."""
+    candidate: list[dict] = []
+    for d in divergenze:
+        va, vb = d.get("versione_a", ""), d.get("versione_b", "")
+        if not va or not vb or va == vb:
+            continue
+        if _numeri(va) != _numeri(vb):
+            continue
+        if len(va) > 80 or len(vb) > 80:
+            continue
+        candidate.append(d)
+    candidate = candidate[:30]
+    if not candidate:
+        return testo, 0
+    inizio = time.monotonic()
+    punti = "\n".join(
+        f'{k + 1}) contesto: «{d["contesto"]}»\n'
+        f'   a: «{d["versione_a"]}»\n   b: «{d["versione_b"]}»'
+        for k, d in enumerate(candidate)
+    )
+    try:
+        uscita = chiama_ollama(
+            PROMPT_ARBITRO.replace("{punti}", punti), file_id, "confronto",
+            formato_json=True, modello=MODELLO_CORREZIONE,
+        )
+        dati = json.loads(uscita)
+    except (RuntimeError, json.JSONDecodeError):
+        return testo, 0
+    scelte = dati.get("scelte") if isinstance(dati, dict) else None
+    if not isinstance(scelte, list):
+        return testo, 0
+    applicate = 0
+    for voce in scelte:
+        if not isinstance(voce, dict) or voce.get("scelta") != "b":
+            continue
+        try:
+            k = int(voce.get("punto", 0)) - 1
+        except (TypeError, ValueError):
+            continue
+        if not 0 <= k < len(candidate):
+            continue
+        va, vb = candidate[k]["versione_a"], candidate[k]["versione_b"]
+        if testo.count(va) == 1:
+            testo = testo.replace(va, vb, 1)
+            applicate += 1
+    log.info(
+        "fase=confronto file=%s esito=arbitrato punti=%d scelte_b=%d durata=%.1fs",
+        file_id, len(candidate), applicate, time.monotonic() - inizio,
+    )
+    return testo, applicate
+
+
 def carica_sostituzioni() -> list[tuple[re.Pattern, str]]:
     """Sostituzioni da correzioni.json (termini_clinici + linguaggio_comune),
     compilate come regex: frasi intere con confini di parola, spazi che
@@ -1862,6 +1935,10 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             "fase=confronto file=%s esito=ok divergenze=%d durata=%.1fs",
             file_id, len(divergenze), time.monotonic() - inizio,
         )
+        # Arbitro a due ipotesi (punto 5 del piano): l'AI sceglie tra le due
+        # versioni nei punti di divergenza; i dubbi restano comunque in bozza.
+        if divergenze:
+            corretto_a, _ = arbitra_divergenze(corretto_a, divergenze, file_id)
 
         fase = "correzione_llm"
         _ = notifica and notifica(fase)

@@ -373,6 +373,19 @@ storpiatura: quelle voci alimentano sia il prompt whisper sia l'aggancio.
 Preprocessing: dal 2026-08-23 il denoise è SPENTO di default (misura
 banco-audio: WER 26.5%→23.6% senza; il rallentamento 0.8× invece resta).
 
+### 6.1e — Arbitro delle divergenze (2026-08-23, piano precisione punto 5)
+
+Dove le due passate di whisper divergono, `arbitra_divergenze` (dopo il
+confronto, prima della correzione AI) mostra al modello ENTRAMBE le versioni
+col contesto e gli fa scegliere («a», «b» o «incerto» — prompt
+`PROMPT_ARBITRO`). Il codice applica solo le scelte «b» e solo se: le due
+versioni hanno gli stessi numeri (altrimenti il punto è escluso a priori),
+il segmento è ≤80 caratteri ed è unico nel testo. Le divergenze restano
+comunque nella bozza: la scelta dell'arbitro è visibile e revocabile dalla
+persona. Risposta JSON rotta → nessun cambio. È la versione in miniatura
+della «generative error correction» su liste N-best (HyPoradise, NeurIPS
+2023), con le nostre due ipotesi beam/greedy.
+
 ### 6.1c — Frasi fantasma (2026-08-23)
 
 Whisper, sul silenzio o sul rumore, inventa frasi che un medico non detta mai
