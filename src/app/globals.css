@@ -1524,6 +1524,13 @@ mark[title] { cursor: help; }
 .evid-frase.spenta { background: transparent; color: var(--muted); text-decoration: line-through; }
 .evid-frase.da-chiarire { text-decoration: underline wavy #c77d00; text-underline-offset: 3px; }
 .evid-frase.spenta.da-chiarire { text-decoration: line-through underline wavy #c77d00; }
+/* Avvocato del diavolo: frase non supportata dal dettato — puntinata rossa. */
+.evid-frase.non-supportata { text-decoration: underline dotted #b3382c; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.evid-frase.spenta.non-supportata { text-decoration: line-through underline dotted #b3382c; }
+.evid-avvocato { border-left: 3px solid #b3382c; }
+.grezzo-box { margin: 10px 0 14px; }
+.grezzo-box summary { cursor: pointer; font-weight: 600; }
+.grezzo-testo { white-space: pre-wrap; background: var(--gray-bg, #f2f2ee); border-radius: 14px; padding: 14px 16px; max-height: 340px; overflow: auto; font-family: inherit; font-size: 0.95em; line-height: 1.5; }
 .evid-senso ul { margin: 6px 0 0; padding-left: 20px; font-size: 14px; }
 .evid-senso li { margin-bottom: 6px; }
 .evid-orig { color: var(--muted); }

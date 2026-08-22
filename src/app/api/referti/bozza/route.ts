@@ -82,6 +82,20 @@ export async function POST(req: NextRequest) {
         frase: v.frase.slice(0, 400),
         proposta: typeof v.proposta === 'string' ? v.proposta.slice(0, 400) : '',
       })),
+    // Avvocato del diavolo (piano precisione, punto 6): frasi della bozza
+    // che il verificatore separato non trova supportate dal dettato grezzo,
+    // col motivo. Solo bandierine per chi rivede.
+    frasi_non_supportate: lista(body?.frasi_non_supportate)
+      .filter((v: unknown): v is { frase: string; motivo?: string } =>
+        !!v && typeof v === 'object' && typeof (v as any).frase === 'string')
+      .map((v: { frase: string; motivo?: string }) => ({
+        frase: v.frase.slice(0, 400),
+        motivo: typeof v.motivo === 'string' ? v.motivo.slice(0, 200) : '',
+      })),
+    // Dettato grezzo (trascrizione prima di ogni ritocco): serve alla pagina
+    // di revisione per il confronto «frase → cosa è stato detto davvero».
+    testo_grezzo:
+      typeof body?.testo_grezzo === 'string' ? body.testo_grezzo.slice(0, MAX_TESTO) : '',
     // Tempi parola-per-parola (SPEC §8): [parola, secondi] per ogni parola di
     // testo_corretto, per il testo sincronizzato con l'audio. Facoltativi.
     parole: (Array.isArray(body?.parole) ? body.parole.slice(0, 8000) : [])

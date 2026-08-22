@@ -10,6 +10,7 @@ import { useMemo, useState } from 'react';
 // «senso» si applicano con un bottone, sempre a scelta della persona.
 
 type FraseDaChiarire = { frase: string; proposta: string };
+type FraseNonSupportata = { frase: string; motivo: string };
 
 function spezzaInFrasi(testo: string): string[] {
   // Confini: fine frase o riga nuova, tenendo i separatori attaccati alla
@@ -41,10 +42,12 @@ export function EvidenziatoreTesto({
   testo,
   divagazioni,
   frasiDaChiarire,
+  frasiNonSupportate = [],
 }: {
   testo: string;
   divagazioni: string[];
   frasiDaChiarire: FraseDaChiarire[];
+  frasiNonSupportate?: FraseNonSupportata[];
 }) {
   const frasi = useMemo(() => spezzaInFrasi(testo), [testo]);
   const spenteIniziali = useMemo(() => {
@@ -78,6 +81,10 @@ export function EvidenziatoreTesto({
     () => frasiDaChiarire.map((v) => normalizza(v.frase)),
     [frasiDaChiarire]
   );
+  const nonSupportate = useMemo(
+    () => frasiNonSupportate.map((v) => ({ n: normalizza(v.frase), motivo: v.motivo })),
+    [frasiNonSupportate]
+  );
 
   return (
     <>
@@ -90,16 +97,20 @@ export function EvidenziatoreTesto({
           </p>
           <div className="evid-testo">
             {frasi.map((f, i) => {
-              const chiarire = daChiarireNorm.some((n) => {
-                const fn = normalizza(f);
-                return n.length >= 8 && (fn.includes(n) || n.includes(fn));
-              });
+              const fn = normalizza(f);
+              const chiarire = daChiarireNorm.some(
+                (n) => n.length >= 8 && (fn.includes(n) || n.includes(fn))
+              );
+              const sospetta = nonSupportate.find(
+                (v) => v.n.length >= 8 && (fn.includes(v.n) || v.n.includes(fn))
+              );
               return (
                 <span
                   key={i}
                   role="button"
                   tabIndex={0}
-                  className={`evid-frase${spente.has(i) ? ' spenta' : ''}${chiarire ? ' da-chiarire' : ''}`}
+                  className={`evid-frase${spente.has(i) ? ' spenta' : ''}${chiarire ? ' da-chiarire' : ''}${sospetta ? ' non-supportata' : ''}`}
+                  title={sospetta ? `Avvocato del diavolo: ${sospetta.motivo || 'non trovata nel dettato'}` : undefined}
                   onClick={() => commuta(i)}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); commuta(i); } }}
                 >

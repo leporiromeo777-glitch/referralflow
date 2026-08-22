@@ -31,6 +31,8 @@ type Payload = {
   parole?: [string, number][];
   divagazioni?: string[];
   frasi_da_chiarire?: { frase: string; proposta: string }[];
+  frasi_non_supportate?: { frase: string; motivo: string }[];
+  testo_grezzo?: string;
 };
 
 // Evidenzia i frammenti segnalati dentro il testo: prima occorrenza di ogni
@@ -385,11 +387,41 @@ export default async function RefertoBozza({
             propone il testo nel formato standard del rapporto — sezioni, diagnosi
             numerate, esami — senza mai cambiare i numeri; resta una proposta da rivedere.
           </p>
+          {Array.isArray(p.frasi_non_supportate) && p.frasi_non_supportate.length > 0 && (
+            <div className="evid-box evid-avvocato">
+              <p className="muted">
+                <strong>Avvocato del diavolo</strong>: un secondo passaggio AI ha riletto
+                la bozza contro il dettato originale e non trova appoggio per queste frasi
+                (segnate anche nel testo qui sotto). Verifica col dettato prima di confermarle.
+              </p>
+              <ul>
+                {p.frasi_non_supportate.map((v, i) => (
+                  <li key={i}>
+                    <span className="evid-orig">{v.frase}</span>
+                    {v.motivo ? <span className="muted"> — {v.motivo}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <EvidenziatoreTesto
             testo={row.testo_finale ?? p.testo_corretto ?? ''}
             divagazioni={Array.isArray(p.divagazioni) ? p.divagazioni : []}
             frasiDaChiarire={Array.isArray(p.frasi_da_chiarire) ? p.frasi_da_chiarire : []}
+            frasiNonSupportate={Array.isArray(p.frasi_non_supportate) ? p.frasi_non_supportate : []}
           />
+
+          {typeof p.testo_grezzo === 'string' && p.testo_grezzo.trim() !== '' && (
+            <details className="grezzo-box">
+              <summary>Dettato originale (trascrizione grezza, prima di ogni ritocco)</summary>
+              <p className="muted small">
+                Per controllare una frase dubbia: cerca qui cosa è stato trascritto
+                davvero, prima del dizionario e delle correzioni AI.
+              </p>
+              <pre className="grezzo-testo">{p.testo_grezzo}</pre>
+            </details>
+          )}
 
           <div className="form-actions">
             <button className="btn btn-primary" type="submit">Conferma il referto</button>

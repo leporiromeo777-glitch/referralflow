@@ -1558,6 +1558,61 @@ def controlla_senso(testo: str, glossario: str, file_id: str) -> list[dict]:
     return voci[:50]
 
 
+PROMPT_AVVOCATO = """Sei un revisore severo («avvocato del diavolo») di referti medici in italiano. Confronta la BOZZA con il DETTATO ORIGINALE: sono lo stesso referto, il dettato è la trascrizione grezza dell'audio, la bozza è la versione ripulita.
+
+Elenca le frasi della bozza che NON sono supportate dal dettato: affermazioni cliniche che nel dettato non compaiono, o che nel dettato dicono una cosa DIVERSA (soprattutto se cambia il significato clinico).
+
+Regole obbligatorie:
+1. Cita ogni frase ESATTAMENTE come compare nella bozza.
+2. Ignora le differenze di forma: punteggiatura, maiuscole, refusi corretti, riformulazioni fedeli NON vanno segnalate. Conta solo il contenuto clinico.
+3. Poche segnalazioni e fondate: nel dubbio, non segnalare.
+4. Se tutto è supportato, lista vuota.
+
+Rispondi SOLO con un oggetto JSON valido:
+{"non_supportate": [{"frase": "...", "motivo": "..."}]}
+
+DETTATO ORIGINALE:
+{grezzo}
+
+BOZZA:
+{bozza}"""
+
+
+def avvocato_diavolo(bozza: str, grezzo: str, file_id: str) -> list[dict]:
+    """Verifica delle affermazioni (piano precisione 2026-08-23, punto 6,
+    ispirata alla claim-verification di Abridge): un passaggio SEPARATO dal
+    generatore rilegge la bozza contro il dettato grezzo e segnala le frasi
+    non supportate, col motivo. Non riscrive niente: solo bandierine per la
+    persona. Il codice tiene solo le citazioni che esistono davvero nella
+    bozza. Qualsiasi errore → lista vuota (fase facoltativa)."""
+    inizio = time.monotonic()
+    try:
+        uscita = chiama_ollama(
+            PROMPT_AVVOCATO.replace("{grezzo}", grezzo).replace("{bozza}", bozza),
+            file_id, "avvocato", formato_json=True, modello=MODELLO_ISPEZIONE,
+        )
+        dati = json.loads(uscita)
+    except (RuntimeError, json.JSONDecodeError):
+        log.warning("fase=avvocato file=%s esito=saltato motivo=ai_non_risponde", file_id)
+        return []
+    voci = dati.get("non_supportate") if isinstance(dati, dict) else None
+    if not isinstance(voci, list):
+        return []
+    fuori: list[dict] = []
+    for voce in voci[:20]:
+        if not isinstance(voce, dict):
+            continue
+        frase = str(voce.get("frase", "")).strip()
+        motivo = str(voce.get("motivo", "")).strip()[:200]
+        if len(frase) >= 8 and frase in bozza:
+            fuori.append({"frase": frase[:400], "motivo": motivo})
+    log.info(
+        "fase=avvocato file=%s esito=ok segnalate=%d durata=%.1fs",
+        file_id, len(fuori), time.monotonic() - inizio,
+    )
+    return fuori
+
+
 def ispeziona_llm(testo: str, file_id: str) -> list[str]:
     """Ispezione col prompt §6.2: SOLO elenco dei segmenti dubbi, nessuna
     modifica al testo (compito separato apposta: un 12B non riesce a
@@ -1986,6 +2041,15 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             encoding="utf-8",
         )
 
+        # Avvocato del diavolo (punto 6 del piano): la bozza riletta contro
+        # il dettato grezzo, frase per frase. Solo bandierine, mai riscritture.
+        fase = "avvocato"
+        _ = notifica and notifica(fase)
+        frasi_non_supportate = avvocato_diavolo(finale, grezzo_a, file_id)
+        frasi_non_supportate = [
+            v for v in frasi_non_supportate if v["frase"] not in divagazioni
+        ]
+
         fase = "ispezione_llm"
         _ = notifica and notifica(fase)
         dubbi = ispeziona_llm(finale, file_id)
@@ -2088,6 +2152,11 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # decide) e frasi prive di senso con proposta dal glossario.
         "divagazioni": divagazioni,
         "frasi_da_chiarire": frasi_da_chiarire,
+        # Avvocato del diavolo + dettato grezzo (punto 6): la pagina di
+        # revisione mostra le frasi non supportate col motivo e permette di
+        # confrontare la bozza con ciò che è stato davvero trascritto.
+        "frasi_non_supportate": frasi_non_supportate,
+        "testo_grezzo": grezzo_a,
         "richiede_revisione": True,
     }
     return file_id, payload

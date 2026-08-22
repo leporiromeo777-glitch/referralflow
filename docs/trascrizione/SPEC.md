@@ -373,6 +373,22 @@ storpiatura: quelle voci alimentano sia il prompt whisper sia l'aggancio.
 Preprocessing: dal 2026-08-23 il denoise è SPENTO di default (misura
 banco-audio: WER 26.5%→23.6% senza; il rallentamento 0.8× invece resta).
 
+### 6.1f — Avvocato del diavolo (2026-08-23, piano precisione punto 6)
+
+Dopo la fase «senso», un passaggio SEPARATO dal generatore (ispirato alla
+claim-verification di Abridge) rilegge la bozza contro il dettato grezzo
+(`avvocato_diavolo`, prompt `PROMPT_AVVOCATO`, modello di ispezione) ed
+elenca le frasi non supportate col motivo. Non riscrive nulla: il codice
+tiene solo le citazioni esatte presenti in bozza (max 20), scarta quelle già
+segnalate come divagazioni, e ogni errore rende la fase un no-op. Nel
+payload: `frasi_non_supportate` [{frase, motivo}] e `testo_grezzo` (la
+trascrizione della passata A dopo fantasmi/deloop, prima del dizionario).
+La pagina Referti: puntinata rossa + motivo sulla frase, riquadro riassuntivo,
+e riquadro a scomparsa «Dettato originale» per il confronto a mano.
+Fase notificata come `avvocato` (aggiunta con `pertinenza` e `senso` alla
+whitelist dell'endpoint fase — prima quelle due venivano rifiutate in
+silenzio e l'avanzamento in pagina le saltava).
+
 ### 6.1e — Arbitro delle divergenze (2026-08-23, piano precisione punto 5)
 
 Dove le due passate di whisper divergono, `arbitra_divergenze` (dopo il
