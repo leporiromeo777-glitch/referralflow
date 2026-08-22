@@ -373,6 +373,23 @@ storpiatura: quelle voci alimentano sia il prompt whisper sia l'aggancio.
 Preprocessing: dal 2026-08-23 il denoise è SPENTO di default (misura
 banco-audio: WER 26.5%→23.6% senza; il rallentamento 0.8× invece resta).
 
+### 6.1g — Addestramento su misura di whisper (piano precisione punto 8: predisposto)
+
+La cassaforte (`~/referti-dataset/`, §2.3) accumula gli audio consegnati;
+`prepara-dataset.py` li accoppia con `testo_finale` delle bozze confermate e
+scrive `coppie/manifest.jsonl` con le ore raccolte. Procedura quando ci sono
+≥5 ore (meglio 10–20): (1) eseguire prepara-dataset.py; (2) LoRA su whisper
+large-v3 con transformers+PEFT su GPU a noleggio — riferimento
+github.com/Vaibhavs10/fast-whisper-finetuning — usando il manifest (i dati
+NON si caricano su servizi terzi: GPU a noleggio = macchina propria affittata,
+disco cifrato, cancellazione a fine corsa; in alternativa attendere un Mac
+più carrozzato); (3) merge_and_unload → convert-h5-to-ggml.py di whisper.cpp;
+(4) il nuovo ggml si valuta con `banco-audio.py --modello=<ggml>` sul set
+d'oro sintetico E su un campione del manifest: sostituisce large-v3 solo se
+vince su WER, termini critici e numeri. Nota 2026-08-23: il checkpoint
+pubblico medwhisper-large-v3-ita è stato provato e BOCCIATO sul nostro banco
+(WER 28.5% vs 23.6%, termini 63/108 vs 70/108, numeri 97/108 vs 105/108).
+
 ### 6.1f — Avvocato del diavolo (2026-08-23, piano precisione punto 6)
 
 Dopo la fase «senso», un passaggio SEPARATO dal generatore (ispirato alla
