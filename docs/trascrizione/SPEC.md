@@ -356,6 +356,23 @@ Selettore `REFERTI_CORREZIONE_METODO` = `lista` (default) | `riscrittura`;
 se la lista non è utilizzabile (JSON rotto, modello muto) si ripiega da soli
 sulla riscrittura §6.1, che resta la rete di sicurezza.
 
+### 6.1d — Aggancio fonetico al glossario (2026-08-23, piano precisione punto 3)
+
+Due meccanismi in `pipeline.py`, entrambi deterministici:
+1. `riparazioni_glossario` (dopo il dizionario, prima della punteggiatura):
+   una parola del dettato minuscola ≥7 lettere, assente dal glossario ma con
+   la stessa **chiave fonetica italiana** di una voce del glossario (o a
+   distanza di battitura ≤1/≤2), viene riparata SENZA AI. Guardie: candidato
+   unico, mai parole con iniziale maiuscola (nomi propri), mai coppie che
+   differiscono solo per le vocali finali (flessioni: «pressoria/pressorio»).
+2. `_chiave_fonetica` come rilassatore di `_riparazione_plausibile`: una
+   coppia proposta dall'AI che suona identica (b/p, d/t, g/k, v/f, doppie,
+   h) è plausibile anche se per lettere è lontana.
+Il vocabolario è stato arricchito (2026-08-23) con ~40 termini soggetti a
+storpiatura: quelle voci alimentano sia il prompt whisper sia l'aggancio.
+Preprocessing: dal 2026-08-23 il denoise è SPENTO di default (misura
+banco-audio: WER 26.5%→23.6% senza; il rallentamento 0.8× invece resta).
+
 ### 6.1c — Frasi fantasma (2026-08-23)
 
 Whisper, sul silenzio o sul rumore, inventa frasi che un medico non detta mai

@@ -80,8 +80,13 @@ ATEMPO = float(os.environ.get("REFERTI_ATEMPO", "0.8"))
 # Validata il 2026-07-24 col confronto a quattro celle sul dettato di prova
 # (divergenze A/B): 65 liscio, 52 solo denoise, 70 solo atempo, 23 con
 # atempo+denoise insieme — la combinazione è l'impostazione di serie.
-# Spegnere con REFERTI_DENOISE=0. Ogni ritocco futuro va rimisurato così.
-DENOISE = os.environ.get("REFERTI_DENOISE", "1") == "1"
+# DENOISE SPENTO di default dal 2026-08-23: misurato col banco-audio.py sul
+# set d'oro sintetico (10 dettati): senza denoise il WER scende dal 26.5% al
+# 23.6% e si ritrovano 2 numeri in più — coerente con la letteratura (arXiv
+# 2512.17562: whisper è già robusto al rumore, il denoise introduce artefatti).
+# Il rallentamento (ATEMPO) invece AIUTA e resta. Riaccendere con
+# REFERTI_DENOISE=1 solo dopo una nuova misura che lo giustifichi.
+DENOISE = os.environ.get("REFERTI_DENOISE", "0") == "1"
 
 # Conserva delle coppie per l'addestramento (piano precisione 2026-08-23,
 # punto 8, approvato dall'utente): a consegna riuscita l'audio NON viene
@@ -1087,6 +1092,109 @@ def _distanza_battitura(a: str, b: str) -> int:
     return prec[-1]
 
 
+def _chiave_fonetica(parola: str) -> str:
+    """Chiave fonetica per l'italiano (piano precisione, punto 3): due parole
+    che SUONANO uguali producono la stessa chiave. Regole: accenti via, h
+    muta via, doppie scempiate, consonanti sonore ripiegate sulle sorde
+    (b→p, d→t, g→k, v→f): whisper confonde proprio quelle coppie
+    («serrada»/«serrata»). Le vocali restano: «cardiaco»≠«cardiaca»."""
+    s = parola.lower()
+    s = s.translate(str.maketrans("àèéìíòóùú", "aeeiioouu"))
+    s = re.sub(r"[^a-z]", "", s)
+    s = s.replace("h", "")
+    s = re.sub(r"(.)\1+", r"\1", s)
+    return s.translate(str.maketrans({
+        "b": "p", "d": "t", "g": "k", "v": "f", "w": "f",
+        "z": "s", "q": "k", "c": "k", "y": "i", "j": "i",
+    }))
+
+
+def _parole_glossario() -> set[str]:
+    """Parole singole (≥6 lettere) dei termini «giusti» dello studio: valori
+    del dizionario + righe del vocabolario, stessi file di carica_vocabolario."""
+    parole: set[str] = set()
+
+    def aggiungi(termine: str) -> None:
+        for w in re.findall(r"[a-zà-ÿ]{6,}", termine.lower()):
+            parole.add(w)
+
+    for p in (PERCORSO_CORREZIONI_LOCALI, PERCORSO_CORREZIONI):
+        if not p.is_file():
+            continue
+        try:
+            config = json.loads(p.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        for chiave, sezione in config.items():
+            if not chiave.startswith("_") and isinstance(sezione, dict):
+                for v in sezione.values():
+                    aggiungi(str(v))
+    for p in (PERCORSO_VOCABOLARIO_LOCALI, PERCORSO_VOCABOLARIO):
+        if not p.is_file():
+            continue
+        try:
+            righe = p.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for r in righe:
+            r = r.strip()
+            if r and not r.startswith("#"):
+                aggiungi(r)
+    return parole
+
+
+def riparazioni_glossario(testo: str, file_id: str) -> tuple[str, int]:
+    """Riparazioni deterministiche SENZA AI (piano precisione, punto 3): una
+    parola del dettato che non è nel glossario ma ne è la storpiatura
+    evidente — stessa chiave fonetica, oppure distanza di battitura ≤1
+    (≤2 se lunga ≥9) — viene riparata col termine del glossario.
+    Prudenza: solo parole minuscole di ≥7 lettere (le maiuscole possono
+    essere nomi propri), solo se il candidato è UNO solo, mai cifre."""
+    inizio = time.monotonic()
+    gloss = _parole_glossario()
+    if not gloss:
+        return testo, 0
+    per_chiave: dict[str, set[str]] = {}
+    for w in gloss:
+        per_chiave.setdefault(_chiave_fonetica(w), set()).add(w)
+    coppie: dict[str, str] = {}
+    viste: set[str] = set()
+    for m in re.finditer(r"(?<![\w'])[a-zà-ÿ]{7,}(?![\w])", testo):
+        parola = m.group(0)
+        if parola in viste or parola in gloss:
+            continue
+        viste.add(parola)
+        candidati = {c for c in per_chiave.get(_chiave_fonetica(parola), set())
+                     if c != parola}
+        if not candidati:
+            max_d = 2 if len(parola) >= 9 else 1
+            candidati = {c for c in gloss
+                         if abs(len(c) - len(parola)) <= max_d
+                         and _distanza_battitura(parola, c) <= max_d}
+        # Desinenze, non storpiature: se le due parole coincidono una volta
+        # tolte le vocali finali («pressoria»/«pressorio», «pressori»/
+        # «pressorio», «cardiaca»/«cardiaco») è una flessione legittima
+        # dell'italiano — non si tocca.
+        stelo = re.sub(r"[aeiou]+$", "", parola)
+        candidati = {c for c in candidati
+                     if re.sub(r"[aeiou]+$", "", c) != stelo}
+        if len(candidati) == 1:
+            coppie[parola] = candidati.pop()
+    riparate = 0
+    for da, a in coppie.items():
+        nuovo, n = re.subn(r"(?<![\w'])" + re.escape(da) + r"(?![\w])",
+                           lambda _m, a=a: a, testo)
+        if n > 0:
+            testo = nuovo
+            riparate += 1
+    if riparate:
+        log.info(
+            "fase=dizionario_fonetico file=%s esito=ok riparazioni=%d durata=%.1fs",
+            file_id, riparate, time.monotonic() - inizio,
+        )
+    return testo, riparate
+
+
 def _riparazione_plausibile(da: str, a: str) -> bool:
     """Una vera storpiatura di trascrizione SUONA come la parola giusta:
     accetta solo coppie foneticamente vicine (visto dal vivo il 2026-08-21:
@@ -1098,6 +1206,10 @@ def _riparazione_plausibile(da: str, a: str) -> bool:
     ba, bb = da.lower(), a.lower()
     dist = _distanza_battitura(ba, bb)
     if dist <= max(1, round(max(len(ba), len(bb)) * 0.34)):
+        return True
+    # Stessa chiave fonetica = suona uguale: la coppia è plausibile anche se
+    # per lettere è lontana (punto 3 del piano precisione).
+    if len(ba) >= 4 and _chiave_fonetica(ba) == _chiave_fonetica(bb):
         return True
     # Sigle: «reg → ECG» (visto dal vivo) suona uguale ma per lettere è
     # lontano; per le sigle corte tutte maiuscole basta una vicinanza lasca.
@@ -1721,9 +1833,13 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         inizio = time.monotonic()
         corretto_a, n_sost = applica_correzioni(grezzo_a, sostituzioni)
         corretto_b, _ = applica_correzioni(grezzo_b, sostituzioni)
+        # Aggancio fonetico al glossario (punto 3 del piano precisione):
+        # riparazioni deterministiche delle storpiature evidenti, senza AI.
+        corretto_a, n_fon = riparazioni_glossario(corretto_a, file_id)
+        corretto_b, _ = riparazioni_glossario(corretto_b, file_id)
         log.info(
-            "fase=dizionario file=%s esito=ok sostituzioni=%d durata=%.1fs",
-            file_id, n_sost, time.monotonic() - inizio,
+            "fase=dizionario file=%s esito=ok sostituzioni=%d fonetiche=%d durata=%.1fs",
+            file_id, n_sost, n_fon, time.monotonic() - inizio,
         )
 
         # Punteggiatura dettata (SPEC §3, passo 5b): i segni detti a voce

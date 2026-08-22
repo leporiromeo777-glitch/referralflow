@@ -84,3 +84,47 @@ angina instabile
 infarto miocardico
 ipertensione arteriosa
 dislipidemia
+
+# Termini soggetti a storpiatura (aggiunti 2026-08-23 per l'aggancio fonetico:
+# il codice ripara le parole del dettato foneticamente uguali a queste voci)
+stenosi serrata
+rigurgito
+bicamerale
+monocamerale
+dispnea
+ortopnea
+mitralica
+tricuspidale
+ipocinesia
+acinesia
+discinesia
+ipertrofia
+bigeminismo
+trigeminismo
+quadrigeminismo
+extrasistolia
+cardiopalmo
+presincope
+sincope
+steno-insufficienza
+transcatetere
+elettroindotto
+cronotropa
+bradicardico
+tachicardico
+diselettrolitemia
+ipokaliemia
+iperkaliemia
+emiblocco
+sopraslivellamento
+sottoslivellamento
+protosistolico
+eiettivo
+parossistica
+pericardite
+miocardite
+endocardite
+cardiomiopatia
+scintigrafia miocardica
+flussolimitante
+sottoclaveare
