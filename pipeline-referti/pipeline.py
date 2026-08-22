@@ -83,6 +83,16 @@ ATEMPO = float(os.environ.get("REFERTI_ATEMPO", "0.8"))
 # Spegnere con REFERTI_DENOISE=0. Ogni ritocco futuro va rimisurato così.
 DENOISE = os.environ.get("REFERTI_DENOISE", "1") == "1"
 
+# Conserva delle coppie per l'addestramento (piano precisione 2026-08-23,
+# punto 8, approvato dall'utente): a consegna riuscita l'audio NON viene
+# cancellato ma spostato nella cassaforte locale (cartella chmod 700 sul Mac
+# dello studio, protetta da FileVault). Il testo d'oro corrispondente sta nel
+# DB (referti_bozze.testo_finale, stesso file_id). Spegnere con
+# REFERTI_CONSERVA_AUDIO=0: torna la cancellazione di prima.
+CONSERVA_AUDIO = os.environ.get("REFERTI_CONSERVA_AUDIO", "1") == "1"
+DATASET_DIR = Path(os.environ.get(
+    "REFERTI_DATASET_DIR", str(Path.home() / "referti-dataset" / "audio")))
+
 # ── Trascrizione (SPEC §4) ───────────────────────────────────────────────────
 # whisper.cpp come binario locale; su Mac arriva da `brew install whisper-cpp`.
 # Un dettato lungo su large-v3 può richiedere minuti: timeout largo.
@@ -810,6 +820,38 @@ def _frasi_span(testo: str) -> list[tuple[int, int]]:
 
 def _norma_frase(s: str) -> str:
     return re.sub(r"[\s.!?;]+", " ", s.lower()).strip()
+
+
+# Frasi che whisper INVENTA sul silenzio o sul rumore (allucinazioni note del
+# modello in italiano, documentate in letteratura — arXiv 2501.11378): non
+# vengono mai dettate da un medico, si tolgono a monte di tutto. Confronto
+# senza distinzione di maiuscole; si rimuove l'intera frase che le contiene.
+FRASI_FANTASMA = (
+    "sottotitoli a cura di",
+    "sottotitoli e revisione",
+    "sottotitoli creati dalla",
+    "amara.org",
+    "grazie per aver guardato",
+    "grazie per l'attenzione",
+    "grazie per la visione",
+    "iscriviti al canale",
+    "alla prossima puntata",
+    "www.",
+)
+
+
+def togli_frasi_fantasma(testo: str) -> tuple[str, int]:
+    """Rimuove le frasi che contengono un marcatore di allucinazione nota.
+    Testo pulito → restituito identico."""
+    spans = _frasi_span(testo)
+    da_togliere = []
+    for a, b in spans:
+        basso = testo[a:b].lower()
+        if any(m in basso for m in FRASI_FANTASMA):
+            da_togliere.append((a, b))
+    for a, b in reversed(da_togliere):
+        testo = testo[:a] + testo[b:]
+    return testo, len(da_togliere)
 
 
 def deduplica_loop(testo: str) -> tuple[str, int, list[str]]:
@@ -1663,13 +1705,15 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # su disco intatti; l'intervento si segnala in bozza (punti_loop).
         fase = "deloop"
         inizio = time.monotonic()
-        grezzo_a, rip_a, punti_loop = deduplica_loop(
+        grezzo_a, fant_a = togli_frasi_fantasma(
             percorso(".txt").read_text(encoding="utf-8"))
-        grezzo_b, rip_b, _ = deduplica_loop(
+        grezzo_b, fant_b = togli_frasi_fantasma(
             percorso(".b.txt").read_text(encoding="utf-8"))
+        grezzo_a, rip_a, punti_loop = deduplica_loop(grezzo_a)
+        grezzo_b, rip_b, _ = deduplica_loop(grezzo_b)
         log.info(
-            "fase=deloop file=%s esito=ok rimosse_a=%d rimosse_b=%d durata=%.1fs",
-            file_id, rip_a, rip_b, time.monotonic() - inizio,
+            "fase=deloop file=%s esito=ok rimosse_a=%d rimosse_b=%d fantasmi_a=%d fantasmi_b=%d durata=%.1fs",
+            file_id, rip_a, rip_b, fant_a, fant_b, time.monotonic() - inizio,
         )
 
         fase = "dizionario"
@@ -2057,11 +2101,23 @@ def invia_bozze(cartelle: dict) -> None:
             log.warning("fase=invio esito=rinviato motivo=non_raggiungibile")
             return
         if codice in (200, 201):
-            # Salvataggio confermato: ORA (e solo ora) si cancella (§2.3).
-            # Unlink semplice: la protezione dei dati a riposo è FileVault,
-            # verificato all'avvio del servizio.
+            # Salvataggio confermato: ORA (e solo ora) l'audio lascia la coda
+            # (§2.3). Con la conserva attiva finisce nella cassaforte locale
+            # per il futuro addestramento; altrimenti si cancella come prima.
+            # La protezione dei dati a riposo è FileVault, verificata all'avvio.
             for audio in cartelle["archivio_temp"].glob(file_id + ".*"):
-                audio.unlink()
+                if CONSERVA_AUDIO:
+                    try:
+                        DATASET_DIR.mkdir(parents=True, exist_ok=True)
+                        os.chmod(DATASET_DIR, 0o700)
+                        os.chmod(DATASET_DIR.parent, 0o700)
+                        audio.rename(DATASET_DIR / audio.name)
+                    except OSError:
+                        # Cassaforte non disponibile: meglio cancellare che
+                        # lasciare l'audio in coda per sempre.
+                        audio.unlink()
+                else:
+                    audio.unlink()
             bozza.unlink()
             log.info("fase=invio file=%s esito=ok codice=%d", file_id, codice)
         else:

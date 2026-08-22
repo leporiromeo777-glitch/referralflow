@@ -79,6 +79,13 @@ più semplice o più performante.
   come best effort, ma non va presentata né trattata come garanzia.
 - Alla conferma del salvataggio si eliminano anche il JSON in `output/` e la copia in
   `archivio_temp/`: a regime, sul Mac mini non resta nulla del referto.
+- **Eccezione dal 2026-08-23 (conserva per l'addestramento, approvata dall'utente —
+  piano precisione, punto 8):** con `REFERTI_CONSERVA_AUDIO=1` (default) l'audio, a
+  consegna confermata, NON viene cancellato ma spostato in `~/referti-dataset/audio/`
+  (chmod 700, protetta da FileVault, mai sincronizzata fuori dal Mac). Serve a
+  costruire le coppie audio + `testo_finale` (stesso `file_id` nel DB) per il futuro
+  fine-tuning di whisper sulla voce del medico. `REFERTI_CONSERVA_AUDIO=0` ripristina
+  la cancellazione. Il resto del paragrafo resta valido per tutti gli altri file.
 
 ### 2.4 Nessun numero viene mai corretto automaticamente
 - Il sistema può **segnalare** un numero sospetto. Non può **cambiarlo**.
@@ -348,6 +355,23 @@ su 46 proposte di medgemma:27b ne passano 3, tutte giuste, numeri 8/8.
 Selettore `REFERTI_CORREZIONE_METODO` = `lista` (default) | `riscrittura`;
 se la lista non è utilizzabile (JSON rotto, modello muto) si ripiega da soli
 sulla riscrittura §6.1, che resta la rete di sicurezza.
+
+### 6.1c — Frasi fantasma (2026-08-23)
+
+Whisper, sul silenzio o sul rumore, inventa frasi che un medico non detta mai
+(«Sottotitoli a cura di…», «Grazie per aver guardato», riferimenti a siti web):
+allucinazioni note del modello in italiano (arXiv 2501.11378). La funzione
+`togli_frasi_fantasma` (lista `FRASI_FANTASMA` in pipeline.py) le rimuove su
+entrambe le passate PRIMA del deloop; conteggio nei log (`fantasmi_a/b`). Le
+soglie anti-allucinazione di whisper-cli (`--entropy-thold 2.40`,
+`--logprob-thold -1.00`, fallback di temperatura) sono attive di default: non
+passare mai `-nf`/`--no-fallback`.
+
+Strumento di misura collegato: `banco-audio.py` (stessa cartella) — WER,
+richiamo dei termini critici e numeri ritrovati su un set di coppie
+`NN.wav`+`NN.txt` con testo d'oro (set sintetico in
+`~/referti-dataset/banco-sintetico/`). Ogni modifica a preprocessing, flag di
+whisper o modello passa da lì prima di entrare in servizio.
 
 ### 6.2 — Ispezione (compito separato, non modifica nulla)
 
