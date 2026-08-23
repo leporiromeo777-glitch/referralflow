@@ -98,9 +98,10 @@ export function EvidenziatoreTesto({
           <div className="evid-testo">
             {frasi.map((f, i) => {
               const fn = normalizza(f);
-              const chiarire = daChiarireNorm.some(
+              const kChiarire = daChiarireNorm.findIndex(
                 (n) => n.length >= 8 && (fn.includes(n) || n.includes(fn))
               );
+              const chiarire = kChiarire >= 0;
               const kSospetta = nonSupportate.findIndex(
                 (v) => v.n.length >= 8 && (fn.includes(v.n) || v.n.includes(fn))
               );
@@ -115,7 +116,9 @@ export function EvidenziatoreTesto({
                   onClick={() => commuta(i)}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); commuta(i); } }}
                 >
-                  {f}{sospetta ? <sup className="ns-num">{kSospetta + 1}</sup> : null}{' '}
+                  {f}
+                  {sospetta ? <sup className="ns-num">{kSospetta + 1}</sup> : null}
+                  {chiarire ? <sup className="dc-num">{`C${kChiarire + 1}`}</sup> : null}{' '}
                 </span>
               );
             })}
@@ -126,13 +129,15 @@ export function EvidenziatoreTesto({
       {frasiDaChiarire.length > 0 && (
         <div className="evid-box evid-senso">
           <p className="muted">
-            <strong>Frasi da chiarire</strong> (sottolineate qui sopra): per l&apos;AI non hanno
-            senso in italiano corretto. Dove c&apos;è una proposta dal glossario dello studio,
-            puoi applicarla — oppure correggi a mano nella casella.
+            <strong>Frasi da chiarire</strong> (ondina arancione e numerino C1, C2… qui
+            sopra): per l&apos;AI non hanno senso in italiano corretto. Dove c&apos;è una
+            proposta dal glossario dello studio, puoi applicarla — oppure correggi a
+            mano nella casella.
           </p>
-          <ul>
+          <ul className="dc-lista">
             {frasiDaChiarire.map((v, i) => (
               <li key={i}>
+                <span className="dc-num-eti">C{i + 1}</span>{' '}
                 <span className="evid-orig">{v.frase}</span>
                 {v.proposta ? (
                   <>
