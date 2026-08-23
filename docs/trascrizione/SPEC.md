@@ -370,8 +370,12 @@ Due meccanismi in `pipeline.py`, entrambi deterministici:
    h) è plausibile anche se per lettere è lontana.
 Il vocabolario è stato arricchito (2026-08-23) con ~40 termini soggetti a
 storpiatura: quelle voci alimentano sia il prompt whisper sia l'aggancio.
-Preprocessing: dal 2026-08-23 il denoise è SPENTO di default (misura
-banco-audio: WER 26.5%→23.6% senza; il rallentamento 0.8× invece resta).
+Preprocessing: il denoise RESTA ACCESO. Storia della decisione (2026-08-23):
+il banco sintetico lo dava dannoso (WER 26.5%→23.6% senza), ma l'autopsia su
+un dettato VERO del DPM 7200 ha ribaltato il verdetto — senza denoise whisper
+va in loop catastrofico (416 frasi-copia su 441, testo utile 3.9k car contro
+9.7k). Le voci sintetiche sono troppo pulite per decidere sul preprocessing:
+ogni futura modifica va misurata su audio veri dalla cassaforte.
 
 ### 6.1g — Addestramento su misura di whisper (piano precisione punto 8: predisposto)
 

@@ -80,13 +80,14 @@ ATEMPO = float(os.environ.get("REFERTI_ATEMPO", "0.8"))
 # Validata il 2026-07-24 col confronto a quattro celle sul dettato di prova
 # (divergenze A/B): 65 liscio, 52 solo denoise, 70 solo atempo, 23 con
 # atempo+denoise insieme — la combinazione è l'impostazione di serie.
-# DENOISE SPENTO di default dal 2026-08-23: misurato col banco-audio.py sul
-# set d'oro sintetico (10 dettati): senza denoise il WER scende dal 26.5% al
-# 23.6% e si ritrovano 2 numeri in più — coerente con la letteratura (arXiv
-# 2512.17562: whisper è già robusto al rumore, il denoise introduce artefatti).
-# Il rallentamento (ATEMPO) invece AIUTA e resta. Riaccendere con
-# REFERTI_DENOISE=1 solo dopo una nuova misura che lo giustifichi.
-DENOISE = os.environ.get("REFERTI_DENOISE", "0") == "1"
+# DENOISE ACCESO: due misure in conflitto, vince l'audio vero (2026-08-23).
+# Sul set d'oro SINTETICO senza denoise il WER migliora (26.5%→23.6%),
+# coerente con arXiv 2512.17562 — ma sull'audio VERO del dittafono DPM 7200
+# whisper senza denoise va in loop catastrofico (autopsia su un dettato di
+# 23 min: 416 frasi-copia su 441, testo utile 3.9k car contro 9.7k con
+# denoise). Le voci sintetiche sono troppo pulite per decidere: qui comanda
+# il microfono dello studio. Rimisurare solo se cambia il registratore.
+DENOISE = os.environ.get("REFERTI_DENOISE", "1") == "1"
 
 # Conserva delle coppie per l'addestramento (piano precisione 2026-08-23,
 # punto 8, approvato dall'utente): a consegna riuscita l'audio NON viene
