@@ -187,7 +187,7 @@ export default async function RefertoBozza({
       : null;
 
   return (
-    <>
+    <div className="referto-largo">
       <div className="page-head">
         <h1>{row.stato === 'confermata' ? 'Referto' : 'Bozza di referto'}</h1>
         <a className="btn btn-primary" href={`/api/referti/docx/${row.id}`}>
@@ -579,6 +579,6 @@ export default async function RefertoBozza({
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
