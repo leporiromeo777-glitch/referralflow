@@ -555,6 +555,18 @@ vede l'estrazione. L'ispezione (6.2) continua a lavorare sul testo ripulito.
 
 ## 7. Gestione errori
 
+
+**Revisione 5 (2026-08-23, dopo il primo referto reale):** il prompt ora è
+costruito sulla «prova del destinatario» (ogni frase: è rivolta al collega o
+a chi prepara la lettera?) con cinque categorie esplicite ed esempi reali:
+saluti/convenevoli, domande alla segreteria, istruzioni di lavorazione,
+regia della dettatura e autocorrezioni («scusami, ripeto», «aspettami»,
+«faccio io il…»), commenti organizzativi. In più una regola d'oro è passata
+NEL CODICE (`_applica_note_segreteria`): una frase citata che contiene cifre
+non lascia mai il referto, qualunque cosa dica il modello — visto dal vivo
+il modello segnalare «Scusami, ripeto, 108 su 70» (avrebbe portato via il
+valore ripetuto).
+
 ### 7.1 Principio
 **Un file che fallisce non deve mai bloccare la coda.** Si sposta in `errori/`, si scrive
 un log accanto, si passa al successivo.
