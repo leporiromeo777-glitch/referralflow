@@ -297,8 +297,15 @@ export default async function RefertoBozza({
 
       {Array.isArray(p.note_segreteria) && p.note_segreteria.length > 0 && (
         <div className="card seg-note">
-          <details open>
-          <summary className="sez-summary">📋 Note per la segreteria ({p.note_segreteria.length})</summary>
+          <details>
+          <summary className="sez-summary">
+            📋 Note per la segreteria ({p.note_segreteria.length})
+            {inBozza && daProcurare.length > 0 && (
+              <span className="badge badge-warn" style={{ marginLeft: 10 }}>
+                {daProcurare.length === 1 ? '1 cosa non trovata' : `${daProcurare.length} cose non trovate`}
+              </span>
+            )}
+          </summary>
           <p className="muted">
             Dettando, il medico ha rivolto queste frasi a voi: la «segretaria AI» le ha
             tolte dal corpo del referto (le trovi qui, testuali). Se una in realtà è parte
@@ -353,7 +360,7 @@ export default async function RefertoBozza({
 
       {inBozza && audio && parole.length > 0 ? (
         <div className="card">
-          <details>
+          <details open>
             <summary className="sez-summary">Testo sincronizzato con l&apos;audio</summary>
             <p className="muted small">
               La stessa bozza, parola per parola sull&apos;audio: utile per riascoltare
@@ -371,7 +378,7 @@ export default async function RefertoBozza({
         </div>
       ) : (
         <div className="card">
-          <details>
+          <details open>
             <summary className="sez-summary">Testo con i punti di trascrizione incerta evidenziati</summary>
             <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{nodi}</div>
           </details>
