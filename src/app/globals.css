@@ -1519,12 +1519,15 @@ mark[title] { cursor: help; }
 /* Evidenziatore del referto (/referti/[id]): acceso = dentro, spento = fuori. */
 .evid-box { background: var(--gray-bg, #f2f2ee); border-radius: 14px; padding: 14px 16px; margin: 10px 0 14px; }
 .evid-testo { line-height: 1.9; font-size: 14.5px; }
-.evid-frase { cursor: pointer; border-radius: 4px; padding: 1px 2px; background: #fdf6c9; }
+/* Sobrio (riordino 2026-08-23): niente fondo giallo — il testo normale entra
+   nel referto, il barrato grigio è fuori, le segnalazioni sono puntinate con
+   il numerino colorato che rimanda all'elenco (rosso avvocato, arancio da
+   chiarire). Un solo stile di sottolineatura, colori solo sui numerini. */
+.evid-frase { cursor: pointer; border-radius: 4px; padding: 1px 2px; }
 .evid-frase:hover { outline: 2px solid rgba(13, 92, 72, 0.35); }
-.evid-frase.spenta { background: transparent; color: var(--muted); text-decoration: line-through; }
-.evid-frase.da-chiarire { text-decoration: underline wavy #c77d00; text-underline-offset: 3px; }
-.evid-frase.spenta.da-chiarire { text-decoration: line-through underline wavy #c77d00; }
-/* Avvocato del diavolo: frase non supportata dal dettato — puntinata rossa. */
+.evid-frase.spenta { color: var(--muted); text-decoration: line-through; }
+.evid-frase.da-chiarire { text-decoration: underline dotted #c77d00; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.evid-frase.spenta.da-chiarire { text-decoration: line-through underline dotted #c77d00; }
 .evid-frase.non-supportata { text-decoration: underline dotted #b3382c; text-decoration-thickness: 2px; text-underline-offset: 3px; }
 .evid-frase.spenta.non-supportata { text-decoration: line-through underline dotted #b3382c; }
 .evid-avvocato { border-left: 3px solid #b3382c; }
@@ -1534,6 +1537,15 @@ mark[title] { cursor: help; }
 .dc-num { color: #c77d00; font-weight: 700; font-size: 0.72em; margin-left: 1px; }
 .dc-lista { list-style: none; padding-left: 6px; }
 .dc-num-eti { color: #c77d00; font-weight: 700; font-size: 0.8em; }
+/* Cruscotto «Da controllare» e sezioni richiudibili (riordino 2026-08-23) */
+.riepilogo-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 6px; }
+.rchip { border-radius: 999px; padding: 4px 12px; font-size: 0.86em; font-weight: 600; background: var(--gray-bg, #f2f2ee); }
+.rchip-rosso { color: #8f2d23; background: #f7e3e0; }
+.rchip-arancio { color: #8a5e10; background: #f6ecd6; }
+.rchip-grigio { color: var(--muted); }
+.rchip-blu { color: #1f4e79; background: #e2ecf5; }
+.sez-summary { cursor: pointer; font-weight: 700; font-size: 1.05em; }
+.campi-box { margin: 14px 0; }
 .grezzo-box { margin: 10px 0 14px; }
 .grezzo-box summary { cursor: pointer; font-weight: 600; }
 .grezzo-testo { white-space: pre-wrap; background: var(--gray-bg, #f2f2ee); border-radius: 14px; padding: 14px 16px; max-height: 340px; overflow: auto; font-family: inherit; font-size: 0.95em; line-height: 1.5; }

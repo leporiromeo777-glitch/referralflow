@@ -91,9 +91,11 @@ export function EvidenziatoreTesto({
       {(frasi.length > 1 || divagazioni.length > 0) && (
         <div className="evid-box">
           <p className="muted">
-            <strong>Evidenziatore</strong>: entra nel referto solo ciò che è evidenziato.
-            L&apos;AI ha spento {spenteIniziali.size > 0 ? `${spenteIniziali.size} frasi fuori tema` : 'niente'};
-            un clic su una frase la accende o la spegne, e la casella qui sotto si aggiorna.
+            Le frasi <span style={{ textDecoration: 'line-through' }}>barrate in grigio</span> NON
+            entrano nel referto ({spenteIniziali.size > 0 ? `l'AI ne ha spente ${spenteIniziali.size} come fuori tema` : 'per ora nessuna'});
+            un clic su una frase la spegne o la riaccende. I numerini rimandano agli elenchi
+            qui sotto: <span className="ns-num">rossi</span> = da verificare col dettato,{' '}
+            <span className="dc-num">arancioni</span> = da chiarire.
           </p>
           <div className="evid-testo">
             {frasi.map((f, i) => {

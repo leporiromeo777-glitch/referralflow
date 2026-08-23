@@ -238,14 +238,48 @@ export default async function RefertoBozza({
         </p>
       )}
 
-      {inBozza && avvisi.length > 0 && (
-        <div className="card avviso-box">
-          <h2>⚠️ Attenzione</h2>
-          <ul className="ctrl-list">
-            {avvisi.map((a, i) => (
-              <li key={i}>{a}</li>
-            ))}
-          </ul>
+      {inBozza && (
+        <div className="card ctrl-box">
+          <h2>Da controllare prima di confermare</h2>
+          <div className="riepilogo-chips">
+            {Array.isArray(p.frasi_non_supportate) && p.frasi_non_supportate.length > 0 && (
+              <span className="rchip rchip-rosso">
+                {p.frasi_non_supportate.length} frasi senza appoggio nel dettato (numerini rossi)
+              </span>
+            )}
+            {Array.isArray(p.frasi_da_chiarire) && p.frasi_da_chiarire.length > 0 && (
+              <span className="rchip rchip-arancio">
+                {p.frasi_da_chiarire.length} frasi da chiarire (numerini C1, C2…)
+              </span>
+            )}
+            {Array.isArray(p.divagazioni) && p.divagazioni.length > 0 && (
+              <span className="rchip rchip-grigio">
+                {p.divagazioni.length} frasi fuori tema spente (barrate: non entrano nel referto)
+              </span>
+            )}
+            {marcati > 0 && (
+              <span className="rchip rchip-blu">
+                {marcati} punti di trascrizione incerta (da riascoltare)
+              </span>
+            )}
+          </div>
+          {(avvisi.length > 0 || allarmi.length > 0) && (
+            <ul className="ctrl-list">
+              {avvisi.map((a, i) => (
+                <li key={i}>{a}</li>
+              ))}
+              {allarmi.map((a, i) => (
+                <li key={i}>
+                  <strong>{String(a.campo ?? 'valore').replaceAll('_', ' ')}: {String(a.valore ?? '?')}</strong>{' '}
+                  — {fraseAllarme(a)}.
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="muted small">
+            Tutto il resto è a posto: correggi nel «Testo da confermare» qui sotto,
+            ogni segnalazione ha il suo numerino e la sua spiegazione.
+          </p>
         </div>
       )}
 
@@ -263,7 +297,8 @@ export default async function RefertoBozza({
 
       {Array.isArray(p.note_segreteria) && p.note_segreteria.length > 0 && (
         <div className="card seg-note">
-          <h2>📋 Note per la segreteria</h2>
+          <details open>
+          <summary className="sez-summary">📋 Note per la segreteria ({p.note_segreteria.length})</summary>
           <p className="muted">
             Dettando, il medico ha rivolto queste frasi a voi: la «segretaria AI» le ha
             tolte dal corpo del referto (le trovi qui, testuali). Se una in realtà è parte
@@ -297,90 +332,56 @@ export default async function RefertoBozza({
               </li>
             ))}
           </ul>
-        </div>
-      )}
-
-      {inBozza && daProcurare.length > 0 && (
-        <div className="card seg-procurare">
-          <h2>❓ Da procurare prima dell'invio</h2>
-          <p className="muted">
-            Il medico cita questi riferimenti, ma non risultano né nella cartella del
-            paziente né tra gli allegati: chiedeteli al medico o recuperateli fuori
-            da ReferralFlow (email, archivio).
-          </p>
-          <ul className="seg-note-list">
-            {daProcurare.map((n, i) => (
-              <li key={i}>«{n.nota}»</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {inBozza && (marcati > 0 || allarmi.length > 0) && (
-        <div className="card ctrl-box">
-          <h2>✏️ Da controllare prima di confermare</h2>
-          <ul className="ctrl-list">
-            {marcati > 0 && (
-              <li>
-                Nel testo qui sotto ci sono <strong>{marcati === 1 ? 'un punto evidenziato' : `${marcati} punti evidenziati`}</strong>:
-                lì la trascrizione non è sicura. Riascolta l&apos;audio in quei punti e
-                correggi se serve (passando il mouse sopra vedi perché è segnalato).
-              </li>
-            )}
-            {allarmi.map((a, i) => (
-              <li key={i}>
-                <strong>{String(a.campo ?? 'valore').replaceAll('_', ' ')}: {String(a.valore ?? '?')}</strong>{' '}
-                — {fraseAllarme(a)}.
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <div className="card">
-        <h2>Testo del referto</h2>
-        {inBozza && audio && parole.length > 0 ? (
-          <TestoDettato testo={p.testo_corretto ?? ''} parole={parole} ranges={ranges} />
-        ) : (
-          <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
-            {inBozza ? nodi : (row.testo_finale ?? p.testo_corretto)}
-          </div>
-        )}
-      </div>
-
-      {inBozza ? (
-        <form action={confermaBozza} className="card form">
-          <input type="hidden" name="id" value={row.id} />
-          <h2>Campi estratti</h2>
-          <p className="muted">
-            Estratti automaticamente dal testo, mai dedotti: «non indicato» significa
-            che nel dettato non c'era. Correggili qui prima di confermare.
-          </p>
-          <div className="grid2">
-            {Object.entries(campi)
-              .filter(([, v]) => typeof v === 'string')
-              .map(([k, v]) => (
-                <label key={k}>{k.replaceAll('_', ' ')}
-                  <input name={`campo__${k}`} maxLength={2000} defaultValue={String(v)} />
-                </label>
-              ))}
-          </div>
-          {valoriNumerici && Object.keys(valoriNumerici).length > 0 && (
+          {inBozza && daProcurare.length > 0 && (
             <>
-              <h3>Valori numerici rilevati</h3>
+              <h3>❓ Da procurare prima dell&apos;invio</h3>
               <p className="muted">
-                Riportati come dettati, mai corretti (gli eventuali sospetti sono
-                negli allarmi qui sopra). Se uno è sbagliato, correggi il testo.
+                Il medico cita questi riferimenti, ma non risultano né nella cartella del
+                paziente né tra gli allegati: chiedeteli al medico o recuperateli fuori
+                da ReferralFlow (email, archivio).
               </p>
-              <ul>
-                {Object.entries(valoriNumerici).map(([k, v]) => (
-                  <li key={k}><strong>{k.replaceAll('_', ' ')}</strong>: {typeof v === 'object' ? JSON.stringify(v) : String(v)}</li>
+              <ul className="seg-note-list">
+                {daProcurare.map((n, i) => (
+                  <li key={i}>«{n.nota}»</li>
                 ))}
               </ul>
             </>
           )}
+          </details>
+        </div>
+      )}
 
-          <h2 style={{ marginTop: 18 }}>Testo da confermare</h2>
+      {inBozza && audio && parole.length > 0 ? (
+        <div className="card">
+          <details>
+            <summary className="sez-summary">Testo sincronizzato con l&apos;audio</summary>
+            <p className="muted small">
+              La stessa bozza, parola per parola sull&apos;audio: utile per riascoltare
+              un punto preciso. Il testo su cui lavorare resta quello qui sotto.
+            </p>
+            <TestoDettato testo={p.testo_corretto ?? ''} parole={parole} ranges={ranges} />
+          </details>
+        </div>
+      ) : !inBozza ? (
+        <div className="card">
+          <h2>Testo del referto</h2>
+          <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+            {row.testo_finale ?? p.testo_corretto}
+          </div>
+        </div>
+      ) : (
+        <div className="card">
+          <details>
+            <summary className="sez-summary">Testo con i punti di trascrizione incerta evidenziati</summary>
+            <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{nodi}</div>
+          </details>
+        </div>
+      )}
+
+      {inBozza ? (
+        <form action={confermaBozza} className="card form">
+          <input type="hidden" name="id" value={row.id} />
+          <h2>Testo da confermare</h2>
           <p className="muted">
             Entra nel referto solo ciò che è evidenziato: l&apos;AI spegne le divagazioni,
             tu puoi riaccenderle con un clic. Con «Riorganizza» l&apos;AI locale
@@ -424,6 +425,37 @@ export default async function RefertoBozza({
               <pre className="grezzo-testo">{p.testo_grezzo}</pre>
             </details>
           )}
+
+          <details className="campi-box" open>
+            <summary className="sez-summary">Campi estratti</summary>
+            <p className="muted">
+              Estratti automaticamente dal testo, mai dedotti: «non indicato» significa
+              che nel dettato non c&apos;era. Correggili qui prima di confermare.
+            </p>
+            <div className="grid2">
+              {Object.entries(campi)
+                .filter(([, v]) => typeof v === 'string')
+                .map(([k, v]) => (
+                  <label key={k}>{k.replaceAll('_', ' ')}
+                    <input name={`campo__${k}`} maxLength={2000} defaultValue={String(v)} />
+                  </label>
+                ))}
+            </div>
+            {valoriNumerici && Object.keys(valoriNumerici).length > 0 && (
+              <>
+                <h3>Valori numerici rilevati</h3>
+                <p className="muted">
+                  Riportati come dettati, mai corretti (gli eventuali sospetti sono
+                  nel riquadro «Da controllare» in cima). Se uno è sbagliato, correggi il testo.
+                </p>
+                <ul>
+                  {Object.entries(valoriNumerici).map(([k, v]) => (
+                    <li key={k}><strong>{k.replaceAll('_', ' ')}</strong>: {typeof v === 'object' ? JSON.stringify(v) : String(v)}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </details>
 
           <div className="form-actions">
             <button className="btn btn-primary" type="submit">Conferma il referto</button>
