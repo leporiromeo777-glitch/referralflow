@@ -101,20 +101,21 @@ export function EvidenziatoreTesto({
               const chiarire = daChiarireNorm.some(
                 (n) => n.length >= 8 && (fn.includes(n) || n.includes(fn))
               );
-              const sospetta = nonSupportate.find(
+              const kSospetta = nonSupportate.findIndex(
                 (v) => v.n.length >= 8 && (fn.includes(v.n) || v.n.includes(fn))
               );
+              const sospetta = kSospetta >= 0 ? nonSupportate[kSospetta] : null;
               return (
                 <span
                   key={i}
                   role="button"
                   tabIndex={0}
                   className={`evid-frase${spente.has(i) ? ' spenta' : ''}${chiarire ? ' da-chiarire' : ''}${sospetta ? ' non-supportata' : ''}`}
-                  title={sospetta ? `Avvocato del diavolo: ${sospetta.motivo || 'non trovata nel dettato'}` : undefined}
+                  title={sospetta ? `Avvocato del diavolo [${kSospetta + 1}]: ${sospetta.motivo || 'non trovata nel dettato'}` : undefined}
                   onClick={() => commuta(i)}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); commuta(i); } }}
                 >
-                  {f}{' '}
+                  {f}{sospetta ? <sup className="ns-num">{kSospetta + 1}</sup> : null}{' '}
                 </span>
               );
             })}

@@ -391,17 +391,19 @@ export default async function RefertoBozza({
             <div className="evid-box evid-avvocato">
               <p className="muted">
                 <strong>Avvocato del diavolo</strong>: un secondo passaggio AI ha riletto
-                la bozza contro il dettato originale e non trova appoggio per queste frasi
-                (segnate anche nel testo qui sotto). Verifica col dettato prima di confermarle.
+                la bozza contro il dettato originale e non trova appoggio per queste
+                citazioni. Nel testo qui sotto le frasi che le contengono sono puntinate
+                in rosso col numeretto corrispondente (la citazione può essere più corta
+                della frase intera). Verifica col dettato prima di confermarle.
               </p>
-              <ul>
+              <ol className="ns-lista">
                 {p.frasi_non_supportate.map((v, i) => (
                   <li key={i}>
                     <span className="evid-orig">{v.frase}</span>
                     {v.motivo ? <span className="muted"> — {v.motivo}</span> : null}
                   </li>
                 ))}
-              </ul>
+              </ol>
             </div>
           )}
 

@@ -1528,6 +1528,9 @@ mark[title] { cursor: help; }
 .evid-frase.non-supportata { text-decoration: underline dotted #b3382c; text-decoration-thickness: 2px; text-underline-offset: 3px; }
 .evid-frase.spenta.non-supportata { text-decoration: line-through underline dotted #b3382c; }
 .evid-avvocato { border-left: 3px solid #b3382c; }
+.ns-num { color: #b3382c; font-weight: 700; font-size: 0.72em; margin-left: 1px; }
+.ns-lista { padding-left: 22px; }
+.ns-lista li::marker { color: #b3382c; font-weight: 700; }
 .grezzo-box { margin: 10px 0 14px; }
 .grezzo-box summary { cursor: pointer; font-weight: 600; }
 .grezzo-testo { white-space: pre-wrap; background: var(--gray-bg, #f2f2ee); border-radius: 14px; padding: 14px 16px; max-height: 340px; overflow: auto; font-family: inherit; font-size: 0.95em; line-height: 1.5; }
