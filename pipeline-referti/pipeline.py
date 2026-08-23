@@ -2133,6 +2133,13 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         parole_audio: list = []
         try:
             parole_audio = parole_da_json(percorso(".json"))
+            # I tempi di whisper sono sull'orologio dell'audio RALLENTATO
+            # (atempo 0.8): riportati all'orologio dell'audio originale che
+            # la pagina riascolta, altrimenti ogni clic atterra più avanti e
+            # lo sfasamento cresce col passare dei minuti (visto dal vivo il
+            # 2026-08-23). t_originale = t_whisper × ATEMPO.
+            if ATEMPO != 1.0:
+                parole_audio = [(w, t * ATEMPO) for w, t in parole_audio]
             parole = allinea_parole(finale, parole_audio)
             log.info("fase=tempi file=%s esito=ok parole=%d", file_id, len(parole))
         except Exception as e:
