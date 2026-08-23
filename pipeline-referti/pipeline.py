@@ -181,6 +181,7 @@ MODELLO_SEGRETERIA = os.environ.get("REFERTI_LLM_SEGRETERIA", MODELLO_LLM)
 MODELLO_ISPEZIONE = os.environ.get("REFERTI_LLM_ISPEZIONE", MODELLO_LLM)
 MODELLO_ESTRAZIONE = os.environ.get("REFERTI_LLM_ESTRAZIONE", MODELLO_LLM)
 MODELLO_PERTINENZA = os.environ.get("REFERTI_LLM_PERTINENZA", MODELLO_LLM)
+MODELLO_RIASSUNTO = os.environ.get("REFERTI_LLM_RIASSUNTO", MODELLO_LLM)
 MODELLO_SENSO = os.environ.get("REFERTI_LLM_SENSO", MODELLO_LLM)
 MODELLI_LLM_TUTTI = sorted({MODELLO_LLM, MODELLO_CORREZIONE, MODELLO_SEGRETERIA,
                             MODELLO_ISPEZIONE, MODELLO_ESTRAZIONE,
@@ -813,6 +814,71 @@ def confronta(testo_a: str, testo_b: str) -> list[dict]:
             "versione_b": seg_b,
         })
     return divergenze
+
+
+# ── Visite registrate (base ambient scribe, 2026-08-24) ─────────────────────
+# Una registrazione di VISITA (conversazione medico-paziente, con consenso
+# esplicito del paziente — art. 179ter CP, responsabilità dello studio) segue
+# lo stesso binario dei dettati ma produce una NOTA DI VISITA strutturata al
+# posto della lettera. Riconoscimento dal nome del file: le visite arrivano
+# dalla piattaforma come «piattaforma-visita-<uuid>», o a mano con un nome
+# che inizia per «visita».
+
+PROMPT_VISITA = """Sei un assistente medico. Il testo qui sotto è la trascrizione automatica di una VISITA: una conversazione tra medico e paziente (le voci non sono etichettate e la trascrizione può contenere errori di riconoscimento).
+
+Scrivi una NOTA DI VISITA strutturata in italiano, con queste sezioni (ometti quelle senza contenuto):
+Motivo della visita:
+Riferito dal paziente:
+Esame e rilievi:
+Valutazione:
+Piano e istruzioni:
+
+Regole obbligatorie:
+1. SOLO informazioni presenti nella conversazione. MAI dedurre, MAI inventare, MAI completare.
+2. Ogni numero (valori, dosaggi, date) deve comparire IDENTICO nella conversazione. Se un numero è incerto, non riportarlo.
+3. Se un'informazione non emerge, ometti la sezione: non scrivere «non riferito».
+4. Stile asciutto, in terza persona («Il paziente riferisce…»). Niente formule di cortesia.
+5. Le chiacchiere non cliniche non entrano nella nota.
+
+Rispondi SOLO con la nota, senza commenti prima o dopo.
+
+CONVERSAZIONE:
+{testo}"""
+
+
+def _e_visita(nome_file: str) -> bool:
+    basso = nome_file.lower()
+    return (basso.startswith(f"{_PREFISSO_PIATTAFORMA}visita-")
+            or basso.startswith("visita"))
+
+
+def riassunto_visita(trascrizione: str, file_id: str) -> str | None:
+    """Nota di visita dal trascritto della conversazione. Guardie nel codice:
+    ogni numero della nota deve ESISTERE nella trascrizione (sottoinsieme,
+    contando le ripetizioni — il riassunto può scartare numeri, mai
+    inventarli) e la lunghezza deve essere sensata. None = il chiamante
+    consegna la trascrizione integrale con un avviso."""
+    inizio = time.monotonic()
+    try:
+        nota = chiama_ollama(
+            PROMPT_VISITA.replace("{testo}", trascrizione), file_id,
+            "riassunto", modello=MODELLO_RIASSUNTO,
+        ).strip()
+    except RuntimeError:
+        return None
+    if not 100 <= len(nota) <= max(2500, len(trascrizione)):
+        log.warning("fase=riassunto file=%s esito=scartato motivo=lunghezza", file_id)
+        return None
+    num_t = _numeri(trascrizione)
+    num_n = _numeri(nota)
+    for n in set(num_n):
+        if num_n.count(n) > num_t.count(n):
+            log.warning(
+                "fase=riassunto file=%s esito=scartato motivo=numero_estraneo", file_id)
+            return None
+    log.info("fase=riassunto file=%s esito=ok durata=%.1fs",
+             file_id, time.monotonic() - inizio)
+    return nota
 
 
 PROMPT_ARBITRO = """Sei un correttore di trascrizioni mediche in italiano. Lo stesso dettato è stato trascritto DUE volte da due sistemi diversi: nei punti elencati le versioni divergono. Per ogni punto scegli la versione che è italiano corretto e ha senso medico nel contesto dato.
@@ -2076,9 +2142,14 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
     `notifica(fase)`, se passata, viene chiamata a ogni cambio di fase
     (avanzamento vivo sulla piattaforma per i dettati del drag & drop)."""
     file_id = file_id_di(ingresso)
+    # Visita registrata o dettato classico? Dal nome del file (vedi _e_visita).
+    visita = _e_visita(ingresso.name)
+    # Avvisi per chi rivede: raccolti lungo tutta la corsa.
+    avvisi: list[str] = []
     # La configurazione nel log (mai contenuti): serve a sapere, a posteriori,
     # con quali impostazioni è stata prodotta una corsa.
-    log.info("fase=avvio file=%s atempo=%s denoise=%d vad=%d", file_id, ATEMPO, int(DENOISE), int(USA_VAD))
+    log.info("fase=avvio file=%s atempo=%s denoise=%d vad=%d visita=%d",
+             file_id, ATEMPO, int(DENOISE), int(USA_VAD), int(visita))
 
     def percorso(suffisso: str) -> Path:
         return dir_out / f"{file_id}{suffisso}"
@@ -2173,8 +2244,13 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # Punteggiatura dettata (SPEC §3, passo 5b): i segni detti a voce
         # diventano segni veri, su entrambe le passate prima del confronto.
         fase = "punteggiatura"
-        corretto_a, n_punt = punteggiatura_dettata(corretto_a)
-        corretto_b, _ = punteggiatura_dettata(corretto_b)
+        # In una conversazione registrata nessuno detta «virgola» o «punto»:
+        # sulle visite la conversione salterebbe su usi normali delle parole.
+        if visita:
+            n_punt = 0
+        else:
+            corretto_a, n_punt = punteggiatura_dettata(corretto_a)
+            corretto_b, _ = punteggiatura_dettata(corretto_b)
         percorso(".corretto.txt").write_text(corretto_a, encoding="utf-8")
         log.info("fase=punteggiatura file=%s esito=ok segni=%d", file_id, n_punt)
 
@@ -2206,53 +2282,76 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # dal corpo. L'estrazione campi e i controlli devono vederlo.
         testo_integrale = finale
 
-        # La «segretaria»: le frasi rivolte alla segreteria escono dal corpo
-        # del referto e diventano note. L'ispezione lavora sul testo pulito.
-        fase = "segreteria"
-        _ = notifica and notifica(fase)
-        finale, note_segreteria = separa_segreteria(finale, file_id)
-        percorso(".segreteria.json").write_text(
-            json.dumps(note_segreteria, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        if note_segreteria:
-            percorso(".finale.txt").write_text(finale, encoding="utf-8")
+        nota_visita: str | None = None
+        if visita:
+            # Visita registrata: segretaria/evidenziatore/senso sono fasi da
+            # dettatura e si saltano; al loro posto la NOTA DI VISITA. Se il
+            # riassunto non supera le guardie si consegna la trascrizione
+            # integrale con un avviso: mai una nota inaffidabile in silenzio.
+            fase = "riassunto"
+            _ = notifica and notifica(fase)
+            nota_visita = riassunto_visita(finale, file_id)
+            if nota_visita is None:
+                avvisi.append(
+                    "Il riassunto della visita non ha superato i controlli: "
+                    "qui sotto c'è la trascrizione integrale da riassumere a mano."
+                )
+            note_segreteria = []
+            divagazioni = []
+            frasi_da_chiarire = []
+        else:
+            # La «segretaria»: le frasi rivolte alla segreteria escono dal corpo
+            # del referto e diventano note. L'ispezione lavora sul testo pulito.
+            fase = "segreteria"
+            _ = notifica and notifica(fase)
+            finale, note_segreteria = separa_segreteria(finale, file_id)
+            percorso(".segreteria.json").write_text(
+                json.dumps(note_segreteria, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            if note_segreteria:
+                percorso(".finale.txt").write_text(finale, encoding="utf-8")
 
-        # L'evidenziatore: le frasi fuori tema restano NEL testo ma la pagina
-        # di revisione le mostra spente; entra nel referto solo l'evidenziato.
-        fase = "pertinenza"
-        _ = notifica and notifica(fase)
-        divagazioni = trova_divagazioni(finale, file_id)
-        percorso(".divagazioni.json").write_text(
-            json.dumps(divagazioni, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
+            # L'evidenziatore: le frasi fuori tema restano NEL testo ma la pagina
+            # di revisione le mostra spente; entra nel referto solo l'evidenziato.
+            fase = "pertinenza"
+            _ = notifica and notifica(fase)
+            divagazioni = trova_divagazioni(finale, file_id)
+            percorso(".divagazioni.json").write_text(
+                json.dumps(divagazioni, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
 
-        # Il controllo del senso: frasi storpiate segnalate con proposta di
-        # ricostruzione dal glossario (stesso vocabolario dato a whisper).
-        fase = "senso"
-        _ = notifica and notifica(fase)
-        frasi_da_chiarire = controlla_senso(finale, vocab, file_id)
-        # Una frase già segnalata come fuori tema non va anche «chiarita»:
-        # è spenta dall'evidenziatore, il doppione confonderebbe.
-        frasi_da_chiarire = [v for v in frasi_da_chiarire if v["frase"] not in divagazioni]
-        percorso(".senso.json").write_text(
-            json.dumps(frasi_da_chiarire, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
+            # Il controllo del senso: frasi storpiate segnalate con proposta di
+            # ricostruzione dal glossario (stesso vocabolario dato a whisper).
+            fase = "senso"
+            _ = notifica and notifica(fase)
+            frasi_da_chiarire = controlla_senso(finale, vocab, file_id)
+            # Una frase già segnalata come fuori tema non va anche «chiarita»:
+            # è spenta dall'evidenziatore, il doppione confonderebbe.
+            frasi_da_chiarire = [v for v in frasi_da_chiarire if v["frase"] not in divagazioni]
+            percorso(".senso.json").write_text(
+                json.dumps(frasi_da_chiarire, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
 
         # Avvocato del diavolo (punto 6 del piano): la bozza riletta contro
         # il dettato grezzo, frase per frase. Solo bandierine, mai riscritture.
         fase = "avvocato"
         _ = notifica and notifica(fase)
-        frasi_non_supportate = avvocato_diavolo(finale, grezzo_a, file_id)
+        # Sulle visite l'avvocato verifica la NOTA (dove il rischio di
+        # invenzione è massimo: è un riassunto generato, non una pulizia).
+        frasi_non_supportate = avvocato_diavolo(
+            nota_visita if nota_visita else finale, grezzo_a, file_id)
         frasi_non_supportate = [
             v for v in frasi_non_supportate if v["frase"] not in divagazioni
         ]
 
         fase = "ispezione_llm"
         _ = notifica and notifica(fase)
-        dubbi = ispeziona_llm(finale, file_id)
+        # Sulle visite l'ispezione lavorerebbe su una conversazione colloquiale
+        # (tutto «privo di senso medico» per costruzione): si salta.
+        dubbi = [] if visita else ispeziona_llm(finale, file_id)
         # I punti dove l'anti-loop è intervenuto vanno in testa ai segmenti
         # dubbi: la bozza li evidenzia e il revisore sa che lì c'era una
         # ripetizione ridotta a una. (Se la correzione ha ritoccato la frase
@@ -2284,6 +2383,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # mai bloccanti (senza, la pagina mostra il testo semplice).
         parole: list = []
         parole_audio: list = []
+        durata_audio_originale = 0.0
         try:
             parole_audio = parole_da_json(percorso(".json"))
             # L'orologio di whisper è storto tre volte: atempo (rallenta),
@@ -2296,6 +2396,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             anc_w = [tempi_w[i + 1] for i in range(len(tempi_w) - 1)
                      if tempi_w[i + 1] - tempi_w[i] > 1.5]
             anc_a, durata_orig = _ancore_audio(ingresso)
+            durata_audio_originale = durata_orig or 0.0
             coppie = _accoppia_ancore(anc_w, anc_a) if USA_VAD else []
             if len(coppie) >= 3:
                 parole_audio = _ritara_parole(parole_audio, coppie, durata_orig)
@@ -2311,6 +2412,11 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             log.info("fase=tempi file=%s esito=ok parole=%d", file_id, len(parole))
         except Exception as e:
             log.info("fase=tempi file=%s esito=saltato tipo=%s", file_id, type(e).__name__)
+        if visita:
+            # La nota di visita è un riassunto: le sue parole non combaciano
+            # con la trascrizione, il testo sincronizzato si spegne (la
+            # pagina mostra il testo semplice; l'audio resta riascoltabile).
+            parole = []
 
         # Sentinella di troncamento: quando whisper «si incanta» in un loop,
         # spesso butta il resto dell'audio dentro il loop e la seconda metà
@@ -2318,9 +2424,14 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # del WAV con il tempo dell'ultima parola trascritta: se manca una
         # coda importante, la bozza arriva con un avviso ben visibile.
         # Solo segnalazione, mai blocco; facoltativa, mai bloccante.
-        avvisi: list[str] = []
+        # (avvisi è creato in cima a elabora: qui si aggiunge soltanto.)
         try:
-            durata_wav = _durata_wav_s(percorso(".wav"))
+            # Coi tempi ritarati sulle ancore l'orologio è quello dell'audio
+            # ORIGINALE: il confronto va fatto con la sua durata, non col WAV
+            # rallentato (che è più lungo del 25%).
+            durata_wav = (durata_audio_originale
+                          if durata_audio_originale > 1
+                          else _durata_wav_s(percorso(".wav")))
             ultimo = parole_audio[-1][1] if parole_audio else 0.0
             scoperto = durata_wav - ultimo
             # Soglie abbassate il 2026-08-17: il caso reale (35 s mancanti su
@@ -2361,7 +2472,10 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
     payload = {
         "file_id": file_id,
         "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "testo_corretto": finale,
+        # Visita: la nota strutturata (se ha superato le guardie), altrimenti
+        # la trascrizione integrale; dettato classico: il testo di sempre.
+        "tipo": "visita" if visita else "referto",
+        "testo_corretto": nota_visita if nota_visita else finale,
         "note_segreteria": note_segreteria,
         "campi_estratti": campi,
         "parole": parole,
@@ -2439,10 +2553,13 @@ def scarica_coda(cartelle: dict) -> None:
             continue
         punto = nome.rfind(".")
         ext = nome[punto:].lower() if punto != -1 else ".m4a"
-        destinazione = cartelle["ingresso"] / f"{_PREFISSO_PIATTAFORMA}{audio_id}{ext}"
+        # Le visite registrate portano il marcatore nel nome locale: da lì
+        # elabora sceglie il binario della nota di visita (vedi _e_visita).
+        marcatore = "visita-" if voce.get("tipo") == "visita" else ""
+        destinazione = cartelle["ingresso"] / f"{_PREFISSO_PIATTAFORMA}{marcatore}{audio_id}{ext}"
         # Già scaricato (o già in lavorazione/archivio): non duplicare.
         occupato = any(
-            any(c.glob(f"{_PREFISSO_PIATTAFORMA}{audio_id}*"))
+            any(c.glob(f"{_PREFISSO_PIATTAFORMA}*{audio_id}*"))
             for c in (cartelle["ingresso"], cartelle["lavorazione"], cartelle["errori"])
         )
         if occupato:
@@ -2468,10 +2585,12 @@ def scarica_coda(cartelle: dict) -> None:
 
 
 def _audio_id_da_nome(nome: str) -> str | None:
-    """piattaforma-<uuid>.<ext> → <uuid>; altrimenti None."""
+    """piattaforma-[visita-]<uuid>.<ext> → <uuid>; altrimenti None."""
     if not nome.startswith(_PREFISSO_PIATTAFORMA):
         return None
     resto = nome[len(_PREFISSO_PIATTAFORMA):]
+    if resto.startswith("visita-"):
+        resto = resto[len("visita-"):]
     punto = resto.rfind(".")
     candidato = resto[:punto] if punto != -1 else resto
     return candidato if re.fullmatch(r"[0-9a-f-]{36}", candidato) else None

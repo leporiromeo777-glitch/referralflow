@@ -1555,3 +1555,9 @@ mark[title] { cursor: help; }
 .evid-senso li { margin-bottom: 6px; }
 .evid-orig { color: var(--muted); }
 .evid-applica { padding: 0 8px; font-size: 13px; }
+
+/* Visite registrate (base 2026-08-24) */
+.consenso-box { border-left: 3px solid #8a5e10; }
+.lista-righe { list-style: none; padding-left: 2px; }
+.lista-righe li { padding: 7px 0; border-bottom: 1px solid var(--border, #e6e4dc); }
+.lista-righe li:last-child { border-bottom: none; }

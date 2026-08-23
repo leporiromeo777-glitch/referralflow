@@ -15,10 +15,10 @@ export async function GET(_req: NextRequest) {
   }
 
   const righe = await query<{
-    id: string; filename: string; stato: string; fase: string | null;
+    id: string; filename: string; stato: string; tipo: string; fase: string | null;
     fase_at: string | null; created_at: string; bozza_id: string | null;
   }>(
-    `select id, filename, stato, fase, fase_at::text, created_at::text, bozza_id
+    `select id, filename, stato, tipo, fase, fase_at::text, created_at::text, bozza_id
        from referti_audio
       where studio_id = $1
         and (stato in ('in_coda', 'elaborazione')

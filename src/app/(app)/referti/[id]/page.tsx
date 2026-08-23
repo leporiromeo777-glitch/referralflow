@@ -116,6 +116,7 @@ export default async function RefertoBozza({
   const [row] = await query<{
     id: string;
     stato: string;
+    tipo: string;
     payload: Payload;
     testo_finale: string | null;
     campi_confermati: Record<string, string> | null;
@@ -123,7 +124,7 @@ export default async function RefertoBozza({
     reviewed_at: string | null;
     reviewed_email: string | null;
   }>(
-    `select b.id, b.stato, b.payload, b.testo_finale, b.campi_confermati,
+    `select b.id, b.stato, b.tipo, b.payload, b.testo_finale, b.campi_confermati,
             b.created_at::text, b.reviewed_at::text, u.email as reviewed_email
        from referti_bozze b
        left join users u on u.id = b.reviewed_by
@@ -189,14 +190,18 @@ export default async function RefertoBozza({
   return (
     <div className="referto-largo">
       <div className="page-head">
-        <h1>{row.stato === 'confermata' ? 'Referto' : 'Bozza di referto'}</h1>
+        <h1>{row.tipo === 'visita'
+          ? (row.stato === 'confermata' ? 'Nota di visita' : 'Bozza di nota di visita')
+          : (row.stato === 'confermata' ? 'Referto' : 'Bozza di referto')}</h1>
         <a className="btn btn-primary" href={`/api/referti/docx/${row.id}`}>
           Word in carta intestata
         </a>
         <a className="btn" href={`/api/referti/pdf/${row.id}`} target="_blank">
           Scarica PDF
         </a>
-        <Link className="btn" href="/referti">← Tutti i referti</Link>
+        <Link className="btn" href={row.tipo === 'visita' ? '/visite' : '/referti'}>
+          {row.tipo === 'visita' ? '← Tutte le visite' : '← Tutti i referti'}
+        </Link>
       </div>
       <p className="muted">
         Ricevuta il {dataOra(row.created_at)}.{' '}

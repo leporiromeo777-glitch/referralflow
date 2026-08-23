@@ -37,12 +37,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ errore: 'formato_non_audio' }, { status: 400 });
   }
 
+  const tipo = String(form?.get('tipo') ?? '') === 'visita' ? 'visita' : 'referto';
   const buffer = Buffer.from(await file.arrayBuffer());
   const key = await putFile(buffer, TIPI[ext], ext);
   const [row] = await query<{ id: string }>(
-    `insert into referti_audio (studio_id, filename, storage_key, content_type, uploaded_by)
-     values ($1, $2, $3, $4, $5) returning id`,
-    [session.studioId, file.name.slice(0, 200), key, TIPI[ext], session.id]
+    `insert into referti_audio (studio_id, filename, storage_key, content_type, uploaded_by, tipo)
+     values ($1, $2, $3, $4, $5, $6) returning id`,
+    [session.studioId, file.name.slice(0, 200), key, TIPI[ext], session.id, tipo]
   );
 
   return NextResponse.json({ ok: true, id: row.id }, { status: 201 });

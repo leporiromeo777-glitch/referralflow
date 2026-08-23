@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation';
 // solo ogni pochi secondi; quando una bozza è pronta ricarica la pagina.
 
 type Voce = {
-  id: string; filename: string; stato: string; fase: string | null;
+  id: string; filename: string; stato: string; tipo?: string; fase: string | null;
   fase_at: string | null; created_at: string; bozza_id: string | null;
 };
 
@@ -23,6 +23,7 @@ const FASI: Array<{ key: string; label: string; pct: number }> = [
   { key: 'confronto',      label: 'Confronto tra le due trascrizioni',       pct: 66 },
   { key: 'correzione_llm', label: 'Correzione AI (termini medici)',          pct: 76 },
   { key: 'segreteria',     label: 'Segretaria AI (separa le istruzioni)',    pct: 80 },
+  { key: 'riassunto',      label: 'Nota di visita (riassunto AI)',           pct: 82 },
   { key: 'pertinenza',     label: 'Evidenziatore (frasi fuori tema)',        pct: 84 },
   { key: 'senso',          label: 'Controllo del senso delle frasi',         pct: 86 },
   { key: 'avvocato',       label: 'Avvocato del diavolo (verifica col dettato)', pct: 88 },
@@ -44,7 +45,7 @@ function minutiDa(iso: string | null): string {
   return min === 0 ? 'meno di un minuto' : min === 1 ? '1 minuto' : `${min} minuti`;
 }
 
-export function ProgressoTrascrizione({ iniziali }: { iniziali: Voce[] }) {
+export function ProgressoTrascrizione({ iniziali, tipo = 'referto' }: { iniziali: Voce[]; tipo?: string }) {
   const router = useRouter();
   const [voci, setVoci] = useState<Voce[]>(iniziali);
 
@@ -71,8 +72,9 @@ export function ProgressoTrascrizione({ iniziali }: { iniziali: Voce[] }) {
     return () => { vivo = false; clearInterval(t); };
   }, [router, iniziali]);
 
-  const attive = voci.filter((v) => v.stato === 'in_coda' || v.stato === 'elaborazione');
-  const errori = voci.filter((v) => v.stato === 'errore');
+  const mie = voci.filter((v) => (v.tipo ?? 'referto') === tipo);
+  const attive = mie.filter((v) => v.stato === 'in_coda' || v.stato === 'elaborazione');
+  const errori = mie.filter((v) => v.stato === 'errore');
 
   if (attive.length === 0 && errori.length === 0) return null;
 

@@ -42,7 +42,7 @@ export default async function Referti({
             coalesce(jsonb_array_length(payload -> 'allarmi_numerici'), 0)::int as n_allarmi,
             coalesce(jsonb_array_length(payload -> 'note_segreteria'), 0)::int as n_note
        from referti_bozze
-      where studio_id = $1
+      where studio_id = $1 and tipo = 'referto'
         and (stato = 'bozza' or reviewed_at > now() - interval '30 days')
       order by (stato = 'bozza') desc, created_at desc
       limit 200`,
@@ -70,7 +70,7 @@ export default async function Referti({
   }>(
     `select id, filename, stato, fase, fase_at::text, created_at::text, bozza_id
        from referti_audio
-      where studio_id = $1
+      where studio_id = $1 and tipo = 'referto'
         and (stato in ('in_coda', 'elaborazione')
              or (stato = 'errore' and updated_at > now() - interval '10 minutes'))
       order by created_at asc

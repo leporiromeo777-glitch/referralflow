@@ -123,12 +123,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Visita registrata o referto dettato: lo dice la pipeline nel payload.
+  const tipo = body?.tipo === 'visita' ? 'visita' : 'referto';
+
   const [inserita] = await query<{ id: string }>(
-    `insert into referti_bozze (studio_id, file_id, payload)
-       values ($1, $2, $3)
+    `insert into referti_bozze (studio_id, file_id, payload, tipo)
+       values ($1, $2, $3, $4)
        on conflict (studio_id, file_id) do nothing
        returning id`,
-    [studio.id, fileId, JSON.stringify(payload)]
+    [studio.id, fileId, JSON.stringify(payload), tipo]
   );
   if (inserita) {
     await collega(inserita.id);
@@ -149,11 +152,11 @@ export async function POST(req: NextRequest) {
     if (esistente.stato === 'scartata') {
       await query(
         `update referti_bozze
-            set stato = 'bozza', payload = $3,
+            set stato = 'bozza', payload = $3, tipo = $4,
                 testo_finale = null, campi_confermati = null,
                 reviewed_by = null, reviewed_at = null
           where id = $1 and studio_id = $2`,
-        [esistente.id, studio.id, JSON.stringify(payload)]
+        [esistente.id, studio.id, JSON.stringify(payload), tipo]
       );
     }
     await collega(esistente.id);

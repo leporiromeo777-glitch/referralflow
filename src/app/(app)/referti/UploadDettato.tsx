@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 
 const ESTENSIONI = ['.mp3', '.m4a', '.mp4', '.wav', '.aac', '.ogg', '.flac', '.aiff', '.caf'];
 
-export function UploadDettato() {
+export function UploadDettato({ tipo = 'referto' }: { tipo?: 'referto' | 'visita' } = {}) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [drag, setDrag] = useState(false);
@@ -31,6 +31,7 @@ export function UploadDettato() {
       for (const f of lista) {
         const fd = new FormData();
         fd.append('audio', f);
+        fd.append('tipo', tipo);
         const r = await fetch('/api/referti/upload', { method: 'POST', body: fd });
         if (!r.ok) {
           const j = await r.json().catch(() => ({}));

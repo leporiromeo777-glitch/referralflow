@@ -84,6 +84,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // Sempre visibile: da qui si caricano i dettati (drag & drop) anche se il
     // Mac della trascrizione non è ancora configurato.
     { label: 'Referti', href: '/referti', badge: refertiBozze },
+    { label: 'Visite', href: '/visite' },
   ];
   const zones: Zona[] = [
     { key: 'oggi', label: 'Oggi', badge: oggiCount, voci: zoneOggi },

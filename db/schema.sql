@@ -390,6 +390,7 @@ create index on appointments (follow_up_due) where follow_up_done_at is null;
 -- il Mac mini dello studio le POSTa su /api/referti/bozza, un umano le conferma
 -- o le scarta da /referti. Il payload della pipeline resta intatto come riferimento.
 create table referti_bozze (
+  tipo text not null default 'referto' check (tipo in ('referto','visita')),
   id          uuid primary key default gen_random_uuid(),
   studio_id   uuid not null references studios(id) on delete cascade,
   file_id     text not null,
@@ -473,6 +474,7 @@ create index on referti_suggerimenti (studio_id, ignorato, conteggio desc);
 -- coda che la pipeline del Mac preleva e trascrive; l'audio resta collegato
 -- alla bozza per il riascolto.
 create table referti_audio (
+  tipo text not null default 'referto' check (tipo in ('referto','visita')),
   id          uuid primary key default gen_random_uuid(),
   studio_id   uuid not null references studios(id) on delete cascade,
   filename    text not null,
@@ -501,3 +503,5 @@ create table note_squadra (
   created_at timestamptz not null default now()
 );
 create index on note_squadra (studio_id, created_at desc);
+
+-- 027: visite registrate (ambient scribe locale) — tipo su audio e bozze
