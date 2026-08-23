@@ -601,6 +601,107 @@ def _decompatta_tempi(parole: list[tuple[str, float]],
     return fuori
 
 
+def _ancore_audio(originale: Path) -> tuple[list[float], float]:
+    """Ancore sull'orologio dell'audio ORIGINALE (quello che la pagina
+    riascolta): le fini dei silenzi trovate sull'originale ripulito al volo
+    (stessa pulizia della pipeline ma SENZA atempo, così l'orologio non
+    cambia). Ritorna anche la durata dell'originale."""
+    esito = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-nostdin", "-i", str(originale),
+         "-af", ("highpass=f=80,afftdn=nf=-25,loudnorm=I=-16:TP=-1.5:LRA=11,"
+                 f"silencedetect=noise={SILENZIO_DB}:d={SILENZIO_MIN_S}"),
+         "-f", "null", "-"],
+        capture_output=True, text=True, timeout=FFMPEG_TIMEOUT_S,
+    )
+    fini = [float(v) for tipo, v in
+            re.findall(r"silence_(start|end): ([0-9.]+)", esito.stderr)
+            if tipo == "end"]
+    durata = 0.0
+    sonda = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=nw=1:nk=1", str(originale)],
+        capture_output=True, text=True, timeout=60,
+    )
+    try:
+        durata = float(sonda.stdout.strip())
+    except ValueError:
+        pass
+    return fini, durata
+
+
+def _accoppia_ancore(anc_w: list[float], anc_a: list[float]) -> list[tuple[float, float]]:
+    """Accoppiamento monotono (programmazione dinamica) tra le riprese dopo
+    pausa dell'orologio whisper e le fini dei silenzi dell'audio originale.
+    Un tratto è credibile se nell'originale dura almeno quanto il parlato
+    compattato (dw × ATEMPO); lo scostamento in più sono le pause reinserite."""
+    INF = float("inf")
+    nW, nA = len(anc_w), len(anc_a)
+    if not nW or not nA:
+        return []
+    SALTO = 6.0
+
+    def tratto(w0: float, a0: float, w1: float, a1: float) -> float:
+        dw, da = w1 - w0, a1 - a0
+        if dw <= 0 or da <= 0:
+            return INF
+        atteso = dw * ATEMPO
+        if da < atteso - 2:
+            return INF
+        return abs(da - atteso) * 0.15
+
+    f = [[INF] * nA for _ in range(nW)]
+    prev: list[list[tuple[int, int] | None]] = [[None] * nA for _ in range(nW)]
+    for i in range(nW):
+        for j in range(nA):
+            f[i][j] = tratto(0.0, 0.0, anc_w[i], anc_a[j]) + SALTO * (i + j)
+            for i0 in range(max(0, i - 8), i):
+                for j0 in range(max(0, j - 8), j):
+                    if f[i0][j0] == INF:
+                        continue
+                    c = (f[i0][j0] + tratto(anc_w[i0], anc_a[j0], anc_w[i], anc_a[j])
+                         + SALTO * ((i - i0 - 1) + (j - j0 - 1)))
+                    if c < f[i][j]:
+                        f[i][j] = c
+                        prev[i][j] = (i0, j0)
+    best, bi, bj = INF, -1, -1
+    for i in range(nW):
+        for j in range(nA):
+            if f[i][j] == INF:
+                continue
+            c = f[i][j] + SALTO * ((nW - 1 - i) + (nA - 1 - j))
+            if c < best:
+                best, bi, bj = c, i, j
+    if bi < 0:
+        return []
+    coppie: list[tuple[float, float]] = []
+    passo: tuple[int, int] | None = (bi, bj)
+    while passo is not None:
+        i, j = passo
+        coppie.append((anc_w[i], anc_a[j]))
+        passo = prev[i][j]
+    coppie.reverse()
+    return coppie
+
+
+def _ritara_parole(parole: list[tuple[str, float]], coppie: list[tuple[float, float]],
+                   durata_audio: float) -> list[tuple[str, float]]:
+    """Deforma i tempi a tratti lineari tra le ancore accoppiate; oltre
+    l'ultima ancora prosegue al passo dell'atempo, mai oltre la fine."""
+    nodi = [(0.0, 0.0)] + coppie
+
+    def deforma(x: float) -> float:
+        for k in range(len(nodi) - 1):
+            w0, a0 = nodi[k]
+            w1, a1 = nodi[k + 1]
+            if x <= w1:
+                return a1 if w1 == w0 else a0 + (x - w0) * (a1 - a0) / (w1 - w0)
+        w0, a0 = nodi[-1]
+        return a0 + (x - w0) * ATEMPO
+
+    tetto = durata_audio - 0.5 if durata_audio > 1 else float("inf")
+    return [(w, min(deforma(t), tetto)) for w, t in parole]
+
+
 def parole_da_json(percorso_json: Path) -> list[tuple[str, float]]:
     """Parole con il tempo d'inizio (in secondi) dal JSON di whisper (-ojf):
     i token si ricompongono in parole sugli spazi."""
@@ -2185,15 +2286,27 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         parole_audio: list = []
         try:
             parole_audio = parole_da_json(percorso(".json"))
-            # Due orologi da raddrizzare (2026-08-23): il VAD compatta i
-            # silenzi (si risommano con la mappa dei silenzi del WAV) e
-            # l'atempo rallenta (t_originale = t_whisper × ATEMPO). Solo
-            # così il clic sulla parola atterra dove viene pronunciata.
-            if USA_VAD:
-                parole_audio = _decompatta_tempi(
-                    parole_audio, _silenzi_wav(percorso(".wav")))
-            if ATEMPO != 1.0:
-                parole_audio = [(w, t * ATEMPO) for w, t in parole_audio]
+            # L'orologio di whisper è storto tre volte: atempo (rallenta),
+            # VAD (butta via le pause) e interi tratti di parlato saltati.
+            # Rimedio robusto (2026-08-24): ANCORE — le riprese dopo pausa
+            # dell'orologio whisper accoppiate alle fini dei silenzi reali
+            # dell'audio originale, poi deformazione a tratti lineari.
+            # Con poche ancore si ripiega su silenzi+atempo (come prima).
+            tempi_w = [x for _, x in parole_audio]
+            anc_w = [tempi_w[i + 1] for i in range(len(tempi_w) - 1)
+                     if tempi_w[i + 1] - tempi_w[i] > 1.5]
+            anc_a, durata_orig = _ancore_audio(ingresso)
+            coppie = _accoppia_ancore(anc_w, anc_a) if USA_VAD else []
+            if len(coppie) >= 3:
+                parole_audio = _ritara_parole(parole_audio, coppie, durata_orig)
+                log.info("fase=tempi file=%s esito=ancore accoppiate=%d",
+                         file_id, len(coppie))
+            else:
+                if USA_VAD:
+                    parole_audio = _decompatta_tempi(
+                        parole_audio, _silenzi_wav(percorso(".wav")))
+                if ATEMPO != 1.0:
+                    parole_audio = [(w, t * ATEMPO) for w, t in parole_audio]
             parole = allinea_parole(finale, parole_audio)
             log.info("fase=tempi file=%s esito=ok parole=%d", file_id, len(parole))
         except Exception as e:
