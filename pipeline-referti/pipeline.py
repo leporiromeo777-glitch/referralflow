@@ -549,6 +549,58 @@ def trascrivi(wav: Path, uscita_txt: Path, file_id: str, fase: str, prompt: str 
 # Serve al testo sincronizzato della pagina di revisione: clic su una parola
 # → l'audio salta lì. Se l'allineamento non convince, meglio niente.
 
+# Il VAD di whisper-cli COMPATTA l'audio (i silenzi spariscono) e i tempi
+# escono sull'orologio compattato: verificato empiricamente il 2026-08-23
+# inserendo 20 s di silenzio in un file di prova — l'ultima parola cadeva a
+# 63 s su 81. Per il testo sincronizzato bisogna RIMETTERE le pause: si
+# individuano i silenzi del WAV preprocessato (ffmpeg silencedetect, soglie
+# tarate sugli ancoraggi di un dettato reale: scarto medio 0.6 s) e si
+# risommano ai tempi, tenendo conto del margine che il VAD conserva ai bordi.
+SILENZIO_DB = os.environ.get("REFERTI_SILENZIO_DB", "-25dB")
+SILENZIO_MIN_S = os.environ.get("REFERTI_SILENZIO_S", "1.0")
+SILENZIO_MARGINE_S = 0.6  # ~2 × vad-speech-pad-ms
+
+
+def _silenzi_wav(wav: Path) -> list[tuple[float, float]]:
+    """Coppie (inizio, fine) dei silenzi nel WAV preprocessato."""
+    esito = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-nostdin", "-i", str(wav),
+         "-af", f"silencedetect=noise={SILENZIO_DB}:d={SILENZIO_MIN_S}",
+         "-f", "null", "-"],
+        capture_output=True, text=True, timeout=FFMPEG_TIMEOUT_S,
+    )
+    coppie: list[tuple[float, float]] = []
+    inizio = None
+    for tipo, val in re.findall(r"silence_(start|end): ([0-9.]+)", esito.stderr):
+        if tipo == "start":
+            inizio = float(val)
+        elif inizio is not None:
+            coppie.append((inizio, float(val)))
+            inizio = None
+    return coppie
+
+
+def _decompatta_tempi(parole: list[tuple[str, float]],
+                      silenzi: list[tuple[float, float]]) -> list[tuple[str, float]]:
+    """Orologio compattato dal VAD → orologio del WAV intero: ogni silenzio
+    risomma la sua durata (meno il margine conservato) ai tempi successivi."""
+    tagli: list[tuple[float, float]] = []
+    tolto = 0.0
+    for s, e in silenzi:
+        durata = max(0.0, (e - s) - SILENZIO_MARGINE_S)
+        if durata <= 0:
+            continue
+        tagli.append((s - tolto, durata))
+        tolto += durata
+    if not tagli:
+        return parole
+    fuori: list[tuple[str, float]] = []
+    for w, t in parole:
+        agg = sum(d for pos, d in tagli if t >= pos)
+        fuori.append((w, t + agg))
+    return fuori
+
+
 def parole_da_json(percorso_json: Path) -> list[tuple[str, float]]:
     """Parole con il tempo d'inizio (in secondi) dal JSON di whisper (-ojf):
     i token si ricompongono in parole sugli spazi."""
@@ -2133,11 +2185,13 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         parole_audio: list = []
         try:
             parole_audio = parole_da_json(percorso(".json"))
-            # I tempi di whisper sono sull'orologio dell'audio RALLENTATO
-            # (atempo 0.8): riportati all'orologio dell'audio originale che
-            # la pagina riascolta, altrimenti ogni clic atterra più avanti e
-            # lo sfasamento cresce col passare dei minuti (visto dal vivo il
-            # 2026-08-23). t_originale = t_whisper × ATEMPO.
+            # Due orologi da raddrizzare (2026-08-23): il VAD compatta i
+            # silenzi (si risommano con la mappa dei silenzi del WAV) e
+            # l'atempo rallenta (t_originale = t_whisper × ATEMPO). Solo
+            # così il clic sulla parola atterra dove viene pronunciata.
+            if USA_VAD:
+                parole_audio = _decompatta_tempi(
+                    parole_audio, _silenzi_wav(percorso(".wav")))
             if ATEMPO != 1.0:
                 parole_audio = [(w, t * ATEMPO) for w, t in parole_audio]
             parole = allinea_parole(finale, parole_audio)
