@@ -1290,31 +1290,65 @@ def _riparazione_plausibile(da: str, a: str) -> bool:
     return a.isupper() and len(a) <= 5 and len(da.split()) == 1 and dist <= 2
 
 
+LISTA_BLOCCO_CAR = int(os.environ.get("REFERTI_LISTA_BLOCCO_CAR", "3500"))
+
+
+def _blocchi_di_testo(testo: str, dimensione: int) -> list[str]:
+    """Spezza il testo in blocchi di circa `dimensione` caratteri, tagliando
+    solo a confine di frase/riga: nessuna parola resta a cavallo di due
+    blocchi."""
+    if len(testo) <= dimensione:
+        return [testo]
+    blocchi: list[str] = []
+    corrente = ""
+    for pezzo in re.split(r"(?<=[.!?;\n])\s+", testo):
+        if corrente and len(corrente) + len(pezzo) + 1 > dimensione:
+            blocchi.append(corrente)
+            corrente = pezzo
+        else:
+            corrente = f"{corrente} {pezzo}".strip() if corrente else pezzo
+    if corrente:
+        blocchi.append(corrente)
+    return blocchi
+
+
 def _correggi_a_lista(testo: str, file_id: str) -> str | None:
     """Correzione «a lista di riparazioni» (idea dell'utente, 2026-08-21):
     il modello NON riscrive il testo — elenca solo gli scambi «parola
     storpiata → forma giusta» e il CODICE li applica, come già fa col
-    dizionario dello studio. Vantaggi: risposta corta (minuti invece di
-    decine di minuti) e numeri intoccabili PER COSTRUZIONE, perché ogni
-    coppia che contiene cifre viene rifiutata a priori. Ritorna None se il
-    modello non produce una lista utilizzabile: il chiamante ripiega sulla
-    vecchia riscrittura integrale."""
+    dizionario dello studio. Vantaggi: risposta corta e numeri intoccabili
+    PER COSTRUZIONE, perché ogni coppia che contiene cifre viene rifiutata
+    a priori. Dal 2026-08-23 i dettati lunghi vanno A BLOCCHI (~3500 car,
+    tagli a confine di frase): sul dettato vero da 23 minuti la chiamata
+    unica sforava il tempo massimo tre volte di fila (45 minuti persi)
+    prima del ripiego. Un blocco che non risponde si salta (le sue frasi
+    restano com'erano); si ritorna None solo se NESSUN blocco risponde —
+    allora il chiamante ripiega sulla riscrittura integrale."""
     inizio = time.monotonic()
-    try:
-        uscita = chiama_ollama(
-            PROMPT_CORREZIONE_LISTA.replace("{testo}", testo), file_id,
-            "correzione_llm", formato_json=True, modello=MODELLO_CORREZIONE,
-        )
-        dati = json.loads(uscita)
-    except (RuntimeError, json.JSONDecodeError):
+    blocchi = _blocchi_di_testo(testo, LISTA_BLOCCO_CAR)
+    dati_blocchi: list[dict | None] = []
+    for blocco in blocchi:
+        try:
+            uscita = chiama_ollama(
+                PROMPT_CORREZIONE_LISTA.replace("{testo}", blocco), file_id,
+                "correzione_llm", formato_json=True, modello=MODELLO_CORREZIONE,
+            )
+            dati_blocchi.append(json.loads(uscita))
+        except (RuntimeError, json.JSONDecodeError):
+            dati_blocchi.append(None)
+    if all(d is None for d in dati_blocchi):
         return None
+    dati = {"riparazioni": []}
+    for d in dati_blocchi:
+        if isinstance(d, dict) and isinstance(d.get("riparazioni"), list):
+            dati["riparazioni"].extend(d["riparazioni"])
     coppie = dati.get("riparazioni") if isinstance(dati, dict) else None
     if not isinstance(coppie, list):
         return None
     applicate = 0
     scartate = 0
     nuovo = testo
-    for voce in coppie[:60]:
+    for voce in coppie[:150]:
         if not isinstance(voce, dict):
             scartate += 1
             continue
