@@ -925,7 +925,7 @@ def arbitra_divergenze(testo: str, divergenze: list[dict], file_id: str) -> tupl
     try:
         uscita = chiama_ollama(
             PROMPT_ARBITRO.replace("{punti}", punti), file_id, "confronto",
-            formato_json=True, modello=MODELLO_CORREZIONE,
+            formato_json=True, modello=MODELLO_CORREZIONE, max_gettoni=800,
         )
         dati = json.loads(uscita)
     except (RuntimeError, json.JSONDecodeError):
@@ -1337,19 +1337,27 @@ def libera_llm() -> None:
 
 
 def chiama_ollama(prompt: str, file_id: str, fase: str, formato_json: bool = False,
-                  modello: str | None = None) -> str:
+                  modello: str | None = None, max_gettoni: int | None = None,
+                  tentativi: int | None = None) -> str:
     """Una chiamata a /api/generate con 3 tentativi e pausa crescente
-    (SPEC §7.2). Temperatura 0: stessa domanda, stessa risposta."""
+    (SPEC §7.2). Temperatura 0: stessa domanda, stessa risposta.
+    `max_gettoni` (num_predict) mette un TETTO alla lunghezza della risposta:
+    per le fasi a risposta corta (liste, verdetti) impedisce fisicamente le
+    generazioni-fiume che sforano il tempo massimo (visto dal vivo il
+    2026-08-24: 45 minuti persi per blocco sulla lista di riparazioni)."""
     richiesta_dati = {
         "model": modello or MODELLO_LLM,
         "prompt": prompt,
         "stream": False,
         "options": {"temperature": 0, "num_ctx": OLLAMA_NUM_CTX},
     }
+    if max_gettoni:
+        richiesta_dati["options"]["num_predict"] = max_gettoni
     if formato_json:
         richiesta_dati["format"] = "json"  # SPEC §6.3: output JSON garantito
     corpo = json.dumps(richiesta_dati).encode("utf-8")
-    for tentativo in range(1, OLLAMA_TENTATIVI + 1):
+    giri = tentativi or OLLAMA_TENTATIVI
+    for tentativo in range(1, giri + 1):
         try:
             richiesta = urllib.request.Request(
                 OLLAMA_URL + "/api/generate",
@@ -1363,11 +1371,11 @@ def chiama_ollama(prompt: str, file_id: str, fase: str, formato_json: bool = Fal
                 return testo
         except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError):
             pass
-        if tentativo < OLLAMA_TENTATIVI:
+        if tentativo < giri:
             time.sleep(5 * tentativo)
     log.error(
         "fase=%s file=%s esito=errore motivo=ollama_non_risponde tentativi=%d",
-        fase, file_id, OLLAMA_TENTATIVI,
+        fase, file_id, giri,
     )
     raise RuntimeError("ollama non risponde")
 
@@ -1557,6 +1565,7 @@ def _correggi_a_lista(testo: str, file_id: str) -> str | None:
             uscita = chiama_ollama(
                 PROMPT_CORREZIONE_LISTA.replace("{testo}", blocco), file_id,
                 "correzione_llm", formato_json=True, modello=MODELLO_CORREZIONE,
+                max_gettoni=1600, tentativi=2,
             )
             dati_blocchi.append(json.loads(uscita))
         except (RuntimeError, json.JSONDecodeError):
@@ -1838,7 +1847,11 @@ BOZZA:
 {bozza}"""
 
 
-def avvocato_diavolo(bozza: str, grezzo: str, file_id: str) -> list[dict]:
+AVVOCATO_REGOLA_RIASSUNTO = """ATTENZIONE: la bozza è un RIASSUNTO della conversazione — riformulare, sintetizzare e riordinare è il suo mestiere e NON va segnalato. Segnala SOLO: informazioni cliniche che nella conversazione non ci sono (lati del corpo, tempi, qualità dei sintomi mai detti), o che nella conversazione sono DIVERSE. Ignora completamente la forma."""
+
+
+def avvocato_diavolo(bozza: str, grezzo: str, file_id: str,
+                     riassunto: bool = False) -> list[dict]:
     """Verifica delle affermazioni (piano precisione 2026-08-23, punto 6,
     ispirata alla claim-verification di Abridge): un passaggio SEPARATO dal
     generatore rilegge la bozza contro il dettato grezzo e segnala le frasi
@@ -1848,8 +1861,13 @@ def avvocato_diavolo(bozza: str, grezzo: str, file_id: str) -> list[dict]:
     inizio = time.monotonic()
     try:
         uscita = chiama_ollama(
-            PROMPT_AVVOCATO.replace("{grezzo}", grezzo).replace("{bozza}", bozza),
+            (PROMPT_AVVOCATO.replace(
+                "Regole obbligatorie:",
+                AVVOCATO_REGOLA_RIASSUNTO + "\n\nRegole obbligatorie:")
+             if riassunto else PROMPT_AVVOCATO)
+            .replace("{grezzo}", grezzo).replace("{bozza}", bozza),
             file_id, "avvocato", formato_json=True, modello=MODELLO_ISPEZIONE,
+            max_gettoni=1600,
         )
         dati = json.loads(uscita)
     except (RuntimeError, json.JSONDecodeError):
@@ -2341,8 +2359,12 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         _ = notifica and notifica(fase)
         # Sulle visite l'avvocato verifica la NOTA (dove il rischio di
         # invenzione è massimo: è un riassunto generato, non una pulizia).
+        # Metro diverso (primo collaudo 2026-08-24: 1 invenzione vera presa
+        # — «caviglia destra» mai detta — ma 5 falsi allarmi sul fatto che
+        # la nota «riformula»): su un riassunto la riformulazione è attesa.
         frasi_non_supportate = avvocato_diavolo(
-            nota_visita if nota_visita else finale, grezzo_a, file_id)
+            nota_visita if nota_visita else finale, grezzo_a, file_id,
+            riassunto=bool(nota_visita))
         frasi_non_supportate = [
             v for v in frasi_non_supportate if v["frase"] not in divagazioni
         ]
