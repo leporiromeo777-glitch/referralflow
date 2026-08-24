@@ -308,6 +308,7 @@ CATEGORIE DA SEGNALARE SEMPRE (con esempi reali):
 5. COMMENTI ORGANIZZATIVI sul lavoro d'ufficio: «ho visto i documenti, ho corretto una data», «se avete proposte di miglioramento discutiamone», «se è troppo lungo me lo dite», «non so come potete fare, se volete mettere solo i risultati».
 
 COSA NON SEGNALARE MAI:
+- Le frasi che DESCRIVONO il percorso clinico del paziente, anche se parlano di controlli e appuntamenti: «abbiamo anticipato il controllo annuale a seguito di…», «lo rivedo tra sei mesi», «ha eseguito l'esame in data…» sono CONTENUTO del referto, non note organizzative. Organizzativo è solo ciò che è rivolto A CHI PREPARA la lettera.
 - I comandi di dettatura seguiti dal testo da scrivere: «scrivi: caro collega, le invio…» → il testo dopo i due punti È la lettera. La differenza: «scrivi A QUALCUNO» o «riprendi UN ALTRO documento» = compito (categoria 3); «scrivi:» + dettato = lettera.
 - Aperture e chiusure della lettera («Caro collega», «Gentile dottoressa», «Cordiali saluti»).
 - QUALSIASI frase che contiene misure, valori, dosaggi, diagnosi o giudizi clinici — anche se inizia con un ordine. Nel dubbio, la frase resta nel referto.
@@ -1876,14 +1877,24 @@ def avvocato_diavolo(bozza: str, grezzo: str, file_id: str,
     voci = dati.get("non_supportate") if isinstance(dati, dict) else None
     if not isinstance(voci, list):
         return []
+    def _nudo(s: str) -> str:
+        return re.sub(r"[^\w\s]", "", s.lower())
+    grezzo_nudo = re.sub(r"\s+", " ", _nudo(grezzo))
     fuori: list[dict] = []
     for voce in voci[:20]:
         if not isinstance(voce, dict):
             continue
         frase = str(voce.get("frase", "")).strip()
         motivo = str(voce.get("motivo", "")).strip()[:200]
-        if len(frase) >= 8 and frase in bozza:
-            fuori.append({"frase": frase[:400], "motivo": motivo})
+        if len(frase) < 8 or frase not in bozza:
+            continue
+        # Anti-pedanteria (primo referto reale 2026-08-24: 9 segnalazioni su
+        # 14 erano «senza punto»/«senza virgola»): se la frase, spogliata
+        # della punteggiatura, esiste tale e quale nel dettato, il contenuto
+        # È supportato — la segnalazione muore qui.
+        if re.sub(r"\s+", " ", _nudo(frase)).strip() in grezzo_nudo:
+            continue
+        fuori.append({"frase": frase[:400], "motivo": motivo})
     log.info(
         "fase=avvocato file=%s esito=ok segnalate=%d durata=%.1fs",
         file_id, len(fuori), time.monotonic() - inizio,
