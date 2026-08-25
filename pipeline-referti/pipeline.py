@@ -1947,6 +1947,12 @@ def _applica_note_segreteria(testo: str, frasi: list) -> tuple[str, list[str]]:
         # cosa dica il modello. Il prompt lo chiede già; qui si garantisce.
         if re.search(r"\d", f):
             continue
+        # Narrazione clinica al passato («abbiamo anticipato il controllo…»):
+        # racconta il percorso del paziente, non è un compito — resta nel
+        # referto qualunque cosa dica il modello (che sul punto è recidivo:
+        # regola nel prompt ignorata due corse di fila, 2026-08-25).
+        if re.search(r"\babbiamo\s+(anticipat|eseguit|effettuat|riscontrat|rivalutat|osservat)", f, re.IGNORECASE):
+            continue
         i = testo.find(f)
         if i == -1:
             continue

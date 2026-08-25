@@ -54,6 +54,9 @@ export function EvidenziatoreTesto({
     const divNorm = divagazioni.map(normalizza).filter((d) => d.length >= 8);
     const spente = new Set<number>();
     frasi.forEach((f, i) => {
+      // Regola d'oro anche qui: una frase che contiene cifre porta quasi
+      // sempre un dato clinico — non parte mai spenta, decide la persona.
+      if (/\d/.test(f)) return;
       const n = normalizza(f);
       if (n.length >= 8 && divNorm.some((d) => d.includes(n) || n.includes(d))) spente.add(i);
     });
