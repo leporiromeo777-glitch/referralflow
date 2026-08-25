@@ -485,7 +485,7 @@ def carica_vocabolario() -> str:
 
 
 def trascrivi(wav: Path, uscita_txt: Path, file_id: str, fase: str, prompt: str = "",
-              con_tempi: bool = False) -> None:
+              con_tempi: bool = False, usa_vad: bool = True) -> None:
     """Trascrizione con whisper.cpp, lingua italiana. Il testo esce
     direttamente su file (-otxt): stdout/stderr di whisper contengono la
     trascrizione e vengono scartati (SPEC §2.2). Il prompt di dominio
@@ -501,7 +501,8 @@ def trascrivi(wav: Path, uscita_txt: Path, file_id: str, fase: str, prompt: str 
         "-f", str(wav),
         "-otxt",
         *(["-ojf"] if con_tempi else []),
-        *(["--vad", "-vm", str(PERCORSO_VAD), "--vad-speech-pad-ms", VAD_PAD_MS] if USA_VAD else []),
+        *(["--vad", "-vm", str(PERCORSO_VAD), "--vad-speech-pad-ms", VAD_PAD_MS]
+          if (USA_VAD and usa_vad) else []),
         "-of", str(base),
         "-np",
         *FLAG_PASSATA[fase],
@@ -2252,7 +2253,15 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                 log.info("fase=trascrizione_a file=%s esito=coda_non_recuperata", file_id)
         fase = "trascrizione_b"
         _ = notifica and notifica(fase)
-        trascrivi(percorso(".wav"), percorso(".b.txt"), file_id, fase, vocab)
+        # La passata B gira SENZA VAD: il suo orologio resta quello pieno del
+        # WAV rallentato, e i tempi delle parole diventano esatti con una
+        # semplice moltiplicazione per ATEMPO (banco della verità 2026-08-25:
+        # scarto max 3.7 s; il metodo ad ancore derivava fino a -37 s perché
+        # cercava pause che il VAD aveva già tagliato). Il testo di lavoro
+        # resta la passata A (col VAD, anti-allucinazioni); eventuali frasi
+        # inventate da B sulle pause le gestiscono deloop e confronto.
+        trascrivi(percorso(".wav"), percorso(".b.txt"), file_id, fase, vocab,
+                  con_tempi=True, usa_vad=False)
 
         # Dizionario PRIMA del confronto (ordine invertito rispetto alla prima
         # stesura della SPEC, deviazione documentata in §3): così le àncore
@@ -2438,28 +2447,32 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         parole_audio: list = []
         durata_audio_originale = 0.0
         try:
-            parole_audio = parole_da_json(percorso(".json"))
-            # L'orologio di whisper è storto tre volte: atempo (rallenta),
-            # VAD (butta via le pause) e interi tratti di parlato saltati.
-            # Rimedio robusto (2026-08-24): ANCORE — le riprese dopo pausa
-            # dell'orologio whisper accoppiate alle fini dei silenzi reali
-            # dell'audio originale, poi deformazione a tratti lineari.
-            # Con poche ancore si ripiega su silenzi+atempo (come prima).
-            tempi_w = [x for _, x in parole_audio]
-            anc_w = [tempi_w[i + 1] for i in range(len(tempi_w) - 1)
-                     if tempi_w[i + 1] - tempi_w[i] > 1.5]
-            anc_a, durata_orig = _ancore_audio(ingresso)
-            durata_audio_originale = durata_orig or 0.0
-            coppie = _accoppia_ancore(anc_w, anc_a) if USA_VAD else []
-            if len(coppie) >= 3:
-                parole_audio = _ritara_parole(parole_audio, coppie, durata_orig)
-                log.info("fase=tempi file=%s esito=ancore accoppiate=%d",
-                         file_id, len(coppie))
-            else:
-                if USA_VAD:
-                    parole_audio = _decompatta_tempi(
-                        parole_audio, _silenzi_wav(percorso(".wav")))
+            # Orologio PIENO della passata B (senza VAD): basta l'atempo.
+            sonda = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                 "-of", "default=nw=1:nk=1", str(ingresso)],
+                capture_output=True, text=True, timeout=60,
+            )
+            try:
+                durata_audio_originale = float(sonda.stdout.strip())
+            except ValueError:
+                durata_audio_originale = 0.0
+            if percorso(".b.json").is_file():
+                parole_audio = parole_da_json(percorso(".b.json"))
                 if ATEMPO != 1.0:
+                    parole_audio = [(w, t * ATEMPO) for w, t in parole_audio]
+                log.info("fase=tempi file=%s orologio=passata_b_senza_vad", file_id)
+            else:
+                # Ripiego (JSON della B assente): vecchio metodo ad ancore.
+                parole_audio = parole_da_json(percorso(".json"))
+                tempi_w = [x for _, x in parole_audio]
+                anc_w = [tempi_w[i + 1] for i in range(len(tempi_w) - 1)
+                         if tempi_w[i + 1] - tempi_w[i] > 1.5]
+                anc_a, durata_orig = _ancore_audio(ingresso)
+                coppie = _accoppia_ancore(anc_w, anc_a) if USA_VAD else []
+                if len(coppie) >= 3:
+                    parole_audio = _ritara_parole(parole_audio, coppie, durata_orig)
+                elif ATEMPO != 1.0:
                     parole_audio = [(w, t * ATEMPO) for w, t in parole_audio]
             parole = allinea_parole(finale, parole_audio)
             log.info("fase=tempi file=%s esito=ok parole=%d", file_id, len(parole))
