@@ -9,7 +9,7 @@ import { confermaBozza, scartaBozza, ripristinaBozza, eliminaBozza, riorganizzaB
 import { agganciaRiferimenti } from '@/lib/referti-allegati';
 import { AudioDettato } from '../AudioDettato';
 import { TestoDettato } from '../TestoDettato';
-import { EvidenziatoreTesto } from './EvidenziatoreTesto';
+import { RevisioneGuidata } from './RevisioneGuidata';
 
 export const dynamic = 'force-dynamic';
 
@@ -243,48 +243,20 @@ export default async function RefertoBozza({
         </p>
       )}
 
-      {inBozza && (
+      {inBozza && (avvisi.length > 0 || allarmi.length > 0) && (
         <div className="card ctrl-box">
-          <h2>Da controllare prima di confermare</h2>
-          <div className="riepilogo-chips">
-            {Array.isArray(p.frasi_non_supportate) && p.frasi_non_supportate.length > 0 && (
-              <span className="rchip rchip-rosso">
-                {p.frasi_non_supportate.length} frasi senza appoggio nel dettato (numerini rossi)
-              </span>
-            )}
-            {Array.isArray(p.frasi_da_chiarire) && p.frasi_da_chiarire.length > 0 && (
-              <span className="rchip rchip-arancio">
-                {p.frasi_da_chiarire.length} frasi da chiarire (numerini C1, C2…)
-              </span>
-            )}
-            {Array.isArray(p.divagazioni) && p.divagazioni.length > 0 && (
-              <span className="rchip rchip-grigio">
-                {p.divagazioni.length} frasi fuori tema spente (barrate: non entrano nel referto)
-              </span>
-            )}
-            {marcati > 0 && (
-              <span className="rchip rchip-blu">
-                {marcati} punti di trascrizione incerta (da riascoltare)
-              </span>
-            )}
-          </div>
-          {(avvisi.length > 0 || allarmi.length > 0) && (
-            <ul className="ctrl-list">
-              {avvisi.map((a, i) => (
-                <li key={i}>{a}</li>
-              ))}
-              {allarmi.map((a, i) => (
-                <li key={i}>
-                  <strong>{String(a.campo ?? 'valore').replaceAll('_', ' ')}: {String(a.valore ?? '?')}</strong>{' '}
-                  — {fraseAllarme(a)}.
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className="muted small">
-            Tutto il resto è a posto: correggi nel «Testo da confermare» qui sotto,
-            ogni segnalazione ha il suo numerino e la sua spiegazione.
-          </p>
+          <h2>Avvisi</h2>
+          <ul className="ctrl-list">
+            {avvisi.map((a, i) => (
+              <li key={i}>{a}</li>
+            ))}
+            {allarmi.map((a, i) => (
+              <li key={i}>
+                <strong>{String(a.campo ?? 'valore').replaceAll('_', ' ')}: {String(a.valore ?? '?')}</strong>{' '}
+                — {fraseAllarme(a)}.
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
@@ -393,81 +365,23 @@ export default async function RefertoBozza({
       {inBozza ? (
         <form action={confermaBozza} className="card form">
           <input type="hidden" name="id" value={row.id} />
-          <h2>Testo da confermare</h2>
-          <p className="muted">
-            Entra nel referto solo ciò che è evidenziato: l&apos;AI spegne le divagazioni,
-            tu puoi riaccenderle con un clic. Con «Riorganizza» l&apos;AI locale
-            propone il testo nel formato standard del rapporto — sezioni, diagnosi
-            numerate, esami — senza mai cambiare i numeri; resta una proposta da rivedere.
-          </p>
-          {Array.isArray(p.frasi_non_supportate) && p.frasi_non_supportate.length > 0 && (
-            <div className="evid-box evid-avvocato">
-              <p className="muted">
-                <strong>Avvocato del diavolo</strong>: un secondo passaggio AI ha riletto
-                la bozza contro il dettato originale e non trova appoggio per queste
-                citazioni. Nel testo qui sotto le frasi che le contengono sono puntinate
-                in rosso col numeretto corrispondente (la citazione può essere più corta
-                della frase intera). Verifica col dettato prima di confermarle.
-              </p>
-              <ol className="ns-lista">
-                {p.frasi_non_supportate.map((v, i) => (
-                  <li key={i}>
-                    <span className="evid-orig">{v.frase}</span>
-                    {v.motivo ? <span className="muted"> — {v.motivo}</span> : null}
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
-
-          <EvidenziatoreTesto
+          <h2>Revisione guidata</h2>
+          <RevisioneGuidata
             testo={row.testo_finale ?? p.testo_corretto ?? ''}
             divagazioni={Array.isArray(p.divagazioni) ? p.divagazioni : []}
             frasiDaChiarire={Array.isArray(p.frasi_da_chiarire) ? p.frasi_da_chiarire : []}
             frasiNonSupportate={Array.isArray(p.frasi_non_supportate) ? p.frasi_non_supportate : []}
+            note={Array.isArray(p.note_segreteria) ? p.note_segreteria.filter((n): n is string => typeof n === 'string') : []}
+            campi={Object.fromEntries(Object.entries(campi).filter(([, v]) => typeof v === 'string')) as Record<string, string>}
+            valoriNumerici={valoriNumerici}
           />
 
           {typeof p.testo_grezzo === 'string' && p.testo_grezzo.trim() !== '' && (
             <details className="grezzo-box">
               <summary>Dettato originale (trascrizione grezza, prima di ogni ritocco)</summary>
-              <p className="muted small">
-                Per controllare una frase dubbia: cerca qui cosa è stato trascritto
-                davvero, prima del dizionario e delle correzioni AI.
-              </p>
               <pre className="grezzo-testo">{p.testo_grezzo}</pre>
             </details>
           )}
-
-          <details className="campi-box" open>
-            <summary className="sez-summary">Campi estratti</summary>
-            <p className="muted">
-              Estratti automaticamente dal testo, mai dedotti: «non indicato» significa
-              che nel dettato non c&apos;era. Correggili qui prima di confermare.
-            </p>
-            <div className="grid2">
-              {Object.entries(campi)
-                .filter(([, v]) => typeof v === 'string')
-                .map(([k, v]) => (
-                  <label key={k}>{k.replaceAll('_', ' ')}
-                    <input name={`campo__${k}`} maxLength={2000} defaultValue={String(v)} />
-                  </label>
-                ))}
-            </div>
-            {valoriNumerici && Object.keys(valoriNumerici).length > 0 && (
-              <>
-                <h3>Valori numerici rilevati</h3>
-                <p className="muted">
-                  Riportati come dettati, mai corretti (gli eventuali sospetti sono
-                  nel riquadro «Da controllare» in cima). Se uno è sbagliato, correggi il testo.
-                </p>
-                <ul>
-                  {Object.entries(valoriNumerici).map(([k, v]) => (
-                    <li key={k}><strong>{k.replaceAll('_', ' ')}</strong>: {typeof v === 'object' ? JSON.stringify(v) : String(v)}</li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </details>
 
           <div className="form-actions">
             <button className="btn btn-primary" type="submit">Conferma il referto</button>

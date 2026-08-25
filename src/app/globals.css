@@ -1561,3 +1561,22 @@ mark[title] { cursor: help; }
 .lista-righe { list-style: none; padding-left: 2px; }
 .lista-righe li { padding: 7px 0; border-bottom: 1px solid var(--border, #e6e4dc); }
 .lista-righe li:last-child { border-bottom: none; }
+
+/* Revisione guidata (2026-08-25) */
+.rg { border: 1px solid var(--border, #e2e0d8); border-radius: 16px; padding: 16px 18px; }
+.rg-passi { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+.rg-tab { border: 1px solid var(--border, #ddd); background: #fff; border-radius: 999px; padding: 6px 14px; cursor: pointer; font-size: 0.88em; }
+.rg-tab.attivo { background: var(--cta, #0d5c48); color: #fff; border-color: var(--cta, #0d5c48); font-weight: 700; }
+.rg-tab.fatto { opacity: 0.75; }
+.rg-tab-num { font-weight: 700; }
+.rg-corpo { margin-top: 12px; }
+.rg-item { border: 1px solid var(--border, #e2e0d8); border-radius: 12px; padding: 12px 14px; margin: 10px 0; }
+.rg-item.rg-rossa { border-left: 4px solid #b3382c; }
+.rg-item.rg-arancione { border-left: 4px solid #c77d00; }
+.rg-item.rg-fatta { opacity: 0.55; }
+.rg-frase { margin: 0 0 6px; line-height: 1.5; }
+.rg-frase.rg-spenta { color: var(--muted); text-decoration: line-through; }
+.rg-motivo { margin: 0 0 8px; color: var(--muted); font-size: 0.92em; }
+.rg-azioni { display: flex; flex-wrap: wrap; gap: 8px; }
+.rg-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; gap: 10px; }
+.rg-modifica { margin-bottom: 8px; }
