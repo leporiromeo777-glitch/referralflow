@@ -608,6 +608,40 @@ def _decompatta_tempi(parole: list[tuple[str, float]],
     return fuori
 
 
+VAD_SEGMENTS_BIN = os.environ.get("REFERTI_VAD_SEGMENTS_BIN", "whisper-vad-speech-segments")
+
+
+def _segmenti_vad(wav: Path) -> list[tuple[float, float]]:
+    """La MAPPA dei tagli del VAD, dallo stesso Silero di whisper-cli
+    (strumento whisper-vad-speech-segments, output in centesimi di secondo).
+    È la chiave della sincronizzazione esatta (2026-08-25): whisper lavora
+    sull'audio compattato e questa mappa dice dove ogni pezzo stava davvero.
+    Banco della verità: scarto massimo 0.87 s."""
+    try:
+        esito = subprocess.run(
+            [VAD_SEGMENTS_BIN, "-np", "-vm", str(PERCORSO_VAD),
+             "--vad-speech-pad-ms", VAD_PAD_MS, "-f", str(wav)],
+            capture_output=True, text=True, timeout=600,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    seg: list[tuple[float, float]] = []
+    for m in re.finditer(r"start = ([0-9.]+), end = ([0-9.]+)", esito.stdout):
+        seg.append((float(m.group(1)) / 100.0, float(m.group(2)) / 100.0))
+    return seg
+
+
+def _decompatta_su_segmenti(t: float, seg: list[tuple[float, float]]) -> float:
+    """Orologio compattato dal VAD → orologio del WAV intero, esatto."""
+    cum = 0.0
+    for s, e in seg:
+        d = e - s
+        if t <= cum + d:
+            return s + (t - cum)
+        cum += d
+    return seg[-1][1] if seg else t
+
+
 def _ancore_audio(originale: Path) -> tuple[list[float], float]:
     """Ancore sull'orologio dell'audio ORIGINALE (quello che la pagina
     riascolta): le fini dei silenzi trovate sull'originale ripulito al volo
@@ -709,6 +743,54 @@ def _ritara_parole(parole: list[tuple[str, float]], coppie: list[tuple[float, fl
 
     tetto = durata_audio - 0.5 if durata_audio > 1 else float("inf")
     return [(w, min(deforma(t), tetto)) for w, t in parole]
+
+
+def _trasferisci_tempi(parole_a: list[tuple[str, float]],
+                       parole_b: list[tuple[str, float]]) -> list[tuple[str, float]]:
+    """Il matrimonio delle due passate (2026-08-25): il TESTO buono della A
+    (col VAD, orologio compattato) sposato con l\'OROLOGIO pieno della B
+    (senza VAD, testo peggiore). Le parole di A che combaciano con B
+    ereditano il tempo di B; le altre si interpolano tra le vicine. Se
+    combacia meno di un quarto, il trasferimento non è affidabile: lista
+    vuota, il chiamante ripiega."""
+    if not parole_a or not parole_b:
+        return []
+
+    def norma(w: str) -> str:
+        return re.sub(r"[^\w]+", "", w.lower())
+
+    na = [norma(w) for w, _ in parole_a]
+    nb = [norma(w) for w, _ in parole_b]
+    tempi: list[float | None] = [None] * len(parole_a)
+    combaciate = 0
+    for blocco in difflib.SequenceMatcher(None, na, nb, autojunk=False).get_matching_blocks():
+        for k in range(blocco.size):
+            tempi[blocco.a + k] = parole_b[blocco.b + k][1]
+            combaciate += 1
+    if combaciate < len(parole_a) / 4:
+        return []
+    noti = [i for i, x in enumerate(tempi) if x is not None]
+    primo, ultimo = noti[0], noti[-1]
+    prec = primo
+    for i in range(len(tempi)):
+        if tempi[i] is not None:
+            prec = i
+            continue
+        if i < primo:
+            tempi[i] = tempi[primo]
+        elif i > ultimo:
+            tempi[i] = tempi[ultimo]
+        else:
+            succ = next(j for j in noti if j > i)
+            fraz = (i - prec) / (succ - prec)
+            tempi[i] = tempi[prec] + (tempi[succ] - tempi[prec]) * fraz  # type: ignore[operator]
+    # monotonia: whisper può incrociare due parole ai bordi dei blocchi
+    fuori: list[tuple[str, float]] = []
+    massimo = 0.0
+    for (w, _), x in zip(parole_a, tempi):
+        massimo = max(massimo, float(x))  # type: ignore[arg-type]
+        fuori.append((w, massimo))
+    return fuori
 
 
 def parole_da_json(percorso_json: Path) -> list[tuple[str, float]]:
@@ -2253,15 +2335,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                 log.info("fase=trascrizione_a file=%s esito=coda_non_recuperata", file_id)
         fase = "trascrizione_b"
         _ = notifica and notifica(fase)
-        # La passata B gira SENZA VAD: il suo orologio resta quello pieno del
-        # WAV rallentato, e i tempi delle parole diventano esatti con una
-        # semplice moltiplicazione per ATEMPO (banco della verità 2026-08-25:
-        # scarto max 3.7 s; il metodo ad ancore derivava fino a -37 s perché
-        # cercava pause che il VAD aveva già tagliato). Il testo di lavoro
-        # resta la passata A (col VAD, anti-allucinazioni); eventuali frasi
-        # inventate da B sulle pause le gestiscono deloop e confronto.
-        trascrivi(percorso(".wav"), percorso(".b.txt"), file_id, fase, vocab,
-                  con_tempi=True, usa_vad=False)
+        trascrivi(percorso(".wav"), percorso(".b.txt"), file_id, fase, vocab)
 
         # Dizionario PRIMA del confronto (ordine invertito rispetto alla prima
         # stesura della SPEC, deviazione documentata in §3): così le àncore
@@ -2457,11 +2531,15 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                 durata_audio_originale = float(sonda.stdout.strip())
             except ValueError:
                 durata_audio_originale = 0.0
-            if percorso(".b.json").is_file():
-                parole_audio = parole_da_json(percorso(".b.json"))
-                if ATEMPO != 1.0:
-                    parole_audio = [(w, t * ATEMPO) for w, t in parole_audio]
-                log.info("fase=tempi file=%s orologio=passata_b_senza_vad", file_id)
+            seg_vad = _segmenti_vad(percorso(".wav")) if USA_VAD else []
+            if seg_vad:
+                parole_audio = parole_da_json(percorso(".json"))
+                parole_audio = [
+                    (w, _decompatta_su_segmenti(x, seg_vad) * ATEMPO)
+                    for w, x in parole_audio
+                ]
+                log.info("fase=tempi file=%s orologio=mappa_vad segmenti=%d",
+                         file_id, len(seg_vad))
             else:
                 # Ripiego (JSON della B assente): vecchio metodo ad ancore.
                 parole_audio = parole_da_json(percorso(".json"))
