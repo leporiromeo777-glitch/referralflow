@@ -1764,6 +1764,14 @@ def trova_divagazioni(testo: str, file_id: str) -> list[str]:
     except json.JSONDecodeError:
         pass
     vere = [f.strip() for f in frasi if len(f.strip()) >= 8 and f.strip() in testo]
+    # Regola d'oro estesa all'evidenziatore (referto reale 2026-08-25:
+    # spenta «…in riserva scrivete ibuprofene, 400 mg al bisogno»): una
+    # frase che contiene CIFRE porta quasi sempre un dato clinico e non può
+    # essere spenta d'ufficio dall'AI — resta accesa, decide la persona.
+    con_cifre = sum(1 for f in vere if re.search(r"\d", f))
+    vere = [f for f in vere if not re.search(r"\d", f)]
+    if con_cifre:
+        log.info("fase=pertinenza file=%s salvate_con_cifre=%d", file_id, con_cifre)
     if sum(len(f) for f in vere) > len(testo) * 0.35:
         log.warning(
             "fase=pertinenza file=%s esito=ignorata motivo=esclusione_eccessiva proposte=%d durata=%.1fs",

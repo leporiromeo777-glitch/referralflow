@@ -128,3 +128,7 @@ cardiomiopatia
 scintigrafia miocardica
 flussolimitante
 sottoclaveare
+NYHA
+classe funzionale NYHA
+dispnea parossistica notturna
+ibuprofene
