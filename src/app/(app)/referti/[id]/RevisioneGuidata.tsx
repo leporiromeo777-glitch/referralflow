@@ -45,6 +45,7 @@ export function RevisioneGuidata({
   note,
   campi,
   valoriNumerici,
+  parole = [],
 }: {
   testo: string;
   divagazioni: string[];
@@ -53,6 +54,7 @@ export function RevisioneGuidata({
   note: string[];
   campi: Record<string, string>;
   valoriNumerici: Record<string, unknown> | null;
+  parole?: [string, number][];
 }) {
   const frasiIniziali = useMemo(() => spezzaInFrasi(testo), [testo]);
   const [frasi, setFrasi] = useState<string[]>(frasiIniziali);
@@ -87,6 +89,51 @@ export function RevisioneGuidata({
     () => frasiDaChiarire.map((v, k) => ({ ...v, k, idx: trovaIndice(v.frase) })),
     [frasiDaChiarire] // eslint-disable-line react-hooks/exhaustive-deps
   );
+
+  // «Riascolta qui»: trova il momento dell'audio in cui la frase viene
+  // detta, scorrendo i tempi parola-per-parola (già ritarati sulle ancore
+  // dell'audio originale) alla ricerca della finestra che somiglia di più
+  // all'attacco della frase.
+  const paroleNorm = useMemo(
+    () => parole.map(([w, s]) => [normalizza(w), s] as [string, number]),
+    [parole]
+  );
+  const tempoDiFrase = (frase: string): number | null => {
+    if (paroleNorm.length === 0) return null;
+    const cerca = normalizza(frase).split(' ').filter((w) => w.length >= 2).slice(0, 8);
+    if (cerca.length < 3) return null;
+    let migliore = -1;
+    let punteggio = 0;
+    for (let i = 0; i <= paroleNorm.length - cerca.length; i++) {
+      let m = 0;
+      for (let j = 0; j < cerca.length; j++) {
+        if (paroleNorm[i + j][0] === cerca[j]) m++;
+      }
+      if (m > punteggio) {
+        punteggio = m;
+        migliore = i;
+      }
+    }
+    if (migliore < 0 || punteggio < Math.max(3, Math.ceil(cerca.length * 0.6))) return null;
+    return paroleNorm[migliore][1];
+  };
+  const riascolta = (secondi: number) => {
+    const a = document.getElementById('audio-dettato') as HTMLAudioElement | null;
+    if (!a) return;
+    a.currentTime = Math.max(0, secondi - 1.5);
+    void a.play().catch(() => {});
+  };
+  const mmss = (s: number) =>
+    `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  const bottoneRiascolta = (frase: string) => {
+    const s = tempoDiFrase(frase);
+    if (s === null) return null;
+    return (
+      <button type="button" className="btn" onClick={() => riascolta(s)}>
+        🎧 Riascolta qui ({mmss(s)})
+      </button>
+    );
+  };
 
   const [fatte, setFatte] = useState<Set<string>>(new Set());
   const segna = (id: string) => setFatte((prev) => new Set(prev).add(id));
@@ -198,6 +245,7 @@ export function RevisioneGuidata({
               <p className="rg-motivo">→ {v.motivo || 'non trovata nel dettato'}</p>
               {!fatte.has(`r${v.k}`) && (
                 <div className="rg-azioni">
+                  {bottoneRiascolta(v.idx >= 0 ? frasiIniziali[v.idx] : v.frase)}
                   {v.idx >= 0 && (
                     <button
                       type="button"
@@ -235,6 +283,7 @@ export function RevisioneGuidata({
               )}
               {!fatte.has(`c${v.k}`) && (
                 <div className="rg-azioni">
+                  {bottoneRiascolta(v.idx >= 0 ? frasiIniziali[v.idx] : v.frase)}
                   {v.proposta && v.idx >= 0 && (
                     <button
                       type="button"
@@ -279,6 +328,7 @@ export function RevisioneGuidata({
             <div key={i} className={`rg-item${spente.has(i) ? '' : ' rg-fatta'}`}>
               <p className={`rg-frase${spente.has(i) ? ' rg-spenta' : ''}`}>{frasi[i]}</p>
               <div className="rg-azioni">
+                {bottoneRiascolta(frasiIniziali[i])}
                 <button type="button" className="btn" onClick={() => riaccendi(i)}>
                   {spente.has(i) ? '💡 Riaccendi (entra nel referto)' : 'Rispegni'}
                 </button>

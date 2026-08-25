@@ -374,6 +374,7 @@ export default async function RefertoBozza({
             note={Array.isArray(p.note_segreteria) ? p.note_segreteria.filter((n): n is string => typeof n === 'string') : []}
             campi={Object.fromEntries(Object.entries(campi).filter(([, v]) => typeof v === 'string')) as Record<string, string>}
             valoriNumerici={valoriNumerici}
+            parole={parole}
           />
 
           {typeof p.testo_grezzo === 'string' && p.testo_grezzo.trim() !== '' && (
