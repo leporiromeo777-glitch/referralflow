@@ -558,8 +558,12 @@ def trascrivi(wav: Path, uscita_txt: Path, file_id: str, fase: str, prompt: str 
 # individuano i silenzi del WAV preprocessato (ffmpeg silencedetect, soglie
 # tarate sugli ancoraggi di un dettato reale: scarto medio 0.6 s) e si
 # risommano ai tempi, tenendo conto del margine che il VAD conserva ai bordi.
-SILENZIO_DB = os.environ.get("REFERTI_SILENZIO_DB", "-25dB")
-SILENZIO_MIN_S = os.environ.get("REFERTI_SILENZIO_S", "1.0")
+# Soglie tarate sul dettato reale (2026-08-25): a -25dB il dittafono
+# rumoroso nasconde le pause di mezzo dettato (22 ancore, tratti di minuti
+# senza appigli → clic fuori bersaglio); a -22dB/0.8s le ancore diventano
+# ~48 e coprono tutto il dettato.
+SILENZIO_DB = os.environ.get("REFERTI_SILENZIO_DB", "-22dB")
+SILENZIO_MIN_S = os.environ.get("REFERTI_SILENZIO_S", "0.8")
 SILENZIO_MARGINE_S = 0.6  # ~2 × vad-speech-pad-ms
 
 
@@ -648,6 +652,8 @@ def _accoppia_ancore(anc_w: list[float], anc_a: list[float]) -> list[tuple[float
             return INF
         atteso = dw * ATEMPO
         if da < atteso - 2:
+            return INF
+        if da > atteso * 6 + 60:  # stiramento assurdo = accoppiamento sbagliato
             return INF
         return abs(da - atteso) * 0.15
 
