@@ -631,15 +631,37 @@ def _segmenti_vad(wav: Path) -> list[tuple[float, float]]:
     return seg
 
 
-def _decompatta_su_segmenti(t: float, seg: list[tuple[float, float]]) -> float:
-    """Orologio compattato dal VAD → orologio del WAV intero, esatto."""
+def _decompatta_su_segmenti(t: float, seg: list[tuple[float, float]],
+                            giuntura: float = 0.0) -> float:
+    """Orologio compattato dal VAD → orologio del WAV intero, esatto.
+    whisper-cli mette un cuscinetto di silenzio sintetico a ogni giuntura
+    tra segmenti quando ricuce l'audio compattato: misurato 0.200 s/giuntura
+    identico sul banco della verità e su un dettato reale (2026-08-25);
+    senza toglierlo l'errore si accumula (fino a +45 s sul banco lungo,
+    con il cuscinetto gli ultimi punti di controllo tornano entro 0.8 s).
+    `giuntura` è quel cuscinetto, auto-calibrato da _giuntura_vad."""
     cum = 0.0
-    for s, e in seg:
+    for k, (s, e) in enumerate(seg):
+        if k > 0:
+            if t <= cum + giuntura:
+                return s  # caduto dentro il cuscinetto sintetico
+            cum += giuntura
         d = e - s
         if t <= cum + d:
             return s + (t - cum)
         cum += d
     return seg[-1][1] if seg else t
+
+
+def _giuntura_vad(seg: list[tuple[float, float]], ultima_compatta: float) -> float:
+    """Auto-calibra il cuscinetto per giuntura: l'orologio compatto di whisper
+    (ultima parola) supera la somma dei segmenti VAD esattamente del
+    cuscinetto × (n−1). Se la trascrizione è mozza (ultima < somma) torna 0;
+    il tetto 0.35 para le stime gonfiate da allucinazioni sulla coda."""
+    somma = sum(e - s for s, e in seg)
+    if len(seg) < 2 or ultima_compatta <= somma:
+        return 0.0
+    return min(0.35, (ultima_compatta - somma) / (len(seg) - 1))
 
 
 def _ancore_audio(originale: Path) -> tuple[list[float], float]:
@@ -2310,12 +2332,22 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             ultimo_a = _ultimo_secondo(percorso(".json"))
         except Exception:
             durata_wav = ultimo_a = 0.0
-        scoperto = durata_wav - ultimo_a
+        # Col VAD i tempi di whisper sono sull'orologio COMPATTO: il metro
+        # del «quanto doveva coprire» è la somma dei segmenti di parlato
+        # (più i cuscinetti di giuntura), non la durata del WAV pieno —
+        # sennò ogni dettato pieno di pause fa scattare un retry a vuoto.
+        attesa = durata_wav
+        if USA_VAD and durata_wav >= TRONC_AUDIO_MIN_S:
+            seg_tr = _segmenti_vad(percorso(".wav"))
+            if seg_tr:
+                attesa = (sum(e - s for s, e in seg_tr)
+                          + 0.2 * (len(seg_tr) - 1))
+        scoperto = attesa - ultimo_a
         if (durata_wav >= TRONC_AUDIO_MIN_S and scoperto >= TRONC_GAP_MIN_S
-                and scoperto / durata_wav >= TRONC_GAP_FRAZ):
+                and scoperto / max(attesa, 1.0) >= TRONC_GAP_FRAZ):
             log.warning(
-                "fase=trascrizione_a file=%s esito=riprovo_troncamento audio_s=%d trascritto_s=%d",
-                file_id, int(durata_wav), int(ultimo_a),
+                "fase=trascrizione_a file=%s esito=riprovo_troncamento attesi_s=%d trascritto_s=%d",
+                file_id, int(attesa), int(ultimo_a),
             )
             ultimo_nc = 0.0
             try:
@@ -2534,12 +2566,15 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             seg_vad = _segmenti_vad(percorso(".wav")) if USA_VAD else []
             if seg_vad:
                 parole_audio = parole_da_json(percorso(".json"))
+                giuntura = _giuntura_vad(
+                    seg_vad, parole_audio[-1][1] if parole_audio else 0.0)
                 parole_audio = [
-                    (w, _decompatta_su_segmenti(x, seg_vad) * ATEMPO)
+                    (w, _decompatta_su_segmenti(x, seg_vad, giuntura) * ATEMPO)
                     for w, x in parole_audio
                 ]
-                log.info("fase=tempi file=%s orologio=mappa_vad segmenti=%d",
-                         file_id, len(seg_vad))
+                log.info(
+                    "fase=tempi file=%s orologio=mappa_vad segmenti=%d giuntura=%.3f",
+                    file_id, len(seg_vad), giuntura)
             else:
                 # Ripiego (JSON della B assente): vecchio metodo ad ancore.
                 parole_audio = parole_da_json(percorso(".json"))
