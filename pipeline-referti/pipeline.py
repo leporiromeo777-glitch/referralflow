@@ -2358,11 +2358,23 @@ def controlla_senso(testo: str, glossario: str, file_id: str) -> list[dict]:
             voci.append({"frase": frase[:300], "proposta": proposta[:300]})
     except json.JSONDecodeError:
         pass
+    # Cintura anti-diluvio (referto reale 2026-08-26: 90 frasi segnalate,
+    # ZERO proposte — il modello confuso sottolinea mezzo referto e la
+    # revisione guidata affoga nel rumore). Come per la pertinenza: se la
+    # fase vuole segnalare troppo, è lei a sbagliare — si autoannulla,
+    # tenendo al più le voci che almeno portano una proposta.
+    if len(voci) > 25:
+        con_proposta = [v for v in voci if v["proposta"]]
+        log.warning(
+            "fase=senso file=%s esito=diluvio segnalate=%d tenute_con_proposta=%d",
+            file_id, len(voci), min(len(con_proposta), 25),
+        )
+        voci = con_proposta
     log.info(
         "fase=senso file=%s esito=ok segnalate=%d con_proposta=%d durata=%.1fs",
         file_id, len(voci), sum(1 for v in voci if v["proposta"]), time.monotonic() - inizio,
     )
-    return voci[:50]
+    return voci[:25]
 
 
 PROMPT_AVVOCATO = """Sei un revisore severo («avvocato del diavolo») di referti medici in italiano. Confronta la BOZZA con il DETTATO ORIGINALE: sono lo stesso referto, il dettato è la trascrizione grezza dell'audio, la bozza è la versione ripulita.
