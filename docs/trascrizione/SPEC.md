@@ -441,6 +441,17 @@ e riquadro a scomparsa «Dettato originale» per il confronto a mano.
 Fase notificata come `avvocato` (aggiunta con `pertinenza` e `senso` alla
 whitelist dell'endpoint fase — prima quelle due venivano rifiutate in
 silenzio e l'avanzamento in pagina le saltava).
+Taratura 2026-08-26 (referto reale: 5 cartellini su 7 erano le riparazioni
+appena applicate, risegnalate perché «non nel dettato»): la catena tiene il
+registro `RIPARAZIONI_APPLICATE` (lista AI locale/esterna + dizionario
+fonetico, azzerato a inizio corsa) e l'avvocato tace se la frase, riportata
+alla forma pre-riparazione, esiste nel grezzo — l'unica differenza è una
+correzione voluta, già passata dalle guardie. Le invenzioni vere restano
+segnalate. Stessa data, pertinenza: `TERMINI_CLINICI_RE` — una frase con un
+termine clinico forte (fibrillazione, dispnea, valvol-, «condizioni
+generali»…) non parte mai spenta d'ufficio (log `salvate_cliniche`), come
+già per le cifre: il dettato a frammenti brevi fa sembrare chiacchiere anche
+il contenuto clinico.
 
 ### 6.1e — Arbitro delle divergenze (2026-08-23, piano precisione punto 5)
 

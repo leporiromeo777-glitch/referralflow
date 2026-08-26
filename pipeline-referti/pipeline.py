@@ -1660,6 +1660,7 @@ def riparazioni_glossario(testo: str, file_id: str) -> tuple[str, int]:
         if n > 0:
             testo = nuovo
             riparate += 1
+            RIPARAZIONI_APPLICATE.setdefault(file_id, []).append((da, a))
     if riparate:
         log.info(
             "fase=dizionario_fonetico file=%s esito=ok riparazioni=%d durata=%.1fs",
@@ -1711,6 +1712,14 @@ def _blocchi_di_testo(testo: str, dimensione: int) -> list[str]:
     return blocchi
 
 
+# Registro delle riparazioni APPLICATE per file (taratura 2026-08-26, dal
+# referto reale: 5 cartellini su 7 dell'avvocato del diavolo erano le nostre
+# stesse riparazioni risegnalate perché «non sono nel dettato» — ovvio, le
+# abbiamo corrette apposta). L'avvocato lo consulta per non processare le
+# correzioni volute. Si azzera a inizio corsa in elabora.
+RIPARAZIONI_APPLICATE: dict[str, list[tuple[str, str]]] = {}
+
+
 def _applica_lista(testo: str, coppie: list, file_id: str,
                    fase: str) -> tuple[str, int, int] | None:
     """Applica una lista di riparazioni con TUTTE le guardie della regola
@@ -1721,6 +1730,7 @@ def _applica_lista(testo: str, coppie: list, file_id: str,
     applicate = 0
     scartate = 0
     nuovo = testo
+    coppie_ok: list[tuple[str, str]] = []
     for voce in coppie[:150]:
         if not isinstance(voce, dict):
             scartate += 1
@@ -1737,6 +1747,7 @@ def _applica_lista(testo: str, coppie: list, file_id: str,
         nuovo, n = patt.subn(lambda _m: a, nuovo)
         if n > 0:
             applicate += 1
+            coppie_ok.append((da, a))
         else:
             scartate += 1
     if _numeri(nuovo) != _numeri(testo):
@@ -1747,6 +1758,7 @@ def _applica_lista(testo: str, coppie: list, file_id: str,
             fase, file_id,
         )
         return None
+    RIPARAZIONI_APPLICATE.setdefault(file_id, []).extend(coppie_ok)
     return nuovo, applicate, scartate
 
 
@@ -2127,6 +2139,27 @@ TESTO:
 {testo}"""
 
 
+# Salvagente clinico della pertinenza (referto reale 2026-08-26: spente
+# «Ma nessuna franca fibrillazione atriale», «In parte, in quadrigemino»,
+# «…si presenta da noi in buone condizioni generali»): il dettato a
+# frammenti brevi fa sembrare chiacchiere anche il contenuto clinico.
+# Una frase con un termine clinico forte non parte MAI spenta d'ufficio:
+# resta accesa, decide la persona.
+TERMINI_CLINICI_RE = re.compile(
+    r"(?i)(?<!\w)(?:"
+    r"fibrillazion\w*|aritmi\w*|extrasistol\w*|quadrigemin\w*|bigemin\w*|"
+    r"trigemin\w*|dispnea|ortopnea|sincope|edem\w*|stenosi|insufficienz\w*|"
+    r"valvol\w*|atriale|atriali|ventricolar\w*|sistolic\w*|diastolic\w*|"
+    r"coronar\w*|ipertrofi\w*|pericardit\w*|cardiopat\w*|scompens\w*|"
+    r"ischemi\w*|infart\w*|angina|palpitazion\w*|ipertension\w*|"
+    r"ipotension\w*|tachicardi\w*|bradicardi\w*|soffio|compensat\w*|"
+    r"diagnosi|terapia|farmac\w*|sintom\w*|paziente|anamnesi|eiezion\w*|"
+    r"frazion\w*|mitralic\w*|aortic\w*|sinusale|calcificazion\w*|"
+    r"cicloergometri\w*|ecocardiogramm\w*|elettrocardiogramm\w*"
+    r")(?!\w)|condizioni generali|esame clinico"
+)
+
+
 def trova_divagazioni(testo: str, file_id: str) -> list[str]:
     """Fase «pertinenza»: l'AI segnala le frasi fuori tema, il testo resta
     INTATTO — le citazioni finiscono in bozza e la pagina le mostra spente,
@@ -2153,6 +2186,10 @@ def trova_divagazioni(testo: str, file_id: str) -> list[str]:
     vere = [f for f in vere if not re.search(r"\d", f)]
     if con_cifre:
         log.info("fase=pertinenza file=%s salvate_con_cifre=%d", file_id, con_cifre)
+    cliniche = sum(1 for f in vere if TERMINI_CLINICI_RE.search(f))
+    vere = [f for f in vere if not TERMINI_CLINICI_RE.search(f)]
+    if cliniche:
+        log.info("fase=pertinenza file=%s salvate_cliniche=%d", file_id, cliniche)
     if sum(len(f) for f in vere) > len(testo) * 0.35:
         log.warning(
             "fase=pertinenza file=%s esito=ignorata motivo=esclusione_eccessiva proposte=%d durata=%.1fs",
@@ -2282,6 +2319,16 @@ def avvocato_diavolo(bozza: str, grezzo: str, file_id: str,
         # della punteggiatura, esiste tale e quale nel dettato, il contenuto
         # È supportato — la segnalazione muore qui.
         if re.sub(r"\s+", " ", _nudo(frase)).strip() in grezzo_nudo:
+            continue
+        # Le riparazioni VOLUTE non si processano (taratura 2026-08-26): se
+        # la frase, riportata alla forma pre-riparazione, esiste nel dettato,
+        # l'unica differenza è una correzione applicata apposta dalla catena
+        # (con le sue guardie) — risegnalarla raddoppia la revisione a vuoto.
+        prima = frase
+        for da, a in RIPARAZIONI_APPLICATE.get(file_id, []):
+            if a and a in prima:
+                prima = prima.replace(a, da)
+        if prima != frase and re.sub(r"\s+", " ", _nudo(prima)).strip() in grezzo_nudo:
             continue
         fuori.append({"frase": frase[:400], "motivo": motivo})
     log.info(
@@ -2566,6 +2613,9 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
     `notifica(fase)`, se passata, viene chiamata a ogni cambio di fase
     (avanzamento vivo sulla piattaforma per i dettati del drag & drop)."""
     file_id = file_id_di(ingresso)
+    # Registro delle riparazioni pulito a ogni corsa (il servizio è un
+    # processo lungo: senza azzeramento un retry sommerebbe corse diverse).
+    RIPARAZIONI_APPLICATE.pop(file_id, None)
     # Visita registrata o dettato classico? Dal nome del file (vedi _e_visita).
     visita = _e_visita(ingresso.name)
     # Avvisi per chi rivede: raccolti lungo tutta la corsa.
