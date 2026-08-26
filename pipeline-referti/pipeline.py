@@ -218,6 +218,27 @@ MODELLO_ESTERNO = os.environ.get("REFERTI_LLM_ESTERNO", "claude-opus-5")
 ANTHROPIC_URL = os.environ.get(
     "REFERTI_ANTHROPIC_URL", "https://api.anthropic.com/v1/messages")
 ESTERNO_TIMEOUT_S = int(os.environ.get("REFERTI_ESTERNO_TIMEOUT", "180"))
+# Trasporto MANUALE per il collaudo (2026-08-26): se esiste il file ATTIVO
+# nella cartella di scambio, il testo anonimizzato viene scritto lì come
+# <file_id>.anon.txt e la pipeline attende <file_id>.lista.json (il
+# correttore è una persona/AI che lavora sul Mac, niente chiave API).
+# Stessa anonimizzazione, stessa controprova, stesse guardie del percorso
+# API. Timeout → ripiego sulla catena locale come sempre.
+SCAMBIO_ESTERNO_DIR = Path(os.environ.get(
+    "REFERTI_SCAMBIO_ESTERNO",
+    str(Path.home() / "referti" / "scambio-esterno")))
+SCAMBIO_ATTESA_S = int(os.environ.get("REFERTI_SCAMBIO_ATTESA", "900"))
+
+
+def _esterno_attivo() -> str | None:
+    """Com'è acceso il percorso esterno, valutato A OGNI referto (così la
+    modalità manuale si accende/spegne creando o togliendo il file ATTIVO,
+    senza riavviare il servizio)."""
+    if (SCAMBIO_ESTERNO_DIR / "ATTIVO").exists():
+        return "manuale"
+    if CORREZIONE_ESTERNA and ANTHROPIC_API_KEY:
+        return "api"
+    return None
 
 # I prompt di SPEC §6: VALIDATI SU REFERTI REALI, copiati carattere per
 # carattere. NON riscriverli, NON «migliorarli» (SPEC §0.3). Il segnaposto
@@ -1851,7 +1872,36 @@ def _chiama_esterno(prompt: str, file_id: str) -> str:
     raise RuntimeError("api esterna non risponde")
 
 
-def _correggi_a_lista_esterna(testo: str, file_id: str) -> str | None:
+def _chiama_esterno_manuale(anon: str, file_id: str) -> str:
+    """Trasporto manuale del collaudo: scrive il testo ANONIMIZZATO in
+    scambio-esterno/<file_id>.anon.txt e attende la lista di riparazioni
+    in <file_id>.lista.json (stesso formato del prompt §6.1b). Il file di
+    scambio viene tolto in ogni caso; niente risposta entro il tempo
+    massimo → RuntimeError → ripiego sulla catena locale."""
+    SCAMBIO_ESTERNO_DIR.mkdir(parents=True, exist_ok=True)
+    consegna = SCAMBIO_ESTERNO_DIR / f"{file_id}.anon.txt"
+    risposta = SCAMBIO_ESTERNO_DIR / f"{file_id}.lista.json"
+    risposta.unlink(missing_ok=True)
+    consegna.write_text(anon, encoding="utf-8")
+    log.info("fase=correzione_esterna file=%s trasporto=manuale attesa_s=%d",
+             file_id, SCAMBIO_ATTESA_S)
+    scadenza = time.monotonic() + SCAMBIO_ATTESA_S
+    try:
+        while time.monotonic() < scadenza:
+            if risposta.exists():
+                time.sleep(1)  # margine: il file potrebbe essere a metà scrittura
+                testo = risposta.read_text(encoding="utf-8")
+                if testo.strip():
+                    return testo
+            time.sleep(5)
+    finally:
+        consegna.unlink(missing_ok=True)
+        risposta.unlink(missing_ok=True)
+    raise RuntimeError("correttore manuale non ha risposto")
+
+
+def _correggi_a_lista_esterna(testo: str, file_id: str,
+                              modo: str = "api") -> str | None:
     """Correzione a lista col modello di punta esterno (2026-08-26, idea
     dell'utente): il testo viaggia ANONIMIZZATO, torna solo la lista di
     riparazioni, il codice la applica al testo ORIGINALE con le stesse
@@ -1862,12 +1912,15 @@ def _correggi_a_lista_esterna(testo: str, file_id: str) -> str | None:
     if anon is None:
         return None
     try:
-        uscita = _chiama_esterno(
-            PROMPT_CORREZIONE_LISTA.replace("{testo}", anon), file_id)
+        if modo == "manuale":
+            uscita = _chiama_esterno_manuale(anon, file_id)
+        else:
+            uscita = _chiama_esterno(
+                PROMPT_CORREZIONE_LISTA.replace("{testo}", anon), file_id)
     except RuntimeError:
         log.warning(
-            "fase=correzione_esterna file=%s esito=fallita motivo=api_non_risponde",
-            file_id)
+            "fase=correzione_esterna file=%s esito=fallita motivo=nessuna_risposta modo=%s",
+            file_id, modo)
         return None
     m = re.search(r"\{.*\}", uscita, re.DOTALL)
     if not m:
@@ -1947,8 +2000,9 @@ def correggi_llm(testo: str, file_id: str, rapporto_scarto: Path) -> str:
     Dal 2026-08-21 il metodo di prima scelta è la lista di riparazioni
     (REFERTI_CORREZIONE_METODO=lista): la riscrittura integrale qui sotto
     scatta solo come ripiego."""
-    if CORREZIONE_ESTERNA and ANTHROPIC_API_KEY:
-        esito_esterno = _correggi_a_lista_esterna(testo, file_id)
+    modo_esterno = _esterno_attivo()
+    if modo_esterno:
+        esito_esterno = _correggi_a_lista_esterna(testo, file_id, modo_esterno)
         if esito_esterno is not None:
             return esito_esterno
         log.warning(

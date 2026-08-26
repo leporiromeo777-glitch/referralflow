@@ -375,7 +375,13 @@ nessuna ri-sostituzione, i nomi veri non escono mai dal Mac. Ogni intoppo
 (anonimizzazione incerta, API muta, JSON rotto) → ripiego silenzioso sulla
 catena locale §6.1b: il referto esce comunque. DOPPIO interruttore:
 `REFERTI_CORREZIONE_ESTERNA=1` **e** `ANTHROPIC_API_KEY` nel plist del
-servizio. NON accendere prima della validazione legale (stessa di Stripe e
+servizio. TRASPORTO MANUALE per il collaudo (senza chiave API): se esiste
+`~/referti/scambio-esterno/ATTIVO` (controllato a ogni referto, niente
+riavvii), il testo anonimizzato viene scritto lì come `<file_id>.anon.txt`
+e la pipeline attende `<file_id>.lista.json` (stesso formato §6.1b) fino a
+`REFERTI_SCAMBIO_ATTESA` secondi (default 900); poi ripiego locale. Stessa
+anonimizzazione, stessa controprova, stesse guardie del percorso API; i
+file di scambio vengono sempre ripuliti. NON accendere prima della validazione legale (stessa di Stripe e
 della cattura impegnativa: DPA col fornitore + informativa) — finché sul Mac
 esiste il testo originale, quello inviato è pseudonimizzato, non anonimo in
 senso stretto. Ripristino della catena locale pura: tag git
