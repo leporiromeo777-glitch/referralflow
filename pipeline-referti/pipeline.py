@@ -1988,20 +1988,31 @@ def _chiama_esterno_openai(prompt: str, file_id: str) -> str:
     cfg = _config_esterno()
     if not cfg:
         raise RuntimeError("config esterna mancante")
-    corpo = json.dumps({
+    base = {
         "model": cfg["modello"], "temperature": 0,
         "max_tokens": int(cfg.get("max_gettoni", "8000")),
-        "chat_template_kwargs": {"enable_thinking": False},
         "messages": [{"role": "user", "content": prompt}],
-    }).encode("utf-8")
+    }
     for tentativo in (1, 2):
         try:
-            richiesta = urllib.request.Request(
-                cfg["url"], data=corpo,
-                headers={"Content-Type": "application/json",
-                         "Authorization": f"Bearer {cfg['chiave']}"})
-            with urllib.request.urlopen(richiesta, timeout=ESTERNO_TIMEOUT_S) as r:
-                dati = json.loads(r.read().decode("utf-8"))
+            dati = None
+            # Pensatoio spento dove il server accetta il campo; chi lo
+            # rifiuta (Google valida stretto: 400) riceve la base nuda.
+            for extra in ({"chat_template_kwargs": {"enable_thinking": False}}, {}):
+                corpo = json.dumps({**base, **extra}).encode("utf-8")
+                richiesta = urllib.request.Request(
+                    cfg["url"], data=corpo,
+                    headers={"Content-Type": "application/json",
+                             "Authorization": f"Bearer {cfg['chiave']}"})
+                try:
+                    with urllib.request.urlopen(richiesta, timeout=ESTERNO_TIMEOUT_S) as r:
+                        dati = json.loads(r.read().decode("utf-8"))
+                    break
+                except urllib.error.HTTPError as e:
+                    if e.code != 400:
+                        raise
+            if dati is None:
+                raise urllib.error.URLError("richiesta rifiutata")
             msg = dati["choices"][0]["message"]
             testo = msg.get("content")
             if isinstance(testo, list):
@@ -2266,7 +2277,12 @@ TERMINI_CLINICI_RE = re.compile(
     r"ipotension\w*|tachicardi\w*|bradicardi\w*|soffio|compensat\w*|"
     r"diagnosi|terapia|farmac\w*|sintom\w*|paziente|anamnesi|eiezion\w*|"
     r"frazion\w*|mitralic\w*|aortic\w*|sinusale|calcificazion\w*|"
-    r"cicloergometri\w*|ecocardiogramm\w*|elettrocardiogramm\w*"
+    r"cicloergometri\w*|ecocardiogramm\w*|elettrocardiogramm\w*|"
+    # Allargato il 2026-08-27 (referto Qwen dal vivo: spente a torto la riga
+    # del subileo e la narrazione della cicloergometria a frammenti).
+    r"dolor\w*|addominal\w*|aderenz\w*|conservativ\w*|subile\w*|"
+    r"carico|watt\w*|sforzo|massimale|negativ\w*|positiv\w*|pressori\w*|"
+    r"ricover\w*|chirurg\w*|trattament\w*|dispositiv\w*|laboratori\w*"
     r")(?!\w)|condizioni generali|esame clinico"
 )
 
@@ -2440,8 +2456,13 @@ def avvocato_diavolo(bozza: str, grezzo: str, file_id: str,
         # Anti-pedanteria (primo referto reale 2026-08-24: 9 segnalazioni su
         # 14 erano «senza punto»/«senza virgola»): se la frase, spogliata
         # della punteggiatura, esiste tale e quale nel dettato, il contenuto
-        # È supportato — la segnalazione muore qui.
-        if re.sub(r"\s+", " ", _nudo(frase)).strip() in grezzo_nudo:
+        # È supportato — la segnalazione muore qui. Dal 2026-08-27 anche i
+        # TRATTINI non fanno cartellino («Ma-lieve» vs «ma lieve»,
+        # «steno-insufficienza» vs «stenoinsufficienza»): si confrontano le
+        # varianti col trattino tolto e col trattino reso spazio.
+        varianti = (frase, frase.replace("-", " "), frase.replace("-", ""))
+        if any(re.sub(r"\s+", " ", _nudo(v)).strip() in grezzo_nudo
+               for v in varianti):
             continue
         # Le riparazioni VOLUTE non si processano (taratura 2026-08-26): se
         # la frase, riportata alla forma pre-riparazione, esiste nel dettato,
@@ -3114,6 +3135,15 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # confrontare la bozza con ciò che è stato davvero trascritto.
         "frasi_non_supportate": frasi_non_supportate,
         "testo_grezzo": grezzo_a,
+        # Trasparenza totale (2026-08-27, referto Qwen dal vivo: «REG→RAC»
+        # applicata dalle guardie fonetiche ma sbagliata nel merito, e
+        # l'avvocato tace sulle correzioni volute): OGNI scambio applicato
+        # in automatico (lista AI + glossario fonetico) finisce in bozza,
+        # e la revisione guidata li mostra uno a uno, annullabili.
+        "riparazioni_applicate": [
+            {"da": da, "a": a}
+            for da, a in RIPARAZIONI_APPLICATE.get(file_id, [])[:80]
+        ],
         "richiede_revisione": True,
     }
     return file_id, payload

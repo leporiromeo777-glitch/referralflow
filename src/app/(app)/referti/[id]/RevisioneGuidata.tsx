@@ -12,6 +12,7 @@ import { useMemo, useState } from 'react';
 
 type FraseDaChiarire = { frase: string; proposta: string };
 type FraseNonSupportata = { frase: string; motivo: string };
+type Riparazione = { da: string; a: string };
 
 function spezzaInFrasi(testo: string): string[] {
   const pezzi: string[] = [];
@@ -46,6 +47,7 @@ export function RevisioneGuidata({
   campi,
   valoriNumerici,
   parole = [],
+  riparazioni = [],
 }: {
   testo: string;
   divagazioni: string[];
@@ -55,6 +57,7 @@ export function RevisioneGuidata({
   campi: Record<string, string>;
   valoriNumerici: Record<string, unknown> | null;
   parole?: [string, number][];
+  riparazioni?: Riparazione[];
 }) {
   const frasiIniziali = useMemo(() => spezzaInFrasi(testo), [testo]);
   const [frasi, setFrasi] = useState<string[]>(frasiIniziali);
@@ -164,8 +167,19 @@ export function RevisioneGuidata({
     segna(id);
   }
 
+  // Annulla una correzione automatica: la macchina l'aveva applicata
+  // ovunque, l'annullamento la ripristina ovunque (parola per parola).
+  function annullaRiparazione(v: Riparazione, id: string) {
+    setFrasi((prev) => prev.map((f) => f.split(v.a).join(v.da)));
+    segna(id);
+  }
+  const fraseConRiparazione = (v: Riparazione) =>
+    frasiIniziali.find((f) => f.includes(v.a)) ?? null;
+
   // Passi presenti solo se hanno contenuto (i campi e la rilettura sempre).
   const passi: { chiave: string; titolo: string; conta?: number }[] = [];
+  if (riparazioni.length > 0)
+    passi.push({ chiave: 'ripar', titolo: 'Correzioni automatiche', conta: riparazioni.length });
   if (rosse.length > 0)
     passi.push({ chiave: 'rosse', titolo: 'Frasi da verificare col dettato', conta: rosse.length });
   if (arancioni.length > 0)
@@ -232,6 +246,43 @@ export function RevisioneGuidata({
           rileggi tutto e confermi. Niente si salva finché non confermi.
         </p>
       </div>
+
+      {attivo === 'ripar' && (
+        <div className="rg-corpo">
+          <p className="muted">
+            Tutto quello che la macchina ha corretto da sola nel testo (parola
+            storpiata → forma scelta). Le guardie controllano suono e numeri, ma
+            il merito medico lo giudichi tu: se una correzione è sbagliata,
+            annullala e torna la parola dettata.
+          </p>
+          {riparazioni.map((v, i) => {
+            const contesto = fraseConRiparazione(v);
+            return (
+              <div key={i} className={`rg-item${fatte.has(`p${i}`) ? ' rg-fatta' : ''}`}>
+                <p className="rg-frase">
+                  <s className="muted">{v.da}</s> → <strong>{v.a}</strong>
+                </p>
+                {contesto && <p className="rg-motivo">…{contesto}…</p>}
+                {!fatte.has(`p${i}`) && (
+                  <div className="rg-azioni">
+                    {contesto && bottoneRiascolta(contesto)}
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => annullaRiparazione(v, `p${i}`)}
+                    >
+                      ↩︎ Annulla (ripristina «{v.da}»)
+                    </button>
+                    <button type="button" className="btn btn-ghost" onClick={() => segna(`p${i}`)}>
+                      ✓ Corretta
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {attivo === 'rosse' && (
         <div className="rg-corpo">

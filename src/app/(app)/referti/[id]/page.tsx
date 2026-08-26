@@ -32,6 +32,7 @@ type Payload = {
   divagazioni?: string[];
   frasi_da_chiarire?: { frase: string; proposta: string }[];
   frasi_non_supportate?: { frase: string; motivo: string }[];
+  riparazioni_applicate?: { da: string; a: string }[];
   testo_grezzo?: string;
 };
 
@@ -371,6 +372,7 @@ export default async function RefertoBozza({
             divagazioni={Array.isArray(p.divagazioni) ? p.divagazioni : []}
             frasiDaChiarire={Array.isArray(p.frasi_da_chiarire) ? p.frasi_da_chiarire : []}
             frasiNonSupportate={Array.isArray(p.frasi_non_supportate) ? p.frasi_non_supportate : []}
+            riparazioni={Array.isArray(p.riparazioni_applicate) ? p.riparazioni_applicate : []}
             note={Array.isArray(p.note_segreteria) ? p.note_segreteria.filter((n): n is string => typeof n === 'string') : []}
             campi={Object.fromEntries(Object.entries(campi).filter(([, v]) => typeof v === 'string')) as Record<string, string>}
             valoriNumerici={valoriNumerici}

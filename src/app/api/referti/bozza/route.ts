@@ -92,6 +92,16 @@ export async function POST(req: NextRequest) {
         frase: v.frase.slice(0, 400),
         motivo: typeof v.motivo === 'string' ? v.motivo.slice(0, 200) : '',
       })),
+    // Correzioni applicate in automatico dalla catena (lista AI + glossario
+    // fonetico): la revisione guidata le mostra una a una, annullabili.
+    riparazioni_applicate: lista(body?.riparazioni_applicate)
+      .filter((v: unknown): v is { da: string; a: string } =>
+        !!v && typeof v === 'object'
+        && typeof (v as any).da === 'string' && typeof (v as any).a === 'string')
+      .map((v: { da: string; a: string }) => ({
+        da: v.da.slice(0, 80),
+        a: v.a.slice(0, 80),
+      })),
     // Dettato grezzo (trascrizione prima di ogni ritocco): serve alla pagina
     // di revisione per il confronto «frase → cosa è stato detto davvero».
     testo_grezzo:
