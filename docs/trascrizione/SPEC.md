@@ -356,6 +356,32 @@ Selettore `REFERTI_CORREZIONE_METODO` = `lista` (default) | `riscrittura`;
 se la lista non è utilizzabile (JSON rotto, modello muto) si ripiega da soli
 sulla riscrittura §6.1, che resta la rete di sicurezza.
 
+### 6.1h — Correzione esterna anonimizzata (2026-08-26, SPENTA di default)
+
+Idea dell'utente: il testo ANONIMIZZATO va a un modello di punta esterno
+(API Anthropic, `REFERTI_LLM_ESTERNO`, default claude-opus-5) che rimanda
+SOLO la lista di riparazioni (stesso `PROMPT_CORREZIONE_LISTA` di §6.1b);
+il codice la applica al testo ORIGINALE con le STESSE guardie del percorso
+locale (`_applica_lista`, condivisa). Anonimizzazione prima dell'invio
+(`_anonimizza_per_esterno` + `PROMPT_DATI_PERSONALI`): l'AI LOCALE individua
+i dati identificativi, il CODICE li sostituisce («Persona N», «[data N]»,
+«[dato rimosso]», comprese le singole parole ≥4 lettere dei nomi composti)
+più la rete regex (AVS, email, telefoni CH, date). CONTROPROVA BLOCCANTE in
+due tempi: il codice verifica che nessun dato trovato sia sopravvissuto, poi
+una seconda passata AI sul testo anonimizzato — un nome vero ancora presente
+(verificato dal codice) annulla l'invio. Le coppie di ritorno che citano un
+segnaposto cadono da sole (contengono cifre → guardia della regola d'oro):
+nessuna ri-sostituzione, i nomi veri non escono mai dal Mac. Ogni intoppo
+(anonimizzazione incerta, API muta, JSON rotto) → ripiego silenzioso sulla
+catena locale §6.1b: il referto esce comunque. DOPPIO interruttore:
+`REFERTI_CORREZIONE_ESTERNA=1` **e** `ANTHROPIC_API_KEY` nel plist del
+servizio. NON accendere prima della validazione legale (stessa di Stripe e
+della cattura impegnativa: DPA col fornitore + informativa) — finché sul Mac
+esiste il testo originale, quello inviato è pseudonimizzato, non anonimo in
+senso stretto. Ripristino della catena locale pura: tag git
+`catena-locale-v1` + copia `~/referti-pipeline/pipeline.py.catena-locale`
+(ma basta lasciare l'interruttore spento: il percorso esterno non parte).
+
 ### 6.1d — Aggancio fonetico al glossario (2026-08-23, piano precisione punto 3)
 
 Due meccanismi in `pipeline.py`, entrambi deterministici:

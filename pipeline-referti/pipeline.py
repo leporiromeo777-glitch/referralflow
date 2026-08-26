@@ -200,6 +200,25 @@ OLLAMA_TENTATIVI = 3
 # larga resta contenuto anche col 27b sul Mac da 24 GB.
 OLLAMA_NUM_CTX = int(os.environ.get("REFERTI_NUM_CTX", "12288"))
 
+# ── Correzione esterna (SPENTA di default, 2026-08-26) ───────────────────────
+# Idea dell'utente: il testo ANONIMIZZATO (nomi → «Persona N», date → «[data
+# N]», contatti oscurati) va a un modello di punta esterno che rimanda SOLO la
+# lista di riparazioni; il codice la applica al testo ORIGINALE con le stesse
+# guardie del percorso locale. Le coppie che citano un segnaposto cadono da
+# sole (contengono cifre → guardia della regola d'oro): il modello esterno non
+# vede mai un nome vero e non serve nessuna ri-sostituzione.
+# DOPPIO interruttore: serve sia la chiave API sia il flag esplicito.
+# NON accendere prima della validazione legale (stessa di Stripe e della
+# cattura impegnativa: DPA col fornitore + informativa). Se l'anonimizzazione
+# non supera la controprova, o l'API non risponde, si ripiega in silenzio
+# sulla catena locale: il referto esce comunque.
+CORREZIONE_ESTERNA = os.environ.get("REFERTI_CORREZIONE_ESTERNA", "0") == "1"
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+MODELLO_ESTERNO = os.environ.get("REFERTI_LLM_ESTERNO", "claude-opus-5")
+ANTHROPIC_URL = os.environ.get(
+    "REFERTI_ANTHROPIC_URL", "https://api.anthropic.com/v1/messages")
+ESTERNO_TIMEOUT_S = int(os.environ.get("REFERTI_ESTERNO_TIMEOUT", "180"))
+
 # I prompt di SPEC §6: VALIDATI SU REFERTI REALI, copiati carattere per
 # carattere. NON riscriverli, NON «migliorarli» (SPEC §0.3). Il segnaposto
 # {testo} si riempie con str.replace, mai con format (il testo può contenere
@@ -248,6 +267,20 @@ Regole obbligatorie:
 
 Rispondi SOLO con un oggetto JSON valido, senza testo prima o dopo:
 {"riparazioni": [{"da": "parola storpiata", "a": "forma corretta"}]}
+
+TESTO:
+{testo}"""
+
+# Prompt per l'anonimizzazione pre-invio esterno (modello LOCALE): individua
+# i dati identificativi, il CODICE li sostituisce — l'AI non riscrive mai.
+PROMPT_DATI_PERSONALI = """Nel testo qui sotto individua i DATI IDENTIFICATIVI di persone: nomi e cognomi (anche storpiati dalla trascrizione automatica), date di nascita, indirizzi privati, numeri di telefono, email, numeri AVS.
+
+NON riscrivere il testo. NON correggere nulla. Elenca solo i dati trovati, citando ciascuno ESATTAMENTE come compare nel testo (stesse maiuscole e accenti).
+
+Rispondi SOLO con un oggetto JSON valido, senza testo prima o dopo:
+{"dati": [{"testo": "citazione esatta", "tipo": "nome"}]}
+Tipi possibili: "nome", "data_nascita", "indirizzo", "contatto".
+Se non trovi nulla, rispondi {"dati": []}.
 
 TESTO:
 {testo}"""
@@ -1657,6 +1690,206 @@ def _blocchi_di_testo(testo: str, dimensione: int) -> list[str]:
     return blocchi
 
 
+def _applica_lista(testo: str, coppie: list, file_id: str,
+                   fase: str) -> tuple[str, int, int] | None:
+    """Applica una lista di riparazioni con TUTTE le guardie della regola
+    d'oro: niente cifre nelle coppie, lunghezze contenute, somiglianza
+    fonetica (_riparazione_plausibile), cintura finale sulla firma numerica.
+    Condivisa tra il percorso locale e quello esterno: le guardie sono le
+    stesse qualunque sia il modello che propone."""
+    applicate = 0
+    scartate = 0
+    nuovo = testo
+    for voce in coppie[:150]:
+        if not isinstance(voce, dict):
+            scartate += 1
+            continue
+        da = str(voce.get("da", "")).strip()
+        a = str(voce.get("a", "")).strip()
+        if (not da or not a or da == a or len(da) > 60 or len(a) > 60
+                or re.search(r"\d", da) or re.search(r"\d", a)
+                or len(a.split()) > len(da.split()) + 2
+                or not _riparazione_plausibile(da, a)):
+            scartate += 1
+            continue
+        patt = re.compile(r"(?<!\w)" + re.escape(da) + r"(?!\w)")
+        nuovo, n = patt.subn(lambda _m: a, nuovo)
+        if n > 0:
+            applicate += 1
+        else:
+            scartate += 1
+    if _numeri(nuovo) != _numeri(testo):
+        # Non dovrebbe mai accadere (le coppie con cifre sono rifiutate):
+        # cintura di sicurezza sul vincolo §2.4.
+        log.warning(
+            "fase=%s file=%s esito=lista_scartata motivo=numeri_cambiati",
+            fase, file_id,
+        )
+        return None
+    return nuovo, applicate, scartate
+
+
+# ── Percorso esterno: anonimizza → modello di punta → lista → guardie ───────
+
+def _anonimizza_per_esterno(testo: str, file_id: str) -> str | None:
+    """Prepara il testo per l'invio esterno: il modello LOCALE individua i
+    dati identificativi, il CODICE li sostituisce con segnaposto («Persona
+    N», «[data N]», «[contatto]») più la rete regex (AVS, email, telefoni,
+    date). CONTROPROVA BLOCCANTE in due tempi: (1) il codice verifica che
+    nessun dato trovato sia ancora nel testo; (2) una seconda passata AI
+    sul testo anonimizzato — se trova un nome che c'è davvero (verificato
+    dal codice, i segnaposto non contano), si torna None e il chiamante
+    resta sulla catena locale. Nei log SOLO conteggi, mai i dati."""
+    try:
+        uscita = chiama_ollama(
+            PROMPT_DATI_PERSONALI.replace("{testo}", testo), file_id,
+            "correzione_esterna", formato_json=True, max_gettoni=800,
+        )
+        dati = json.loads(uscita)
+    except (RuntimeError, json.JSONDecodeError):
+        return None
+    voci = dati.get("dati") if isinstance(dati, dict) else None
+    if not isinstance(voci, list):
+        return None
+    anon = testo
+    persone = 0
+    date_n = 0
+    sensibili: list[str] = []  # tutto ciò che NON deve più comparire
+    for voce in voci[:80]:
+        if not isinstance(voce, dict):
+            continue
+        s = str(voce.get("testo", "")).strip()
+        tipo = str(voce.get("tipo", "")).strip()
+        if not s or len(s) > 80 or s not in anon and s.lower() not in anon.lower():
+            continue
+        if tipo == "nome":
+            persone += 1
+            segnaposto = f"Persona {persone}"
+        elif tipo == "data_nascita":
+            date_n += 1
+            segnaposto = f"[data {date_n}]"
+        else:
+            segnaposto = "[dato rimosso]"
+        anon = re.sub(re.escape(s), segnaposto, anon, flags=re.IGNORECASE)
+        sensibili.append(s)
+        # Le singole parole di un nome composto (≥4 lettere) coprono le
+        # citazioni parziali («la signora Rossi» dopo «Maria Rossi»).
+        if tipo == "nome":
+            for pezzo in s.split():
+                if len(pezzo) >= 4 and pezzo.isalpha():
+                    anon = re.sub(r"(?<!\w)" + re.escape(pezzo) + r"(?!\w)",
+                                  segnaposto, anon, flags=re.IGNORECASE)
+                    sensibili.append(pezzo)
+    # Rete regex: cose a struttura fissa che l'AI può mancare.
+    anon = re.sub(r"756\.\d{4}\.\d{4}\.\d{2}", "[dato rimosso]", anon)
+    anon = re.sub(r"[\w.+-]+@[\w-]+\.[\w.]+", "[dato rimosso]", anon)
+    anon = re.sub(r"(?<!\d)(?:\+41|0041|0)\s?7[5-9](?:[ .]?\d{2,3}){3}(?!\d)",
+                  "[dato rimosso]", anon)
+    anon = re.sub(r"(?<!\d)\d{1,2}[./]\d{1,2}[./](?:19|20)?\d{2}(?!\d)",
+                  "[data]", anon)
+    # Controprova 1 (codice): nessun dato trovato deve essere sopravvissuto.
+    for s in sensibili:
+        if re.search(r"(?<!\w)" + re.escape(s) + r"(?!\w)", anon, re.IGNORECASE):
+            log.warning(
+                "fase=correzione_esterna file=%s esito=annullata motivo=dato_sopravvissuto",
+                file_id)
+            return None
+    # Controprova 2 (seconda passata AI sul testo anonimizzato).
+    try:
+        uscita2 = chiama_ollama(
+            PROMPT_DATI_PERSONALI.replace("{testo}", anon), file_id,
+            "correzione_esterna", formato_json=True, max_gettoni=800,
+        )
+        dati2 = json.loads(uscita2)
+    except (RuntimeError, json.JSONDecodeError):
+        return None
+    for voce in (dati2.get("dati") or []) if isinstance(dati2, dict) else []:
+        if not isinstance(voce, dict) or str(voce.get("tipo", "")) != "nome":
+            continue
+        s = str(voce.get("testo", "")).strip()
+        # Conta solo se è davvero nel testo e non è un nostro segnaposto.
+        if (s and s in anon and not s.startswith("Persona")
+                and not s.startswith("[")):
+            log.warning(
+                "fase=correzione_esterna file=%s esito=annullata motivo=controprova_nome",
+                file_id)
+            return None
+    log.info(
+        "fase=correzione_esterna file=%s anonimizzazione=ok persone=%d date=%d",
+        file_id, persone, date_n)
+    return anon
+
+
+def _chiama_esterno(prompt: str, file_id: str) -> str:
+    """Una chiamata all'API Anthropic (messages), 2 tentativi, temperatura 0.
+    Mai contenuti nei log; qui arriva SOLO testo già anonimizzato."""
+    corpo = json.dumps({
+        "model": MODELLO_ESTERNO,
+        "max_tokens": 2000,
+        "temperature": 0,
+        "messages": [{"role": "user", "content": prompt}],
+    }).encode("utf-8")
+    for tentativo in (1, 2):
+        try:
+            richiesta = urllib.request.Request(
+                ANTHROPIC_URL, data=corpo,
+                headers={
+                    "Content-Type": "application/json",
+                    "x-api-key": ANTHROPIC_API_KEY,
+                    "anthropic-version": "2023-06-01",
+                })
+            with urllib.request.urlopen(richiesta, timeout=ESTERNO_TIMEOUT_S) as r:
+                dati = json.loads(r.read().decode("utf-8"))
+            testo = "".join(b.get("text", "") for b in dati.get("content") or []
+                            if isinstance(b, dict) and b.get("type") == "text")
+            if testo.strip():
+                return testo
+        except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError):
+            pass
+        if tentativo == 1:
+            time.sleep(5)
+    raise RuntimeError("api esterna non risponde")
+
+
+def _correggi_a_lista_esterna(testo: str, file_id: str) -> str | None:
+    """Correzione a lista col modello di punta esterno (2026-08-26, idea
+    dell'utente): il testo viaggia ANONIMIZZATO, torna solo la lista di
+    riparazioni, il codice la applica al testo ORIGINALE con le stesse
+    guardie del percorso locale. Le coppie che citano un segnaposto cadono
+    da sole (contengono cifre). Ogni intoppo → None → catena locale."""
+    inizio = time.monotonic()
+    anon = _anonimizza_per_esterno(testo, file_id)
+    if anon is None:
+        return None
+    try:
+        uscita = _chiama_esterno(
+            PROMPT_CORREZIONE_LISTA.replace("{testo}", anon), file_id)
+    except RuntimeError:
+        log.warning(
+            "fase=correzione_esterna file=%s esito=fallita motivo=api_non_risponde",
+            file_id)
+        return None
+    m = re.search(r"\{.*\}", uscita, re.DOTALL)
+    if not m:
+        return None
+    try:
+        dati = json.loads(m.group(0))
+    except json.JSONDecodeError:
+        return None
+    coppie = dati.get("riparazioni") if isinstance(dati, dict) else None
+    if not isinstance(coppie, list):
+        return None
+    esito = _applica_lista(testo, coppie, file_id, "correzione_esterna")
+    if esito is None:
+        return None
+    nuovo, applicate, scartate = esito
+    log.info(
+        "fase=correzione_esterna file=%s esito=ok riparazioni=%d scartate=%d durata=%.1fs",
+        file_id, applicate, scartate, time.monotonic() - inizio,
+    )
+    return nuovo
+
+
 def _correggi_a_lista(testo: str, file_id: str) -> str | None:
     """Correzione «a lista di riparazioni» (idea dell'utente, 2026-08-21):
     il modello NON riscrive il testo — elenca solo gli scambi «parola
@@ -1691,35 +1924,10 @@ def _correggi_a_lista(testo: str, file_id: str) -> str | None:
     coppie = dati.get("riparazioni") if isinstance(dati, dict) else None
     if not isinstance(coppie, list):
         return None
-    applicate = 0
-    scartate = 0
-    nuovo = testo
-    for voce in coppie[:150]:
-        if not isinstance(voce, dict):
-            scartate += 1
-            continue
-        da = str(voce.get("da", "")).strip()
-        a = str(voce.get("a", "")).strip()
-        if (not da or not a or da == a or len(da) > 60 or len(a) > 60
-                or re.search(r"\d", da) or re.search(r"\d", a)
-                or len(a.split()) > len(da.split()) + 2
-                or not _riparazione_plausibile(da, a)):
-            scartate += 1
-            continue
-        patt = re.compile(r"(?<!\w)" + re.escape(da) + r"(?!\w)")
-        nuovo, n = patt.subn(lambda _m: a, nuovo)
-        if n > 0:
-            applicate += 1
-        else:
-            scartate += 1
-    if _numeri(nuovo) != _numeri(testo):
-        # Non dovrebbe mai accadere (le coppie con cifre sono rifiutate):
-        # cintura di sicurezza sul vincolo §2.4.
-        log.warning(
-            "fase=correzione_llm file=%s esito=lista_scartata motivo=numeri_cambiati",
-            file_id,
-        )
+    esito = _applica_lista(testo, coppie, file_id, "correzione_llm")
+    if esito is None:
         return None
+    nuovo, applicate, scartate = esito
     log.info(
         "fase=correzione_llm file=%s esito=ok_lista riparazioni=%d scartate=%d durata=%.1fs",
         file_id, applicate, scartate, time.monotonic() - inizio,
@@ -1739,6 +1947,14 @@ def correggi_llm(testo: str, file_id: str, rapporto_scarto: Path) -> str:
     Dal 2026-08-21 il metodo di prima scelta è la lista di riparazioni
     (REFERTI_CORREZIONE_METODO=lista): la riscrittura integrale qui sotto
     scatta solo come ripiego."""
+    if CORREZIONE_ESTERNA and ANTHROPIC_API_KEY:
+        esito_esterno = _correggi_a_lista_esterna(testo, file_id)
+        if esito_esterno is not None:
+            return esito_esterno
+        log.warning(
+            "fase=correzione_esterna file=%s esito=fallita ripiego=catena_locale",
+            file_id,
+        )
     if METODO_CORREZIONE == "lista":
         esito_lista = _correggi_a_lista(testo, file_id)
         if esito_lista is not None:
