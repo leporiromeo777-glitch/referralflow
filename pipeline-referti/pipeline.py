@@ -1704,6 +1704,11 @@ def riparazioni_glossario(testo: str, file_id: str) -> tuple[str, int]:
         stelo = re.sub(r"[aeiou]+$", "", parola)
         candidati = {c for c in candidati
                      if re.sub(r"[aeiou]+$", "", c) != stelo}
+        # Guardia anti-ribaltamento anche qui (2026-08-27, visto dal vivo:
+        # «regolare» era nel glossario dentro «sinusale regolare» e l'aggancio
+        # ha riparato irregolare→regolare — inversione clinica): la stessa
+        # regola della lista AI vale per il percorso deterministico.
+        candidati = {c for c in candidati if not _ribaltamento_clinico(parola, c)}
         if len(candidati) == 1:
             coppie[parola] = candidati.pop()
     riparate = 0
@@ -1713,7 +1718,9 @@ def riparazioni_glossario(testo: str, file_id: str) -> tuple[str, int]:
         if n > 0:
             testo = nuovo
             riparate += 1
-            RIPARAZIONI_APPLICATE.setdefault(file_id, []).append((da, a))
+            registro = RIPARAZIONI_APPLICATE.setdefault(file_id, [])
+            if (da, a) not in registro:
+                registro.append((da, a))
     if riparate:
         log.info(
             "fase=dizionario_fonetico file=%s esito=ok riparazioni=%d durata=%.1fs",
@@ -1849,7 +1856,8 @@ def _applica_lista(testo: str, coppie: list, file_id: str,
             fase, file_id,
         )
         return None
-    RIPARAZIONI_APPLICATE.setdefault(file_id, []).extend(coppie_ok)
+    registro = RIPARAZIONI_APPLICATE.setdefault(file_id, [])
+    registro.extend(c for c in coppie_ok if c not in registro)
     return nuovo, applicate, scartate
 
 

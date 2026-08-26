@@ -132,3 +132,5 @@ NYHA
 classe funzionale NYHA
 dispnea parossistica notturna
 ibuprofene
+irregolare
+battito irregolare
