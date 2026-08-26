@@ -322,6 +322,29 @@ Rispondi SOLO con un oggetto JSON valido, senza testo prima o dopo:
 TESTO:
 {testo}"""
 
+# Catena compatta esterna (2026-08-27, idea dell'utente: «cicli nella stessa
+# chiamata» — il testo si paga una volta sola e il modello che separa le note
+# ha appena fatto lui stesso le correzioni). UNA chiamata al modello di punta
+# per quattro fasi; l'avvocato resta separato (chi verifica non è chi scrive)
+# e le guardie del codice valgono su ogni sezione come per le fasi locali.
+PROMPT_CATENA_COMPATTA = """Sei l'assistente di redazione dei referti di uno studio cardiologico svizzero. Il testo qui sotto è un referto dettato a voce e trascritto automaticamente: contiene errori di riconoscimento, frasi rivolte alla segretaria e divagazioni.
+
+Lavora in QUATTRO CICLI ordinati, uno alla volta, rileggendo ogni volta il testo. Non fare tutto insieme.
+
+CICLO 1 — RIPARAZIONI: elenca le parole o brevi espressioni storpiate dalla trascrizione, ciascuna con la forma corretta. Regole: «da» è una citazione ESATTA (stesse maiuscole e accenti, max 4 parole); MAI numeri, dosaggi, misure o date dentro «da» o «a»; la forma corretta deve SUONARE come quella storpiata (stai riparando errori d'ascolto, non riscrivendo); nel dubbio non proporre; max 40 riparazioni.
+
+CICLO 2 — NOTE PER LA SEGRETERIA: elenca le frasi in cui il medico si rivolge a chi scrive invece che al referto: saluti e congedi, istruzioni («recuperate», «copiate», «potete prendere…»), domande, scuse e ripetizioni annunciate, commenti organizzativi. Citazioni ESATTE del testo. MAI frasi che contengono numeri o dati clinici: nel dubbio, non è una nota.
+
+CICLO 3 — FUORI TEMA: elenca le frasi estranee al referto (chiacchiere, parentesi personali, meta-commenti sul dettato). Citazioni ESATTE. MAI frasi con cifre o contenuto clinico; nel dubbio, lasciala nel referto.
+
+CICLO 4 — SENZA SENSO: elenca le frasi rimaste prive di senso in italiano dopo il ciclo 1, ciascuna con una proposta di ricostruzione SOLO se il suono la giustifica (mai cambiare i numeri); altrimenti proposta vuota.
+
+Rispondi SOLO con un oggetto JSON valido, senza testo prima o dopo:
+{"riparazioni": [{"da": "…", "a": "…"}], "note_segreteria": ["…"], "fuori_tema": ["…"], "senza_senso": [{"frase": "…", "proposta": ""}]}
+
+TESTO:
+{testo}"""
+
 # Prompt per l'anonimizzazione pre-invio esterno (modello LOCALE): individua
 # i dati identificativi, il CODICE li sostituisce — l'AI non riscrive mai.
 PROMPT_DATI_PERSONALI = """Nel testo qui sotto individua i DATI IDENTIFICATIVI di persone: nomi e cognomi (anche storpiati dalla trascrizione automatica), date di nascita, indirizzi privati, numeri di telefono, email, numeri AVS.
@@ -1832,7 +1855,8 @@ def _applica_lista(testo: str, coppie: list, file_id: str,
 
 # ── Percorso esterno: anonimizza → modello di punta → lista → guardie ───────
 
-def _anonimizza_per_esterno(testo: str, file_id: str) -> str | None:
+def _anonimizza_per_esterno(testo: str, file_id: str,
+                            con_mappa: bool = False):
     """Prepara il testo per l'invio esterno: il modello LOCALE individua i
     dati identificativi, il CODICE li sostituisce con segnaposto («Persona
     N», «[data N]», «[contatto]») più la rete regex (AVS, email, telefoni,
@@ -1856,6 +1880,10 @@ def _anonimizza_per_esterno(testo: str, file_id: str) -> str | None:
     persone = 0
     date_n = 0
     sensibili: list[str] = []  # tutto ciò che NON deve più comparire
+    # La mappa segnaposto → dato vero serve alla catena compatta per
+    # riportare le citazioni del modello esterno sul testo reale. Vive
+    # SOLO in memoria e solo per questa corsa: mai su disco, mai nei log.
+    mappa: dict[str, str] = {}
     for voce in voci[:80]:
         if not isinstance(voce, dict):
             continue
@@ -1871,6 +1899,8 @@ def _anonimizza_per_esterno(testo: str, file_id: str) -> str | None:
             segnaposto = f"[data {date_n}]"
         else:
             segnaposto = "[dato rimosso]"
+        if segnaposto != "[dato rimosso]" and segnaposto not in mappa:
+            mappa[segnaposto] = s
         anon = re.sub(re.escape(s), segnaposto, anon, flags=re.IGNORECASE)
         sensibili.append(s)
         # Le singole parole di un nome composto (≥4 lettere) coprono le
@@ -1918,7 +1948,7 @@ def _anonimizza_per_esterno(testo: str, file_id: str) -> str | None:
     log.info(
         "fase=correzione_esterna file=%s anonimizzazione=ok persone=%d date=%d",
         file_id, persone, date_n)
-    return anon
+    return (anon, mappa) if con_mappa else anon
 
 
 def _chiama_esterno(prompt: str, file_id: str) -> str:
@@ -2031,6 +2061,93 @@ def _chiama_esterno_openai(prompt: str, file_id: str) -> str:
     raise RuntimeError("endpoint esterno non risponde")
 
 
+def _estrai_json(uscita: str) -> dict | None:
+    """Pesca l'oggetto JSON nella risposta anche se il modello lo incornicia
+    di testo o di ragionamento (che può contenere altre graffe)."""
+    i = uscita.rfind('{"riparazioni"')
+    if i == -1:
+        i = uscita.find("{")
+    if i == -1:
+        return None
+    for j in range(len(uscita) - 1, i, -1):
+        if uscita[j] == "}":
+            try:
+                dati = json.loads(uscita[i:j + 1])
+                return dati if isinstance(dati, dict) else None
+            except json.JSONDecodeError:
+                continue
+    return None
+
+
+# Esiti delle fasi «assorbite» dalla catena compatta, per file: elabora li
+# consuma al posto delle chiamate locali. Azzerato a inizio corsa.
+COMPATTA_ESITI: dict[str, dict] = {}
+
+
+def _catena_compatta_esterna(testo: str, file_id: str) -> str | None:
+    """UNA chiamata esterna per quattro fasi (riparazioni, note segreteria,
+    fuori tema, senza senso). Il testo viaggia ANONIMIZZATO; le citazioni
+    tornano coi segnaposto e vengono riportate ai dati veri SUL MAC (mappa
+    in sola memoria), poi passano dalle STESSE guardie delle fasi locali.
+    Qualsiasi intoppo → None → catena tradizionale."""
+    inizio = time.monotonic()
+    esito_anon = _anonimizza_per_esterno(testo, file_id, con_mappa=True)
+    if esito_anon is None:
+        return None
+    anon, mappa = esito_anon
+    try:
+        uscita = _chiama_esterno_openai(
+            PROMPT_CATENA_COMPATTA.replace("{testo}", anon), file_id)
+    except RuntimeError:
+        log.warning(
+            "fase=correzione_esterna file=%s esito=fallita motivo=nessuna_risposta modo=compatta",
+            file_id)
+        return None
+    dati = _estrai_json(uscita)
+    if not isinstance(dati, dict):
+        return None
+
+    def rip(s: str) -> str:
+        for segnaposto, vero in mappa.items():
+            s = s.replace(segnaposto, vero)
+        return s
+
+    coppie = [{"da": rip(str(v.get("da", ""))), "a": rip(str(v.get("a", "")))}
+              for v in (dati.get("riparazioni") or []) if isinstance(v, dict)]
+    esito = _applica_lista(testo, coppie, file_id, "correzione_esterna")
+    if esito is None:
+        return None
+    nuovo, applicate, scartate = esito
+    # Le citazioni degli altri cicli si riferiscono al testo PRIMA delle
+    # riparazioni: si aggiornano con gli stessi scambi appena applicati,
+    # così l'aggancio esatto sul testo nuovo torna a combaciare.
+    applicate_coppie = RIPARAZIONI_APPLICATE.get(file_id, [])
+
+    def aggiorna(s: str) -> str:
+        s = rip(s)
+        for da, a in applicate_coppie:
+            s = s.replace(da, a)
+        return s
+
+    note = [aggiorna(str(s)) for s in (dati.get("note_segreteria") or [])
+            if isinstance(s, str) and s.strip()]
+    fuori = [aggiorna(str(s)) for s in (dati.get("fuori_tema") or [])
+             if isinstance(s, str) and s.strip()]
+    chiarire = [{"frase": aggiorna(str(v.get("frase", ""))),
+                 "proposta": aggiorna(str(v.get("proposta", "")))}
+                for v in (dati.get("senza_senso") or []) if isinstance(v, dict)]
+    COMPATTA_ESITI[file_id] = {
+        "note": note[:60], "fuori_tema": fuori[:60], "chiarire": chiarire[:40],
+    }
+    log.info(
+        "fase=correzione_esterna file=%s esito=ok_compatta riparazioni=%d scartate=%d "
+        "note=%d fuori=%d senza_senso=%d durata=%.1fs",
+        file_id, applicate, scartate, len(note), len(fuori), len(chiarire),
+        time.monotonic() - inizio,
+    )
+    return nuovo
+
+
 def _correggi_a_lista_esterna(testo: str, file_id: str,
                               modo: str = "api") -> str | None:
     """Correzione a lista col modello di punta esterno (2026-08-26, idea
@@ -2135,6 +2252,14 @@ def correggi_llm(testo: str, file_id: str, rapporto_scarto: Path) -> str:
     (REFERTI_CORREZIONE_METODO=lista): la riscrittura integrale qui sotto
     scatta solo come ripiego."""
     modo_esterno = _esterno_attivo()
+    if modo_esterno == "openai" and (_config_esterno() or {}).get("compatta") == "1":
+        esito_compatta = _catena_compatta_esterna(testo, file_id)
+        if esito_compatta is not None:
+            return esito_compatta
+        log.warning(
+            "fase=correzione_esterna file=%s esito=compatta_fallita ripiego=lista",
+            file_id,
+        )
     if modo_esterno:
         esito_esterno = _correggi_a_lista_esterna(testo, file_id, modo_esterno)
         if esito_esterno is not None:
@@ -2304,11 +2429,20 @@ def trova_divagazioni(testo: str, file_id: str) -> list[str]:
             frasi = [f for f in dati["fuori_tema"] if isinstance(f, str)]
     except json.JSONDecodeError:
         pass
+    vere = _filtra_divagazioni(frasi, testo, file_id)
+    log.info(
+        "fase=pertinenza file=%s esito=ok fuori_tema=%d scartate=%d durata=%.1fs",
+        file_id, len(vere), len(frasi) - len(vere), time.monotonic() - inizio,
+    )
+    return vere
+
+
+def _filtra_divagazioni(frasi: list[str], testo: str, file_id: str) -> list[str]:
+    """TUTTE le guardie dell'evidenziatore, riusabili da qualunque fonte
+    (fase locale o catena compatta esterna): citazioni esatte, mai frasi
+    con cifre (regola d'oro), mai frasi con termini clinici forti, e se
+    l'esclusione supera un terzo del testo si ignora tutto."""
     vere = [f.strip() for f in frasi if len(f.strip()) >= 8 and f.strip() in testo]
-    # Regola d'oro estesa all'evidenziatore (referto reale 2026-08-25:
-    # spenta «…in riserva scrivete ibuprofene, 400 mg al bisogno»): una
-    # frase che contiene CIFRE porta quasi sempre un dato clinico e non può
-    # essere spenta d'ufficio dall'AI — resta accesa, decide la persona.
     con_cifre = sum(1 for f in vere if re.search(r"\d", f))
     vere = [f for f in vere if not re.search(r"\d", f)]
     if con_cifre:
@@ -2319,14 +2453,10 @@ def trova_divagazioni(testo: str, file_id: str) -> list[str]:
         log.info("fase=pertinenza file=%s salvate_cliniche=%d", file_id, cliniche)
     if sum(len(f) for f in vere) > len(testo) * 0.35:
         log.warning(
-            "fase=pertinenza file=%s esito=ignorata motivo=esclusione_eccessiva proposte=%d durata=%.1fs",
-            file_id, len(vere), time.monotonic() - inizio,
+            "fase=pertinenza file=%s esito=ignorata motivo=esclusione_eccessiva proposte=%d",
+            file_id, len(vere),
         )
         return []
-    log.info(
-        "fase=pertinenza file=%s esito=ok fuori_tema=%d scartate=%d durata=%.1fs",
-        file_id, len(vere), len(frasi) - len(vere), time.monotonic() - inizio,
-    )
     return vere[:60]
 
 
@@ -2358,27 +2488,38 @@ def controlla_senso(testo: str, glossario: str, file_id: str) -> list[dict]:
     inizio = time.monotonic()
     prompt = PROMPT_SENSO.replace("{glossario}", glossario or "(vuoto)").replace("{testo}", testo)
     uscita = chiama_ollama(prompt, file_id, "senso", formato_json=True, modello=MODELLO_SENSO)
-    voci: list[dict] = []
+    grezzi: list = []
     try:
         dati = json.loads(uscita)
-        grezzi = dati.get("frasi") if isinstance(dati, dict) else None
-        for g in grezzi if isinstance(grezzi, list) else []:
-            if not isinstance(g, dict):
-                continue
-            frase = str(g.get("frase", "")).strip()
-            proposta = str(g.get("proposta", "")).strip()
-            if len(frase) < 8 or frase not in testo:
-                continue
-            if proposta and _numeri(proposta) != _numeri(frase):
-                proposta = ""  # veto §2.4: resta la segnalazione, cade la proposta
-            voci.append({"frase": frase[:300], "proposta": proposta[:300]})
+        if isinstance(dati, dict) and isinstance(dati.get("frasi"), list):
+            grezzi = dati["frasi"]
     except json.JSONDecodeError:
         pass
-    # Cintura anti-diluvio (referto reale 2026-08-26: 90 frasi segnalate,
-    # ZERO proposte — il modello confuso sottolinea mezzo referto e la
-    # revisione guidata affoga nel rumore). Come per la pertinenza: se la
-    # fase vuole segnalare troppo, è lei a sbagliare — si autoannulla,
-    # tenendo al più le voci che almeno portano una proposta.
+    voci = _filtra_senso(grezzi, testo, file_id)
+    log.info(
+        "fase=senso file=%s esito=ok segnalate=%d con_proposta=%d durata=%.1fs",
+        file_id, len(voci), sum(1 for v in voci if v["proposta"]), time.monotonic() - inizio,
+    )
+    return voci
+
+
+def _filtra_senso(grezzi: list, testo: str, file_id: str) -> list[dict]:
+    """Guardie della fase «senso», riusabili da qualunque fonte: citazioni
+    esatte, veto numerico sulle proposte (§2.4), e cintura anti-diluvio
+    (referto reale 2026-08-26: 90 frasi segnalate, zero proposte — se la
+    fase vuole segnalare troppo, è lei a sbagliare: restano al più 25 voci
+    e solo quelle con una proposta)."""
+    voci: list[dict] = []
+    for g in grezzi if isinstance(grezzi, list) else []:
+        if not isinstance(g, dict):
+            continue
+        frase = str(g.get("frase", "")).strip()
+        proposta = str(g.get("proposta", "")).strip()
+        if len(frase) < 8 or frase not in testo:
+            continue
+        if proposta and _numeri(proposta) != _numeri(frase):
+            proposta = ""  # veto §2.4: resta la segnalazione, cade la proposta
+        voci.append({"frase": frase[:300], "proposta": proposta[:300]})
     if len(voci) > 25:
         con_proposta = [v for v in voci if v["proposta"]]
         log.warning(
@@ -2386,10 +2527,6 @@ def controlla_senso(testo: str, glossario: str, file_id: str) -> list[dict]:
             file_id, len(voci), min(len(con_proposta), 25),
         )
         voci = con_proposta
-    log.info(
-        "fase=senso file=%s esito=ok segnalate=%d con_proposta=%d durata=%.1fs",
-        file_id, len(voci), sum(1 for v in voci if v["proposta"]), time.monotonic() - inizio,
-    )
     return voci[:25]
 
 
@@ -2760,6 +2897,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
     # Registro delle riparazioni pulito a ogni corsa (il servizio è un
     # processo lungo: senza azzeramento un retry sommerebbe corse diverse).
     RIPARAZIONI_APPLICATE.pop(file_id, None)
+    COMPATTA_ESITI.pop(file_id, None)
     # Visita registrata o dettato classico? Dal nome del file (vedi _e_visita).
     visita = _e_visita(ingresso.name)
     # Avvisi per chi rivede: raccolti lungo tutta la corsa.
@@ -2928,11 +3066,22 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             divagazioni = []
             frasi_da_chiarire = []
         else:
+            # Catena compatta esterna: le tre fasi qui sotto sono già state
+            # svolte dal modello di punta in un'unica chiamata (cicli 2-4);
+            # qui si applicano SOLO le guardie del codice sugli stessi esiti.
+            compatta = COMPATTA_ESITI.pop(file_id, None)
+
             # La «segretaria»: le frasi rivolte alla segreteria escono dal corpo
             # del referto e diventano note. L'ispezione lavora sul testo pulito.
             fase = "segreteria"
             _ = notifica and notifica(fase)
-            finale, note_segreteria = separa_segreteria(finale, file_id)
+            if compatta is not None:
+                finale, note_segreteria = _applica_note_segreteria(
+                    finale, compatta["note"])
+                log.info("fase=segreteria file=%s esito=compatta note=%d",
+                         file_id, len(note_segreteria))
+            else:
+                finale, note_segreteria = separa_segreteria(finale, file_id)
             percorso(".segreteria.json").write_text(
                 json.dumps(note_segreteria, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",
@@ -2944,7 +3093,13 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             # di revisione le mostra spente; entra nel referto solo l'evidenziato.
             fase = "pertinenza"
             _ = notifica and notifica(fase)
-            divagazioni = trova_divagazioni(finale, file_id)
+            if compatta is not None:
+                divagazioni = _filtra_divagazioni(
+                    compatta["fuori_tema"], finale, file_id)
+                log.info("fase=pertinenza file=%s esito=compatta fuori_tema=%d",
+                         file_id, len(divagazioni))
+            else:
+                divagazioni = trova_divagazioni(finale, file_id)
             percorso(".divagazioni.json").write_text(
                 json.dumps(divagazioni, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",
@@ -2954,7 +3109,13 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             # ricostruzione dal glossario (stesso vocabolario dato a whisper).
             fase = "senso"
             _ = notifica and notifica(fase)
-            frasi_da_chiarire = controlla_senso(finale, vocab, file_id)
+            if compatta is not None:
+                frasi_da_chiarire = _filtra_senso(
+                    compatta["chiarire"], finale, file_id)
+                log.info("fase=senso file=%s esito=compatta segnalate=%d",
+                         file_id, len(frasi_da_chiarire))
+            else:
+                frasi_da_chiarire = controlla_senso(finale, vocab, file_id)
             # Una frase già segnalata come fuori tema non va anche «chiarita»:
             # è spenta dall'evidenziatore, il doppione confonderebbe.
             frasi_da_chiarire = [v for v in frasi_da_chiarire if v["frase"] not in divagazioni]
