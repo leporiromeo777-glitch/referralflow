@@ -230,12 +230,42 @@ SCAMBIO_ESTERNO_DIR = Path(os.environ.get(
 SCAMBIO_ATTESA_S = int(os.environ.get("REFERTI_SCAMBIO_ATTESA", "900"))
 
 
+# Trasporto «cloud a consumo» (2026-08-26, dopo il banco dei 12 modelli):
+# un endpoint compatibile OpenAI (es. Infomaniak, server svizzeri, il
+# vincitore del banco è Qwen3.5-122B con 11/22 contro il 3/22 del modello
+# locale). Configurato da un file fuori dal repo (chmod 600), riletto a
+# OGNI referto: si accende/spegne modificando il file, niente riavvii.
+# Formato del file:  attivo=1 / url=... / chiave=... / modello=...
+CONFIG_ESTERNO = Path(os.environ.get(
+    "REFERTI_ESTERNO_CONF",
+    str(Path.home() / ".referralflow-esterno.conf")))
+
+
+def _config_esterno() -> dict | None:
+    try:
+        if not CONFIG_ESTERNO.exists():
+            return None
+        cfg: dict[str, str] = {}
+        for riga in CONFIG_ESTERNO.read_text(encoding="utf-8").splitlines():
+            if "=" in riga and not riga.strip().startswith("#"):
+                k, v = riga.split("=", 1)
+                cfg[k.strip()] = v.strip()
+        if cfg.get("attivo") != "1":
+            return None
+        if not (cfg.get("url") and cfg.get("chiave") and cfg.get("modello")):
+            return None
+        return cfg
+    except OSError:
+        return None
+
+
 def _esterno_attivo() -> str | None:
-    """Com'è acceso il percorso esterno, valutato A OGNI referto (così la
-    modalità manuale si accende/spegne creando o togliendo il file ATTIVO,
-    senza riavviare il servizio)."""
+    """Com'è acceso il percorso esterno, valutato A OGNI referto (così le
+    modalità manuale e cloud si accendono/spengono da file, senza riavvii)."""
     if (SCAMBIO_ESTERNO_DIR / "ATTIVO").exists():
         return "manuale"
+    if _config_esterno():
+        return "openai"
     if CORREZIONE_ESTERNA and ANTHROPIC_API_KEY:
         return "api"
     return None
@@ -1950,6 +1980,46 @@ def _chiama_esterno_manuale(anon: str, file_id: str) -> str:
     raise RuntimeError("correttore manuale non ha risposto")
 
 
+def _chiama_esterno_openai(prompt: str, file_id: str) -> str:
+    """Una chiamata a un endpoint compatibile OpenAI (config da
+    _config_esterno). Pensatoio spento dove il server lo onora; per i
+    modelli che ragionano comunque, la risposta si pesca anche dal campo
+    reasoning. 2 tentativi. Qui arriva SOLO testo già anonimizzato."""
+    cfg = _config_esterno()
+    if not cfg:
+        raise RuntimeError("config esterna mancante")
+    corpo = json.dumps({
+        "model": cfg["modello"], "temperature": 0,
+        "max_tokens": int(cfg.get("max_gettoni", "8000")),
+        "chat_template_kwargs": {"enable_thinking": False},
+        "messages": [{"role": "user", "content": prompt}],
+    }).encode("utf-8")
+    for tentativo in (1, 2):
+        try:
+            richiesta = urllib.request.Request(
+                cfg["url"], data=corpo,
+                headers={"Content-Type": "application/json",
+                         "Authorization": f"Bearer {cfg['chiave']}"})
+            with urllib.request.urlopen(richiesta, timeout=ESTERNO_TIMEOUT_S) as r:
+                dati = json.loads(r.read().decode("utf-8"))
+            msg = dati["choices"][0]["message"]
+            testo = msg.get("content")
+            if isinstance(testo, list):
+                testo = "".join(b.get("text", "") for b in testo
+                                if isinstance(b, dict))
+            if not testo:
+                testo = msg.get("reasoning_content") or msg.get("reasoning") or ""
+            testo = re.sub(r"<think>.*?</think>", "", testo, flags=re.DOTALL)
+            if testo.strip():
+                return testo
+        except (urllib.error.URLError, TimeoutError, OSError,
+                json.JSONDecodeError, KeyError, IndexError):
+            pass
+        if tentativo == 1:
+            time.sleep(5)
+    raise RuntimeError("endpoint esterno non risponde")
+
+
 def _correggi_a_lista_esterna(testo: str, file_id: str,
                               modo: str = "api") -> str | None:
     """Correzione a lista col modello di punta esterno (2026-08-26, idea
@@ -1964,6 +2034,9 @@ def _correggi_a_lista_esterna(testo: str, file_id: str,
     try:
         if modo == "manuale":
             uscita = _chiama_esterno_manuale(anon, file_id)
+        elif modo == "openai":
+            uscita = _chiama_esterno_openai(
+                PROMPT_CORREZIONE_LISTA.replace("{testo}", anon), file_id)
         else:
             uscita = _chiama_esterno(
                 PROMPT_CORREZIONE_LISTA.replace("{testo}", anon), file_id)
