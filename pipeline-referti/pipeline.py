@@ -1719,6 +1719,43 @@ def _blocchi_di_testo(testo: str, dimensione: int) -> list[str]:
 # correzioni volute. Si azzera a inizio corsa in elabora.
 RIPARAZIONI_APPLICATE: dict[str, list[tuple[str, str]]] = {}
 
+# Ribaltamenti clinici VIETATI nelle liste di riparazioni (buco scoperto al
+# banco del 2026-08-26: Apertus proponeva «ma scrivete positivo → ma scrivete
+# negativo» — suona simile, niente cifre, passava tutte le guardie ma inverte
+# il significato medico). Una coppia che scambia questi opposti è respinta
+# SEMPRE, qualunque modello la proponga.
+ANTONIMI_CLINICI = [
+    ("positivo", "negativo"), ("positiva", "negativa"),
+    ("positivi", "negativi"), ("positive", "negative"),
+    ("regolare", "irregolare"), ("regolari", "irregolari"),
+    ("destro", "sinistro"), ("destra", "sinistra"),
+    ("presente", "assente"), ("presenti", "assenti"),
+    ("aumentato", "diminuito"), ("aumentata", "diminuita"),
+    ("superiore", "inferiore"), ("superiori", "inferiori"),
+    ("ascendente", "discendente"), ("ascendenti", "discendenti"),
+    ("sistolico", "diastolico"), ("sistolica", "diastolica"),
+    ("conservata", "ridotta"), ("conservato", "ridotto"),
+    ("prossimale", "distale"), ("anteriore", "posteriore"),
+]
+
+
+def _ribaltamento_clinico(da: str, a: str) -> bool:
+    """Vero se la coppia scambia due opposti clinici (o un prefisso
+    iper-/ipo- sullo stesso stelo, es. ipertensione → ipotensione)."""
+    tda = set(re.findall(r"[a-zà-ÿ]+", da.lower()))
+    ta = set(re.findall(r"[a-zà-ÿ]+", a.lower()))
+    for x, y in ANTONIMI_CLINICI:
+        if (x in tda and y in ta) or (y in tda and x in ta):
+            return True
+    for wa in tda:
+        for wb in ta:
+            for p1, p2 in (("iper", "ipo"), ("ipo", "iper")):
+                if (wa.startswith(p1) and wb.startswith(p2)
+                        and wa[len(p1):] == wb[len(p2):]
+                        and len(wa) > len(p1) + 2):
+                    return True
+    return False
+
 
 def _applica_lista(testo: str, coppie: list, file_id: str,
                    fase: str) -> tuple[str, int, int] | None:
@@ -1740,6 +1777,7 @@ def _applica_lista(testo: str, coppie: list, file_id: str,
         if (not da or not a or da == a or len(da) > 60 or len(a) > 60
                 or re.search(r"\d", da) or re.search(r"\d", a)
                 or len(a.split()) > len(da.split()) + 2
+                or _ribaltamento_clinico(da, a)
                 or not _riparazione_plausibile(da, a)):
             scartate += 1
             continue
