@@ -2027,16 +2027,24 @@ def _chiama_esterno_openai(prompt: str, file_id: str) -> str:
     if not cfg:
         raise RuntimeError("config esterna mancante")
     base = {
-        "model": cfg["modello"], "temperature": 0,
+        "model": cfg["modello"],
         "max_tokens": int(cfg.get("max_gettoni", "8000")),
         "messages": [{"role": "user", "content": prompt}],
     }
     for tentativo in (1, 2):
         try:
             dati = None
-            # Pensatoio spento dove il server accetta il campo; chi lo
-            # rifiuta (Google valida stretto: 400) riceve la base nuda.
-            for extra in ({"chat_template_kwargs": {"enable_thinking": False}}, {}):
+            # Scaletta di varianti: temperatura 0 e pensatoio spento dove il
+            # server li accetta; chi rifiuta un campo (Google valida stretto,
+            # i modelli Anthropic «ragionanti» non vogliono la temperatura
+            # fissa) riceve via via la richiesta più nuda. Ogni rifiuto è un
+            # 400 immediato: le varianti extra non costano nulla.
+            for extra in (
+                {"temperature": 0,
+                 "chat_template_kwargs": {"enable_thinking": False}},
+                {"temperature": 0},
+                {},
+            ):
                 corpo = json.dumps({**base, **extra}).encode("utf-8")
                 richiesta = urllib.request.Request(
                     cfg["url"], data=corpo,
@@ -2587,6 +2595,20 @@ def avvocato_diavolo(bozza: str, grezzo: str, file_id: str,
     voci = dati.get("non_supportate") if isinstance(dati, dict) else None
     if not isinstance(voci, list):
         return []
+    fuori = _filtra_avvocato(voci, bozza, grezzo, file_id)
+    log.info(
+        "fase=avvocato file=%s esito=ok segnalate=%d durata=%.1fs",
+        file_id, len(fuori), time.monotonic() - inizio,
+    )
+    return fuori
+
+
+def _filtra_avvocato(voci: list, bozza: str, grezzo: str,
+                     file_id: str) -> list[dict]:
+    """Le guardie dell'avvocato, riusabili da qualunque fonte (modello
+    locale o verificatore esterno): citazioni esatte in bozza,
+    anti-pedanteria (punteggiatura e trattini), niente riprocessi delle
+    riparazioni volute."""
     def _nudo(s: str) -> str:
         return re.sub(r"[^\w\s]", "", s.lower())
     grezzo_nudo = re.sub(r"\s+", " ", _nudo(grezzo))
@@ -2620,8 +2642,54 @@ def avvocato_diavolo(bozza: str, grezzo: str, file_id: str,
         if prima != frase and re.sub(r"\s+", " ", _nudo(prima)).strip() in grezzo_nudo:
             continue
         fuori.append({"frase": frase[:400], "motivo": motivo})
+    return fuori
+
+
+AVVOCATO_SEP = "\n=====BOZZA=====\n"
+
+
+def avvocato_esterno(bozza: str, grezzo: str, file_id: str) -> list[dict] | None:
+    """Avvocato del diavolo sul modello di punta ESTERNO (2026-08-27,
+    «opus per tutto»): seconda chiamata indipendente dal correttore.
+    Grezzo e bozza vengono anonimizzati INSIEME (stesso passaggio, stessa
+    controprova) e separati da un marcatore; le citazioni tornano coi
+    segnaposto e vengono riportate ai dati veri prima delle guardie
+    condivise. None = si ripiega sull'avvocato locale."""
+    inizio = time.monotonic()
+    if AVVOCATO_SEP.strip() in bozza or AVVOCATO_SEP.strip() in grezzo:
+        return None
+    esito_anon = _anonimizza_per_esterno(grezzo + AVVOCATO_SEP + bozza,
+                                         file_id, con_mappa=True)
+    if esito_anon is None:
+        return None
+    anon, mappa = esito_anon
+    if AVVOCATO_SEP not in anon:
+        return None
+    anon_grezzo, anon_bozza = anon.split(AVVOCATO_SEP, 1)
+    try:
+        uscita = _chiama_esterno_openai(
+            PROMPT_AVVOCATO.replace("{grezzo}", anon_grezzo)
+            .replace("{bozza}", anon_bozza), file_id)
+    except RuntimeError:
+        log.warning(
+            "fase=avvocato file=%s esito=esterno_fallito ripiego=locale", file_id)
+        return None
+    dati = _estrai_json(uscita)
+    voci = dati.get("non_supportate") if isinstance(dati, dict) else None
+    if not isinstance(voci, list):
+        return None
+
+    def rip(s: str) -> str:
+        for segnaposto, vero in mappa.items():
+            s = s.replace(segnaposto, vero)
+        return s
+
+    voci = [{"frase": rip(str(v.get("frase", ""))),
+             "motivo": rip(str(v.get("motivo", "")))[:200]}
+            for v in voci if isinstance(v, dict)]
+    fuori = _filtra_avvocato(voci, bozza, grezzo, file_id)
     log.info(
-        "fase=avvocato file=%s esito=ok segnalate=%d durata=%.1fs",
+        "fase=avvocato file=%s esito=ok_esterno segnalate=%d durata=%.1fs",
         file_id, len(fuori), time.monotonic() - inizio,
     )
     return fuori
@@ -3141,9 +3209,15 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # Metro diverso (primo collaudo 2026-08-24: 1 invenzione vera presa
         # — «caviglia destra» mai detta — ma 5 falsi allarmi sul fatto che
         # la nota «riformula»): su un riassunto la riformulazione è attesa.
-        frasi_non_supportate = avvocato_diavolo(
-            nota_visita if nota_visita else finale, grezzo_a, file_id,
-            riassunto=bool(nota_visita))
+        cfg_est = _config_esterno()
+        frasi_non_supportate = None
+        if (cfg_est and cfg_est.get("avvocato") == "1"
+                and _esterno_attivo() == "openai" and not nota_visita):
+            frasi_non_supportate = avvocato_esterno(finale, grezzo_a, file_id)
+        if frasi_non_supportate is None:
+            frasi_non_supportate = avvocato_diavolo(
+                nota_visita if nota_visita else finale, grezzo_a, file_id,
+                riassunto=bool(nota_visita))
         frasi_non_supportate = [
             v for v in frasi_non_supportate if v["frase"] not in divagazioni
         ]
