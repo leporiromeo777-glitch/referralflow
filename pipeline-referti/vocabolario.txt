@@ -1,31 +1,53 @@
-# Vocabolario di dominio dato a whisper come prompt iniziale: orienta la
-# trascrizione verso il gergo cardiologico e i farmaci ricorrenti. Una voce per
-# riga; le righe che iniziano con # sono commenti. Le voci dello studio vanno in
-# vocabolario-locali.txt (non sovrascritto dagli aggiornamenti), oppure si
-# aggiungono qui via pull request.
-#
-# ORDINE = PRIORITÀ: whisper accetta un prompt breve e taglia l'eccesso, quindi
-# in cima vanno le parole più spesso sbagliate (farmaci e termini ostici),
-# in fondo quelle generiche.
+# Vocabolario di dominio, due mestieri:
+# 1) le PRIME righe (fino al tetto VOCAB_MAX_CHARS, ~1000 caratteri) diventano
+#    il prompt iniziale di whisper: orientano la trascrizione. ORDINE = PRIORITÀ,
+#    whisper taglia l'eccesso — in cima le parole più spesso sbagliate.
+# 2) TUTTE le righe (nessun tetto) alimentano l'aggancio fonetico: una parola
+#    del dettato che suona come una voce di questo file viene riparata
+#    (riparazioni_glossario, con le guardie anti-ribaltamento e anti-desinenze).
+# Una voce per riga; le righe che iniziano con # sono commenti. Le voci dello
+# studio vanno in vocabolario-locali.txt (non sovrascritto dagli aggiornamenti),
+# oppure si aggiungono qui via chat.
 
 # Farmaci cardiologici (nomi spesso storpiati dalla trascrizione)
 bisoprololo
 metoprololo
 carvedilolo
+nebivololo
 ramipril
 enalapril
 perindopril
+lisinopril
 valsartan
 candesartan
+losartan
+sacubitril
 amlodipina
+lercanidipina
+diltiazem
+verapamil
 atorvastatina
 rosuvastatina
+ezetimibe
 apixaban
 rivaroxaban
+edoxaban
+dabigatran
 warfarin
+acenocumarolo
 clopidogrel
+ticagrelor
+prasugrel
 furosemide
+torasemide
 spironolattone
+empagliflozin
+dapagliflozin
+amiodarone
+flecainide
+digossina
+ivabradina
+colchicina
 acido acetilsalicilico
 
 # Termini ostici / da distinguere
@@ -134,3 +156,289 @@ dispnea parossistica notturna
 ibuprofene
 irregolare
 battito irregolare
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Estensione 2026-08-31 — centinaia di termini per l'aggancio fonetico.
+# Da qui in giù si è quasi certamente FUORI dal bigliettino di whisper (il
+# tetto taglia prima): queste voci lavorano nell'aggancio fonetico, che le
+# usa tutte. Una parola presente qui è anche PROTETTA: l'aggancio non
+# «ripara» mai una parola che sta nel glossario.
+
+# Procedure e dispositivi
+cardioversione elettrica
+cardioversione farmacologica
+ablazione transcatetere
+isolamento delle vene polmonari
+studio elettrofisiologico
+elettrofisiologia
+pacemaker bicamerale
+defibrillatore impiantabile
+resincronizzazione cardiaca
+elettrocatetere
+elettrostimolazione
+soglia di stimolazione
+loop recorder
+telemetria
+monitoraggio remoto
+cateterismo cardiaco
+ventricolografia
+aortografia
+pericardiocentesi
+biopsia endomiocardica
+rivascolarizzazione
+bypass aortocoronarico
+stent medicato
+restenosi intrastent
+angio-TAC coronarica
+calcium score
+ecostress
+test ergometrico
+cicloergometro
+MitraClip
+TAVI
+
+# Anatomia coronarica e vasi
+tronco comune
+arteria discendente anteriore
+arteria circonflessa
+coronaria destra
+ramo marginale
+ramo diagonale
+dominanza destra
+vasi epicardici
+microcircolo
+arco aortico
+aorta addominale
+tronco polmonare
+vene polmonari
+vena cava inferiore
+succlavia
+carotide
+femorale
+radiale
+
+# Valvole e camere
+prolasso mitralico
+insufficienza aortica
+insufficienza tricuspidalica
+stenosi mitralica
+steno-insufficienza aortica
+lembo anteriore
+lembo posteriore
+corde tendinee
+muscolo papillare
+anulus mitralico
+bulbo aortico
+giunzione sinotubulare
+auricola sinistra
+forame ovale pervio
+difetto interatriale
+difetto interventricolare
+aneurisma del setto
+vegetazioni valvolari
+trombo apicale
+ecocontrasto spontaneo
+protesi valvolare
+bioprotesi
+valvuloplastica
+
+# Funzione e reperti ecocardiografici
+disfunzione diastolica
+rilasciamento alterato
+pattern restrittivo
+rimodellamento concentrico
+ipertrofia ventricolare sinistra
+geometria ventricolare
+atriomegalia
+dilatazione atriale
+escursione sistolica
+collassabilità
+cavità ventricolari
+gradiente transvalvolare
+gradiente medio
+area valvolare
+vena contracta
+ipertensione polmonare
+pressione polmonare stimata
+rigurgito tricuspidalico
+congestione polmonare
+stasi polmonare
+versamento pleurico
+edema polmonare
+embolia polmonare
+cuore polmonare
+
+# Elettrocardiogramma e aritmie
+aritmia sinusale
+tachicardia sinusale
+bradicardia sinusale
+extrasistoli sopraventricolari
+battiti ectopici
+tachicardia parossistica sopraventricolare
+tachicardia ventricolare
+blocco di branca destra
+blocco di branca sinistra
+emiblocco anteriore sinistro
+blocco senoatriale
+malattia del nodo del seno
+preeccitazione ventricolare
+ripolarizzazione precoce
+alterazioni aspecifiche
+asse elettrico
+deviazione assiale
+intervallo PR
+QT corretto
+onde di necrosi
+sequenza attivazione
+
+# Sintomi e clinica
+astenia
+affaticabilità
+vertigini
+lipotimia
+palpitazioni
+dolore toracico
+oppressione retrosternale
+irradiazione
+angina pectoris
+angina da sforzo
+claudicatio intermittens
+edemi declivi
+turgore giugulare
+epatomegalia
+reflusso epatogiugulare
+cianosi
+pallore
+sudorazione algida
+ortostatismo
+ipotensione ortostatica
+crisi ipertensiva
+profilo pressorio
+automisurazione domiciliare
+ipertensione essenziale
+sindrome coronarica acuta
+arteriopatia periferica
+vasculopatia
+comorbidità
+scompenso cardiaco acuto
+riacutizzazione
+
+# Fattori di rischio e laboratorio
+fattori di rischio cardiovascolare
+familiarità
+tabagismo
+obesità
+sedentarietà
+ipercolesterolemia
+ipertrigliceridemia
+diabete mellito
+emoglobina glicata
+insufficienza renale cronica
+funzione renale
+creatinina
+clearance della creatinina
+elettroliti
+troponina
+peptide natriuretico
+D-dimero
+emocromo
+ferritina
+sideremia
+colesterolo totale
+colesterolo LDL
+colesterolo HDL
+trigliceridi
+
+# Obiettività e semeiotica
+anamnesi
+anamnesi cardiologica
+obiettività
+auscultazione
+toni cardiaci
+pause libere
+soffio sistolico
+soffio diastolico
+murmure vescicolare
+rantoli
+crepitii
+polsi periferici
+frequenza cardiaca
+pressione arteriosa
+saturazione
+normocardico
+normoteso
+eupnoico
+apiretico
+
+# Linguaggio del referto (parole comuni spesso storpiate)
+valutazione
+rivalutazione
+riscontro
+evidenza
+compatibile
+verosimilmente
+sostanzialmente
+complessivamente
+moderatamente
+lievemente
+severamente
+significativo
+emodinamicamente
+clinicamente
+asintomatico
+sintomatico
+paucisintomatico
+stazionario
+peggioramento
+miglioramento
+ottimizzazione
+titolazione
+incremento
+riduzione
+sospensione
+prosecuzione
+introduzione
+sostituzione
+monitoraggio
+sorveglianza
+indicazione
+controindicazione
+raccomandazione
+prescrizione
+posologia
+formulazione
+aderenza terapeutica
+decorso
+stabilità
+tollerabilità
+efficacia
+beneficio
+prognosi
+eziologia
+diagnosi differenziale
+approfondimento
+accertamenti
+consulenza
+ambulatoriale
+ambulatorio
+ricovero
+dimissione
+convocazione
+prenotazione
+appuntamento
+documentazione
+refertazione
+certificato
+
+# Lettera al collega
+Egregio
+Gentile
+collega
+dottore
+dottoressa
+professore
+ringraziando
+disposizione
+riferimento
+cordiali saluti
+distinti saluti
