@@ -345,6 +345,28 @@ Rispondi SOLO con un oggetto JSON valido, senza testo prima o dopo:
 TESTO:
 {testo}"""
 
+# Cicli 2-4 da soli (variante «spezzata», 2026-09-01): sul dettato lungo i
+# modelli medi (Qwen) diluiti sui 4 cicli quasi saltano le correzioni
+# (palestra dal vivo: 5 proposte, 0 applicate, contro le 16-21 in modalità
+# lista). Con spezzata=1 nel .conf la correzione resta una chiamata dedicata
+# (il formato dove rendono al massimo) e questi tre cicli vanno in una
+# seconda chiamata sul testo già corretto.
+PROMPT_TRE_CICLI = """Sei l'assistente di redazione dei referti di uno studio cardiologico svizzero. Il testo qui sotto è un referto dettato a voce, già corretto dagli errori di trascrizione: contiene ancora frasi rivolte alla segretaria e divagazioni.
+
+Lavora in TRE CICLI ordinati, uno alla volta, rileggendo ogni volta il testo.
+
+CICLO 1 — NOTE PER LA SEGRETERIA: elenca le frasi in cui il medico si rivolge a chi scrive invece che al referto: saluti e congedi, istruzioni («recuperate», «copiate», «potete prendere…»), domande, scuse e ripetizioni annunciate, commenti organizzativi. Citazioni ESATTE del testo. MAI frasi che contengono numeri o dati clinici: nel dubbio, non è una nota.
+
+CICLO 2 — FUORI TEMA: elenca le frasi estranee al referto (chiacchiere, parentesi personali, meta-commenti sul dettato). Citazioni ESATTE. MAI frasi con cifre o contenuto clinico; nel dubbio, lasciala nel referto.
+
+CICLO 3 — SENZA SENSO: elenca le frasi rimaste prive di senso in italiano, ciascuna con una proposta di ricostruzione SOLO se il suono la giustifica (mai cambiare i numeri); altrimenti proposta vuota.
+
+Rispondi SOLO con un oggetto JSON valido, senza testo prima o dopo:
+{"note_segreteria": ["…"], "fuori_tema": ["…"], "senza_senso": [{"frase": "…", "proposta": ""}]}
+
+TESTO:
+{testo}"""
+
 # Prompt per l'anonimizzazione pre-invio esterno (modello LOCALE): individua
 # i dati identificativi, il CODICE li sostituisce — l'AI non riscrive mai.
 PROMPT_DATI_PERSONALI = """Nel testo qui sotto individua i DATI IDENTIFICATIVI di persone: nomi e cognomi (anche storpiati dalla trascrizione automatica), date di nascita, indirizzi privati, numeri di telefono, email, numeri AVS.
@@ -2111,9 +2133,22 @@ def _catena_compatta_esterna(testo: str, file_id: str) -> str | None:
     if esito_anon is None:
         return None
     anon, mappa = esito_anon
+
+    def rip(s: str) -> str:
+        for segnaposto, vero in mappa.items():
+            s = s.replace(segnaposto, vero)
+        return s
+
+    spezzata = (_config_esterno() or {}).get("spezzata") == "1"
     try:
-        uscita = _chiama_esterno_openai(
-            PROMPT_CATENA_COMPATTA.replace("{testo}", anon), file_id)
+        if spezzata:
+            # Chiamata A: SOLO la lista di riparazioni (il formato dove anche
+            # i modelli medi rendono al massimo).
+            uscita = _chiama_esterno_openai(
+                PROMPT_CORREZIONE_LISTA.replace("{testo}", anon), file_id)
+        else:
+            uscita = _chiama_esterno_openai(
+                PROMPT_CATENA_COMPATTA.replace("{testo}", anon), file_id)
     except RuntimeError:
         log.warning(
             "fase=correzione_esterna file=%s esito=fallita motivo=nessuna_risposta modo=compatta",
@@ -2123,17 +2158,37 @@ def _catena_compatta_esterna(testo: str, file_id: str) -> str | None:
     if not isinstance(dati, dict):
         return None
 
-    def rip(s: str) -> str:
-        for segnaposto, vero in mappa.items():
-            s = s.replace(segnaposto, vero)
-        return s
-
-    coppie = [{"da": rip(str(v.get("da", ""))), "a": rip(str(v.get("a", "")))}
-              for v in (dati.get("riparazioni") or []) if isinstance(v, dict)]
+    coppie_anon = [(str(v.get("da", "")), str(v.get("a", "")))
+                   for v in (dati.get("riparazioni") or []) if isinstance(v, dict)]
+    coppie = [{"da": rip(da), "a": rip(a)} for da, a in coppie_anon]
     esito = _applica_lista(testo, coppie, file_id, "correzione_esterna")
     if esito is None:
         return None
     nuovo, applicate, scartate = esito
+
+    if spezzata:
+        # Il testo anonimo segue le stesse riparazioni appena applicate al
+        # testo vero, così la chiamata B lavora sul referto già corretto.
+        applicate_reali = {(d, a) for d, a in RIPARAZIONI_APPLICATE.get(file_id, [])}
+        anon_corr = anon
+        for da, a in coppie_anon:
+            if (rip(da), rip(a)) in applicate_reali:
+                anon_corr = re.sub(r"(?<!\w)" + re.escape(da) + r"(?!\w)",
+                                   lambda _m, a=a: a, anon_corr)
+        # Chiamata B: i tre cicli «segretariali» sul testo corretto.
+        try:
+            uscita_b = _chiama_esterno_openai(
+                PROMPT_TRE_CICLI.replace("{testo}", anon_corr), file_id)
+            dati_b = _estrai_json(uscita_b)
+        except RuntimeError:
+            dati_b = None
+        if isinstance(dati_b, dict):
+            for chiave in ("note_segreteria", "fuori_tema", "senza_senso"):
+                dati[chiave] = dati_b.get(chiave)
+        else:
+            log.warning(
+                "fase=correzione_esterna file=%s esito=cicli_b_falliti (solo riparazioni)",
+                file_id)
     # Le citazioni degli altri cicli si riferiscono al testo PRIMA delle
     # riparazioni: si aggiornano con gli stessi scambi appena applicati,
     # così l'aggancio esatto sul testo nuovo torna a combaciare.
