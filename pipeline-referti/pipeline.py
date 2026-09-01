@@ -355,11 +355,11 @@ PROMPT_TRE_CICLI = """Sei l'assistente di redazione dei referti di uno studio ca
 
 Lavora in TRE CICLI ordinati, uno alla volta, rileggendo ogni volta il testo.
 
-CICLO 1 — NOTE PER LA SEGRETERIA: elenca le frasi in cui il medico si rivolge a chi scrive invece che al referto: saluti e congedi, istruzioni («recuperate», «copiate», «potete prendere…»), domande, scuse e ripetizioni annunciate, commenti organizzativi. Citazioni ESATTE del testo. MAI frasi che contengono numeri o dati clinici: nel dubbio, non è una nota.
+CICLO 1 — NOTE PER LA SEGRETERIA: elenca le frasi in cui il medico si rivolge a chi scrive invece che al referto: saluti e congedi, istruzioni («recuperate», «copiate», «potete prendere…»), domande, scuse e ripetizioni annunciate, commenti organizzativi. Citazioni ESATTE del testo. MAI frasi che contengono numeri o dati clinici. POCHE E SICURE: al massimo 25, solo quelle inequivocabili — nel dubbio, non è una nota.
 
-CICLO 2 — FUORI TEMA: elenca le frasi estranee al referto (chiacchiere, parentesi personali, meta-commenti sul dettato). Citazioni ESATTE. MAI frasi con cifre o contenuto clinico; nel dubbio, lasciala nel referto.
+CICLO 2 — FUORI TEMA: elenca le frasi estranee al referto (chiacchiere, parentesi personali, meta-commenti sul dettato). Citazioni ESATTE. MAI frasi con cifre o contenuto clinico. POCHE E SICURE: al massimo 12 — nel dubbio, lasciala nel referto.
 
-CICLO 3 — SENZA SENSO: elenca le frasi rimaste prive di senso in italiano, ciascuna con una proposta di ricostruzione SOLO se il suono la giustifica (mai cambiare i numeri); altrimenti proposta vuota.
+CICLO 3 — SENZA SENSO: elenca le frasi rimaste prive di senso in italiano, ciascuna con una proposta di ricostruzione SOLO se il suono la giustifica (mai cambiare i numeri); altrimenti proposta vuota. Al massimo 10, le più gravi.
 
 Rispondi SOLO con un oggetto JSON valido, senza testo prima o dopo:
 {"note_segreteria": ["…"], "fuori_tema": ["…"], "senza_senso": [{"frase": "…", "proposta": ""}]}
