@@ -3065,6 +3065,28 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             ultimo_a = _ultimo_secondo(percorso(".json"))
         except Exception:
             durata_wav = ultimo_a = 0.0
+        # Sentinella anti-nano (2026-09-01, visto dal vivo: due corse del
+        # servizio hanno prodotto 1'700 caratteri invece di 9'900 sullo
+        # stesso audio, e la bozza decapitata è arrivata in pagina senza un
+        # avviso). Un dettato vero rende ~5-8 caratteri per secondo di
+        # parlato: sotto i 2 la trascrizione è quasi certamente collassata
+        # → una corsa di recupero, e comunque un avviso ben visibile.
+        try:
+            testo_a = percorso(".txt").read_text(encoding="utf-8")
+        except OSError:
+            testo_a = ""
+        densita = len(testo_a) / max(durata_wav, 1.0)
+        if durata_wav >= TRONC_AUDIO_MIN_S and densita < 2.0:
+            log.warning(
+                "fase=trascrizione_a file=%s esito=sospetto_collasso caratteri=%d densita=%.2f",
+                file_id, len(testo_a), densita,
+            )
+            avvisi.append(
+                "ATTENZIONE: la trascrizione è sospettosamente corta rispetto alla "
+                "durata dell'audio — è probabile che manchi gran parte del dettato. "
+                "NON confermare questa bozza: riascolta l'audio e, se incompleta, "
+                "ricarica il dettato."
+            )
         # Col VAD i tempi di whisper sono sull'orologio COMPATTO: il metro
         # del «quanto doveva coprire» è la somma dei segmenti di parlato
         # (più i cuscinetti di giuntura), non la durata del WAV pieno —
