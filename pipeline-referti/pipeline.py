@@ -3492,7 +3492,10 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # buoni diventano PROPOSTE nel wizard (entrano tra le frasi da
         # chiarire); mai applicati da soli. Fase facoltativa: senza visita
         # abbinata, senza embedding o senza esterno non succede nulla.
-        if not visita and _esterno_attivo() == "openai":
+        # Interruttore: si accende SOLO con visita=1 nella config esterna
+        # (tenuta da parte su richiesta utente 2026-09-03).
+        if (not visita and _esterno_attivo() == "openai"
+                and cfg_est and cfg_est.get("visita") == "1"):
             fase = "consulto_visita"
             _ = notifica and notifica(fase)
             gia = {v["frase"] for v in frasi_da_chiarire}
