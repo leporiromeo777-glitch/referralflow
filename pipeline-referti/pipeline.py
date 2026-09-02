@@ -345,6 +345,178 @@ Rispondi SOLO con un oggetto JSON valido, senza testo prima o dopo:
 TESTO:
 {testo}"""
 
+# ── Memoria della visita (2026-09-02, idea dell'utente) ─────────────────────
+# La registrazione completa della seduta come memoria di consulto: la
+# dettatura resta la fonte autorevole; per le sole frasi DUBBIE della bozza
+# si cercano (in locale: embedding BGE-M3 + coseno) i passaggi pertinenti
+# della visita e si chiede al modello esterno di verificare/proporre SOLO
+# sulla base di quegli estratti. Esiti come PROPOSTE nel wizard, mai
+# applicati da soli. Modulare: embedding, ricerca e risolutore sostituibili.
+MODELLO_EMBED = os.environ.get("REFERTI_EMBED", "bge-m3")
+CONSULTO_MAX_DUBBI = int(os.environ.get("REFERTI_CONSULTO_DUBBI", "10"))
+CONSULTO_BLOCCO_PAROLE = 60   # ~30 secondi di parlato per blocco
+CONSULTO_TOP_BLOCCHI = 4
+CONSULTO_VISITA_ORE = 12      # abbinamento v1: la visita più recente del giorno
+
+PROMPT_CONSULTO_VISITA = """Sei l'assistente di redazione di referti di uno studio cardiologico. Durante la visita è stata registrata la conversazione medico-paziente; il medico ha poi dettato il referto. Alcune frasi del referto sono DUBBIE (trascritte male o ambigue).
+
+Per ogni dubbio ricevi la frase del referto e alcuni ESTRATTI della conversazione in visita. Il tuo compito: verificare se gli estratti chiariscono il dubbio.
+
+Regole obbligatorie:
+1. Usa ESCLUSIVAMENTE gli estratti forniti: mai conoscenze tue, mai supposizioni cliniche.
+2. Se gli estratti chiariscono il dubbio, proponi la frase corretta («proposta»), fedele a ciò che si è detto in visita.
+3. Ogni numero nella proposta deve comparire IDENTICO negli estratti o nella frase originale.
+4. Se gli estratti non bastano, esito «irrisolto» e proposta vuota: mai inventare.
+5. Se la frase del referto è già coerente con gli estratti, esito «conferma».
+
+Rispondi SOLO con un oggetto JSON valido:
+{"consulti": [{"n": 1, "esito": "conferma|proposta|irrisolto", "proposta": ""}]}
+
+{dubbi}"""
+
+
+def _embeddings(testi: list[str]) -> list[list[float]] | None:
+    """Vettori BGE-M3 via Ollama locale (mai contenuti nei log)."""
+    if not testi:
+        return []
+    corpo = json.dumps({"model": MODELLO_EMBED, "input": testi}).encode("utf-8")
+    try:
+        r = urllib.request.Request(
+            OLLAMA_URL + "/api/embed", data=corpo,
+            headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(r, timeout=OLLAMA_TIMEOUT_S) as resp:
+            dati = json.loads(resp.read().decode("utf-8"))
+        emb = dati.get("embeddings")
+        return emb if isinstance(emb, list) and len(emb) == len(testi) else None
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError):
+        return None
+
+
+def _coseno(a: list[float], b: list[float]) -> float:
+    num = sum(x * y for x, y in zip(a, b))
+    na = sum(x * x for x in a) ** 0.5
+    nb = sum(y * y for y in b) ** 0.5
+    return num / (na * nb) if na and nb else 0.0
+
+
+def _blocchi_visita(testo: str, parole: list) -> list[dict]:
+    """Blocchi di ~CONSULTO_BLOCCO_PAROLE parole con il tempo d'inizio nella
+    registrazione (se i tempi mancano, blocchi per frasi senza tempo)."""
+    blocchi: list[dict] = []
+    if parole:
+        for i in range(0, len(parole), CONSULTO_BLOCCO_PAROLE):
+            gruppo = parole[i:i + CONSULTO_BLOCCO_PAROLE]
+            blocchi.append({
+                "testo": " ".join(str(p[0]) for p in gruppo),
+                "tempo": float(gruppo[0][1]),
+            })
+    else:
+        for pezzo in _blocchi_di_testo(testo, 400):
+            blocchi.append({"testo": pezzo, "tempo": None})
+    return [b for b in blocchi if len(b["testo"]) >= 40]
+
+
+def _visita_recente(file_id: str) -> dict | None:
+    """La visita registrata più recente (ultime CONSULTO_VISITA_ORE) dalla
+    piattaforma. None = niente consulto, la catena procede come sempre."""
+    base = os.environ.get("REFERTI_FLOW_URL", "")
+    token = os.environ.get("REFERTI_FLOW_TOKEN", "")
+    if not base or not token:
+        return None
+    try:
+        r = urllib.request.Request(
+            base.rstrip("/") + "/api/referti/visita-recente?ore=%d" % CONSULTO_VISITA_ORE,
+            headers={"Authorization": "Bearer " + token})
+        with urllib.request.urlopen(r, timeout=30) as resp:
+            dati = json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(dati, dict) or not dati.get("testo"):
+        return None
+    return dati
+
+
+def consulto_visita(dubbi: list[str], file_id: str) -> list[dict]:
+    """Per ogni frase dubbia: ricerca semantica LOCALE nella trascrizione
+    della visita, poi UNA chiamata esterna (anonimizzata) che verifica sui
+    soli estratti. Ritorna [{frase, proposta, tempo_visita}] — solo esiti
+    «proposta»; conferme e irrisolti restano fuori (la frase resta comunque
+    segnalata dalle fasi che l'hanno prodotta). Ogni intoppo → lista vuota."""
+    inizio = time.monotonic()
+    dubbi = [d.strip() for d in dubbi if len(d.strip()) >= 12][:CONSULTO_MAX_DUBBI]
+    if not dubbi:
+        return []
+    visita = _visita_recente(file_id)
+    if not visita:
+        return []
+    blocchi = _blocchi_visita(str(visita.get("testo") or ""),
+                              visita.get("parole") or [])
+    if len(blocchi) < 3:
+        return []
+    emb_b = _embeddings([b["testo"] for b in blocchi])
+    emb_d = _embeddings(dubbi)
+    if not emb_b or not emb_d:
+        log.warning("fase=consulto_visita file=%s esito=saltato motivo=embedding", file_id)
+        return []
+    scelte: list[list[dict]] = []
+    for ed in emb_d:
+        punte = sorted(range(len(blocchi)),
+                       key=lambda j: _coseno(ed, emb_b[j]), reverse=True)
+        scelte.append([blocchi[j] for j in punte[:CONSULTO_TOP_BLOCCHI]])
+    # Un solo documento dubbi+estratti → UNA anonimizzazione, UNA chiamata.
+    righe: list[str] = []
+    for i, (d, bs) in enumerate(zip(dubbi, scelte), 1):
+        righe.append(f"DUBBIO {i}: {d}")
+        for b in bs:
+            righe.append(f"  ESTRATTO: {b['testo']}")
+    documento = "\n".join(righe)
+    esito_anon = _anonimizza_per_esterno(documento, file_id, con_mappa=True)
+    if esito_anon is None:
+        log.warning("fase=consulto_visita file=%s esito=annullato motivo=anonimizzazione", file_id)
+        return []
+    anon, mappa = esito_anon
+
+    def rip(s: str) -> str:
+        for segnaposto, vero in mappa.items():
+            s = s.replace(segnaposto, vero)
+        return s
+
+    try:
+        uscita = _chiama_esterno_openai(
+            PROMPT_CONSULTO_VISITA.replace("{dubbi}", anon), file_id)
+    except RuntimeError:
+        log.warning("fase=consulto_visita file=%s esito=fallito motivo=nessuna_risposta", file_id)
+        return []
+    dati = _estrai_json(uscita) or {}
+    voci = dati.get("consulti") if isinstance(dati, dict) else None
+    fuori: list[dict] = []
+    for v in voci if isinstance(voci, list) else []:
+        if not isinstance(v, dict) or str(v.get("esito")) != "proposta":
+            continue
+        try:
+            i = int(v.get("n", 0)) - 1
+        except (TypeError, ValueError):
+            continue
+        if not 0 <= i < len(dubbi):
+            continue
+        proposta = rip(str(v.get("proposta", "")).strip())[:300]
+        if not proposta or proposta == dubbi[i]:
+            continue
+        # Regola d'oro del consulto: ogni numero della proposta deve esistere
+        # negli estratti usati o nella frase dubbia (verifica del CODICE).
+        ammessi = _numeri(dubbi[i] + " " + " ".join(b["testo"] for b in scelte[i]))
+        if any(n not in ammessi for n in _numeri(proposta)):
+            continue
+        tempo = next((b["tempo"] for b in scelte[i] if b["tempo"] is not None), None)
+        fuori.append({"frase": dubbi[i], "proposta": proposta,
+                      "tempo_visita": tempo})
+    log.info(
+        "fase=consulto_visita file=%s esito=ok dubbi=%d proposte=%d durata=%.1fs",
+        file_id, len(dubbi), len(fuori), time.monotonic() - inizio,
+    )
+    return fuori
+
+
 # Cicli 2-4 da soli (variante «spezzata», 2026-09-01): sul dettato lungo i
 # modelli medi (Qwen) diluiti sui 4 cicli quasi saltano le correzioni
 # (palestra dal vivo: 5 proposte, 0 applicate, contro le 16-21 in modalità
@@ -3315,6 +3487,38 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             encoding="utf-8",
         )
 
+        # Memoria della visita (2026-09-02): per le frasi dubbie della bozza
+        # si consulta la registrazione della seduta più recente. Gli esiti
+        # buoni diventano PROPOSTE nel wizard (entrano tra le frasi da
+        # chiarire); mai applicati da soli. Fase facoltativa: senza visita
+        # abbinata, senza embedding o senza esterno non succede nulla.
+        if not visita and _esterno_attivo() == "openai":
+            fase = "consulto_visita"
+            _ = notifica and notifica(fase)
+            gia = {v["frase"] for v in frasi_da_chiarire}
+            candidati = (
+                [v["frase"] for v in frasi_da_chiarire if not v.get("proposta")]
+                + [v["frase"] for v in frasi_non_supportate]
+                + [d for d in dubbi if isinstance(d, str)]
+            )
+            visti_c: set[str] = set()
+            domande = []
+            for c in candidati:
+                if c not in visti_c:
+                    visti_c.add(c)
+                    domande.append(c)
+            for esito_c in consulto_visita(domande, file_id):
+                voce = {"frase": esito_c["frase"][:300],
+                        "proposta": esito_c["proposta"][:300]}
+                if esito_c["frase"] in gia:
+                    for v in frasi_da_chiarire:
+                        if v["frase"] == esito_c["frase"] and not v.get("proposta"):
+                            v["proposta"] = voce["proposta"]
+                            break
+                else:
+                    frasi_da_chiarire.append(voce)
+            frasi_da_chiarire = frasi_da_chiarire[:40]
+
         fase = "estrazione"
         _ = notifica and notifica(fase)
         campi = estrai_campi(testo_integrale, file_id)
@@ -3375,10 +3579,18 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             log.info("fase=tempi file=%s esito=ok parole=%d", file_id, len(parole))
         except Exception as e:
             log.info("fase=tempi file=%s esito=saltato tipo=%s", file_id, type(e).__name__)
+        parole_grezzo: list = []
         if visita:
             # La nota di visita è un riassunto: le sue parole non combaciano
             # con la trascrizione, il testo sincronizzato si spegne (la
             # pagina mostra il testo semplice; l'audio resta riascoltabile).
+            # I tempi allineati al GREZZO però si conservano (parole_grezzo):
+            # servono alla memoria della visita per il «riascolta qui» sui
+            # blocchi consultati.
+            try:
+                parole_grezzo = allinea_parole(grezzo_a, parole_audio)
+            except Exception:
+                parole_grezzo = []
             parole = []
 
         # Sentinella di troncamento: quando whisper «si incanta» in un loop,
@@ -3466,6 +3678,10 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         ],
         "richiede_revisione": True,
     }
+    if visita and parole_grezzo:
+        # Tempi parola-per-parola della TRASCRIZIONE INTEGRALE della visita:
+        # alimentano la memoria di consulto (blocchi con «riascolta qui»).
+        payload["parole_grezzo"] = parole_grezzo
     return file_id, payload
 
 

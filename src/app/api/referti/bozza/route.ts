@@ -106,6 +106,15 @@ export async function POST(req: NextRequest) {
     // di revisione per il confronto «frase → cosa è stato detto davvero».
     testo_grezzo:
       typeof body?.testo_grezzo === 'string' ? body.testo_grezzo.slice(0, MAX_TESTO) : '',
+    // Trascrizione integrale della visita coi tempi (solo tipo=visita):
+    // alimenta la memoria di consulto della registrazione.
+    parole_grezzo: (Array.isArray(body?.parole_grezzo) ? body.parole_grezzo.slice(0, 20000) : [])
+      .filter(
+        (p: unknown): p is [string, number] =>
+          Array.isArray(p) && p.length === 2
+          && typeof p[0] === 'string' && typeof p[1] === 'number'
+      )
+      .map((p: [string, number]) => [p[0].slice(0, 80), p[1]]),
     // Tempi parola-per-parola (SPEC §8): [parola, secondi] per ogni parola di
     // testo_corretto, per il testo sincronizzato con l'audio. Facoltativi.
     parole: (Array.isArray(body?.parole) ? body.parole.slice(0, 8000) : [])
