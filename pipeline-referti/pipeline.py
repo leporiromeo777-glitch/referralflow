@@ -2070,7 +2070,7 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
     try:
         uscita = chiama_ollama(
             PROMPT_DATI_PERSONALI.replace("{testo}", testo), file_id,
-            "correzione_esterna", formato_json=True, max_gettoni=800,
+            "correzione_esterna", formato_json=True, max_gettoni=1600,
         )
         dati = json.loads(uscita)
     except (RuntimeError, json.JSONDecodeError):
@@ -2156,7 +2156,7 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
     try:
         uscita2 = chiama_ollama(
             PROMPT_DATI_PERSONALI.replace("{testo}", anon), file_id,
-            "correzione_esterna", formato_json=True, max_gettoni=800,
+            "correzione_esterna", formato_json=True, max_gettoni=1600,
         )
         dati2 = json.loads(uscita2)
     except (RuntimeError, json.JSONDecodeError):
