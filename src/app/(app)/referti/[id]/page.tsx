@@ -5,11 +5,12 @@ import { query } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
 import { dataOra } from '@/lib/format';
-import { confermaBozza, scartaBozza, ripristinaBozza, eliminaBozza, riorganizzaBozza } from '../actions';
+import { confermaBozza, scartaBozza, ripristinaBozza, eliminaBozza } from '../actions';
 import { agganciaRiferimenti } from '@/lib/referti-allegati';
 import { AudioDettato } from '../AudioDettato';
 import { TestoDettato } from '../TestoDettato';
 import { RevisioneGuidata } from './RevisioneGuidata';
+import RiorganizzaAI from './RiorganizzaAI';
 
 export const dynamic = 'force-dynamic';
 
@@ -388,12 +389,11 @@ export default async function RefertoBozza({
 
           <div className="form-actions">
             <button className="btn btn-primary" type="submit">Conferma il referto</button>
-            {/* Stesso form: la proposta parte dal testo COME LO VEDI adesso
-                nella casella, comprese le correzioni non ancora confermate.
-                Può richiedere uno-due minuti (modello locale). */}
-            <button className="btn" type="submit" formAction={riorganizzaBozza}>
-              Riorganizza nel formato standard (AI)
-            </button>
+            {/* La proposta parte dal testo COME LO VEDI adesso nella casella,
+                comprese le correzioni non ancora confermate. Il lavoro dura
+                minuti (modello locale): il componente mostra la percentuale
+                interrogando /api/referti/struttura. */}
+            <RiorganizzaAI bozzaId={row.id} />
           </div>
         </form>
       ) : (

@@ -60,7 +60,10 @@ export type EsitoStruttura =
   | { ok: true; testo: string }
   | { ok: false; motivo: 'numeri' | 'troppo_corto' | 'ai_non_risponde' };
 
-export async function riorganizzaReferto(testo: string): Promise<EsitoStruttura> {
+export async function riorganizzaReferto(
+  testo: string,
+  avanzamento?: (percento: number) => void
+): Promise<EsitoStruttura> {
   const originale = testo.slice(0, TESTO_MAX);
   let risposta = '';
   try {
@@ -70,7 +73,10 @@ export async function riorganizzaReferto(testo: string): Promise<EsitoStruttura>
       body: JSON.stringify({
         model: MODELLO,
         prompt: PROMPT.replace('{testo}', originale),
-        stream: false,
+        // Streaming: serve solo a misurare l'avanzamento (il testo
+        // riorganizzato è lungo circa quanto l'originale, quindi i
+        // caratteri già prodotti sono una percentuale onesta).
+        stream: true,
         // 8192 e non 16384: sul Mac mini 24GB il 27b col contesto pieno
         // sconfina su CPU e manda in pressione la memoria dell'intera
         // macchina (visto dal vivo 2026-09-03); un referto sta in ~5k token.
@@ -79,9 +85,26 @@ export async function riorganizzaReferto(testo: string): Promise<EsitoStruttura>
       signal: AbortSignal.timeout(TIMEOUT_MS),
       cache: 'no-store',
     });
-    if (!r.ok) throw new Error(`ollama_http_${r.status}`);
-    const dati = await r.json();
-    risposta = typeof dati?.response === 'string' ? dati.response.trim() : '';
+    if (!r.ok || !r.body) throw new Error(`ollama_http_${r.status}`);
+    const lettore = r.body.getReader();
+    const decoder = new TextDecoder();
+    let resto = '';
+    for (;;) {
+      const { done, value } = await lettore.read();
+      if (done) break;
+      resto += decoder.decode(value, { stream: true });
+      const righe = resto.split('\n');
+      resto = righe.pop() ?? '';
+      for (const riga of righe) {
+        if (!riga.trim()) continue;
+        try {
+          const pezzo = JSON.parse(riga);
+          if (typeof pezzo?.response === 'string') risposta += pezzo.response;
+        } catch { /* riga parziale: ignorata */ }
+      }
+      avanzamento?.(Math.min(96, Math.round(100 * (risposta.length / Math.max(originale.length, 1)))));
+    }
+    risposta = risposta.trim();
   } catch {
     return { ok: false, motivo: 'ai_non_risponde' };
   }
@@ -96,4 +119,51 @@ export async function riorganizzaReferto(testo: string): Promise<EsitoStruttura>
     return { ok: false, motivo: 'troppo_corto' };
   }
   return { ok: true, testo: risposta };
+}
+
+// ——— Lavori in corso (barra di avanzamento del bottone) ———
+// Registro in memoria: l'app di produzione è un unico processo Node sul
+// Mac dello studio, quindi basta una Map. Un lavoro per bozza alla volta:
+// ripremere il bottone NON accoda una seconda generazione (lezione del
+// 2026-09-03: due 27b in coda mandano il Mac in pressione di memoria).
+
+export type StatoLavoro = {
+  stato: 'lavora' | 'fatto' | 'errore';
+  percento: number;
+  motivo?: 'numeri' | 'troppo_corto' | 'ai_non_risponde';
+};
+
+const lavori = new Map<string, StatoLavoro>();
+
+export function statoRiorganizzazione(bozzaId: string): StatoLavoro | null {
+  return lavori.get(bozzaId) ?? null;
+}
+
+export function avviaRiorganizzazione(
+  bozzaId: string,
+  testo: string,
+  salva: (testo: string) => Promise<void>
+): boolean {
+  const gia = lavori.get(bozzaId);
+  if (gia?.stato === 'lavora') return false;
+  lavori.set(bozzaId, { stato: 'lavora', percento: 1 });
+  void (async () => {
+    const esito = await riorganizzaReferto(testo, (percento) => {
+      const l = lavori.get(bozzaId);
+      if (l?.stato === 'lavora') l.percento = Math.max(l.percento, percento);
+    });
+    if (esito.ok) {
+      try {
+        await salva(esito.testo);
+        lavori.set(bozzaId, { stato: 'fatto', percento: 100 });
+      } catch {
+        lavori.set(bozzaId, { stato: 'errore', percento: 100, motivo: 'ai_non_risponde' });
+      }
+    } else {
+      lavori.set(bozzaId, { stato: 'errore', percento: 100, motivo: esito.motivo });
+    }
+    // Il registro si ripulisce da solo: l'esito resta leggibile 10 minuti.
+    setTimeout(() => lavori.delete(bozzaId), 600_000).unref?.();
+  })();
+  return true;
 }
