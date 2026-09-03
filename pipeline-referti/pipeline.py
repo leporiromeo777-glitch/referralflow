@@ -2081,6 +2081,7 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
     anon = testo
     persone = 0
     date_n = 0
+    altri_n = 0
     sensibili: list[str] = []  # tutto ciò che NON deve più comparire
     # La mappa segnaposto → dato vero serve alla catena compatta per
     # riportare le citazioni del modello esterno sul testo reale. Vive
@@ -2093,6 +2094,9 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
         tipo = str(voce.get("tipo", "")).strip()
         if not s or len(s) > 80 or s not in anon and s.lower() not in anon.lower():
             continue
+        # Ogni segnaposto è NUMERATO e finisce in mappa (2026-09-04): serve
+        # alla bella copia per ricostruire il testo vero al carattere. Fuori
+        # esce solo il numero progressivo — stessa privacy di prima.
         if tipo == "nome":
             persone += 1
             segnaposto = f"Persona {persone}"
@@ -2100,26 +2104,47 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
             date_n += 1
             segnaposto = f"[data {date_n}]"
         else:
-            segnaposto = "[dato rimosso]"
-        if segnaposto != "[dato rimosso]" and segnaposto not in mappa:
+            altri_n += 1
+            segnaposto = f"[dato {altri_n}]"
+        if segnaposto not in mappa:
             mappa[segnaposto] = s
         anon = re.sub(re.escape(s), segnaposto, anon, flags=re.IGNORECASE)
         sensibili.append(s)
         # Le singole parole di un nome composto (≥4 lettere) coprono le
-        # citazioni parziali («la signora Rossi» dopo «Maria Rossi»).
+        # citazioni parziali («la signora Rossi» dopo «Maria Rossi»): ogni
+        # pezzo ha il SUO segnaposto, così il ripristino è esatto (il nome
+        # intero al posto del solo cognome romperebbe l'impronta).
         if tipo == "nome":
             for pezzo in s.split():
-                if len(pezzo) >= 4 and pezzo.isalpha():
+                if len(pezzo) >= 4 and pezzo.isalpha() and re.search(
+                        r"(?<!\w)" + re.escape(pezzo) + r"(?!\w)", anon, re.IGNORECASE):
+                    persone += 1
+                    segnaposto_p = f"Persona {persone}"
+                    mappa[segnaposto_p] = pezzo
                     anon = re.sub(r"(?<!\w)" + re.escape(pezzo) + r"(?!\w)",
-                                  segnaposto, anon, flags=re.IGNORECASE)
+                                  segnaposto_p, anon, flags=re.IGNORECASE)
                     sensibili.append(pezzo)
-    # Rete regex: cose a struttura fissa che l'AI può mancare.
-    anon = re.sub(r"756\.\d{4}\.\d{4}\.\d{2}", "[dato rimosso]", anon)
-    anon = re.sub(r"[\w.+-]+@[\w-]+\.[\w.]+", "[dato rimosso]", anon)
-    anon = re.sub(r"(?<!\d)(?:\+41|0041|0)\s?7[5-9](?:[ .]?\d{2,3}){3}(?!\d)",
-                  "[dato rimosso]", anon)
-    anon = re.sub(r"(?<!\d)\d{1,2}[./]\d{1,2}[./](?:19|20)?\d{2}(?!\d)",
-                  "[data]", anon)
+
+    # Rete regex: cose a struttura fissa che l'AI può mancare. Anche qui
+    # segnaposto numerati per occorrenza, registrati in mappa.
+    def _rete(motivo: str, etichetta: str) -> None:
+        nonlocal anon
+        def _sost(m: "re.Match[str]") -> str:
+            nonlocal altri_n, date_n
+            if etichetta == "data":
+                date_n += 1
+                seg = f"[data {date_n}]"
+            else:
+                altri_n += 1
+                seg = f"[dato {altri_n}]"
+            mappa[seg] = m.group(0)
+            return seg
+        anon = re.sub(motivo, _sost, anon)
+
+    _rete(r"756\.\d{4}\.\d{4}\.\d{2}", "dato")
+    _rete(r"[\w.+-]+@[\w-]+\.[\w.]+", "dato")
+    _rete(r"(?<!\d)(?:\+41|0041|0)\s?7[5-9](?:[ .]?\d{2,3}){3}(?!\d)", "dato")
+    _rete(r"(?<!\d)\d{1,2}[./]\d{1,2}[./](?:19|20)?\d{2}(?!\d)", "data")
     # Controprova 1 (codice): nessun dato trovato deve essere sopravvissuto.
     for s in sensibili:
         if re.search(r"(?<!\w)" + re.escape(s) + r"(?!\w)", anon, re.IGNORECASE):
@@ -2969,8 +2994,10 @@ def bella_copia(testo: str, file_id: str) -> str | None:
     if not uscita or _impronta_lettere(uscita) != _impronta_lettere(anon):
         log.warning("fase=bella_copia file=%s esito=scartata motivo=impronta_anon", file_id)
         return None
-    for segnaposto, vero in mappa.items():
-        uscita = uscita.replace(segnaposto, vero)
+    # Segnaposto lunghi prima: «Persona 12» va ripristinato prima di
+    # «Persona 1», che altrimenti gli mangerebbe il prefisso.
+    for segnaposto in sorted(mappa, key=len, reverse=True):
+        uscita = uscita.replace(segnaposto, mappa[segnaposto])
     if _impronta_lettere(uscita) != _impronta_lettere(testo):
         log.warning("fase=bella_copia file=%s esito=scartata motivo=impronta_reale", file_id)
         return None
