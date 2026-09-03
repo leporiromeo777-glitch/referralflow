@@ -71,7 +71,10 @@ export async function riorganizzaReferto(testo: string): Promise<EsitoStruttura>
         model: MODELLO,
         prompt: PROMPT.replace('{testo}', originale),
         stream: false,
-        options: { temperature: 0, num_ctx: 16384 },
+        // 8192 e non 16384: sul Mac mini 24GB il 27b col contesto pieno
+        // sconfina su CPU e manda in pressione la memoria dell'intera
+        // macchina (visto dal vivo 2026-09-03); un referto sta in ~5k token.
+        options: { temperature: 0, num_ctx: 8192 },
       }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
       cache: 'no-store',
