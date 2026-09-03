@@ -2922,6 +2922,63 @@ def avvocato_esterno(bozza: str, grezzo: str, file_id: str) -> list[dict] | None
     return fuori
 
 
+# ——— Bella copia (2026-09-03, richiesta utente) ———
+# Punteggiatura e maiuscole sistemate dall'esterno. È l'UNICA fase a cui è
+# permesso riscrivere il testo intero, ed è permesso solo perché esiste una
+# guardia assoluta: l'impronta «solo lettere e cifre» deve restare identica
+# al carattere — se l'AI cambia, aggiunge o perde anche una sola parola o
+# cifra, la proposta muore. Controllata DUE volte: sul testo anonimo
+# (contro l'AI) e dopo il ripristino dei nomi (contro il giro di
+# anonimizzazione: un dato redatto senza segnaposto non tornerebbe).
+
+PROMPT_BELLA_COPIA = """Sei un correttore di bozze per referti cardiologici. Sistema SOLO la punteggiatura e le maiuscole/minuscole del testo qui sotto: virgole al posto giusto, punti, maiuscola a inizio frase e nei nomi propri, spazi corretti attorno ai segni.
+
+REGOLE ASSOLUTE:
+- NON aggiungere, togliere o cambiare NEMMENO UNA parola.
+- NON toccare numeri, date, sigle, unità di misura.
+- NON riformulare, NON riordinare le frasi, NON unire o dividere i paragrafi: gli a-capo restano dove sono.
+- I segnaposto come «Persona 1» o «[data 1]» restano ESATTAMENTE come sono.
+- Rispondi SOLO con il testo sistemato, senza commenti.
+
+TESTO:
+{testo}"""
+
+
+def _impronta_lettere(testo: str) -> str:
+    """Solo lettere e cifre, minuscole, in fila: ciò che la bella copia non
+    può cambiare (le è concesso toccare solo segni, spazi e maiuscole)."""
+    return "".join(ch.lower() for ch in testo if ch.isalnum())
+
+
+def bella_copia(testo: str, file_id: str) -> str | None:
+    """Il testo torna ripunteggiato o non torna affatto: None = si tiene
+    l'originale (esterno giù, anonimizzazione incerta o impronta violata)."""
+    inizio = time.monotonic()
+    esito_anon = _anonimizza_per_esterno(testo, file_id, con_mappa=True)
+    if esito_anon is None:
+        log.warning("fase=bella_copia file=%s esito=annullato motivo=anonimizzazione", file_id)
+        return None
+    anon, mappa = esito_anon
+    try:
+        uscita = _chiama_esterno_openai(
+            PROMPT_BELLA_COPIA.replace("{testo}", anon), file_id)
+    except RuntimeError:
+        log.warning("fase=bella_copia file=%s esito=fallito motivo=esterno", file_id)
+        return None
+    uscita = (uscita or "").strip()
+    if not uscita or _impronta_lettere(uscita) != _impronta_lettere(anon):
+        log.warning("fase=bella_copia file=%s esito=scartata motivo=impronta_anon", file_id)
+        return None
+    for segnaposto, vero in mappa.items():
+        uscita = uscita.replace(segnaposto, vero)
+    if _impronta_lettere(uscita) != _impronta_lettere(testo):
+        log.warning("fase=bella_copia file=%s esito=scartata motivo=impronta_reale", file_id)
+        return None
+    log.info("fase=bella_copia file=%s esito=ok durata=%.1fs",
+             file_id, time.monotonic() - inizio)
+    return uscita
+
+
 def ispeziona_llm(testo: str, file_id: str) -> list[str]:
     """Ispezione col prompt §6.2: SOLO elenco dei segmenti dubbi, nessuna
     modifica al testo (compito separato apposta: un 12B non riesce a
@@ -3521,6 +3578,19 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                 else:
                     frasi_da_chiarire.append(voce)
             frasi_da_chiarire = frasi_da_chiarire[:40]
+
+        # Bella copia: punteggiatura e maiuscole (interruttore bella=1 nella
+        # config esterna, solo sui referti). Se la proposta non supera le
+        # guardie dell'impronta il testo resta com'è; sta PRIMA di estrazione
+        # e tempi, così campi e riascolto lavorano sul testo definitivo.
+        if (not visita and _esterno_attivo() == "openai"
+                and (_config_esterno() or {}).get("bella") == "1"):
+            fase = "bella_copia"
+            _ = notifica and notifica(fase)
+            pulito = bella_copia(finale, file_id)
+            if pulito is not None:
+                finale = pulito
+                testo_integrale = finale
 
         fase = "estrazione"
         _ = notifica and notifica(fase)
