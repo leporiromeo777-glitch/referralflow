@@ -2399,16 +2399,19 @@ def _chiama_esterno_manuale(anon: str, file_id: str) -> str:
     raise RuntimeError("correttore manuale non ha risposto")
 
 
-def _chiama_esterno_openai(prompt: str, file_id: str) -> str:
+def _chiama_esterno_openai(prompt: str, file_id: str,
+                           modello: str | None = None) -> str:
     """Una chiamata a un endpoint compatibile OpenAI (config da
     _config_esterno). Pensatoio spento dove il server lo onora; per i
     modelli che ragionano comunque, la risposta si pesca anche dal campo
-    reasoning. 2 tentativi. Qui arriva SOLO testo già anonimizzato."""
+    reasoning. 2 tentativi. Qui arriva SOLO testo già anonimizzato.
+    `modello` scavalca la riga modello= della config (righe per-fase:
+    modello_bella=, modello_struttura=)."""
     cfg = _config_esterno()
     if not cfg:
         raise RuntimeError("config esterna mancante")
     base = {
-        "model": cfg["modello"],
+        "model": modello or cfg["modello"],
         "max_tokens": int(cfg.get("max_gettoni", "8000")),
         "messages": [{"role": "user", "content": prompt}],
     }
@@ -3171,11 +3174,24 @@ REFERTO DETTATO:
 {testo}"""
 
 
-def _firma_numerica(testo: str) -> str:
-    """Tutti i numeri in fila, ESCLUSA la numerazione d'elenco a inizio
-    riga («1. », «2. »…): è il formato a chiederla, non è un dato clinico."""
+def _conta_numeri(testo: str) -> dict[str, int]:
+    """Quante volte compare ogni numero, ESCLUSA la numerazione d'elenco a
+    inizio riga («1. », «2. »…): è il formato a chiederla, non è un dato."""
     senza_elenchi = re.sub(r"^\s*\d{1,2}\.\s+", "", testo, flags=re.MULTILINE)
-    return "|".join(sorted(re.findall(r"\d+(?:[.,]\d+)?", senza_elenchi)))
+    conteggio: dict[str, int] = {}
+    for n in re.findall(r"\d+(?:[.,]\d+)?", senza_elenchi):
+        conteggio[n] = conteggio.get(n, 0) + 1
+    return conteggio
+
+
+def _numeri_conservati(prima: str, dopo: str) -> bool:
+    """La riorganizzazione può far COLLASSARE i doppioni (il formato vieta
+    di ripetere i dati in due sezioni), ma: nessun numero nuovo, nessun
+    numero distinto perso, nessuna occorrenza in più."""
+    a, b = _conta_numeri(prima), _conta_numeri(dopo)
+    if set(a) != set(b):
+        return False
+    return all(b[n] <= a[n] for n in b)
 
 
 def struttura_standard(testo: str, file_id: str) -> str | None:
@@ -3187,27 +3203,35 @@ def struttura_standard(testo: str, file_id: str) -> str | None:
         log.warning("fase=struttura file=%s esito=annullata motivo=anonimizzazione", file_id)
         return None
     anon, mappa = esito_anon
-    try:
-        uscita = _chiama_esterno_openai(
-            PROMPT_STRUTTURA.replace("{testo}", anon), file_id)
-    except RuntimeError:
-        log.warning("fase=struttura file=%s esito=fallita motivo=esterno", file_id)
-        return None
-    uscita = (uscita or "").strip()
-    if not uscita or _firma_numerica(uscita) != _firma_numerica(anon):
-        log.warning("fase=struttura file=%s esito=scartata motivo=numeri", file_id)
-        return None
-    if len(uscita) < len(anon) * 0.6:
-        log.warning("fase=struttura file=%s esito=scartata motivo=troppo_corta", file_id)
-        return None
-    for segnaposto in sorted(mappa, key=len, reverse=True):
-        uscita = uscita.replace(segnaposto, mappa[segnaposto])
-    if _firma_numerica(uscita) != _firma_numerica(testo):
-        log.warning("fase=struttura file=%s esito=scartata motivo=numeri_reali", file_id)
-        return None
-    log.info("fase=struttura file=%s esito=ok caratteri=%d durata=%.1fs",
-             file_id, len(uscita), time.monotonic() - inizio)
-    return uscita
+    modello = (_config_esterno() or {}).get("modello_struttura") or None
+    # Due tentativi: i fornitori non sono deterministici e la guardia è
+    # severa — una bocciatura singola non condanna la fase.
+    for giro in (1, 2):
+        try:
+            uscita = _chiama_esterno_openai(
+                PROMPT_STRUTTURA.replace("{testo}", anon), file_id, modello=modello)
+        except RuntimeError:
+            log.warning("fase=struttura file=%s esito=fallita motivo=esterno", file_id)
+            return None
+        uscita = (uscita or "").strip()
+        if not uscita or not _numeri_conservati(anon, uscita):
+            log.warning("fase=struttura file=%s esito=scartata motivo=numeri giro=%d",
+                        file_id, giro)
+            continue
+        if len(uscita) < len(anon) * 0.6:
+            log.warning("fase=struttura file=%s esito=scartata motivo=troppo_corta giro=%d",
+                        file_id, giro)
+            continue
+        for segnaposto in sorted(mappa, key=len, reverse=True):
+            uscita = uscita.replace(segnaposto, mappa[segnaposto])
+        if not _numeri_conservati(testo, uscita):
+            log.warning("fase=struttura file=%s esito=scartata motivo=numeri_reali giro=%d",
+                        file_id, giro)
+            continue
+        log.info("fase=struttura file=%s esito=ok caratteri=%d giro=%d durata=%.1fs",
+                 file_id, len(uscita), giro, time.monotonic() - inizio)
+        return uscita
+    return None
 
 
 PROMPT_BELLA_COPIA = """Sei un correttore di bozze per referti cardiologici. Sistema SOLO la punteggiatura e le maiuscole/minuscole del testo qui sotto: virgole al posto giusto, punti, maiuscola a inizio frase e nei nomi propri, spazi corretti attorno ai segni.
@@ -3238,26 +3262,31 @@ def bella_copia(testo: str, file_id: str) -> str | None:
         log.warning("fase=bella_copia file=%s esito=annullato motivo=anonimizzazione", file_id)
         return None
     anon, mappa = esito_anon
-    try:
-        uscita = _chiama_esterno_openai(
-            PROMPT_BELLA_COPIA.replace("{testo}", anon), file_id)
-    except RuntimeError:
-        log.warning("fase=bella_copia file=%s esito=fallito motivo=esterno", file_id)
-        return None
-    uscita = (uscita or "").strip()
-    if not uscita or _impronta_lettere(uscita) != _impronta_lettere(anon):
-        log.warning("fase=bella_copia file=%s esito=scartata motivo=impronta_anon", file_id)
-        return None
-    # Segnaposto lunghi prima: «Persona 12» va ripristinato prima di
-    # «Persona 1», che altrimenti gli mangerebbe il prefisso.
-    for segnaposto in sorted(mappa, key=len, reverse=True):
-        uscita = uscita.replace(segnaposto, mappa[segnaposto])
-    if _impronta_lettere(uscita) != _impronta_lettere(testo):
-        log.warning("fase=bella_copia file=%s esito=scartata motivo=impronta_reale", file_id)
-        return None
-    log.info("fase=bella_copia file=%s esito=ok durata=%.1fs",
-             file_id, time.monotonic() - inizio)
-    return uscita
+    modello = (_config_esterno() or {}).get("modello_bella") or None
+    for giro in (1, 2):
+        try:
+            uscita = _chiama_esterno_openai(
+                PROMPT_BELLA_COPIA.replace("{testo}", anon), file_id, modello=modello)
+        except RuntimeError:
+            log.warning("fase=bella_copia file=%s esito=fallito motivo=esterno", file_id)
+            return None
+        uscita = (uscita or "").strip()
+        if not uscita or _impronta_lettere(uscita) != _impronta_lettere(anon):
+            log.warning("fase=bella_copia file=%s esito=scartata motivo=impronta_anon giro=%d",
+                        file_id, giro)
+            continue
+        # Segnaposto lunghi prima: «Persona 12» va ripristinato prima di
+        # «Persona 1», che altrimenti gli mangerebbe il prefisso.
+        for segnaposto in sorted(mappa, key=len, reverse=True):
+            uscita = uscita.replace(segnaposto, mappa[segnaposto])
+        if _impronta_lettere(uscita) != _impronta_lettere(testo):
+            log.warning("fase=bella_copia file=%s esito=scartata motivo=impronta_reale giro=%d",
+                        file_id, giro)
+            continue
+        log.info("fase=bella_copia file=%s esito=ok giro=%d durata=%.1fs",
+                 file_id, giro, time.monotonic() - inizio)
+        return uscita
+    return None
 
 
 def ispeziona_llm(testo: str, file_id: str) -> list[str]:
