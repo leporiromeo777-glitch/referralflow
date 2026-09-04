@@ -1,7 +1,6 @@
 {
   "_nota": "Sostituzioni deterministiche applicate PRIMA di passare il testo al modello. Non toccano numeri. Il confronto e' case-insensitive ma la sostituzione mantiene la maiuscola iniziale se presente nell'originale.",
   "_regola": "Aggiungere qui solo errori RICORRENTI e NON AMBIGUI. Se una parola potrebbe legittimamente comparire nel suo significato originale, NON metterla qui: lasciala gestire al modello.",
-
   "termini_clinici": {
     "sottoclavare": "sottoclaveare",
     "ecocarogramma": "ecocardiogramma",
@@ -35,9 +34,10 @@
     "postro laterale": "postero-laterale",
     "posto laterale": "postero-laterale",
     "approssimale": "prossimale",
-    "approssimata": "prossimale"
+    "approssimata": "prossimale",
+    "autopnea": "ortopnea",
+    "nidismia": "dispnea"
   },
-
   "linguaggio_comune": {
     "starbane": "sta bene",
     "starbake": "sta bene",
@@ -59,7 +59,6 @@
     "normo carico": "normocardico",
     "normal carrico": "normocardico"
   },
-
   "istruzioni_dettatura": {
     "_nota": "Termini con cui il medico impartisce istruzioni. NON sono contenuto clinico. Vanno riconosciuti e isolati, non tradotti in testo.",
     "elenco": [
@@ -84,20 +83,45 @@
       "da qualche parte"
     ]
   },
-
   "controlli_numerici": {
     "_nota": "Se un valore cade FUORI dall'intervallo, il campo va marcato in rosso nell'interfaccia e richiede conferma esplicita. Il sistema NON corregge mai in automatico.",
-    "frequenza_cardiaca_bpm": { "min": 35, "max": 180 },
-    "pressione_sistolica_mmhg": { "min": 70, "max": 230 },
-    "pressione_diastolica_mmhg": { "min": 40, "max": 140 },
-    "aorta_mm": { "min": 20, "max": 75 },
-    "peso_kg": { "min": 30, "max": 200 },
-    "altezza_cm": { "min": 130, "max": 210 },
-    "eta_anni": { "min": 0, "max": 110 },
-    "frazione_eiezione_pct": { "min": 10, "max": 80 },
-    "stenosi_pct": { "min": 0, "max": 100 }
+    "frequenza_cardiaca_bpm": {
+      "min": 35,
+      "max": 180
+    },
+    "pressione_sistolica_mmhg": {
+      "min": 70,
+      "max": 230
+    },
+    "pressione_diastolica_mmhg": {
+      "min": 40,
+      "max": 140
+    },
+    "aorta_mm": {
+      "min": 20,
+      "max": 75
+    },
+    "peso_kg": {
+      "min": 30,
+      "max": 200
+    },
+    "altezza_cm": {
+      "min": 130,
+      "max": 210
+    },
+    "eta_anni": {
+      "min": 0,
+      "max": 110
+    },
+    "frazione_eiezione_pct": {
+      "min": 10,
+      "max": 80
+    },
+    "stenosi_pct": {
+      "min": 0,
+      "max": 100
+    }
   },
-
   "regole_invariabili": [
     "Le sostituzioni non toccano MAI cifre, unita di misura, date.",
     "Ogni numero estratto dall'audio va evidenziato nell'interfaccia e confermato dall'utente, anche se dentro l'intervallo.",

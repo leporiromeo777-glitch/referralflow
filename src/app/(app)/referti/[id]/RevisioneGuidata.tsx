@@ -564,14 +564,26 @@ export function RevisioneGuidata({
         </p>
         {testoStrutturato && (
           <div className="rg-azioni" style={{ marginBottom: 10 }}>
-            {/* La proposta è pronta dalla catena (fase «struttura», guardia
-                sui numeri già superata): applicarla è istantaneo e reversibile. */}
+            {/* La proposta è pronta dalla catena (fase «struttura») ed è
+                fatta delle STESSE frasi del testo: al clic ci si innestano
+                le correzioni fatte nei passi (frasi modificate e spente),
+                così il lavoro di revisione non va mai perso. */}
             <button
               type="button"
               className="btn btn-primary"
-              onClick={() => setTestoLibero(testoStrutturato)}
+              onClick={() => {
+                let s = testoStrutturato;
+                frasiIniziali.forEach((orig, i) => {
+                  if (spente.has(i)) {
+                    s = s.replace(orig, '');
+                  } else if (frasi[i] !== orig) {
+                    s = s.replace(orig, frasi[i]);
+                  }
+                });
+                setTestoLibero(s.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n'));
+              }}
             >
-              📐 Applica il formato standard (proposta pronta)
+              📐 Applica il formato standard (con le tue correzioni)
             </button>
             {testoLibero !== null && (
               <button type="button" className="btn" onClick={() => setTestoLibero(null)}>
