@@ -156,6 +156,10 @@ export function RevisioneGuidata({
 
   const [inModifica, setInModifica] = useState<number | null>(null);
   const [bozzaModifica, setBozzaModifica] = useState('');
+  // Frasi già ritoccate a mano: badge verde sulla scheda, così il
+  // salvataggio si VEDE (il testone evidenziato in cima alla pagina è la
+  // fotografia della bozza originale e cambia solo alla conferma).
+  const [modificate, setModificate] = useState<Set<number>>(new Set());
 
   const componi = (fr: string[], esc: Set<number>) =>
     fr.filter((_, i) => !esc.has(i)).join('\n');
@@ -170,6 +174,7 @@ export function RevisioneGuidata({
     if (testoLibero !== null && vecchia.trim()) {
       setTestoLibero(testoLibero.replace(vecchia, bozzaModifica));
     }
+    setModificate((prev) => new Set(prev).add(i));
     setInModifica(null);
   }
   function riaccendi(i: number) {
@@ -236,7 +241,14 @@ export function RevisioneGuidata({
           </div>
         </div>
       ) : (
-        <p className="rg-frase">{frasi[idx]}</p>
+        <p className="rg-frase">
+          {frasi[idx]}
+          {modificate.has(idx) && (
+            <span style={{ color: 'var(--cta)', fontWeight: 600, marginLeft: 8 }}>
+              ✓ frase aggiornata (entra così nel referto)
+            </span>
+          )}
+        </p>
       )
     ) : (
       <div>
@@ -295,7 +307,16 @@ export function RevisioneGuidata({
                 {idxR >= 0 && inModifica === idxR
                   ? cardFrase(idxR)
                   : idxR >= 0
-                    ? <p className="rg-motivo">…{frasi[idxR]}…</p>
+                    ? (
+                      <p className="rg-motivo">
+                        …{frasi[idxR]}…
+                        {modificate.has(idxR) && (
+                          <span style={{ color: 'var(--cta)', fontWeight: 600, marginLeft: 8 }}>
+                            ✓ frase aggiornata
+                          </span>
+                        )}
+                      </p>
+                    )
                     : contesto && <p className="rg-motivo">…{contesto}…</p>}
                 {!fatte.has(`p${i}`) && (
                   <div className="rg-azioni">
