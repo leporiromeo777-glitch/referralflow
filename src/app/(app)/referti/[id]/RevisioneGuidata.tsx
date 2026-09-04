@@ -48,6 +48,7 @@ export function RevisioneGuidata({
   valoriNumerici,
   parole = [],
   riparazioni = [],
+  testoStrutturato = '',
 }: {
   testo: string;
   divagazioni: string[];
@@ -58,6 +59,7 @@ export function RevisioneGuidata({
   valoriNumerici: Record<string, unknown> | null;
   parole?: [string, number][];
   riparazioni?: Riparazione[];
+  testoStrutturato?: string;
 }) {
   const frasiIniziali = useMemo(() => spezzaInFrasi(testo), [testo]);
   const [frasi, setFrasi] = useState<string[]>(frasiIniziali);
@@ -543,6 +545,24 @@ export function RevisioneGuidata({
           Il referto come uscirà, con tutte le correzioni dei passi precedenti.
           Ultima rilettura: puoi ancora ritoccare a mano qui.
         </p>
+        {testoStrutturato && (
+          <div className="rg-azioni" style={{ marginBottom: 10 }}>
+            {/* La proposta è pronta dalla catena (fase «struttura», guardia
+                sui numeri già superata): applicarla è istantaneo e reversibile. */}
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setTestoLibero(testoStrutturato)}
+            >
+              📐 Applica il formato standard (proposta pronta)
+            </button>
+            {testoLibero !== null && (
+              <button type="button" className="btn" onClick={() => setTestoLibero(null)}>
+                ↩︎ Torna al testo dei passi
+              </button>
+            )}
+          </div>
+        )}
         <textarea
           name="testo"
           rows={18}

@@ -13,7 +13,7 @@ const FASI_VALIDE = new Set([
   'scaricato', 'preprocessing', 'trascrizione_a', 'trascrizione_b',
   'dizionario', 'confronto', 'correzione_llm', 'segreteria',
   'pertinenza', 'senso', 'avvocato', 'riassunto', 'consulto_visita', 'ispezione_llm',
-  'bella_copia', 'estrazione', 'controlli', 'invio', 'errore',
+  'bella_copia', 'struttura', 'estrazione', 'controlli', 'invio', 'errore',
 ]);
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {

@@ -106,6 +106,10 @@ export async function POST(req: NextRequest) {
     // di revisione per il confronto «frase → cosa è stato detto davvero».
     testo_grezzo:
       typeof body?.testo_grezzo === 'string' ? body.testo_grezzo.slice(0, MAX_TESTO) : '',
+    // Proposta nel formato standard dello studio (fase «struttura»):
+    // la revisione guidata la applica con un clic, mai da sola.
+    testo_strutturato:
+      typeof body?.testo_strutturato === 'string' ? body.testo_strutturato.slice(0, MAX_TESTO) : '',
     // Trascrizione integrale della visita coi tempi (solo tipo=visita):
     // alimenta la memoria di consulto della registrazione.
     parole_grezzo: (Array.isArray(body?.parole_grezzo) ? body.parole_grezzo.slice(0, 20000) : [])

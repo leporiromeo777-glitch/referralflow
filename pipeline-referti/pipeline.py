@@ -3118,6 +3118,98 @@ def avvocato_esterno(bozza: str, grezzo: str, file_id: str) -> list[dict] | None
 # (contro l'AI) e dopo il ripristino dei nomi (contro il giro di
 # anonimizzazione: un dato redatto senza segnaposto non tornerebbe).
 
+# ——— Formato standard dello studio (2026-09-04) ———
+# Stampo ricavato dal rapporto-tipo VERO dello studio (foto dell'utente,
+# nomi finti): la fase «struttura» produce nel payload una PROPOSTA
+# testo_strutturato già nel formato della carta intestata — in pagina si
+# applica con un clic, al posto dei 5 minuti del 27B locale. Guardie:
+# firma numerica identica (esclusa la numerazione d'elenco), lunghezza,
+# mai applicata da sola. Interruttore struttura=1 nella config esterna.
+
+PROMPT_STRUTTURA = """Sei l'assistente di un cardiologo. Riorganizza il REFERTO DETTATO qui sotto nel formato standard dello studio, definito ESATTAMENTE così (solo le sezioni per cui il testo ha davvero contenuto, in quest'ordine):
+
+Il saluto iniziale (es. «Cara collega, ti riferisco…») resta PRIMA di tutto, così com'è.
+
+Diagnosi principali
+1. Titolo della diagnosi (mese.anno se detto)
+   - reperto o esame, con sigla, data e luogo se detti (es. «- ETT (11.03.2014): versamento…»)
+   - altri reperti, uno per riga, ognuno preceduto da «- »
+   - Attuale: la situazione di oggi di QUESTA diagnosi, se il testo la dice
+
+Diagnosi secondarie
+(numerazione che CONTINUA dalla precedente: 5., 6., …, stesso formato)
+
+Comorbidità
+(elenco breve, anche in prosa compatta)
+
+Anamnesi attuale
+(prosa: il decorso recente e i sintomi riferiti)
+
+Terapia domiciliare
+(un farmaco per riga: «Nome dose    schema» — lo schema posologico come dettato, es. «½-0-0-0», «1-0-1-0»)
+
+Esami
+(un paragrafo per esame, che inizia con il nome e la data tra parentesi SOLO se dettata: «Esame clinico (09.10.2025): …», «ECG basale (…): …», «Ecocardiografia transtoracica (…): …», laboratorio, ergometria…)
+
+Valutazione
+(il giudizio clinico complessivo)
+
+Procedere
+(il piano: controlli, terapia, «Programmiamo il prossimo controllo tra…»)
+
+I saluti finali e la firma restano in FONDO, dopo Procedere.
+
+REGOLE ASSOLUTE:
+1. NON inventare MAI nulla: niente diagnosi, valori, esami, date o frasi che non siano nel testo. Sezione senza contenuto = non scrivere nemmeno il titolo.
+2. Conserva TUTTI i numeri ESATTAMENTE come scritti (valori, date, dosaggi, schemi posologici): non aggiungerne, non toglierne, non riformattarli.
+3. Ogni informazione va in UNA SOLA sezione: mai ripetere gli stessi dati in due punti.
+4. Frasi scorrevoli e complete: puoi sistemare punteggiatura e ricucire i pezzi spostati, senza cambiare significato.
+5. I segnaposto come «Persona 1» o «[data 3]» restano ESATTAMENTE come sono.
+6. Rispondi SOLO con il referto riorganizzato, senza commenti.
+
+REFERTO DETTATO:
+{testo}"""
+
+
+def _firma_numerica(testo: str) -> str:
+    """Tutti i numeri in fila, ESCLUSA la numerazione d'elenco a inizio
+    riga («1. », «2. »…): è il formato a chiederla, non è un dato clinico."""
+    senza_elenchi = re.sub(r"^\s*\d{1,2}\.\s+", "", testo, flags=re.MULTILINE)
+    return "|".join(sorted(re.findall(r"\d+(?:[.,]\d+)?", senza_elenchi)))
+
+
+def struttura_standard(testo: str, file_id: str) -> str | None:
+    """La proposta nel formato standard dello studio, o None (esterno giù,
+    anonimizzazione incerta, numeri cambiati, testo dimagrito troppo)."""
+    inizio = time.monotonic()
+    esito_anon = _anonimizza_per_esterno(testo, file_id, con_mappa=True)
+    if esito_anon is None:
+        log.warning("fase=struttura file=%s esito=annullata motivo=anonimizzazione", file_id)
+        return None
+    anon, mappa = esito_anon
+    try:
+        uscita = _chiama_esterno_openai(
+            PROMPT_STRUTTURA.replace("{testo}", anon), file_id)
+    except RuntimeError:
+        log.warning("fase=struttura file=%s esito=fallita motivo=esterno", file_id)
+        return None
+    uscita = (uscita or "").strip()
+    if not uscita or _firma_numerica(uscita) != _firma_numerica(anon):
+        log.warning("fase=struttura file=%s esito=scartata motivo=numeri", file_id)
+        return None
+    if len(uscita) < len(anon) * 0.6:
+        log.warning("fase=struttura file=%s esito=scartata motivo=troppo_corta", file_id)
+        return None
+    for segnaposto in sorted(mappa, key=len, reverse=True):
+        uscita = uscita.replace(segnaposto, mappa[segnaposto])
+    if _firma_numerica(uscita) != _firma_numerica(testo):
+        log.warning("fase=struttura file=%s esito=scartata motivo=numeri_reali", file_id)
+        return None
+    log.info("fase=struttura file=%s esito=ok caratteri=%d durata=%.1fs",
+             file_id, len(uscita), time.monotonic() - inizio)
+    return uscita
+
+
 PROMPT_BELLA_COPIA = """Sei un correttore di bozze per referti cardiologici. Sistema SOLO la punteggiatura e le maiuscole/minuscole del testo qui sotto: virgole al posto giusto, punti, maiuscola a inizio frase e nei nomi propri, spazi corretti attorno ai segni.
 
 REGOLE ASSOLUTE:
@@ -3789,6 +3881,16 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                 finale = pulito
                 testo_integrale = finale
 
+        # Formato standard dello studio (struttura=1): la catena prepara la
+        # PROPOSTA già impaginata come il rapporto-tipo — in pagina si
+        # applica con un clic. Il testo ufficiale resta `finale`.
+        testo_strutturato: str | None = None
+        if (not visita and _esterno_attivo() == "openai"
+                and (_config_esterno() or {}).get("struttura") == "1"):
+            fase = "struttura"
+            _ = notifica and notifica(fase)
+            testo_strutturato = struttura_standard(finale, file_id)
+
         fase = "estrazione"
         _ = notifica and notifica(fase)
         campi = estrai_campi(testo_integrale, file_id)
@@ -3959,6 +4061,10 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         ],
         "richiede_revisione": True,
     }
+    if not visita and testo_strutturato:
+        # Proposta nel formato standard dello studio (fase struttura):
+        # in pagina si applica con un clic, mai da sola.
+        payload["testo_strutturato"] = testo_strutturato
     if visita and parole_grezzo:
         # Tempi parola-per-parola della TRASCRIZIONE INTEGRALE della visita:
         # alimentano la memoria di consulto (blocchi con «riascolta qui»).
