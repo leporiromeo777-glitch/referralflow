@@ -38,7 +38,8 @@ Procedere
 Regole obbligatorie:
 1. NON inventare MAI nulla: niente diagnosi, valori, esami o frasi che non siano già nel testo. Se una sezione non ha contenuto, NON scrivere nemmeno il titolo.
 2. Conserva TUTTI i numeri ESATTAMENTE come sono scritti (valori, date, dosaggi): non aggiungerne, non toglierne, non riformattarli.
-3. Sposta le frasi nella sezione giusta senza riscriverle: ritocchi minimi solo dove serve per la scorrevolezza dopo lo spostamento.
+3. Sposta le frasi nella sezione giusta e RISCRIVILE IN BELLA COPIA dove serve: punteggiatura corretta, maiuscole a inizio frase, frasi scorrevoli e complete — senza mai cambiare il significato né aggiungere informazioni.
+3b. Ripara i resti dei tagli fatti in revisione: apostrofi o virgolette rimasti orfani, articoli e congiunzioni appesi nel vuoto (es. «l'», «e», «con» senza la parola che seguiva), doppi spazi, segni doppi, frasi che iniziano a metà. Un frammento spezzato che non contiene NESSUNA informazione clinica può essere tolto; se contiene un dato, va ricucito nella frase più vicina.
 4. Le diagnosi vanno numerate (1., 2., …), i dettagli di ognuna come elenco puntato «- …»; se il testo descrive la situazione attuale di una diagnosi, mettila su una riga che inizia con «- attuale:».
 5. La sezione «Esami» raggruppa: esame clinico, ECG, ecocardiografia, ergometria/cicloergometria, laboratorio — ognuno in un paragrafo che inizia col nome dell'esame e la data tra parentesi SOLO se il testo la dice; se la data non c'è, non scrivere nulla al suo posto (mai «data non specificata» o simili).
 5b. Ogni informazione va in UNA SOLA sezione: non ripetere le stesse frasi o gli stessi dati in più sezioni (per esempio le diagnosi NON vanno ricopiate nell'anamnesi). Se tutto il contenuto anamnestico è già nelle diagnosi, la sezione «Anamnesi attuale» si omette.
