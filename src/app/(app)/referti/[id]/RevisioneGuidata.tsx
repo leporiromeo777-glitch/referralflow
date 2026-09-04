@@ -163,7 +163,13 @@ export function RevisioneGuidata({
   const testoAttuale = testoLibero ?? componi(frasi, spente);
 
   function salvaModifica(i: number) {
+    const vecchia = frasi[i];
     setFrasi((prev) => prev.map((f, j) => (j === i ? bozzaModifica : f)));
+    // Se la rilettura finale è già stata toccata a mano, comanda lei: la
+    // stessa modifica va applicata anche lì, altrimenti andrebbe persa.
+    if (testoLibero !== null && vecchia.trim()) {
+      setTestoLibero(testoLibero.replace(vecchia, bozzaModifica));
+    }
     setInModifica(null);
   }
   function riaccendi(i: number) {
@@ -184,6 +190,7 @@ export function RevisioneGuidata({
   // ovunque, l'annullamento la ripristina ovunque (parola per parola).
   function annullaRiparazione(v: Riparazione, id: string) {
     setFrasi((prev) => prev.map((f) => f.split(v.a).join(v.da)));
+    if (testoLibero !== null) setTestoLibero(testoLibero.split(v.a).join(v.da));
     segna(id);
   }
   const fraseConRiparazione = (v: Riparazione) =>
@@ -287,7 +294,9 @@ export function RevisioneGuidata({
                 </p>
                 {idxR >= 0 && inModifica === idxR
                   ? cardFrase(idxR)
-                  : contesto && <p className="rg-motivo">…{contesto}…</p>}
+                  : idxR >= 0
+                    ? <p className="rg-motivo">…{frasi[idxR]}…</p>
+                    : contesto && <p className="rg-motivo">…{contesto}…</p>}
                 {!fatte.has(`p${i}`) && (
                   <div className="rg-azioni">
                     {/* Aggancio a cascata: contesto intero → parola corretta
