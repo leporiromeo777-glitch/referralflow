@@ -232,10 +232,19 @@ export function RevisioneGuidata({
         <p className="rg-frase">{frasi[idx]}</p>
       )
     ) : (
-      <p className="muted small">
-        (La frase non si aggancia più al testo — probabilmente l&apos;hai già modificata:
-        controllala nella rilettura finale.)
-      </p>
+      <div>
+        <p className="muted small">
+          (La frase non si aggancia più al testo — probabilmente l&apos;hai già
+          modificata.)
+        </p>
+        <button
+          type="button"
+          className="btn"
+          onClick={() => setPasso(passi.length - 1)}
+        >
+          ✏️ Correggi nella rilettura finale
+        </button>
+      </div>
     );
 
   return (
@@ -270,12 +279,15 @@ export function RevisioneGuidata({
           </p>
           {riparazioni.map((v, i) => {
             const contesto = fraseConRiparazione(v);
+            const idxR = frasi.findIndex((f) => f.includes(v.a) || f.includes(v.da));
             return (
               <div key={i} className={`rg-item${fatte.has(`p${i}`) ? ' rg-fatta' : ''}`}>
                 <p className="rg-frase">
                   <s className="muted">{v.da}</s> → <strong>{v.a}</strong>
                 </p>
-                {contesto && <p className="rg-motivo">…{contesto}…</p>}
+                {idxR >= 0 && inModifica === idxR
+                  ? cardFrase(idxR)
+                  : contesto && <p className="rg-motivo">…{contesto}…</p>}
                 {!fatte.has(`p${i}`) && (
                   <div className="rg-azioni">
                     {/* Aggancio a cascata: contesto intero → parola corretta
@@ -283,6 +295,18 @@ export function RevisioneGuidata({
                     {(contesto && bottoneRiascolta(contesto))
                       || bottoneRiascolta(v.a)
                       || bottoneRiascolta(v.da)}
+                    {idxR >= 0 && inModifica !== idxR && (
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => {
+                          setInModifica(idxR);
+                          setBozzaModifica(frasi[idxR]);
+                        }}
+                      >
+                        ✏️ Correggi la frase
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="btn"
@@ -394,12 +418,30 @@ export function RevisioneGuidata({
           </p>
           {[...spenteIniziali].map((i) => (
             <div key={i} className={`rg-item${spente.has(i) ? '' : ' rg-fatta'}`}>
-              <p className={`rg-frase${spente.has(i) ? ' rg-spenta' : ''}`}>{frasi[i]}</p>
+              {inModifica === i ? (
+                cardFrase(i)
+              ) : (
+                <p className={`rg-frase${spente.has(i) ? ' rg-spenta' : ''}`}>{frasi[i]}</p>
+              )}
               <div className="rg-azioni">
                 {bottoneRiascolta(frasiIniziali[i])}
                 <button type="button" className="btn" onClick={() => riaccendi(i)}>
                   {spente.has(i) ? '💡 Riaccendi (entra nel referto)' : 'Rispegni'}
                 </button>
+                {inModifica !== i && (
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => {
+                      // Correggerla implica volerla nel referto: si riaccende.
+                      if (spente.has(i)) riaccendi(i);
+                      setInModifica(i);
+                      setBozzaModifica(frasi[i]);
+                    }}
+                  >
+                    ✏️ Correggi
+                  </button>
+                )}
               </div>
             </div>
           ))}
