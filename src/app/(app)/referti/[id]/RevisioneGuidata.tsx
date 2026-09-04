@@ -104,7 +104,20 @@ export function RevisioneGuidata({
   const tempoDiFrase = (frase: string): number | null => {
     if (paroleNorm.length === 0) return null;
     const cerca = normalizza(frase).split(' ').filter((w) => w.length >= 2).slice(0, 8);
-    if (cerca.length < 3) return null;
+    if (cerca.length === 0) return null;
+    // Frasi corte (1-2 parole, tipiche delle correzioni singole): serve la
+    // corrispondenza esatta e consecutiva — prima occorrenza. Meglio un
+    // riascolto sulla prima occorrenza che nessun riascolto.
+    if (cerca.length < 3) {
+      for (let i = 0; i <= paroleNorm.length - cerca.length; i++) {
+        let tutte = true;
+        for (let j = 0; j < cerca.length; j++) {
+          if (paroleNorm[i + j][0] !== cerca[j]) { tutte = false; break; }
+        }
+        if (tutte) return paroleNorm[i][1];
+      }
+      return null;
+    }
     let migliore = -1;
     let punteggio = 0;
     for (let i = 0; i <= paroleNorm.length - cerca.length; i++) {
@@ -265,7 +278,11 @@ export function RevisioneGuidata({
                 {contesto && <p className="rg-motivo">…{contesto}…</p>}
                 {!fatte.has(`p${i}`) && (
                   <div className="rg-azioni">
-                    {contesto && bottoneRiascolta(contesto)}
+                    {/* Aggancio a cascata: contesto intero → parola corretta
+                        → parola dettata. Così il 🎧 c'è quasi sempre. */}
+                    {(contesto && bottoneRiascolta(contesto))
+                      || bottoneRiascolta(v.a)
+                      || bottoneRiascolta(v.da)}
                     <button
                       type="button"
                       className="btn"
