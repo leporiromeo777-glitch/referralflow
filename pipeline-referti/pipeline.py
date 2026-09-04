@@ -2323,17 +2323,27 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
         dati2 = json.loads(uscita2)
     except (RuntimeError, json.JSONDecodeError):
         return None
+    # Ciò che la seconda passata considera un nome NON annulla più tutto:
+    # viene REDATTO anche lui (2026-09-04, visto dal vivo: sigle tipo H1N1
+    # scambiate per nomi bocciavano stabilmente la fase). Privacy uguale o
+    # migliore — un nome vero sfuggito viene coperto, una sigla oscurata
+    # per eccesso non fa male: al ritorno la rimette la mappa.
+    redatte = 0
     for voce in (dati2.get("dati") or []) if isinstance(dati2, dict) else []:
         if not isinstance(voce, dict) or str(voce.get("tipo", "")) != "nome":
             continue
         s = str(voce.get("testo", "")).strip()
         # Conta solo se è davvero nel testo e non è un nostro segnaposto.
-        if (s and s in anon and not s.startswith("Persona")
+        if (s and len(s) <= 80 and s in anon and not s.startswith("Persona")
                 and not s.startswith("[")):
-            log.warning(
-                "fase=correzione_esterna file=%s esito=annullata motivo=controprova_nome",
-                file_id)
-            return None
+            persone += 1
+            segnaposto = f"Persona {persone}"
+            mappa[segnaposto] = s
+            anon = re.sub(re.escape(s), segnaposto, anon, flags=re.IGNORECASE)
+            redatte += 1
+    if redatte:
+        log.info("fase=correzione_esterna file=%s controprova_redatte=%d",
+                 file_id, redatte)
     log.info(
         "fase=correzione_esterna file=%s anonimizzazione=ok persone=%d date=%d",
         file_id, persone, date_n)
