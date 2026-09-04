@@ -3233,6 +3233,12 @@ def struttura_standard(testo: str, file_id: str) -> str | None:
     codice ricompone con le frasi ORIGINALI intatte al carattere. Nessuna
     frase può perdersi (le non classificate finiscono in coda, visibili)."""
     inizio = time.monotonic()
+    # Un testo GIÀ strutturato non si ristruttura (2026-09-05, visto dal
+    # vivo: titoli e trattini raddoppiati): se lo stampo c'è già, stop.
+    if re.search(r"^Diagnosi principali$", testo, flags=re.MULTILINE) \
+            or "— Regia di dettatura" in testo:
+        log.warning("fase=struttura file=%s esito=saltata motivo=gia_strutturato", file_id)
+        return None
     grezze = [testo[a:b].strip() for a, b in _frasi_span(testo) if testo[a:b].strip()]
     if len(grezze) < 5:
         return None
