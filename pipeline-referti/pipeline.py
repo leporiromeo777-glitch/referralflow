@@ -1526,9 +1526,16 @@ SOGLIA_LOOP_PAROLA = 6   # parola singola senza cifre
 
 
 def _frasi_span(testo: str) -> list[tuple[int, int]]:
-    """Intervalli (inizio, fine) delle frasi: tagli su .!?; e sugli a capo."""
+    """Intervalli (inizio, fine) delle frasi: tagli su .!?; e sugli a capo.
+    MAI sul punto decimale dettato («amiloride 2. 5 mg»): cifra prima e
+    cifra subito dopo = non è una fine di frase (visto dal vivo 2026-09-05:
+    i dosaggi finivano spezzati in due frasi)."""
     spans, inizio = [], 0
     for m in re.finditer(r"[.!?;]+\s*|\n+", testo):
+        if (m.group().startswith(".") and m.start() > 0
+                and testo[m.start() - 1].isdigit()
+                and m.end() < len(testo) and testo[m.end()].isdigit()):
+            continue
         spans.append((inizio, m.end()))
         inizio = m.end()
     if inizio < len(testo):
@@ -3206,10 +3213,11 @@ def _numeri_conservati(prima: str, dopo: str) -> bool:
 
 PROMPT_STRUTTURA_MAPPA = """Sei l'assistente di un cardiologo. Ti do un referto dettato come elenco di FRASI NUMERATE. NON riscrivere niente: rispondi SOLO con la MAPPA in JSON che assegna ogni frase alla sua sezione del formato standard dello studio.
 
-{"saluto": [n], "diagnosi_principali": [{"titolo": "...", "frasi": [n], "attuale": [n]}], "diagnosi_secondarie": [{"titolo": "...", "frasi": [n], "attuale": [n]}], "comorbidita": [n], "anamnesi": [n], "terapia": [n], "esami": [{"nome": "...", "frasi": [n]}], "valutazione": [n], "procedere": [n], "congedo": [n]}
+{"saluto": [n], "regia": [n], "diagnosi_principali": [{"titolo": "...", "frasi": [n], "attuale": [n]}], "diagnosi_secondarie": [{"titolo": "...", "frasi": [n], "attuale": [n]}], "comorbidita": [n], "anamnesi": [n], "terapia": [n], "esami": [{"nome": "...", "frasi": [n]}], "valutazione": [n], "procedere": [n], "congedo": [n]}
 
 Regole:
 - OGNI numero di frase va in ESATTAMENTE un posto: nessuna frase esclusa, nessuna ripetuta.
+- «regia» (IMPORTANTISSIMO): tutte le frasi in cui il medico parla ALLA SEGRETARIA o del lavoro di scrittura, non del paziente — «per favore scrivete», «copy-paste dalla lettera», «scusami, ripeto», «mettiamo, per favore», saluti alla segretaria, istruzioni su formattazione e documenti. NON entrano nel referto. Una frase con dentro sia regia sia un dato clinico va nella sua sezione clinica, non in regia.
 - Le diagnosi principali sono le malattie cardiologiche importanti; le secondarie il resto; per ognuna «frasi» = i reperti e la storia, «attuale» = la situazione di oggi (può mancare).
 - «titolo»: il nome della diagnosi COPIATO dalle parole delle sue frasi (con la data se c'è scritta): mai parole o numeri nuovi.
 - «nome» dell'esame: uno tra «Esame clinico», «ECG», «Ecocardiografia transtoracica», «Ergometria», «Laboratorio», «Altro».
@@ -3225,9 +3233,20 @@ def struttura_standard(testo: str, file_id: str) -> str | None:
     codice ricompone con le frasi ORIGINALI intatte al carattere. Nessuna
     frase può perdersi (le non classificate finiscono in coda, visibili)."""
     inizio = time.monotonic()
-    frasi = [testo[a:b].strip() for a, b in _frasi_span(testo) if testo[a:b].strip()]
-    if len(frasi) < 5:
+    grezze = [testo[a:b].strip() for a, b in _frasi_span(testo) if testo[a:b].strip()]
+    if len(grezze) < 5:
         return None
+    # Consolidamento: i frammenti del parlato («Con, tuttavia,» — corti o
+    # sospesi su una virgola) si incollano alla frase successiva, così i
+    # puntini del formato sono frasi vere e non macerie.
+    frasi: list[str] = []
+    for f in grezze:
+        if frasi and len(frasi[-1]) < 350 and (
+                frasi[-1].rstrip().endswith((",", ":", "…"))
+                or len(frasi[-1].split()) < 4):
+            frasi[-1] = (frasi[-1].rstrip() + " " + f).strip()
+        else:
+            frasi.append(f)
     esito_anon = _anonimizza_per_esterno(testo, file_id, con_mappa=True)
     if esito_anon is None:
         log.warning("fase=struttura file=%s esito=annullata motivo=anonimizzazione", file_id)
@@ -3329,6 +3348,13 @@ def struttura_standard(testo: str, file_id: str) -> str | None:
     congedo = prendi(dati.get("congedo"))
     if congedo:
         righe.extend(congedo)
+    # La regia di dettatura (frasi rivolte alla segretaria) NON entra nel
+    # referto, ma resta in coda ben visibile: decide la persona se c'è
+    # dentro qualcosa da recuperare.
+    regia = prendi(dati.get("regia"))
+    if regia:
+        righe.extend(["", "— Regia di dettatura (esclusa dal referto: controlla e cancella) —"])
+        righe.extend(f"- {f}" for f in regia)
     # NESSUNA frase può perdersi: le dimenticate dalla mappa finiscono in
     # coda, bene in vista, e le sistema la persona.
     dimenticate = [frasi[i - 1] for i in range(1, len(frasi) + 1) if i not in usate]
