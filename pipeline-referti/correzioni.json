@@ -38,7 +38,10 @@
     "autopnea": "ortopnea",
     "nidismia": "dispnea",
     "mitrotrattino": "mitro-aortico",
-    "ecezzione": "eccezione"
+    "ecezzione": "eccezione",
+    "costitutiva": "costrittiva",
+    "nia": "NYHA",
+    "nea": "NYHA"
   },
   "linguaggio_comune": {
     "starbane": "sta bene",
