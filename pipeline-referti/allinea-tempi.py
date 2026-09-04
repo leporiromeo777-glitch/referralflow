@@ -15,7 +15,10 @@ import sys
 import tempfile
 from pathlib import Path
 
-FINESTRA_S = 235.0
+# 55 secondi e non 235: sul collaudo da 1 minuto il modello è preciso al
+# centesimo, ma su finestre da 4 minuti restituisce tempi quasi tutti a
+# zero (visto dal vivo 2026-09-04 sul primo referto: 287 parole a 0:00).
+FINESTRA_S = 55.0
 MARGINE_S = 1.0
 MODELLO = "Qwen/Qwen3-ForcedAligner-0.6B-hf"
 
@@ -75,6 +78,12 @@ def main() -> int:
                     word_lists=word_lists,
                     timestamp_token_id=model.config.timestamp_token_id)[0]
             except Exception:  # noqa: BLE001 — finestra fallita: tempi vecchi
+                continue
+            # Sanità della finestra: se il modello ha schiacciato tutto
+            # all'inizio (tempi che non coprono nemmeno metà finestra) o ha
+            # perso troppe parole, i tempi di whisper restano al loro posto.
+            if (not ts or len(ts) < 0.6 * (i1 - i0)
+                    or float(ts[-1]["start_time"]) < 0.5 * (t1 - t0 - 6.0)):
                 continue
             nostre = [_norm(str(p[0])) for p in parole[i0:i1]]
             sue = [_norm(t["text"]) for t in ts]
