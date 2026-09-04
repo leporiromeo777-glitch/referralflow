@@ -1749,6 +1749,65 @@ def libera_llm() -> None:
             pass
 
 
+# ——— Passata B con Voxtral (doppia trascrizione, 2026-09-04) ———
+# Secondo testimone INDIPENDENTE: al banco pesato Voxtral Mini prende più
+# termini clinici di whisper (121 vs 113) e sbaglia in modo diverso — le
+# divergenze A/B diventano due opinioni davvero indipendenti per l'arbitro.
+# Whisper resta titolare di tempi e sincronizzazione: qui nasce SOLO il
+# testo B. Interruttore: il file ~/.referralflow-voxtral-b (toccarlo =
+# acceso, toglierlo = spento, letto a ogni dettato). Qualsiasi intoppo →
+# False → passata B whisper come sempre: la catena non si ferma mai.
+VOXTRAL_B_SWITCH = Path.home() / ".referralflow-voxtral-b"
+VOXTRAL_VENV_PY = Path.home() / "voxtral-banco-venv" / "bin" / "python"
+VOXTRAL_TIMEOUT_S = int(os.environ.get("REFERTI_VOXTRAL_TIMEOUT_S", "1500"))
+
+
+def trascrivi_voxtral_b(originale: Path, uscita_txt: Path, wav_voxtral: Path,
+                        file_id: str, caratteri_a: int) -> bool:
+    inizio = time.monotonic()
+    script = Path(__file__).resolve().parent / "trascrivi-voxtral.py"
+    if not (VOXTRAL_VENV_PY.is_file() and script.is_file()):
+        log.warning("fase=trascrizione_b motore=voxtral esito=saltato motivo=attrezzi file=%s",
+                    file_id)
+        return False
+    # Voxtral vuole l'audio NATURALE: il rallentamento 0.8x tarato per
+    # whisper lo PEGGIORA (misurato al banco 2026-09-03). Solo 16 kHz mono.
+    try:
+        subprocess.run(
+            ["ffmpeg", "-hide_banner", "-nostdin", "-y", "-i", str(originale),
+             "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", str(wav_voxtral)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            timeout=600, check=True)
+    except (subprocess.SubprocessError, OSError):
+        log.warning("fase=trascrizione_b motore=voxtral esito=saltato motivo=ffmpeg file=%s",
+                    file_id)
+        return False
+    # 9.5 GB di Voxtral e un gemma residente non convivono sul Mac da 24GB.
+    libera_llm()
+    try:
+        esito = subprocess.run(
+            [str(VOXTRAL_VENV_PY), str(script), str(wav_voxtral), str(uscita_txt)],
+            capture_output=True, timeout=VOXTRAL_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        log.warning("fase=trascrizione_b motore=voxtral esito=fallito motivo=timeout file=%s",
+                    file_id)
+        return False
+    if esito.returncode != 0 or not uscita_txt.is_file():
+        log.warning("fase=trascrizione_b motore=voxtral esito=fallito codice=%d file=%s",
+                    esito.returncode, file_id)
+        return False
+    testo = uscita_txt.read_text(encoding="utf-8").strip()
+    # Sentinella anti-collasso: una passata B molto più corta della A è un
+    # motore incantato, non un secondo parere. Si torna a whisper B.
+    if len(testo) < max(400, int(caratteri_a * 0.4)):
+        log.warning("fase=trascrizione_b motore=voxtral esito=scartato motivo=troppo_corto "
+                    "caratteri=%d file=%s", len(testo), file_id)
+        return False
+    log.info("fase=trascrizione_b motore=voxtral esito=ok caratteri=%d durata=%.1fs file=%s",
+             len(testo), time.monotonic() - inizio, file_id)
+    return True
+
+
 def chiama_ollama(prompt: str, file_id: str, fase: str, formato_json: bool = False,
                   modello: str | None = None, max_gettoni: int | None = None,
                   tentativi: int | None = None) -> str:
@@ -3378,7 +3437,15 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                 log.info("fase=trascrizione_a file=%s esito=coda_non_recuperata", file_id)
         fase = "trascrizione_b"
         _ = notifica and notifica(fase)
-        trascrivi(percorso(".wav"), percorso(".b.txt"), file_id, fase, vocab)
+        # Doppia trascrizione: con l'interruttore acceso la passata B la fa
+        # Voxtral (testimone indipendente); su visite o intoppi, whisper B.
+        fatto_b = False
+        if VOXTRAL_B_SWITCH.is_file() and not visita:
+            fatto_b = trascrivi_voxtral_b(
+                ingresso, percorso(".b.txt"), percorso(".voxtral.wav"),
+                file_id, len(percorso(".txt").read_text(encoding="utf-8")))
+        if not fatto_b:
+            trascrivi(percorso(".wav"), percorso(".b.txt"), file_id, fase, vocab)
 
         # Dizionario PRIMA del confronto (ordine invertito rispetto alla prima
         # stesura della SPEC, deviazione documentata in §3): così le àncore
