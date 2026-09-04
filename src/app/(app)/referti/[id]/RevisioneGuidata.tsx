@@ -300,10 +300,18 @@ export function RevisioneGuidata({
           </p>
           {riparazioni.map((v, i) => {
             const contesto = fraseConRiparazione(v);
-            // Ancora sulle frasi INIZIALI (immutabili): cercare nelle frasi
-            // correnti faceva perdere l'aggancio appena l'utente correggeva
-            // la parola, e la scheda ripiombava sul contesto vecchio.
-            const idxR = frasiIniziali.findIndex((f) => f.includes(v.a) || f.includes(v.da));
+            // Ancora sulle frasi INIZIALI (immutabili) e ricerca ELASTICA
+            // (senza maiuscole/punteggiatura): il confronto rigido perdeva
+            // l'aggancio per una virgola toccata dalla bella copia e il ✏️
+            // spariva proprio dove serviva.
+            const na = normalizza(v.a);
+            const nda = normalizza(v.da);
+            const idxR = frasiIniziali.findIndex((f) => {
+              const n = ` ${normalizza(f)} `;
+              return (na.length >= 3 && n.includes(` ${na} `))
+                || (nda.length >= 3 && n.includes(` ${nda} `))
+                || f.includes(v.a) || f.includes(v.da);
+            });
             return (
               <div key={i} className={`rg-item${fatte.has(`p${i}`) ? ' rg-fatta' : ''}`}>
                 <p className="rg-frase">
@@ -340,6 +348,15 @@ export function RevisioneGuidata({
                         }}
                       >
                         ✏️ Correggi la frase
+                      </button>
+                    )}
+                    {idxR < 0 && (
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => setPasso(passi.length - 1)}
+                      >
+                        ✏️ Correggi nella rilettura finale
                       </button>
                     )}
                     <button
