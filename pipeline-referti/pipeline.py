@@ -3204,44 +3204,146 @@ def _numeri_conservati(prima: str, dopo: str) -> bool:
     return all(b[n] <= a[n] for n in b)
 
 
+PROMPT_STRUTTURA_MAPPA = """Sei l'assistente di un cardiologo. Ti do un referto dettato come elenco di FRASI NUMERATE. NON riscrivere niente: rispondi SOLO con la MAPPA in JSON che assegna ogni frase alla sua sezione del formato standard dello studio.
+
+{"saluto": [n], "diagnosi_principali": [{"titolo": "...", "frasi": [n], "attuale": [n]}], "diagnosi_secondarie": [{"titolo": "...", "frasi": [n], "attuale": [n]}], "comorbidita": [n], "anamnesi": [n], "terapia": [n], "esami": [{"nome": "...", "frasi": [n]}], "valutazione": [n], "procedere": [n], "congedo": [n]}
+
+Regole:
+- OGNI numero di frase va in ESATTAMENTE un posto: nessuna frase esclusa, nessuna ripetuta.
+- Le diagnosi principali sono le malattie cardiologiche importanti; le secondarie il resto; per ognuna «frasi» = i reperti e la storia, «attuale» = la situazione di oggi (può mancare).
+- «titolo»: il nome della diagnosi COPIATO dalle parole delle sue frasi (con la data se c'è scritta): mai parole o numeri nuovi.
+- «nome» dell'esame: uno tra «Esame clinico», «ECG», «Ecocardiografia transtoracica», «Ergometria», «Laboratorio», «Altro».
+- saluto = l'apertura al collega; congedo = saluti finali e firma.
+- Rispondi SOLO col JSON.
+
+FRASI:
+{frasi}"""
+
+
 def struttura_standard(testo: str, file_id: str) -> str | None:
-    """La proposta nel formato standard dello studio, o None (esterno giù,
-    anonimizzazione incerta, numeri cambiati, testo dimagrito troppo)."""
+    """Formato standard per MAPPA: l'AI decide solo dove va ogni frase, il
+    codice ricompone con le frasi ORIGINALI intatte al carattere. Nessuna
+    frase può perdersi (le non classificate finiscono in coda, visibili)."""
     inizio = time.monotonic()
+    frasi = [testo[a:b].strip() for a, b in _frasi_span(testo) if testo[a:b].strip()]
+    if len(frasi) < 5:
+        return None
     esito_anon = _anonimizza_per_esterno(testo, file_id, con_mappa=True)
     if esito_anon is None:
         log.warning("fase=struttura file=%s esito=annullata motivo=anonimizzazione", file_id)
         return None
-    anon, mappa = esito_anon
+    _, mappa = esito_anon
+    # Ogni frase viene anonimizzata dal CODICE con la stessa mappa (vero →
+    # segnaposto, i lunghi prima): niente seconda passata AI, niente rischio
+    # di confini di frase diversi tra testo vero e testo anonimo.
+    inversa = sorted(mappa.items(), key=lambda kv: -len(kv[1]))
+    def anonima(f: str) -> str:
+        for segnaposto, vero in inversa:
+            f = re.sub(re.escape(vero), segnaposto, f, flags=re.IGNORECASE)
+        return f
+    elenco = "\n".join(f"{i + 1}. {anonima(f)}" for i, f in enumerate(frasi))
+
     modello = (_config_esterno() or {}).get("modello_struttura") or None
-    # Due tentativi: i fornitori non sono deterministici e la guardia è
-    # severa — una bocciatura singola non condanna la fase.
-    for giro in (1, 2):
-        try:
-            uscita = _chiama_esterno_openai(
-                PROMPT_STRUTTURA.replace("{testo}", anon), file_id, modello=modello)
-        except RuntimeError:
-            log.warning("fase=struttura file=%s esito=fallita motivo=esterno", file_id)
-            return None
-        uscita = (uscita or "").strip()
-        if not uscita or not _numeri_conservati(anon, uscita):
-            log.warning("fase=struttura file=%s esito=scartata motivo=numeri giro=%d",
-                        file_id, giro)
+    try:
+        uscita = _chiama_esterno_openai(
+            PROMPT_STRUTTURA_MAPPA.replace("{frasi}", elenco), file_id, modello=modello)
+    except RuntimeError:
+        log.warning("fase=struttura file=%s esito=fallita motivo=esterno", file_id)
+        return None
+    dati = _estrai_json(uscita)
+    if not isinstance(dati, dict):
+        log.warning("fase=struttura file=%s esito=scartata motivo=json", file_id)
+        return None
+
+    usate: set[int] = set()
+    def prendi(v) -> list[str]:
+        """Gli id validi e mai usati diventano frasi vere; il resto si ignora."""
+        fuori: list[str] = []
+        for x in (v if isinstance(v, list) else []):
+            if isinstance(x, int) and 1 <= x <= len(frasi) and x not in usate:
+                usate.add(x)
+                fuori.append(frasi[x - 1])
+        return fuori
+
+    def blocco_diagnosi(voci, contatore: int, righe: list[str]) -> int:
+        for d in (voci if isinstance(voci, list) else []):
+            if not isinstance(d, dict):
+                continue
+            corpo = prendi(d.get("frasi"))
+            attuale = prendi(d.get("attuale"))
+            if not corpo and not attuale:
+                continue
+            titolo = str(d.get("titolo", "")).strip()
+            # Guardia sul titolo: le sue cifre devono esistere nelle sue frasi.
+            cifre_frasi = set(re.findall(r"\d+", " ".join(corpo + attuale)))
+            if titolo and not set(re.findall(r"\d+", titolo)) <= cifre_frasi:
+                titolo = ""
+            if not titolo:
+                titolo = (corpo or attuale)[0][:80]
+            righe.append(f"{contatore}. {titolo}")
+            righe.extend(f"   - {f}" for f in corpo)
+            righe.extend(f"   - Attuale: {f}" for f in attuale)
+            righe.append("")
+            contatore += 1
+        return contatore
+
+    righe: list[str] = []
+    saluto = prendi(dati.get("saluto"))
+    if saluto:
+        righe.extend(saluto + [""])
+    principali: list[str] = []
+    n = blocco_diagnosi(dati.get("diagnosi_principali"), 1, principali)
+    if principali:
+        righe.append("Diagnosi principali")
+        righe.extend(principali)
+    secondarie: list[str] = []
+    n = blocco_diagnosi(dati.get("diagnosi_secondarie"), n, secondarie)
+    if secondarie:
+        righe.append("Diagnosi secondarie")
+        righe.extend(secondarie)
+    for chiave, titolo_sez in (("comorbidita", "Comorbidità"), ("anamnesi", "Anamnesi attuale")):
+        blocco = prendi(dati.get(chiave))
+        if blocco:
+            righe.extend([titolo_sez, " ".join(blocco), ""])
+    terapia = prendi(dati.get("terapia"))
+    if terapia:
+        righe.append("Terapia domiciliare")
+        righe.extend(f"- {f}" for f in terapia)
+        righe.append("")
+    esami_righe: list[str] = []
+    for e in (dati.get("esami") if isinstance(dati.get("esami"), list) else []):
+        if not isinstance(e, dict):
             continue
-        if len(uscita) < len(anon) * 0.6:
-            log.warning("fase=struttura file=%s esito=scartata motivo=troppo_corta giro=%d",
-                        file_id, giro)
-            continue
-        for segnaposto in sorted(mappa, key=len, reverse=True):
-            uscita = uscita.replace(segnaposto, mappa[segnaposto])
-        if not _numeri_conservati(testo, uscita):
-            log.warning("fase=struttura file=%s esito=scartata motivo=numeri_reali giro=%d",
-                        file_id, giro)
-            continue
-        log.info("fase=struttura file=%s esito=ok caratteri=%d giro=%d durata=%.1fs",
-                 file_id, len(uscita), giro, time.monotonic() - inizio)
-        return uscita
-    return None
+        corpo = prendi(e.get("frasi"))
+        if corpo:
+            nome = str(e.get("nome", "Altro")).strip()[:60] or "Altro"
+            esami_righe.append(f"{nome}: " + " ".join(corpo))
+            esami_righe.append("")
+    if esami_righe:
+        righe.append("Esami")
+        righe.extend(esami_righe)
+    for chiave, titolo_sez in (("valutazione", "Valutazione"), ("procedere", "Procedere")):
+        blocco = prendi(dati.get(chiave))
+        if blocco:
+            righe.extend([titolo_sez, " ".join(blocco), ""])
+    congedo = prendi(dati.get("congedo"))
+    if congedo:
+        righe.extend(congedo)
+    # NESSUNA frase può perdersi: le dimenticate dalla mappa finiscono in
+    # coda, bene in vista, e le sistema la persona.
+    dimenticate = [frasi[i - 1] for i in range(1, len(frasi) + 1) if i not in usate]
+    if dimenticate:
+        righe.extend(["", "— Frasi non classificate dalla mappa (da ricollocare) —"])
+        righe.extend(f"- {f}" for f in dimenticate)
+    if len(usate) < len(frasi) * 0.6:
+        log.warning("fase=struttura file=%s esito=scartata motivo=mappa_povera "
+                    "classificate=%d su=%d", file_id, len(usate), len(frasi))
+        return None
+    risultato = "\n".join(righe).strip() + "\n"
+    log.info("fase=struttura file=%s esito=ok frasi=%d classificate=%d "
+             "dimenticate=%d durata=%.1fs", file_id, len(frasi), len(usate),
+             len(dimenticate), time.monotonic() - inizio)
+    return risultato
 
 
 PROMPT_BELLA_COPIA = """Sei un correttore di bozze per referti cardiologici. Sistema SOLO la punteggiatura e le maiuscole/minuscole del testo qui sotto: virgole al posto giusto, punti, maiuscola a inizio frase e nei nomi propri, spazi corretti attorno ai segni.
