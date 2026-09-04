@@ -47,6 +47,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import sys
 import time
 import urllib.error
@@ -1806,6 +1807,59 @@ def trascrivi_voxtral_b(originale: Path, uscita_txt: Path, wav_voxtral: Path,
     log.info("fase=trascrizione_b motore=voxtral esito=ok caratteri=%d durata=%.1fs file=%s",
              len(testo), time.monotonic() - inizio, file_id)
     return True
+
+
+# ——— Rifinitura tempi col ForcedAligner (2026-09-04) ———
+# Sgancia il riascolto dal motore: il testo FINALE viene riallineato
+# all'audio da Qwen3-ForcedAligner (0.6B locale, scarto mediano 0.21s
+# misurato al banco). Interruttore: file ~/.referralflow-aligner-tempi.
+ALIGNER_SWITCH = Path.home() / ".referralflow-aligner-tempi"
+
+
+def rifinisci_tempi(originale: Path, wav_naturale: Path,
+                    parole: list, file_id: str) -> list:
+    inizio = time.monotonic()
+    script = Path(__file__).resolve().parent / "allinea-tempi.py"
+    if not (VOXTRAL_VENV_PY.is_file() and script.is_file()):
+        return parole
+    if not wav_naturale.is_file():
+        try:
+            subprocess.run(
+                ["ffmpeg", "-hide_banner", "-nostdin", "-y", "-i", str(originale),
+                 "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", str(wav_naturale)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                timeout=600, check=True)
+        except (subprocess.SubprocessError, OSError):
+            return parole
+    try:
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False,
+                                         encoding="utf-8") as f:
+            json.dump(parole, f, ensure_ascii=False)
+            dentro = Path(f.name)
+        fuori = dentro.with_suffix(".out.json")
+        esito = subprocess.run(
+            [str(VOXTRAL_VENV_PY), str(script), str(wav_naturale),
+             str(dentro), str(fuori)],
+            capture_output=True, timeout=900)
+        if esito.returncode != 0 or not fuori.is_file():
+            log.warning("fase=tempi motore=aligner esito=saltato codice=%d file=%s",
+                        esito.returncode, file_id)
+            return parole
+        rifinite = json.loads(fuori.read_text(encoding="utf-8"))
+        dentro.unlink(missing_ok=True)
+        fuori.unlink(missing_ok=True)
+    except (subprocess.SubprocessError, OSError, json.JSONDecodeError):
+        log.warning("fase=tempi motore=aligner esito=saltato motivo=eccezione file=%s",
+                    file_id)
+        return parole
+    if (not isinstance(rifinite, list) or len(rifinite) != len(parole)
+            or any(not isinstance(p, list) or len(p) != 2 for p in rifinite)):
+        log.warning("fase=tempi motore=aligner esito=scartato motivo=forma file=%s",
+                    file_id)
+        return parole
+    log.info("fase=tempi motore=aligner esito=ok parole=%d durata=%.1fs file=%s",
+             len(rifinite), time.monotonic() - inizio, file_id)
+    return rifinite
 
 
 # ——— Controllore di cifre con Parakeet (2026-09-04) ———
@@ -3797,6 +3851,13 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                     parole_audio = [(w, t * ATEMPO) for w, t in parole_audio]
             parole = allinea_parole(finale, parole_audio)
             log.info("fase=tempi file=%s esito=ok parole=%d", file_id, len(parole))
+            # Rifinitura col ForcedAligner (interruttore ~/.referralflow-
+            # aligner-tempi): il testo FINALE viene riallineato all'audio
+            # naturale — le parole ritoccate dalla catena tornano inchiodate
+            # al secondo giusto. Qualsiasi intoppo → tempi whisper di sempre.
+            if ALIGNER_SWITCH.is_file() and not visita and parole:
+                parole = rifinisci_tempi(
+                    ingresso, percorso(".voxtral.wav"), parole, file_id)
         except Exception as e:
             log.info("fase=tempi file=%s esito=saltato tipo=%s", file_id, type(e).__name__)
         parole_grezzo: list = []
