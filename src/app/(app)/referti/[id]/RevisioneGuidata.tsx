@@ -298,7 +298,10 @@ export function RevisioneGuidata({
           </p>
           {riparazioni.map((v, i) => {
             const contesto = fraseConRiparazione(v);
-            const idxR = frasi.findIndex((f) => f.includes(v.a) || f.includes(v.da));
+            // Ancora sulle frasi INIZIALI (immutabili): cercare nelle frasi
+            // correnti faceva perdere l'aggancio appena l'utente correggeva
+            // la parola, e la scheda ripiombava sul contesto vecchio.
+            const idxR = frasiIniziali.findIndex((f) => f.includes(v.a) || f.includes(v.da));
             return (
               <div key={i} className={`rg-item${fatte.has(`p${i}`) ? ' rg-fatta' : ''}`}>
                 <p className="rg-frase">
