@@ -1808,6 +1808,55 @@ def trascrivi_voxtral_b(originale: Path, uscita_txt: Path, wav_voxtral: Path,
     return True
 
 
+# ——— Controllore di cifre con Parakeet (2026-09-04) ———
+# Al banco pesato Parakeet-TDT è mediocre sulle parole ma È IL MIGLIORE
+# sui numeri (104/108) ed è fulmineo (~2 s per minuto d'audio): terzo
+# orecchio SOLO per le cifre. Non corregge mai nulla: se sente un numero
+# che nel referto non c'è, aggiunge un AVVISO per chi rivede. Interruttore:
+# file ~/.referralflow-parakeet-cifre. Qualsiasi intoppo → nessun avviso.
+PARAKEET_SWITCH = Path.home() / ".referralflow-parakeet-cifre"
+OPENASR_BIN = Path.home() / ".local" / "bin" / "openasr"
+PARAKEET_MODELLO = "parakeet-tdt-0.6b-v3"
+
+
+def controllo_cifre_parakeet(originale: Path, wav_naturale: Path,
+                             finale: str, file_id: str) -> list[str]:
+    inizio = time.monotonic()
+    if not OPENASR_BIN.is_file():
+        return []
+    if not wav_naturale.is_file():
+        try:
+            subprocess.run(
+                ["ffmpeg", "-hide_banner", "-nostdin", "-y", "-i", str(originale),
+                 "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", str(wav_naturale)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                timeout=600, check=True)
+        except (subprocess.SubprocessError, OSError):
+            return []
+    try:
+        esito = subprocess.run(
+            [str(OPENASR_BIN), "transcribe", str(wav_naturale),
+             "--model", PARAKEET_MODELLO, "-f", "text", "--offline"],
+            capture_output=True, text=True, timeout=900)
+    except subprocess.SubprocessError:
+        return []
+    if esito.returncode != 0 or not esito.stdout.strip():
+        log.warning("fase=controllo_cifre file=%s esito=saltato codice=%d",
+                    file_id, esito.returncode)
+        return []
+    sentiti = set(_numeri(esito.stdout))
+    presenti = set(_numeri(finale))
+    mancanti = sorted(sentiti - presenti)[:8]
+    log.info("fase=controllo_cifre file=%s esito=ok sentiti=%d presenti=%d "
+             "mancanti=%d durata=%.1fs", file_id, len(sentiti), len(presenti),
+             len(mancanti), time.monotonic() - inizio)
+    return [
+        f"Controllo cifre (secondo orecchio): nell'audio sembra esserci il numero "
+        f"«{n}» che nel referto non compare — riascolta il passaggio."
+        for n in mancanti
+    ]
+
+
 def chiama_ollama(prompt: str, file_id: str, fase: str, formato_json: bool = False,
                   modello: str | None = None, max_gettoni: int | None = None,
                   tentativi: int | None = None) -> str:
@@ -3696,6 +3745,10 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
 
         fase = "controlli"
         _ = notifica and notifica(fase)
+        # Terzo orecchio sulle cifre (Parakeet): solo avvisi, mai correzioni.
+        if PARAKEET_SWITCH.is_file() and not visita:
+            avvisi.extend(controllo_cifre_parakeet(
+                ingresso, percorso(".voxtral.wav"), finale, file_id))
         allarmi = controlla_valori(campi, testo_integrale, controlli, file_id)
         percorso(".allarmi.json").write_text(
             json.dumps(allarmi, ensure_ascii=False, indent=2) + "\n",
