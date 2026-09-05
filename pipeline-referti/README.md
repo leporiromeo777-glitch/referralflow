@@ -76,6 +76,32 @@ JSON il controllo non fa nulla. Aggiornamento (il registro cambia ogni
 mese): riscaricare lo zip dal portale dati aperti di Swissmedic
 (opendata.swiss, «Zugelassene Arzneimittel») e rilanciare lo script.
 
+## Rischio per frase, verificatore selettivo, telemetria (6.9.2026)
+
+- **Rischio per frase** (`valuta_rischio_frasi`): ogni frase della bozza
+  riceve un punteggio dai segnali già in catena (numeri e unità, numeri non
+  confermati dal secondo orecchio Parakeet, disaccordo tra i due motori,
+  negazioni, lateralità, farmaci del registro Swissmedic, frasi non
+  supportate, senso, dubbi, punti di loop) e i motivi in chiaro («perché lo
+  vedo»). Nel payload: `rischio_frasi` e `numeri` (valore, unità, secondo di
+  audio, conferma). La revisione guidata li mette nel primo passo.
+- **Verificatore selettivo** (`verificatore=1` nella config esterna): una
+  sola chiamata al cloud su correzioni applicate e frasi a rischio, ognuna
+  col passaggio del dettato grezzo, al posto delle due riletture intere di
+  avvocato del diavolo e ispezione; su intoppo, percorso classico.
+- **Anonimizzazione una volta per referto** (`riusa=True`): i dati trovati
+  restano in RAM per il referto; le fasi successive li coprono dal codice e
+  la controprova AI legge solo le frasi con maiuscole scoperte. Segnaposto
+  «[Medico N]» dopo Dr./dott./Prof.
+- **Telemetria**: ogni chiamata esterna e locale logga durata e gettoni;
+  l'anonimizzazione logga durata e caratteri.
+- **Suite cattiva** (`suite-cattiva.py`): 36 frasi × 3 voci sintetiche su
+  coppie pericolose (15/50, 0,5/5, non vi è/vi è, destra/sinistra, farmaci
+  simili, iper/ipo). Da rilanciare a ogni cambio di motore, prompt o
+  preprocessing; esito in `~/referti-dataset/suite-cattiva/`.
+- **Audio conservato**: regola in `docs/legale/conservazione-audio.md`;
+  scadenza automatica con `REFERTI_CONSERVA_GIORNI`.
+
 ## Lettera incrementale (fusione col referto precedente)
 
 Dalla pagina della bozza si può incollare (o accettare) la lettera
