@@ -49,6 +49,7 @@ export function RevisioneGuidata({
   parole = [],
   riparazioni = [],
   testoStrutturato = '',
+  provenienza = [],
 }: {
   testo: string;
   divagazioni: string[];
@@ -60,8 +61,43 @@ export function RevisioneGuidata({
   parole?: [string, number][];
   riparazioni?: Riparazione[];
   testoStrutturato?: string;
+  provenienza?: [string, string][];
 }) {
   const frasiIniziali = useMemo(() => spezzaInFrasi(testo), [testo]);
+
+  // Provenienza (lettera incrementale): per ogni frase del wizard, da dove
+  // viene — dettata oggi, copiata dalla lettera precedente, aggiornata. Le
+  // righe della lettera fusa possono contenere più frasi: si cerca la riga
+  // che CONTIENE la frase (frasi corte escluse per non sbagliare aggancio).
+  const provNorm = useMemo(
+    () => provenienza.map(([r, o]) => [normalizza(r), o] as [string, string]),
+    [provenienza]
+  );
+  const origineDi = (frase: string): string | null => {
+    if (provNorm.length === 0) return null;
+    const n = normalizza(frase);
+    if (n.length < 15) return null;
+    const hit = provNorm.find(([r]) => r === n || r.includes(n));
+    return hit ? hit[1] : null;
+  };
+  const ETICHETTE: Record<string, { t: string; fg: string; bg: string }> = {
+    dettato: { t: 'dettato oggi', fg: '#0d5c48', bg: '#e3ece8' },
+    precedente: { t: 'lettera precedente', fg: '#2c5c86', bg: '#e0e8f0' },
+    aggiornato: { t: 'aggiornato', fg: '#8a5d0c', bg: '#f3e9d6' },
+    misto: { t: 'precedente + oggi', fg: '#5a4a86', bg: '#e9e4f2' },
+  };
+  const chipOrigine = (frase: string) => {
+    const o = origineDi(frase);
+    const v = o ? ETICHETTE[o] : undefined;
+    if (!v) return null;
+    return (
+      <span style={{
+        fontSize: 10.5, fontWeight: 600, letterSpacing: '.05em', textTransform: 'uppercase',
+        color: v.fg, background: v.bg, borderRadius: 4, padding: '2px 6px', marginLeft: 8,
+        whiteSpace: 'nowrap', verticalAlign: 'middle',
+      }}>{v.t}</span>
+    );
+  };
   const [frasi, setFrasi] = useState<string[]>(frasiIniziali);
 
   const spenteIniziali = useMemo(() => {
@@ -245,6 +281,7 @@ export function RevisioneGuidata({
       ) : (
         <p className="rg-frase">
           {frasi[idx]}
+          {chipOrigine(frasiIniziali[idx])}
           {modificate.has(idx) && (
             <span style={{ color: 'var(--cta)', fontWeight: 600, marginLeft: 8 }}>
               ✓ frase aggiornata (entra così nel referto)

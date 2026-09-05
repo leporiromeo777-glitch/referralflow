@@ -52,9 +52,12 @@ TESTO:
 function firmaNumerica(testo: string): string {
   // La numerazione d'elenco a inizio riga («1. », «2. »…) non conta: è il
   // formato stesso a chiederla, non è un valore clinico. Tutti gli altri
-  // numeri devono restare identici.
+  // numeri devono restare identici — E ANCHE L'UNITÀ che li segue (2026-09-05):
+  // «5 mg» → «5 mcg» lasciava il numero intatto e passava la guardia.
+  // La firma ora è «numero+unità» (mg, mcg, g, ml, mmHg, bpm, %, cm, kg, ms…).
   const senzaElenchi = testo.replace(/^\s*\d{1,2}\.\s+/gm, '');
-  return (senzaElenchi.match(/\d+(?:[.,]\d+)?/g) ?? []).sort().join('|');
+  const voci = senzaElenchi.match(/\d+(?:[.,]\d+)?(?:\s?(?:mcg|µg|mg|g|kg|ml|l|mmHg|bpm|%|cm|mm|m|ms|s|min|h|mmol\/l|ng\/l|u\/l|kg\/m²|kg\/m2)(?![\p{L}]))?/giu) ?? [];
+  return voci.map((v) => v.toLowerCase().replace(/\s+/g, '')).sort().join('|');
 }
 
 export type EsitoStruttura =

@@ -7,6 +7,7 @@ import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
 import { estraiSostituzioni } from '@/lib/referti-learn';
 import { deleteFile } from '@/lib/storage';
+import { misuraRevisione } from '@/lib/referti-misura';
 
 const MAX_SUGGERIMENTI = 30;
 
@@ -44,6 +45,22 @@ export async function confermaBozza(formData: FormData) {
       returning payload ->> 'testo_corretto' as ai_text`,
     [id, session.studioId, testo, JSON.stringify(campi), session.id]
   );
+
+  // Misura della revisione: quanto la persona ha corretto la catena.
+  // Best-effort, mai bloccante, solo numeri.
+  if (row?.ai_text) {
+    try {
+      const m = misuraRevisione(row.ai_text, testo);
+      await query(
+        `update referti_bozze
+            set payload = jsonb_set(payload, '{revisione}', $3::jsonb)
+          where id = $1 and studio_id = $2`,
+        [id, session.studioId, JSON.stringify(m)]
+      );
+    } catch (e: any) {
+      console.error('Misura revisione fallita:', e?.message || e);
+    }
+  }
 
   // Impara dalla correzione: se la persona ha cambiato delle parole, le
   // sostituzioni ricorrenti diventano suggerimenti per il dizionario della

@@ -36,6 +36,7 @@ type Payload = {
   riparazioni_applicate?: { da: string; a: string }[];
   testo_grezzo?: string;
   testo_strutturato?: string;
+  revisione?: { quota_modificata?: number; distanza_parole?: number; parole_finali?: number };
 };
 
 // Evidenzia i frammenti segnalati dentro il testo: prima occorrenza di ogni
@@ -84,6 +85,29 @@ function evidenzia(
   });
   nodi.push(testo.slice(pos));
   return { nodi, nonTrovati, marcati: ranges.length, ranges };
+}
+
+// Provenienza di una riga della lettera fusa (lettera incrementale):
+// etichetta e colore. «dettato» = detto oggi, «precedente» = copiato dalla
+// lettera precedente, «aggiornato» = paragrafo esame riscritto coi valori
+// nuovi (guardia numerica), «misto» = riga che unisce le due fonti.
+const PROVENIENZA: Record<string, { testo: string; fg: string; bg: string }> = {
+  dettato: { testo: 'dettato oggi', fg: '#0d5c48', bg: '#e3ece8' },
+  precedente: { testo: 'lettera precedente', fg: '#2c5c86', bg: '#e0e8f0' },
+  aggiornato: { testo: 'aggiornato coi valori nuovi', fg: '#8a5d0c', bg: '#f3e9d6' },
+  misto: { testo: 'precedente + oggi', fg: '#5a4a86', bg: '#e9e4f2' },
+  modello: { testo: 'formato', fg: '#6d7a74', bg: '#ecebe6' },
+};
+function chipProvenienza(origine: string | undefined) {
+  const v = origine ? PROVENIENZA[origine] : undefined;
+  if (!v) return null;
+  return (
+    <span style={{
+      fontSize: 10.5, fontWeight: 600, letterSpacing: '.05em', textTransform: 'uppercase',
+      color: v.fg, background: v.bg, borderRadius: 4, padding: '2px 6px', marginLeft: 8,
+      whiteSpace: 'nowrap', verticalAlign: 'middle',
+    }}>{v.testo}</span>
+  );
 }
 
 // Traduce un allarme numerico in una frase semplice per chi rivede la bozza.
@@ -148,7 +172,7 @@ export default async function RefertoBozza({
   // automatica della lettera precedente = ultimo referto CONFERMATO dello
   // stesso paziente (nome + data di nascita dai campi, confermati o estratti).
   const fusione = (p as any).fusione && typeof (p as any).fusione === 'object'
-    ? ((p as any).fusione as { stato?: string; lettera_precedente?: string; testo_fuso?: string; errore?: string; richiesta_at?: string })
+    ? ((p as any).fusione as { stato?: string; lettera_precedente?: string; testo_fuso?: string; errore?: string; richiesta_at?: string; provenienza?: string[]; riepilogo?: Record<string, number> })
     : null;
   const campiRif = { ...(p.campi_estratti ?? {}), ...(row.campi_confermati ?? {}) } as Record<string, unknown>;
   const nomePaz = typeof campiRif.nome_paziente === 'string' ? campiRif.nome_paziente.trim() : '';
@@ -241,6 +265,13 @@ export default async function RefertoBozza({
 
       {searchParams.ok === 'confermata' && (
         <div className="card notice"><p>Bozza confermata ✓ — ora puoi scaricare il PDF.</p></div>
+      )}
+      {!inBozza && p.revisione && typeof p.revisione.quota_modificata === 'number' && (
+        <p className="muted small">
+          Revisione: il medico ha modificato il <strong>{p.revisione.quota_modificata}%</strong> delle
+          parole rispetto alla proposta della catena
+          {typeof p.revisione.distanza_parole === 'number' ? ` (${p.revisione.distanza_parole} parole)` : ''}.
+        </p>
       )}
       {searchParams.err === 'testo' && (
         <p className="error">Il testo del referto non può essere vuoto.</p>
@@ -344,9 +375,38 @@ export default async function RefertoBozza({
             <div className="ctrl-box" style={{ marginBottom: 14 }}>
               <p><strong>Lettera aggiornata pronta.</strong> Controllala e, se va, applicala:
                 diventa il testo di partenza della revisione.</p>
+              {fusione.riepilogo && Object.keys(fusione.riepilogo).length > 0 && (
+                <p className="muted small">
+                  <strong>Cosa è cambiato:</strong>{' '}
+                  {[
+                    fusione.riepilogo.dettato ? `${fusione.riepilogo.dettato} righe dettate oggi` : null,
+                    fusione.riepilogo.aggiornato ? `${fusione.riepilogo.aggiornato} esami aggiornati coi valori nuovi` : null,
+                    fusione.riepilogo.misto ? `${fusione.riepilogo.misto} righe che uniscono le due fonti` : null,
+                    fusione.riepilogo.precedente ? `${fusione.riepilogo.precedente} righe identiche alla lettera precedente` : null,
+                  ].filter(Boolean).join(' · ')}
+                </p>
+              )}
+              {Array.isArray(fusione.provenienza) && fusione.provenienza.length > 0 && (
+                <details>
+                  <summary className="sez-summary">Solo le novità di oggi</summary>
+                  <ul style={{ marginTop: 8 }}>
+                    {fusione.testo_fuso.split('\n').map((riga, i) => ({ riga, o: fusione.provenienza?.[i] }))
+                      .filter(({ riga, o }) => riga.trim() && (o === 'dettato' || o === 'aggiornato' || o === 'misto'))
+                      .slice(0, 80)
+                      .map(({ riga, o }, i) => <li key={i}>{riga.trim()}{chipProvenienza(o)}</li>)}
+                  </ul>
+                </details>
+              )}
               <details>
-                <summary className="sez-summary">Anteprima della lettera aggiornata</summary>
-                <pre className="grezzo-testo">{fusione.testo_fuso}</pre>
+                <summary className="sez-summary">Anteprima della lettera aggiornata, riga per riga</summary>
+                <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6, fontSize: 14.5, marginTop: 8 }}>
+                  {fusione.testo_fuso.split('\n').map((riga, i) => (
+                    <div key={i} style={{ minHeight: '1.2em' }}>
+                      {riga}
+                      {riga.trim() && Array.isArray(fusione.provenienza) ? chipProvenienza(fusione.provenienza[i]) : null}
+                    </div>
+                  ))}
+                </div>
               </details>
               <form action={applicaFusione} style={{ marginTop: 10 }}>
                 <input type="hidden" name="id" value={row.id} />
@@ -489,6 +549,12 @@ export default async function RefertoBozza({
             frasiNonSupportate={Array.isArray(p.frasi_non_supportate) ? p.frasi_non_supportate : []}
             riparazioni={Array.isArray(p.riparazioni_applicate) ? p.riparazioni_applicate : []}
             testoStrutturato={typeof p.testo_strutturato === 'string' ? p.testo_strutturato : ''}
+            provenienza={
+              fusione?.stato === 'fatta' && fusione.testo_fuso && Array.isArray(fusione.provenienza)
+                ? fusione.testo_fuso.split('\n').map((riga, i) => [riga, fusione.provenienza?.[i] ?? ''] as [string, string])
+                    .filter(([r, o]) => r.trim() && o && o !== 'modello')
+                : []
+            }
             note={Array.isArray(p.note_segreteria) ? p.note_segreteria.filter((n): n is string => typeof n === 'string') : []}
             campi={Object.fromEntries(Object.entries(campi).filter(([, v]) => typeof v === 'string')) as Record<string, string>}
             valoriNumerici={valoriNumerici}

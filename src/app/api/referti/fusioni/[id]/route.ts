@@ -31,8 +31,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ errore: 'json_non_valido' }, { status: 400 });
   }
   const testo = typeof body?.testo_fuso === 'string' ? body.testo_fuso.slice(0, MAX_TESTO) : '';
+  // Provenienza per riga (dettato / precedente / aggiornato / modello /
+  // misto) e riepilogo dei conteggi: alimentano i badge e la vista
+  // «cosa è cambiato». Solo valori dell'insieme ammesso.
+  const AMMESSE = new Set(['', 'dettato', 'precedente', 'aggiornato', 'modello', 'misto']);
+  const provenienza = (Array.isArray(body?.provenienza) ? body.provenienza.slice(0, 4000) : [])
+    .map((v: unknown) => (typeof v === 'string' && AMMESSE.has(v) ? v : ''));
+  const riepilogo: Record<string, number> = {};
+  if (body?.riepilogo && typeof body.riepilogo === 'object') {
+    for (const [k, v] of Object.entries(body.riepilogo)) {
+      if (AMMESSE.has(k) && typeof v === 'number' && Number.isFinite(v)) riepilogo[k] = Math.round(v);
+    }
+  }
   const esito = testo
-    ? { stato: 'fatta', testo_fuso: testo, fatta_at: new Date().toISOString() }
+    ? { stato: 'fatta', testo_fuso: testo, provenienza, riepilogo, fatta_at: new Date().toISOString() }
     : { stato: 'fallita', errore: String(body?.errore ?? 'sconosciuto').slice(0, 80), fatta_at: new Date().toISOString() };
 
   await query(

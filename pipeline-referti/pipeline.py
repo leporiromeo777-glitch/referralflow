@@ -3594,8 +3594,17 @@ def _anonimizzatore_da_mappa(mappa: dict[str, str]):
 
 
 def fusione_lettera(lettera: str, dettato: str, file_id: str) -> str | None:
-    """La lettera precedente aggiornata col dettato, o None. Tutto ciò che
-    esce è verbatim: righe della lettera precedente o frasi del dettato."""
+    """Solo il testo della lettera aggiornata (vedi fusione_lettera_completa)."""
+    esito = fusione_lettera_completa(lettera, dettato, file_id)
+    return esito["testo"] if esito else None
+
+
+def fusione_lettera_completa(lettera: str, dettato: str, file_id: str) -> dict | None:
+    """La lettera precedente aggiornata col dettato + la PROVENIENZA di ogni
+    riga (dettato / precedente / aggiornato / modello / misto) + riepilogo.
+    Tutto ciò che esce è verbatim (righe della lettera precedente, frasi del
+    dettato) tranne i paragrafi degli esami aggiornati, che passano da una
+    guardia numerica. None = niente lettera."""
     inizio = time.monotonic()
     prec = _analizza_lettera(lettera)
     if not prec["diagnosi"] and not prec["sezioni"]:
@@ -3604,15 +3613,19 @@ def fusione_lettera(lettera: str, dettato: str, file_id: str) -> str | None:
     frasi = _frasi_consolidate(dettato)
     if len(frasi) < 3:
         return None
-    # Due anonimizzazioni separate (mappe distinte): al modello vanno solo
-    # testi anonimi, e nulla di ciò che risponde viene riportato al reale —
-    # il piano parla per numeri di frase e numeri di diagnosi.
-    an_l = _anonimizza_per_esterno(lettera, file_id, con_mappa=True)
-    an_d = _anonimizza_per_esterno(dettato, file_id, con_mappa=True)
-    if an_l is None or an_d is None:
+    # UNA sola anonimizzazione dei due testi insieme (2026-09-05): dimezza il
+    # tempo (misurato: 122 s a passata) e dà alla stessa persona lo stesso
+    # segnaposto nella lettera e nel dettato — il piano ne guadagna. Al
+    # modello vanno solo testi anonimi; ciò che risponde è quasi tutto numeri
+    # (frasi, diagnosi); l'unico testo che torna (paragrafi esami aggiornati)
+    # passa dalla mappa e da guardie numeriche prima di entrare nella lettera.
+    an = _anonimizza_per_esterno(lettera + "\n\n" + AVVOCATO_SEP + "\n\n" + dettato,
+                                 file_id, con_mappa=True)
+    if an is None:
         log.warning("fase=fusione file=%s esito=annullata motivo=anonimizzazione", file_id)
         return None
-    anon_l, anon_d = _anonimizzatore_da_mappa(an_l[1]), _anonimizzatore_da_mappa(an_d[1])
+    mappa = an[1]
+    anon_l = anon_d = _anonimizzatore_da_mappa(mappa)
 
     struttura = []
     for d in prec["diagnosi"]:
@@ -3749,6 +3762,7 @@ def fusione_lettera(lettera: str, dettato: str, file_id: str) -> str | None:
         if isinstance(e, dict):
             piano_per_nome[norm_nome(e.get("nome", ""))] = e
     esami_righe: list[str] = []
+    righe_aggiornate: set[str] = set()
     visti_nomi = set()
     for e in prec["esami"]:
         chiave = norm_nome(e["nome_base"])
@@ -3759,10 +3773,16 @@ def fusione_lettera(lettera: str, dettato: str, file_id: str) -> str | None:
         if azione == "sostituisci" and nuove:
             esami_righe.append(f"{e['nome_base']}: " + " ".join(nuove))
         elif azione in ("aggiorna", "aggiungi") and nuove:
-            # v1 prudente: il paragrafo precedente resta intero, i valori
-            # nuovi dettati seguono in chiaro — la persona fonde i numeri.
-            esami_righe.append(e["testo"])
-            esami_righe.append("   ↳ Aggiornamento dettato: " + " ".join(nuove))
+            aggiornato = _aggiorna_paragrafo_esame(
+                e["testo"], nuove, mappa, anon_l, file_id, modello)
+            if aggiornato:
+                esami_righe.append(aggiornato)
+                righe_aggiornate.add(aggiornato)
+            else:
+                # Ripiego prudente: il paragrafo precedente resta intero, i
+                # valori nuovi dettati seguono in chiaro — fonde la persona.
+                esami_righe.append(e["testo"])
+                esami_righe.append("   ↳ Aggiornamento dettato: " + " ".join(nuove))
         else:
             esami_righe.append(e["testo"])
             if nuove:
@@ -3797,11 +3817,134 @@ def fusione_lettera(lettera: str, dettato: str, file_id: str) -> str | None:
         log.warning("fase=fusione file=%s esito=scartata motivo=piano_povero collocate=%d su=%d",
                     file_id, len(usate), len(frasi))
         return None
-    risultato = re.sub(r"\n{3,}", "\n\n", "\n".join(righe)).strip() + "\n"
+    testo_finale = re.sub(r"\n{3,}", "\n\n", "\n".join(righe)).strip() + "\n"
+    righe_finali = testo_finale.split("\n")
+    titoli_nuovi = {d["titolo"] for d in nuove_p + nuove_s}
+    provenienza = _provenienza_righe(righe_finali, frasi, lettera, prec,
+                                     righe_aggiornate, titoli_nuovi)
+    riepilogo: dict[str, int] = {}
+    for o in provenienza:
+        if o:
+            riepilogo[o] = riepilogo.get(o, 0) + 1
     log.info("fase=fusione file=%s esito=ok frasi=%d collocate=%d dimenticate=%d "
-             "diagnosi_prec=%d durata=%.1fs", file_id, len(frasi), len(usate),
-             len(dimenticate), len(prec["diagnosi"]), time.monotonic() - inizio)
-    return risultato
+             "diagnosi_prec=%d righe_aggiornate=%d durata=%.1fs", file_id, len(frasi),
+             len(usate), len(dimenticate), len(prec["diagnosi"]), len(righe_aggiornate),
+             time.monotonic() - inizio)
+    return {"testo": testo_finale, "provenienza": provenienza, "riepilogo": riepilogo}
+
+
+PROMPT_AGGIORNA_ESAME = """Sei l'assistente di un cardiologo. Qui sotto ci sono il paragrafo di un esame nella lettera PRECEDENTE e le frasi che il medico ha dettato OGGI con i valori nuovi. Riscrivi il paragrafo AGGIORNATO: stessa struttura e stesse frasi del paragrafo precedente, con i valori nuovi al posto dei vecchi dove il medico li ha dettati; i valori non menzionati oggi restano quelli precedenti. La data tra parentesi accanto al nome dell'esame diventa quella dettata se c'è, altrimenti resta quella precedente.
+
+REGOLE ASSOLUTE:
+- NESSUN numero che non sia nel paragrafo precedente o nel dettato di oggi.
+- Nessuna informazione nuova, nessuna frase inventata.
+- I segnaposto come «Persona 1» o «[data 3]» restano ESATTAMENTE come sono.
+- Rispondi SOLO col JSON {"paragrafo": "..."}.
+
+PARAGRAFO PRECEDENTE:
+{prec}
+
+DETTATO DI OGGI:
+{nuove}"""
+
+
+def _aggiorna_paragrafo_esame(paragrafo: str, nuove: list[str], mappa: dict,
+                              anonima, file_id: str, modello: str | None) -> str | None:
+    """Il paragrafo dell'esame riscritto coi valori dettati, o None (ripiego
+    al paragrafo precedente + valori in chiaro). Guardie: i numeri del
+    risultato ⊆ numeri(precedente) ∪ numeri(dettato), tutti i numeri dettati
+    presenti, lunghezza sensata — controllate sul testo anonimo E sul testo
+    reale dopo il ripristino dei nomi."""
+    def numeri(s: str) -> set[str]:
+        return set(re.findall(r"\d+(?:[.,]\d+)?", s))
+    prec_anon = anonima(paragrafo)
+    nuove_anon = [anonima(f) for f in nuove]
+    try:
+        uscita = _chiama_esterno_openai(
+            PROMPT_AGGIORNA_ESAME.replace("{prec}", prec_anon)
+                                 .replace("{nuove}", "\n".join(nuove_anon)),
+            file_id, modello=modello,
+            schema=_oggetto({"paragrafo": {"type": "string"}}))
+    except RuntimeError:
+        return None
+    dati = _estrai_json(uscita)
+    testo = str(dati.get("paragrafo", "")).strip() if isinstance(dati, dict) else ""
+    if not testo:
+        return None
+    ammessi = numeri(prec_anon) | set().union(*(numeri(f) for f in nuove_anon))
+    dettati = set().union(*(numeri(f) for f in nuove_anon))
+    if not numeri(testo) <= ammessi or not dettati <= numeri(testo):
+        log.info("fase=fusione file=%s esame=scartato motivo=numeri", file_id)
+        return None
+    if not (0.5 * len(prec_anon) <= len(testo) <= 1.8 * len(prec_anon) + 200):
+        log.info("fase=fusione file=%s esame=scartato motivo=lunghezza", file_id)
+        return None
+    for segnaposto in sorted(mappa, key=len, reverse=True):
+        testo = testo.replace(segnaposto, mappa[segnaposto])
+    ammessi_reali = numeri(paragrafo) | set().union(*(numeri(f) for f in nuove))
+    if not numeri(testo) <= ammessi_reali or "Persona " in testo or "[dat" in testo:
+        log.info("fase=fusione file=%s esame=scartato motivo=numeri_reali", file_id)
+        return None
+    return testo
+
+
+_TITOLI_MODELLO = {"diagnosi principali", "diagnosi secondarie", "comorbidità",
+                   "comorbidita", "anamnesi attuale", "terapia domiciliare",
+                   "esami", "valutazione", "procedere"}
+
+
+def _provenienza_righe(righe: list[str], frasi: list[str], lettera: str, prec: dict,
+                       righe_aggiornate: set[str], titoli_nuovi: set[str]) -> list[str]:
+    """Per ogni riga della lettera fusa: da dove viene. «dettato» = frase
+    detta oggi, «precedente» = copiata dalla lettera precedente, «aggiornato»
+    = paragrafo esame riscritto coi valori nuovi (guardia numerica),
+    «modello» = titoli e cornice, «misto» = riga che unisce le due fonti.
+    Serve alla pagina per i badge di provenienza e la vista «cosa è cambiato»."""
+    def norm(s: str) -> str:
+        return re.sub(r"\W+", " ", s.lower()).strip()
+    dett = {norm(f) for f in frasi if f.strip()}
+    dett_lunghe = [n for n in dett if len(n) > 20]
+    precl: set[str] = {norm(l) for l in lettera.replace("\r", "").split("\n") if l.strip()}
+    for d in prec["diagnosi"]:
+        precl.add(norm(d["titolo"]))
+        precl.update(norm(r) for r in d["righe"])
+    for v in prec["sezioni"].values():
+        precl.update(norm(l) for l in v.split("\n") if l.strip())
+    for e in prec["esami"]:
+        precl.update(norm(l) for l in e["testo"].split("\n") if l.strip())
+    prec_lunghe = [n for n in precl if len(n) > 30]
+    nuovi = {norm(x) for x in titoli_nuovi}
+    out: list[str] = []
+    for r in righe:
+        s = r.strip()
+        if not s:
+            out.append("")
+            continue
+        if s.lower() in _TITOLI_MODELLO or s.startswith("—"):
+            out.append("modello")
+            continue
+        if s in righe_aggiornate:
+            out.append("aggiornato")
+            continue
+        if s.startswith("↳"):
+            out.append("dettato")
+            continue
+        core = re.sub(r"^(?:\d{1,2}\.\s+|-\s*)", "", s)
+        core = re.sub(r"^attuale:\s*", "", core, flags=re.IGNORECASE)
+        n = norm(core)
+        if n in dett or n in nuovi:
+            out.append("dettato")
+        elif n in precl or norm(s) in precl:
+            out.append("precedente")
+        elif any(f in n for f in dett_lunghe) and any(p in n for p in prec_lunghe):
+            out.append("misto")
+        elif any(f in n for f in dett_lunghe):
+            out.append("dettato")
+        elif any(p in n for p in prec_lunghe):
+            out.append("precedente")
+        else:
+            out.append("modello")
+    return out
 
 
 def lavora_fusioni() -> None:
@@ -3826,11 +3969,13 @@ def lavora_fusioni() -> None:
             continue
         log.info("fase=fusione bozza=%s esito=avvio", bozza_id[:8])
         try:
-            testo = fusione_lettera(lettera, dettato, "fusione-" + bozza_id[:8])
+            esito = fusione_lettera_completa(lettera, dettato, "fusione-" + bozza_id[:8])
         except Exception as e:  # noqa: BLE001 — mai bloccare il servizio
             log.error("fase=fusione bozza=%s esito=errore tipo=%s", bozza_id[:8], type(e).__name__)
-            testo = None
-        risposta = {"testo_fuso": testo} if testo else {"errore": "fusione_non_riuscita"}
+            esito = None
+        risposta = ({"testo_fuso": esito["testo"], "provenienza": esito["provenienza"],
+                     "riepilogo": esito["riepilogo"]}
+                    if esito else {"errore": "fusione_non_riuscita"})
         try:
             req = urllib.request.Request(
                 f"{FLOW_URL}/api/referti/fusioni/{bozza_id}",
@@ -4132,6 +4277,146 @@ class ErroreElaborazione(Exception):
         self.fase = fase
         self.tipo = tipo
         self.file_id = file_id
+
+
+# ——— Farmaci: indice Swissmedic (dati aperti) per avvisi sui dosaggi ———
+# Costruito da farmaci-swissmedic.py (registro pubblico dei medicamenti
+# omologati, nessun dato paziente). Serve a due controlli, SOLO avvisi:
+# (1) nome di farmaco + dosaggio che non esiste in Svizzera per quel
+# farmaco (né come multiplo/metà delle confezioni note): probabile cifra
+# sbagliata dalla trascrizione; (2) parola sconosciuta seguita da un
+# dosaggio che somiglia a un farmaco noto: probabile nome storpiato.
+FARMACI_JSON = Path.home() / "referti-pipeline" / "dati" / "farmaci-ch.json"
+_FARMACI_CACHE: dict | None = None
+RE_DOSE_TESTO = re.compile(r"(\d+(?:[.,]\d+)?)\s*(mg|mcg|µg|g|ml|ui|ie)(?![\w])", re.I)
+# Parole comuni che precedono un dosaggio senza essere farmaci.
+_STOP_FARMACI = {
+    "compresse", "compressa", "capsule", "capsula", "dosaggio", "dosaggi", "posologia",
+    "giornaliera", "giornaliero", "quotidiana", "quotidiano", "somministrazione",
+    "aumentare", "aumentato", "aumentata", "ridurre", "ridotto", "ridotta", "passare",
+    "iniziare", "iniziato", "introdurre", "introdotto", "sospendere", "sospeso",
+    "attualmente", "assume", "assumere", "terapia", "trattamento", "totale", "totali",
+    "mattino", "mattina", "pomeriggio", "settimana", "settimanale", "mensile",
+    "portare", "portato", "portata", "titolare", "titolazione", "raddoppiare",
+    "dimezzare", "dimezzato", "massimo", "massima", "minimo", "minima", "circa",
+    "rispettivamente", "eventualmente", "successivamente", "attuale", "invece",
+    "continuare", "proseguire", "prosegue", "mantenere", "mantiene", "bisogno",
+    "colesterolo", "creatinina", "emoglobina", "potassio", "sodio", "glicemia",
+    "ferritina", "troponina", "peptide", "valore", "valori", "livello", "livelli",
+    "dose", "dosi", "quantità", "peso", "diuretico", "diuretici", "betabloccante",
+    "statina", "statine", "anticoagulante", "antiaggregante", "sartano", "sartani",
+    "aceinibitore", "calcioantagonista", "gliflozina", "gliflozine", "insulina",
+    "caffeina", "alcool", "alcol", "sodica", "sodico", "orale", "endovena", "sottocute",
+    "compressa", "fiala", "fiale", "gocce", "bustina", "bustine", "supposta", "cerotto",
+}
+
+
+def _farmaci() -> dict:
+    global _FARMACI_CACHE
+    if _FARMACI_CACHE is None:
+        try:
+            _FARMACI_CACHE = json.loads(FARMACI_JSON.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            _FARMACI_CACHE = {}
+    return _FARMACI_CACHE
+
+
+def _distanza_breve(a: str, b: str, massimo: int) -> int:
+    if abs(len(a) - len(b)) > massimo:
+        return massimo + 1
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        if min(cur) > massimo:
+            return massimo + 1
+        prev = cur
+    return prev[-1]
+
+
+def _farmaco_vicino(parola: str, nomi: dict, principi: dict) -> str | None:
+    """Farmaco noto più vicino a una parola sconosciuta (stessa iniziale,
+    distanza 1 per parole di 6-7 lettere, 2 da 8 in su)."""
+    soglia = 2 if len(parola) >= 8 else 1
+    migliore, dist_migliore = None, soglia + 1
+    for indice in (nomi, principi):
+        for k in indice:
+            if " " in k or k[0] != parola[0] or abs(len(k) - len(parola)) > soglia:
+                continue
+            d = _distanza_breve(parola, k, soglia)
+            if d < dist_migliore:
+                migliore, dist_migliore = k, d
+                if d == 1:
+                    break
+    return migliore if dist_migliore <= soglia else None
+
+
+def controllo_farmaci(testo: str, file_id: str) -> list[str]:
+    dati = _farmaci()
+    nomi = dati.get("nomi") or {}
+    principi = dati.get("principi") or {}
+    if not nomi:
+        return []
+    avvisi: list[str] = []
+    visti: set[str] = set()
+    basso = testo.lower()
+    for m in RE_DOSE_TESTO.finditer(basso):
+        prima = basso[max(0, m.start() - 45):m.start()]
+        parole = re.findall(r"[a-zàèéìòùäöü][a-zàèéìòùäöü\-]+", prima)
+        if not parole:
+            continue
+        candidati = []
+        if len(parole) >= 2:
+            candidati.append(parole[-2] + " " + parole[-1])
+        candidati.append(parole[-1])
+        voce, nome = None, None
+        for c in candidati:
+            if c in nomi:
+                voce, nome = nomi[c], c
+                break
+            if c in principi:
+                voce, nome = principi[c], c
+                break
+        try:
+            numero = float(m.group(1).replace(",", "."))
+        except ValueError:
+            continue
+        unita = m.group(2).lower().replace("µg", "mcg")
+        if voce is not None:
+            dosi = voce.get("dosi") or []
+            unita_note = {d.split()[1] for d in dosi if " " in d}
+            valori = {float(d.split()[0]) for d in dosi if d.endswith(" " + unita)}
+            if unita == "mg":
+                valori |= {float(x) for x in voce.get("numeri_nome", [])}
+            if not valori or (unita not in unita_note and unita != "mg"):
+                continue
+            # Multipli e metà delle confezioni note, con tolleranza del 2.5%
+            # (il medico detta «97/103», la dichiarazione dice 97.2/102.8).
+            plausibile = any(abs(numero - k * v) <= 0.025 * k * v + 1e-6
+                             for v in valori for k in (0.25, 0.5, 1, 1.5, 2, 3, 4))
+            chiave = f"{nome}|{numero}|{unita}"
+            if not plausibile and chiave not in visti:
+                visti.add(chiave)
+                note = ", ".join(sorted(dosi, key=lambda d: (d.split()[1], float(d.split()[0])))[:6])
+                avvisi.append(
+                    f"Farmaco «{nome}»: il dosaggio {m.group(1)} {unita} non corrisponde "
+                    f"alle confezioni svizzere note ({note}). Riascolta il numero."
+                )
+        else:
+            ultima = parole[-1]
+            if len(ultima) < 6 or ultima in _STOP_FARMACI or ultima in visti:
+                continue
+            vicino = _farmaco_vicino(ultima, nomi, principi)
+            if vicino:
+                visti.add(ultima)
+                avvisi.append(
+                    f"«{ultima}» seguito da un dosaggio non è un farmaco noto in Svizzera: "
+                    f"forse «{vicino}»? Riascolta."
+                )
+    if avvisi:
+        log.info("fase=farmaci file=%s avvisi=%d", file_id, len(avvisi))
+    return avvisi[:6]
 
 
 def controlli_avvio():
@@ -4544,6 +4829,12 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         if PARAKEET_SWITCH.is_file() and not visita:
             avvisi.extend(controllo_cifre_parakeet(
                 ingresso, percorso(".voxtral.wav"), finale, file_id))
+        # Farmaci (registro Swissmedic): dosaggi inesistenti e nomi storpiati.
+        # Solo avvisi, mai correzioni; senza l'indice, non fa nulla.
+        try:
+            avvisi.extend(controllo_farmaci(finale, file_id))
+        except Exception as e:  # noqa: BLE001 — mai bloccare il referto
+            log.warning("fase=farmaci file=%s esito=errore %s", file_id, type(e).__name__)
         allarmi = controlla_valori(campi, testo_integrale, controlli, file_id)
         percorso(".allarmi.json").write_text(
             json.dumps(allarmi, ensure_ascii=False, indent=2) + "\n",
