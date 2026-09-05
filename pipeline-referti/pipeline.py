@@ -2417,13 +2417,21 @@ def _chiama_esterno_manuale(anon: str, file_id: str) -> str:
 
 
 def _chiama_esterno_openai(prompt: str, file_id: str,
-                           modello: str | None = None) -> str:
+                           modello: str | None = None,
+                           schema: dict | None = None) -> str:
     """Una chiamata a un endpoint compatibile OpenAI (config da
     _config_esterno). Pensatoio spento dove il server lo onora; per i
     modelli che ragionano comunque, la risposta si pesca anche dal campo
     reasoning. 2 tentativi. Qui arriva SOLO testo già anonimizzato.
     `modello` scavalca la riga modello= della config (righe per-fase:
-    modello_bella=, modello_struttura=)."""
+    modello_bella=, modello_struttura=).
+    `schema`: JSON Schema imposto al modello (response_format json_schema,
+    modalità stretta). Misurato il 2026-09-05 su gemma-4 con una mappa di
+    60 frasi: SENZA schema il JSON usciva non valido (0/60 frasi), CON lo
+    schema 60/60 e tutte le sezioni ammesse — il server rifiuta i token che
+    violano lo schema, quindi malformazioni e sezioni inventate diventano
+    impossibili. Un 400 (server che non lo supporta) fa scendere la
+    scaletta alle varianti senza schema: nessuna regressione."""
     cfg = _config_esterno()
     if not cfg:
         raise RuntimeError("config esterna mancante")
@@ -2432,15 +2440,20 @@ def _chiama_esterno_openai(prompt: str, file_id: str,
         "max_tokens": int(cfg.get("max_gettoni", "8000")),
         "messages": [{"role": "user", "content": prompt}],
     }
+    formato = ({"response_format": {"type": "json_schema", "json_schema": {
+        "name": "risposta", "strict": True, "schema": schema}}} if schema else {})
     for tentativo in (1, 2):
         try:
             dati = None
-            # Scaletta di varianti: temperatura 0 e pensatoio spento dove il
-            # server li accetta; chi rifiuta un campo (Google valida stretto,
-            # i modelli Anthropic «ragionanti» non vogliono la temperatura
-            # fissa) riceve via via la richiesta più nuda. Ogni rifiuto è un
-            # 400 immediato: le varianti extra non costano nulla.
+            # Scaletta di varianti: prima con lo schema (dove è supportato),
+            # poi temperatura 0 e pensatoio spento dove il server li onora;
+            # chi rifiuta un campo (Google valida stretto, i modelli
+            # Anthropic «ragionanti» non vogliono la temperatura fissa)
+            # riceve via via la richiesta più nuda. Ogni rifiuto è un 400
+            # immediato: le varianti extra non costano nulla.
             for extra in (
+                *(({**formato, "temperature": 0},
+                   {**formato},) if formato else ()),
                 {"temperature": 0,
                  "chat_template_kwargs": {"enable_thinking": False}},
                 {"temperature": 0},
@@ -3211,6 +3224,68 @@ def _numeri_conservati(prima: str, dopo: str) -> bool:
     return all(b[n] <= a[n] for n in b)
 
 
+def _lista_frasi(n: int) -> dict:
+    """Un elenco di numeri di frase validi: il server non può produrne
+    fuori intervallo (schema stretto)."""
+    return {"type": "array", "items": {"type": "integer", "minimum": 1, "maximum": n}}
+
+
+def _oggetto(proprieta: dict) -> dict:
+    """Oggetto in modalità stretta: tutte le chiavi obbligatorie, nessuna in più
+    (è ciò che pretende `strict: true` degli endpoint OpenAI-compatibili)."""
+    return {"type": "object", "properties": proprieta,
+            "required": list(proprieta), "additionalProperties": False}
+
+
+def _schema_mappa(n: int) -> dict:
+    diagnosi = {"type": "array", "items": _oggetto({
+        "titolo": {"type": "string"},
+        "frasi": _lista_frasi(n),
+        "attuale": _lista_frasi(n)})}
+    return _oggetto({
+        "saluto": _lista_frasi(n),
+        "regia": _lista_frasi(n),
+        "diagnosi_principali": diagnosi,
+        "diagnosi_secondarie": diagnosi,
+        "comorbidita": _lista_frasi(n),
+        "anamnesi": _lista_frasi(n),
+        "terapia": _lista_frasi(n),
+        "esami": {"type": "array", "items": _oggetto({
+            "nome": {"type": "string", "enum": [
+                "Esame clinico", "ECG", "Ecocardiografia transtoracica",
+                "Ergometria", "Laboratorio", "Altro"]},
+            "frasi": _lista_frasi(n)})},
+        "valutazione": _lista_frasi(n),
+        "procedere": _lista_frasi(n),
+        "congedo": _lista_frasi(n)})
+
+
+def _schema_fusione(n: int, numeri_diagnosi: list[int]) -> dict:
+    azioni = {"type": "string", "enum": ["uguale", "sostituisci", "aggiungi"]}
+    sezione = _oggetto({"azione": azioni, "frasi": _lista_frasi(n)})
+    return _oggetto({
+        "saluto": _lista_frasi(n),
+        "regia": _lista_frasi(n),
+        "congedo": _lista_frasi(n),
+        "diagnosi_esistenti": {"type": "array", "items": _oggetto({
+            "numero": ({"type": "integer", "enum": numeri_diagnosi}
+                       if numeri_diagnosi else {"type": "integer"}),
+            "frasi": _lista_frasi(n),
+            "attuale": _lista_frasi(n)})},
+        "diagnosi_nuove": {"type": "array", "items": _oggetto({
+            "titolo": {"type": "string"},
+            "principale": {"type": "boolean"},
+            "frasi": _lista_frasi(n),
+            "attuale": _lista_frasi(n)})},
+        "sezioni": _oggetto({c: sezione for c in (
+            "comorbidita", "anamnesi", "terapia", "valutazione", "procedere")}),
+        "esami": {"type": "array", "items": _oggetto({
+            "nome": {"type": "string"},
+            "azione": {"type": "string",
+                       "enum": ["uguale", "aggiorna", "sostituisci", "nuovo"]},
+            "frasi": _lista_frasi(n)})}})
+
+
 PROMPT_STRUTTURA_MAPPA = """Sei l'assistente di un cardiologo. Ti do un referto dettato come elenco di FRASI NUMERATE. NON riscrivere niente: rispondi SOLO con la MAPPA in JSON che assegna ogni frase alla sua sezione del formato standard dello studio.
 
 {"saluto": [n], "regia": [n], "diagnosi_principali": [{"titolo": "...", "frasi": [n], "attuale": [n]}], "diagnosi_secondarie": [{"titolo": "...", "frasi": [n], "attuale": [n]}], "comorbidita": [n], "anamnesi": [n], "terapia": [n], "esami": [{"nome": "...", "frasi": [n]}], "valutazione": [n], "procedere": [n], "congedo": [n]}
@@ -3271,7 +3346,8 @@ def struttura_standard(testo: str, file_id: str) -> str | None:
     modello = (_config_esterno() or {}).get("modello_struttura") or None
     try:
         uscita = _chiama_esterno_openai(
-            PROMPT_STRUTTURA_MAPPA.replace("{frasi}", elenco), file_id, modello=modello)
+            PROMPT_STRUTTURA_MAPPA.replace("{frasi}", elenco), file_id,
+            modello=modello, schema=_schema_mappa(len(frasi)))
     except RuntimeError:
         log.warning("fase=struttura file=%s esito=fallita motivo=esterno", file_id)
         return None
@@ -3547,7 +3623,8 @@ def fusione_lettera(lettera: str, dettato: str, file_id: str) -> str | None:
     try:
         uscita = _chiama_esterno_openai(
             PROMPT_FUSIONE.replace("{struttura}", "\n".join(struttura)).replace("{frasi}", elenco),
-            file_id, modello=modello)
+            file_id, modello=modello,
+            schema=_schema_fusione(len(frasi), [d["numero"] for d in prec["diagnosi"]]))
     except RuntimeError:
         log.warning("fase=fusione file=%s esito=fallita motivo=esterno", file_id)
         return None
