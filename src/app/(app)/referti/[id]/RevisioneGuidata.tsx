@@ -53,6 +53,7 @@ export function RevisioneGuidata({
   avvisi = [],
   rischioFrasi = [],
   numeri = [],
+  frasiOmesse = [],
   letteraPrecedente = '',
 }: {
   testo: string;
@@ -69,6 +70,7 @@ export function RevisioneGuidata({
   avvisi?: string[];
   rischioFrasi?: { frase: string; punteggio: number; motivi?: string[] }[];
   numeri?: { valore: string; unita?: string; frase?: number | null; secondo?: number | null; confermato?: boolean | null }[];
+  frasiOmesse?: { frase: string; secondo?: number | null; cifre?: boolean; farmaco?: boolean; copertura?: number | null }[];
   letteraPrecedente?: string;
 }) {
   const frasiIniziali = useMemo(() => spezzaInFrasi(testo), [testo]);
@@ -310,8 +312,10 @@ export function RevisioneGuidata({
     .filter((r) => r.punteggio >= 8)
     .filter((r) => !rosse.some((v) => normalizza(v.frase) === normalizza(r.frase)))
     .map((r, k) => ({ ...r, k, idx: trovaIndice(r.frase) }));
-  if (rosse.length + avvisi.length + aRischio.length > 0)
-    passi.push({ chiave: 'subito', titolo: 'Da controllare subito', conta: rosse.length + avvisi.length + aRischio.length });
+  const omesseGravi = frasiOmesse.filter((o) => o.cifre || o.farmaco);
+  const omesseAltre = frasiOmesse.filter((o) => !(o.cifre || o.farmaco));
+  if (rosse.length + avvisi.length + aRischio.length + omesseGravi.length > 0)
+    passi.push({ chiave: 'subito', titolo: 'Da controllare subito', conta: rosse.length + avvisi.length + aRischio.length + omesseGravi.length });
   if (arancioni.length > 0)
     passi.push({ chiave: 'arancioni', titolo: 'Frasi da chiarire', conta: arancioni.length });
   if (spenteIniziali.size > 0)
@@ -620,6 +624,37 @@ export function RevisioneGuidata({
             </div>
           ))}
           {bottoneAltre('rischio', aRischio.length)}
+          {frasiOmesse.length > 0 && (
+            <p className="muted small" style={{ marginTop: 12 }}>
+              <strong>Nel dettato ma non nel referto</strong> ({frasiOmesse.length}): passaggi della
+              trascrizione grezza che non si ritrovano né nel testo né nelle note. Riascolta: se
+              serve, inseriscilo; se era una divagazione o un&apos;istruzione alla segreteria, chiudi.
+            </p>
+          )}
+          {limita('omesse', [...omesseGravi, ...omesseAltre].map((o, k) => ({ ...o, k }))).map((o) => (
+            <div key={`o${o.k}`} className={`rg-item${o.cifre || o.farmaco ? ' rg-rossa' : ''}${fatte.has(`o${o.k}`) ? ' rg-fatta' : ''}`}>
+              <p className="rg-frase">«{o.frase}»
+                {o.cifre && <span className="rg-tab" style={{ marginLeft: 8, fontSize: '0.8em', padding: '2px 9px' }}>numeri</span>}
+                {o.farmaco && <span className="rg-tab" style={{ marginLeft: 6, fontSize: '0.8em', padding: '2px 9px' }}>farmaco</span>}
+              </p>
+              {!fatte.has(`o${o.k}`) && (
+                <div className="rg-azioni">
+                  {typeof o.secondo === 'number' && (
+                    <button type="button" className="btn" onClick={() => riascolta(o.secondo as number, true)}>
+                      🎧 Riascolta qui ({mmss(o.secondo)})
+                    </button>
+                  )}
+                  <button type="button" className="btn" onClick={() => inserisciNota(o.frase, `o${o.k}`)}>
+                    ↩︎ Inserisci nel testo
+                  </button>
+                  <button type="button" className="btn btn-ghost" onClick={() => segna(`o${o.k}`)}>
+                    ✓ Non serve nel referto
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+          {bottoneAltre('omesse', frasiOmesse.length)}
           {numeri.some((n) => n.confermato === false) && (
             <details style={{ marginTop: 10 }}>
               <summary className="sez-summary">

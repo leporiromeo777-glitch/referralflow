@@ -4110,6 +4110,50 @@ def _fondi_piani(base: dict, extra: dict, solo: set[int] | None = None) -> dict:
     return fuso
 
 
+_MISURE = [
+    ("Frazione di eiezione", r"(?:frazione di eiezione|\bFE\b|LVEF|FEVS)\D{0,25}?(\d{2}(?:[.,]\d)?)\s*%?"),
+    ("PAPs", r"\bPAPs?\b\D{0,20}?(\d{2,3})"),
+    ("Pressione arteriosa", r"pressione(?: arteriosa)?\D{0,30}?(\d{2,3}\s*/\s*\d{2,3})"),
+    ("Frequenza cardiaca", r"frequenza(?: cardiaca)?\D{0,25}?(\d{2,3})\s*(?:bpm|battiti)?"),
+    ("Creatinina", r"creatinina\D{0,20}?(\d{2,3}(?:[.,]\d)?)"),
+    ("eGFR", r"(?:eGFR|filtrato(?: glomerulare)?)\D{0,20}?(\d{2,3})"),
+    ("Potassio", r"potassio\D{0,15}?(\d(?:[.,]\d{1,2})?)"),
+    ("Emoglobina", r"emoglobina\D{0,15}?(\d{2,3}(?:[.,]\d)?)"),
+    ("NT-proBNP", r"(?:NT-?proBNP|proBNP|\bBNP\b)\D{0,20}?(\d{2,5})"),
+    ("LDL", r"\bLDL\b\D{0,15}?(\d(?:[.,]\d{1,2})?)"),
+    ("HbA1c", r"HbA1c\D{0,15}?(\d(?:[.,]\d)?)\s*%?"),
+    ("Peso", r"\bpeso\b\D{0,15}?(\d{2,3}(?:[.,]\d)?)\s*kg"),
+    ("BMI", r"\bBMI\b\D{0,15}?(\d{2}(?:[.,]\d)?)"),
+    ("TAPSE", r"TAPSE\D{0,15}?(\d{2})"),
+    ("QTc", r"QTc\D{0,10}?(\d{3})"),
+    ("QRS", r"\bQRS\b\D{0,10}?(\d{2,3})"),
+    ("PQ", r"\bPQ\b\D{0,10}?(\d{3})"),
+    ("Volume atrio sinistro", r"atrio sinistro\D{0,40}?(\d{2,3})\s*ml"),
+    ("Colesterolo totale", r"colesterolo totale\D{0,15}?(\d(?:[.,]\d{1,2})?)"),
+]
+
+
+def _misure(testo: str) -> dict[str, str]:
+    fuori: dict[str, str] = {}
+    for nome, rx in _MISURE:
+        m = re.search(rx, testo, re.IGNORECASE)
+        if m and nome not in fuori:
+            fuori[nome] = re.sub(r"\s+", "", m.group(1)).replace(",", ".")
+    return fuori
+
+
+def variazioni_misure(lettera: str, dettato: str) -> list[dict]:
+    """Misure presenti in ENTRAMBI i testi con valore diverso: «cosa è
+    cambiato» anche sui numeri, non solo sulle righe (2026-09-06, analisi
+    dei concorrenti: in cardiologia il valore è la storia longitudinale)."""
+    prima, dopo = _misure(lettera), _misure(dettato)
+    out = []
+    for nome in prima:
+        if nome in dopo and prima[nome] != dopo[nome]:
+            out.append({"misura": nome, "prima": prima[nome], "dopo": dopo[nome]})
+    return out[:20]
+
+
 def fusione_lettera(lettera: str, dettato: str, file_id: str) -> str | None:
     """Solo il testo della lettera aggiornata (vedi fusione_lettera_completa)."""
     esito = fusione_lettera_completa(lettera, dettato, file_id)
@@ -4378,7 +4422,8 @@ def fusione_lettera_completa(lettera: str, dettato: str, file_id: str) -> dict |
              "diagnosi_prec=%d righe_aggiornate=%d durata=%.1fs", file_id, len(frasi),
              len(usate), len(dimenticate), len(prec["diagnosi"]), len(righe_aggiornate),
              time.monotonic() - inizio)
-    return {"testo": testo_finale, "provenienza": provenienza, "riepilogo": riepilogo}
+    return {"testo": testo_finale, "provenienza": provenienza, "riepilogo": riepilogo,
+            "variazioni": variazioni_misure(lettera, dettato)}
 
 
 PROMPT_AGGIORNA_ESAME = """Sei l'assistente di un cardiologo. Qui sotto ci sono il paragrafo di un esame nella lettera PRECEDENTE e le frasi che il medico ha dettato OGGI con i valori nuovi. Riscrivi il paragrafo AGGIORNATO: stessa struttura e stesse frasi del paragrafo precedente, con i valori nuovi al posto dei vecchi dove il medico li ha dettati; i valori non menzionati oggi restano quelli precedenti. La data tra parentesi accanto al nome dell'esame diventa quella dettata se c'è, altrimenti resta quella precedente.
@@ -4562,7 +4607,7 @@ def lavora_fusioni() -> None:
             log.error("fase=fusione bozza=%s esito=errore tipo=%s", bozza_id[:8], type(e).__name__)
             esito = None
         risposta = ({"testo_fuso": esito["testo"], "provenienza": esito["provenienza"],
-                     "riepilogo": esito["riepilogo"]}
+                     "riepilogo": esito["riepilogo"], "variazioni": esito.get("variazioni", [])}
                     if esito else {"errore": "fusione_non_riuscita"})
         try:
             req = urllib.request.Request(
@@ -5264,6 +5309,52 @@ def scadenza_dataset_audio() -> None:
         pass
 
 
+def rileva_omissioni(grezzo: str, finale: str, note: list, parole_audio: list,
+                     file_id: str) -> list[dict]:
+    """Frasi del DETTATO GREZZO che non si ritrovano nel referto né nelle note
+    per la segreteria (2026-09-06, analisi dei concorrenti: gli scribe
+    omettono più di quanto inventino e nessuno mostra il controllo inverso
+    audio→nota). Per ogni frase grezza con almeno 4 parole significative si
+    cerca la frase del referto con la massima sovrapposizione di parole; sotto
+    il 50% è «omessa». Con numeri o farmaci pesa di più. Tempo dell'audio
+    dalle parole grezze. Solo avvisi: decide la persona."""
+    def parole_sig(s: str) -> list[str]:
+        return [w for w in re.findall(r"[a-zà-ÿ0-9][a-zà-ÿ0-9,.]*", s.lower()) if len(w) >= 4 or w[0].isdigit()]
+    destinazioni = _spezza_frasi_wizard(finale) + [str(n) for n in (note or [])]
+    dest_set = [set(parole_sig(f)) for f in destinazioni]
+    tutte_dest: set[str] = set().union(*dest_set) if dest_set else set()
+    tempi: dict[str, float] = {}
+    for w, s in (parole_audio or []):
+        k = re.sub(r"\W+", "", str(w).lower())
+        if k and k not in tempi:
+            try:
+                tempi[k] = float(s)
+            except (TypeError, ValueError):
+                pass
+    farmaci = _farmaci().get("nomi") or {}
+    omesse: list[dict] = []
+    for f in _spezza_frasi_wizard(grezzo):
+        sig = parole_sig(f)
+        if len(sig) < 4:
+            continue
+        s = set(sig)
+        if re.search(r"\b(virgola|punto|a capo|punto e virgola|per favore|scusa|ripeto|copia|incolla)\b", f.lower()) and len(sig) < 7:
+            continue
+        migliore = max((len(s & d) / len(s) for d in dest_set), default=0.0)
+        copertura_globale = len(s & tutte_dest) / len(s)
+        if migliore >= 0.5 or copertura_globale >= 0.8:
+            continue
+        cifre = bool(re.search(r"\d", f))
+        farm = any(w in farmaci for w in sig)
+        secondo = next((tempi[re.sub(r"\W+", "", w)] for w in sig if re.sub(r"\W+", "", w) in tempi), None)
+        omesse.append({"frase": f[:400], "secondo": secondo, "cifre": cifre, "farmaco": farm,
+                       "copertura": round(migliore, 2)})
+    omesse.sort(key=lambda o: (-(o["cifre"] or o["farmaco"]), o["copertura"]))
+    log.info("fase=omissioni file=%s grezze=%d omesse=%d con_cifre=%d", file_id,
+             len(_spezza_frasi_wizard(grezzo)), len(omesse), sum(1 for o in omesse if o["cifre"]))
+    return omesse[:30]
+
+
 def controlli_avvio():
     """Verifiche una-volta-sola prima di lavorare: strumenti, modelli,
     configurazione. Restituisce (sostituzioni, controlli) o None."""
@@ -5303,7 +5394,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
     ErroreElaborazione dopo aver loggato (mai contenuti nei log).
     `notifica(fase)`, se passata, viene chiamata a ogni cambio di fase
     (avanzamento vivo sulla piattaforma per i dettati del drag & drop)."""
-    file_id = file_id_di(ingresso)
+    file_id = file_id_di(ingresso) + ("-ombra" if OMBRA else "")
     # Registro delle riparazioni pulito a ogni corsa (il servizio è un
     # processo lungo: senza azzeramento un retry sommerebbe corse diverse).
     RIPARAZIONI_APPLICATE.pop(file_id, None)
@@ -5322,8 +5413,17 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
 
     fase = "preprocessing"
     _ = notifica and notifica(fase)
+    # Cronologia del referto: una voce per trasformazione (attore, numeri,
+    # secondi dall'avvio) e le versioni intermedie del testo.
+    storia: list[dict] = []
+    versioni: dict[str, str] = {}
+    t_avvio = time.monotonic()
+    def tappa(nome: str, attore: str, **dati) -> None:
+        storia.append({"tappa": nome, "attore": attore, "secondi": round(time.monotonic() - t_avvio, 1),
+                       **{k: v for k, v in dati.items() if isinstance(v, (int, float, str, bool))}})
     try:
         preprocessa(ingresso, percorso(".wav"), file_id)
+        tappa("preprocessing", "codice")
         # Vocabolario di dominio per whisper (SPEC §4.2): stesso prompt per le due
         # passate. Nel log solo il numero di termini, mai il contenuto.
         vocab = carica_vocabolario()
@@ -5442,6 +5542,10 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             "fase=deloop file=%s esito=ok rimosse_a=%d rimosse_b=%d fantasmi_a=%d fantasmi_b=%d durata=%.1fs",
             file_id, rip_a, rip_b, fant_a, fant_b, time.monotonic() - inizio,
         )
+        tappa("trascrizione_a", "whisper", caratteri=len(grezzo_a))
+        tappa("trascrizione_b", "voxtral" if fatto_b else "whisper", caratteri=len(grezzo_b))
+        tappa("deloop", "codice", rimosse=rip_a + rip_b, fantasmi=fant_a + fant_b)
+        versioni["grezzo_b"] = grezzo_b
 
         fase = "dizionario"
         _ = notifica and notifica(fase)
@@ -5456,6 +5560,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             "fase=dizionario file=%s esito=ok sostituzioni=%d fonetiche=%d durata=%.1fs",
             file_id, n_sost, n_fon, time.monotonic() - inizio,
         )
+        tappa("dizionario", "codice", sostituzioni=n_sost, fonetiche=n_fon)
 
         # Punteggiatura dettata (SPEC §3, passo 5b): i segni detti a voce
         # diventano segni veri, su entrambe le passate prima del confronto.
@@ -5484,13 +5589,20 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         )
         # Arbitro a due ipotesi (punto 5 del piano): l'AI sceglie tra le due
         # versioni nei punti di divergenza; i dubbi restano comunque in bozza.
+        versioni["dopo_dizionario"] = corretto_a
+        n_arb = 0
         if divergenze:
-            corretto_a, _ = arbitra_divergenze(corretto_a, divergenze, file_id)
+            corretto_a, n_arb = arbitra_divergenze(corretto_a, divergenze, file_id)
+        tappa("confronto", "codice", divergenze=len(divergenze))
+        tappa("arbitro", "modello", scelte_b=n_arb)
+        versioni["dopo_arbitro"] = corretto_a
 
         fase = "correzione_llm"
         _ = notifica and notifica(fase)
         finale = correggi_llm(corretto_a, file_id, percorso(".scarto_ai.json"))
         percorso(".finale.txt").write_text(finale, encoding="utf-8")
+        tappa("correzione", "modello+codice", riparazioni=len(RIPARAZIONI_APPLICATE.get(file_id, [])))
+        versioni["dopo_correzione"] = finale
 
         # Il testo integrale PRIMA della segretaria: il nome del paziente
         # spesso è dettato solo nell'apertura rivolta alla segreteria
@@ -5598,6 +5710,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                 frasi_da_chiarire, punti_loop, file_id)
         if verif is not None:
             frasi_non_supportate, dubbi = verif
+            tappa("verificatore", "modello", non_supportate=len(frasi_non_supportate), dubbi=len(dubbi))
         else:
             if (cfg_est and cfg_est.get("avvocato") == "1"
                     and _esterno_attivo() == "openai" and not nota_visita):
@@ -5616,6 +5729,8 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # (tutto «privo di senso medico» per costruzione): si salta.
         if verif is None:
             dubbi = [] if visita else ispeziona_llm(finale, file_id)
+            tappa("avvocato", "modello", non_supportate=len(frasi_non_supportate))
+            tappa("ispezione", "modello", dubbi=len(dubbi))
         # I punti dove l'anti-loop è intervenuto vanno in testa ai segmenti
         # dubbi: la bozza li evidenzia e il revisore sa che lì c'era una
         # ripetizione ridotta a una. (Se la correzione ha ritoccato la frase
@@ -5671,9 +5786,11 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             fase = "bella_copia"
             _ = notifica and notifica(fase)
             pulito = bella_copia(finale, file_id)
+            tappa("bella_copia", "modello+codice", applicata=pulito is not None)
             if pulito is not None:
                 finale = pulito
                 testo_integrale = finale
+                versioni["dopo_bella_copia"] = finale
 
         # Formato standard dello studio (struttura=1): la catena prepara la
         # PROPOSTA già impaginata come il rapporto-tipo — in pagina si
@@ -5684,10 +5801,12 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             fase = "struttura"
             _ = notifica and notifica(fase)
             testo_strutturato = struttura_standard(finale, file_id)
+            tappa("struttura", "modello+codice", proposta=testo_strutturato is not None)
 
         fase = "estrazione"
         _ = notifica and notifica(fase)
         campi = estrai_campi(testo_integrale, file_id)
+        tappa("estrazione", "modello+codice")
         percorso(".campi.json").write_text(
             json.dumps(campi, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
@@ -5860,6 +5979,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             for da, a in RIPARAZIONI_APPLICATE.get(file_id, [])[:80]
         ],
         "richiede_revisione": True,
+        "ombra": OMBRA,
     }
     if not visita:
         try:
@@ -5870,6 +5990,20 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             payload["numeri"] = numeri_entita
         except Exception as e:  # noqa: BLE001 — mai bloccare la consegna
             log.warning("fase=rischio file=%s esito=errore tipo=%s", file_id, type(e).__name__)
+        try:
+            omesse = rileva_omissioni(grezzo_a, finale, note_segreteria, parole_audio, file_id)
+            payload["frasi_omesse"] = omesse
+            gravi = [o for o in omesse if o["cifre"] or o["farmaco"]]
+            if gravi:
+                payload["avvisi"] = list(payload.get("avvisi") or []) + [
+                    f"Nel dettato ci sono {len(gravi)} passaggi con numeri o farmaci che non si "
+                    f"ritrovano nel referto: controllali nel primo passo della revisione."]
+        except Exception as e:  # noqa: BLE001
+            log.warning("fase=omissioni file=%s esito=errore tipo=%s", file_id, type(e).__name__)
+    # Cronologia e versioni intermedie (2026-09-06): ogni trasformazione con
+    # attore e numeri; le versioni servono all'audit e al confronto cieco.
+    payload["storia"] = storia
+    payload["versioni"] = {k: v for k, v in versioni.items() if isinstance(v, str) and v.strip()}
     if not visita and testo_strutturato:
         # Proposta nel formato standard dello studio (fase struttura):
         # in pagina si applica con un clic, mai da sola.
@@ -6196,7 +6330,17 @@ def servizio(sostituzioni, controlli) -> int:
             time.sleep(INTERVALLO_SCANSIONE_S)
 
 
+OMBRA = False  # confronto cieco: la bozza si consegna come «-ombra», mai al posto di quella vera
+
+
 def main(argv: list[str]) -> int:
+    global OMBRA
+    if len(argv) == 3 and argv[1] == "--ombra":
+        # Confronto cieco (2026-09-06): stesso audio, catena candidata; la bozza
+        # arriva nell'app col file_id suffisso «-ombra» e la pagina
+        # /referti/confronto la mostra accanto a quella di produzione.
+        OMBRA = True
+        argv = [argv[0], argv[2]]
     if len(argv) != 2:
         print(__doc__, file=sys.stderr)
         return 2

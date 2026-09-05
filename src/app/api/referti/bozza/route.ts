@@ -154,6 +154,35 @@ export async function POST(req: NextRequest) {
         secondo: typeof v.secondo === 'number' && Number.isFinite(v.secondo) ? v.secondo : null,
         confermato: typeof v.confermato === 'boolean' ? v.confermato : null,
       })),
+    // Omission detector: frasi del dettato grezzo senza destinazione nel
+    // referto (con secondo di audio, cifre/farmaco).
+    frasi_omesse: lista(body?.frasi_omesse)
+      .filter((v: unknown): v is { frase: string; secondo?: unknown; cifre?: unknown; farmaco?: unknown; copertura?: unknown } =>
+        !!v && typeof v === 'object' && typeof (v as any).frase === 'string')
+      .slice(0, 30)
+      .map((v) => ({
+        frase: v.frase.slice(0, 400),
+        secondo: typeof v.secondo === 'number' && Number.isFinite(v.secondo) ? v.secondo : null,
+        cifre: v.cifre === true,
+        farmaco: v.farmaco === true,
+        copertura: typeof v.copertura === 'number' ? v.copertura : null,
+      })),
+    // Cronologia delle trasformazioni (attore, numeri, secondi dall'avvio) e
+    // versioni intermedie del testo: audit e confronto.
+    storia: lista(body?.storia)
+      .filter((v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && typeof (v as any).tappa === 'string')
+      .slice(0, 40)
+      .map((v) => Object.fromEntries(Object.entries(v)
+        .filter(([k, x]) => /^[a-z_]{1,30}$/.test(k) && (typeof x === 'string' || typeof x === 'number' || typeof x === 'boolean'))
+        .map(([k, x]) => [k, typeof x === 'string' ? x.slice(0, 80) : x]))),
+    versioni: body?.versioni && typeof body.versioni === 'object'
+      ? Object.fromEntries(Object.entries(body.versioni as Record<string, unknown>)
+          .filter(([k, x]) => /^[a-z_]{1,30}$/.test(k) && typeof x === 'string')
+          .slice(0, 8)
+          .map(([k, x]) => [k, (x as string).slice(0, MAX_TESTO)]))
+      : {},
+    // Bozza «ombra» (confronto cieco tra due versioni della catena).
+    ombra: body?.ombra === true,
     richiede_revisione: true,
   };
 

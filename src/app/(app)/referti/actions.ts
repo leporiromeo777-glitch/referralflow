@@ -8,6 +8,7 @@ import { isUuid } from '@/lib/cartella';
 import { estraiSostituzioni } from '@/lib/referti-learn';
 import { deleteFile } from '@/lib/storage';
 import { misuraRevisione } from '@/lib/referti-misura';
+import { tassonomiaModifiche } from '@/lib/referti-tassonomia';
 
 const MAX_SUGGERIMENTI = 30;
 
@@ -63,6 +64,15 @@ export async function confermaBozza(formData: FormData) {
       if (t !== null) m.tempo_revisione_s = t;
       if (ft !== null) m.flag_totali = ft;
       if (fs !== null) m.flag_accettati_senza_riascolto = fs;
+      // Tassonomia automatica di ogni modifica (numero, farmaco, negazione,
+      // lateralità, termine, formato, stile, frase inserita o tolta).
+      try {
+        const tx = tassonomiaModifiche(row.ai_text, testo);
+        m.classi = tx.classi;
+        m.modifiche = tx.modifiche;
+      } catch (e: any) {
+        console.error('Tassonomia modifiche fallita:', e?.message || e);
+      }
       await query(
         `update referti_bozze
             set payload = jsonb_set(payload, '{revisione}', $3::jsonb)
@@ -281,4 +291,32 @@ export async function riorganizzaBozza(formData: FormData) {
   );
   revalidatePath(`/referti/${id}`);
   redirect(`/referti/${id}?ok=strutturato`);
+}
+
+
+// Confronto cieco (2026-09-06): la preferenza del medico tra la bozza di
+// produzione (a) e quella «ombra» (b), rimappata dall'ordine casuale mostrato.
+export async function decidiConfronto(formData: FormData) {
+  const session = await getSession();
+  if (!session || !session.studioId) redirect('/login');
+  const a = String(formData.get('bozza_a') ?? '');
+  const b = String(formData.get('bozza_b') ?? '');
+  if (!isUuid(a) || !isUuid(b)) redirect('/referti/confronto');
+  const inverti = String(formData.get('inverti') ?? '0') === '1';
+  const mostrata = String(formData.get('scelta') ?? '');
+  let scelta: 'a' | 'b' | 'pari';
+  if (mostrata === 'pari') scelta = 'pari';
+  else if (mostrata === '1') scelta = inverti ? 'b' : 'a';
+  else if (mostrata === '2') scelta = inverti ? 'a' : 'b';
+  else redirect('/referti/confronto');
+  const motivo = String(formData.get('motivo') ?? '').trim().slice(0, 200) || null;
+  await query(
+    `insert into referti_confronti (studio_id, bozza_a, bozza_b, scelta, motivo, deciso_da, deciso_at)
+     values ($1, $2, $3, $4, $5, $6, now())
+     on conflict (bozza_a, bozza_b) do update
+       set scelta = excluded.scelta, motivo = excluded.motivo, deciso_da = excluded.deciso_da, deciso_at = now()`,
+    [session.studioId, a, b, scelta, motivo, session.id]
+  );
+  revalidatePath('/referti/confronto');
+  redirect('/referti/confronto?ok=deciso');
 }

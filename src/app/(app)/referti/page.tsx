@@ -85,6 +85,9 @@ export default async function Referti({
         la trascrizione parte da sola e torna come bozza da rivedere e confermare.
         Nessun referto è definitivo senza una persona.
       </PageHero>
+      <p className="muted small" style={{ marginTop: 8 }}>
+        <Link href="/referti/qualita">Qualità della dettatura</Link> · <Link href="/referti/confronto">Confronto cieco</Link>
+      </p>
 
       <UploadDettato />
 

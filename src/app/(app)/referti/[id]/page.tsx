@@ -11,6 +11,8 @@ import { AudioDettato } from '../AudioDettato';
 import { TestoDettato } from '../TestoDettato';
 import { RevisioneGuidata } from './RevisioneGuidata';
 import RiorganizzaAI from './RiorganizzaAI';
+import { RiascoltaChip } from '../RiascoltaChip';
+import { tempoDiFrase } from '@/lib/referti-tempi';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,9 +38,13 @@ type Payload = {
   riparazioni_applicate?: { da: string; a: string }[];
   testo_grezzo?: string;
   testo_strutturato?: string;
-  revisione?: { quota_modificata?: number; distanza_parole?: number; parole_finali?: number; tempo_revisione_s?: number; flag_totali?: number; flag_accettati_senza_riascolto?: number };
+  revisione?: { quota_modificata?: number; distanza_parole?: number; parole_finali?: number; tempo_revisione_s?: number; flag_totali?: number; flag_accettati_senza_riascolto?: number; classi?: Record<string, number>; modifiche?: { prima: string; dopo: string; classe: string }[] };
   rischio_frasi?: { frase: string; punteggio: number; motivi?: string[] }[];
   numeri?: { valore: string; unita?: string; frase?: number | null; secondo?: number | null; confermato?: boolean | null }[];
+  frasi_omesse?: { frase: string; secondo?: number | null; cifre?: boolean; farmaco?: boolean; copertura?: number | null }[];
+  storia?: Record<string, string | number | boolean>[];
+  versioni?: Record<string, string>;
+  ombra?: boolean;
 };
 
 // Evidenzia i frammenti segnalati dentro il testo: prima occorrenza di ogni
@@ -174,7 +180,7 @@ export default async function RefertoBozza({
   // automatica della lettera precedente = ultimo referto CONFERMATO dello
   // stesso paziente (nome + data di nascita dai campi, confermati o estratti).
   const fusione = (p as any).fusione && typeof (p as any).fusione === 'object'
-    ? ((p as any).fusione as { stato?: string; lettera_precedente?: string; testo_fuso?: string; errore?: string; richiesta_at?: string; provenienza?: string[]; riepilogo?: Record<string, number> })
+    ? ((p as any).fusione as { stato?: string; lettera_precedente?: string; testo_fuso?: string; errore?: string; richiesta_at?: string; provenienza?: string[]; riepilogo?: Record<string, number>; variazioni?: { misura: string; prima: string; dopo: string }[] })
     : null;
   const campiRif = { ...(p.campi_estratti ?? {}), ...(row.campi_confermati ?? {}) } as Record<string, unknown>;
   const nomePaz = typeof campiRif.nome_paziente === 'string' ? campiRif.nome_paziente.trim() : '';
@@ -277,7 +283,37 @@ export default async function RefertoBozza({
           {typeof p.revisione.flag_totali === 'number' && p.revisione.flag_totali > 0
             ? ` · segnalazioni: ${p.revisione.flag_totali}, accettate senza riascolto ${p.revisione.flag_accettati_senza_riascolto ?? 0}`
             : ''}.
+          {p.revisione.classi && Object.keys(p.revisione.classi).length > 0 && (
+            <> Tipi di correzione: {Object.entries(p.revisione.classi).map(([k, n]) => `${k.toLowerCase().replaceAll('_', ' ')} ${n}`).join(', ')}.</>
+          )}
         </p>
+      )}
+      {(Array.isArray(p.storia) && p.storia.length > 0) && (
+        <details className="card">
+          <summary className="sez-summary">Cronologia della catena ({p.storia.length} tappe{p.versioni && Object.keys(p.versioni).length > 0 ? `, ${Object.keys(p.versioni).length} versioni intermedie` : ''})</summary>
+          <p className="muted small">Ogni trasformazione con chi l&apos;ha fatta (codice, modello, whisper) e i numeri. Le versioni intermedie servono al confronto e all&apos;audit: il testo ufficiale resta quello confermato.</p>
+          <div className="tbl-scroll">
+            <table className="tbl">
+              <thead><tr><th>Tappa</th><th>Attore</th><th>Secondi</th><th>Dettagli</th></tr></thead>
+              <tbody>
+                {p.storia.map((v, i) => (
+                  <tr key={i}>
+                    <td>{String(v.tappa).replaceAll('_', ' ')}</td>
+                    <td>{String(v.attore ?? '')}</td>
+                    <td>{typeof v.secondi === 'number' ? Math.round(v.secondi) : ''}</td>
+                    <td className="muted small">{Object.entries(v).filter(([k]) => !['tappa', 'attore', 'secondi'].includes(k)).map(([k, x]) => `${k.replaceAll('_', ' ')}: ${String(x)}`).join(' · ')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {p.versioni && Object.entries(p.versioni).map(([k, testo]) => (
+            <details key={k} style={{ marginTop: 8 }}>
+              <summary className="sez-summary">Versione: {k.replaceAll('_', ' ')}</summary>
+              <pre className="grezzo-testo">{testo}</pre>
+            </details>
+          ))}
+        </details>
       )}
       {searchParams.err === 'testo' && (
         <p className="error">Il testo del referto non può essere vuoto.</p>
@@ -390,6 +426,18 @@ export default async function RefertoBozza({
                   ].filter(Boolean).join(' · ')}
                 </p>
               )}
+              {Array.isArray(fusione.variazioni) && fusione.variazioni.length > 0 && (
+                <div className="tbl-scroll" style={{ marginBottom: 10 }}>
+                  <table className="tbl">
+                    <thead><tr><th>Misura</th><th>Lettera precedente</th><th>Dettato oggi</th></tr></thead>
+                    <tbody>
+                      {fusione.variazioni.map((v, i) => (
+                        <tr key={i}><td>{v.misura}</td><td>{v.prima}</td><td><strong>{v.dopo}</strong></td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
               {Array.isArray(fusione.provenienza) && fusione.provenienza.length > 0 && (
                 <details open>
                   <summary className="sez-summary">Solo le novità di oggi</summary>
@@ -397,7 +445,10 @@ export default async function RefertoBozza({
                     {fusione.testo_fuso.split('\n').map((riga, i) => ({ riga, o: fusione.provenienza?.[i] }))
                       .filter(({ riga, o }) => riga.trim() && (o === 'dettato' || o === 'aggiornato' || o === 'misto'))
                       .slice(0, 80)
-                      .map(({ riga, o }, i) => <li key={i}>{riga.trim()}{chipProvenienza(o)}</li>)}
+                      .map(({ riga, o }, i) => {
+                        const s = o === 'dettato' || o === 'misto' ? tempoDiFrase(riga, parole) : null;
+                        return <li key={i}>{riga.trim()}{chipProvenienza(o)}{s !== null && <RiascoltaChip secondi={s} />}</li>;
+                      })}
                   </ul>
                 </details>
               )}
@@ -566,6 +617,7 @@ export default async function RefertoBozza({
             avvisi={avvisi}
             rischioFrasi={Array.isArray(p.rischio_frasi) ? p.rischio_frasi : []}
             numeri={Array.isArray(p.numeri) ? p.numeri : []}
+            frasiOmesse={Array.isArray(p.frasi_omesse) ? p.frasi_omesse : []}
             letteraPrecedente={fusione?.stato === 'fatta' && typeof fusione.lettera_precedente === 'string' ? fusione.lettera_precedente : ''}
             note={Array.isArray(p.note_segreteria) ? p.note_segreteria.filter((n): n is string => typeof n === 'string') : []}
             campi={Object.fromEntries(Object.entries(campi).filter(([, v]) => typeof v === 'string')) as Record<string, string>}

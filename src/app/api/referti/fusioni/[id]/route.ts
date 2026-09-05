@@ -43,8 +43,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       if (AMMESSE.has(k) && typeof v === 'number' && Number.isFinite(v)) riepilogo[k] = Math.round(v);
     }
   }
+  // Variazioni delle misure tra lettera precedente e dettato («cosa è
+  // cambiato» sui numeri): misura, prima, dopo.
+  const variazioni = (Array.isArray(body?.variazioni) ? body.variazioni.slice(0, 20) : [])
+    .filter((v: unknown): v is { misura: string; prima: string; dopo: string } =>
+      !!v && typeof v === 'object' && typeof (v as any).misura === 'string'
+      && typeof (v as any).prima === 'string' && typeof (v as any).dopo === 'string')
+    .map((v: { misura: string; prima: string; dopo: string }) => ({ misura: v.misura.slice(0, 40), prima: v.prima.slice(0, 20), dopo: v.dopo.slice(0, 20) }));
   const esito = testo
-    ? { stato: 'fatta', testo_fuso: testo, provenienza, riepilogo, fatta_at: new Date().toISOString() }
+    ? { stato: 'fatta', testo_fuso: testo, provenienza, riepilogo, variazioni, fatta_at: new Date().toISOString() }
     : { stato: 'fallita', errore: String(body?.errore ?? 'sconosciuto').slice(0, 80), fatta_at: new Date().toISOString() };
 
   await query(

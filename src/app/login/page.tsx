@@ -32,7 +32,7 @@ export default function LoginPage({
       </p>
       <p className="muted small center support-line">
         Uno studio che vuole ReferralFlow? <a href="/attiva">Attiva il tuo studio</a>
-        {' '}· <a href="/privacy">Informativa privacy</a>
+        {' '}· <a href="/privacy">Informativa privacy</a> · <a href="/sicurezza-dati">Come proteggiamo i dati</a>
       </p>
       <TrustStrip />
     </main>

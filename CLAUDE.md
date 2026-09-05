@@ -25,7 +25,7 @@ comunicazione sicura): non li sostituisce. Cliente pilota reale: Centro Cardiolo
   multi-studio: crea prima lo studio slug `studio-demo` e un admin; il vecchio
   `db/seed.sql` è pre-migrazione 007 e non funziona più)
 - DB esistente da versione precedente: applicare in ordine le `db/migrations/0XX_*.sql`
-  mancanti (ultima: `022_slot_proposti.sql`)
+  mancanti (ultima: `028_confronti_referti.sql`)
 - Anteprima locale sul Mac mini dello studio: `bash mac/avvia-anteprima.sh`
   (installa Node+Postgres, prepara DB e dati demo, avvia su http://localhost:3000;
   vedi `mac/LEGGIMI.md` — obiettivo: Mac mini come server dello studio)
@@ -299,6 +299,18 @@ creati/collegati da `/programma/feed`), menu profilo e campanella nuove richiest
 (`AutoRefresh` ogni 60s), avviso email alla segreteria per le richieste dal form pubblico
 (`notifyStudio`, env `STUDIO_NOTIFY_EMAIL`), notifiche reali all'inviante, scadenza + rotazione
 token pubblici, programma del giorno da feed iCal Cassa dei Medici.
+
+## Catena referti: pagine e strumenti aggiunti il 5-6.9.2026
+- `/referti/qualita` cruscotto (parole modificate, tempo di revisione, segnalazioni
+  chiuse senza riascolto, classi di correzione da `src/lib/referti-tassonomia.ts`);
+  `/referti/confronto` confronto cieco tra bozza di produzione e bozza «ombra»
+  (`python3 pipeline.py --ombra file`, migrazione 028 `referti_confronti`);
+  `/sicurezza-dati` pagina pubblica «come proteggiamo i dati».
+- Payload bozza: `rischio_frasi`, `numeri`, `frasi_omesse`, `storia`, `versioni`,
+  `ombra`; `payload.revisione` con tempo, flag e tassonomia; `payload.fusione`
+  con provenienza, riepilogo e `variazioni` delle misure.
+- Dettagli in `pipeline-referti/README.md`; documenti legali in `docs/legale/`
+  (destinazione d'uso, DSFA bozza, email Infomaniak, conservazione audio).
 
 ## Visione di lungo periodo
 Quando più studi useranno ReferralFlow: pagina «Esplora» per i medici invianti (cerca la
