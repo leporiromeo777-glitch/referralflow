@@ -60,6 +60,34 @@ aggiornamenti). Sovrascrivibile con `REFERTI_VOCABOLARIO` /
 `REFERTI_VOCABOLARIO_LOCALI`. Come ogni modifica alla trascrizione, va
 **misurata** confrontando le divergenze sullo stesso dettato prima/dopo.
 
+## Controlli sui farmaci (registro Swissmedic)
+
+`farmaci-swissmedic.py` legge i dati aperti di Swissmedic (elenco dei
+medicamenti omologati, licenza aperta anche per uso commerciale: nessun dato
+paziente) da `~/referti-pipeline/dati/OGD.zip` e produce
+`~/referti-pipeline/dati/farmaci-ch.json`: nomi commerciali senza dosaggio,
+principi attivi (nome DCI latino + varianti italiane), dosaggi per
+confezione, coppie di nomi che si somigliano (LASA). La catena
+(`controllo_farmaci`, fase controlli) lo usa SOLO per avvisi: dosaggio
+dettato che non esiste per quel farmaco (né come metà/multiplo delle
+confezioni, tolleranza 2.5%) e parola sconosciuta seguita da un dosaggio che
+somiglia a un farmaco noto («Elikuis 5 mg» → forse «Eliquis»). Senza il file
+JSON il controllo non fa nulla. Aggiornamento (il registro cambia ogni
+mese): riscaricare lo zip dal portale dati aperti di Swissmedic
+(opendata.swiss, «Zugelassene Arzneimittel») e rilanciare lo script.
+
+## Lettera incrementale (fusione col referto precedente)
+
+Dalla pagina della bozza si può incollare (o accettare) la lettera
+precedente dello stesso paziente: la catena (`lavora_fusioni`, ogni giro del
+servizio) anonimizza in un colpo solo lettera + dettato, chiede al modello
+un PIANO (quali frasi vanno dove, quali diagnosi/esami cambiano) e ricompone
+in locale: la lettera precedente resta verbatim salvo dove il medico ha
+dettato; i paragrafi degli esami «aggiornati» sono riscritti coi valori nuovi
+dietro guardia numerica. Ogni riga porta la sua provenienza (dettato /
+lettera precedente / aggiornato / misto), mostrata come badge nell'app;
+il risultato è una proposta che entra nel referto solo con «Applica».
+
 ## Prova su un dettato reale
 
 ```bash
