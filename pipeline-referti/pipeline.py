@@ -180,6 +180,12 @@ MODELLO_LLM = os.environ.get("REFERTI_LLM", "gemma3:12b")
 # scambio costa ~30-60 s di ricarica, quindi conviene tenere sullo stesso
 # modello le fasi consecutive.
 MODELLO_CORREZIONE = os.environ.get("REFERTI_LLM_CORREZIONE", MODELLO_LLM)
+# Anonimizzatore, prima passata (2026-09-05, banco di 20 lettere sintetiche
+# lunghe): gemma3:12b trova gli stessi dati del 27b (9 sopravvissuti su
+# ~207 nomi per entrambi, tutti medici col titolo — oggi coperti dal codice)
+# in 86 s invece di 216. Trovare nomi è un compito facile: la potenza serve
+# altrove. Anche la controprova gira qui (vedi nota nel corpo della funzione).
+MODELLO_ANONIMIZZA = os.environ.get("REFERTI_LLM_ANONIMIZZA", "gemma3:12b")
 # «lista» = il modello elenca le riparazioni e il codice le applica (veloce,
 # numeri intoccabili per costruzione); «riscrittura» = vecchio metodo a
 # riscrittura integrale, che resta comunque come ripiego automatico.
@@ -2305,6 +2311,7 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
         uscita = chiama_ollama(
             PROMPT_DATI_PERSONALI.replace("{testo}", anon), file_id,
             "correzione_esterna", formato_json=True, max_gettoni=1600,
+            modello=MODELLO_ANONIMIZZA,
         )
         dati = json.loads(uscita)
     except (RuntimeError, json.JSONDecodeError):
@@ -2382,10 +2389,15 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
                 file_id)
             return None
     # Controprova 2 (seconda passata AI sul testo anonimizzato).
+    # Anche la controprova sul modello dell'anonimizzatore (banco 20 lettere:
+    # la controprova del 27b non ha coperto nulla in più di quella del 12b, e
+    # alternare 12b/27b costa ~40 s di ricarica a ogni lettera: 166 s contro
+    # 86 s con un solo modello).
     try:
         uscita2 = chiama_ollama(
             PROMPT_DATI_PERSONALI.replace("{testo}", anon), file_id,
             "correzione_esterna", formato_json=True, max_gettoni=1600,
+            modello=MODELLO_ANONIMIZZA,
         )
         dati2 = json.loads(uscita2)
     except (RuntimeError, json.JSONDecodeError):

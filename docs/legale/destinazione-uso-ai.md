@@ -37,6 +37,25 @@ regolatorio chiederà.
 | Anonimizza documenti | sostituisce dati identificativi con segnaposto, in locale | non riscrive il testo | amministrativo |
 | Memoria della visita (spenta) | propone parole udite in visita per frasi dubbie del dettato | mai inventa; sempre proposta | supporto alla revisione — da rivalutare prima di riaccenderla |
 
+## Nota del 5 settembre 2026 (deepsearch): il confine della regola 11
+
+MDCG 2019-11 rev. 1 (giugno 2025) e il rapporto della Sandbox del Canton
+Zurigo (dicembre 2025) collocano nel perimetro «dispositivo» anche gli avvisi
+che forniscono «informazioni per una decisione diagnostica o terapeutica»
+(regola 11, classe IIa). Due nostre funzioni sono sul confine e vanno
+formulate come controlli di FEDELTÀ DELLA TRASCRIZIONE, mai di plausibilità
+clinica:
+- allarmi numerici: oggi il testo dice «di solito questo valore sta tra X e
+  Y» → va riformulato in «questo numero non si ritrova / è insolito per
+  una trascrizione: riascolta»; niente intervalli clinici mostrati;
+- controllo farmaci (Swissmedic): parla di CONFEZIONI esistenti («nessuna
+  confezione da 25 mg: probabile errore d'ascolto»), mai di dose corretta
+  per il paziente; nessuna interazione, nessun aggiustamento.
+Alternativa strategica: registrazione volontaria in classe I (come 44ai e
+Tandem), che nei bandi ospedalieri è ormai un filtro d'ingresso. Da
+decidere col legale. I codici TARDOC suggeriti dalla lettera approvata sono
+fatturazione (scopo non medico): ammessi.
+
 ## Cosa NON aggiungere senza una Regulatory Opinion
 
 Diagnosi differenziali, triage clinico automatico dal contenuto, richiami
