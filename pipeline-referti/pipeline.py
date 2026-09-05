@@ -550,7 +550,7 @@ TESTO:
 # i dati identificativi, il CODICE li sostituisce — l'AI non riscrive mai.
 PROMPT_DATI_PERSONALI = """Nel testo qui sotto individua i DATI IDENTIFICATIVI di persone: nomi e cognomi (anche storpiati dalla trascrizione automatica), date di nascita, indirizzi privati, numeri di telefono, email, numeri AVS.
 
-NON riscrivere il testo. NON correggere nulla. Elenca solo i dati trovati, citando ciascuno ESATTAMENTE come compare nel testo (stesse maiuscole e accenti).
+NON riscrivere il testo. NON correggere nulla. Elenca solo i dati trovati, citando ciascuno ESATTAMENTE come compare nel testo (stesse maiuscole e accenti). Ogni dato UNA sola volta, anche se compare più volte. I segnaposto già presenti («Persona 1», «[data 2]», «[dato 3]») non vanno elencati.
 
 Rispondi SOLO con un oggetto JSON valido, senza testo prima o dopo:
 {"dati": [{"testo": "citazione esatta", "tipo": "nome"}]}
@@ -2242,17 +2242,6 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
     sul testo anonimizzato — se trova un nome che c'è davvero (verificato
     dal codice, i segnaposto non contano), si torna None e il chiamante
     resta sulla catena locale. Nei log SOLO conteggi, mai i dati."""
-    try:
-        uscita = chiama_ollama(
-            PROMPT_DATI_PERSONALI.replace("{testo}", testo), file_id,
-            "correzione_esterna", formato_json=True, max_gettoni=1600,
-        )
-        dati = json.loads(uscita)
-    except (RuntimeError, json.JSONDecodeError):
-        return None
-    voci = dati.get("dati") if isinstance(dati, dict) else None
-    if not isinstance(voci, list):
-        return None
     anon = testo
     persone = 0
     date_n = 0
@@ -2262,6 +2251,42 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
     # riportare le citazioni del modello esterno sul testo reale. Vive
     # SOLO in memoria e solo per questa corsa: mai su disco, mai nei log.
     mappa: dict[str, str] = {}
+
+    # Rete regex PRIMA del modello (2026-09-05): cose a struttura fissa che
+    # l'AI può mancare — e che non ha bisogno di elencare. Farla prima
+    # accorcia di molto la risposta del modello (nella fusione elencava
+    # 18 date già coperte dalla rete: minuti di generazione sul 27b). Stessa
+    # copertura di prima, deterministica; segnaposto numerati in mappa.
+    def _rete(motivo: str, etichetta: str) -> None:
+        nonlocal anon
+        def _sost(m: "re.Match[str]") -> str:
+            nonlocal altri_n, date_n
+            if etichetta == "data":
+                date_n += 1
+                seg = f"[data {date_n}]"
+            else:
+                altri_n += 1
+                seg = f"[dato {altri_n}]"
+            mappa[seg] = m.group(0)
+            return seg
+        anon = re.sub(motivo, _sost, anon)
+
+    _rete(r"756\.\d{4}\.\d{4}\.\d{2}", "dato")
+    _rete(r"[\w.+-]+@[\w-]+\.[\w.]+", "dato")
+    _rete(r"(?<!\d)(?:\+41|0041|0)\s?7[5-9](?:[ .]?\d{2,3}){3}(?!\d)", "dato")
+    _rete(r"(?<!\d)\d{1,2}[./]\d{1,2}[./](?:19|20)?\d{2}(?!\d)", "data")
+
+    try:
+        uscita = chiama_ollama(
+            PROMPT_DATI_PERSONALI.replace("{testo}", anon), file_id,
+            "correzione_esterna", formato_json=True, max_gettoni=1600,
+        )
+        dati = json.loads(uscita)
+    except (RuntimeError, json.JSONDecodeError):
+        return None
+    voci = dati.get("dati") if isinstance(dati, dict) else None
+    if not isinstance(voci, list):
+        return None
     for voce in voci[:80]:
         if not isinstance(voce, dict):
             continue
@@ -2269,6 +2294,8 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
         tipo = str(voce.get("tipo", "")).strip()
         if not s or len(s) > 80 or s not in anon and s.lower() not in anon.lower():
             continue
+        if s.startswith("Persona ") or s.startswith("[data") or s.startswith("[dato"):
+            continue  # è un nostro segnaposto, non un dato
         # Ogni segnaposto è NUMERATO e finisce in mappa (2026-09-04): serve
         # alla bella copia per ricostruire il testo vero al carattere. Fuori
         # esce solo il numero progressivo — stessa privacy di prima.
@@ -2300,26 +2327,28 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
                                   segnaposto_p, anon, flags=re.IGNORECASE)
                     sensibili.append(pezzo)
 
-    # Rete regex: cose a struttura fissa che l'AI può mancare. Anche qui
-    # segnaposto numerati per occorrenza, registrati in mappa.
-    def _rete(motivo: str, etichetta: str) -> None:
-        nonlocal anon
-        def _sost(m: "re.Match[str]") -> str:
-            nonlocal altri_n, date_n
-            if etichetta == "data":
-                date_n += 1
-                seg = f"[data {date_n}]"
-            else:
-                altri_n += 1
-                seg = f"[dato {altri_n}]"
-            mappa[seg] = m.group(0)
-            return seg
-        anon = re.sub(motivo, _sost, anon)
+    # Parenti storpiati (2026-09-05, dal banco sintetico): la trascrizione
+    # scrive lo stesso cognome in due modi («Bernasconi» / «Bernascone») e il
+    # modello ne elenca uno solo — in 6 prove su 8 la variante storpiata
+    # sopravviveva, col 27b come col 12b. Il CODICE cerca le parole maiuscole
+    # a distanza di battitura 1 (≥6 lettere) o 2 (≥9) da ogni pezzo di nome
+    # trovato e le copre con un loro segnaposto. Coprire per eccesso non
+    # costa nulla: la mappa rimette tutto al ritorno.
+    pezzi_nome = {p.lower() for s in sensibili for p in s.split() if p.isalpha() and len(p) >= 5}
+    if pezzi_nome:
+        for parola in sorted(set(re.findall(r"(?<!\w)[A-ZÀ-Ý][a-zà-ÿ]{5,}(?!\w)", anon))):
+            if parola == "Persona" or parola.lower() in pezzi_nome:
+                continue
+            soglia = 2 if len(parola) >= 9 else 1
+            if any(abs(len(parola) - len(pz)) <= soglia
+                   and _distanza_battitura(parola.lower(), pz) <= soglia
+                   for pz in pezzi_nome):
+                persone += 1
+                segnaposto_p = f"Persona {persone}"
+                mappa[segnaposto_p] = parola
+                anon = re.sub(r"(?<!\w)" + re.escape(parola) + r"(?!\w)", segnaposto_p, anon)
+                sensibili.append(parola)
 
-    _rete(r"756\.\d{4}\.\d{4}\.\d{2}", "dato")
-    _rete(r"[\w.+-]+@[\w-]+\.[\w.]+", "dato")
-    _rete(r"(?<!\d)(?:\+41|0041|0)\s?7[5-9](?:[ .]?\d{2,3}){3}(?!\d)", "dato")
-    _rete(r"(?<!\d)\d{1,2}[./]\d{1,2}[./](?:19|20)?\d{2}(?!\d)", "data")
     # Controprova 1 (codice): nessun dato trovato deve essere sopravvissuto.
     for s in sensibili:
         if re.search(r"(?<!\w)" + re.escape(s) + r"(?!\w)", anon, re.IGNORECASE):
@@ -3856,7 +3885,14 @@ def _aggiorna_paragrafo_esame(paragrafo: str, nuove: list[str], mappa: dict,
     presenti, lunghezza sensata — controllate sul testo anonimo E sul testo
     reale dopo il ripristino dei nomi."""
     def numeri(s: str) -> set[str]:
-        return set(re.findall(r"\d+(?:[.,]\d+)?", s))
+        # «1,5» e «1.5» sono lo stesso numero; «10,0» → «10».
+        out = set()
+        for n in re.findall(r"\d+(?:[.,]\d+)?", s):
+            n = n.replace(",", ".")
+            if "." in n:
+                n = n.rstrip("0").rstrip(".")
+            out.add(n)
+        return out
     prec_anon = anonima(paragrafo)
     nuove_anon = [anonima(f) for f in nuove]
     try:
@@ -3873,8 +3909,15 @@ def _aggiorna_paragrafo_esame(paragrafo: str, nuove: list[str], mappa: dict,
         return None
     ammessi = numeri(prec_anon) | set().union(*(numeri(f) for f in nuove_anon))
     dettati = set().union(*(numeri(f) for f in nuove_anon))
-    if not numeri(testo) <= ammessi or not dettati <= numeri(testo):
-        log.info("fase=fusione file=%s esame=scartato motivo=numeri", file_id)
+    # I numeri NUOVI del dettato devono comparire tutti; un numero dettato che
+    # era già nel paragrafo precedente può mancare (il medico lo citava come
+    # valore vecchio: «FE 45%, era 35%»). Nessun numero estraneo.
+    dettati_nuovi = dettati - numeri(prec_anon)
+    estranei = numeri(testo) - ammessi
+    mancanti = dettati_nuovi - numeri(testo)
+    if estranei or mancanti:
+        log.info("fase=fusione file=%s esame=scartato motivo=numeri estranei=%d mancanti=%d",
+                 file_id, len(estranei), len(mancanti))
         return None
     if not (0.5 * len(prec_anon) <= len(testo) <= 1.8 * len(prec_anon) + 200):
         log.info("fase=fusione file=%s esame=scartato motivo=lunghezza", file_id)
