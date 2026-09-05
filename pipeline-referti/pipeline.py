@@ -3378,6 +3378,389 @@ def struttura_standard(testo: str, file_id: str) -> str | None:
     return risultato
 
 
+# ——— Lettera incrementale (2026-09-05) ———
+# Scoperta dal dettato vero: il medico non detta la lettera, detta gli
+# AGGIORNAMENTI alla lettera precedente («le secondarie sono quelle
+# dell'altra volta», «comorbidità uguale», «prendi l'esame clinico dalla
+# lettera e cambia i valori»). La segretaria oggi fonde a mano. Qui:
+# la lettera precedente viene ANALIZZATA DAL CODICE (titoli di sezione
+# noti), il dettato diventa frasi numerate, l'AI produce solo il PIANO di
+# fusione (cosa resta uguale, dove vanno le frasi nuove, quale diagnosi
+# riceve l'«Attuale:»), il codice ricompone con testi verbatim. Nessuna
+# riscrittura libera: i numeri non possono cambiare per costruzione.
+
+_TITOLI_SEZIONE = {
+    "diagnosi principali": "diagnosi_principali",
+    "diagnosi secondarie": "diagnosi_secondarie",
+    "comorbidità": "comorbidita", "comorbidita": "comorbidita",
+    "anamnesi attuale": "anamnesi", "anamnesi": "anamnesi",
+    "terapia domiciliare": "terapia", "terapia": "terapia",
+    "esami": "esami",
+    "valutazione": "valutazione",
+    "procedere": "procedere",
+}
+
+
+def _analizza_lettera(lettera: str) -> dict:
+    """Spezza la lettera precedente nelle sezioni del formato standard.
+    Tutto verbatim: righe originali, mai riscritte."""
+    righe = lettera.replace("\r", "").split("\n")
+    esito: dict = {"saluto": [], "diagnosi": [], "sezioni": {}, "esami": [], "congedo": []}
+    corrente = "saluto"
+    blocco: list[str] = []
+    diag_corr: dict | None = None
+    principale = True
+
+    def chiudi_sezione():
+        nonlocal blocco, diag_corr
+        if diag_corr is not None:
+            esito["diagnosi"].append(diag_corr)
+            diag_corr = None
+        testo = "\n".join(blocco).strip("\n")
+        if corrente == "saluto":
+            esito["saluto"] = [r for r in blocco]
+        elif corrente in ("comorbidita", "anamnesi", "terapia", "valutazione", "procedere"):
+            esito["sezioni"][corrente] = testo
+        elif corrente == "esami":
+            # Paragrafi separati da righe vuote; nome = testo prima dei «:».
+            for par in re.split(r"\n\s*\n", testo):
+                par = par.strip()
+                if not par:
+                    continue
+                m = re.match(r"^([^:\n]{2,80}):", par)
+                nome = m.group(1).strip() if m else "Altro"
+                nome_base = re.sub(r"\s*\(.*?\)\s*$", "", nome).strip()
+                esito["esami"].append({"nome": nome, "nome_base": nome_base, "testo": par})
+        elif corrente == "congedo":
+            esito["congedo"] = [r for r in blocco]
+        blocco = []
+
+    for riga in righe:
+        chiave = _TITOLI_SEZIONE.get(riga.strip().lower())
+        if chiave:
+            chiudi_sezione()
+            corrente = chiave
+            principale = chiave != "diagnosi_secondarie"
+            continue
+        if corrente in ("diagnosi_principali", "diagnosi_secondarie"):
+            m = re.match(r"^\s*(\d{1,2})\.\s+(.*)$", riga)
+            if m:
+                if diag_corr is not None:
+                    esito["diagnosi"].append(diag_corr)
+                diag_corr = {"numero": int(m.group(1)), "titolo": m.group(2).strip(),
+                             "righe": [], "principale": principale}
+            elif diag_corr is not None and riga.strip():
+                diag_corr["righe"].append(riga)
+            continue
+        if corrente in ("valutazione", "procedere") and blocco and not riga.strip():
+            # Dopo Procedere, il primo paragrafo vuoto apre il congedo.
+            if corrente == "procedere":
+                chiudi_sezione()
+                corrente = "congedo"
+                continue
+        blocco.append(riga)
+    chiudi_sezione()
+    return esito
+
+
+PROMPT_FUSIONE = """Sei l'assistente di un cardiologo. Il medico ha dettato gli AGGIORNAMENTI alla lettera precedente di un paziente. Ti do (A) la struttura della lettera precedente e (B) il dettato come frasi numerate. NON riscrivere nulla: rispondi SOLO col PIANO DI FUSIONE in JSON.
+
+{"saluto": [n], "regia": [n], "congedo": [n],
+ "diagnosi_esistenti": [{"numero": 1, "frasi": [n], "attuale": [n]}],
+ "diagnosi_nuove": [{"titolo": "...", "principale": true, "frasi": [n], "attuale": [n]}],
+ "sezioni": {"comorbidita": {"azione": "uguale", "frasi": []}, "anamnesi": {"azione": "sostituisci", "frasi": [n]}, "terapia": {"azione": "aggiungi", "frasi": [n]}, "valutazione": {"azione": "sostituisci", "frasi": [n]}, "procedere": {"azione": "sostituisci", "frasi": [n]}},
+ "esami": [{"nome": "Esame clinico", "azione": "aggiorna", "frasi": [n]}]}
+
+Regole:
+- OGNI numero di frase del dettato va in ESATTAMENTE un posto.
+- «regia»: le frasi rivolte alla segretaria o sul lavoro di scrittura («per favore scrivete», «copy-paste», «scusami, ripeto», «quelle dell'altra volta», «lasciamo uguale»): sono ISTRUZIONI, non contenuto — vanno in regia e si traducono nelle azioni delle sezioni.
+- Azioni: «uguale» = il medico dice di lasciare com'era O non ne parla; «sostituisci» = detta la sezione da capo; «aggiungi» = aggiunge informazioni a quella precedente. Per gli esami: «aggiorna» = riprendere l'esame precedente cambiando i valori dettati (le frasi coi valori nuovi vanno in «frasi»); «nuovo» = esame non presente prima.
+- «diagnosi_esistenti»: le frasi che aggiornano una diagnosi già presente vanno sotto il suo «numero»; «attuale» = la situazione di oggi di quella diagnosi.
+- «diagnosi_nuove» solo per diagnosi davvero nuove; «titolo» COPIATO dalle parole delle sue frasi, mai inventato; «principale» true se cardiologica importante.
+- saluto e congedo del dettato, se ci sono; altrimenti liste vuote (si terranno quelli della lettera precedente).
+- Rispondi SOLO col JSON.
+
+(A) LETTERA PRECEDENTE — struttura:
+{struttura}
+
+(B) DETTATO — frasi numerate:
+{frasi}"""
+
+
+def _frasi_consolidate(testo: str) -> list[str]:
+    """Le frasi del dettato coi frammenti sospesi incollati alla successiva
+    (stesso consolidamento della fase struttura)."""
+    grezze = [testo[a:b].strip() for a, b in _frasi_span(testo) if testo[a:b].strip()]
+    frasi: list[str] = []
+    for f in grezze:
+        if frasi and len(frasi[-1]) < 350 and (
+                frasi[-1].rstrip().endswith((",", ":", "…"))
+                or len(frasi[-1].split()) < 4):
+            frasi[-1] = (frasi[-1].rstrip() + " " + f).strip()
+        else:
+            frasi.append(f)
+    return frasi
+
+
+def _anonimizzatore_da_mappa(mappa: dict[str, str]):
+    inversa = sorted(mappa.items(), key=lambda kv: -len(kv[1]))
+    def anonima(f: str) -> str:
+        for segnaposto, vero in inversa:
+            f = re.sub(re.escape(vero), segnaposto, f, flags=re.IGNORECASE)
+        return f
+    return anonima
+
+
+def fusione_lettera(lettera: str, dettato: str, file_id: str) -> str | None:
+    """La lettera precedente aggiornata col dettato, o None. Tutto ciò che
+    esce è verbatim: righe della lettera precedente o frasi del dettato."""
+    inizio = time.monotonic()
+    prec = _analizza_lettera(lettera)
+    if not prec["diagnosi"] and not prec["sezioni"]:
+        log.warning("fase=fusione file=%s esito=saltata motivo=lettera_senza_struttura", file_id)
+        return None
+    frasi = _frasi_consolidate(dettato)
+    if len(frasi) < 3:
+        return None
+    # Due anonimizzazioni separate (mappe distinte): al modello vanno solo
+    # testi anonimi, e nulla di ciò che risponde viene riportato al reale —
+    # il piano parla per numeri di frase e numeri di diagnosi.
+    an_l = _anonimizza_per_esterno(lettera, file_id, con_mappa=True)
+    an_d = _anonimizza_per_esterno(dettato, file_id, con_mappa=True)
+    if an_l is None or an_d is None:
+        log.warning("fase=fusione file=%s esito=annullata motivo=anonimizzazione", file_id)
+        return None
+    anon_l, anon_d = _anonimizzatore_da_mappa(an_l[1]), _anonimizzatore_da_mappa(an_d[1])
+
+    struttura = []
+    for d in prec["diagnosi"]:
+        tipo = "principale" if d["principale"] else "secondaria"
+        struttura.append(f"- diagnosi {d['numero']} ({tipo}): {anon_l(d['titolo'])[:120]}")
+    for k in ("comorbidita", "anamnesi", "terapia", "valutazione", "procedere"):
+        if prec["sezioni"].get(k):
+            struttura.append(f"- sezione «{k}» presente")
+    for e in prec["esami"]:
+        struttura.append(f"- esame «{anon_l(e['nome_base'])[:60]}» presente")
+    elenco = "\n".join(f"{i + 1}. {anon_d(f)}" for i, f in enumerate(frasi))
+
+    modello = (_config_esterno() or {}).get("modello_struttura") or None
+    try:
+        uscita = _chiama_esterno_openai(
+            PROMPT_FUSIONE.replace("{struttura}", "\n".join(struttura)).replace("{frasi}", elenco),
+            file_id, modello=modello)
+    except RuntimeError:
+        log.warning("fase=fusione file=%s esito=fallita motivo=esterno", file_id)
+        return None
+    piano = _estrai_json(uscita)
+    if not isinstance(piano, dict):
+        log.warning("fase=fusione file=%s esito=scartata motivo=json", file_id)
+        return None
+
+    usate: set[int] = set()
+    def prendi(v) -> list[str]:
+        fuori: list[str] = []
+        for x in (v if isinstance(v, list) else []):
+            if isinstance(x, int) and 1 <= x <= len(frasi) and x not in usate:
+                usate.add(x)
+                fuori.append(frasi[x - 1])
+        return fuori
+
+    def titolo_sicuro(t, corpo: list[str]) -> str:
+        t = str(t or "").strip()
+        cifre = set(re.findall(r"\d+", " ".join(corpo)))
+        if (not t or "Persona" in t or "[" in t
+                or not set(re.findall(r"\d+", t)) <= cifre):
+            return corpo[0][:80] if corpo else ""
+        return t
+
+    righe: list[str] = []
+    saluto = prendi(piano.get("saluto"))
+    righe.extend(saluto if saluto else prec["saluto"])
+    righe.append("")
+
+    # Diagnosi: quelle precedenti verbatim, con le frasi nuove in coda e
+    # l'«Attuale:» sostituito quando il dettato ne porta uno nuovo.
+    agg: dict[int, dict] = {}
+    for v in (piano.get("diagnosi_esistenti") if isinstance(piano.get("diagnosi_esistenti"), list) else []):
+        if isinstance(v, dict) and isinstance(v.get("numero"), int):
+            agg[v["numero"]] = {"frasi": prendi(v.get("frasi")), "attuale": prendi(v.get("attuale"))}
+    nuove_p, nuove_s = [], []
+    for v in (piano.get("diagnosi_nuove") if isinstance(piano.get("diagnosi_nuove"), list) else []):
+        if not isinstance(v, dict):
+            continue
+        corpo, attuale = prendi(v.get("frasi")), prendi(v.get("attuale"))
+        if corpo or attuale:
+            (nuove_p if v.get("principale", True) else nuove_s).append(
+                {"titolo": titolo_sicuro(v.get("titolo"), corpo or attuale),
+                 "righe": [f"   - {f}" for f in corpo], "attuale": attuale})
+
+    def emetti_diagnosi(d: dict, numero: int, extra: dict | None) -> None:
+        righe.append(f"{numero}. {d['titolo']}")
+        vecchie = d["righe"]
+        nuovo_attuale = extra["attuale"] if extra else []
+        if nuovo_attuale:
+            vecchie = [r for r in vecchie if not re.match(r"^\s*-\s*attuale\s*:", r, re.IGNORECASE)]
+        righe.extend(vecchie)
+        if extra:
+            righe.extend(f"   - {f}" for f in extra["frasi"])
+        righe.extend(f"   - Attuale: {f}" for f in nuovo_attuale)
+        righe.append("")
+
+    contatore = 1
+    principali = [d for d in prec["diagnosi"] if d["principale"]]
+    secondarie = [d for d in prec["diagnosi"] if not d["principale"]]
+    if principali or nuove_p:
+        righe.append("Diagnosi principali")
+        for d in principali:
+            emetti_diagnosi(d, contatore, agg.get(d["numero"]))
+            contatore += 1
+        for d in nuove_p:
+            emetti_diagnosi({"titolo": d["titolo"], "righe": d["righe"]}, contatore,
+                            {"frasi": [], "attuale": d["attuale"]})
+            contatore += 1
+    if secondarie or nuove_s:
+        righe.append("Diagnosi secondarie")
+        for d in secondarie:
+            emetti_diagnosi(d, contatore, agg.get(d["numero"]))
+            contatore += 1
+        for d in nuove_s:
+            emetti_diagnosi({"titolo": d["titolo"], "righe": d["righe"]}, contatore,
+                            {"frasi": [], "attuale": d["attuale"]})
+            contatore += 1
+
+    sez_piano = piano.get("sezioni") if isinstance(piano.get("sezioni"), dict) else {}
+    def sezione(chiave: str, titolo: str, terapia: bool = False) -> None:
+        p = sez_piano.get(chiave) if isinstance(sez_piano.get(chiave), dict) else {}
+        azione = str(p.get("azione", "uguale"))
+        nuove = prendi(p.get("frasi"))
+        vecchio = prec["sezioni"].get(chiave, "")
+        if azione == "sostituisci" and nuove:
+            corpo = nuove
+        elif azione == "aggiungi" and nuove:
+            corpo = ([vecchio] if vecchio else []) + nuove
+        elif nuove and not vecchio:
+            corpo = nuove
+        else:
+            corpo = [vecchio] if vecchio else []
+            if nuove:  # azione «uguale» ma frasi assegnate: non si buttano
+                corpo += nuove
+        if not corpo:
+            return
+        righe.append(titolo)
+        if terapia:
+            for c in corpo:
+                righe.extend(c.split("\n") if c is vecchio else [f"- {c}"])
+        else:
+            righe.append(" ".join(c for c in corpo))
+        righe.append("")
+
+    sezione("comorbidita", "Comorbidità")
+    sezione("anamnesi", "Anamnesi attuale")
+    sezione("terapia", "Terapia domiciliare", terapia=True)
+
+    esami_piano = piano.get("esami") if isinstance(piano.get("esami"), list) else []
+    def norm_nome(s: str) -> str:
+        return re.sub(r"[^a-z]", "", str(s).lower())
+    piano_per_nome = {}
+    for e in esami_piano:
+        if isinstance(e, dict):
+            piano_per_nome[norm_nome(e.get("nome", ""))] = e
+    esami_righe: list[str] = []
+    visti_nomi = set()
+    for e in prec["esami"]:
+        chiave = norm_nome(e["nome_base"])
+        visti_nomi.add(chiave)
+        p = piano_per_nome.get(chiave) or {}
+        azione = str(p.get("azione", "uguale"))
+        nuove = prendi(p.get("frasi"))
+        if azione == "sostituisci" and nuove:
+            esami_righe.append(f"{e['nome_base']}: " + " ".join(nuove))
+        elif azione in ("aggiorna", "aggiungi") and nuove:
+            # v1 prudente: il paragrafo precedente resta intero, i valori
+            # nuovi dettati seguono in chiaro — la persona fonde i numeri.
+            esami_righe.append(e["testo"])
+            esami_righe.append("   ↳ Aggiornamento dettato: " + " ".join(nuove))
+        else:
+            esami_righe.append(e["testo"])
+            if nuove:
+                esami_righe.append("   ↳ Aggiornamento dettato: " + " ".join(nuove))
+        esami_righe.append("")
+    for e in esami_piano:
+        if not isinstance(e, dict) or norm_nome(e.get("nome", "")) in visti_nomi:
+            continue
+        nuove = prendi(e.get("frasi"))
+        if nuove:
+            nome = str(e.get("nome", "Altro")).strip()[:60] or "Altro"
+            esami_righe.append(f"{nome}: " + " ".join(nuove))
+            esami_righe.append("")
+    if esami_righe:
+        righe.append("Esami")
+        righe.extend(esami_righe)
+
+    sezione("valutazione", "Valutazione")
+    sezione("procedere", "Procedere")
+    congedo = prendi(piano.get("congedo"))
+    righe.extend(congedo if congedo else prec["congedo"])
+
+    regia = prendi(piano.get("regia"))
+    if regia:
+        righe.extend(["", "— Regia di dettatura (esclusa dalla lettera: controlla e cancella) —"])
+        righe.extend(f"- {f}" for f in regia)
+    dimenticate = [frasi[i - 1] for i in range(1, len(frasi) + 1) if i not in usate]
+    if dimenticate:
+        righe.extend(["", "— Frasi del dettato non collocate (da ricollocare) —"])
+        righe.extend(f"- {f}" for f in dimenticate)
+    if len(usate) < len(frasi) * 0.5:
+        log.warning("fase=fusione file=%s esito=scartata motivo=piano_povero collocate=%d su=%d",
+                    file_id, len(usate), len(frasi))
+        return None
+    risultato = re.sub(r"\n{3,}", "\n\n", "\n".join(righe)).strip() + "\n"
+    log.info("fase=fusione file=%s esito=ok frasi=%d collocate=%d dimenticate=%d "
+             "diagnosi_prec=%d durata=%.1fs", file_id, len(frasi), len(usate),
+             len(dimenticate), len(prec["diagnosi"]), time.monotonic() - inizio)
+    return risultato
+
+
+def lavora_fusioni() -> None:
+    """Coda delle fusioni chieste dalla pagina Referti: la piattaforma
+    consegna dettato + lettera precedente, il servizio rimanda la lettera
+    aggiornata (o l'errore). Best-effort a ogni giro."""
+    if not FLOW_URL or not FLOW_TOKEN:
+        return
+    try:
+        richiesta = urllib.request.Request(
+            FLOW_URL + "/api/referti/fusioni",
+            headers={"Authorization": f"Bearer {FLOW_TOKEN}"})
+        with urllib.request.urlopen(richiesta, timeout=FLOW_TIMEOUT_S) as r:
+            corpo = json.loads(r.read().decode("utf-8"))
+    except Exception:
+        return
+    for voce in (corpo.get("fusioni", []) if isinstance(corpo, dict) else []):
+        bozza_id = str(voce.get("id", ""))
+        dettato = str(voce.get("dettato", ""))
+        lettera = str(voce.get("lettera_precedente", ""))
+        if not bozza_id or not dettato or not lettera:
+            continue
+        log.info("fase=fusione bozza=%s esito=avvio", bozza_id[:8])
+        try:
+            testo = fusione_lettera(lettera, dettato, "fusione-" + bozza_id[:8])
+        except Exception as e:  # noqa: BLE001 — mai bloccare il servizio
+            log.error("fase=fusione bozza=%s esito=errore tipo=%s", bozza_id[:8], type(e).__name__)
+            testo = None
+        risposta = {"testo_fuso": testo} if testo else {"errore": "fusione_non_riuscita"}
+        try:
+            req = urllib.request.Request(
+                f"{FLOW_URL}/api/referti/fusioni/{bozza_id}",
+                data=json.dumps(risposta, ensure_ascii=False).encode("utf-8"),
+                headers={"Authorization": f"Bearer {FLOW_TOKEN}",
+                         "Content-Type": "application/json"},
+                method="POST")
+            with urllib.request.urlopen(req, timeout=FLOW_TIMEOUT_S):
+                pass
+        except Exception:
+            log.warning("fase=fusione bozza=%s esito=consegna_fallita", bozza_id[:8])
+
+
 PROMPT_BELLA_COPIA = """Sei un correttore di bozze per referti cardiologici. Sistema SOLO la punteggiatura e le maiuscole/minuscole del testo qui sotto: virgole al posto giusto, punti, maiuscola a inizio frase e nei nomi propri, spazi corretti attorno ai segni.
 
 REGOLE ASSOLUTE:
@@ -4544,6 +4927,9 @@ def servizio(sostituzioni, controlli) -> int:
             # Dopo l'invio: prendi eventuali dettati caricati dalla pagina
             # Referti (drag & drop). Al giro dopo entrano nella catena normale.
             scarica_coda(cartelle)
+            # Lettere incrementali chieste dalla pagina (dettato + lettera
+            # precedente → lettera aggiornata).
+            lavora_fusioni()
             time.sleep(INTERVALLO_SCANSIONE_S)
         except KeyboardInterrupt:
             log.info("fase=servizio esito=fermato motivo=richiesta_utente")

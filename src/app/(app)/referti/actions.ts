@@ -72,6 +72,57 @@ export async function confermaBozza(formData: FormData) {
 
 // Riporta tra le «da rivedere» una bozza cestinata per sbaglio («Scarta» si
 // confonde facilmente con «Scarica»: dev'esserci sempre la via del ritorno).
+// Lettera incrementale: la persona incolla (o accetta) la lettera precedente
+// del paziente e chiede alla pipeline di fonderla col dettato. La richiesta
+// vive nel payload (fusione.stato in_attesa → in_lavorazione → fatta/fallita);
+// il risultato è una proposta, applicata solo con «Applica».
+export async function richiediFusione(formData: FormData) {
+  const session = await getSession();
+  if (!session || !session.studioId) redirect('/login');
+  const id = String(formData.get('id') ?? '');
+  if (!isUuid(id)) redirect('/referti');
+  const lettera = String(formData.get('lettera') ?? '').trim().slice(0, MAX_TESTO);
+  if (lettera.length < 200) redirect(`/referti/${id}?err=lettera_corta`);
+
+  const richiesta = {
+    stato: 'in_attesa',
+    lettera_precedente: lettera,
+    richiesta_at: new Date().toISOString(),
+    richiesta_da: session.id,
+  };
+  await query(
+    `update referti_bozze
+        set payload = jsonb_set(payload, '{fusione}', $3::jsonb)
+      where id = $1 and studio_id = $2`,
+    [id, session.studioId, JSON.stringify(richiesta)]
+  );
+  revalidatePath(`/referti/${id}`);
+  redirect(`/referti/${id}?ok=fusione_richiesta`);
+}
+
+export async function applicaFusione(formData: FormData) {
+  const session = await getSession();
+  if (!session || !session.studioId) redirect('/login');
+  const id = String(formData.get('id') ?? '');
+  if (!isUuid(id)) redirect('/referti');
+  const [b] = await query<{ testo: string | null }>(
+    `select payload->'fusione'->>'testo_fuso' as testo
+       from referti_bozze where id = $1 and studio_id = $2`,
+    [id, session.studioId]
+  );
+  if (!b?.testo) redirect(`/referti/${id}?err=fusione_assente`);
+  // La versione attuale resta nel payload: il ripristino è sempre possibile.
+  await query(
+    `update referti_bozze
+        set payload = jsonb_set(payload, '{testo_prima_della_fusione}', to_jsonb(coalesce(testo_finale, payload->>'testo_corretto'))),
+            testo_finale = $3
+      where id = $1 and studio_id = $2`,
+    [id, session.studioId, b.testo]
+  );
+  revalidatePath(`/referti/${id}`);
+  redirect(`/referti/${id}?ok=fusione_applicata`);
+}
+
 export async function ripristinaBozza(formData: FormData) {
   const session = await getSession();
   if (!session || !session.studioId) redirect('/login');

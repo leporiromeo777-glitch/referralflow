@@ -5,7 +5,7 @@ import { query } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
 import { dataOra } from '@/lib/format';
-import { confermaBozza, scartaBozza, ripristinaBozza, eliminaBozza } from '../actions';
+import { confermaBozza, scartaBozza, ripristinaBozza, eliminaBozza, richiediFusione, applicaFusione } from '../actions';
 import { agganciaRiferimenti } from '@/lib/referti-allegati';
 import { AudioDettato } from '../AudioDettato';
 import { TestoDettato } from '../TestoDettato';
@@ -143,6 +143,30 @@ export default async function RefertoBozza({
   );
 
   const p = row.payload;
+
+  // Lettera incrementale: stato della fusione chiesta (se c'è) e proposta
+  // automatica della lettera precedente = ultimo referto CONFERMATO dello
+  // stesso paziente (nome + data di nascita dai campi, confermati o estratti).
+  const fusione = (p as any).fusione && typeof (p as any).fusione === 'object'
+    ? ((p as any).fusione as { stato?: string; lettera_precedente?: string; testo_fuso?: string; errore?: string; richiesta_at?: string })
+    : null;
+  const campiRif = { ...(p.campi_estratti ?? {}), ...(row.campi_confermati ?? {}) } as Record<string, unknown>;
+  const nomePaz = typeof campiRif.nome_paziente === 'string' ? campiRif.nome_paziente.trim() : '';
+  const nascitaPaz = typeof campiRif.data_nascita === 'string' ? campiRif.data_nascita.trim() : '';
+  const [precedente] = nomePaz
+    ? await query<{ id: string; testo_finale: string; reviewed_at: string }>(
+        `select id, testo_finale, reviewed_at::text
+           from referti_bozze
+          where studio_id = $1 and id <> $2 and stato = 'confermata'
+            and testo_finale is not null
+            and lower(coalesce(campi_confermati->>'nome_paziente', payload->'campi_estratti'->>'nome_paziente', '')) = lower($3)
+            and ($4 = '' or coalesce(campi_confermati->>'data_nascita', payload->'campi_estratti'->>'data_nascita', '') in ('', $4))
+          order by reviewed_at desc
+          limit 1`,
+        [session.studioId, params.id, nomePaz, nascitaPaz]
+      )
+    : [];
+
   const divergenze = Array.isArray(p.divergenze) ? p.divergenze : [];
   const dubbi = Array.isArray(p.segmenti_dubbi) ? p.segmenti_dubbi.filter((s) => typeof s === 'string') : [];
   const allarmi = Array.isArray(p.allarmi_numerici) ? p.allarmi_numerici : [];
@@ -245,6 +269,25 @@ export default async function RefertoBozza({
           Il modello AI locale non risponde: riprova tra qualche minuto.
         </p>
       )}
+      {searchParams.ok === 'fusione_richiesta' && (
+        <div className="card notice"><p>
+          Richiesta inviata: la catena sta fondendo il dettato con la lettera
+          precedente. Ricarica la pagina tra qualche minuto — la proposta
+          comparirà nella scheda «Lettera precedente».
+        </p></div>
+      )}
+      {searchParams.ok === 'fusione_applicata' && (
+        <div className="card notice"><p>
+          Lettera aggiornata applicata: ora è il testo di partenza della
+          revisione. La versione precedente resta salvata nel fascicolo.
+        </p></div>
+      )}
+      {searchParams.err === 'lettera_corta' && (
+        <p className="error">La lettera precedente è troppo corta per essere usata (serve il testo completo).</p>
+      )}
+      {searchParams.err === 'fusione_assente' && (
+        <p className="error">Nessuna lettera aggiornata da applicare: chiedi prima la fusione.</p>
+      )}
 
       {inBozza && (avvisi.length > 0 || allarmi.length > 0) && (
         <div className="card ctrl-box">
@@ -272,6 +315,76 @@ export default async function RefertoBozza({
             usa i salti da 10 secondi.
           </p>
           <AudioDettato src={`/api/referti/audio/${audio.id}`} />
+        </div>
+      )}
+
+      {row.tipo !== 'visita' && (
+        <div className="card">
+          <h2>Lettera precedente</h2>
+          <p className="muted">
+            Quando il medico detta gli aggiornamenti («le diagnosi secondarie
+            sono quelle dell&apos;altra volta», «prendi l&apos;esame clinico e cambia
+            i valori»), la catena può fondere il dettato con l&apos;ultima lettera
+            del paziente: le parti invariate restano identiche, il nuovo entra
+            al posto giusto. Risultato sempre da rivedere.
+          </p>
+          {fusione?.stato === 'in_attesa' || fusione?.stato === 'in_lavorazione' ? (
+            <p className="muted">
+              ⏳ Fusione in corso (richiesta {fusione.richiesta_at ? dataOra(fusione.richiesta_at) : ''}):
+              ricarica la pagina tra qualche minuto.
+            </p>
+          ) : null}
+          {fusione?.stato === 'fallita' && (
+            <p className="error">
+              La fusione non è riuscita ({fusione.errore ?? 'motivo sconosciuto'}): puoi
+              riprovare, magari con la lettera completa.
+            </p>
+          )}
+          {fusione?.stato === 'fatta' && fusione.testo_fuso && (
+            <div className="ctrl-box" style={{ marginBottom: 14 }}>
+              <p><strong>Lettera aggiornata pronta.</strong> Controllala e, se va, applicala:
+                diventa il testo di partenza della revisione.</p>
+              <details>
+                <summary className="sez-summary">Anteprima della lettera aggiornata</summary>
+                <pre className="grezzo-testo">{fusione.testo_fuso}</pre>
+              </details>
+              <form action={applicaFusione} style={{ marginTop: 10 }}>
+                <input type="hidden" name="id" value={row.id} />
+                <button className="btn btn-primary" type="submit">
+                  📎 Applica la lettera aggiornata
+                </button>
+              </form>
+            </div>
+          )}
+          {fusione?.stato !== 'in_attesa' && fusione?.stato !== 'in_lavorazione' && (
+            <form action={richiediFusione} className="form">
+              <input type="hidden" name="id" value={row.id} />
+              {precedente ? (
+                <p className="muted small">
+                  Trovata l&apos;ultima lettera confermata di questo paziente
+                  ({dataOra(precedente.reviewed_at)}): è già qui sotto. Se non è
+                  quella giusta, sostituiscila incollando il testo corretto.
+                </p>
+              ) : (
+                <p className="muted small">
+                  Nessuna lettera precedente nel sistema per questo paziente:
+                  incolla qui il testo dell&apos;ultima lettera (da Word).
+                </p>
+              )}
+              <textarea
+                name="lettera"
+                rows={8}
+                defaultValue={fusione?.lettera_precedente ?? precedente?.testo_finale ?? ''}
+                placeholder="Incolla qui la lettera precedente completa…"
+                style={{ width: '100%', fontFamily: 'inherit', lineHeight: 1.5 }}
+              />
+              <div className="form-actions">
+                <button className="btn" type="submit">
+                  🔁 Aggiorna la lettera precedente con questo dettato
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       )}
 
