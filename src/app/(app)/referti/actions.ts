@@ -107,10 +107,11 @@ export async function richiediFusione(formData: FormData) {
     richiesta_at: new Date().toISOString(),
     richiesta_da: session.id,
   };
+  // Solo sulle bozze aperte: un referto confermato non cambia più testo.
   await query(
     `update referti_bozze
         set payload = jsonb_set(payload, '{fusione}', $3::jsonb)
-      where id = $1 and studio_id = $2`,
+      where id = $1 and studio_id = $2 and stato = 'bozza'`,
     [id, session.studioId, JSON.stringify(richiesta)]
   );
   revalidatePath(`/referti/${id}`);
@@ -124,16 +125,20 @@ export async function applicaFusione(formData: FormData) {
   if (!isUuid(id)) redirect('/referti');
   const [b] = await query<{ testo: string | null }>(
     `select payload->'fusione'->>'testo_fuso' as testo
-       from referti_bozze where id = $1 and studio_id = $2`,
+       from referti_bozze where id = $1 and studio_id = $2 and stato = 'bozza'`,
     [id, session.studioId]
   );
   if (!b?.testo) redirect(`/referti/${id}?err=fusione_assente`);
   // La versione attuale resta nel payload: il ripristino è sempre possibile.
+  // Il «testo prima della fusione» si salva UNA volta sola (è il dettato di
+  // oggi): applicando due fusioni di seguito non va sovrascritto con la
+  // lettera fusa. Solo su bozze aperte.
   await query(
     `update referti_bozze
-        set payload = jsonb_set(payload, '{testo_prima_della_fusione}', to_jsonb(coalesce(testo_finale, payload->>'testo_corretto'))),
+        set payload = jsonb_set(payload, '{testo_prima_della_fusione}',
+              coalesce(payload->'testo_prima_della_fusione', to_jsonb(coalesce(testo_finale, payload->>'testo_corretto')))),
             testo_finale = $3
-      where id = $1 and studio_id = $2`,
+      where id = $1 and studio_id = $2 and stato = 'bozza'`,
     [id, session.studioId, b.testo]
   );
   revalidatePath(`/referti/${id}`);

@@ -408,15 +408,19 @@ export default async function RefertoBozza({
                   ))}
                 </div>
               </details>
-              <form action={applicaFusione} style={{ marginTop: 10 }}>
-                <input type="hidden" name="id" value={row.id} />
-                <button className="btn btn-primary" type="submit">
-                  📎 Applica la lettera aggiornata
-                </button>
-              </form>
+              {inBozza ? (
+                <form action={applicaFusione} style={{ marginTop: 10 }}>
+                  <input type="hidden" name="id" value={row.id} />
+                  <button className="btn btn-primary" type="submit">
+                    📎 Applica la lettera aggiornata
+                  </button>
+                </form>
+              ) : (
+                <p className="muted small">Il referto è già confermato: la proposta resta consultabile, non si applica più.</p>
+              )}
             </div>
           )}
-          {fusione?.stato !== 'in_attesa' && fusione?.stato !== 'in_lavorazione' && (
+          {inBozza && fusione?.stato !== 'in_attesa' && fusione?.stato !== 'in_lavorazione' && (
             <form action={richiediFusione} className="form">
               <input type="hidden" name="id" value={row.id} />
               {precedente ? (

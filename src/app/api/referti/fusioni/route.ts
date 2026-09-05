@@ -10,6 +10,9 @@ export const dynamic = 'force-dynamic';
 // studio preleva da qui le richieste in attesa (token referti, come la
 // coda) e rimanda la lettera aggiornata su /api/referti/fusioni/[id].
 // Mai contenuti nei log.
+// Il «dettato» è il testo di OGGI: se una fusione è già stata applicata,
+// testo_finale contiene la lettera fusa e il dettato vero è in
+// payload.testo_prima_della_fusione (altrimenti si fonderebbe due volte).
 
 export async function GET(req: NextRequest) {
   const auth = req.headers.get('authorization') ?? '';
@@ -24,7 +27,7 @@ export async function GET(req: NextRequest) {
 
   const righe = await query<{ id: string; dettato: string | null; lettera_precedente: string | null }>(
     `select id,
-            coalesce(testo_finale, payload->>'testo_corretto') as dettato,
+            coalesce(payload->>'testo_prima_della_fusione', testo_finale, payload->>'testo_corretto') as dettato,
             payload->'fusione'->>'lettera_precedente' as lettera_precedente
        from referti_bozze
       where studio_id = $1
