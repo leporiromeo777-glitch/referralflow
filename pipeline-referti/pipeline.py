@@ -2276,6 +2276,31 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
     _rete(r"(?<!\d)(?:\+41|0041|0)\s?7[5-9](?:[ .]?\d{2,3}){3}(?!\d)", "dato")
     _rete(r"(?<!\d)\d{1,2}[./]\d{1,2}[./](?:19|20)?\d{2}(?!\d)", "data")
 
+    # Titolo + maiuscole (2026-09-05, banco di 20 lettere sintetiche: il
+    # cognome del medico in «Dr. med. Nome Cognome» sopravviveva in 7 lettere
+    # su 13 col 27b, controprova compresa). Dopo un titolo le parole maiuscole
+    # sono un nome: le copre il CODICE, prima del modello, e ogni pezzo viene
+    # coperto anche dove ricompare da solo. Per eccesso: la mappa rimette tutto.
+    pezzi_titolati: dict[str, str] = {}
+    def _titolati(m: "re.Match[str]") -> str:
+        nonlocal persone
+        fuori = []
+        for pezzo in m.group(2).split():
+            if pezzo not in pezzi_titolati:
+                persone += 1
+                pezzi_titolati[pezzo] = f"Persona {persone}"
+                mappa[pezzi_titolati[pezzo]] = pezzo
+                sensibili.append(pezzo)
+            fuori.append(pezzi_titolati[pezzo])
+        return m.group(1) + " ".join(fuori)
+    anon = re.sub(
+        r"((?:Dr|Dott|dott|Prof|prof|Sig|sig|PD Dr)\.(?:\s*ssa|\s*ra)?(?:\s+med\.)?\s+|(?:[Ss]ignor[ae]?|[Dd]ottoressa|[Dd]ottore?)\s+)"
+        r"([A-ZÀ-Ý][a-zà-ÿ'’\-]{2,}(?:\s+[A-ZÀ-Ý][a-zà-ÿ'’\-]{2,}){0,2})",
+        _titolati, anon)
+    for pezzo, seg in pezzi_titolati.items():
+        if len(pezzo) >= 4:
+            anon = re.sub(r"(?<!\w)" + re.escape(pezzo) + r"(?!\w)", seg, anon)
+
     try:
         uscita = chiama_ollama(
             PROMPT_DATI_PERSONALI.replace("{testo}", anon), file_id,
