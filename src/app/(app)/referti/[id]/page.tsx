@@ -36,7 +36,9 @@ type Payload = {
   riparazioni_applicate?: { da: string; a: string }[];
   testo_grezzo?: string;
   testo_strutturato?: string;
-  revisione?: { quota_modificata?: number; distanza_parole?: number; parole_finali?: number };
+  revisione?: { quota_modificata?: number; distanza_parole?: number; parole_finali?: number; tempo_revisione_s?: number; flag_totali?: number; flag_accettati_senza_riascolto?: number };
+  rischio_frasi?: { frase: string; punteggio: number; motivi?: string[] }[];
+  numeri?: { valore: string; unita?: string; frase?: number | null; secondo?: number | null; confermato?: boolean | null }[];
 };
 
 // Evidenzia i frammenti segnalati dentro il testo: prima occorrenza di ogni
@@ -270,7 +272,11 @@ export default async function RefertoBozza({
         <p className="muted small">
           Revisione: il medico ha modificato il <strong>{p.revisione.quota_modificata}%</strong> delle
           parole rispetto alla proposta della catena
-          {typeof p.revisione.distanza_parole === 'number' ? ` (${p.revisione.distanza_parole} parole)` : ''}.
+          {typeof p.revisione.distanza_parole === 'number' ? ` (${p.revisione.distanza_parole} parole)` : ''}
+          {typeof p.revisione.tempo_revisione_s === 'number' ? ` · tempo di revisione ${Math.round(p.revisione.tempo_revisione_s / 60)} min` : ''}
+          {typeof p.revisione.flag_totali === 'number' && p.revisione.flag_totali > 0
+            ? ` · segnalazioni: ${p.revisione.flag_totali}, accettate senza riascolto ${p.revisione.flag_accettati_senza_riascolto ?? 0}`
+            : ''}.
         </p>
       )}
       {searchParams.err === 'testo' && (
@@ -558,6 +564,8 @@ export default async function RefertoBozza({
                 : []
             }
             avvisi={avvisi}
+            rischioFrasi={Array.isArray(p.rischio_frasi) ? p.rischio_frasi : []}
+            numeri={Array.isArray(p.numeri) ? p.numeri : []}
             letteraPrecedente={fusione?.stato === 'fatta' && typeof fusione.lettera_precedente === 'string' ? fusione.lettera_precedente : ''}
             note={Array.isArray(p.note_segreteria) ? p.note_segreteria.filter((n): n is string => typeof n === 'string') : []}
             campi={Object.fromEntries(Object.entries(campi).filter(([, v]) => typeof v === 'string')) as Record<string, string>}

@@ -556,7 +556,7 @@ TESTO:
 # i dati identificativi, il CODICE li sostituisce — l'AI non riscrive mai.
 PROMPT_DATI_PERSONALI = """Nel testo qui sotto individua i DATI IDENTIFICATIVI di persone: nomi e cognomi (anche storpiati dalla trascrizione automatica), date di nascita, indirizzi privati, numeri di telefono, email, numeri AVS.
 
-NON riscrivere il testo. NON correggere nulla. Elenca solo i dati trovati, citando ciascuno ESATTAMENTE come compare nel testo (stesse maiuscole e accenti). Ogni dato UNA sola volta, anche se compare più volte. I segnaposto già presenti («Persona 1», «[data 2]», «[dato 3]») non vanno elencati.
+NON riscrivere il testo. NON correggere nulla. Elenca solo i dati trovati, citando ciascuno ESATTAMENTE come compare nel testo (stesse maiuscole e accenti). Ogni dato UNA sola volta, anche se compare più volte. I segnaposto già presenti («Persona 1», «[Medico 2]», «[data 3]», «[dato 4]») non vanno elencati.
 
 Rispondi SOLO con un oggetto JSON valido, senza testo prima o dopo:
 {"dati": [{"testo": "citazione esatta", "tipo": "nome"}]}
@@ -1779,6 +1779,7 @@ def libera_llm() -> None:
     vivo e riprodotto il 2026-08-16; il file finiva in errori/ e il dettato
     sembrava «bloccato»). Best-effort: se Ollama non risponde, la
     trascrizione parte comunque."""
+    t_inizio_lib = time.monotonic()
     for modello in MODELLI_LLM_TUTTI:
         corpo = json.dumps({"model": modello, "keep_alive": 0}).encode("utf-8")
         try:
@@ -1790,6 +1791,7 @@ def libera_llm() -> None:
             urllib.request.urlopen(richiesta, timeout=30).read()
         except (urllib.error.URLError, TimeoutError, OSError):
             pass
+    log.info("fase=ollama scarico_modelli durata=%.1fs", time.monotonic() - t_inizio_lib)
 
 
 # ——— Passata B con Voxtral (doppia trascrizione, 2026-09-04) ———
@@ -1966,6 +1968,10 @@ OPENASR_BIN = Path.home() / ".local" / "bin" / "openasr"
 PARAKEET_MODELLO = "parakeet-tdt-0.6b-v3"
 
 
+# Numeri sentiti dal secondo orecchio, per referto (solo in RAM): servono
+# alla tabella dei numeri e al punteggio di rischio delle frasi.
+_CIFRE_SENTITE: dict[str, set[str]] = {}
+
 def controllo_cifre_parakeet(originale: Path, wav_naturale: Path,
                              finale: str, file_id: str) -> list[str]:
     inizio = time.monotonic()
@@ -1994,6 +2000,9 @@ def controllo_cifre_parakeet(originale: Path, wav_naturale: Path,
     sentiti = set(_numeri(esito.stdout))
     presenti = set(_numeri(finale))
     mancanti = sorted(sentiti - presenti)[:8]
+    _CIFRE_SENTITE[file_id] = sentiti
+    while len(_CIFRE_SENTITE) > 12:
+        _CIFRE_SENTITE.pop(next(iter(_CIFRE_SENTITE)))
     log.info("fase=controllo_cifre file=%s esito=ok sentiti=%d presenti=%d "
              "mancanti=%d durata=%.1fs", file_id, len(sentiti), len(presenti),
              len(mancanti), time.monotonic() - inizio)
@@ -2013,6 +2022,7 @@ def chiama_ollama(prompt: str, file_id: str, fase: str, formato_json: bool = Fal
     per le fasi a risposta corta (liste, verdetti) impedisce fisicamente le
     generazioni-fiume che sforano il tempo massimo (visto dal vivo il
     2026-08-24: 45 minuti persi per blocco sulla lista di riparazioni)."""
+    t_inizio_oll = time.monotonic()
     richiesta_dati = {
         "model": modello or MODELLO_LLM,
         "prompt": prompt,
@@ -2036,6 +2046,11 @@ def chiama_ollama(prompt: str, file_id: str, fase: str, formato_json: bool = Fal
                 risposta = json.loads(r.read().decode("utf-8"))
             testo = risposta.get("response", "")
             if isinstance(testo, str) and testo.strip():
+                log.info("fase=ollama file=%s per=%s modello=%s durata=%.1fs carico_s=%.1f "
+                         "gettoni_in=%s gettoni_out=%s",
+                         file_id, fase, modello or MODELLO_LLM, time.monotonic() - t_inizio_oll,
+                         (risposta.get("load_duration") or 0) / 1e9,
+                         risposta.get("prompt_eval_count", "?"), risposta.get("eval_count", "?"))
                 return testo
         except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError):
             pass
@@ -2248,6 +2263,14 @@ ANTONIMI_CLINICI = [
 ]
 
 
+# Lateralità (2026-09-06, dalla revisione esterna della catena): destra e
+# sinistra sono oggetti protetti come le negazioni — una correzione che le
+# scambia è sempre respinta.
+ANTONIMI_CLINICI = list(ANTONIMI_CLINICI) + [
+    ("destra", "sinistra"), ("destro", "sinistro"), ("destre", "sinistre"),
+    ("destri", "sinistri"), ("dx", "sx"), ("dx", "sn"),
+]
+
 def _ribaltamento_clinico(da: str, a: str) -> bool:
     """Vero se la coppia scambia due opposti clinici (o un prefisso
     iper-/ipo- sullo stesso stelo, es. ipertensione → ipotensione)."""
@@ -2331,6 +2354,7 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
     sul testo anonimizzato — se trova un nome che c'è davvero (verificato
     dal codice, i segnaposto non contano), si torna None e il chiamante
     resta sulla catena locale. Nei log SOLO conteggi, mai i dati."""
+    t_inizio_anon = time.monotonic()
     anon = testo
     persone = 0
     date_n = 0
@@ -2382,10 +2406,14 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
     def _titolati(m: "re.Match[str]") -> str:
         nonlocal persone
         fuori = []
+        # Segnaposto tipizzato (2026-09-06): dopo Dr./dott./Prof. la persona è
+        # un medico → «[Medico N]»; il modello capisce chi è chi, la privacy
+        # è identica. Dopo signor/signora resta «Persona N».
+        medico = bool(re.match(r"\s*(?:Dr|Dott|dott|Prof|prof|PD Dr|[Dd]ottor)", m.group(1)))
         for pezzo in m.group(2).split():
             if pezzo not in pezzi_titolati:
                 persone += 1
-                pezzi_titolati[pezzo] = f"Persona {persone}"
+                pezzi_titolati[pezzo] = (f"[Medico {persone}]" if medico else f"Persona {persone}")
                 mappa[pezzi_titolati[pezzo]] = pezzo
                 sensibili.append(pezzo)
             fuori.append(pezzi_titolati[pezzo])
@@ -2469,7 +2497,7 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
         tipo = str(voce.get("tipo", "")).strip()
         if not s or len(s) > 80 or s not in anon and s.lower() not in anon.lower():
             continue
-        if re.search(r"Persona \d+|\[dat[ao] \d+\]", s):
+        if re.search(r"Persona \d+|\[Medico \d+\]|\[dat[ao] \d+\]", s):
             # Contiene un nostro segnaposto («nato il [data 20]»): NON va in
             # mappa, altrimenti il ripristino reintroduce il segnaposto
             # (trovato dal collaudo esami 2026-09-06: residui «[data 20]»).
@@ -2486,7 +2514,7 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
     pezzi_nome = {p.lower() for s in sensibili for p in s.split() if p.isalpha() and len(p) >= 5}
     if pezzi_nome:
         for parola in sorted(set(re.findall(r"(?<!\w)[A-ZÀ-Ý][a-zà-ÿ]{5,}(?!\w)", anon))):
-            if parola == "Persona" or parola.lower() in pezzi_nome:
+            if parola in ("Persona", "Medico") or parola.lower() in pezzi_nome:
                 continue
             soglia = 2 if len(parola) >= 9 else 1
             if any(abs(len(parola) - len(pz)) <= soglia
@@ -2539,7 +2567,7 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
         s = str(voce.get("testo", "")).strip()
         # Conta solo se è davvero nel testo e non è un nostro segnaposto.
         if (s and len(s) <= 80 and s in anon
-                and not re.search(r"Persona \d+|\[dat[ao] \d+\]", s)):
+                and not re.search(r"Persona \d+|\[Medico \d+\]|\[dat[ao] \d+\]", s)):
             persone += 1
             segnaposto = f"Persona {persone}"
             mappa[segnaposto] = s
@@ -2557,8 +2585,8 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
     while len(_ANON_NOTI) > _ANON_NOTI_MAX:
         _ANON_NOTI.pop(next(iter(_ANON_NOTI)))
     log.info(
-        "fase=correzione_esterna file=%s anonimizzazione=ok persone=%d date=%d riuso=%d",
-        file_id, persone, date_n, int(noti is not None))
+        "fase=correzione_esterna file=%s anonimizzazione=ok persone=%d date=%d riuso=%d durata=%.1fs caratteri=%d",
+        file_id, persone, date_n, int(noti is not None), time.monotonic() - t_inizio_anon, len(testo))
     return (anon, mappa) if con_mappa else anon
 
 
@@ -2580,7 +2608,7 @@ def _frasi_con_maiuscole(anon: str) -> str:
             w2 = w.strip("«»\"'()[],.;:")
             if not w2 or not w2[0].isupper() or i == 0:
                 continue
-            if w2 in ("Persona", "Attuale") or w2.isupper() and len(w2) <= 6 or w2 in _SIGLE_NOTE:
+            if w2 in ("Persona", "Medico", "Attuale") or w2.isupper() and len(w2) <= 6 or w2 in _SIGLE_NOTE:
                 continue
             if len(w2) < 3 or w2.isdigit():
                 continue
@@ -2680,6 +2708,7 @@ def _chiama_esterno_openai(prompt: str, file_id: str,
     violano lo schema, quindi malformazioni e sezioni inventate diventano
     impossibili. Un 400 (server che non lo supporta) fa scendere la
     scaletta alle varianti senza schema: nessuna regressione."""
+    t_inizio_est = time.monotonic()
     cfg = _config_esterno()
     if not cfg:
         raise RuntimeError("config esterna mancante")
@@ -2730,12 +2759,20 @@ def _chiama_esterno_openai(prompt: str, file_id: str,
                 testo = msg.get("reasoning_content") or msg.get("reasoning") or ""
             testo = re.sub(r"<think>.*?</think>", "", testo, flags=re.DOTALL)
             if testo.strip():
+                uso = dati.get("usage") if isinstance(dati.get("usage"), dict) else {}
+                log.info("fase=esterno file=%s chiamata=ok modello=%s durata=%.1fs "
+                         "gettoni_in=%s gettoni_out=%s tentativo=%d",
+                         file_id, str(modello or cfg.get("modello")).split("/")[-1],
+                         time.monotonic() - t_inizio_est, uso.get("prompt_tokens", "?"),
+                         uso.get("completion_tokens", "?"), tentativo)
                 return testo
         except (urllib.error.URLError, TimeoutError, OSError,
                 json.JSONDecodeError, KeyError, IndexError):
             pass
         if tentativo == 1:
             time.sleep(5)
+    log.warning("fase=esterno file=%s chiamata=fallita durata=%.1fs", file_id,
+                time.monotonic() - t_inizio_est)
     raise RuntimeError("endpoint esterno non risponde")
 
 
@@ -3388,6 +3425,163 @@ def avvocato_esterno(bozza: str, grezzo: str, file_id: str) -> list[dict] | None
         file_id, len(fuori), time.monotonic() - inizio,
     )
     return fuori
+
+
+# ——— Verificatore selettivo (2026-09-06, dalla revisione esterna della catena) ———
+# Al posto di due riletture INTERE (avvocato del diavolo sul testo contro il
+# grezzo, ispezione del nonsenso su tutto), una sola chiamata che legge
+# SOLO ciò che può contenere un errore: le correzioni applicate in
+# automatico (ognuna col suo passaggio del dettato grezzo) e le frasi a
+# rischio (numeri, negazioni, lateralità, farmaci, disaccordo tra i motori).
+# Nel testo il codice non ha inventato nulla: gli unici punti in cui può
+# essere entrato contenuto non dettato sono le patch. Interruttore
+# verificatore=1 nella config esterna; su qualunque intoppo, vecchio percorso.
+PROMPT_VERIFICATORE = """Sei il verificatore finale di un referto cardiologico dettato a voce e trascritto automaticamente. Ricevi:
+(A) le CORREZIONI applicate in automatico alla trascrizione: per ognuna la parola dettata («da»), la correzione («a»), la frase della bozza in cui compare e il passaggio corrispondente del DETTATO GREZZO;
+(B) le FRASI A RISCHIO della bozza, ognuna col passaggio corrispondente del dettato grezzo.
+
+Per ogni correzione decidi se «a» è ciò che il medico ha detto o evidentemente intendeva (accetta) oppure no (rifiuta, con motivo breve).
+Per ogni frase a rischio decidi se è sostenuta dal dettato grezzo (supportata) e se ha senso in italiano medico (sensata), con un motivo breve quando rispondi no.
+
+Regole:
+- Non proporre testo nuovo: solo verdetti.
+- I numeri sono decisivi: se la bozza dice un numero diverso dal grezzo, la frase NON è supportata.
+- Nel dubbio sulle correzioni, accetta; nel dubbio sulle frasi, segnala (supportata: false) con motivo.
+- I segnaposto come «Persona 1», «[Medico 2]», «[data 3]» sono normali: non sono errori.
+- Rispondi SOLO col JSON richiesto.
+
+CORREZIONI:
+{correzioni}
+
+FRASI A RISCHIO:
+{frasi}"""
+
+
+def _passaggio_grezzo(frase: str, grezzo: str, finestra: int = 160) -> str:
+    """Il passaggio del dettato grezzo che corrisponde alla frase: ancora sul
+    trigramma di parole più raro della frase presente nel grezzo."""
+    def norm(s: str) -> str:
+        return re.sub(r"[^\w ]+", " ", s.lower())
+    g = norm(grezzo)
+    parole = [w for w in norm(frase).split() if len(w) >= 4]
+    if not parole:
+        return ""
+    for n in (4, 3, 2):
+        migliore = None
+        for i in range(0, max(0, len(parole) - n + 1)):
+            ngr = " ".join(parole[i:i + n])
+            pos = g.find(ngr)
+            if pos >= 0:
+                conta = g.count(ngr)
+                if migliore is None or conta < migliore[0]:
+                    migliore = (conta, pos)
+        if migliore is not None:
+            pos = migliore[1]
+            return grezzo[max(0, pos - finestra):pos + finestra].replace("\n", " ").strip()
+    for w in sorted(parole, key=len, reverse=True):
+        pos = g.find(w)
+        if pos >= 0:
+            return grezzo[max(0, pos - finestra):pos + finestra].replace("\n", " ").strip()
+    return ""
+
+
+def verificatore_selettivo(finale: str, grezzo: str, riparazioni: list, divergenze: list,
+                           frasi_da_chiarire: list, punti_loop: list, file_id: str):
+    """Torna (frasi_non_supportate, dubbi) oppure None (→ percorso classico)."""
+    inizio = time.monotonic()
+    frasi = _spezza_frasi_wizard(finale)
+    def norm(s: str) -> str:
+        return re.sub(r"\W+", " ", s.lower()).strip()
+    # (A) correzioni applicate, con frase e passaggio grezzo
+    voci_corr: list[dict] = []
+    for da, a in list(riparazioni)[:40]:
+        frase = next((f for f in frasi if a in f), "")
+        if not frase:
+            continue
+        voci_corr.append({"da": da, "a": a, "frase": frase,
+                          "grezzo": _passaggio_grezzo(frase.replace(a, da), grezzo)})
+    # (B) frasi a rischio (segnali disponibili a questo punto della catena)
+    rischio, _ = valuta_rischio_frasi(finale, divergenze, [], [], frasi_da_chiarire,
+                                      punti_loop, [], file_id)
+    frasi_r = [r for r in rischio if r["punteggio"] >= 8][:25]
+    voci_frasi = [{"frase": r["frase"], "motivi": r["motivi"],
+                   "grezzo": _passaggio_grezzo(r["frase"], grezzo)} for r in frasi_r]
+    if not voci_corr and not voci_frasi:
+        log.info("fase=verificatore file=%s esito=niente_da_verificare", file_id)
+        return [], []
+    # Un solo documento → una sola anonimizzazione (cache del referto)
+    blocchi: list[str] = []
+    for i, v in enumerate(voci_corr, 1):
+        blocchi.append(f"C{i}. da: «{v['da']}» → a: «{v['a']}»\n   frase: {v['frase']}\n   grezzo: {v['grezzo'] or '(non ritrovato)'}")
+    for i, v in enumerate(voci_frasi, 1):
+        blocchi.append(f"F{i}. frase: {v['frase']}\n   segnali: {', '.join(v['motivi'])}\n   grezzo: {v['grezzo'] or '(non ritrovato)'}")
+    documento = "\n".join(blocchi)
+    esito_anon = _anonimizza_per_esterno(documento, file_id, con_mappa=True, riusa=True)
+    if esito_anon is None:
+        log.warning("fase=verificatore file=%s esito=annullato motivo=anonimizzazione", file_id)
+        return None
+    anon, mappa = esito_anon
+    # separa per prefisso di riga (C… / F…), conservando le righe interne
+    righe_c, righe_f, corrente = [], [], None
+    for r in anon.split("\n"):
+        if re.match(r"^C\d+\. ", r):
+            corrente = righe_c
+        elif re.match(r"^F\d+\. ", r):
+            corrente = righe_f
+        if corrente is not None:
+            corrente.append(r)
+    schema = _oggetto({
+        "correzioni": {"type": "array", "items": _oggetto({
+            "n": {"type": "integer", "minimum": 1, "maximum": max(1, len(voci_corr))},
+            "verdetto": {"type": "string", "enum": ["accetta", "rifiuta"]},
+            "motivo": {"type": "string"}})},
+        "frasi": {"type": "array", "items": _oggetto({
+            "n": {"type": "integer", "minimum": 1, "maximum": max(1, len(voci_frasi))},
+            "supportata": {"type": "boolean"},
+            "sensata": {"type": "boolean"},
+            "motivo": {"type": "string"}})}})
+    try:
+        uscita = _chiama_esterno_openai(
+            PROMPT_VERIFICATORE.replace("{correzioni}", "\n".join(righe_c) or "(nessuna)")
+                               .replace("{frasi}", "\n".join(righe_f) or "(nessuna)"),
+            file_id, schema=schema)
+    except RuntimeError:
+        log.warning("fase=verificatore file=%s esito=esterno_fallito ripiego=classico", file_id)
+        return None
+    dati = _estrai_json(uscita)
+    if not isinstance(dati, dict):
+        return None
+    non_supportate: list[dict] = []
+    dubbi: list[str] = []
+    rifiutate = 0
+    for v in dati.get("correzioni") if isinstance(dati.get("correzioni"), list) else []:
+        if not isinstance(v, dict) or not isinstance(v.get("n"), int):
+            continue
+        k = v["n"] - 1
+        if 0 <= k < len(voci_corr) and v.get("verdetto") == "rifiuta":
+            c = voci_corr[k]
+            rifiutate += 1
+            non_supportate.append({
+                "frase": c["frase"],
+                "motivo": (f"correzione automatica «{c['da']}» → «{c['a']}» da verificare: "
+                           + _ripristina(str(v.get("motivo", ""))[:160], mappa))})
+    for v in dati.get("frasi") if isinstance(dati.get("frasi"), list) else []:
+        if not isinstance(v, dict) or not isinstance(v.get("n"), int):
+            continue
+        k = v["n"] - 1
+        if not 0 <= k < len(voci_frasi):
+            continue
+        f = voci_frasi[k]["frase"]
+        motivo = _ripristina(str(v.get("motivo", ""))[:200], mappa)
+        if v.get("supportata") is False:
+            non_supportate.append({"frase": f, "motivo": motivo or "non sostenuta dal dettato"})
+        elif v.get("sensata") is False:
+            dubbi.append(f)
+    log.info("fase=verificatore file=%s esito=ok correzioni=%d rifiutate=%d frasi=%d "
+             "non_supportate=%d dubbi=%d durata=%.1fs",
+             file_id, len(voci_corr), rifiutate, len(voci_frasi),
+             len(non_supportate), len(dubbi), time.monotonic() - inizio)
+    return non_supportate, dubbi
 
 
 # ——— Bella copia (2026-09-03, richiesta utente) ———
@@ -4216,7 +4410,7 @@ def _aggiorna_paragrafo_esame(paragrafo: str, nuove: list[str], mappa: dict,
     nuove_anon = [anonima(f) for f in nuove]
     gettoni: dict[str, str] = {}   # ⟪N3⟫ → "45"
     inverso: dict[str, str] = {}   # "45" → ⟪N3⟫
-    RX_SEG = r"(\[data \d+\]|\[dato \d+\]|Persona \d+)"
+    RX_SEG = r"(\[data \d+\]|\[dato \d+\]|\[Medico \d+\]|Persona \d+)"
 
     def maschera(s: str) -> str:
         def _g(m: "re.Match[str]") -> str:
@@ -4269,10 +4463,10 @@ def _aggiorna_paragrafo_esame(paragrafo: str, nuove: list[str], mappa: dict,
     for g in sorted(gettoni, key=len, reverse=True):
         testo = testo.replace(g, gettoni[g])
     testo = _ripristina(testo, mappa)
-    if "{{" in testo or "}}" in testo or "Persona " in testo or "[dat" in testo:
+    if "{{" in testo or "}}" in testo or "Persona " in testo or "[dat" in testo or "[Medico" in testo:
         # Diagnosi: SOLO i segnaposto ignoti (sono etichette, non dati) e il
         # numero di chiavi della mappa.
-        ignoti = sorted(set(re.findall(r"\[dat[ao] ?\d*\]|Persona ?\d*|\{\{[^}]*\}\}", testo)))[:6]
+        ignoti = sorted(set(re.findall(r"\[dat[ao] ?\d*\]|\[Medico ?\d*\]|Persona ?\d*|\{\{[^}]*\}\}", testo)))[:6]
         log.info("fase=fusione file=%s esame=scartato motivo=residui ignoti=%s chiavi_mappa=%d",
                  file_id, ignoti, len(mappa))
         return None
@@ -4383,16 +4577,16 @@ def lavora_fusioni() -> None:
             log.warning("fase=fusione bozza=%s esito=consegna_fallita", bozza_id[:8])
 
 
-PROMPT_BELLA_COPIA = """Sei un correttore di bozze per referti cardiologici. Sistema SOLO la punteggiatura e le maiuscole/minuscole del testo qui sotto: virgole al posto giusto, punti, maiuscola a inizio frase e nei nomi propri, spazi corretti attorno ai segni.
+PROMPT_BELLA_COPIA = """Sei un correttore di bozze per referti cardiologici. Qui sotto ci sono FRASI NUMERATE di un referto dettato. Per OGNI frase sistema SOLO la punteggiatura e le maiuscole/minuscole: virgole al posto giusto, punto finale, maiuscola a inizio frase e nei nomi propri, spazi corretti attorno ai segni.
 
 REGOLE ASSOLUTE:
 - NON aggiungere, togliere o cambiare NEMMENO UNA parola.
 - NON toccare numeri, date, sigle, unità di misura.
-- NON riformulare, NON riordinare le frasi, NON unire o dividere i paragrafi: gli a-capo restano dove sono.
-- I segnaposto come «Persona 1» o «[data 1]» restano ESATTAMENTE come sono.
-- Rispondi SOLO con il testo sistemato, senza commenti.
+- NON riformulare, NON riordinare, NON unire o dividere le frasi.
+- I segnaposto come «Persona 1», «[Medico 2]» o «[data 1]» restano ESATTAMENTE come sono.
+- Rispondi SOLO col JSON {"frasi": [{"n": 1, "testo": "…"}, …]}, una voce per ogni numero.
 
-TESTO:
+FRASI:
 {testo}"""
 
 
@@ -4403,8 +4597,12 @@ def _impronta_lettere(testo: str) -> str:
 
 
 def bella_copia(testo: str, file_id: str) -> str | None:
-    """Il testo torna ripunteggiato o non torna affatto: None = si tiene
-    l'originale (esterno giù, anonimizzazione incerta o impronta violata)."""
+    """Punteggiatura e maiuscole FRASE PER FRASE (2026-09-06): il modello
+    riceve le frasi numerate del testo anonimo, il codice accetta solo le
+    frasi la cui impronta (lettere+cifre) è identica e rimette le altre
+    com'erano. Prima la chiamata era globale e una sola lettera cambiata
+    buttava via tutto (scartata nell'ultimo referto vero). None = niente
+    da cambiare o esterno giù."""
     inizio = time.monotonic()
     esito_anon = _anonimizza_per_esterno(testo, file_id, con_mappa=True, riusa=True)
     if esito_anon is None:
@@ -4412,30 +4610,57 @@ def bella_copia(testo: str, file_id: str) -> str | None:
         return None
     anon, mappa = esito_anon
     modello = (_config_esterno() or {}).get("modello_bella") or None
-    for giro in (1, 2):
+    # Struttura: righe → frasi, per rimettere tutto al suo posto.
+    righe = anon.split("\n")
+    frasi: list[str] = []
+    posizioni: list[tuple[int, int]] = []  # (riga, indice nella riga)
+    per_riga: list[list[str]] = []
+    for i, r in enumerate(righe):
+        pezzi = [x for x in re.split(r"(?<=[.!?;])\s+", r) if x.strip()] if r.strip() else []
+        per_riga.append(pezzi)
+        for j, f in enumerate(pezzi):
+            frasi.append(f)
+            posizioni.append((i, j))
+    if not frasi:
+        return None
+    accettate = 0
+    scartate = 0
+    schema = _oggetto({"frasi": {"type": "array", "items": _oggetto({
+        "n": {"type": "integer", "minimum": 1, "maximum": len(frasi)},
+        "testo": {"type": "string"}})}})
+    for inizio_b in range(0, len(frasi), 60):
+        blocco = list(range(inizio_b, min(inizio_b + 60, len(frasi))))
+        elenco = "\n".join(f"{k + 1}. {frasi[k]}" for k in blocco)
         try:
             uscita = _chiama_esterno_openai(
-                PROMPT_BELLA_COPIA.replace("{testo}", anon), file_id, modello=modello)
+                PROMPT_BELLA_COPIA.replace("{testo}", elenco), file_id, modello=modello,
+                schema=schema)
         except RuntimeError:
             log.warning("fase=bella_copia file=%s esito=fallito motivo=esterno", file_id)
             return None
-        uscita = (uscita or "").strip()
-        if not uscita or _impronta_lettere(uscita) != _impronta_lettere(anon):
-            log.warning("fase=bella_copia file=%s esito=scartata motivo=impronta_anon giro=%d",
-                        file_id, giro)
-            continue
-        # Segnaposto lunghi prima: «Persona 12» va ripristinato prima di
-        # «Persona 1», che altrimenti gli mangerebbe il prefisso.
-        for segnaposto in sorted(mappa, key=len, reverse=True):
-            uscita = uscita.replace(segnaposto, mappa[segnaposto])
-        if _impronta_lettere(uscita) != _impronta_lettere(testo):
-            log.warning("fase=bella_copia file=%s esito=scartata motivo=impronta_reale giro=%d",
-                        file_id, giro)
-            continue
-        log.info("fase=bella_copia file=%s esito=ok giro=%d durata=%.1fs",
-                 file_id, giro, time.monotonic() - inizio)
-        return uscita
-    return None
+        dati = _estrai_json(uscita)
+        voci = dati.get("frasi") if isinstance(dati, dict) else None
+        for v in (voci if isinstance(voci, list) else []):
+            if not isinstance(v, dict) or not isinstance(v.get("n"), int):
+                continue
+            k = v["n"] - 1
+            if k not in blocco:
+                continue
+            nuova = str(v.get("testo", "")).strip()
+            if nuova and nuova != frasi[k] and _impronta_lettere(nuova) == _impronta_lettere(frasi[k]):
+                i, j = posizioni[k]
+                per_riga[i][j] = nuova
+                accettate += 1
+            elif nuova and nuova != frasi[k]:
+                scartate += 1
+    uscita_anon = "\n".join(" ".join(p) if p else r for p, r in zip(per_riga, righe))
+    uscita_reale = _ripristina(uscita_anon, mappa)
+    if _impronta_lettere(uscita_reale) != _impronta_lettere(testo):
+        log.warning("fase=bella_copia file=%s esito=scartata motivo=impronta_reale", file_id)
+        return None
+    log.info("fase=bella_copia file=%s esito=ok frasi=%d accettate=%d scartate=%d durata=%.1fs",
+             file_id, len(frasi), accettate, scartate, time.monotonic() - inizio)
+    return uscita_reale if accettate else None
 
 
 def ispeziona_llm(testo: str, file_id: str) -> list[str]:
@@ -4601,6 +4826,12 @@ def estrai_campi(testo: str, file_id: str) -> dict:
                 return {_ripristina(str(k), mappa): _rip(x) for k, x in v.items()}
             return v
         dati = _rip(dati)
+        # I campi identificativi li decide il codice sul testo vero: il cloud
+        # ha visto solo segnaposto e può averli confusi tra loro.
+        locali = _identita_locale(testo)
+        for k, v in locali.items():
+            dati[k] = v
+        log.info("fase=estrazione file=%s identita_locale=%d", file_id, len(locali))
 
     for chiave in CAMPI_RICHIESTI:
         if chiave not in dati or dati[chiave] in (None, ""):
@@ -4617,6 +4848,31 @@ def estrai_campi(testo: str, file_id: str) -> dict:
         file_id, trasporto, presenti, len(dati["valori_numerici"]), time.monotonic() - inizio,
     )
     return dati
+
+
+_MESI_RX = r"(?:gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)"
+
+
+def _identita_locale(testo: str) -> dict[str, str]:
+    """Paziente, data di nascita e medico inviante trovati dal CODICE sul
+    testo vero (2026-09-06, dalla revisione esterna: i campi identificativi
+    non devono dipendere da ciò che il cloud risponde sui segnaposto).
+    Solo ciò che si trova con certezza; il resto lo decide il chiamante."""
+    out: dict[str, str] = {}
+    nome = r"([A-ZÀ-Ý][\w'’-]+(?:\s+[A-ZÀ-Ý][\w'’-]+){0,2})"
+    m = re.search(r"(?:[Ss]ignor[ae]?|[Ss]ig\.(?:ra)?|[Pp]aziente|[Pp]z\.?)\s+" + nome, testo)
+    if m:
+        out["nome_paziente"] = m.group(1).strip()
+    m = re.search(r"nat[oa]\s+(?:il\s+|a\s+\w+\s+il\s+)?(\d{1,2}[./]\d{1,2}[./](?:19|20)?\d{2}|\d{1,2}\s+"
+                  + _MESI_RX + r"\s+(?:19|20)\d{2})", testo, re.IGNORECASE)
+    if m:
+        out["data_nascita"] = m.group(1).strip()
+    medici = re.findall(r"(?:[Dd]ott\.?(?:\s*ssa)?|[Dd]ottoressa|[Dd]ottor(?:e)?|Dr\.?(?:\s*med\.?)?|Prof\.?)\s+" + nome, testo)
+    medici = [x.strip() for x in medici if x.strip().lower() not in ("med", "med.")]
+    if medici:
+        # Il primo medico citato è di norma l'inviante; l'ultimo, la firma.
+        out["medico_inviante"] = medici[0]
+    return out
 
 
 def _primo_numero(valore) -> float | None:
@@ -4857,6 +5113,155 @@ def controllo_farmaci(testo: str, file_id: str) -> list[str]:
     if avvisi:
         log.info("fase=farmaci file=%s avvisi=%d", file_id, len(avvisi))
     return avvisi[:6]
+
+
+_RX_NEGAZIONE = re.compile(r"\b(?:non|nessun[ao]?|senza|assenz[ae]|negativ[oaie]|esclus[oaie]|né)\b", re.IGNORECASE)
+_RX_LATERALITA = re.compile(r"\b(?:destr[oaie]|sinistr[oaie]|dx|sx|sn|bilateral[ei])\b", re.IGNORECASE)
+_RX_NUMERO_UNITA = re.compile(
+    r"(\d+(?:[.,]\d+)?)\s*(mmHg|bpm|mg|mcg|µg|g|ml|l|%|cm|mm|ms|m/s|kg|mmol/l|ng/l|u/l|umol/l|mcmol/l|"
+    r"ml/min|kg/m2|kg/m²|watt|w|min|sec|s|anni|mesi|settimane|giorni|volte)?(?![\w/])", re.IGNORECASE)
+
+
+def _spezza_frasi_wizard(testo: str) -> list[str]:
+    """Stessa suddivisione della revisione guidata (righe, poi . ! ? ;)."""
+    fuori: list[str] = []
+    for riga in testo.replace("\r\n", "\n").split("\n"):
+        for f in re.split(r"(?<=[.!?;])\s+", riga):
+            if f.strip():
+                fuori.append(f.strip())
+    return fuori
+
+
+def valuta_rischio_frasi(finale: str, divergenze: list, dubbi: list, frasi_non_supportate: list,
+                         frasi_da_chiarire: list, punti_loop: list, parole: list,
+                         file_id: str) -> tuple[list[dict], list[dict]]:
+    """Punteggio di rischio per frase (2026-09-06, revisione esterna + ricerca:
+    la revisione deve mettere in cima probabilità × gravità, e ogni segnale
+    deve dire «perché lo vedo»). Segnali già disponibili nella catena: numeri
+    e unità, numeri non confermati dal secondo orecchio, disaccordo tra i due
+    motori, negazioni, lateralità, farmaci, frasi non supportate, frasi senza
+    senso, segmenti dubbi, punti di loop. Torna (rischio_frasi, numeri)."""
+    frasi = _spezza_frasi_wizard(finale)
+    if not frasi:
+        return [], []
+    def norm(s: str) -> str:
+        return re.sub(r"\W+", " ", s.lower()).strip()
+    frasi_n = [norm(f) for f in frasi]
+    sentiti = _CIFRE_SENTITE.get(file_id)
+    farmaci = (_farmaci().get("nomi") or {})
+    principi = (_farmaci().get("principi") or {})
+    # tempi delle parole per agganciare i numeri all'audio
+    tempi: dict[str, float] = {}
+    for w, s in (parole or []):
+        k = norm(str(w))
+        if k and k not in tempi:
+            try:
+                tempi[k] = float(s)
+            except (TypeError, ValueError):
+                pass
+    div_testi = []
+    for d in divergenze or []:
+        if isinstance(d, dict):
+            for k in ("contesto", "versione_a"):
+                v = norm(str(d.get(k, "")))
+                if len(v) >= 6:
+                    div_testi.append(v)
+    def contiene(lista: list, f_n: str) -> bool:
+        return any(len(x) >= 6 and (x in f_n or f_n in x) for x in lista)
+    non_supp = [norm(str(v.get("frase", ""))) for v in frasi_non_supportate if isinstance(v, dict)]
+    da_chiar = [norm(str(v.get("frase", ""))) for v in frasi_da_chiarire if isinstance(v, dict)]
+    dubbi_n = [norm(str(x)) for x in dubbi if isinstance(x, str)]
+    loop_n = [norm(str(x)) for x in punti_loop if isinstance(x, str)]
+
+    rischio: list[dict] = []
+    numeri: list[dict] = []
+    for i, (f, f_n) in enumerate(zip(frasi, frasi_n)):
+        punti = 0
+        motivi: list[str] = []
+        trovati = _RX_NUMERO_UNITA.findall(f)
+        n_num = len(trovati)
+        if n_num:
+            punti += min(2 * n_num, 6)
+            motivi.append(f"{n_num} numer{'o' if n_num == 1 else 'i'}")
+        non_conf = 0
+        for val, unita in trovati:
+            v_norm = val.replace(",", ".")
+            confermato = None
+            if sentiti is not None:
+                confermato = (val in sentiti) or (v_norm in sentiti) or (val.replace(".", ",") in sentiti)
+                if not confermato:
+                    non_conf += 1
+            numeri.append({
+                "valore": val, "unita": unita or "", "frase": i,
+                "secondo": tempi.get(norm(val)),
+                "confermato": confermato,
+            })
+        if non_conf:
+            punti += 4 * min(non_conf, 3)
+            motivi.append(f"{non_conf} numer{'o' if non_conf == 1 else 'i'} non confermat{'o' if non_conf == 1 else 'i'} dal secondo orecchio")
+        if contiene(div_testi, f_n):
+            punti += 5
+            motivi.append("i due motori di trascrizione divergono qui")
+        if _RX_NEGAZIONE.search(f):
+            punti += 3
+            motivi.append("negazione")
+        if _RX_LATERALITA.search(f):
+            punti += 3
+            motivi.append("lateralità")
+        parole_f = re.findall(r"[a-zà-ÿ][a-zà-ÿ\-]+", f.lower())
+        farm = [w for w in parole_f if (w in farmaci or w in principi) and len(w) >= 5][:3]
+        if farm:
+            punti += 3 * len(farm)
+            motivi.append("farmaco: " + ", ".join(farm))
+        if contiene(non_supp, f_n):
+            punti += 8
+            motivi.append("non trovata nel dettato (avvocato del diavolo)")
+        if contiene(da_chiar, f_n):
+            punti += 5
+            motivi.append("senso da chiarire")
+        if contiene(dubbi_n, f_n):
+            punti += 4
+            motivi.append("segmento dubbio")
+        if contiene(loop_n, f_n):
+            punti += 4
+            motivi.append("qui la trascrizione si era ripetuta")
+        if n_num and len(parole_f) < 4:
+            punti += 2
+            motivi.append("frase brevissima con un numero")
+        if punti >= 5:
+            rischio.append({"frase": f[:500], "punteggio": punti, "motivi": motivi[:8]})
+    rischio.sort(key=lambda r: -r["punteggio"])
+    log.info("fase=rischio file=%s frasi=%d a_rischio=%d numeri=%d non_confermati=%d",
+             file_id, len(frasi), len(rischio), len(numeri),
+             sum(1 for n in numeri if n["confermato"] is False))
+    return rischio[:40], numeri[:200]
+
+
+# Scadenza del dataset audio (2026-09-06, regola in docs/legale/
+# conservazione-audio.md): con REFERTI_CONSERVA_GIORNI impostato, i file
+# più vecchi vengono cancellati a ogni giro del servizio. Senza la
+# variabile non si cancella nulla (decisione del titolare). Nel log solo
+# conteggi.
+CONSERVA_GIORNI = int(os.environ.get("REFERTI_CONSERVA_GIORNI", "0") or 0)
+
+
+def scadenza_dataset_audio() -> None:
+    if CONSERVA_GIORNI <= 0:
+        return
+    try:
+        cartella = DATASET_DIR / "audio"
+        if not cartella.is_dir():
+            return
+        limite = time.time() - CONSERVA_GIORNI * 86400
+        cancellati = 0
+        for f in cartella.iterdir():
+            if f.is_file() and f.stat().st_mtime < limite:
+                f.unlink()
+                cancellati += 1
+        if cancellati:
+            log.info("fase=dataset_audio scaduti=%d giorni=%d", cancellati, CONSERVA_GIORNI)
+    except OSError:
+        pass
 
 
 def controlli_avvio():
@@ -5180,13 +5585,27 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # la nota «riformula»): su un riassunto la riformulazione è attesa.
         cfg_est = _config_esterno()
         frasi_non_supportate = None
-        if (cfg_est and cfg_est.get("avvocato") == "1"
-                and _esterno_attivo() == "openai" and not nota_visita):
-            frasi_non_supportate = avvocato_esterno(finale, grezzo_a, file_id)
-        if frasi_non_supportate is None:
-            frasi_non_supportate = avvocato_diavolo(
-                nota_visita if nota_visita else finale, grezzo_a, file_id,
-                riassunto=bool(nota_visita))
+        # Verificatore selettivo (2026-09-06): una chiamata su patch e frasi a
+        # rischio al posto delle due riletture intere. Se torna None, percorso
+        # classico (avvocato + ispezione) come prima.
+        verif = None
+        if (cfg_est and cfg_est.get("verificatore") == "1"
+                and _esterno_attivo() == "openai" and not nota_visita and not visita):
+            fase = "verificatore"
+            _ = notifica and notifica(fase)
+            verif = verificatore_selettivo(
+                finale, grezzo_a, RIPARAZIONI_APPLICATE.get(file_id, []), divergenze,
+                frasi_da_chiarire, punti_loop, file_id)
+        if verif is not None:
+            frasi_non_supportate, dubbi = verif
+        else:
+            if (cfg_est and cfg_est.get("avvocato") == "1"
+                    and _esterno_attivo() == "openai" and not nota_visita):
+                frasi_non_supportate = avvocato_esterno(finale, grezzo_a, file_id)
+            if frasi_non_supportate is None:
+                frasi_non_supportate = avvocato_diavolo(
+                    nota_visita if nota_visita else finale, grezzo_a, file_id,
+                    riassunto=bool(nota_visita))
         frasi_non_supportate = [
             v for v in frasi_non_supportate if v["frase"] not in divagazioni
         ]
@@ -5195,7 +5614,8 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         _ = notifica and notifica(fase)
         # Sulle visite l'ispezione lavorerebbe su una conversazione colloquiale
         # (tutto «privo di senso medico» per costruzione): si salta.
-        dubbi = [] if visita else ispeziona_llm(finale, file_id)
+        if verif is None:
+            dubbi = [] if visita else ispeziona_llm(finale, file_id)
         # I punti dove l'anti-loop è intervenuto vanno in testa ai segmenti
         # dubbi: la bozza li evidenzia e il revisore sa che lì c'era una
         # ripetizione ridotta a una. (Se la correzione ha ritoccato la frase
@@ -5441,6 +5861,15 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         ],
         "richiede_revisione": True,
     }
+    if not visita:
+        try:
+            rischio_frasi, numeri_entita = valuta_rischio_frasi(
+                finale, divergenze, dubbi, frasi_non_supportate, frasi_da_chiarire,
+                punti_loop, parole, file_id)
+            payload["rischio_frasi"] = rischio_frasi
+            payload["numeri"] = numeri_entita
+        except Exception as e:  # noqa: BLE001 — mai bloccare la consegna
+            log.warning("fase=rischio file=%s esito=errore tipo=%s", file_id, type(e).__name__)
     if not visita and testo_strutturato:
         # Proposta nel formato standard dello studio (fase struttura):
         # in pagina si applica con un clic, mai da sola.
@@ -5754,6 +6183,7 @@ def servizio(sostituzioni, controlli) -> int:
             # Lettere incrementali chieste dalla pagina (dettato + lettera
             # precedente → lettera aggiornata).
             lavora_fusioni()
+            scadenza_dataset_audio()
             time.sleep(INTERVALLO_SCANSIONE_S)
         except KeyboardInterrupt:
             log.info("fase=servizio esito=fermato motivo=richiesta_utente")

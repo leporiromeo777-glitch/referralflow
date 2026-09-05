@@ -51,6 +51,8 @@ export function RevisioneGuidata({
   testoStrutturato = '',
   provenienza = [],
   avvisi = [],
+  rischioFrasi = [],
+  numeri = [],
   letteraPrecedente = '',
 }: {
   testo: string;
@@ -65,6 +67,8 @@ export function RevisioneGuidata({
   testoStrutturato?: string;
   provenienza?: [string, string][];
   avvisi?: string[];
+  rischioFrasi?: { frase: string; punteggio: number; motivi?: string[] }[];
+  numeri?: { valore: string; unita?: string; frase?: number | null; secondo?: number | null; confermato?: boolean | null }[];
   letteraPrecedente?: string;
 }) {
   const frasiIniziali = useMemo(() => spezzaInFrasi(testo), [testo]);
@@ -215,6 +219,7 @@ export function RevisioneGuidata({
     a.playbackRate = veloce && !conCifre ? 1.5 : 1;
     a.currentTime = Math.max(0, secondi - 1.5);
     void a.play().catch(() => {});
+    setRiascoltiFatti((n) => n + 1);
   };
   const mmss = (s: number) =>
     `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
@@ -231,7 +236,20 @@ export function RevisioneGuidata({
   };
 
   const [fatte, setFatte] = useState<Set<string>>(new Set());
-  const segna = (id: string) => setFatte((prev) => new Set(prev).add(id));
+  // Telemetria della revisione: quando è iniziata, quante segnalazioni sono
+  // state chiuse e quante senza aver riascoltato nulla nel frattempo.
+  const [inizioRevisione] = useState(() => Date.now());
+  const [riascoltiFatti, setRiascoltiFatti] = useState(0);
+  const [chiuseSenzaRiascolto, setChiuseSenzaRiascolto] = useState(0);
+  const [chiuse, setChiuse] = useState(0);
+  const segna = (id: string) => {
+    setFatte((prev) => {
+      if (prev.has(id)) return prev;
+      setChiuse((c) => c + 1);
+      if (riascoltiFatti === 0) setChiuseSenzaRiascolto((c) => c + 1);
+      return new Set(prev).add(id);
+    });
+  };
 
   const [inModifica, setInModifica] = useState<number | null>(null);
   const [bozzaModifica, setBozzaModifica] = useState('');
@@ -287,8 +305,13 @@ export function RevisioneGuidata({
   // supportate dal dettato, avvisi su cifre e farmaci — poi il resto. Ogni
   // lista mostra al massimo 7 voci, le altre a richiesta.
   const passi: { chiave: string; titolo: string; conta?: number }[] = [];
-  if (rosse.length + avvisi.length > 0)
-    passi.push({ chiave: 'subito', titolo: 'Da controllare subito', conta: rosse.length + avvisi.length });
+  // Frasi a rischio dalla pipeline (punteggio ≥ 8) non già mostrate tra le rosse.
+  const aRischio = rischioFrasi
+    .filter((r) => r.punteggio >= 8)
+    .filter((r) => !rosse.some((v) => normalizza(v.frase) === normalizza(r.frase)))
+    .map((r, k) => ({ ...r, k, idx: trovaIndice(r.frase) }));
+  if (rosse.length + avvisi.length + aRischio.length > 0)
+    passi.push({ chiave: 'subito', titolo: 'Da controllare subito', conta: rosse.length + avvisi.length + aRischio.length });
   if (arancioni.length > 0)
     passi.push({ chiave: 'arancioni', titolo: 'Frasi da chiarire', conta: arancioni.length });
   if (spenteIniziali.size > 0)
@@ -567,6 +590,56 @@ export function RevisioneGuidata({
             </div>
           ))}
           {bottoneAltre('rosse', rosse.length)}
+          {aRischio.length > 0 && (
+            <p className="muted small" style={{ marginTop: 12 }}>
+              Frasi a rischio secondo la catena (numeri, negazioni, lateralità, farmaci,
+              disaccordo tra i due motori): ognuna dice perché la vedi.
+            </p>
+          )}
+          {limita('rischio', aRischio).map((v) => (
+            <div key={`k${v.k}`} className={`rg-item rg-arancione${fatte.has(`k${v.k}`) ? ' rg-fatta' : ''}`}>
+              {cardFrase(v.idx)}
+              <p className="rg-motivo">
+                {(v.motivi ?? []).map((m, j) => (
+                  <span key={j} className="rg-tab" style={{ marginRight: 6, fontSize: '0.8em', padding: '2px 9px' }}>{m}</span>
+                ))}
+              </p>
+              {!fatte.has(`k${v.k}`) && (
+                <div className="rg-azioni">
+                  {bottoneRiascolta(v.idx >= 0 ? frasiIniziali[v.idx] : v.frase)}
+                  {v.idx >= 0 && (
+                    <button type="button" className="btn" onClick={() => { setInModifica(v.idx); setBozzaModifica(frasi[v.idx]); }}>
+                      ✏️ Correggi la frase
+                    </button>
+                  )}
+                  <button type="button" className="btn btn-ghost" onClick={() => segna(`k${v.k}`)}>
+                    ✓ Va bene così
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+          {bottoneAltre('rischio', aRischio.length)}
+          {numeri.some((n) => n.confermato === false) && (
+            <details style={{ marginTop: 10 }}>
+              <summary className="sez-summary">
+                Numeri non confermati dal secondo orecchio ({numeri.filter((n) => n.confermato === false).length})
+              </summary>
+              <ul style={{ marginTop: 8 }}>
+                {numeri.filter((n) => n.confermato === false).slice(0, 30).map((n, j) => (
+                  <li key={j}>
+                    <strong>{n.valore}{n.unita ? ` ${n.unita}` : ''}</strong>
+                    {typeof n.frase === 'number' && frasiIniziali[n.frase] ? <> — {frasiIniziali[n.frase].slice(0, 90)}{frasiIniziali[n.frase].length > 90 ? '…' : ''}</> : null}
+                    {typeof n.secondo === 'number' && (
+                      <button type="button" className="btn" style={{ marginLeft: 8 }} onClick={() => riascolta(n.secondo as number, true)}>
+                        🎧 {mmss(n.secondo)}
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
         </div>
       )}
 
@@ -691,6 +764,9 @@ export function RevisioneGuidata({
           Estratti automaticamente, mai dedotti («non indicato» = nel dettato non
           c&apos;era). Correggi qui prima di confermare.
         </p>
+        <input type="hidden" name="tempo_revisione_s" value={Math.round((Date.now() - inizioRevisione) / 1000)} readOnly />
+        <input type="hidden" name="flag_totali" value={chiuse} readOnly />
+        <input type="hidden" name="flag_accettati_senza_riascolto" value={chiuseSenzaRiascolto} readOnly />
         <div className="grid2">
           {Object.entries(campi)
             .filter(([, v]) => typeof v === 'string')

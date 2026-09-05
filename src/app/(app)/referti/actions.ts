@@ -50,7 +50,19 @@ export async function confermaBozza(formData: FormData) {
   // Best-effort, mai bloccante, solo numeri.
   if (row?.ai_text) {
     try {
-      const m = misuraRevisione(row.ai_text, testo);
+      const m: Record<string, unknown> = { ...misuraRevisione(row.ai_text, testo) };
+      // Telemetria della revisione (2026-09-06): tempo alla conferma e
+      // segnalazioni accettate senza riascolto — la misura dell'automatismo.
+      const num = (k: string, max: number) => {
+        const v = Number(formData.get(k));
+        return Number.isFinite(v) && v >= 0 ? Math.min(Math.round(v), max) : null;
+      };
+      const t = num('tempo_revisione_s', 6 * 3600);
+      const ft = num('flag_totali', 1000);
+      const fs = num('flag_accettati_senza_riascolto', 1000);
+      if (t !== null) m.tempo_revisione_s = t;
+      if (ft !== null) m.flag_totali = ft;
+      if (fs !== null) m.flag_accettati_senza_riascolto = fs;
       await query(
         `update referti_bozze
             set payload = jsonb_set(payload, '{revisione}', $3::jsonb)

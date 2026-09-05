@@ -128,6 +128,32 @@ export async function POST(req: NextRequest) {
           typeof p[1] === 'number' && Number.isFinite(p[1]) && p[1] >= 0
       )
       .map((p: [string, number]) => [p[0].slice(0, 100), p[1]]),
+    // Punteggio di rischio per frase con i motivi («perché lo vedo») e
+    // tabella dei numeri (valore, unità, secondo di audio, conferma del
+    // secondo orecchio): alimentano il primo passo della revisione guidata.
+    rischio_frasi: lista(body?.rischio_frasi)
+      .filter((v: unknown): v is { frase: string; punteggio: number; motivi?: unknown } =>
+        !!v && typeof v === 'object' && typeof (v as any).frase === 'string'
+        && typeof (v as any).punteggio === 'number' && Number.isFinite((v as any).punteggio))
+      .slice(0, 40)
+      .map((v) => ({
+        frase: v.frase.slice(0, 500),
+        punteggio: Math.round(v.punteggio),
+        motivi: (Array.isArray(v.motivi) ? v.motivi : [])
+          .filter((m: unknown): m is string => typeof m === 'string').slice(0, 8)
+          .map((m: string) => m.slice(0, 120)),
+      })),
+    numeri: lista(body?.numeri)
+      .filter((v: unknown): v is { valore: string; unita?: unknown; frase?: unknown; secondo?: unknown; confermato?: unknown } =>
+        !!v && typeof v === 'object' && typeof (v as any).valore === 'string')
+      .slice(0, 200)
+      .map((v) => ({
+        valore: v.valore.slice(0, 20),
+        unita: typeof v.unita === 'string' ? v.unita.slice(0, 12) : '',
+        frase: typeof v.frase === 'number' ? v.frase : null,
+        secondo: typeof v.secondo === 'number' && Number.isFinite(v.secondo) ? v.secondo : null,
+        confermato: typeof v.confermato === 'boolean' ? v.confermato : null,
+      })),
     richiede_revisione: true,
   };
 
