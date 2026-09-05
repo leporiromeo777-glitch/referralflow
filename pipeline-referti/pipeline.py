@@ -88,6 +88,12 @@ ATEMPO = float(os.environ.get("REFERTI_ATEMPO", "0.8"))
 # 23 min: 416 frasi-copia su 441, testo utile 3.9k car contro 9.7k con
 # denoise). Le voci sintetiche sono troppo pulite per decidere: qui comanda
 # il microfono dello studio. Rimisurare solo se cambia il registratore.
+# RICONFERMATO il 2026-09-05: la letteratura (arXiv 2512.17562: denoise
+# peggiore in 40 scenari su 40) e una riprova sul set sintetico con la
+# pagella pesata (ponderato 19.3 -> 18.6 senza denoise) tirano di nuovo
+# verso lo spegnimento; sull'audio vero, di nuovo, il testo si accorcia
+# (12.5k -> 10.3k caratteri). Resta ACCESO. Non rilitigare senza un
+# dettato VERO con trascrizione d'oro verificata dal medico.
 DENOISE = os.environ.get("REFERTI_DENOISE", "1") == "1"
 
 # Conserva delle coppie per l'addestramento (piano precisione 2026-08-23,
