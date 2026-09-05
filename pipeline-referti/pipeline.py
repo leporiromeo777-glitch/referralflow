@@ -1348,14 +1348,37 @@ def arbitra_divergenze(testo: str, divergenze: list[dict], file_id: str) -> tupl
         f'   a: «{d["versione_a"]}»\n   b: «{d["versione_b"]}»'
         for k, d in enumerate(candidate)
     )
-    try:
-        uscita = chiama_ollama(
-            PROMPT_ARBITRO.replace("{punti}", punti), file_id, "confronto",
-            formato_json=True, modello=MODELLO_CORREZIONE, max_gettoni=800,
-        )
-        dati = json.loads(uscita)
-    except (RuntimeError, json.JSONDecodeError):
-        return testo, 0
+    # Al cloud svizzero sul testo ANONIMO (2026-09-05, cfg arbitro=1): qui
+    # si innesca anche la cache dell'anonimizzatore col testo intero, che le
+    # fasi successive riusano. Su qualunque intoppo si resta in locale.
+    dati = None
+    trasporto = "locale"
+    cfg_est = _config_esterno()
+    if cfg_est and cfg_est.get("arbitro") == "1" and _esterno_attivo() == "openai":
+        an_testo = _anonimizza_per_esterno(testo, file_id, con_mappa=True, riusa=True)
+        an_punti = (_anonimizza_per_esterno(punti, file_id, con_mappa=True, riusa=True)
+                    if an_testo is not None else None)
+        if an_punti is not None:
+            try:
+                uscita = _chiama_esterno_openai(
+                    PROMPT_ARBITRO.replace("{punti}", an_punti[0]), file_id,
+                    schema=_oggetto({"scelte": {"type": "array", "items": _oggetto({
+                        "punto": {"type": "integer", "minimum": 1, "maximum": len(candidate)},
+                        "scelta": {"type": "string", "enum": ["a", "b", "incerto"]}})}}))
+                dati = _estrai_json(uscita)
+                trasporto = "esterno"
+            except RuntimeError:
+                dati = None
+    if not isinstance(dati, dict):
+        try:
+            uscita = chiama_ollama(
+                PROMPT_ARBITRO.replace("{punti}", punti), file_id, "confronto",
+                formato_json=True, modello=MODELLO_CORREZIONE, max_gettoni=800,
+            )
+            dati = json.loads(uscita)
+            trasporto = "locale"
+        except (RuntimeError, json.JSONDecodeError):
+            return testo, 0
     scelte = dati.get("scelte") if isinstance(dati, dict) else None
     if not isinstance(scelte, list):
         return testo, 0
@@ -1374,8 +1397,8 @@ def arbitra_divergenze(testo: str, divergenze: list[dict], file_id: str) -> tupl
             testo = testo.replace(va, vb, 1)
             applicate += 1
     log.info(
-        "fase=confronto file=%s esito=arbitrato punti=%d scelte_b=%d durata=%.1fs",
-        file_id, len(candidate), applicate, time.monotonic() - inizio,
+        "fase=confronto file=%s esito=arbitrato trasporto=%s punti=%d scelte_b=%d durata=%.1fs",
+        file_id, trasporto, len(candidate), applicate, time.monotonic() - inizio,
     )
     return testo, applicate
 
@@ -1812,9 +1835,14 @@ def trascrivi_voxtral_b(originale: Path, uscita_txt: Path, wav_voxtral: Path,
         log.warning("fase=trascrizione_b motore=voxtral esito=fallito motivo=timeout file=%s",
                     file_id)
         return False
-    if esito.returncode != 0 or not uscita_txt.is_file():
+    return _valuta_voxtral_b(esito.returncode, uscita_txt, file_id, caratteri_a, inizio)
+
+
+def _valuta_voxtral_b(codice: int, uscita_txt: Path, file_id: str,
+                      caratteri_a: int, inizio: float) -> bool:
+    if codice != 0 or not uscita_txt.is_file():
         log.warning("fase=trascrizione_b motore=voxtral esito=fallito codice=%d file=%s",
-                    esito.returncode, file_id)
+                    codice, file_id)
         return False
     testo = uscita_txt.read_text(encoding="utf-8").strip()
     # Sentinella anti-collasso: una passata B molto più corta della A è un
@@ -1827,6 +1855,52 @@ def trascrivi_voxtral_b(originale: Path, uscita_txt: Path, wav_voxtral: Path,
              len(testo), time.monotonic() - inizio, file_id)
     return True
 
+
+
+# Voxtral IN PARALLELO a whisper A (2026-09-05): la passata B costava 575 s
+# in serie dopo i 216 s di whisper. Insieme sulla GPU ci stanno (whisper
+# ~4 GB + Voxtral ~9.5 GB, col modello Ollama scaricato prima). Interruttore
+# separato: senza il file, la passata B resta in serie come prima.
+VOXTRAL_PARALLELO_SWITCH = Path.home() / ".referralflow-voxtral-parallelo"
+
+
+def avvia_voxtral_b(originale: Path, uscita_txt: Path, wav_voxtral: Path,
+                    file_id: str):
+    """Avvia Voxtral in sottofondo; torna (processo, inizio) o None."""
+    script = Path(__file__).resolve().parent / "trascrivi-voxtral.py"
+    if not (VOXTRAL_VENV_PY.is_file() and script.is_file()):
+        return None
+    try:
+        subprocess.run(
+            ["ffmpeg", "-hide_banner", "-nostdin", "-y", "-i", str(originale),
+             "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", str(wav_voxtral)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            timeout=600, check=True)
+    except (subprocess.SubprocessError, OSError):
+        return None
+    libera_llm()
+    try:
+        proc = subprocess.Popen(
+            [str(VOXTRAL_VENV_PY), str(script), str(wav_voxtral), str(uscita_txt)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        return None
+    log.info("fase=trascrizione_b motore=voxtral esito=avviato_in_parallelo file=%s", file_id)
+    return (proc, time.monotonic())
+
+
+def concludi_voxtral_b(avvio, uscita_txt: Path, file_id: str, caratteri_a: int) -> bool:
+    if avvio is None:
+        return False
+    proc, inizio = avvio
+    try:
+        codice = proc.wait(timeout=max(60, VOXTRAL_TIMEOUT_S - (time.monotonic() - inizio)))
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        log.warning("fase=trascrizione_b motore=voxtral esito=fallito motivo=timeout file=%s",
+                    file_id)
+        return False
+    return _valuta_voxtral_b(codice, uscita_txt, file_id, caratteri_a, inizio)
 
 # ——— Rifinitura tempi col ForcedAligner (2026-09-04) ———
 # Sgancia il riascolto dal motore: il testo FINALE viene riallineato
@@ -2238,8 +2312,17 @@ def _applica_lista(testo: str, coppie: list, file_id: str,
 
 # ── Percorso esterno: anonimizza → modello di punta → lista → guardie ───────
 
+# Dati identificativi già trovati per referto (file_id → [(dato, tipo)]):
+# solo in memoria, mai su disco. Servono a non rifare la passata del
+# modello quattro volte sullo stesso dettato (2026-09-05: ~20 dei 47 minuti
+# di un referto). Le fasi successive alla prima passano riusa=True: i dati
+# noti si coprono dal codice, la controprova AI gira comunque.
+_ANON_NOTI: dict[str, list[tuple[str, str]]] = {}
+_ANON_NOTI_MAX = 12
+
+
 def _anonimizza_per_esterno(testo: str, file_id: str,
-                            con_mappa: bool = False):
+                            con_mappa: bool = False, riusa: bool = False):
     """Prepara il testo per l'invio esterno: il modello LOCALE individua i
     dati identificativi, il CODICE li sostituisce con segnaposto («Persona
     N», «[data N]», «[contatto]») più la rete regex (AVS, email, telefoni,
@@ -2281,6 +2364,14 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
     _rete(r"[\w.+-]+@[\w-]+\.[\w.]+", "dato")
     _rete(r"(?<!\d)(?:\+41|0041|0)\s?7[5-9](?:[ .]?\d{2,3}){3}(?!\d)", "dato")
     _rete(r"(?<!\d)\d{1,2}[./]\d{1,2}[./](?:19|20)?\d{2}(?!\d)", "data")
+    # Date in lettere («12 marzo 1951») e indirizzi con civico («via Pretorio
+    # 14»): deterministici, così non dipendono dal modello né dalla cache
+    # (2026-09-06, dal collaudo della cache: sopravvivevano quando il modello
+    # non li elencava).
+    _rete(r"(?<!\w)\d{1,2}(?:°|º)?\s+(?:gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|"
+          r"settembre|ottobre|novembre|dicembre)\s+(?:19|20)\d{2}(?!\d)", "data")
+    _rete(r"(?<!\w)(?:[Vv]ia|[Vv]iale|[Pp]iazza|[Cc]orso|[Vv]icolo|[Ss]trada|[Ll]argo)\s+"
+          r"(?:[A-ZÀ-Ý][\w'’.-]*\s+){1,4}\d{1,4}[a-z]?(?!\d)", "dato")
 
     # Titolo + maiuscole (2026-09-05, banco di 20 lettere sintetiche: il
     # cognome del medico in «Dr. med. Nome Cognome» sopravviveva in 7 lettere
@@ -2304,33 +2395,20 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
         r"([A-ZÀ-Ý][a-zà-ÿ'’\-]{2,}(?:\s+[A-ZÀ-Ý][a-zà-ÿ'’\-]{2,}){0,2})",
         _titolati, anon)
     for pezzo, seg in pezzi_titolati.items():
-        if len(pezzo) >= 4:
+        # Anche i nomi corti («Pia», «Ivo»): solo maiuscoli e a parola intera,
+        # così non si toccano parole comuni. Trovato dal collaudo della cache
+        # (2026-09-06): «Pia» dopo «signora» finiva in sensibili ma restava
+        # libera altrove → fase annullata per «dato sopravvissuto».
+        if len(pezzo) >= 3:
             anon = re.sub(r"(?<!\w)" + re.escape(pezzo) + r"(?!\w)", seg, anon)
 
-    try:
-        uscita = chiama_ollama(
-            PROMPT_DATI_PERSONALI.replace("{testo}", anon), file_id,
-            "correzione_esterna", formato_json=True, max_gettoni=1600,
-            modello=MODELLO_ANONIMIZZA,
-        )
-        dati = json.loads(uscita)
-    except (RuntimeError, json.JSONDecodeError):
-        return None
-    voci = dati.get("dati") if isinstance(dati, dict) else None
-    if not isinstance(voci, list):
-        return None
-    for voce in voci[:80]:
-        if not isinstance(voce, dict):
-            continue
-        s = str(voce.get("testo", "")).strip()
-        tipo = str(voce.get("tipo", "")).strip()
-        if not s or len(s) > 80 or s not in anon and s.lower() not in anon.lower():
-            continue
-        if s.startswith("Persona ") or s.startswith("[data") or s.startswith("[dato"):
-            continue  # è un nostro segnaposto, non un dato
-        # Ogni segnaposto è NUMERATO e finisce in mappa (2026-09-04): serve
-        # alla bella copia per ricostruire il testo vero al carattere. Fuori
-        # esce solo il numero progressivo — stessa privacy di prima.
+    trovati: list[tuple[str, str]] = []
+
+    def _copri(s: str, tipo: str) -> None:
+        """Copre un dato (e i pezzi di un nome) con segnaposto numerati.
+        Ogni segnaposto finisce in mappa (2026-09-04): serve alla bella copia
+        per ricostruire il testo vero al carattere. Fuori esce solo il numero."""
+        nonlocal anon, persone, date_n, altri_n
         if tipo == "nome":
             persone += 1
             segnaposto = f"Persona {persone}"
@@ -2344,20 +2422,56 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
             mappa[segnaposto] = s
         anon = re.sub(re.escape(s), segnaposto, anon, flags=re.IGNORECASE)
         sensibili.append(s)
+        trovati.append((s, tipo))
         # Le singole parole di un nome composto (≥4 lettere) coprono le
         # citazioni parziali («la signora Rossi» dopo «Maria Rossi»): ogni
         # pezzo ha il SUO segnaposto, così il ripristino è esatto (il nome
         # intero al posto del solo cognome romperebbe l'impronta).
         if tipo == "nome":
             for pezzo in s.split():
-                if len(pezzo) >= 4 and pezzo.isalpha() and re.search(
-                        r"(?<!\w)" + re.escape(pezzo) + r"(?!\w)", anon, re.IGNORECASE):
+                if not pezzo.isalpha() or len(pezzo) < 3:
+                    continue
+                # ≥4 lettere: anche minuscolo; 3 lettere («Pia»): solo maiuscolo.
+                flags = re.IGNORECASE if len(pezzo) >= 4 else 0
+                if re.search(r"(?<!\w)" + re.escape(pezzo) + r"(?!\w)", anon, flags):
                     persone += 1
                     segnaposto_p = f"Persona {persone}"
                     mappa[segnaposto_p] = pezzo
                     anon = re.sub(r"(?<!\w)" + re.escape(pezzo) + r"(?!\w)",
-                                  segnaposto_p, anon, flags=re.IGNORECASE)
+                                  segnaposto_p, anon, flags=flags)
                     sensibili.append(pezzo)
+
+    noti = _ANON_NOTI.get(file_id) if riusa else None
+    if noti is not None:
+        # Dati già trovati su questo referto: li copre il codice, senza
+        # rifare la passata del modello. La controprova AI gira comunque.
+        for s, tipo in noti:
+            if s in anon or s.lower() in anon.lower():
+                _copri(s, tipo)
+        voci = []
+    else:
+        try:
+            uscita = chiama_ollama(
+                PROMPT_DATI_PERSONALI.replace("{testo}", anon), file_id,
+                "correzione_esterna", formato_json=True, max_gettoni=1600,
+                modello=MODELLO_ANONIMIZZA,
+            )
+            dati = json.loads(uscita)
+        except (RuntimeError, json.JSONDecodeError):
+            return None
+        voci = dati.get("dati") if isinstance(dati, dict) else None
+        if not isinstance(voci, list):
+            return None
+    for voce in voci[:80]:
+        if not isinstance(voce, dict):
+            continue
+        s = str(voce.get("testo", "")).strip()
+        tipo = str(voce.get("tipo", "")).strip()
+        if not s or len(s) > 80 or s not in anon and s.lower() not in anon.lower():
+            continue
+        if s.startswith("Persona ") or s.startswith("[data") or s.startswith("[dato"):
+            continue  # è un nostro segnaposto, non un dato
+        _copri(s, tipo)
 
     # Parenti storpiati (2026-09-05, dal banco sintetico): la trascrizione
     # scrive lo stesso cognome in due modi («Bernasconi» / «Bernascone») e il
@@ -2393,15 +2507,23 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
     # la controprova del 27b non ha coperto nulla in più di quella del 12b, e
     # alternare 12b/27b costa ~40 s di ricarica a ogni lettera: 166 s contro
     # 86 s con un solo modello).
-    try:
-        uscita2 = chiama_ollama(
-            PROMPT_DATI_PERSONALI.replace("{testo}", anon), file_id,
-            "correzione_esterna", formato_json=True, max_gettoni=1600,
-            modello=MODELLO_ANONIMIZZA,
-        )
-        dati2 = json.loads(uscita2)
-    except (RuntimeError, json.JSONDecodeError):
-        return None
+    # Con la cache (fasi successive alla prima dello stesso referto) la
+    # controprova legge SOLO le frasi che contengono ancora una parola
+    # maiuscola non coperta (non a inizio frase, non sigla, non segnaposto):
+    # è lì che può nascondersi un nome sfuggito; il resto è già passato
+    # dalla controprova piena della prima passata. Da 40-60 s a pochi secondi.
+    testo_controprova = anon if noti is None else _frasi_con_maiuscole(anon)
+    dati2: dict = {"dati": []}
+    if testo_controprova.strip():
+        try:
+            uscita2 = chiama_ollama(
+                PROMPT_DATI_PERSONALI.replace("{testo}", testo_controprova), file_id,
+                "correzione_esterna", formato_json=True, max_gettoni=1600,
+                modello=MODELLO_ANONIMIZZA,
+            )
+            dati2 = json.loads(uscita2)
+        except (RuntimeError, json.JSONDecodeError):
+            return None
     # Ciò che la seconda passata considera un nome NON annulla più tutto:
     # viene REDATTO anche lui (2026-09-04, visto dal vivo: sigle tipo H1N1
     # scambiate per nomi bocciavano stabilmente la fase). Privacy uguale o
@@ -2419,14 +2541,60 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
             segnaposto = f"Persona {persone}"
             mappa[segnaposto] = s
             anon = re.sub(re.escape(s), segnaposto, anon, flags=re.IGNORECASE)
+            trovati.append((s, "nome"))
             redatte += 1
     if redatte:
         log.info("fase=correzione_esterna file=%s controprova_redatte=%d",
                  file_id, redatte)
+    # Memoria per le fasi successive dello stesso referto (solo in RAM).
+    if noti is None:
+        _ANON_NOTI[file_id] = trovati
+    else:
+        _ANON_NOTI[file_id] = noti + [x for x in trovati if x not in noti]
+    while len(_ANON_NOTI) > _ANON_NOTI_MAX:
+        _ANON_NOTI.pop(next(iter(_ANON_NOTI)))
     log.info(
-        "fase=correzione_esterna file=%s anonimizzazione=ok persone=%d date=%d",
-        file_id, persone, date_n)
+        "fase=correzione_esterna file=%s anonimizzazione=ok persone=%d date=%d riuso=%d",
+        file_id, persone, date_n, int(noti is not None))
     return (anon, mappa) if con_mappa else anon
+
+
+_SIGLE_NOTE = {"ECG", "FE", "NYHA", "BPCO", "PA", "FC", "BMI", "TAC", "RMN", "PTCA", "CABG",
+               "TAVI", "FA", "BAV", "BBS", "BBD", "PM", "ICD", "CRT", "LDL", "HDL", "TSH",
+               "INR", "AVS", "PAPs", "IRC", "IMA", "STEMI", "NSTEMI", "SCA", "DM", "IA",
+               "IM", "IT", "IP", "SA", "SM", "VS", "VD", "AS", "AD", "TC", "RX", "OK"}
+
+
+def _frasi_con_maiuscole(anon: str) -> str:
+    """Le sole frasi del testo anonimo con una parola maiuscola sospetta:
+    non a inizio frase, non segnaposto, non sigla nota, non tutta maiuscola
+    corta. Serve alla controprova ridotta (vedi _anonimizza_per_esterno)."""
+    fuori = []
+    for frase in re.split(r"(?<=[.!?;\n])\s+", anon):
+        parole = frase.split()
+        sospette = False
+        for i, w in enumerate(parole):
+            w2 = w.strip("«»\"'()[],.;:")
+            if not w2 or not w2[0].isupper() or i == 0:
+                continue
+            if w2 in ("Persona", "Attuale") or w2.isupper() and len(w2) <= 6 or w2 in _SIGLE_NOTE:
+                continue
+            if len(w2) < 3 or w2.isdigit():
+                continue
+            if parole[i - 1].rstrip().endswith((".", ":", "?", "!", "»")):
+                continue  # in pratica inizio frase
+            sospette = True
+            break
+        if sospette:
+            fuori.append(frase.strip())
+    return "\n".join(fuori)
+
+
+def _ripristina(testo: str, mappa: dict[str, str]) -> str:
+    """Rimette i dati veri al posto dei segnaposto (i più lunghi prima)."""
+    for segnaposto in sorted(mappa, key=len, reverse=True):
+        testo = testo.replace(segnaposto, mappa[segnaposto])
+    return testo
 
 
 def _chiama_esterno(prompt: str, file_id: str) -> str:
@@ -2593,7 +2761,7 @@ def _catena_compatta_esterna(testo: str, file_id: str) -> str | None:
     in sola memoria), poi passano dalle STESSE guardie delle fasi locali.
     Qualsiasi intoppo → None → catena tradizionale."""
     inizio = time.monotonic()
-    esito_anon = _anonimizza_per_esterno(testo, file_id, con_mappa=True)
+    esito_anon = _anonimizza_per_esterno(testo, file_id, con_mappa=True, riusa=True)
     if esito_anon is None:
         return None
     anon, mappa = esito_anon
@@ -2691,7 +2859,7 @@ def _correggi_a_lista_esterna(testo: str, file_id: str,
     guardie del percorso locale. Le coppie che citano un segnaposto cadono
     da sole (contengono cifre). Ogni intoppo → None → catena locale."""
     inizio = time.monotonic()
-    anon = _anonimizza_per_esterno(testo, file_id)
+    anon = _anonimizza_per_esterno(testo, file_id, riusa=True)
     if anon is None:
         return None
     try:
@@ -3178,7 +3346,7 @@ def avvocato_esterno(bozza: str, grezzo: str, file_id: str) -> list[dict] | None
     if AVVOCATO_SEP.strip() in bozza or AVVOCATO_SEP.strip() in grezzo:
         return None
     esito_anon = _anonimizza_per_esterno(grezzo + AVVOCATO_SEP + bozza,
-                                         file_id, con_mappa=True)
+                                         file_id, con_mappa=True, riusa=True)
     if esito_anon is None:
         return None
     anon, mappa = esito_anon
@@ -3400,7 +3568,7 @@ def struttura_standard(testo: str, file_id: str) -> str | None:
             frasi[-1] = (frasi[-1].rstrip() + " " + f).strip()
         else:
             frasi.append(f)
-    esito_anon = _anonimizza_per_esterno(testo, file_id, con_mappa=True)
+    esito_anon = _anonimizza_per_esterno(testo, file_id, con_mappa=True, riusa=True)
     if esito_anon is None:
         log.warning("fase=struttura file=%s esito=annullata motivo=anonimizzazione", file_id)
         return None
@@ -3659,6 +3827,87 @@ def _anonimizzatore_da_mappa(mappa: dict[str, str]):
     return anonima
 
 
+def _indici_nel_piano(piano: dict) -> set[int]:
+    """Tutti i numeri di frase citati in un piano di fusione (liste di interi)."""
+    fuori: set[int] = set()
+    def visita(v) -> None:
+        if isinstance(v, list):
+            if all(isinstance(x, int) for x in v):
+                fuori.update(v)
+            else:
+                for x in v:
+                    visita(x)
+        elif isinstance(v, dict):
+            for x in v.values():
+                visita(x)
+    visita(piano)
+    return fuori
+
+
+def _fondi_piani(base: dict, extra: dict, solo: set[int] | None = None) -> dict:
+    """Unisce un secondo piano al primo: le liste di frasi si sommano (senza
+    doppioni; con `solo`, entrano solo quegli indici), le diagnosi esistenti
+    si abbinano per numero, gli esami per nome, le nuove diagnosi si
+    accodano; per l'azione di una sezione vince quella più «forte»."""
+    def lista(v) -> list[int]:
+        return [x for x in (v if isinstance(v, list) else []) if isinstance(x, int)]
+    def filtra(v) -> list[int]:
+        return [x for x in lista(v) if solo is None or x in solo]
+    def somma(a, b) -> list[int]:
+        out = lista(a)
+        out.extend(x for x in filtra(b) if x not in out)
+        return out
+    forza = {"uguale": 0, "aggiungi": 1, "aggiorna": 1, "sostituisci": 2, "nuovo": 2}
+    fuso = json.loads(json.dumps(base))
+    for k in ("saluto", "regia", "congedo"):
+        fuso[k] = somma(fuso.get(k), extra.get(k))
+    de = {d.get("numero"): d for d in fuso.get("diagnosi_esistenti", []) if isinstance(d, dict)}
+    for d in extra.get("diagnosi_esistenti", []) if isinstance(extra.get("diagnosi_esistenti"), list) else []:
+        if not isinstance(d, dict):
+            continue
+        if d.get("numero") in de:
+            de[d["numero"]]["frasi"] = somma(de[d["numero"]].get("frasi"), d.get("frasi"))
+            de[d["numero"]]["attuale"] = somma(de[d["numero"]].get("attuale"), d.get("attuale"))
+        else:
+            nd = dict(d); nd["frasi"] = filtra(d.get("frasi")); nd["attuale"] = filtra(d.get("attuale"))
+            fuso.setdefault("diagnosi_esistenti", []).append(nd)
+            de[d.get("numero")] = nd
+    for d in extra.get("diagnosi_nuove", []) if isinstance(extra.get("diagnosi_nuove"), list) else []:
+        if isinstance(d, dict):
+            nd = dict(d); nd["frasi"] = filtra(d.get("frasi")); nd["attuale"] = filtra(d.get("attuale"))
+            if nd["frasi"] or nd["attuale"]:
+                fuso.setdefault("diagnosi_nuove", []).append(nd)
+    sb = fuso.get("sezioni") if isinstance(fuso.get("sezioni"), dict) else {}
+    se = extra.get("sezioni") if isinstance(extra.get("sezioni"), dict) else {}
+    for k, v in se.items():
+        if not isinstance(v, dict):
+            continue
+        cur = sb.get(k) if isinstance(sb.get(k), dict) else {"azione": "uguale", "frasi": []}
+        nuove_frasi = filtra(v.get("frasi"))
+        cur["frasi"] = somma(cur.get("frasi"), nuove_frasi)
+        if nuove_frasi and forza.get(str(v.get("azione")), 0) > forza.get(str(cur.get("azione")), 0):
+            cur["azione"] = v.get("azione")
+        sb[k] = cur
+    fuso["sezioni"] = sb
+    def nn(s) -> str:
+        return re.sub(r"[^a-z]", "", str(s).lower())
+    es = {nn(e.get("nome")): e for e in fuso.get("esami", []) if isinstance(e, dict)}
+    for e in extra.get("esami", []) if isinstance(extra.get("esami"), list) else []:
+        if not isinstance(e, dict):
+            continue
+        nuove_frasi = filtra(e.get("frasi"))
+        if nn(e.get("nome")) in es:
+            cur = es[nn(e.get("nome"))]
+            cur["frasi"] = somma(cur.get("frasi"), nuove_frasi)
+            if nuove_frasi and forza.get(str(e.get("azione")), 0) > forza.get(str(cur.get("azione")), 0):
+                cur["azione"] = e.get("azione")
+        elif nuove_frasi:
+            ne = dict(e); ne["frasi"] = nuove_frasi
+            fuso.setdefault("esami", []).append(ne)
+            es[nn(e.get("nome"))] = ne
+    return fuso
+
+
 def fusione_lettera(lettera: str, dettato: str, file_id: str) -> str | None:
     """Solo il testo della lettera aggiornata (vedi fusione_lettera_completa)."""
     esito = fusione_lettera_completa(lettera, dettato, file_id)
@@ -3705,18 +3954,45 @@ def fusione_lettera_completa(lettera: str, dettato: str, file_id: str) -> dict |
     elenco = "\n".join(f"{i + 1}. {anon_d(f)}" for i, f in enumerate(frasi))
 
     modello = (_config_esterno() or {}).get("modello_struttura") or None
-    try:
-        uscita = _chiama_esterno_openai(
-            PROMPT_FUSIONE.replace("{struttura}", "\n".join(struttura)).replace("{frasi}", elenco),
-            file_id, modello=modello,
-            schema=_schema_fusione(len(frasi), [d["numero"] for d in prec["diagnosi"]]))
-    except RuntimeError:
-        log.warning("fase=fusione file=%s esito=fallita motivo=esterno", file_id)
-        return None
-    piano = _estrai_json(uscita)
-    if not isinstance(piano, dict):
+    schema = _schema_fusione(len(frasi), [d["numero"] for d in prec["diagnosi"]])
+
+    def chiedi_piano(indici: list[int]) -> dict | None:
+        el = "\n".join(f"{i}. {anon_d(frasi[i - 1])}" for i in indici)
+        try:
+            u = _chiama_esterno_openai(
+                PROMPT_FUSIONE.replace("{struttura}", "\n".join(struttura)).replace("{frasi}", el),
+                file_id, modello=modello, schema=schema)
+        except RuntimeError:
+            return None
+        p = _estrai_json(u)
+        return p if isinstance(p, dict) else None
+
+    # Blocchi da ~30 frasi (2026-09-05, dalla ricerca: l'accuratezza dei
+    # modelli sulle liste lunghe cala col numero di voci e un piano JSON per
+    # 116 frasi supera i 2K token di uscita dove i modelli aperti inciampano —
+    # le 17 frasi «dimenticate» del collaudo). Poi una seconda passata SOLO
+    # sulle frasi rimaste fuori («gleaning»). Il codice fonde i piani.
+    tutti = list(range(1, len(frasi) + 1))
+    blocchi = [tutti[i:i + 30] for i in range(0, len(tutti), 30)] if len(tutti) > 45 else [tutti]
+    piano: dict | None = None
+    for blocco in blocchi:
+        pb = chiedi_piano(blocco)
+        if pb is None:
+            if piano is None:
+                log.warning("fase=fusione file=%s esito=fallita motivo=esterno", file_id)
+                return None
+            continue
+        piano = pb if piano is None else _fondi_piani(piano, pb)
+    if piano is None:
         log.warning("fase=fusione file=%s esito=scartata motivo=json", file_id)
         return None
+    mancanti = [i for i in tutti if i not in _indici_nel_piano(piano)]
+    if mancanti and len(mancanti) < len(tutti):
+        pb = chiedi_piano(mancanti)
+        if pb is not None:
+            piano = _fondi_piani(piano, pb, solo=set(mancanti))
+        log.info("fase=fusione file=%s gleaning=%d recuperate=%d", file_id, len(mancanti),
+                 len([i for i in mancanti if i in _indici_nel_piano(piano)]))
 
     usate: set[int] = set()
     def prendi(v) -> list[str]:
@@ -3901,8 +4177,9 @@ def fusione_lettera_completa(lettera: str, dettato: str, file_id: str) -> dict |
 
 PROMPT_AGGIORNA_ESAME = """Sei l'assistente di un cardiologo. Qui sotto ci sono il paragrafo di un esame nella lettera PRECEDENTE e le frasi che il medico ha dettato OGGI con i valori nuovi. Riscrivi il paragrafo AGGIORNATO: stessa struttura e stesse frasi del paragrafo precedente, con i valori nuovi al posto dei vecchi dove il medico li ha dettati; i valori non menzionati oggi restano quelli precedenti. La data tra parentesi accanto al nome dell'esame diventa quella dettata se c'è, altrimenti resta quella precedente.
 
-REGOLE ASSOLUTE:
-- NESSUN numero che non sia nel paragrafo precedente o nel dettato di oggi.
+I NUMERI sono stati sostituiti da GETTONI come ⟪N3⟫. Regole assolute:
+- Non scrivere MAI cifre: solo gettoni, copiati ESATTAMENTE. Per ogni misura, il gettone del valore dettato oggi va al posto del gettone del valore vecchio della stessa misura.
+- Tutti i gettoni del dettato di oggi devono comparire nel paragrafo aggiornato.
 - Nessuna informazione nuova, nessuna frase inventata.
 - I segnaposto come «Persona 1» o «[data 3]» restano ESATTAMENTE come sono.
 - Rispondi SOLO col JSON {"paragrafo": "..."}.
@@ -3917,25 +4194,37 @@ DETTATO DI OGGI:
 def _aggiorna_paragrafo_esame(paragrafo: str, nuove: list[str], mappa: dict,
                               anonima, file_id: str, modello: str | None) -> str | None:
     """Il paragrafo dell'esame riscritto coi valori dettati, o None (ripiego
-    al paragrafo precedente + valori in chiaro). Guardie: i numeri del
-    risultato ⊆ numeri(precedente) ∪ numeri(dettato), tutti i numeri dettati
-    presenti, lunghezza sensata — controllate sul testo anonimo E sul testo
-    reale dopo il ripristino dei nomi."""
-    def numeri(s: str) -> set[str]:
-        # «1,5» e «1.5» sono lo stesso numero; «10,0» → «10».
-        out = set()
-        for n in re.findall(r"\d+(?:[.,]\d+)?", s):
-            n = n.replace(",", ".")
-            if "." in n:
-                n = n.rstrip("0").rstrip(".")
-            out.add(n)
-        return out
+    al paragrafo precedente + valori in chiaro). Dal 2026-09-05 per
+    RIEMPIMENTO: i numeri (di paragrafo e dettato) diventano gettoni opachi
+    ⟪N7⟫, il modello scrive solo la prosa copiando i gettoni, il codice
+    rimette i numeri. Guardie: nessuna cifra libera in uscita, solo gettoni
+    noti, tutti i gettoni NUOVI del dettato presenti, lunghezza sensata,
+    nessun segnaposto residuo dopo il ripristino."""
     prec_anon = anonima(paragrafo)
     nuove_anon = [anonima(f) for f in nuove]
+    gettoni: dict[str, str] = {}   # ⟪N3⟫ → "45"
+    inverso: dict[str, str] = {}   # "45" → ⟪N3⟫
+    RX_SEG = r"(\[data \d+\]|\[dato \d+\]|Persona \d+)"
+
+    def maschera(s: str) -> str:
+        def _g(m: "re.Match[str]") -> str:
+            num = m.group(0)
+            if num not in inverso:
+                inverso[num] = f"⟪N{len(inverso) + 1}⟫"
+                gettoni[inverso[num]] = num
+            return inverso[num]
+        parti = re.split(RX_SEG, s)
+        return "".join(x if i % 2 else re.sub(r"\d+(?:[.,]\d+)?", _g, x)
+                       for i, x in enumerate(parti))
+
+    prec_m = maschera(prec_anon)
+    nuove_m = [maschera(f) for f in nuove_anon]
+    g_prec = set(re.findall(r"⟪N\d+⟫", prec_m))
+    g_nuovi = set().union(*(set(re.findall(r"⟪N\d+⟫", f)) for f in nuove_m)) if nuove_m else set()
     try:
         uscita = _chiama_esterno_openai(
-            PROMPT_AGGIORNA_ESAME.replace("{prec}", prec_anon)
-                                 .replace("{nuove}", "\n".join(nuove_anon)),
+            PROMPT_AGGIORNA_ESAME.replace("{prec}", prec_m)
+                                 .replace("{nuove}", "\n".join(nuove_m)),
             file_id, modello=modello,
             schema=_oggetto({"paragrafo": {"type": "string"}}))
     except RuntimeError:
@@ -3944,28 +4233,25 @@ def _aggiorna_paragrafo_esame(paragrafo: str, nuove: list[str], mappa: dict,
     testo = str(dati.get("paragrafo", "")).strip() if isinstance(dati, dict) else ""
     if not testo:
         return None
-    ammessi = numeri(prec_anon) | set().union(*(numeri(f) for f in nuove_anon))
-    dettati = set().union(*(numeri(f) for f in nuove_anon))
-    # I numeri NUOVI del dettato devono comparire tutti; un numero dettato che
-    # era già nel paragrafo precedente può mancare (il medico lo citava come
-    # valore vecchio: «FE 45%, era 35%»). Nessun numero estraneo.
-    dettati_nuovi = dettati - numeri(prec_anon)
-    estranei = numeri(testo) - ammessi
-    mancanti = dettati_nuovi - numeri(testo)
-    if estranei or mancanti:
-        log.info("fase=fusione file=%s esame=scartato motivo=numeri estranei=%d mancanti=%d",
-                 file_id, len(estranei), len(mancanti))
+    usati = set(re.findall(r"⟪N\d+⟫", testo))
+    libere = re.search(r"\d", re.sub(r"⟪N\d+⟫|" + RX_SEG, "", testo))
+    estranei = usati - (g_prec | g_nuovi)
+    mancanti = (g_nuovi - g_prec) - usati
+    if libere or estranei or mancanti:
+        log.info("fase=fusione file=%s esame=scartato motivo=gettoni cifre_libere=%d estranei=%d mancanti=%d",
+                 file_id, int(bool(libere)), len(estranei), len(mancanti))
         return None
-    if not (0.5 * len(prec_anon) <= len(testo) <= 1.8 * len(prec_anon) + 200):
+    if not (0.5 * len(prec_m) <= len(testo) <= 2.5 * len(prec_m) + 200):
         log.info("fase=fusione file=%s esame=scartato motivo=lunghezza", file_id)
         return None
-    for segnaposto in sorted(mappa, key=len, reverse=True):
-        testo = testo.replace(segnaposto, mappa[segnaposto])
-    ammessi_reali = numeri(paragrafo) | set().union(*(numeri(f) for f in nuove))
-    if not numeri(testo) <= ammessi_reali or "Persona " in testo or "[dat" in testo:
-        log.info("fase=fusione file=%s esame=scartato motivo=numeri_reali", file_id)
+    for g in sorted(gettoni, key=len, reverse=True):
+        testo = testo.replace(g, gettoni[g])
+    testo = _ripristina(testo, mappa)
+    if "⟪" in testo or "Persona " in testo or "[dat" in testo:
+        log.info("fase=fusione file=%s esame=scartato motivo=residui", file_id)
         return None
     return testo
+
 
 
 _TITOLI_MODELLO = {"diagnosi principali", "diagnosi secondarie", "comorbidità",
@@ -4092,7 +4378,7 @@ def bella_copia(testo: str, file_id: str) -> str | None:
     """Il testo torna ripunteggiato o non torna affatto: None = si tiene
     l'originale (esterno giù, anonimizzazione incerta o impronta violata)."""
     inizio = time.monotonic()
-    esito_anon = _anonimizza_per_esterno(testo, file_id, con_mappa=True)
+    esito_anon = _anonimizza_per_esterno(testo, file_id, con_mappa=True, riusa=True)
     if esito_anon is None:
         log.warning("fase=bella_copia file=%s esito=annullato motivo=anonimizzazione", file_id)
         return None
@@ -4129,6 +4415,24 @@ def ispeziona_llm(testo: str, file_id: str) -> list[str]:
     modifica al testo (compito separato apposta: un 12B non riesce a
     trasformare e annotare insieme)."""
     inizio = time.monotonic()
+    # Al cloud svizzero sul testo anonimo (2026-09-05, cfg ispezione=1): i
+    # segmenti tornano coi segnaposto e la mappa li rimette in chiaro.
+    cfg_est = _config_esterno()
+    if cfg_est and cfg_est.get("ispezione") == "1" and _esterno_attivo() == "openai":
+        an = _anonimizza_per_esterno(testo, file_id, con_mappa=True, riusa=True)
+        if an is not None:
+            try:
+                uscita = _chiama_esterno_openai(
+                    PROMPT_ISPEZIONE.replace("{testo}", an[0]), file_id)
+                dubbi = [_ripristina(d, an[1]) for d in _parse_ispezione(uscita)]
+                log.info(
+                    "fase=ispezione_llm file=%s esito=ok_esterno dubbi=%d durata=%.1fs",
+                    file_id, len(dubbi), time.monotonic() - inizio,
+                )
+                return dubbi
+            except RuntimeError:
+                log.warning("fase=ispezione_llm file=%s esito=esterno_fallito ripiego=locale",
+                            file_id)
     uscita = chiama_ollama(
         PROMPT_ISPEZIONE.replace("{testo}", testo), file_id, "ispezione_llm",
         modello=MODELLO_ISPEZIONE,
@@ -4228,19 +4532,47 @@ def estrai_campi(testo: str, file_id: str) -> dict:
     inizio = time.monotonic()
     prompt = PROMPT_ESTRAZIONE.replace("{testo}", testo)
     dati = None
-    for _ in range(2):
-        uscita = chiama_ollama(prompt, file_id, "estrazione", formato_json=True,
-                               modello=MODELLO_ESTRAZIONE)
-        try:
-            candidato = json.loads(uscita)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(candidato, dict):
-            dati = candidato
-            break
+    trasporto = "locale"
+    # Al cloud svizzero sul testo anonimo (2026-09-05, cfg estrazione=1): il
+    # modello risponde «Persona 1» / «[data 2]» e la mappa rimette i dati
+    # veri nei campi. Su qualunque intoppo, estrazione locale come prima.
+    mappa: dict[str, str] = {}
+    cfg_est = _config_esterno()
+    if cfg_est and cfg_est.get("estrazione") == "1" and _esterno_attivo() == "openai":
+        an = _anonimizza_per_esterno(testo, file_id, con_mappa=True, riusa=True)
+        if an is not None:
+            try:
+                uscita = _chiama_esterno_openai(
+                    PROMPT_ESTRAZIONE.replace("{testo}", an[0]), file_id)
+                candidato = _estrai_json(uscita)
+                if isinstance(candidato, dict):
+                    dati, mappa, trasporto = candidato, an[1], "esterno"
+            except RuntimeError:
+                pass
+    if dati is None:
+        for _ in range(2):
+            uscita = chiama_ollama(prompt, file_id, "estrazione", formato_json=True,
+                                   modello=MODELLO_ESTRAZIONE)
+            try:
+                candidato = json.loads(uscita)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(candidato, dict):
+                dati = candidato
+                break
     if dati is None:
         log.error("fase=estrazione file=%s esito=errore motivo=json_non_parsabile", file_id)
         raise RuntimeError("estrazione non parsabile")
+    if mappa:
+        def _rip(v):
+            if isinstance(v, str):
+                return _ripristina(v, mappa)
+            if isinstance(v, list):
+                return [_rip(x) for x in v]
+            if isinstance(v, dict):
+                return {_ripristina(str(k), mappa): _rip(x) for k, x in v.items()}
+            return v
+        dati = _rip(dati)
 
     for chiave in CAMPI_RICHIESTI:
         if chiave not in dati or dati[chiave] in (None, ""):
@@ -4253,8 +4585,8 @@ def estrai_campi(testo: str, file_id: str) -> dict:
         if c != "valori_numerici" and dati[c] != "non indicato"
     )
     log.info(
-        "fase=estrazione file=%s esito=ok campi_presenti=%d valori=%d durata=%.1fs",
-        file_id, presenti, len(dati["valori_numerici"]), time.monotonic() - inizio,
+        "fase=estrazione file=%s esito=ok trasporto=%s campi_presenti=%d valori=%d durata=%.1fs",
+        file_id, trasporto, presenti, len(dati["valori_numerici"]), time.monotonic() - inizio,
     )
     return dati
 
@@ -4569,6 +4901,12 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # Prima delle trascrizioni: via il modello LLM dalla memoria — sulla
         # GPU whisper e gemma non ci stanno insieme (vedi libera_llm).
         libera_llm()
+        # Voxtral parte ORA, in parallelo a whisper (interruttore dedicato).
+        voxtral_avvio = None
+        if (VOXTRAL_B_SWITCH.is_file() and VOXTRAL_PARALLELO_SWITCH.is_file()
+                and not visita):
+            voxtral_avvio = avvia_voxtral_b(
+                ingresso, percorso(".b.txt"), percorso(".voxtral.wav"), file_id)
         trascrivi(percorso(".wav"), percorso(".txt"), file_id, fase, vocab, con_tempi=True)
         # Anti-troncamento (vedi TRONC_*): se la trascrizione copre molto meno
         # audio del WAV, quasi sempre un loop si è mangiato la coda del
@@ -4639,7 +4977,11 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # Doppia trascrizione: con l'interruttore acceso la passata B la fa
         # Voxtral (testimone indipendente); su visite o intoppi, whisper B.
         fatto_b = False
-        if VOXTRAL_B_SWITCH.is_file() and not visita:
+        if voxtral_avvio is not None:
+            fatto_b = concludi_voxtral_b(
+                voxtral_avvio, percorso(".b.txt"), file_id,
+                len(percorso(".txt").read_text(encoding="utf-8")))
+        elif VOXTRAL_B_SWITCH.is_file() and not visita:
             fatto_b = trascrivi_voxtral_b(
                 ingresso, percorso(".b.txt"), percorso(".voxtral.wav"),
                 file_id, len(percorso(".txt").read_text(encoding="utf-8")))

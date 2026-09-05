@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 // Revisione guidata della bozza (2026-08-25, su richiesta dell'utente: la
 // pagina «tutto insieme» era diventata incasinata): un passo alla volta,
@@ -50,6 +50,8 @@ export function RevisioneGuidata({
   riparazioni = [],
   testoStrutturato = '',
   provenienza = [],
+  avvisi = [],
+  letteraPrecedente = '',
 }: {
   testo: string;
   divagazioni: string[];
@@ -62,6 +64,8 @@ export function RevisioneGuidata({
   riparazioni?: Riparazione[];
   testoStrutturato?: string;
   provenienza?: [string, string][];
+  avvisi?: string[];
+  letteraPrecedente?: string;
 }) {
   const frasiIniziali = useMemo(() => spezzaInFrasi(testo), [testo]);
 
@@ -86,16 +90,47 @@ export function RevisioneGuidata({
     aggiornato: { t: 'aggiornato', fg: '#8a5d0c', bg: '#f3e9d6' },
     misto: { t: 'precedente + oggi', fg: '#5a4a86', bg: '#e9e4f2' },
   };
+  // Un badge di provenienza deve APRIRE qualcosa (la ricerca del 2026 è
+  // netta: le citazioni aumentano la fiducia anche quando sono casuali):
+  // «dettato oggi» riascolta il punto, «lettera precedente» mostra la riga
+  // d'origine. Mai badge decorativi.
+  const [rigaPrec, setRigaPrec] = useState<{ frase: string; riga: string } | null>(null);
+  const rigaPrecedenteDi = (frase: string): string | null => {
+    if (!letteraPrecedente) return null;
+    const n = normalizza(frase);
+    if (n.length < 15) return null;
+    const righe = letteraPrecedente.replace(/\r/g, '').split('\n');
+    const hit = righe.find((r) => {
+      const nr = normalizza(r);
+      return nr.length >= 15 && (nr.includes(n) || n.includes(nr));
+    });
+    return hit ? hit.trim() : null;
+  };
   const chipOrigine = (frase: string) => {
     const o = origineDi(frase);
     const v = o ? ETICHETTE[o] : undefined;
     if (!v) return null;
+    const stile = {
+      fontSize: 10.5, fontWeight: 600, letterSpacing: '.05em', textTransform: 'uppercase' as const,
+      color: v.fg, background: v.bg, borderRadius: 4, padding: '2px 6px', marginLeft: 8,
+      whiteSpace: 'nowrap' as const, verticalAlign: 'middle', border: 0, cursor: 'pointer',
+    };
+    if (o === 'precedente') {
+      const riga = rigaPrecedenteDi(frase);
+      return (
+        <button type="button" style={stile} title="Mostra la riga della lettera precedente"
+          onClick={() => setRigaPrec(rigaPrec?.frase === frase ? null : { frase, riga: riga ?? '' })}>
+          {v.t} ↗
+        </button>
+      );
+    }
+    const s = tempoDiFrase(frase);
+    if (s === null) return <span style={{ ...stile, cursor: 'default' }}>{v.t}</span>;
     return (
-      <span style={{
-        fontSize: 10.5, fontWeight: 600, letterSpacing: '.05em', textTransform: 'uppercase',
-        color: v.fg, background: v.bg, borderRadius: 4, padding: '2px 6px', marginLeft: 8,
-        whiteSpace: 'nowrap', verticalAlign: 'middle',
-      }}>{v.t}</span>
+      <button type="button" style={stile} title={`Riascolta qui (${mmss(s)})`}
+        onClick={() => riascolta(s, /\d/.test(frase))}>
+        {v.t} 🎧
+      </button>
     );
   };
   const [frasi, setFrasi] = useState<string[]>(frasiIniziali);
@@ -171,9 +206,13 @@ export function RevisioneGuidata({
     if (migliore < 0 || punteggio < Math.max(3, Math.ceil(cerca.length * 0.6))) return null;
     return paroleNorm[migliore][1];
   };
-  const riascolta = (secondi: number) => {
+  // Riascolto a 1,5x a scelta (fino a 2x la comprensione non cala), ma
+  // SEMPRE a 1x sui passaggi con cifre: lì l'orecchio deve essere lento.
+  const [veloce, setVeloce] = useState(false);
+  const riascolta = (secondi: number, conCifre = false) => {
     const a = document.getElementById('audio-dettato') as HTMLAudioElement | null;
     if (!a) return;
+    a.playbackRate = veloce && !conCifre ? 1.5 : 1;
     a.currentTime = Math.max(0, secondi - 1.5);
     void a.play().catch(() => {});
   };
@@ -182,9 +221,11 @@ export function RevisioneGuidata({
   const bottoneRiascolta = (frase: string) => {
     const s = tempoDiFrase(frase);
     if (s === null) return null;
+    const cifre = /\d/.test(frase);
     return (
-      <button type="button" className="btn" onClick={() => riascolta(s)}>
-        🎧 Riascolta qui ({mmss(s)})
+      <button type="button" className="btn" title={cifre ? 'Riascolto a 1x: ci sono numeri' : undefined}
+        onClick={() => riascolta(s, cifre)}>
+        🎧 Riascolta qui ({mmss(s)}){veloce && cifre ? ' · 1x' : ''}
       </button>
     );
   };
@@ -240,15 +281,20 @@ export function RevisioneGuidata({
     frasiIniziali.find((f) => f.includes(v.a)) ?? null;
 
   // Passi presenti solo se hanno contenuto (i campi e la rilettura sempre).
+  // Triage a due livelli (ricerca 2026: sotto il 70% di affidabilità un
+  // aiuto peggiora la prestazione, e se i rossi sono quasi sempre falsi il
+  // rosso vero passa): PRIMA solo ciò che può fare danno — frasi non
+  // supportate dal dettato, avvisi su cifre e farmaci — poi il resto. Ogni
+  // lista mostra al massimo 7 voci, le altre a richiesta.
   const passi: { chiave: string; titolo: string; conta?: number }[] = [];
-  if (riparazioni.length > 0)
-    passi.push({ chiave: 'ripar', titolo: 'Correzioni automatiche', conta: riparazioni.length });
-  if (rosse.length > 0)
-    passi.push({ chiave: 'rosse', titolo: 'Frasi da verificare col dettato', conta: rosse.length });
+  if (rosse.length + avvisi.length > 0)
+    passi.push({ chiave: 'subito', titolo: 'Da controllare subito', conta: rosse.length + avvisi.length });
   if (arancioni.length > 0)
     passi.push({ chiave: 'arancioni', titolo: 'Frasi da chiarire', conta: arancioni.length });
   if (spenteIniziali.size > 0)
     passi.push({ chiave: 'spente', titolo: 'Frasi spente dall’AI', conta: spenteIniziali.size });
+  if (riparazioni.length > 0)
+    passi.push({ chiave: 'ripar', titolo: 'Correzioni automatiche', conta: riparazioni.length });
   if (note.length > 0)
     passi.push({ chiave: 'note', titolo: 'Note per la segreteria', conta: note.length });
   if (Object.keys(campi).filter((k) => typeof campi[k] === 'string').length > 0)
@@ -258,6 +304,43 @@ export function RevisioneGuidata({
   const [passo, setPasso] = useState(0);
   const attivo = passi[passo].chiave;
   const ultimo = passo === passi.length - 1;
+
+  // Ripresa dal passo lasciato (per questa bozza, in questo browser).
+  const chiaveRipresa = typeof window !== 'undefined' ? `rg-passo:${window.location.pathname}` : '';
+  useEffect(() => {
+    try {
+      const v = chiaveRipresa ? window.localStorage.getItem(chiaveRipresa) : null;
+      const n = v === null ? NaN : Number(v);
+      if (Number.isInteger(n) && n > 0 && n < passi.length) setPasso(n);
+    } catch { /* niente memoria locale: si parte dal primo passo */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    try { if (chiaveRipresa) window.localStorage.setItem(chiaveRipresa, String(passo)); } catch { /* ignorato */ }
+  }, [passo, chiaveRipresa]);
+
+  // Tasti: ← → cambiano passo (non mentre si scrive in un campo).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName ?? '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === 'ArrowRight' && passo < passi.length - 1) { e.preventDefault(); setPasso(passo + 1); }
+      if (e.key === 'ArrowLeft' && passo > 0) { e.preventDefault(); setPasso(passo - 1); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [passo, passi.length]);
+
+  const LIMITE = 7;
+  const [estese, setEstese] = useState<Set<string>>(new Set());
+  const limita = <T,>(chiave: string, lista: T[]): T[] =>
+    estese.has(chiave) ? lista : lista.slice(0, LIMITE);
+  const bottoneAltre = (chiave: string, totale: number) =>
+    totale > LIMITE && !estese.has(chiave) ? (
+      <button type="button" className="btn" onClick={() => setEstese((prev) => new Set(prev).add(chiave))}>
+        Mostra le altre {totale - LIMITE}
+      </button>
+    ) : null;
 
   const cardFrase = (idx: number) =>
     idx >= 0 ? (
@@ -279,15 +362,22 @@ export function RevisioneGuidata({
           </div>
         </div>
       ) : (
-        <p className="rg-frase">
-          {frasi[idx]}
-          {chipOrigine(frasiIniziali[idx])}
-          {modificate.has(idx) && (
-            <span style={{ color: 'var(--cta)', fontWeight: 600, marginLeft: 8 }}>
-              ✓ frase aggiornata (entra così nel referto)
-            </span>
+        <div>
+          <p className="rg-frase">
+            {frasi[idx]}
+            {chipOrigine(frasiIniziali[idx])}
+            {modificate.has(idx) && (
+              <span style={{ color: 'var(--cta)', fontWeight: 600, marginLeft: 8 }}>
+                ✓ frase aggiornata (entra così nel referto)
+              </span>
+            )}
+          </p>
+          {rigaPrec?.frase === frasiIniziali[idx] && (
+            <p className="rg-motivo">
+              {rigaPrec.riga ? <>Dalla lettera precedente: «{rigaPrec.riga}»</> : 'Riga d’origine non ritrovata nella lettera precedente.'}
+            </p>
           )}
-        </p>
+        </div>
       )
     ) : (
       <div>
@@ -323,7 +413,18 @@ export function RevisioneGuidata({
         </div>
         <p className="muted small">
           Passo {passo + 1} di {passi.length} — sistemi una cosa alla volta; alla fine
-          rileggi tutto e confermi. Niente si salva finché non confermi.
+          rileggi tutto e confermi. Niente si salva finché non confermi. Tasti ← → per
+          cambiare passo.
+          {parole.length > 0 && (
+            <>
+              {' '}
+              <button type="button" className={`rg-tab${veloce ? ' attivo' : ''}`} style={{ marginLeft: 6 }}
+                title="Riascolto più veloce; sui passaggi con numeri resta a 1x"
+                onClick={() => setVeloce(!veloce)}>
+                ⏩ Riascolto 1,5x {veloce ? 'acceso' : 'spento'}
+              </button>
+            </>
+          )}
         </p>
       </div>
 
@@ -335,7 +436,7 @@ export function RevisioneGuidata({
             il merito medico lo giudichi tu: se una correzione è sbagliata,
             annullala e torna la parola dettata.
           </p>
-          {riparazioni.map((v, i) => {
+          {limita('ripar', riparazioni.map((v, i) => ({ v, i }))).map(({ v, i }) => {
             const contesto = fraseConRiparazione(v);
             // Ancora sulle frasi INIZIALI (immutabili) e ricerca ELASTICA
             // (senza maiuscole/punteggiatura): il confronto rigido perdeva
@@ -411,16 +512,35 @@ export function RevisioneGuidata({
               </div>
             );
           })}
+          {bottoneAltre('ripar', riparazioni.length)}
         </div>
       )}
 
-      {attivo === 'rosse' && (
+      {attivo === 'subito' && (
         <div className="rg-corpo">
           <p className="muted">
-            L&apos;avvocato del diavolo non trova queste frasi nel dettato: riascolta il
-            punto (player qui sopra) e correggi, oppure conferma che va bene così.
+            Solo ciò che può fare danno: avvisi su cifre e farmaci, e frasi che
+            l&apos;avvocato del diavolo non trova nel dettato. Riascolta il punto e
+            correggi, oppure conferma che va bene così.
           </p>
-          {rosse.map((v) => (
+          {limita('avvisi', avvisi.map((a, i) => ({ a, i }))).map(({ a, i }) => (
+            <div key={`a${i}`} className={`rg-item rg-rossa${fatte.has(`a${i}`) ? ' rg-fatta' : ''}`}>
+              <p className="rg-frase">⚠️ {a}</p>
+              {!fatte.has(`a${i}`) && (
+                <div className="rg-azioni">
+                  {(a.match(/«([^»]+)»/g) ?? []).slice(0, 2).map((m) => bottoneRiascolta(m.replace(/[«»]/g, ''))).find(Boolean) ?? null}
+                  <button type="button" className="btn" onClick={() => setPasso(passi.length - 1)}>
+                    ✏️ Correggi nella rilettura finale
+                  </button>
+                  <button type="button" className="btn btn-ghost" onClick={() => segna(`a${i}`)}>
+                    ✓ Controllato
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+          {bottoneAltre('avvisi', avvisi.length)}
+          {limita('rosse', rosse).map((v) => (
             <div key={v.k} className={`rg-item rg-rossa${fatte.has(`r${v.k}`) ? ' rg-fatta' : ''}`}>
               {cardFrase(v.idx)}
               <p className="rg-motivo">→ {v.motivo || 'non trovata nel dettato'}</p>
@@ -446,6 +566,7 @@ export function RevisioneGuidata({
               )}
             </div>
           ))}
+          {bottoneAltre('rosse', rosse.length)}
         </div>
       )}
 
@@ -456,7 +577,7 @@ export function RevisioneGuidata({
             una proposta dal glossario, applicala con un clic; altrimenti correggi o
             lascia com&apos;è.
           </p>
-          {arancioni.map((v) => (
+          {limita('arancioni', arancioni).map((v) => (
             <div key={v.k} className={`rg-item rg-arancione${fatte.has(`c${v.k}`) ? ' rg-fatta' : ''}`}>
               {cardFrase(v.idx)}
               {v.proposta && !fatte.has(`c${v.k}`) && (
@@ -496,6 +617,7 @@ export function RevisioneGuidata({
               )}
             </div>
           ))}
+          {bottoneAltre('arancioni', arancioni.length)}
         </div>
       )}
 
@@ -505,7 +627,7 @@ export function RevisioneGuidata({
             L&apos;AI ha spento queste frasi come fuori tema: NON entreranno nel referto.
             Se una in realtà serve, riaccendila.
           </p>
-          {[...spenteIniziali].map((i) => (
+          {limita('spente', [...spenteIniziali]).map((i) => (
             <div key={i} className={`rg-item${spente.has(i) ? '' : ' rg-fatta'}`}>
               {inModifica === i ? (
                 cardFrase(i)
@@ -534,6 +656,7 @@ export function RevisioneGuidata({
               </div>
             </div>
           ))}
+          {bottoneAltre('spente', spenteIniziali.size)}
         </div>
       )}
 
@@ -646,11 +769,11 @@ export function RevisioneGuidata({
       </div>
 
       <div className="rg-nav">
-        <button type="button" className="btn" disabled={passo === 0} onClick={() => setPasso(passo - 1)}>
+        <button type="button" className="btn" disabled={passo === 0} title="Tasto ←" onClick={() => setPasso(passo - 1)}>
           ← Indietro
         </button>
         {!ultimo ? (
-          <button type="button" className="btn btn-primary" onClick={() => setPasso(passo + 1)}>
+          <button type="button" className="btn btn-primary" title="Tasto →" onClick={() => setPasso(passo + 1)}>
             Avanti →
           </button>
         ) : (

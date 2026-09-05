@@ -111,21 +111,21 @@ function chipProvenienza(origine: string | undefined) {
 }
 
 // Traduce un allarme numerico in una frase semplice per chi rivede la bozza.
+// Formulazione da CONTROLLO DI TRASCRIZIONE (2026-09-05): niente intervalli
+// clinici a schermo e niente «valore fuori norma» — un avviso che dà
+// informazioni per una decisione diagnostica rientra nella regola 11 del
+// regolamento dispositivi (MDCG 2019-11 rev. 1). Qui si segnala solo che il
+// numero, per il campo in cui è finito, è insolito da trascrivere.
 function fraseAllarme(a: Allarme): string {
-  const intervallo = a.intervallo ? String(a.intervallo) : '';
   switch (a.stato) {
     case 'fuori':
-      return intervallo
-        ? `di solito questo valore sta tra ${intervallo}: riascolta l'audio su questo numero`
-        : `sembra fuori dai valori consueti: riascolta l'audio su questo numero`;
+      return `numero insolito per questo campo, spesso una cifra sentita male (una cifra in più o in meno): riascolta l'audio su questo punto`;
     case 'limite':
-      return intervallo
-        ? `è al limite dei valori consueti (${intervallo}): meglio ricontrollarlo`
-        : `è al limite dei valori consueti: meglio ricontrollarlo`;
+      return `numero raro per questo campo: vale un riascolto`;
     case 'non_trovato_nel_testo':
       return `questo numero non si ritrova nel testo: controlla che sia giusto`;
     default:
-      return `da ricontrollare`;
+      return `da riascoltare`;
   }
 }
 
@@ -320,13 +320,11 @@ export default async function RefertoBozza({
         <p className="error">Nessuna lettera aggiornata da applicare: chiedi prima la fusione.</p>
       )}
 
-      {inBozza && (avvisi.length > 0 || allarmi.length > 0) && (
+      {inBozza && allarmi.length > 0 && (
         <div className="card ctrl-box">
-          <h2>Avvisi</h2>
+          <h2>Numeri da riascoltare</h2>
+          <p className="muted small">Controlli di trascrizione: un numero insolito per il campo in cui è finito è quasi sempre una cifra sentita male. Nessun giudizio clinico.</p>
           <ul className="ctrl-list">
-            {avvisi.map((a, i) => (
-              <li key={i}>{a}</li>
-            ))}
             {allarmi.map((a, i) => (
               <li key={i}>
                 <strong>{String(a.campo ?? 'valore').replaceAll('_', ' ')}: {String(a.valore ?? '?')}</strong>{' '}
@@ -387,7 +385,7 @@ export default async function RefertoBozza({
                 </p>
               )}
               {Array.isArray(fusione.provenienza) && fusione.provenienza.length > 0 && (
-                <details>
+                <details open>
                   <summary className="sez-summary">Solo le novità di oggi</summary>
                   <ul style={{ marginTop: 8 }}>
                     {fusione.testo_fuso.split('\n').map((riga, i) => ({ riga, o: fusione.provenienza?.[i] }))
@@ -559,6 +557,8 @@ export default async function RefertoBozza({
                     .filter(([r, o]) => r.trim() && o && o !== 'modello')
                 : []
             }
+            avvisi={avvisi}
+            letteraPrecedente={fusione?.stato === 'fatta' && typeof fusione.lettera_precedente === 'string' ? fusione.lettera_precedente : ''}
             note={Array.isArray(p.note_segreteria) ? p.note_segreteria.filter((n): n is string => typeof n === 'string') : []}
             campi={Object.fromEntries(Object.entries(campi).filter(([, v]) => typeof v === 'string')) as Record<string, string>}
             valoriNumerici={valoriNumerici}
