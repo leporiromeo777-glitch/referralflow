@@ -2469,8 +2469,11 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
         tipo = str(voce.get("tipo", "")).strip()
         if not s or len(s) > 80 or s not in anon and s.lower() not in anon.lower():
             continue
-        if s.startswith("Persona ") or s.startswith("[data") or s.startswith("[dato"):
-            continue  # è un nostro segnaposto, non un dato
+        if re.search(r"Persona \d+|\[dat[ao] \d+\]", s):
+            # Contiene un nostro segnaposto («nato il [data 20]»): NON va in
+            # mappa, altrimenti il ripristino reintroduce il segnaposto
+            # (trovato dal collaudo esami 2026-09-06: residui «[data 20]»).
+            continue
         _copri(s, tipo)
 
     # Parenti storpiati (2026-09-05, dal banco sintetico): la trascrizione
@@ -2535,8 +2538,8 @@ def _anonimizza_per_esterno(testo: str, file_id: str,
             continue
         s = str(voce.get("testo", "")).strip()
         # Conta solo se è davvero nel testo e non è un nostro segnaposto.
-        if (s and len(s) <= 80 and s in anon and not s.startswith("Persona")
-                and not s.startswith("[")):
+        if (s and len(s) <= 80 and s in anon
+                and not re.search(r"Persona \d+|\[dat[ao] \d+\]", s)):
             persone += 1
             segnaposto = f"Persona {persone}"
             mappa[segnaposto] = s
@@ -2591,9 +2594,14 @@ def _frasi_con_maiuscole(anon: str) -> str:
 
 
 def _ripristina(testo: str, mappa: dict[str, str]) -> str:
-    """Rimette i dati veri al posto dei segnaposto (i più lunghi prima)."""
-    for segnaposto in sorted(mappa, key=len, reverse=True):
-        testo = testo.replace(segnaposto, mappa[segnaposto])
+    """Rimette i dati veri al posto dei segnaposto (i più lunghi prima; un
+    secondo giro se un valore ne conteneva un altro)."""
+    for _ in range(3):
+        prima = testo
+        for segnaposto in sorted(mappa, key=len, reverse=True):
+            testo = testo.replace(segnaposto, mappa[segnaposto])
+        if testo == prima:
+            break
     return testo
 
 
@@ -3973,7 +3981,10 @@ def fusione_lettera_completa(lettera: str, dettato: str, file_id: str) -> dict |
     # le 17 frasi «dimenticate» del collaudo). Poi una seconda passata SOLO
     # sulle frasi rimaste fuori («gleaning»). Il codice fonde i piani.
     tutti = list(range(1, len(frasi) + 1))
-    blocchi = [tutti[i:i + 30] for i in range(0, len(tutti), 30)] if len(tutti) > 45 else [tutti]
+    # Soglia 90 (collaudo 2026-09-06): con 63 frasi la chiamata unica ne perdeva
+    # 1, i blocchi da 30 ne perdevano 32 (poi 30 recuperate dal gleaning) e
+    # costavano 4 chiamate. I blocchi servono solo alle liste davvero lunghe.
+    blocchi = [tutti[i:i + 40] for i in range(0, len(tutti), 40)] if len(tutti) > 90 else [tutti]
     piano: dict | None = None
     for blocco in blocchi:
         pb = chiedi_piano(blocco)
@@ -4177,7 +4188,7 @@ def fusione_lettera_completa(lettera: str, dettato: str, file_id: str) -> dict |
 
 PROMPT_AGGIORNA_ESAME = """Sei l'assistente di un cardiologo. Qui sotto ci sono il paragrafo di un esame nella lettera PRECEDENTE e le frasi che il medico ha dettato OGGI con i valori nuovi. Riscrivi il paragrafo AGGIORNATO: stessa struttura e stesse frasi del paragrafo precedente, con i valori nuovi al posto dei vecchi dove il medico li ha dettati; i valori non menzionati oggi restano quelli precedenti. La data tra parentesi accanto al nome dell'esame diventa quella dettata se c'è, altrimenti resta quella precedente.
 
-I NUMERI sono stati sostituiti da GETTONI come ⟪N3⟫. Regole assolute:
+I NUMERI sono stati sostituiti da GETTONI come {{N3}}. Regole assolute:
 - Non scrivere MAI cifre: solo gettoni, copiati ESATTAMENTE. Per ogni misura, il gettone del valore dettato oggi va al posto del gettone del valore vecchio della stessa misura.
 - Tutti i gettoni del dettato di oggi devono comparire nel paragrafo aggiornato.
 - Nessuna informazione nuova, nessuna frase inventata.
@@ -4196,7 +4207,7 @@ def _aggiorna_paragrafo_esame(paragrafo: str, nuove: list[str], mappa: dict,
     """Il paragrafo dell'esame riscritto coi valori dettati, o None (ripiego
     al paragrafo precedente + valori in chiaro). Dal 2026-09-05 per
     RIEMPIMENTO: i numeri (di paragrafo e dettato) diventano gettoni opachi
-    ⟪N7⟫, il modello scrive solo la prosa copiando i gettoni, il codice
+    {{N7}}, il modello scrive solo la prosa copiando i gettoni, il codice
     rimette i numeri. Guardie: nessuna cifra libera in uscita, solo gettoni
     noti, tutti i gettoni NUOVI del dettato presenti, lunghezza sensata,
     nessun segnaposto residuo dopo il ripristino."""
@@ -4210,7 +4221,7 @@ def _aggiorna_paragrafo_esame(paragrafo: str, nuove: list[str], mappa: dict,
         def _g(m: "re.Match[str]") -> str:
             num = m.group(0)
             if num not in inverso:
-                inverso[num] = f"⟪N{len(inverso) + 1}⟫"
+                inverso[num] = "{{N%d}}" % (len(inverso) + 1)
                 gettoni[inverso[num]] = num
             return inverso[num]
         parti = re.split(RX_SEG, s)
@@ -4219,8 +4230,8 @@ def _aggiorna_paragrafo_esame(paragrafo: str, nuove: list[str], mappa: dict,
 
     prec_m = maschera(prec_anon)
     nuove_m = [maschera(f) for f in nuove_anon]
-    g_prec = set(re.findall(r"⟪N\d+⟫", prec_m))
-    g_nuovi = set().union(*(set(re.findall(r"⟪N\d+⟫", f)) for f in nuove_m)) if nuove_m else set()
+    g_prec = set(re.findall(r"\{\{N\d+\}\}", prec_m))
+    g_nuovi = set().union(*(set(re.findall(r"\{\{N\d+\}\}", f)) for f in nuove_m)) if nuove_m else set()
     try:
         uscita = _chiama_esterno_openai(
             PROMPT_AGGIORNA_ESAME.replace("{prec}", prec_m)
@@ -4233,23 +4244,39 @@ def _aggiorna_paragrafo_esame(paragrafo: str, nuove: list[str], mappa: dict,
     testo = str(dati.get("paragrafo", "")).strip() if isinstance(dati, dict) else ""
     if not testo:
         return None
-    usati = set(re.findall(r"⟪N\d+⟫", testo))
-    libere = re.search(r"\d", re.sub(r"⟪N\d+⟫|" + RX_SEG, "", testo))
+    usati = set(re.findall(r"\{\{N\d+\}\}", testo))
+    libere = re.search(r"\d", re.sub(r"\{\{N\d+\}\}|" + RX_SEG, "", testo))
     estranei = usati - (g_prec | g_nuovi)
     mancanti = (g_nuovi - g_prec) - usati
-    if libere or estranei or mancanti:
-        log.info("fase=fusione file=%s esame=scartato motivo=gettoni cifre_libere=%d estranei=%d mancanti=%d",
-                 file_id, int(bool(libere)), len(estranei), len(mancanti))
+    if libere or estranei:
+        log.info("fase=fusione file=%s esame=scartato motivo=gettoni cifre_libere=%d estranei=%d",
+                 file_id, int(bool(libere)), len(estranei))
         return None
+    # Valori nuovi che il modello non ha inserito (misure assenti dal
+    # paragrafo precedente, di solito): il paragrafo resta valido e le frasi
+    # dettate che li contengono seguono VERBATIM, così nulla si perde.
+    coda: list[str] = []
+    if mancanti:
+        for f_m, f_orig in zip(nuove_m, nuove):
+            if set(re.findall(r"\{\{N\d+\}\}", f_m)) & mancanti:
+                coda.append(f_orig)
+        log.info("fase=fusione file=%s esame=aggiornato_con_coda mancanti=%d frasi_accodate=%d",
+                 file_id, len(mancanti), len(coda))
     if not (0.5 * len(prec_m) <= len(testo) <= 2.5 * len(prec_m) + 200):
         log.info("fase=fusione file=%s esame=scartato motivo=lunghezza", file_id)
         return None
     for g in sorted(gettoni, key=len, reverse=True):
         testo = testo.replace(g, gettoni[g])
     testo = _ripristina(testo, mappa)
-    if "⟪" in testo or "Persona " in testo or "[dat" in testo:
-        log.info("fase=fusione file=%s esame=scartato motivo=residui", file_id)
+    if "{{" in testo or "}}" in testo or "Persona " in testo or "[dat" in testo:
+        # Diagnosi: SOLO i segnaposto ignoti (sono etichette, non dati) e il
+        # numero di chiavi della mappa.
+        ignoti = sorted(set(re.findall(r"\[dat[ao] ?\d*\]|Persona ?\d*|\{\{[^}]*\}\}", testo)))[:6]
+        log.info("fase=fusione file=%s esame=scartato motivo=residui ignoti=%s chiavi_mappa=%d",
+                 file_id, ignoti, len(mappa))
         return None
+    if coda:
+        testo += "\n   ↳ Dettato inoltre: " + " ".join(coda)
     return testo
 
 
