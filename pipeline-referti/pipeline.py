@@ -4130,7 +4130,8 @@ def fusione_lettera_completa(lettera: str, dettato: str, file_id: str) -> dict |
                 e["testo"], nuove, mappa, anon_l, file_id, modello)
             if aggiornato:
                 esami_righe.append(aggiornato)
-                righe_aggiornate.add(aggiornato)
+                # riga per riga: il paragrafo può avere la coda «↳ Dettato inoltre»
+                righe_aggiornate.update(r.strip() for r in aggiornato.split("\n") if r.strip())
             else:
                 # Ripiego prudente: il paragrafo precedente resta intero, i
                 # valori nuovi dettati seguono in chiaro — fonde la persona.
