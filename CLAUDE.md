@@ -25,7 +25,7 @@ comunicazione sicura): non li sostituisce. Cliente pilota reale: Centro Cardiolo
   multi-studio: crea prima lo studio slug `studio-demo` e un admin; il vecchio
   `db/seed.sql` è pre-migrazione 007 e non funziona più)
 - DB esistente da versione precedente: applicare in ordine le `db/migrations/0XX_*.sql`
-  mancanti (ultima: `028_confronti_referti.sql`)
+  mancanti (ultima: `029_suggerimenti_tipo.sql`)
 - Anteprima locale sul Mac mini dello studio: `bash mac/avvia-anteprima.sh`
   (installa Node+Postgres, prepara DB e dati demo, avvia su http://localhost:3000;
   vedi `mac/LEGGIMI.md` — obiettivo: Mac mini come server dello studio)
