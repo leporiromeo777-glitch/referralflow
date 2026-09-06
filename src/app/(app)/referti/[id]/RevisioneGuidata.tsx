@@ -835,6 +835,9 @@ export function RevisioneGuidata({
         <input type="hidden" name="tempo_revisione_s" value={Math.round((Date.now() - inizioRevisione) / 1000)} readOnly />
         <input type="hidden" name="flag_totali" value={chiuse} readOnly />
         <input type="hidden" name="flag_accettati_senza_riascolto" value={chiuseSenzaRiascolto} readOnly />
+        <input type="hidden" name="flag_critici_totali" value={rosse.length + avvisi.length + aRischio.length + omesseGravi.length + grandi.length} readOnly />
+        <input type="hidden" name="flag_critici_chiusi" value={[...fatte].filter((id) => /^(a|r|k|g)\d/.test(id) || (id.startsWith('o') && omesseGravi.some((_, i) => id === `o${i}`))).length} readOnly />
+        <input type="hidden" name="revisione_iniziata_at" value={new Date(inizioRevisione).toISOString()} readOnly />
         <div className="grid2">
           {Object.entries(campi)
             .filter(([, v]) => typeof v === 'string')

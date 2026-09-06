@@ -25,7 +25,7 @@ comunicazione sicura): non li sostituisce. Cliente pilota reale: Centro Cardiolo
   multi-studio: crea prima lo studio slug `studio-demo` e un admin; il vecchio
   `db/seed.sql` è pre-migrazione 007 e non funziona più)
 - DB esistente da versione precedente: applicare in ordine le `db/migrations/0XX_*.sql`
-  mancanti (ultima: `029_suggerimenti_tipo.sql`)
+  mancanti (ultima: `030_referti_eventi.sql`)
 - Anteprima locale sul Mac mini dello studio: `bash mac/avvia-anteprima.sh`
   (installa Node+Postgres, prepara DB e dati demo, avvia su http://localhost:3000;
   vedi `mac/LEGGIMI.md` — obiettivo: Mac mini come server dello studio)
@@ -310,7 +310,14 @@ token pubblici, programma del giorno da feed iCal Cassa dei Medici.
   `ombra`; `payload.revisione` con tempo, flag e tassonomia; `payload.fusione`
   con provenienza, riepilogo e `variazioni` delle misure.
 - Dettagli in `pipeline-referti/README.md`; documenti legali in `docs/legale/`
-  (destinazione d'uso, DSFA bozza, email Infomaniak, conservazione audio).
+  (destinazione d'uso con checklist per funzione, DSFA bozza, email Infomaniak,
+  conservazione audio, ciclo di vita dei dati, fornitori cloud, registro
+  trattamenti, incidenti, diritti degli interessati, sorveglianza normativa,
+  classificazione dataset). Registro eventi referti append-only:
+  `referti_eventi` (migrazione 030, `src/lib/referti-eventi.ts`, mai testo
+  clinico). La catena chiama solo fornitori nella lista autorizzata
+  (`FORNITORI_AUTORIZZATI`). Il testo verso il cloud è PSEUDONIMIZZATO
+  (mappa in RAM sul Mac), non anonimo: usare questa parola.
 
 ## Visione di lungo periodo
 Quando più studi useranno ReferralFlow: pagina «Esplora» per i medici invianti (cerca la

@@ -10,6 +10,7 @@ import { deleteFile } from '@/lib/storage';
 import { misuraRevisione } from '@/lib/referti-misura';
 import { tassonomiaModifiche, conLineage } from '@/lib/referti-tassonomia';
 import { trovaPaziente } from '@/lib/referti-allegati';
+import { registraEvento, impronta } from '@/lib/referti-eventi';
 
 const MAX_SUGGERIMENTI = 30;
 
@@ -65,6 +66,14 @@ export async function confermaBozza(formData: FormData) {
       if (t !== null) m.tempo_revisione_s = t;
       if (ft !== null) m.flag_totali = ft;
       if (fs !== null) m.flag_accettati_senza_riascolto = fs;
+      // Prova del controllo umano (Ricerca 17 §17.13): avvisi critici presi
+      // visione e momento di inizio della revisione.
+      const fct = num('flag_critici_totali', 1000);
+      const fcc = num('flag_critici_chiusi', 1000);
+      if (fct !== null) m.flag_critici_totali = fct;
+      if (fcc !== null) m.flag_critici_chiusi = fcc;
+      const iniz = String(formData.get('revisione_iniziata_at') ?? '');
+      if (/^\d{4}-\d{2}-\d{2}T/.test(iniz)) m.revisione_iniziata_at = iniz.slice(0, 40);
       // Tassonomia automatica di ogni modifica (numero, farmaco, negazione,
       // lateralità, termine, formato, stile, frase inserita o tolta).
       try {
@@ -130,6 +139,11 @@ export async function confermaBozza(formData: FormData) {
     }
   }
 
+  await registraEvento(session.studioId, id, 'conferma', session.id, {
+    impronta_testo: impronta(testo),
+    parole_finali: testo.split(/\s+/).filter(Boolean).length,
+    campi: Object.keys(campi).length,
+  });
   revalidatePath('/referti');
   redirect(`/referti/${id}?ok=confermata`);
 }
@@ -161,6 +175,7 @@ export async function richiediFusione(formData: FormData) {
       where id = $1 and studio_id = $2 and stato = 'bozza'`,
     [id, session.studioId, JSON.stringify(richiesta)]
   );
+  await registraEvento(session.studioId, id, 'fusione_richiesta', session.id, { impronta_lettera: impronta(lettera), caratteri: lettera.length });
   revalidatePath(`/referti/${id}`);
   redirect(`/referti/${id}?ok=fusione_richiesta`);
 }
@@ -188,6 +203,7 @@ export async function applicaFusione(formData: FormData) {
       where id = $1 and studio_id = $2 and stato = 'bozza'`,
     [id, session.studioId, b.testo]
   );
+  await registraEvento(session.studioId, id, 'fusione_applicata', session.id, { impronta_testo: impronta(b.testo) });
   revalidatePath(`/referti/${id}`);
   redirect(`/referti/${id}?ok=fusione_applicata`);
 }
@@ -205,6 +221,7 @@ export async function ripristinaBozza(formData: FormData) {
       where id = $1 and studio_id = $2 and stato = 'scartata'`,
     [id, session.studioId]
   );
+  await registraEvento(session.studioId, id, 'ripristino', session.id);
 
   revalidatePath('/referti');
   redirect(`/referti/${id}`);
@@ -236,6 +253,7 @@ export async function eliminaBozza(formData: FormData) {
   for (const a of audio) {
     await deleteFile(a.storage_key);
   }
+  await registraEvento(session.studioId, id, 'eliminazione', session.id, { audio: audio.length });
   await query('delete from referti_audio where bozza_id = $1 and studio_id = $2', [id, session.studioId]);
   await query(
     "delete from referti_bozze where id = $1 and studio_id = $2 and stato = 'scartata'",
@@ -274,6 +292,7 @@ export async function scartaBozza(formData: FormData) {
       where id = $1 and studio_id = $2 and stato = 'bozza'`,
     [id, session.studioId, session.id]
   );
+  await registraEvento(session.studioId, id, 'scarto', session.id);
 
   revalidatePath('/referti');
   redirect('/referti');
@@ -314,6 +333,7 @@ export async function riorganizzaBozza(formData: FormData) {
       where id = $1 and studio_id = $2 and stato = 'bozza'`,
     [id, session.studioId, esito.testo]
   );
+  await registraEvento(session.studioId, id, 'riorganizzazione', session.id, { impronta_testo: impronta(esito.testo) });
   revalidatePath(`/referti/${id}`);
   redirect(`/referti/${id}?ok=strutturato`);
 }
@@ -342,6 +362,7 @@ export async function decidiConfronto(formData: FormData) {
        set scelta = excluded.scelta, motivo = excluded.motivo, deciso_da = excluded.deciso_da, deciso_at = now()`,
     [session.studioId, a, b, scelta, motivo, session.id]
   );
+  await registraEvento(session.studioId, a, 'confronto_deciso', session.id, { scelta, ombra: b });
   revalidatePath('/referti/confronto');
   redirect('/referti/confronto?ok=deciso');
 }
@@ -388,6 +409,7 @@ export async function creaRichiamoDaReferto(formData: FormData) {
       where id = $1 and studio_id = $2`,
     [id, session.studioId, JSON.stringify({ mesi, referral_id: ref.id, creato_at: new Date().toISOString(), da: session.id })]
   );
+  await registraEvento(session.studioId, id, 'richiamo_creato', session.id, { mesi, referral: ref.id });
   revalidatePath(`/referti/${id}`);
   revalidatePath('/richiami');
   redirect(`/referti/${id}?ok=richiamo`);

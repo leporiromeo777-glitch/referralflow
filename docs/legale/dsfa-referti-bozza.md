@@ -20,7 +20,7 @@ completare col legale, 5 settembre 2026. Perché serve: nuova tecnologia
 | Cancellazione dell'audio dopo la consegna della bozza | Mac dello studio | — | — |
 
 Basi legali: contratto di cura + art. 31 cpv. 2 lett. b LPD (esecuzione del
-contratto), segreto professionale art. 321 CP; l'anonimizzazione è
+contratto), segreto professionale art. 321 CP; la pseudonimizzazione è
 documentata nel codice (`_anonimizza_per_esterno`) e nel registro.
 
 ## 2. Necessità e proporzionalità
@@ -28,7 +28,7 @@ documentata nel codice (`_anonimizza_per_esterno`) e nel registro.
 - Perché il cloud: i modelli locali (gemma3:27b) non reggono le fasi di
   lettura clinica alla qualità misurata (banco correttori: gemma-4-31B
   Infomaniak 10 consensi vs modelli locali molto sotto); l'unica cosa che
-  viaggia è testo già anonimizzato e frammentato in giri brevi.
+  viaggia è testo già pseudonimizzato (dato personale per la LPD, trattato come tale) e frammentato in giri brevi.
 - Minimizzazione: audio mai; nomi, date, luoghi, numeri identificativi
   sostituiti da segnaposto numerati; controprova che REDIGE il sospetto;
   finestra di gettoni limitata (1600 sull'anonimizzatore).
@@ -41,7 +41,7 @@ documentata nel codice (`_anonimizza_per_esterno`) e nel registro.
 
 | Rischio | Probabilità | Gravità | Misure |
 |---|---|---|---|
-| Re-identificazione dal testo anonimizzato al fornitore | bassa | alta | segnaposto numerati per tutto, redazione dei sospetti, frammentazione dei giri, nessun audio; DPA con Infomaniak; hosting CH |
+| Re-identificazione dal testo pseudonimizzato al fornitore | bassa | alta | segnaposto numerati per tutto, redazione dei sospetti, frammentazione dei giri, nessun audio; DPA con Infomaniak; hosting CH |
 | Il fornitore conserva i prompt / li usa per addestrare | media (da chiarire) | alta | **domanda formale a Infomaniak** (vedi email-infomaniak.md); clausola contrattuale; in mancanza, ritorno alla catena locale |
 | Errore del modello che altera il senso clinico | media | alta | guardie deterministiche (numeri, unità, negazioni, ribaltamenti), provenienza per riga, revisione umana obbligatoria, misura della revisione |
 | Accesso indebito al Mac / DB | bassa | alta | account dedicato, disco cifrato, 2FA sull'app, backup cifrati, chiavi chmod 600 fuori dal repo |

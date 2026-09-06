@@ -20,7 +20,7 @@ regolatorio chiederà.
 - Il sistema **non fornisce diagnosi, non propone terapie, non calcola
   valori clinici, non prende decisioni sul paziente**.
 - Audio e dati identificativi restano sul Mac dello studio; verso il cloud
-  (svizzero) viaggia solo testo anonimizzato dal codice con controprova.
+  (svizzero) viaggia solo testo PSEUDONIMIZZATO dal codice con controprova (la mappa dei segnaposto resta in memoria sul Mac: non è anonimizzazione in senso LPD).
 
 ## Funzione per funzione
 
@@ -70,8 +70,30 @@ vanno in un modulo separato e isolabile (raccomandazione 3 del rapporto).
   fabbricato e usato nella stessa struttura: decade alla prima vendita.
 - Valutazione d'impatto (art. 22 LPD): probabilmente dovuta (nuova
   tecnologia + dati sanitari). Bozza da preparare con i flussi: audio →
-  whisper locale → anonimizzazione locale → LLM svizzero → ricomposizione
+  whisper locale → pseudonimizzazione locale → LLM svizzero → ricomposizione
   locale → revisione umana.
 - Trasparenza: i referti prodotti con assistenza AI e rivisti da una persona;
   una riga nell'informativa dello studio basta per l'uso amministrativo
   (rapporto Zurigo/UZH), a costo zero e copre.
+
+
+## Checklist per ogni nuova funzione (Ricerca 17 §17.11-17.12)
+
+Prima di mettere in produzione una funzione che tocca il contenuto clinico,
+rispondere e annotare qui sotto:
+
+1. La funzione **trascrive, corregge, impagina o confronta** testo dettato? → documentale, via libera.
+2. **Interpreta** un dato clinico (dice cosa significa un valore, propone una diagnosi, una terapia, una priorità clinica)? → fermarsi: revisione del confine dispositivo medico (MDCG 2019-11 rev. 1, regola 11) prima di procedere.
+3. Il **testo mostrato al medico** parla di trascrizione («numero insolito per questo campo, riascolta») o di clinica («valore fuori norma»)? Solo la prima formulazione è ammessa.
+4. La funzione **cambia la destinazione d'uso** dichiarata in questo documento? Se sì, aggiornare qui e nella DSFA.
+5. **Materiale di vendita**: la funzione viene presentata come aiuto alla scrittura, mai come strumento diagnostico.
+
+### Registro delle decisioni
+
+| Data | Funzione | Documentale? | Decisione |
+|---|---|---|---|
+| 2026-09-05 | Allarmi numerici riformulati come controlli di trascrizione | sì | ammessa |
+| 2026-09-05 | Controllo farmaci (confezioni Swissmedic esistenti) | sì (fedeltà della trascrizione) | ammessa; mai «dose corretta» |
+| 2026-09-06 | Variazioni tra visite marcate «grandi» | sì (verifica del cambiamento dettato) | ammessa; il testo dice «o è vero o è una cifra sentita male», nessun giudizio clinico |
+| 2026-09-06 | Richiami proposti dal referto («controllo tra 6 mesi») | sì (trascrizione di un'indicazione del medico) | ammessa; creato solo al clic |
+| 2026-09-06 | Rischio per frase con gravità | sì (probabilità di errore di trascrizione) | ammessa; la parola «gravità» si riferisce all'errore di trascrizione, non alla clinica |

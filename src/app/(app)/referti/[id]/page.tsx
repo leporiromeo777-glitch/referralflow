@@ -39,7 +39,7 @@ type Payload = {
   riparazioni_applicate?: { da: string; a: string }[];
   testo_grezzo?: string;
   testo_strutturato?: string;
-  revisione?: { quota_modificata?: number; distanza_parole?: number; parole_finali?: number; tempo_revisione_s?: number; flag_totali?: number; flag_accettati_senza_riascolto?: number; classi?: Record<string, number>; origini?: Record<string, number>; modifiche?: { prima: string; dopo: string; classe: string; origine?: string }[] };
+  revisione?: { quota_modificata?: number; distanza_parole?: number; parole_finali?: number; tempo_revisione_s?: number; flag_totali?: number; flag_accettati_senza_riascolto?: number; flag_critici_totali?: number; flag_critici_chiusi?: number; classi?: Record<string, number>; origini?: Record<string, number>; modifiche?: { prima: string; dopo: string; classe: string; origine?: string }[] };
   rischio_frasi?: { frase: string; punteggio: number; motivi?: string[] }[];
   numeri?: { valore: string; unita?: string; frase?: number | null; secondo?: number | null; confermato?: boolean | null }[];
   frasi_omesse?: { frase: string; secondo?: number | null; cifre?: boolean; farmaco?: boolean; copertura?: number | null }[];
@@ -178,6 +178,14 @@ export default async function RefertoBozza({
   );
 
   const p = row.payload;
+  // Registro eventi del referto (append-only, senza contenuti).
+  const eventi = await query<{ azione: string; attore_email: string | null; dettagli: Record<string, unknown>; created_at: string }>(
+    `select e.azione, u.email as attore_email, e.dettagli, e.created_at::text
+       from referti_eventi e left join users u on u.id = e.attore
+      where e.bozza_id = $1 and e.studio_id = $2
+      order by e.created_at asc limit 100`,
+    [params.id, session.studioId]
+  );
 
   // Lettera incrementale: stato della fusione chiesta (se c'è) e proposta
   // automatica della lettera precedente = ultimo referto CONFERMATO dello
@@ -289,10 +297,27 @@ export default async function RefertoBozza({
           {p.revisione.classi && Object.keys(p.revisione.classi).length > 0 && (
             <> Tipi di correzione: {Object.entries(p.revisione.classi).map(([k, n]) => `${k.toLowerCase().replaceAll('_', ' ')} ${n}`).join(', ')}.</>
           )}
+          {typeof p.revisione.flag_critici_totali === 'number' && p.revisione.flag_critici_totali > 0 && (
+            <> Avvisi critici presi visione: {p.revisione.flag_critici_chiusi ?? 0} su {p.revisione.flag_critici_totali}.</>
+          )}
           {p.revisione.origini && Object.keys(p.revisione.origini).length > 0 && (
             <> Da dove nascevano gli errori: {Object.entries(p.revisione.origini).map(([k, n]) => `${k.replaceAll('_', ' ')} ${n}`).join(', ')}.</>
           )}
         </p>
+      )}
+      {eventi.length > 0 && (
+        <details className="card">
+          <summary className="sez-summary">Eventi nell&apos;app ({eventi.length})</summary>
+          <ul style={{ marginTop: 8 }}>
+            {eventi.map((e, i) => (
+              <li key={i} className="small">
+                {dataOra(e.created_at)} · <strong>{e.azione.replaceAll('_', ' ')}</strong>
+                {e.attore_email ? ` · ${e.attore_email}` : ' · catena'}
+                {e.dettagli && Object.keys(e.dettagli).length > 0 ? ` · ${Object.entries(e.dettagli).map(([k, v]) => `${k} ${String(v)}`).join(', ')}` : ''}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
       {(Array.isArray(p.storia) && p.storia.length > 0) && (
         <details className="card">

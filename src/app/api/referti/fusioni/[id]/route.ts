@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'crypto';
 import { query } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
+import { registraEvento } from '@/lib/referti-eventi';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -60,5 +61,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       where id = $1 and studio_id = $2`,
     [params.id, studio.id, JSON.stringify(esito)]
   );
+  await registraEvento(studio.id, params.id, testo ? 'fusione_consegnata' : 'fusione_fallita', null, { righe: provenienza.length });
   return NextResponse.json({ ok: true });
 }

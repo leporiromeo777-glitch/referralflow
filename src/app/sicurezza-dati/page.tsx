@@ -23,8 +23,9 @@ export default function SicurezzaDati() {
             trascritta sul computer dello studio. Prima che un testo esca verso un servizio
             esterno, un programma sostituisce nomi, date di nascita, indirizzi e contatti con
             segnaposto numerati; la corrispondenza resta solo nella memoria del computer dello
-            studio e non viene mai salvata né inviata.</li>
-          <li><strong>Il servizio esterno è in Svizzera e vede solo testo anonimizzato.</strong> Le
+            studio e non viene mai salvata né inviata. Per questo parliamo di testo
+            <em>pseudonimizzato</em>, non anonimo: la chiave esiste, ma non lascia mai lo studio.</li>
+          <li><strong>Il servizio esterno è in Svizzera e vede solo testo pseudonimizzato.</strong> Le
             fasi che richiedono un modello linguistico grande usano un fornitore con server in
             Svizzera; nessun audio, nessun nome, nessun documento intero quando bastano poche
             frasi.</li>

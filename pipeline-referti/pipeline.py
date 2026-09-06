@@ -2795,6 +2795,19 @@ def _chiama_esterno_manuale(anon: str, file_id: str) -> str:
     raise RuntimeError("correttore manuale non ha risposto")
 
 
+# Fornitori cloud autorizzati (2026-09-06, registro in docs/legale/
+# fornitori-cloud.md): la catena rifiuta di parlare con un indirizzo fuori
+# lista, anche se la config lo indica. Estendibile con REFERTI_FORNITORI
+# (prefissi separati da virgola) solo dopo aver aggiornato il registro.
+FORNITORI_AUTORIZZATI = tuple(
+    x.strip() for x in os.environ.get(
+        "REFERTI_FORNITORI", "https://api.infomaniak.com/").split(",") if x.strip())
+
+
+def _fornitore_autorizzato(url: str) -> bool:
+    return any(url.startswith(pref) for pref in FORNITORI_AUTORIZZATI)
+
+
 def _chiama_esterno_openai(prompt: str, file_id: str,
                            modello: str | None = None,
                            schema: dict | None = None) -> str:
@@ -2812,6 +2825,10 @@ def _chiama_esterno_openai(prompt: str, file_id: str,
     impossibili. Un 400 (server che non lo supporta) fa scendere la
     scaletta alle varianti senza schema: nessuna regressione."""
     t_inizio_est = time.monotonic()
+    _cfg_url = (_config_esterno() or {}).get("url", "")
+    if not _fornitore_autorizzato(_cfg_url):
+        log.error("fase=esterno file=%s esito=rifiutato motivo=fornitore_non_autorizzato", file_id)
+        raise RuntimeError("fornitore esterno non autorizzato")
     cfg = _config_esterno()
     if not cfg:
         raise RuntimeError("config esterna mancante")
@@ -5437,6 +5454,34 @@ def valuta_rischio_frasi(finale: str, divergenze: list, dubbi: list, frasi_non_s
 CONSERVA_GIORNI = int(os.environ.get("REFERTI_CONSERVA_GIORNI", "0") or 0)
 
 
+def pulizia_residui() -> None:
+    """Ciclo di vita dei dati (2026-09-06, docs/legale/ciclo-vita-dati.md):
+    file rimasti in lavorazione/ da più di 7 giorni (orfani di riavvii o
+    prove) vengono cancellati; il log del servizio ruota sopra i 20 MB
+    (tre generazioni). Nel log solo conteggi."""
+    try:
+        lav = Path(os.environ.get("REFERTI_LAVORAZIONE", str(Path.home() / "referti" / "lavorazione")))
+        if lav.is_dir():
+            limite = time.time() - 7 * 86400
+            n = 0
+            for f in lav.iterdir():
+                if f.is_file() and f.stat().st_mtime < limite:
+                    f.unlink()
+                    n += 1
+            if n:
+                log.info("fase=ciclo_vita residui_cancellati=%d", n)
+        registro = Path.home() / "referti" / "log" / "servizio.log"
+        if registro.is_file() and registro.stat().st_size > 20 * 1024 * 1024:
+            for k in (2, 1):
+                v = registro.with_suffix(f".log.{k}")
+                if v.exists():
+                    v.replace(registro.with_suffix(f".log.{k + 1}"))
+            registro.replace(registro.with_suffix(".log.1"))
+            log.info("fase=ciclo_vita log_ruotato=1")
+    except OSError:
+        pass
+
+
 def scadenza_dataset_audio() -> None:
     if CONSERVA_GIORNI <= 0:
         return
@@ -6565,6 +6610,7 @@ def servizio(sostituzioni, controlli) -> int:
             # precedente → lettera aggiornata).
             lavora_fusioni()
             scadenza_dataset_audio()
+            pulizia_residui()
             time.sleep(INTERVALLO_SCANSIONE_S)
         except KeyboardInterrupt:
             log.info("fase=servizio esito=fermato motivo=richiesta_utente")

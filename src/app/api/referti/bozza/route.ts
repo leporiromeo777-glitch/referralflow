@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'crypto';
 import { query } from '@/lib/db';
+import { registraEvento } from '@/lib/referti-eventi';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -225,7 +226,8 @@ export async function POST(req: NextRequest) {
   );
   if (inserita) {
     await collega(inserita.id);
-    return NextResponse.json({ id: inserita.id }, { status: 201 });
+    await registraEvento(studio.id, inserita?.id ?? null, 'bozza_ricevuta', null, { versione: String((payload as any).versione_catena?.pipeline ?? ''), ombra: (payload as any).ombra === true });
+  return NextResponse.json({ id: inserita.id }, { status: 201 });
   }
 
   // Retry della pipeline su un file già consegnato: successo, senza doppioni.
