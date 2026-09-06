@@ -54,7 +54,7 @@ CASI = [
     ("controllo tra sei mesi", "6", "numero"),
     ("controllo tra dodici mesi", "12", "numero"),
 ]
-VOCI = ["Alice", "Eddy", "Flo"]
+VOCI = ["Alice"]  # Eddy e Flo sono voci-giocattolo: producono audio inintelligibile, non misurano nulla
 
 def genera(voci):
     for i, (frase, _, _) in enumerate(CASI, 1):
