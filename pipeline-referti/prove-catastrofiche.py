@@ -69,12 +69,15 @@ def _():
 #    registrazione che finisce a metà parola.
 @caso("truncated audio")
 def _():
-    e = m._analizza_integrita("", "max_volume: -3.0 dB\ntime=00:06:43.20 bitrate=N/A", "size=N/A time=00:00:03.00", 600.0)
+    e = m._analizza_integrita("", "mean_volume: -20.0 dB\nmax_volume: -3.0 dB\ntime=00:06:43.20 bitrate=N/A", "mean_volume: -19.0 dB", 600.0)
     assert e["troncato_s"] > 190 and e["coda_parlata"] is True, e
-    e2 = m._analizza_integrita("", "time=00:10:00.00", "silence_start: 1.8\nsilence_end: 3 | silence_duration: 1.2\ntime=00:00:03.00", 600.0)
+    e2 = m._analizza_integrita("", "mean_volume: -20.0 dB\ntime=00:10:00.00", "mean_volume: -45.0 dB", 600.0)
     assert e2["troncato_s"] == 0.0 and e2["coda_parlata"] is False, e2
-    e3 = m._analizza_integrita("", "time=00:10:00.00", "silence_start: 0.2\nsilence_end: 0.9 | silence_duration: 0.7\ntime=00:00:03.00", 600.0)
-    assert e3["coda_parlata"] is True, e3  # dopo il silenzio si è ripreso a parlare fino alla fine
+    # rumore di fondo di un dittafono rumoroso (-31 dB su parlato a -20): NON è coda parlata
+    e3 = m._analizza_integrita("", "mean_volume: -20.0 dB\ntime=00:10:00.00", "mean_volume: -31.0 dB", 600.0)
+    assert e3["coda_parlata"] is False, e3
+    e5 = m._analizza_integrita("", "mean_volume: -20.0 dB\ntime=00:00:15.00", "mean_volume: -19.0 dB", 15.0)
+    assert e5["coda_parlata"] is False, "sotto i 20 s non si giudica la coda"
     e4 = m._analizza_integrita("frame corrotto\naltro errore\n", "time=00:10:00.00", "", 600.0)
     assert e4["errori_decodifica"] == 2, e4
     assert m.livello_verifica([], troncato=True) == "minimo"

@@ -36,6 +36,20 @@ if [ "${FORZA_LAVORAZIONE:-0}" != "1" ]; then
     echo "BLOCCO: una trascrizione è in corso (whisper/Voxtral/aligner)." >&2
     exit 1
   fi
+  # Fusione in corso? Gira dentro il processo del servizio: l'ultima riga di
+  # fusione nel log è ancora un «avvio» senza esito (e ha meno di 15 minuti).
+  LOGS="$HOME/referti/log/servizio.log"
+  if [ -f "$LOGS" ]; then
+    ULT=$(grep -E "fase=fusione (bozza=|file=fusione-)" "$LOGS" | tail -1)
+    if echo "$ULT" | grep -q "esito=avvio"; then
+      T=$(echo "$ULT" | cut -c1-19)
+      ETA=$(( $(date +%s) - $(date -j -f "%Y-%m-%dT%H:%M:%S" "$T" +%s 2>/dev/null || echo 0) ))
+      if [ "$ETA" -lt 900 ]; then
+        echo "BLOCCO: una fusione è in corso da $ETA s (riavviare ora la perderebbe)." >&2
+        exit 1
+      fi
+    fi
+  fi
 fi
 
 echo "3/3 · copia e riavvio"

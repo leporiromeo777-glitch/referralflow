@@ -690,19 +690,15 @@ def _analizza_integrita(err_decodifica: str, err_volume: str, err_coda: str,
         esito["decodificato_s"] = round(int(h) * 3600 + int(mnt) * 60 + float(s), 2)
         if durata and durata - esito["decodificato_s"] > 2.0:
             esito["troncato_s"] = round(durata - esito["decodificato_s"], 1)
-    # Coda: silencedetect sugli ultimi 3 s. Nessun evento = parlato fino
-    # all'ultimo campione; un silence_end che coincide con la fine della
-    # finestra (ffmpeg lo stampa a EOF) o un silence_start senza fine =
-    # silenzio in coda, com'è normale quando si preme stop.
-    if durata and durata >= 20:
-        eventi = re.findall(r"silence_(start|end):\s*(-?[\d.]+)", err_coda)
-        fine = re.findall(r"time=(\d+):(\d+):(\d+(?:\.\d+)?)", err_coda)
-        fine_s = (int(fine[-1][0]) * 3600 + int(fine[-1][1]) * 60 + float(fine[-1][2])) if fine else 3.0
-        if not eventi:
-            esito["coda_parlata"] = True
-        else:
-            tipo, t = eventi[-1]
-            esito["coda_parlata"] = (tipo == "end" and fine_s - float(t) > 0.15)
+    # Coda parlata: il livello medio dell'ultimo mezzo secondo è vicino al
+    # livello medio dell'intero file (cioè si stava ancora parlando quando la
+    # registrazione è finita). Il confronto è RELATIVO: una soglia assoluta
+    # scambierebbe il rumore di fondo di un dittafono per parlato (provato
+    # con rumore bianco sintetico a -30 dB).
+    m_tutto = re.search(r"mean_volume:\s*(-?[\d.]+) dB", err_volume)
+    m_coda = re.search(r"mean_volume:\s*(-?[\d.]+) dB", err_coda)
+    if durata and durata >= 20 and m_tutto and m_coda:
+        esito["coda_parlata"] = float(m_coda.group(1)) >= float(m_tutto.group(1)) - 8.0
     return esito
 
 
@@ -740,8 +736,8 @@ def verifica_integrita_audio(ingresso: Path, file_id: str) -> dict:
     except (subprocess.SubprocessError, OSError, ValueError):
         pass
     try:
-        r = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-sseof", "-3", "-i", str(ingresso),
-                            "-af", "silencedetect=noise=-35dB:d=0.25", "-f", "null", "-"],
+        r = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-sseof", "-0.5", "-i", str(ingresso),
+                            "-af", "volumedetect", "-f", "null", "-"],
                            capture_output=True, text=True, timeout=120)
         err3 = r.stderr
     except (subprocess.SubprocessError, OSError):
