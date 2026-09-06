@@ -46,14 +46,27 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
   // Variazioni delle misure tra lettera precedente e dettato («cosa è
   // cambiato» sui numeri): misura, prima, dopo.
+  // «nella_lettera» = gate temporale (Ricerca 18 §9): quale valore porta la
+  // lettera fusa per ogni misura cambiata (dopo / prima / entrambi / assente).
+  const NELLA = new Set(['dopo', 'prima', 'entrambi', 'assente']);
   const variazioni = (Array.isArray(body?.variazioni) ? body.variazioni.slice(0, 20) : [])
-    .filter((v: unknown): v is { misura: string; prima: string; dopo: string; grande?: unknown } =>
+    .filter((v: unknown): v is { misura: string; prima: string; dopo: string; grande?: unknown; nella_lettera?: unknown } =>
       !!v && typeof v === 'object' && typeof (v as any).misura === 'string'
       && typeof (v as any).prima === 'string' && typeof (v as any).dopo === 'string')
-    .map((v: { misura: string; prima: string; dopo: string; grande?: unknown }) => ({ misura: v.misura.slice(0, 40), prima: v.prima.slice(0, 20), dopo: v.dopo.slice(0, 20), grande: v.grande === true }));
+    .map((v: { misura: string; prima: string; dopo: string; grande?: unknown; nella_lettera?: unknown }) => ({
+      misura: v.misura.slice(0, 40), prima: v.prima.slice(0, 20), dopo: v.dopo.slice(0, 20), grande: v.grande === true,
+      nella_lettera: typeof v.nella_lettera === 'string' && NELLA.has(v.nella_lettera) ? v.nella_lettera : undefined,
+    }));
+  const conflitti = variazioni.filter((v: { nella_lettera?: string }) => v.nella_lettera === 'prima').length;
+  // Guardia d'identità (Ricerca 18 §3): esito del confronto codice tra la
+  // lettera incollata e il dettato (mai i nomi).
+  const ESITI = new Set(['uguale', 'diversa', 'non_verificabile']);
+  const identita = body?.identita && typeof body.identita === 'object' && ESITI.has(String((body.identita as any).esito))
+    ? { esito: String((body.identita as any).esito), motivo: String((body.identita as any).motivo ?? '').slice(0, 40) }
+    : null;
   const esito = testo
-    ? { stato: 'fatta', testo_fuso: testo, provenienza, riepilogo, variazioni, fatta_at: new Date().toISOString() }
-    : { stato: 'fallita', errore: String(body?.errore ?? 'sconosciuto').slice(0, 80), fatta_at: new Date().toISOString() };
+    ? { stato: 'fatta', testo_fuso: testo, provenienza, riepilogo, variazioni, conflitti_temporali: conflitti, identita, fatta_at: new Date().toISOString() }
+    : { stato: 'fallita', errore: String(body?.errore ?? 'sconosciuto').slice(0, 80), identita, fatta_at: new Date().toISOString() };
 
   await query(
     `update referti_bozze
@@ -61,6 +74,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       where id = $1 and studio_id = $2`,
     [params.id, studio.id, JSON.stringify(esito)]
   );
-  await registraEvento(studio.id, params.id, testo ? 'fusione_consegnata' : 'fusione_fallita', null, { righe: provenienza.length });
+  await registraEvento(studio.id, params.id, testo ? 'fusione_consegnata' : 'fusione_fallita', null, {
+    righe: provenienza.length, conflitti_temporali: conflitti, identita: identita?.esito ?? '',
+    ...(testo ? {} : { errore: String(body?.errore ?? 'sconosciuto').slice(0, 40) }),
+  });
   return NextResponse.json({ ok: true });
 }

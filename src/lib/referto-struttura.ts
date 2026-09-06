@@ -1,4 +1,5 @@
 import 'server-only';
+import { relazioniIntatte } from './referti-misure-cliniche';
 
 // Riorganizzazione del referto dettato nel formato standard dello studio
 // (bottone nel dettaglio referto). Il modello AI LOCALE (Ollama) rimappa il
@@ -116,6 +117,12 @@ export async function riorganizzaReferto(
 
   // Rete di sicurezza §2.4: la riorganizzazione non deve toccare i numeri.
   if (firmaNumerica(risposta) !== firmaNumerica(originale)) {
+    return { ok: false, motivo: 'numeri' };
+  }
+  // Lucchetto delle relazioni (Ricerca 18 §7): la firma è un multinsieme e
+  // lascia passare due valori scambiati tra due concetti (FE 55 e FEVD 45 →
+  // FE 45 e FEVD 55). Ogni misura del profilo deve avere gli stessi valori.
+  if (!relazioniIntatte(originale, risposta)) {
     return { ok: false, motivo: 'numeri' };
   }
   // Un risultato molto più corto dell'originale = contenuto perso.

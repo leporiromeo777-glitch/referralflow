@@ -20,5 +20,15 @@ while IFS='|' read -r fid testo_b64; do
   printf '%s' "$testo_b64" | base64 -d > "$ORO/$fid.txt"
   n=$((n+1))
 done < <(psql "$DATABASE_URL" -At -F'|' -c "select payload->>'file_id', encode(convert_to(testo_finale,'UTF8'),'base64') from referti_bozze where stato='confermata' and testo_finale is not null and coalesce((payload->>'ombra')::boolean,false)=false")
+# Quarantena del feedback (Ricerca 18 §14, docs/legale/dataset-classificazione.md):
+# un referto firmato NON diventa verità di addestramento per il solo fatto di
+# essere firmato. L'oro è materiale di QA (banco, confronto cieco); la
+# promozione a dataset di addestramento è manuale e documentata.
+cat > "$ORO/MANIFEST.txt" <<MANIF
+classe: QA
+idoneo_addestramento: no
+promozione: manuale, con analisi delle cause e registro in docs/legale/dataset-classificazione.md
+aggiornato: $(date +%F)
+MANIF
 ls "$ORO"/*.txt 2>/dev/null | wc -l | xargs printf 'referti nell\x27oro: %s\n'
 echo "esportati ora: $n · confermati senza audio conservato: $senza_audio"

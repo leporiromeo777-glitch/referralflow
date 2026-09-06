@@ -48,6 +48,7 @@ type Payload = {
   versione_catena?: Record<string, string>;
   ombra?: boolean;
   richiamo?: { mesi: number; referral_id: string; creato_at: string };
+  manifesto?: Record<string, unknown>;
 };
 
 // Evidenzia i frammenti segnalati dentro il testo: prima occorrenza di ogni
@@ -191,7 +192,7 @@ export default async function RefertoBozza({
   // automatica della lettera precedente = ultimo referto CONFERMATO dello
   // stesso paziente (nome + data di nascita dai campi, confermati o estratti).
   const fusione = (p as any).fusione && typeof (p as any).fusione === 'object'
-    ? ((p as any).fusione as { stato?: string; lettera_precedente?: string; testo_fuso?: string; errore?: string; richiesta_at?: string; provenienza?: string[]; riepilogo?: Record<string, number>; variazioni?: { misura: string; prima: string; dopo: string; grande?: boolean }[] })
+    ? ((p as any).fusione as { stato?: string; lettera_precedente?: string; testo_fuso?: string; errore?: string; richiesta_at?: string; provenienza?: string[]; riepilogo?: Record<string, number>; variazioni?: { misura: string; prima: string; dopo: string; grande?: boolean; nella_lettera?: string }[]; conflitti_temporali?: number; identita?: { esito?: string; motivo?: string } })
     : null;
   const campiRif = { ...(p.campi_estratti ?? {}), ...(row.campi_confermati ?? {}) } as Record<string, unknown>;
   const nomePaz = typeof campiRif.nome_paziente === 'string' ? campiRif.nome_paziente.trim() : '';
@@ -252,6 +253,14 @@ export default async function RefertoBozza({
   const daProcurare = noteRif.filter((n) => n.riguardaDocumenti && n.candidati.length === 0);
 
   const inBozza = row.stato === 'bozza';
+  // Manifesto di sicurezza (Ricerca 18 §16): certificato tecnico del
+  // percorso; il livello di verifica alimenta il gate pre-firma del wizard.
+  const manifesto = p.manifesto && typeof p.manifesto === 'object' ? p.manifesto : null;
+  const mfNum = (k: string) => (manifesto && typeof manifesto[k] === 'number' ? (manifesto[k] as number) : 0);
+  const mfLista = (k: string) => (manifesto && Array.isArray(manifesto[k]) ? (manifesto[k] as unknown[]).filter((x): x is string => typeof x === 'string') : []);
+  const livello = manifesto && typeof manifesto.livello_verifica === 'string' ? manifesto.livello_verifica : '';
+  const mancanti = mfLista('componenti_mancanti');
+  const conflittiTemporali = fusione?.stato === 'fatta' ? Number(fusione.conflitti_temporali ?? 0) || 0 : 0;
   const valoriNumerici =
     campi.valori_numerici && typeof campi.valori_numerici === 'object' && !Array.isArray(campi.valori_numerici)
       ? (campi.valori_numerici as Record<string, unknown>)
@@ -304,6 +313,22 @@ export default async function RefertoBozza({
             <> Da dove nascevano gli errori: {Object.entries(p.revisione.origini).map(([k, n]) => `${k.replaceAll('_', ' ')} ${n}`).join(', ')}.</>
           )}
         </p>
+      )}
+      {manifesto && livello && (
+        <div className={`card manifesto livello-${livello}`}>
+          <p style={{ margin: 0 }}>
+            <strong>Livello di verifica della catena: {livello}.</strong>{' '}
+            {livello === 'pieno'
+              ? 'Tutte le barriere erano attive su questa bozza.'
+              : `Ripieghi attivi: ${mancanti.join(', ')}.`}
+            {' '}Testimoni: {mfLista('testimoni').join(' + ') || '—'} (indipendenza {String(manifesto.indipendenza_testimoni ?? '—')}).
+            {' '}Fatti critici {mfNum('fatti_critici')} · numeri non confermati dal secondo orecchio {mfNum('numeri_non_confermati')} su {mfNum('numeri')} · omissioni gravi {mfNum('omissioni_gravi')} · frasi non supportate {mfNum('frasi_non_supportate')}
+            {conflittiTemporali > 0 ? ` · conflitti temporali nella lettera fusa ${conflittiTemporali}` : ''}.
+          </p>
+          <p className="muted small" style={{ marginTop: 6 }}>
+            Certificato tecnico del percorso seguito, non un giudizio clinico: dice quali controlli hanno lavorato davvero su questa bozza e quali sono mancati. I dettagli per fase sono nella cronologia.
+          </p>
+        </div>
       )}
       {eventi.length > 0 && (
         <details className="card">
@@ -397,6 +422,15 @@ export default async function RefertoBozza({
       {searchParams.err === 'fusione_assente' && (
         <p className="error">Nessuna lettera aggiornata da applicare: chiedi prima la fusione.</p>
       )}
+      {searchParams.err === 'fusione_identita' && (
+        <p className="error">La lettera incollata risulta di un altro paziente: la lettera aggiornata non si applica. Richiedi la fusione con la lettera giusta.</p>
+      )}
+      {searchParams.err === 'fusione_conflitti' && (
+        <p className="error">Nella lettera aggiornata una misura dettata oggi porta ancora il valore precedente: spunta la presa d&apos;atto per applicarla comunque, poi correggila nella revisione.</p>
+      )}
+      {searchParams.err === 'critici' && (
+        <p className="error">Ci sono segnalazioni critiche non ancora aperte o un livello di verifica ridotto: spunta la presa d&apos;atto in fondo alla revisione guidata per confermare.</p>
+      )}
 
       {inBozza && allarmi.length > 0 && (
         <div className="card ctrl-box">
@@ -472,7 +506,14 @@ export default async function RefertoBozza({
               ricarica la pagina tra qualche minuto.
             </p>
           ) : null}
-          {fusione?.stato === 'fallita' && (
+          {fusione?.stato === 'fallita' && fusione.errore === 'paziente_diverso' && (
+            <p className="error">
+              La lettera incollata sembra di un <strong>altro paziente</strong>
+              {fusione.identita?.motivo ? ` (${fusione.identita.motivo} diversa)` : ''}: la fusione non è stata
+              eseguita. Controlla la lettera e richiedila di nuovo.
+            </p>
+          )}
+          {fusione?.stato === 'fallita' && fusione.errore !== 'paziente_diverso' && (
             <p className="error">
               La fusione non è riuscita ({fusione.errore ?? 'motivo sconosciuto'}): puoi
               riprovare, magari con la lettera completa.
@@ -496,10 +537,13 @@ export default async function RefertoBozza({
               {Array.isArray(fusione.variazioni) && fusione.variazioni.length > 0 && (
                 <div className="tbl-scroll" style={{ marginBottom: 10 }}>
                   <table className="tbl">
-                    <thead><tr><th>Misura</th><th>Lettera precedente</th><th>Dettato oggi</th></tr></thead>
+                    <thead><tr><th>Misura</th><th>Lettera precedente</th><th>Dettato oggi</th><th>Nella lettera aggiornata</th></tr></thead>
                     <tbody>
                       {fusione.variazioni.map((v, i) => (
-                        <tr key={i} style={v.grande ? { color: '#b3382c', fontWeight: 600 } : undefined}><td>{v.misura}{v.grande ? ' ⚠︎' : ''}</td><td>{v.prima}</td><td><strong>{v.dopo}</strong></td></tr>
+                        <tr key={i} style={v.grande || v.nella_lettera === 'prima' ? { color: '#b3382c', fontWeight: 600 } : undefined}>
+                          <td>{v.misura}{v.grande ? ' ⚠︎' : ''}</td><td>{v.prima}</td><td><strong>{v.dopo}</strong></td>
+                          <td>{v.nella_lettera === 'dopo' ? 'valore di oggi ✓' : v.nella_lettera === 'prima' ? 'ANCORA IL VALORE PRECEDENTE' : v.nella_lettera === 'entrambi' ? 'storia + oggi' : v.nella_lettera === 'assente' ? 'non trovata' : ''}</td>
+                        </tr>
                       ))}
                     </tbody>
                   </table>
@@ -533,6 +577,15 @@ export default async function RefertoBozza({
               {inBozza ? (
                 <form action={applicaFusione} style={{ marginTop: 10 }}>
                   <input type="hidden" name="id" value={row.id} />
+                  {conflittiTemporali > 0 && (
+                    <label className="rg-gate" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 10 }}>
+                      <input type="checkbox" name="override_temporale" value="1" required />
+                      <span>
+                        In {conflittiTemporali === 1 ? 'una misura' : `${conflittiTemporali} misure`} la lettera aggiornata porta ancora il
+                        valore precedente invece di quello dettato oggi (righe in rosso). Applico lo stesso e le correggo nella revisione.
+                      </span>
+                    </label>
+                  )}
                   <button className="btn btn-primary" type="submit">
                     📎 Applica la lettera aggiornata
                   </button>
@@ -687,6 +740,8 @@ export default async function RefertoBozza({
             frasiOmesse={Array.isArray(p.frasi_omesse) ? p.frasi_omesse : []}
             variazioni={fusione?.stato === 'fatta' && Array.isArray(fusione.variazioni) ? fusione.variazioni : []}
             letteraPrecedente={fusione?.stato === 'fatta' && typeof fusione.lettera_precedente === 'string' ? fusione.lettera_precedente : ''}
+            livelloVerifica={livello}
+            componentiMancanti={mancanti}
             note={Array.isArray(p.note_segreteria) ? p.note_segreteria.filter((n): n is string => typeof n === 'string') : []}
             campi={Object.fromEntries(Object.entries(campi).filter(([, v]) => typeof v === 'string')) as Record<string, string>}
             valoriNumerici={valoriNumerici}

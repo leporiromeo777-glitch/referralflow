@@ -102,6 +102,19 @@ mese): riscaricare lo zip dal portale dati aperti di Swissmedic
 - **Audio conservato**: regola in `docs/legale/conservazione-audio.md`;
   scadenza automatica con `REFERTI_CONSERVA_GIORNI`.
 
+## Barriere contro i guasti silenziosi (Ricerca 18, 6.9.2026)
+
+Obiettivo: un errore singolo non deve attraversare in silenzio tutte le difese e diventare un referto firmato.
+
+- **Certificato audio** (`verifica_integrita_audio` → `_analizza_integrita`, pura): errori di decodifica, picco, silenzio, secondi decodificati contro durata dichiarata dal contenitore (file troncato), coda parlata (la registrazione finisce mentre si parla), ora di creazione del file. Avvisi espliciti in bozza; tutto nella cronologia.
+- **Testimone non indipendente**: se Voxtral manca, B è ancora whisper → avviso, punti di rischio in più su numeri/negazioni/lateralità/farmaci (`testimone_unico` nel profilo), `indipendenza_testimoni = bassa` nel manifesto.
+- **Lucchetto delle relazioni** (`relazioni_intatte`, `_misure_tutte`): la firma numerica «multinsieme» non vede due valori scambiati tra due concetti; ogni misura del profilo deve avere gli stessi valori prima e dopo. Applicato al ripiego di riscrittura locale, al paragrafo esami della fusione (`_esame_relazioni_ok`) e nell'app al bottone «Riorganizza (AI)» (`src/lib/referti-misure-cliniche.ts`).
+- **Confini delle clausole** (`_bella_copia_ammessa`): nelle frasi con negazione o lateralità la bella copia può cambiare solo maiuscole, spazi e punto finale.
+- **Guardia d'identità della fusione** (`identita_compatibile`): data di nascita o cognome diversi tra lettera incollata e dettato → la fusione non parte (`errore=paziente_diverso`), l'app non applica. Unico HARD STOP.
+- **Gate temporale** (`esito_temporale`): per ogni misura cambiata, la lettera fusa porta il valore di oggi, quello precedente, entrambi o nessuno; «prima» = conflitto, l'app chiede una presa d'atto per applicare.
+- **Manifesto di sicurezza** (`costruisci_manifesto`, `payload.manifesto`): testimoni, indipendenza, verifica cloud, secondo orecchio, tempi, trasporti per fase (`_TRASPORTI`), fatti critici, numeri non confermati, omissioni gravi, componenti mancanti, `livello_verifica` pieno/ridotto/minimo. In pagina come striscia in cima; nel wizard alimenta il gate pre-firma: con critiche non aperte o livello non pieno la conferma chiede una spunta, registrata in `payload.revisione` (`override_critici`, `livello_verifica`, `presa_atto`) e nel registro eventi.
+- **Suite catastrofica** `python3.14 prove-catastrofiche.py`: 14 casi (uno per scenario del documento) su funzioni pure con testo sintetico, in secondi. `bash distribuisci.sh` la esegue, rifiuta di copiare se un caso fallisce o se un referto è in lavorazione, poi copia in `~/referti-pipeline` e riavvia il servizio.
+
 ## Lettera incrementale (fusione col referto precedente)
 
 Dalla pagina della bozza si può incollare (o accettare) la lettera

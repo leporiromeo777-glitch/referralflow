@@ -17,6 +17,30 @@ export const dynamic = 'force-dynamic';
 const MAX_TESTO = 200_000;
 const MAX_LISTA = 500;
 
+// Manifesto di sicurezza della catena (Ricerca 18 §16): certificato tecnico
+// del percorso (testimoni, ripieghi, conteggi dei fatti critici). Solo
+// etichette e numeri: mai testo clinico.
+function manifestoPulito(m: unknown): Record<string, unknown> {
+  if (!m || typeof m !== 'object' || Array.isArray(m)) return {};
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(m as Record<string, unknown>).slice(0, 32)) {
+    if (!/^[a-z_]{1,32}$/.test(k)) continue;
+    if (typeof v === 'number' && Number.isFinite(v)) out[k] = v;
+    else if (typeof v === 'boolean' || v === null) out[k] = v;
+    else if (typeof v === 'string') out[k] = v.slice(0, 60);
+    else if (Array.isArray(v)) out[k] = v.filter((x): x is string => typeof x === 'string').slice(0, 12).map((x) => x.slice(0, 60));
+    else if (typeof v === 'object') {
+      out[k] = Object.fromEntries(
+        Object.entries(v as Record<string, unknown>)
+          .filter(([kk, x]) => /^[a-z_]{1,32}$/.test(kk) && typeof x === 'string')
+          .slice(0, 16)
+          .map(([kk, x]) => [kk, (x as string).slice(0, 40)])
+      );
+    }
+  }
+  return out;
+}
+
 export async function POST(req: NextRequest) {
   const auth = req.headers.get('authorization') ?? '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
@@ -196,6 +220,7 @@ export async function POST(req: NextRequest) {
       : {},
     // Bozza «ombra» (confronto cieco tra due versioni della catena).
     ombra: body?.ombra === true,
+    manifesto: manifestoPulito(body?.manifesto),
     richiede_revisione: true,
   };
 

@@ -97,3 +97,11 @@ rispondere e annotare qui sotto:
 | 2026-09-06 | Variazioni tra visite marcate «grandi» | sì (verifica del cambiamento dettato) | ammessa; il testo dice «o è vero o è una cifra sentita male», nessun giudizio clinico |
 | 2026-09-06 | Richiami proposti dal referto («controllo tra 6 mesi») | sì (trascrizione di un'indicazione del medico) | ammessa; creato solo al clic |
 | 2026-09-06 | Rischio per frase con gravità | sì (probabilità di errore di trascrizione) | ammessa; la parola «gravità» si riferisce all'errore di trascrizione, non alla clinica |
+| 2026-09-06 | Manifesto di sicurezza e livello di verifica (Ricerca 18) | sì (certificato tecnico del percorso: testimoni, ripieghi, conteggi) | ammessa; non esprime giudizi clinici, dice quali controlli hanno lavorato |
+| 2026-09-06 | Gate pre-firma con presa d'atto registrata | sì (organizzazione della revisione umana) | ammessa; non blocca mai la firma, la rende consapevole e tracciata |
+| 2026-09-06 | Guardia d'identità sulla fusione (lettera vs dettato) | sì (controllo di coerenza tra documenti) | ammessa; unico HARD STOP della catena, nessun override |
+| 2026-09-06 | Lucchetto delle relazioni (concetto+valore) e gate temporale | sì (fedeltà della trascrizione e della fusione) | ammessa; segnala «valore precedente rimasto», non decide quale sia giusto |
+
+## Definizione operativa di robustezza (Ricerca 18 §20)
+
+Un referto prodotto dalla catena è robusto quando la catena sa spiegare **quale sorgente lo sostiene** (audio identificato dall'hash del contenuto, due testimoni di trascrizione e la loro indipendenza), **quali barriere ha superato** (integrità dell'audio, lucchetto delle relazioni, verificatore, secondo orecchio sui numeri), **quali ripieghi erano attivi** (livello di verifica pieno / ridotto / minimo, tracce dei trasporti per fase) e **se resta una criticità irrisolta** al momento della firma (segnalazioni critiche non aperte, conflitti temporali). Il manifesto di sicurezza nel payload della bozza (`payload.manifesto`) è la forma tecnica di questa definizione; il gate pre-firma la porta davanti al medico. L'obiettivo non è una catena che non sbaglia mai, ma una catena in cui un errore singolo non può attraversare in silenzio tutte le barriere e diventare un'informazione clinica firmata e riutilizzata.

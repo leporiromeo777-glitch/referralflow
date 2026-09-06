@@ -11,3 +11,5 @@ Bozza del 6.9.2026. Prima di usare dati reali per migliorare la catena, ogni dat
 | Correzioni del medico (`payload.revisione.modifiche`) | QA | coppie prima/dopo con classe e origine | dizionario, memoria di stile, cruscotto | app (medico/admin) | pochi esempi anonimizzati ammessi come few-shot |
 
 Regola: nessun dataset passa da QA ad addestramento senza una riga in questo file con data, base giuridica e decisione del titolare.
+
+Quarantena del feedback (Ricerca 18 §14): un referto firmato non diventa verità di addestramento per il solo fatto di essere firmato — un errore non notato dal medico diventerebbe precedente, dizionario o memoria e si ripresenterebbe più spesso. Perciò `esporta-oro.sh` scrive `MANIFEST.txt` con `idoneo_addestramento: no`; le regole di stile e di dizionario entrano solo con conferma manuale dal pannello; la promozione all'addestramento passa da un'analisi delle cause e da una riga in questo file. La suite catastrofica (`prove-catastrofiche.py`) verifica che il marcatore ci sia.

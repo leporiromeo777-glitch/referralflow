@@ -1580,3 +1580,9 @@ mark[title] { cursor: help; }
 .rg-azioni { display: flex; flex-wrap: wrap; gap: 8px; }
 .rg-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; gap: 10px; }
 .rg-modifica { margin-bottom: 8px; }
+/* Manifesto di sicurezza e gate pre-firma (Ricerca 18) */
+.manifesto { border-left: 3px solid var(--success); }
+.manifesto.livello-ridotto { border-left-color: var(--warn); }
+.manifesto.livello-minimo { border-left-color: var(--danger); }
+.rg-gate { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--warn); border-radius: 12px; background: var(--warn-bg); }
+.rg-gate input[type="checkbox"] { margin-top: 4px; }

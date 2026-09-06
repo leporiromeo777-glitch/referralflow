@@ -31,6 +31,22 @@ export async function confermaBozza(formData: FormData) {
   const testo = String(formData.get('testo') ?? '').slice(0, MAX_TESTO);
   if (!testo.trim()) redirect(`/referti/${id}?err=testo`);
 
+  // Gate pre-firma (Ricerca 18 §16.1): con segnalazioni critiche non ancora
+  // aperte, o con un livello di verifica non pieno, la conferma passa solo
+  // con la presa d'atto esplicita — e resta registrata come override.
+  const numForm = (k: string, max: number) => {
+    const v = Number(formData.get(k));
+    return Number.isFinite(v) && v >= 0 ? Math.min(Math.round(v), max) : null;
+  };
+  const criticiTot = numForm('flag_critici_totali', 1000);
+  const criticiChiusi = numForm('flag_critici_chiusi', 1000);
+  const criticiAperti = criticiTot !== null && criticiChiusi !== null ? Math.max(0, criticiTot - criticiChiusi) : 0;
+  const livelloVerifica = String(formData.get('livello_verifica') ?? '').replace(/[^a-z]/g, '').slice(0, 12);
+  const presaAtto = formData.get('override_critici') === '1';
+  if ((criticiAperti > 0 || (livelloVerifica && livelloVerifica !== 'pieno')) && !presaAtto) {
+    redirect(`/referti/${id}?err=critici`);
+  }
+
   // I campi estratti arrivano come campo__<chiave>: si riconfermano tutti,
   // eventualmente corretti a mano. Solo i campi presenti nel form.
   const campi: Record<string, string> = {};
@@ -74,6 +90,11 @@ export async function confermaBozza(formData: FormData) {
       if (fcc !== null) m.flag_critici_chiusi = fcc;
       const iniz = String(formData.get('revisione_iniziata_at') ?? '');
       if (/^\d{4}-\d{2}-\d{2}T/.test(iniz)) m.revisione_iniziata_at = iniz.slice(0, 40);
+      // Override registrato (Ricerca 18 §16.1): quante critiche restavano
+      // aperte alla firma e con quale livello di verifica della catena.
+      if (criticiAperti > 0) m.override_critici = criticiAperti;
+      if (livelloVerifica) m.livello_verifica = livelloVerifica;
+      if (presaAtto) m.presa_atto = true;
       // Tassonomia automatica di ogni modifica (numero, farmaco, negazione,
       // lateralità, termine, formato, stile, frase inserita o tolta).
       try {
@@ -143,6 +164,9 @@ export async function confermaBozza(formData: FormData) {
     impronta_testo: impronta(testo),
     parole_finali: testo.split(/\s+/).filter(Boolean).length,
     campi: Object.keys(campi).length,
+    override_critici: criticiAperti,
+    livello_verifica: livelloVerifica,
+    presa_atto: presaAtto,
   });
   revalidatePath('/referti');
   redirect(`/referti/${id}?ok=confermata`);
@@ -185,12 +209,20 @@ export async function applicaFusione(formData: FormData) {
   if (!session || !session.studioId) redirect('/login');
   const id = String(formData.get('id') ?? '');
   if (!isUuid(id)) redirect('/referti');
-  const [b] = await query<{ testo: string | null }>(
-    `select payload->'fusione'->>'testo_fuso' as testo
+  const [b] = await query<{ testo: string | null; identita: string | null; conflitti: number }>(
+    `select payload->'fusione'->>'testo_fuso' as testo,
+            payload->'fusione'->'identita'->>'esito' as identita,
+            coalesce((payload->'fusione'->>'conflitti_temporali')::int, 0) as conflitti
        from referti_bozze where id = $1 and studio_id = $2 and stato = 'bozza'`,
     [id, session.studioId]
   );
   if (!b?.testo) redirect(`/referti/${id}?err=fusione_assente`);
+  // Guardia d'identità (Ricerca 18 §3): HARD STOP, nessun override.
+  if (b.identita === 'diversa') redirect(`/referti/${id}?err=fusione_identita`);
+  // Gate temporale (Ricerca 18 §9): il valore precedente ha vinto su una
+  // misura dettata oggi → si applica solo con presa d'atto esplicita.
+  const presaAttoTemporale = formData.get('override_temporale') === '1';
+  if (Number(b.conflitti) > 0 && !presaAttoTemporale) redirect(`/referti/${id}?err=fusione_conflitti`);
   // La versione attuale resta nel payload: il ripristino è sempre possibile.
   // Il «testo prima della fusione» si salva UNA volta sola (è il dettato di
   // oggi): applicando due fusioni di seguito non va sovrascritto con la
@@ -203,7 +235,9 @@ export async function applicaFusione(formData: FormData) {
       where id = $1 and studio_id = $2 and stato = 'bozza'`,
     [id, session.studioId, b.testo]
   );
-  await registraEvento(session.studioId, id, 'fusione_applicata', session.id, { impronta_testo: impronta(b.testo) });
+  await registraEvento(session.studioId, id, 'fusione_applicata', session.id, {
+    impronta_testo: impronta(b.testo), conflitti_temporali: Number(b.conflitti) || 0, presa_atto: presaAttoTemporale,
+  });
   revalidatePath(`/referti/${id}`);
   redirect(`/referti/${id}?ok=fusione_applicata`);
 }

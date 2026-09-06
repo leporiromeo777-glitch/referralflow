@@ -668,41 +668,88 @@ def file_id_di(percorso: Path) -> str:
     return h.hexdigest()[:16]
 
 
+def _analizza_integrita(err_decodifica: str, err_volume: str, err_coda: str,
+                        durata: float | None, creato: str = "") -> dict:
+    """Parte PURA del certificato audio (Ricerca 18 §4, testabile senza
+    ffmpeg): errori di decodifica, picco, quota di silenzio, secondi davvero
+    decodificati contro la durata dichiarata dal contenitore (file troncato:
+    m4a/mp3 con l'intestazione che promette più di quanto c'è) e «la
+    registrazione finisce mentre si parla» (nessun silenzio in coda)."""
+    esito = {"errori_decodifica": 0, "picco_db": None, "silenzio_pct": None, "durata_s": durata,
+             "decodificato_s": None, "troncato_s": 0.0, "coda_parlata": False, "creato": creato}
+    esito["errori_decodifica"] = len([l for l in err_decodifica.splitlines() if l.strip()])
+    m = re.search(r"max_volume:\s*(-?[\d.]+) dB", err_volume)
+    if m:
+        esito["picco_db"] = float(m.group(1))
+    durate = [float(x) for x in re.findall(r"silence_duration:\s*([\d.]+)", err_volume)]
+    if durata:
+        esito["silenzio_pct"] = round(100.0 * sum(durate) / durata, 1)
+    tempi = re.findall(r"time=(\d+):(\d+):(\d+(?:\.\d+)?)", err_volume)
+    if tempi:
+        h, mnt, s = tempi[-1]
+        esito["decodificato_s"] = round(int(h) * 3600 + int(mnt) * 60 + float(s), 2)
+        if durata and durata - esito["decodificato_s"] > 2.0:
+            esito["troncato_s"] = round(durata - esito["decodificato_s"], 1)
+    # Coda: silencedetect sugli ultimi 3 s. Nessun evento = parlato fino
+    # all'ultimo campione; un silence_end che coincide con la fine della
+    # finestra (ffmpeg lo stampa a EOF) o un silence_start senza fine =
+    # silenzio in coda, com'è normale quando si preme stop.
+    if durata and durata >= 20:
+        eventi = re.findall(r"silence_(start|end):\s*(-?[\d.]+)", err_coda)
+        fine = re.findall(r"time=(\d+):(\d+):(\d+(?:\.\d+)?)", err_coda)
+        fine_s = (int(fine[-1][0]) * 3600 + int(fine[-1][1]) * 60 + float(fine[-1][2])) if fine else 3.0
+        if not eventi:
+            esito["coda_parlata"] = True
+        else:
+            tipo, t = eventi[-1]
+            esito["coda_parlata"] = (tipo == "end" and fine_s - float(t) > 0.15)
+    return esito
+
+
 def verifica_integrita_audio(ingresso: Path, file_id: str) -> dict:
-    """Controlli tecnici PRIMA della trascrizione (2026-09-06, quarto documento:
-    un audio rotto può essere trascritto «bene» e dare una bozza che sembra
-    completa). Errori di decodifica, saturazione (picco a 0 dB), quota di
-    silenzio. Nel log e nella cronologia solo numeri."""
-    esito = {"errori_decodifica": 0, "picco_db": None, "silenzio_pct": None, "durata_s": None}
+    """Certificato di completezza dell'audio PRIMA della trascrizione
+    (2026-09-06, quarto documento + Ricerca 18 §4: un audio rotto o tagliato
+    può essere trascritto «bene» e dare una bozza che sembra completa).
+    Errori di decodifica, saturazione, silenzio, durata decodificata contro
+    quella dichiarata, coda parlata, ora di creazione se il dittafono la
+    scrive. Nel log e nella cronologia solo numeri."""
+    err1 = err2 = err3 = ""
+    durata = None
+    creato = ""
     try:
         r = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-v", "error", "-i", str(ingresso),
                             "-f", "null", "-"], capture_output=True, text=True, timeout=300)
-        esito["errori_decodifica"] = len([l for l in r.stderr.splitlines() if l.strip()])
+        err1 = r.stderr
     except (subprocess.SubprocessError, OSError):
-        return esito
+        return _analizza_integrita("", "", "", None)
     try:
         r = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-i", str(ingresso),
                             "-af", "volumedetect,silencedetect=noise=-35dB:d=2", "-f", "null", "-"],
                            capture_output=True, text=True, timeout=300)
-        m = re.search(r"max_volume:\s*(-?[\d.]+) dB", r.stderr)
-        if m:
-            esito["picco_db"] = float(m.group(1))
-        durate = [float(x) for x in re.findall(r"silence_duration:\s*([\d.]+)", r.stderr)]
-        m2 = re.search(r"time=(\d+):(\d+):([\d.]+)", r.stderr.rsplit("time=", 1)[0] + "time=" + r.stderr.rsplit("time=", 1)[-1])
-        durata = None
-        try:
-            son = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
-                                  "-of", "default=nw=1:nk=1", str(ingresso)], capture_output=True, text=True, timeout=60)
-            durata = float(son.stdout.strip())
-        except (subprocess.SubprocessError, OSError, ValueError):
-            pass
-        esito["durata_s"] = durata
-        if durata:
-            esito["silenzio_pct"] = round(100.0 * sum(durate) / durata, 1)
+        err2 = r.stderr
     except (subprocess.SubprocessError, OSError):
         pass
-    log.info("fase=integrita_audio file=%s errori=%d picco_db=%s silenzio_pct=%s", file_id,
-             esito["errori_decodifica"], esito["picco_db"], esito["silenzio_pct"])
+    try:
+        son = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
+                              "format=duration:format_tags=creation_time",
+                              "-of", "default=nw=1", str(ingresso)], capture_output=True, text=True, timeout=60)
+        m = re.search(r"^duration=([\d.]+)", son.stdout, re.MULTILINE)
+        durata = float(m.group(1)) if m else None
+        m = re.search(r"^TAG:creation_time=(\S+)", son.stdout, re.MULTILINE)
+        creato = m.group(1)[:25] if m else ""
+    except (subprocess.SubprocessError, OSError, ValueError):
+        pass
+    try:
+        r = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-sseof", "-3", "-i", str(ingresso),
+                            "-af", "silencedetect=noise=-35dB:d=0.25", "-f", "null", "-"],
+                           capture_output=True, text=True, timeout=120)
+        err3 = r.stderr
+    except (subprocess.SubprocessError, OSError):
+        pass
+    esito = _analizza_integrita(err1, err2, err3, durata, creato)
+    log.info("fase=integrita_audio file=%s errori=%d picco_db=%s silenzio_pct=%s decodificato_s=%s "
+             "troncato_s=%s coda_parlata=%d", file_id, esito["errori_decodifica"], esito["picco_db"],
+             esito["silenzio_pct"], esito["decodificato_s"], esito["troncato_s"], int(esito["coda_parlata"]))
     return esito
 
 
@@ -1468,6 +1515,7 @@ def arbitra_divergenze(testo: str, divergenze: list[dict], file_id: str) -> tupl
         if testo.count(va) == 1:
             testo = testo.replace(va, vb, 1)
             applicate += 1
+    _segna_trasporto(file_id, "arbitro", trasporto)
     log.info(
         "fase=confronto file=%s esito=arbitrato trasporto=%s punti=%d scelte_b=%d durata=%.1fs",
         file_id, trasporto, len(candidate), applicate, time.monotonic() - inizio,
@@ -2446,6 +2494,23 @@ def _peso(nome: str, predefinito: int) -> int:
 _ANON_NOTI: dict[str, list[tuple[str, str]]] = {}
 _ANON_NOTI_MAX = 12
 
+# Tracce dei ripieghi (Ricerca 18 §13 e §15): per ogni referto, con quale
+# trasporto ha davvero lavorato ogni fase (cloud, locale, classico, saltata).
+# Finiscono nel manifesto e nella cronologia: un ripiego non deve restare
+# solo nel log del servizio. Solo etichette, mai contenuti.
+_TRASPORTI: dict[str, dict[str, str]] = {}
+
+
+def _segna_trasporto(file_id: str, fase: str, trasporto: str) -> None:
+    d = _TRASPORTI.setdefault(file_id, {})
+    d[fase] = str(trasporto)[:24]
+    while len(_TRASPORTI) > 12:
+        _TRASPORTI.pop(next(iter(_TRASPORTI)))
+
+
+def _trasporto(file_id: str, fase: str) -> str:
+    return _TRASPORTI.get(file_id, {}).get(fase, "")
+
 
 def _anonimizza_per_esterno(testo: str, file_id: str,
                             con_mappa: bool = False, riusa: bool = False):
@@ -3007,6 +3072,7 @@ def _catena_compatta_esterna(testo: str, file_id: str) -> str | None:
     COMPATTA_ESITI[file_id] = {
         "note": note[:60], "fuori_tema": fuori[:60], "chiarire": chiarire[:40],
     }
+    _segna_trasporto(file_id, "correzione", "cloud")
     log.info(
         "fase=correzione_esterna file=%s esito=ok_compatta riparazioni=%d scartate=%d "
         "note=%d fuori=%d senza_senso=%d durata=%.1fs",
@@ -3055,6 +3121,7 @@ def _correggi_a_lista_esterna(testo: str, file_id: str,
     if esito is None:
         return None
     nuovo, applicate, scartate = esito
+    _segna_trasporto(file_id, "correzione", "cloud")
     log.info(
         "fase=correzione_esterna file=%s esito=ok riparazioni=%d scartate=%d durata=%.1fs",
         file_id, applicate, scartate, time.monotonic() - inizio,
@@ -3145,11 +3212,21 @@ def correggi_llm(testo: str, file_id: str, rapporto_scarto: Path) -> str:
             file_id,
         )
     inizio = time.monotonic()
+    _segna_trasporto(file_id, "correzione", "locale")
     uscita = chiama_ollama(
         PROMPT_CORREZIONE.replace("{testo}", testo), file_id, "correzione_llm",
         modello=MODELLO_CORREZIONE,
     ).strip() + "\n"
     durata = time.monotonic() - inizio
+    ok_rel, motivo_rel = relazioni_intatte(testo, uscita)
+    if _numeri(uscita) == _numeri(testo) and not ok_rel:
+        # Ricerca 18 §7: stessi numeri, relazioni diverse (valori scambiati
+        # tra due concetti). Il multinsieme non lo vede, il lucchetto sì.
+        log.warning(
+            "fase=correzione_llm file=%s esito=scartata motivo=relazioni dettaglio=%s durata=%.1fs",
+            file_id, motivo_rel, durata,
+        )
+        return _correggi_a_blocchi(testo, file_id)
     if _numeri(uscita) != _numeri(testo):
         prima, dopo = _numeri(testo), _numeri(uscita)
         rapporto = {
@@ -3628,6 +3705,7 @@ def verificatore_selettivo(finale: str, grezzo: str, riparazioni: list, divergen
                    "grezzo": _passaggio_grezzo(r["frase"], grezzo)} for r in frasi_r]
     if not voci_corr and not voci_frasi:
         log.info("fase=verificatore file=%s esito=niente_da_verificare", file_id)
+        _segna_trasporto(file_id, "verificatore", "niente_da_verificare")
         return [], []
     # Un solo documento → una sola anonimizzazione (cache del referto)
     blocchi: list[str] = []
@@ -3667,6 +3745,7 @@ def verificatore_selettivo(finale: str, grezzo: str, riparazioni: list, divergen
             file_id, schema=schema)
     except RuntimeError:
         log.warning("fase=verificatore file=%s esito=esterno_fallito ripiego=classico", file_id)
+        _segna_trasporto(file_id, "verificatore", "classico")
         return None
     dati = _estrai_json(uscita)
     if not isinstance(dati, dict):
@@ -3697,6 +3776,7 @@ def verificatore_selettivo(finale: str, grezzo: str, riparazioni: list, divergen
             non_supportate.append({"frase": f, "motivo": motivo or "non sostenuta dal dettato"})
         elif v.get("sensata") is False:
             dubbi.append(f)
+    _segna_trasporto(file_id, "verificatore", "cloud")
     log.info("fase=verificatore file=%s esito=ok correzioni=%d rifiutate=%d frasi=%d "
              "non_supportate=%d dubbi=%d durata=%.1fs",
              file_id, len(voci_corr), rifiutate, len(voci_frasi),
@@ -4300,6 +4380,113 @@ def variazioni_misure(lettera: str, dettato: str) -> list[dict]:
     return out[:20]
 
 
+_RX_NUM_UNITA_ORD = re.compile(
+    r"\d+(?:[.,]\d+)?(?:\s?(?:mcg|µg|mg|g|kg|ml|l|mmHg|bpm|%|cm|mm|m|ms|s|min|h|mmol/l|ng/l|u/l|kg/m²|kg/m2)"
+    r"(?![^\W\d_]))?", re.IGNORECASE)
+
+
+def _misure_tutte(testo: str) -> dict[str, list[str]]:
+    """Tutti i valori di ogni misura del profilo, nell'ordine del testo (la
+    prima occorrenza sola non basta per una lettera longitudinale)."""
+    fuori: dict[str, list[str]] = {}
+    for nome, rx in _misure_attive():
+        vals = [re.sub(r"\s+", "", m.group(1)).replace(",", ".")
+                for m in re.finditer(rx, testo, re.IGNORECASE)]
+        if vals:
+            fuori[nome] = vals
+    return fuori
+
+
+def _coppie_numero_unita(testo: str) -> list[str]:
+    """Sequenza ORDINATA numero+unità (la numerazione d'elenco esclusa)."""
+    senza_elenchi = re.sub(r"^\s*\d{1,2}\.\s+", "", testo, flags=re.MULTILINE)
+    return [re.sub(r"\s+", "", m.group(0)).lower() for m in _RX_NUM_UNITA_ORD.finditer(senza_elenchi)]
+
+
+def relazioni_intatte(prima: str, dopo: str, ordine: bool = True) -> tuple[bool, str]:
+    """Lucchetto delle relazioni cliniche (Ricerca 18 §7): concetto+valore
+    restano accoppiati. La firma numerica «multinsieme» lascia passare due
+    valori scambiati tra due concetti (FE 55 / gradiente 35 → 35 / 55): qui
+    ogni misura del profilo deve avere gli stessi valori prima e dopo e,
+    dove il testo non viene riordinato, la sequenza numero+unità deve
+    essere identica. Torna (ok, motivo)."""
+    m1, m2 = _misure_tutte(prima), _misure_tutte(dopo)
+    for nome in sorted(set(m1) | set(m2)):
+        if sorted(m1.get(nome, [])) != sorted(m2.get(nome, [])):
+            return False, f"misura: {nome}"
+    if ordine and _coppie_numero_unita(prima) != _coppie_numero_unita(dopo):
+        return False, "ordine dei numeri"
+    return True, ""
+
+
+def _esame_relazioni_ok(paragrafo_prec: str, nuove: list[str], aggiornato: str) -> tuple[bool, str]:
+    """Paragrafo esame aggiornato (fusione): ogni misura dettata OGGI deve
+    avere esattamente i valori di oggi, ogni misura non ridettata quelli di
+    prima. I gettoni «tutti presenti» non bastano: potevano essere scambiati
+    di posto tra due misure (Ricerca 18 §7)."""
+    prec = _misure_tutte(paragrafo_prec)
+    oggi = _misure_tutte(" ".join(nuove))
+    dopo = _misure_tutte(aggiornato)
+    for nome in sorted(set(prec) | set(oggi)):
+        attesi = oggi.get(nome) or prec.get(nome) or []
+        if sorted(dopo.get(nome, [])) != sorted(attesi):
+            return False, nome
+    return True, ""
+
+
+def esito_temporale(variazioni: list[dict], testo_fuso: str) -> list[dict]:
+    """Gate temporale (Ricerca 18 §9): per ogni misura cambiata, quale valore
+    porta la lettera fusa — «dopo» (oggi), «prima» (il precedente ha vinto:
+    conflitto da risolvere prima di applicare), «entrambi» (storia + oggi,
+    normale in una lettera longitudinale), «assente»."""
+    tutte = _misure_tutte(testo_fuso)
+    out = []
+    for v in variazioni:
+        vals = tutte.get(str(v.get("misura")), [])
+        ha_prima, ha_dopo = str(v.get("prima")) in vals, str(v.get("dopo")) in vals
+        w = dict(v)
+        w["nella_lettera"] = ("entrambi" if ha_prima and ha_dopo else "dopo" if ha_dopo
+                              else "prima" if ha_prima else "assente")
+        out.append(w)
+    return out
+
+
+_MESI_INDICE = {m: i + 1 for i, m in enumerate(
+    ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto",
+     "settembre", "ottobre", "novembre", "dicembre"])}
+
+
+def identita_compatibile(lettera: str, dettato: str) -> dict:
+    """Guardia d'identità della fusione (Ricerca 18 §3): la lettera
+    precedente la incolla una persona e nessuno controllava che fosse dello
+    stesso paziente. Confronto del CODICE su data di nascita e cognome
+    trovati nei due testi; «diversa» solo quando entrambi i testi li hanno e
+    non combaciano. Nel payload va solo l'esito, mai i nomi."""
+    a, b = _identita_locale(lettera), _identita_locale(dettato)
+
+    def data(x: dict):
+        s = x.get("data_nascita", "")
+        m = re.search(r"(\d{1,2})\s+(" + _MESI_RX + r")\s+(\d{4})", s, re.IGNORECASE)
+        if m:
+            return (int(m.group(1)), _MESI_INDICE[m.group(2).lower()], int(m.group(3)))
+        d = re.findall(r"\d+", s)
+        return tuple(int(n) for n in d) if len(d) == 3 else None
+
+    da, db = data(a), data(b)
+    if da and db:
+        if da[:2] != db[:2] or (da[2] % 100) != (db[2] % 100):
+            return {"esito": "diversa", "motivo": "data di nascita"}
+        return {"esito": "uguale", "motivo": "data di nascita"}
+    na, nb = a.get("nome_paziente", ""), b.get("nome_paziente", "")
+    if na and nb:
+        pa = {p.lower() for p in re.findall(r"[^\W\d_]{3,}", na)}
+        pb = {p.lower() for p in re.findall(r"[^\W\d_]{3,}", nb)}
+        if pa and pb and not (pa & pb):
+            return {"esito": "diversa", "motivo": "cognome"}
+        return {"esito": "uguale", "motivo": "cognome"}
+    return {"esito": "non_verificabile", "motivo": ""}
+
+
 def fusione_lettera(lettera: str, dettato: str, file_id: str) -> str | None:
     """Solo il testo della lettera aggiornata (vedi fusione_lettera_completa)."""
     esito = fusione_lettera_completa(lettera, dettato, file_id)
@@ -4663,6 +4850,10 @@ def _aggiorna_paragrafo_esame(paragrafo: str, nuove: list[str], mappa: dict,
         return None
     if coda:
         testo += "\n   ↳ Dettato inoltre: " + " ".join(coda)
+    ok_rel, motivo_rel = _esame_relazioni_ok(paragrafo, nuove, testo)
+    if not ok_rel:
+        log.info("fase=fusione file=%s esame=scartato motivo=relazioni misura=%s", file_id, motivo_rel)
+        return None
     return testo
 
 
@@ -4747,14 +4938,32 @@ def lavora_fusioni() -> None:
         if not bozza_id or not dettato or not lettera:
             continue
         log.info("fase=fusione bozza=%s esito=avvio", bozza_id[:8])
-        try:
-            esito = fusione_lettera_completa(lettera, dettato, "fusione-" + bozza_id[:8])
-        except Exception as e:  # noqa: BLE001 — mai bloccare il servizio
-            log.error("fase=fusione bozza=%s esito=errore tipo=%s", bozza_id[:8], type(e).__name__)
-            esito = None
-        risposta = ({"testo_fuso": esito["testo"], "provenienza": esito["provenienza"],
-                     "riepilogo": esito["riepilogo"], "variazioni": esito.get("variazioni", [])}
-                    if esito else {"errore": "fusione_non_riuscita"})
+        # Guardia d'identità (Ricerca 18 §3): lettera e dettato devono essere
+        # dello stesso paziente. Se il codice trova due date di nascita o due
+        # cognomi diversi, la fusione NON parte: niente lettera, niente spesa.
+        identita = identita_compatibile(lettera, dettato)
+        esito = None
+        if identita["esito"] == "diversa":
+            log.warning("fase=fusione bozza=%s esito=rifiutata motivo=paziente_diverso dettaglio=%s",
+                        bozza_id[:8], identita["motivo"])
+            risposta = {"errore": "paziente_diverso", "identita": identita}
+        else:
+            try:
+                esito = fusione_lettera_completa(lettera, dettato, "fusione-" + bozza_id[:8])
+            except Exception as e:  # noqa: BLE001 — mai bloccare il servizio
+                log.error("fase=fusione bozza=%s esito=errore tipo=%s", bozza_id[:8], type(e).__name__)
+                esito = None
+            if esito:
+                # Gate temporale (Ricerca 18 §9): quale valore porta la lettera fusa.
+                variazioni = esito_temporale(esito.get("variazioni", []), esito["testo"])
+                conflitti = sum(1 for v in variazioni if v.get("nella_lettera") == "prima")
+                if conflitti:
+                    log.warning("fase=fusione bozza=%s esito=conflitti_temporali n=%d", bozza_id[:8], conflitti)
+                risposta = {"testo_fuso": esito["testo"], "provenienza": esito["provenienza"],
+                            "riepilogo": esito["riepilogo"], "variazioni": variazioni,
+                            "conflitti_temporali": conflitti, "identita": identita}
+            else:
+                risposta = {"errore": "fusione_non_riuscita", "identita": identita}
         try:
             req = urllib.request.Request(
                 f"{FLOW_URL}/api/referti/fusioni/{bozza_id}",
@@ -4787,6 +4996,32 @@ def _impronta_lettere(testo: str) -> str:
     return "".join(ch.lower() for ch in testo if ch.isalnum())
 
 
+def _confini_clausole(frase: str) -> tuple:
+    """Dove cadono i segni che spezzano una clausola (virgola, punto e
+    virgola, due punti, parentesi, punto interno), contati in parole: la
+    struttura che decide fino a dove arriva una negazione."""
+    parole = 0
+    confini = []
+    for tok in re.findall(r"\w+|[,;:()\[\]!?.]", frase.rstrip(" .!?;")):
+        if tok[0].isalnum() or tok[0] == "_":
+            parole += 1
+        else:
+            confini.append((parole, tok))
+    return tuple(confini)
+
+
+def _bella_copia_ammessa(originale: str, nuova: str) -> bool:
+    """Regola d'oro della bella copia più il confine semantico (Ricerca 18
+    §8): lettere e cifre identiche sempre; nelle frasi con negazione o
+    lateralità anche i confini di clausola devono restare dove sono (solo
+    maiuscole, spazi e punto finale)."""
+    if _impronta_lettere(nuova) != _impronta_lettere(originale):
+        return False
+    if _RX_NEGAZIONE.search(originale) or _RX_LATERALITA.search(originale):
+        return _confini_clausole(nuova) == _confini_clausole(originale)
+    return True
+
+
 def bella_copia(testo: str, file_id: str) -> str | None:
     """Punteggiatura e maiuscole FRASE PER FRASE (2026-09-06): il modello
     riceve le frasi numerate del testo anonimo, il codice accetta solo le
@@ -4816,6 +5051,7 @@ def bella_copia(testo: str, file_id: str) -> str | None:
         return None
     accettate = 0
     scartate = 0
+    confini = 0
     schema = _oggetto({"frasi": {"type": "array", "items": _oggetto({
         "n": {"type": "integer", "minimum": 1, "maximum": len(frasi)},
         "testo": {"type": "string"}})}})
@@ -4828,6 +5064,7 @@ def bella_copia(testo: str, file_id: str) -> str | None:
                 schema=schema)
         except RuntimeError:
             log.warning("fase=bella_copia file=%s esito=fallito motivo=esterno", file_id)
+            _segna_trasporto(file_id, "bella_copia", "saltata")
             return None
         dati = _estrai_json(uscita)
         voci = dati.get("frasi") if isinstance(dati, dict) else None
@@ -4838,19 +5075,22 @@ def bella_copia(testo: str, file_id: str) -> str | None:
             if k not in blocco:
                 continue
             nuova = str(v.get("testo", "")).strip()
-            if nuova and nuova != frasi[k] and _impronta_lettere(nuova) == _impronta_lettere(frasi[k]):
+            if nuova and nuova != frasi[k] and _bella_copia_ammessa(frasi[k], nuova):
                 i, j = posizioni[k]
                 per_riga[i][j] = nuova
                 accettate += 1
             elif nuova and nuova != frasi[k]:
                 scartate += 1
+                if _impronta_lettere(nuova) == _impronta_lettere(frasi[k]):
+                    confini += 1  # lettere uguali, confini di clausola spostati
     uscita_anon = "\n".join(" ".join(p) if p else r for p, r in zip(per_riga, righe))
     uscita_reale = _ripristina(uscita_anon, mappa)
     if _impronta_lettere(uscita_reale) != _impronta_lettere(testo):
         log.warning("fase=bella_copia file=%s esito=scartata motivo=impronta_reale", file_id)
         return None
-    log.info("fase=bella_copia file=%s esito=ok frasi=%d accettate=%d scartate=%d durata=%.1fs",
-             file_id, len(frasi), accettate, scartate, time.monotonic() - inizio)
+    _segna_trasporto(file_id, "bella_copia", "cloud")
+    log.info("fase=bella_copia file=%s esito=ok frasi=%d accettate=%d scartate=%d confini=%d durata=%.1fs",
+             file_id, len(frasi), accettate, scartate, confini, time.monotonic() - inizio)
     return uscita_reale if accettate else None
 
 
@@ -4869,6 +5109,7 @@ def ispeziona_llm(testo: str, file_id: str) -> list[str]:
                 uscita = _chiama_esterno_openai(
                     PROMPT_ISPEZIONE.replace("{testo}", an[0]), file_id)
                 dubbi = [_ripristina(d, an[1]) for d in _parse_ispezione(uscita)]
+                _segna_trasporto(file_id, "ispezione", "cloud")
                 log.info(
                     "fase=ispezione_llm file=%s esito=ok_esterno dubbi=%d durata=%.1fs",
                     file_id, len(dubbi), time.monotonic() - inizio,
@@ -5034,6 +5275,7 @@ def estrai_campi(testo: str, file_id: str) -> dict:
         1 for c in CAMPI_RICHIESTI
         if c != "valori_numerici" and dati[c] != "non indicato"
     )
+    _segna_trasporto(file_id, "estrazione", trasporto)
     log.info(
         "fase=estrazione file=%s esito=ok trasporto=%s campi_presenti=%d valori=%d durata=%.1fs",
         file_id, trasporto, presenti, len(dati["valori_numerici"]), time.monotonic() - inizio,
@@ -5325,7 +5567,7 @@ def _spezza_frasi_wizard(testo: str) -> list[str]:
 
 def valuta_rischio_frasi(finale: str, divergenze: list, dubbi: list, frasi_non_supportate: list,
                          frasi_da_chiarire: list, punti_loop: list, parole: list,
-                         file_id: str) -> tuple[list[dict], list[dict]]:
+                         file_id: str, b_indipendente: bool = True) -> tuple[list[dict], list[dict]]:
     """Punteggio di rischio per frase (2026-09-06, revisione esterna + ricerca:
     la revisione deve mettere in cima probabilità × gravità, e ogni segnale
     deve dire «perché lo vedo»). Segnali già disponibili nella catena: numeri
@@ -5404,6 +5646,11 @@ def valuta_rischio_frasi(finale: str, divergenze: list, dubbi: list, frasi_non_s
         if farm:
             punti += _peso('farmaco', 3) * len(farm)
             motivi.append("farmaco: " + ", ".join(farm))
+        # Ricerca 18 §6: B = whisper di nuovo → l'accordo A/B non vale come
+        # conferma sui fatti critici (numeri, negazioni, lateralità, farmaci).
+        if not b_indipendente and (n_num or _RX_NEGAZIONE.search(f) or _RX_LATERALITA.search(f) or farm):
+            punti += _peso('testimone_unico', 3)
+            motivi.append("secondo motore non indipendente (whisper due volte)")
         if contiene(non_supp, f_n):
             punti += _peso('non_supportata', 8)
             motivi.append("non trovata nel dettato (avvocato del diavolo)")
@@ -5436,6 +5683,8 @@ def valuta_rischio_frasi(finale: str, divergenze: list, dubbi: list, frasi_non_s
             fonte.append("secondo orecchio conferma" if not non_conf else "secondo orecchio non conferma")
         if incerte:
             fonte.append("whisper incerto")
+        if not b_indipendente:
+            fonte.append("un solo motore")
         if punti >= _peso('soglia_lista', 5):
             rischio.append({"frase": f[:500], "punteggio": punti, "motivi": motivi[:8],
                             "gravita": gravita, "supporto": supporto, "fonte": fonte[:4]})
@@ -5444,6 +5693,63 @@ def valuta_rischio_frasi(finale: str, divergenze: list, dubbi: list, frasi_non_s
              file_id, len(frasi), len(rischio), len(numeri),
              sum(1 for n in numeri if n["confermato"] is False))
     return rischio[:40], numeri[:200]
+
+
+def livello_verifica(componenti_mancanti: list[str], troncato: bool = False) -> str:
+    """FULL / DEGRADED / MINIMAL della Ricerca 18 §13, in italiano: «pieno»
+    con tutte le barriere attive, «ridotto» con almeno un ripiego, «minimo»
+    quando mancano insieme il secondo motore indipendente e il verificatore
+    cloud, o l'audio risulta troncato."""
+    if troncato or {"secondo motore indipendente", "verificatore cloud"} <= set(componenti_mancanti):
+        return "minimo"
+    return "pieno" if not componenti_mancanti else "ridotto"
+
+
+def costruisci_manifesto(integ: dict, fatto_b: bool, verif_cloud: bool, secondo_orecchio: bool,
+                         motore_tempi: str, rischio_frasi: list, numeri: list,
+                         frasi_non_supportate: list, omesse: list, avvisi_farmaci: int,
+                         divergenze: list, file_id: str) -> dict:
+    """Manifesto di sicurezza (Ricerca 18 §16): il certificato TECNICO del
+    percorso seguito — quali testimoni, quali barriere, quali ripieghi,
+    quanti fatti critici — non un giudizio clinico. Solo numeri ed
+    etichette; la pagina lo mostra in cima e il gate pre-firma lo legge."""
+    mancanti: list[str] = []
+    if not fatto_b:
+        mancanti.append("secondo motore indipendente")
+    if not verif_cloud:
+        mancanti.append("verificatore cloud")
+    if not secondo_orecchio:
+        mancanti.append("terzo orecchio sui numeri")
+    if motore_tempi == "nessuno":
+        mancanti.append("tempi delle parole")
+    integ = integ or {}
+    integ_ok = (int(integ.get("errori_decodifica") or 0) == 0 and not integ.get("troncato_s")
+                and not integ.get("coda_parlata") and float(integ.get("silenzio_pct") or 0) < 60)
+    if not integ_ok:
+        mancanti.append("integrità audio")
+    con_tempo = sum(1 for n in numeri if isinstance(n, dict) and n.get("secondo") is not None)
+    return {
+        "integrita_audio": "ok" if integ_ok else "avviso",
+        "legame_audio": "hash del contenuto",
+        "testimoni": ["whisper-large-v3", "voxtral-mini" if fatto_b else "whisper-large-v3 (seconda passata)"],
+        "indipendenza_testimoni": "alta" if fatto_b else "bassa",
+        "verifica_cloud": "ok" if verif_cloud else "classica",
+        "secondo_orecchio": bool(secondo_orecchio),
+        "tempi": motore_tempi,
+        "trasporti": dict(_TRASPORTI.get(file_id, {})),
+        "fatti_critici": sum(1 for r in rischio_frasi if isinstance(r, dict) and r.get("gravita") == "critica"),
+        "frasi_a_rischio": len(rischio_frasi),
+        "numeri": len(numeri),
+        "numeri_non_confermati": sum(1 for n in numeri if isinstance(n, dict) and n.get("confermato") is False),
+        "divergenze": len(divergenze or []),
+        "frasi_non_supportate": len(frasi_non_supportate or []),
+        "omissioni_gravi": sum(1 for o in omesse if isinstance(o, dict) and (o.get("cifre") or o.get("farmaco"))),
+        "avvisi_farmaci": int(avvisi_farmaci),
+        "copertura_evidenza": round(con_tempo / len(numeri), 2) if numeri else None,
+        "componenti_mancanti": mancanti,
+        "modalita_degradata": bool(mancanti),
+        "livello_verifica": livello_verifica(mancanti, bool(integ.get("troncato_s"))),
+    }
 
 
 # Scadenza del dataset audio (2026-09-06, regola in docs/legale/
@@ -5665,6 +5971,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
     # processo lungo: senza azzeramento un retry sommerebbe corse diverse).
     RIPARAZIONI_APPLICATE.pop(file_id, None)
     COMPATTA_ESITI.pop(file_id, None)
+    _TRASPORTI.pop(file_id, None)
     # Visita registrata o dettato classico? Dal nome del file (vedi _e_visita).
     visita = _e_visita(ingresso.name)
     # Avvisi per chi rivede: raccolti lungo tutta la corsa.
@@ -5691,7 +5998,20 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         integ = verifica_integrita_audio(ingresso, file_id)
         tappa("integrita_audio", "codice", errori=integ["errori_decodifica"],
               picco_db=integ["picco_db"] if integ["picco_db"] is not None else "",
-              silenzio_pct=integ["silenzio_pct"] if integ["silenzio_pct"] is not None else "")
+              silenzio_pct=integ["silenzio_pct"] if integ["silenzio_pct"] is not None else "",
+              durata_s=round(integ["durata_s"], 1) if integ.get("durata_s") else "",
+              decodificato_s=integ.get("decodificato_s") if integ.get("decodificato_s") is not None else "",
+              troncato_s=integ.get("troncato_s") or 0, coda_parlata=bool(integ.get("coda_parlata")),
+              creato=integ.get("creato") or "")
+        # Ricerca 18 §4: ciò che non è mai stato registrato nessuna catena lo
+        # recupera — ma si può dire che manca.
+        if integ.get("troncato_s"):
+            avvisi.append(f"Il file audio è più corto di quanto dichiara: mancano circa "
+                          f"{integ['troncato_s']:.0f} secondi alla fine. Il dettato è probabilmente "
+                          "incompleto: riascolta la fine prima di confermare.")
+        if integ.get("coda_parlata"):
+            avvisi.append("La registrazione finisce mentre si sta ancora parlando: controlla che il "
+                          "dettato non sia stato interrotto e che la chiusura ci sia tutta.")
         if integ["errori_decodifica"] > 0:
             avvisi.append(f"L'audio presenta {integ['errori_decodifica']} punti danneggiati in decodifica: "
                           "parti del dettato potrebbero mancare. Riascolta per intero prima di confermare.")
@@ -5799,6 +6119,13 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                 file_id, len(percorso(".txt").read_text(encoding="utf-8")))
         if not fatto_b:
             trascrivi(percorso(".wav"), percorso(".b.txt"), file_id, fase, vocab)
+        # Ricerca 18 §6: senza Voxtral la passata B è ancora whisper. Non è
+        # un secondo testimone: chi rivede deve saperlo, e il punteggio di
+        # rischio non deve leggere l'accordo A/B come forte.
+        if not fatto_b and not visita and VOXTRAL_B_SWITCH.is_file():
+            avvisi.append("Il secondo motore di trascrizione (Voxtral) non era disponibile: le due "
+                          "trascrizioni vengono entrambe da whisper e il loro accordo vale meno. "
+                          "Riascolta con più attenzione numeri, negazioni e lateralità.")
 
         # Dizionario PRIMA del confronto (ordine invertito rispetto alla prima
         # stesura della SPEC, deviazione documentata in §3): così le àncore
@@ -5873,14 +6200,15 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         if divergenze:
             corretto_a, n_arb = arbitra_divergenze(corretto_a, divergenze, file_id)
         tappa("confronto", "codice", divergenze=len(divergenze))
-        tappa("arbitro", "modello", scelte_b=n_arb)
+        tappa("arbitro", "modello", scelte_b=n_arb, trasporto=_trasporto(file_id, "arbitro"))
         versioni["dopo_arbitro"] = corretto_a
 
         fase = "correzione_llm"
         _ = notifica and notifica(fase)
         finale = correggi_llm(corretto_a, file_id, percorso(".scarto_ai.json"))
         percorso(".finale.txt").write_text(finale, encoding="utf-8")
-        tappa("correzione", "modello+codice", riparazioni=len(RIPARAZIONI_APPLICATE.get(file_id, [])))
+        tappa("correzione", "modello+codice", riparazioni=len(RIPARAZIONI_APPLICATE.get(file_id, [])),
+              trasporto=_trasporto(file_id, "correzione"))
         versioni["dopo_correzione"] = finale
 
         # Il testo integrale PRIMA della segretaria: il nome del paziente
@@ -5989,7 +6317,8 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                 frasi_da_chiarire, punti_loop, file_id)
         if verif is not None:
             frasi_non_supportate, dubbi = verif
-            tappa("verificatore", "modello", non_supportate=len(frasi_non_supportate), dubbi=len(dubbi))
+            tappa("verificatore", "modello", non_supportate=len(frasi_non_supportate), dubbi=len(dubbi),
+                  trasporto=_trasporto(file_id, "verificatore"))
         else:
             if (cfg_est and cfg_est.get("avvocato") == "1"
                     and _esterno_attivo() == "openai" and not nota_visita):
@@ -6065,7 +6394,8 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             fase = "bella_copia"
             _ = notifica and notifica(fase)
             pulito = bella_copia(finale, file_id)
-            tappa("bella_copia", "modello+codice", applicata=pulito is not None)
+            tappa("bella_copia", "modello+codice", applicata=pulito is not None,
+                  trasporto=_trasporto(file_id, "bella_copia"))
             if pulito is not None:
                 finale = pulito
                 testo_integrale = finale
@@ -6091,7 +6421,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         fase = "estrazione"
         _ = notifica and notifica(fase)
         campi = estrai_campi(testo_integrale, file_id)
-        tappa("estrazione", "modello+codice")
+        tappa("estrazione", "modello+codice", trasporto=_trasporto(file_id, "estrazione"))
         percorso(".campi.json").write_text(
             json.dumps(campi, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
@@ -6099,6 +6429,8 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
 
         fase = "controlli"
         _ = notifica and notifica(fase)
+        motore_tempi = "nessuno"
+        n_avv_farmaci = 0
         # Terzo orecchio sulle cifre (Parakeet): solo avvisi, mai correzioni.
         if PARAKEET_SWITCH.is_file() and not visita:
             avvisi.extend(controllo_cifre_parakeet(
@@ -6106,7 +6438,9 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # Farmaci (registro Swissmedic): dosaggi inesistenti e nomi storpiati.
         # Solo avvisi, mai correzioni; senza l'indice, non fa nulla.
         try:
-            avvisi.extend(controllo_farmaci(finale, file_id))
+            _avv_farm = controllo_farmaci(finale, file_id)
+            n_avv_farmaci = len(_avv_farm)
+            avvisi.extend(_avv_farm)
         except Exception as e:  # noqa: BLE001 — mai bloccare il referto
             log.warning("fase=farmaci file=%s esito=errore %s", file_id, type(e).__name__)
         allarmi = controlla_valori(campi, testo_integrale, controlli, file_id)
@@ -6164,9 +6498,13 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             # aligner-tempi): il testo FINALE viene riallineato all'audio
             # naturale — le parole ritoccate dalla catena tornano inchiodate
             # al secondo giusto. Qualsiasi intoppo → tempi whisper di sempre.
+            motore_tempi = "whisper"
             if ALIGNER_SWITCH.is_file() and not visita and parole:
+                _prima_rif = parole
                 parole = rifinisci_tempi(
                     ingresso, percorso(".voxtral.wav"), parole, file_id)
+                if parole is not _prima_rif:
+                    motore_tempi = "aligner"
         except Exception as e:
             log.info("fase=tempi file=%s esito=saltato tipo=%s", file_id, type(e).__name__)
         parole_grezzo: list = []
@@ -6273,7 +6611,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         try:
             rischio_frasi, numeri_entita = valuta_rischio_frasi(
                 finale, divergenze, dubbi, frasi_non_supportate, frasi_da_chiarire,
-                punti_loop, parole, file_id)
+                punti_loop, parole, file_id, b_indipendente=fatto_b)
             payload["rischio_frasi"] = rischio_frasi
             payload["numeri"] = numeri_entita
         except Exception as e:  # noqa: BLE001 — mai bloccare la consegna
@@ -6288,6 +6626,18 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                     f"ritrovano nel referto: controllali nel primo passo della revisione."]
         except Exception as e:  # noqa: BLE001
             log.warning("fase=omissioni file=%s esito=errore tipo=%s", file_id, type(e).__name__)
+    # Manifesto di sicurezza (Ricerca 18 §16): mai bloccare la consegna.
+    try:
+        payload["manifesto"] = costruisci_manifesto(
+            integ, fatto_b, verif is not None, _CIFRE_SENTITE.get(file_id) is not None, motore_tempi,
+            payload.get("rischio_frasi") or [], payload.get("numeri") or [], frasi_non_supportate,
+            payload.get("frasi_omesse") or [], n_avv_farmaci, divergenze, file_id)
+        mf = payload["manifesto"]
+        log.info("fase=manifesto file=%s livello=%s mancanti=%d critici=%d non_confermati=%d omissioni=%d",
+                 file_id, mf["livello_verifica"], len(mf["componenti_mancanti"]), mf["fatti_critici"],
+                 mf["numeri_non_confermati"], mf["omissioni_gravi"])
+    except Exception as e:  # noqa: BLE001
+        log.warning("fase=manifesto file=%s esito=errore tipo=%s", file_id, type(e).__name__)
     # Cronologia e versioni intermedie (2026-09-06): ogni trasformazione con
     # attore e numeri; le versioni servono all'audit e al confronto cieco.
     payload["storia"] = storia

@@ -318,6 +318,13 @@ token pubblici, programma del giorno da feed iCal Cassa dei Medici.
   clinico). La catena chiama solo fornitori nella lista autorizzata
   (`FORNITORI_AUTORIZZATI`). Il testo verso il cloud è PSEUDONIMIZZATO
   (mappa in RAM sul Mac), non anonimo: usare questa parola.
+- Barriere anti-guasto silenzioso (Ricerca 18, 6.9.2026): `payload.manifesto`
+  (livello di verifica pieno/ridotto/minimo, testimoni, trasporti, conteggi),
+  gate pre-firma nel wizard con presa d'atto registrata (`override_critici`),
+  guardia d'identità e gate temporale sulla fusione, lucchetto delle relazioni
+  (`src/lib/referti-misure-cliniche.ts`), suite `pipeline-referti/prove-
+  catastrofiche.py` e `distribuisci.sh` (distribuisce SOLO se la suite passa e
+  nessun referto è in lavorazione: usare quello, non cp+kickstart a mano).
 
 ## Visione di lungo periodo
 Quando più studi useranno ReferralFlow: pagina «Esplora» per i medici invianti (cerca la

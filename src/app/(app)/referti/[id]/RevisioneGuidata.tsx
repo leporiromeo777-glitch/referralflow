@@ -56,6 +56,8 @@ export function RevisioneGuidata({
   frasiOmesse = [],
   variazioni = [],
   letteraPrecedente = '',
+  livelloVerifica = '',
+  componentiMancanti = [],
 }: {
   testo: string;
   divagazioni: string[];
@@ -74,6 +76,8 @@ export function RevisioneGuidata({
   frasiOmesse?: { frase: string; secondo?: number | null; cifre?: boolean; farmaco?: boolean; copertura?: number | null }[];
   variazioni?: { misura: string; prima: string; dopo: string; grande?: boolean }[];
   letteraPrecedente?: string;
+  livelloVerifica?: string;
+  componentiMancanti?: string[];
 }) {
   const frasiIniziali = useMemo(() => spezzaInFrasi(testo), [testo]);
 
@@ -322,8 +326,15 @@ export function RevisioneGuidata({
     const frase = frasiIniziali.find((f) => f.includes(v.dopo) && normalizza(f).includes(normalizza(v.misura).split(' ')[0])) ?? frasiIniziali.find((f) => f.includes(v.dopo)) ?? '';
     return { ...v, k, frase };
   });
-  if (rosse.length + avvisi.length + aRischio.length + omesseGravi.length + grandi.length > 0)
-    passi.push({ chiave: 'subito', titolo: 'Da controllare subito', conta: rosse.length + avvisi.length + aRischio.length + omesseGravi.length + grandi.length });
+  // Gate pre-firma (Ricerca 18 §16.1): critiche mostrate e critiche aperte
+  // (viste) — se ne restano di chiuse mai, o il livello di verifica della
+  // catena non è pieno, la conferma chiede una presa d'atto esplicita.
+  const criticiTotali = rosse.length + avvisi.length + aRischio.length + omesseGravi.length + grandi.length;
+  const criticiChiusi = [...fatte].filter((id) => /^(a|r|k|g)\d/.test(id) || (id.startsWith('o') && omesseGravi.some((_, i) => id === `o${i}`))).length;
+  const criticiAperti = Math.max(0, criticiTotali - criticiChiusi);
+  const gateAttivo = criticiAperti > 0 || (livelloVerifica !== '' && livelloVerifica !== 'pieno');
+  if (criticiTotali > 0)
+    passi.push({ chiave: 'subito', titolo: 'Da controllare subito', conta: criticiTotali });
   if (arancioni.length > 0)
     passi.push({ chiave: 'arancioni', titolo: 'Frasi da chiarire', conta: arancioni.length });
   if (spenteIniziali.size > 0)
@@ -835,8 +846,9 @@ export function RevisioneGuidata({
         <input type="hidden" name="tempo_revisione_s" value={Math.round((Date.now() - inizioRevisione) / 1000)} readOnly />
         <input type="hidden" name="flag_totali" value={chiuse} readOnly />
         <input type="hidden" name="flag_accettati_senza_riascolto" value={chiuseSenzaRiascolto} readOnly />
-        <input type="hidden" name="flag_critici_totali" value={rosse.length + avvisi.length + aRischio.length + omesseGravi.length + grandi.length} readOnly />
-        <input type="hidden" name="flag_critici_chiusi" value={[...fatte].filter((id) => /^(a|r|k|g)\d/.test(id) || (id.startsWith('o') && omesseGravi.some((_, i) => id === `o${i}`))).length} readOnly />
+        <input type="hidden" name="flag_critici_totali" value={criticiTotali} readOnly />
+        <input type="hidden" name="flag_critici_chiusi" value={criticiChiusi} readOnly />
+        <input type="hidden" name="livello_verifica" value={livelloVerifica} readOnly />
         <input type="hidden" name="revisione_iniziata_at" value={new Date(inizioRevisione).toISOString()} readOnly />
         <div className="grid2">
           {Object.entries(campi)
@@ -927,6 +939,23 @@ export function RevisioneGuidata({
           <span className="muted small">Qui sotto: conferma o riorganizza.</span>
         )}
       </div>
+      {gateAttivo && (
+        <div className="rg-gate">
+          <p style={{ margin: '0 0 6px' }}>
+            <strong>Prima di confermare.</strong>{' '}
+            {criticiAperti > 0
+              ? `${criticiAperti} ${criticiAperti === 1 ? 'segnalazione critica non è ancora stata aperta' : 'segnalazioni critiche non sono ancora state aperte'} nel passo «Da controllare subito». `
+              : ''}
+            {livelloVerifica && livelloVerifica !== 'pieno'
+              ? `La catena ha lavorato con verifica ${livelloVerifica}${componentiMancanti.length ? ` (mancava: ${componentiMancanti.join(', ')})` : ''}. `
+              : ''}
+          </p>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            <input type="checkbox" name="override_critici" value="1" required />
+            <span>Confermo di aver riletto il referto sapendo questo. La conferma resta registrata con questa presa d&apos;atto.</span>
+          </label>
+        </div>
+      )}
     </div>
   );
 }

@@ -16,6 +16,7 @@
   "data"
  ],
  "pesi_rischio": {
+  "testimone_unico": 3,
   "numero": 2,
   "numero_max": 6,
   "numero_non_confermato": 4,
