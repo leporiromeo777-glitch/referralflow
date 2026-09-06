@@ -1,0 +1,167 @@
+{
+ "nome": "cardiologia",
+ "versione": "2026-09-06",
+ "descrizione": "Profilo di specialità: tutto ciò che rende la catena «cardiologica» in un file solo (dall'analisi dei concorrenti: Dragon Copilot separa i profili per specialità dallo stile). Per un'altra specialità si copia questo file e si cambiano i valori, non il codice. Le voci con percorso rimandano ai file che le contengono.",
+ "memorie": {
+  "fonetica": "correzioni.json + correzioni-locali.json (termini_clinici, linguaggio_comune): come il medico pronuncia → forma confermata; alimentata dai suggerimenti di tipo «parola»",
+  "terminologica": "vocabolario.txt + vocabolario-locali.txt: termini e farmaci che whisper deve aspettarsi",
+  "stile": "correzioni-locali.json (sezione «stile»): formulazioni preferite, applicate a fine catena; alimentata dai suggerimenti di tipo «stile» confermati dal medico. Regola: lo stile non può toccare numeri, negazioni, lateralità, farmaci."
+ },
+ "farmaci": "~/referti-pipeline/dati/farmaci-ch.json (registro Swissmedic, farmaci-swissmedic.py)",
+ "oggetti_protetti": [
+  "numero con unità",
+  "negazione",
+  "lateralità",
+  "farmaco e dose",
+  "data"
+ ],
+ "pesi_rischio": {
+  "numero": 2,
+  "numero_max": 6,
+  "numero_non_confermato": 4,
+  "divergenza": 5,
+  "negazione": 3,
+  "lateralita": 3,
+  "farmaco": 3,
+  "non_supportata": 8,
+  "senso": 5,
+  "dubbio": 4,
+  "loop": 4,
+  "frase_breve_con_numero": 2,
+  "soglia_lista": 5,
+  "soglia_subito": 8
+ },
+ "misure": [
+  {
+   "nome": "Frazione di eiezione",
+   "regex": "(?:frazione di eiezione|\\bFE\\b|LVEF|FEVS)\\D{0,25}?(\\d{2}(?:[.,]\\d)?)\\s*%?"
+  },
+  {
+   "nome": "PAPs",
+   "regex": "\\bPAPs?\\b\\D{0,20}?(\\d{2,3})"
+  },
+  {
+   "nome": "Pressione arteriosa",
+   "regex": "pressione(?: arteriosa)?\\D{0,30}?(\\d{2,3}\\s*/\\s*\\d{2,3})"
+  },
+  {
+   "nome": "Frequenza cardiaca",
+   "regex": "frequenza(?: cardiaca)?\\D{0,25}?(\\d{2,3})\\s*(?:bpm|battiti)?"
+  },
+  {
+   "nome": "Creatinina",
+   "regex": "creatinina\\D{0,20}?(\\d{2,3}(?:[.,]\\d)?)"
+  },
+  {
+   "nome": "eGFR",
+   "regex": "(?:eGFR|filtrato(?: glomerulare)?)\\D{0,20}?(\\d{2,3})"
+  },
+  {
+   "nome": "Potassio",
+   "regex": "potassio\\D{0,15}?(\\d(?:[.,]\\d{1,2})?)"
+  },
+  {
+   "nome": "Emoglobina",
+   "regex": "emoglobina\\D{0,15}?(\\d{2,3}(?:[.,]\\d)?)"
+  },
+  {
+   "nome": "NT-proBNP",
+   "regex": "(?:NT-?proBNP|proBNP|\\bBNP\\b)\\D{0,20}?(\\d{2,5})"
+  },
+  {
+   "nome": "LDL",
+   "regex": "\\bLDL\\b\\D{0,15}?(\\d(?:[.,]\\d{1,2})?)"
+  },
+  {
+   "nome": "HbA1c",
+   "regex": "HbA1c\\D{0,15}?(\\d(?:[.,]\\d)?)\\s*%?"
+  },
+  {
+   "nome": "Peso",
+   "regex": "\\bpeso\\b\\D{0,15}?(\\d{2,3}(?:[.,]\\d)?)\\s*kg"
+  },
+  {
+   "nome": "BMI",
+   "regex": "\\bBMI\\b\\D{0,15}?(\\d{2}(?:[.,]\\d)?)"
+  },
+  {
+   "nome": "TAPSE",
+   "regex": "TAPSE\\D{0,15}?(\\d{2})"
+  },
+  {
+   "nome": "QTc",
+   "regex": "QTc\\D{0,10}?(\\d{3})"
+  },
+  {
+   "nome": "QRS",
+   "regex": "\\bQRS\\b\\D{0,10}?(\\d{2,3})"
+  },
+  {
+   "nome": "PQ",
+   "regex": "\\bPQ\\b\\D{0,10}?(\\d{3})"
+  },
+  {
+   "nome": "Volume atrio sinistro",
+   "regex": "atrio sinistro\\D{0,40}?(\\d{2,3})\\s*ml"
+  },
+  {
+   "nome": "Colesterolo totale",
+   "regex": "colesterolo totale\\D{0,15}?(\\d(?:[.,]\\d{1,2})?)"
+  }
+ ],
+ "variazione_grande": {
+  "relativa": 0.25,
+  "pressione_sistolica_mmHg": 20,
+  "pressione_diastolica_mmHg": 15
+ },
+ "sezioni_struttura": [
+  "Diagnosi principali",
+  "Diagnosi secondarie",
+  "Comorbidità",
+  "Anamnesi attuale",
+  "Terapia domiciliare",
+  "Esami",
+  "Valutazione",
+  "Procedere"
+ ],
+ "esami_struttura": [
+  "Esame clinico",
+  "ECG",
+  "Ecocardiografia transtoracica",
+  "Ergometria",
+  "Laboratorio",
+  "Altro"
+ ],
+ "misure_attese_per_esame": {
+  "Ecocardiografia transtoracica": [
+   "Frazione di eiezione",
+   "PAPs",
+   "TAPSE",
+   "Volume atrio sinistro"
+  ],
+  "ECG": [
+   "Frequenza cardiaca",
+   "PQ",
+   "QRS",
+   "QTc"
+  ],
+  "Esame clinico": [
+   "Pressione arteriosa",
+   "Frequenza cardiaca",
+   "Peso",
+   "BMI"
+  ],
+  "Laboratorio": [
+   "Creatinina",
+   "eGFR",
+   "Potassio",
+   "Emoglobina",
+   "NT-proBNP",
+   "LDL",
+   "HbA1c",
+   "Colesterolo totale"
+  ]
+ },
+ "suite_prova": "suite-cattiva.py (coppie pericolose lette da voci sintetiche; gate di sicurezza)",
+ "banco": "banco-audio.py <cartella oro> --base=<esito precedente> --esito=<nuovo> (gate di sicurezza su numeri e negazioni)"
+}

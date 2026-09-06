@@ -112,4 +112,20 @@ if __name__ == "__main__":
         c = per_classe.setdefault(e["classe"], [0, 0]); c[1] += 1; c[0] += e["ok"]
     tot_ok = sum(e["ok"] for e in esiti)
     print(f"\nTOTALE {tot_ok}/{len(esiti)} · " + " · ".join(f"{k} {v[0]}/{v[1]}" for k, v in per_classe.items()))
-    (DIR / f"esito-{date.today().isoformat()}.json").write_text(json.dumps({"totale": [tot_ok, len(esiti)], "classi": per_classe, "esiti": esiti}, ensure_ascii=False, indent=1), encoding="utf-8")
+    # GATE DI SICUREZZA: rispetto all'ultimo esito salvato, nessun caso critico
+    # (numero, negazione, lateralità, farmaco, prefisso) può passare da OK a ERR.
+    precedenti = sorted(DIR.glob("esito-*.json"))
+    verdetto = "prima corsa"
+    if precedenti:
+        prima = json.loads(precedenti[-1].read_text(encoding="utf-8"))
+        ok_prima = {(e["caso"], e["voce"]): e["ok"] for e in prima.get("esiti", [])}
+        regressioni = [e for e in esiti if e["classe"] in ("numero", "negazione", "lateralità", "farmaco", "prefisso")
+                       and ok_prima.get((e["caso"], e["voce"])) is True and not e["ok"]]
+        if regressioni:
+            verdetto = "BOCCIATA"
+            print(f"✗ BOCCIATA (gate di sicurezza): {len(regressioni)} casi critici passati da OK a ERR: "
+                  + ", ".join(f"{e['caso']:02d}-{e['voce']}({e['atteso']})" for e in regressioni[:8]))
+        else:
+            verdetto = "superata"
+            print(f"✓ gate di sicurezza superato (riferimento: {precedenti[-1].name})")
+    (DIR / f"esito-{date.today().isoformat()}.json").write_text(json.dumps({"totale": [tot_ok, len(esiti)], "classi": per_classe, "verdetto": verdetto, "esiti": esiti}, ensure_ascii=False, indent=1), encoding="utf-8")

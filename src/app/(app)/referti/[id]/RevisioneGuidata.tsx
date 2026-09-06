@@ -54,6 +54,7 @@ export function RevisioneGuidata({
   rischioFrasi = [],
   numeri = [],
   frasiOmesse = [],
+  variazioni = [],
   letteraPrecedente = '',
 }: {
   testo: string;
@@ -71,6 +72,7 @@ export function RevisioneGuidata({
   rischioFrasi?: { frase: string; punteggio: number; motivi?: string[] }[];
   numeri?: { valore: string; unita?: string; frase?: number | null; secondo?: number | null; confermato?: boolean | null }[];
   frasiOmesse?: { frase: string; secondo?: number | null; cifre?: boolean; farmaco?: boolean; copertura?: number | null }[];
+  variazioni?: { misura: string; prima: string; dopo: string; grande?: boolean }[];
   letteraPrecedente?: string;
 }) {
   const frasiIniziali = useMemo(() => spezzaInFrasi(testo), [testo]);
@@ -314,8 +316,14 @@ export function RevisioneGuidata({
     .map((r, k) => ({ ...r, k, idx: trovaIndice(r.frase) }));
   const omesseGravi = frasiOmesse.filter((o) => o.cifre || o.farmaco);
   const omesseAltre = frasiOmesse.filter((o) => !(o.cifre || o.farmaco));
-  if (rosse.length + avvisi.length + aRischio.length + omesseGravi.length > 0)
-    passi.push({ chiave: 'subito', titolo: 'Da controllare subito', conta: rosse.length + avvisi.length + aRischio.length + omesseGravi.length });
+  // Cambiamenti grandi tra una visita e l'altra (dalla fusione): o sono veri
+  // o è una cifra sentita male → nel primo passo, con riascolto.
+  const grandi = variazioni.filter((v) => v.grande).map((v, k) => {
+    const frase = frasiIniziali.find((f) => f.includes(v.dopo) && normalizza(f).includes(normalizza(v.misura).split(' ')[0])) ?? frasiIniziali.find((f) => f.includes(v.dopo)) ?? '';
+    return { ...v, k, frase };
+  });
+  if (rosse.length + avvisi.length + aRischio.length + omesseGravi.length + grandi.length > 0)
+    passi.push({ chiave: 'subito', titolo: 'Da controllare subito', conta: rosse.length + avvisi.length + aRischio.length + omesseGravi.length + grandi.length });
   if (arancioni.length > 0)
     passi.push({ chiave: 'arancioni', titolo: 'Frasi da chiarire', conta: arancioni.length });
   if (spenteIniziali.size > 0)
@@ -624,6 +632,23 @@ export function RevisioneGuidata({
             </div>
           ))}
           {bottoneAltre('rischio', aRischio.length)}
+          {grandi.map((v) => (
+            <div key={`g${v.k}`} className={`rg-item rg-rossa${fatte.has(`g${v.k}`) ? ' rg-fatta' : ''}`}>
+              <p className="rg-frase">
+                <strong>{v.misura}</strong>: era {v.prima}, oggi {v.dopo}
+                <span className="rg-tab" style={{ marginLeft: 8, fontSize: '0.8em', padding: '2px 9px' }}>cambiamento grande tra le visite</span>
+              </p>
+              {v.frase && <p className="rg-motivo">…{v.frase}…</p>}
+              {!fatte.has(`g${v.k}`) && (
+                <div className="rg-azioni">
+                  {v.frase ? bottoneRiascolta(v.frase) : null}
+                  <button type="button" className="btn btn-ghost" onClick={() => segna(`g${v.k}`)}>
+                    ✓ È corretto così
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
           {frasiOmesse.length > 0 && (
             <p className="muted small" style={{ marginTop: 12 }}>
               <strong>Nel dettato ma non nel referto</strong> ({frasiOmesse.length}): passaggi della

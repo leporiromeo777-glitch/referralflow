@@ -2335,6 +2335,37 @@ def _applica_lista(testo: str, coppie: list, file_id: str,
 
 # ── Percorso esterno: anonimizza → modello di punta → lista → guardie ───────
 
+# ——— Profilo di specialità (2026-09-06) ———
+# Un file solo con pesi di rischio, misure, soglie e riferimenti alle tre
+# memorie del medico: profilo-cardiologia.json accanto allo script,
+# sovrascrivibile voce per voce da profilo-locale.json (non versionato) o
+# da REFERTI_PROFILO. Senza file valgono i valori scritti nel codice.
+def _carica_profilo() -> dict:
+    base = Path(__file__).resolve().parent
+    fuori: dict = {}
+    for cand in (Path(os.environ.get("REFERTI_PROFILO", "")) if os.environ.get("REFERTI_PROFILO") else base / "profilo-cardiologia.json",
+                 base / "profilo-locale.json"):
+        try:
+            if cand.is_file():
+                d = json.loads(cand.read_text(encoding="utf-8"))
+                if isinstance(d, dict):
+                    for k, v in d.items():
+                        if isinstance(v, dict) and isinstance(fuori.get(k), dict):
+                            fuori[k].update(v)
+                        else:
+                            fuori[k] = v
+        except (OSError, ValueError):
+            pass
+    return fuori
+
+
+PROFILO = _carica_profilo()
+
+
+def _peso(nome: str, predefinito: int) -> int:
+    v = (PROFILO.get("pesi_rischio") or {}).get(nome)
+    return int(v) if isinstance(v, (int, float)) else predefinito
+
 # Dati identificativi già trovati per referto (file_id → [(dato, tipo)]):
 # solo in memoria, mai su disco. Servono a non rifare la passata del
 # modello quattro volte sullo stesso dettato (2026-09-05: ~20 dei 47 minuti
@@ -3503,7 +3534,7 @@ def verificatore_selettivo(finale: str, grezzo: str, riparazioni: list, divergen
     # (B) frasi a rischio (segnali disponibili a questo punto della catena)
     rischio, _ = valuta_rischio_frasi(finale, divergenze, [], [], frasi_da_chiarire,
                                       punti_loop, [], file_id)
-    frasi_r = [r for r in rischio if r["punteggio"] >= 8][:25]
+    frasi_r = [r for r in rischio if r["punteggio"] >= _peso('soglia_subito', 8)][:25]
     voci_frasi = [{"frase": r["frase"], "motivi": r["motivi"],
                    "grezzo": _passaggio_grezzo(r["frase"], grezzo)} for r in frasi_r]
     if not voci_corr and not voci_frasi:
@@ -4133,9 +4164,19 @@ _MISURE = [
 ]
 
 
+def _misure_attive() -> list[tuple[str, str]]:
+    dal_profilo = PROFILO.get("misure")
+    if isinstance(dal_profilo, list):
+        voci = [(str(m.get("nome")), str(m.get("regex"))) for m in dal_profilo
+                if isinstance(m, dict) and m.get("nome") and m.get("regex")]
+        if voci:
+            return voci
+    return _MISURE
+
+
 def _misure(testo: str) -> dict[str, str]:
     fuori: dict[str, str] = {}
-    for nome, rx in _MISURE:
+    for nome, rx in _misure_attive():
         m = re.search(rx, testo, re.IGNORECASE)
         if m and nome not in fuori:
             fuori[nome] = re.sub(r"\s+", "", m.group(1)).replace(",", ".")
@@ -4150,7 +4191,23 @@ def variazioni_misure(lettera: str, dettato: str) -> list[dict]:
     out = []
     for nome in prima:
         if nome in dopo and prima[nome] != dopo[nome]:
-            out.append({"misura": nome, "prima": prima[nome], "dopo": dopo[nome]})
+            # «grande»: variazione relativa ≥ 25% o pressione con ≥ 20 mmHg di
+            # differenza → flag rosso nella revisione (verifica del cambiamento
+            # temporale: o è vero, o è una cifra sentita male).
+            grande = False
+            try:
+                if "/" in prima[nome] and "/" in dopo[nome]:
+                    a1, a2 = (float(x) for x in prima[nome].split("/")[:2])
+                    b1, b2 = (float(x) for x in dopo[nome].split("/")[:2])
+                    vg = PROFILO.get("variazione_grande") or {}
+                    grande = (abs(a1 - b1) >= float(vg.get("pressione_sistolica_mmHg", 20))
+                              or abs(a2 - b2) >= float(vg.get("pressione_diastolica_mmHg", 15)))
+                else:
+                    a, b = float(prima[nome]), float(dopo[nome])
+                    grande = a > 0 and abs(b - a) / a >= float((PROFILO.get("variazione_grande") or {}).get("relativa", 0.25))
+            except ValueError:
+                grande = False
+            out.append({"misura": nome, "prima": prima[nome], "dopo": dopo[nome], "grande": grande})
     return out[:20]
 
 
@@ -5226,7 +5283,7 @@ def valuta_rischio_frasi(finale: str, divergenze: list, dubbi: list, frasi_non_s
         trovati = _RX_NUMERO_UNITA.findall(f)
         n_num = len(trovati)
         if n_num:
-            punti += min(2 * n_num, 6)
+            punti += min(_peso('numero', 2) * n_num, _peso('numero_max', 6))
             motivi.append(f"{n_num} numer{'o' if n_num == 1 else 'i'}")
         non_conf = 0
         for val, unita in trovati:
@@ -5242,38 +5299,38 @@ def valuta_rischio_frasi(finale: str, divergenze: list, dubbi: list, frasi_non_s
                 "confermato": confermato,
             })
         if non_conf:
-            punti += 4 * min(non_conf, 3)
+            punti += _peso('numero_non_confermato', 4) * min(non_conf, 3)
             motivi.append(f"{non_conf} numer{'o' if non_conf == 1 else 'i'} non confermat{'o' if non_conf == 1 else 'i'} dal secondo orecchio")
         if contiene(div_testi, f_n):
-            punti += 5
+            punti += _peso('divergenza', 5)
             motivi.append("i due motori di trascrizione divergono qui")
         if _RX_NEGAZIONE.search(f):
-            punti += 3
+            punti += _peso('negazione', 3)
             motivi.append("negazione")
         if _RX_LATERALITA.search(f):
-            punti += 3
+            punti += _peso('lateralita', 3)
             motivi.append("lateralità")
         parole_f = re.findall(r"[a-zà-ÿ][a-zà-ÿ\-]+", f.lower())
         farm = [w for w in parole_f if (w in farmaci or w in principi) and len(w) >= 5][:3]
         if farm:
-            punti += 3 * len(farm)
+            punti += _peso('farmaco', 3) * len(farm)
             motivi.append("farmaco: " + ", ".join(farm))
         if contiene(non_supp, f_n):
-            punti += 8
+            punti += _peso('non_supportata', 8)
             motivi.append("non trovata nel dettato (avvocato del diavolo)")
         if contiene(da_chiar, f_n):
-            punti += 5
+            punti += _peso('senso', 5)
             motivi.append("senso da chiarire")
         if contiene(dubbi_n, f_n):
-            punti += 4
+            punti += _peso('dubbio', 4)
             motivi.append("segmento dubbio")
         if contiene(loop_n, f_n):
-            punti += 4
+            punti += _peso('loop', 4)
             motivi.append("qui la trascrizione si era ripetuta")
         if n_num and len(parole_f) < 4:
-            punti += 2
+            punti += _peso('frase_breve_con_numero', 2)
             motivi.append("frase brevissima con un numero")
-        if punti >= 5:
+        if punti >= _peso('soglia_lista', 5):
             rischio.append({"frase": f[:500], "punteggio": punti, "motivi": motivi[:8]})
     rischio.sort(key=lambda r: -r["punteggio"])
     log.info("fase=rischio file=%s frasi=%d a_rischio=%d numeri=%d non_confermati=%d",
@@ -5353,6 +5410,33 @@ def rileva_omissioni(grezzo: str, finale: str, note: list, parole_audio: list,
     log.info("fase=omissioni file=%s grezze=%d omesse=%d con_cifre=%d", file_id,
              len(_spezza_frasi_wizard(grezzo)), len(omesse), sum(1 for o in omesse if o["cifre"]))
     return omesse[:30]
+
+
+def applica_stile(testo: str, file_id: str) -> tuple[str, int]:
+    """Memoria di STILE del medico (2026-09-06): formulazioni preferite
+    confermate dal pannello (correzioni-locali.json, sezione «stile»),
+    applicate a FINE catena come sostituzioni di frase intere. Guardie: mai
+    cifre nelle coppie, mai ribaltamenti clinici, confini di parola. Lo stile
+    non può toccare un oggetto protetto."""
+    try:
+        locali = json.loads(PERCORSO_CORREZIONI_LOCALI.read_text(encoding="utf-8")) if PERCORSO_CORREZIONI_LOCALI.is_file() else {}
+    except (OSError, ValueError):
+        return testo, 0
+    regole = locali.get("stile") if isinstance(locali, dict) else None
+    if not isinstance(regole, dict) or not regole:
+        return testo, 0
+    n = 0
+    for da in sorted(regole, key=len, reverse=True):
+        a = str(regole[da])
+        if (not da or not a or re.search(r"\d", da + a) or _ribaltamento_clinico(da, a)
+                or _RX_LATERALITA.search(da) or _RX_LATERALITA.search(a)):
+            continue
+        pattern = re.compile(r"(?<!\w)" + re.escape(da).replace(r"\ ", r"\s+") + r"(?!\w)", re.IGNORECASE)
+        testo, k = pattern.subn(a, testo)
+        n += k
+    if n:
+        log.info("fase=stile file=%s sostituzioni=%d", file_id, n)
+    return testo, n
 
 
 def controlli_avvio():
@@ -5791,6 +5875,12 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                 finale = pulito
                 testo_integrale = finale
                 versioni["dopo_bella_copia"] = finale
+        # Memoria di stile del medico (regole confermate dal pannello).
+        if not visita:
+            finale, n_stile = applica_stile(finale, file_id)
+            if n_stile:
+                testo_integrale = finale
+                tappa("stile", "codice", sostituzioni=n_stile)
 
         # Formato standard dello studio (struttura=1): la catena prepara la
         # PROPOSTA già impaginata come il rapporto-tipo — in pagina si

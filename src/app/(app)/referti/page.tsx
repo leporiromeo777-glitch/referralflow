@@ -54,8 +54,8 @@ export default async function Referti({
 
   // Suggerimenti per il dizionario, imparati dalle correzioni ricorrenti
   // (mostrati quando la stessa sostituzione ricorre almeno due volte).
-  const suggerimenti = await query<{ id: string; da: string; a: string; conteggio: number }>(
-    `select id, da, a, conteggio from referti_suggerimenti
+  const suggerimenti = await query<{ id: string; da: string; a: string; conteggio: number; tipo: string }>(
+    `select id, da, a, conteggio, tipo from referti_suggerimenti
       where studio_id = $1 and not ignorato and not applicato and conteggio >= 2
       order by conteggio desc, updated_at desc
       limit 12`,
@@ -111,7 +111,8 @@ export default async function Referti({
           <p className="muted">
             Queste parole vengono corrette spesso a mano. Aggiungile al dizionario
             della trascrizione (dal pannello sul Mac dello studio) e la trascrizione
-            smetterà di sbagliarle.
+            smetterà di sbagliarle. Le voci «stile» sono formulazioni preferite: entrano
+            a fine catena e non toccano mai numeri, negazioni o lateralità.
           </p>
           <ul className="learn-list">
             {suggerimenti.map((s) => (
@@ -121,7 +122,7 @@ export default async function Referti({
                   <span className="learn-arr">→</span>
                   <span className="learn-a">{s.a}</span>
                 </span>
-                <span className="learn-count">×{s.conteggio}</span>
+                <span className="learn-count">×{s.conteggio}{s.tipo === 'stile' ? ' · stile' : ''}</span>
                 <form action={ignoraSuggerimento}>
                   <input type="hidden" name="id" value={s.id} />
                   <button className="btn btn-ghost btn-small" type="submit">Ignora</button>

@@ -172,9 +172,16 @@ def main(argv: list[str]) -> int:
     print(f"set: {len(coppie)} dettati · {len(critici)} termini critici · modello: {Path(modello).name}")
 
     salva = None
+    base = None      # esito precedente con cui confrontarsi (gate di sicurezza)
+    esito_out = None # dove salvare l'esito di questa corsa
     for a in argv:
         if a.startswith("--salva="):
             salva = Path(a.split("=", 1)[1])
+        if a.startswith("--base="):
+            base = json.loads(Path(a.split("=", 1)[1]).read_text(encoding="utf-8"))
+        if a.startswith("--esito="):
+            esito_out = Path(a.split("=", 1)[1])
+    esiti: dict = {}
 
     for nome in scelte:
         if nome not in VARIANTI:
@@ -207,6 +214,28 @@ def main(argv: list[str]) -> int:
               f"{tot['t_trov']}/{tot['t_pres']} · numeri {tot['n_trov']}/{tot['n_pres']} "
               f"· negazioni {tot['g_trov']}/{tot['g_pres']} "
               f"· errore ponderato {pond:.1f} · whisper {secondi:.0f}s")
+        esiti[nome] = {"wer": round(media, 2), "termini": [tot["t_trov"], tot["t_pres"]],
+                       "numeri": [tot["n_trov"], tot["n_pres"]], "negazioni": [tot["g_trov"], tot["g_pres"]],
+                       "ponderato": round(pond, 2), "secondi": round(secondi)}
+        # GATE DI SICUREZZA (2026-09-06): prima la sicurezza, poi la prestazione.
+        # Se rispetto all'esito di riferimento peggiora anche UN numero o UNA
+        # negazione, la variante è BOCCIATA, qualunque sia il WER.
+        if base and nome in base:
+            b = base[nome]
+            peggio = []
+            if tot["n_trov"] < b["numeri"][0]:
+                peggio.append(f"numeri {b['numeri'][0]}→{tot['n_trov']}")
+            if tot["g_trov"] < b["negazioni"][0]:
+                peggio.append(f"negazioni {b['negazioni'][0]}→{tot['g_trov']}")
+            if peggio:
+                print(f"  ✗ BOCCIATA (gate di sicurezza): {', '.join(peggio)}")
+                esiti[nome]["gate"] = "bocciata"
+            else:
+                meglio = pond < b["ponderato"]
+                print(f"  ✓ gate superato · errore ponderato {b['ponderato']:.1f}→{pond:.1f} ({'meglio' if meglio else 'non meglio'})")
+                esiti[nome]["gate"] = "superato" if meglio else "superato_senza_guadagno"
+    if esito_out:
+        esito_out.write_text(json.dumps(esiti, ensure_ascii=False, indent=1), encoding="utf-8")
     return 0
 
 

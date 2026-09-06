@@ -28,8 +28,8 @@ export async function GET(req: NextRequest) {
   const studioId = await studioDaToken(req);
   if (!studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
 
-  const righe = await query<{ da: string; a: string; conteggio: number }>(
-    `select da, a, conteggio from referti_suggerimenti
+  const righe = await query<{ da: string; a: string; conteggio: number; tipo: string }>(
+    `select da, a, conteggio, tipo from referti_suggerimenti
       where studio_id = $1 and not ignorato and not applicato and conteggio >= 2
       order by conteggio desc, updated_at desc
       limit 100`,

@@ -33,6 +33,7 @@ PORTA = int(os.environ.get("REFERTI_PANNELLO_PORTA", "8737"))
 SEZIONI = {
     "termini_clinici": "Termine clinico",
     "linguaggio_comune": "Linguaggio comune",
+    "stile": "Stile (formulazione, applicata a fine catena)",
 }
 TIPI_AUDIO = {
     ".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".wav": "audio/wav",
@@ -404,6 +405,7 @@ def sez_suggerimenti() -> str:
             f'<li class="sug-item"><span class="sug-pair"><s>{e(da)}</s> → <b>{e(a)}</b></span>'
             f'<span class="sug-n">×{n}</span>'
             f'<form method="post" action="/suggerimenti/aggiungi">'
+            f'<input type="hidden" name="tipo" value="{html.escape(str(v.get("tipo", "parola")))}">'
             f'<input type="hidden" name="da" value="{e(da)}">'
             f'<input type="hidden" name="a" value="{e(a)}">'
             f'<button class="btn" type="submit">Aggiungi al dizionario</button></form></li>'
@@ -583,7 +585,10 @@ class Pannello(BaseHTTPRequestHandler):
             if any(c.isdigit() for c in da + a) or da.lower() == a.lower():
                 return self._reindirizza("/?err=" + urllib.parse.quote("Suggerimento non valido (numeri o voci uguali).") + "#suggerimenti")
             locali = leggi_json(LOCALI, {})
-            locali.setdefault("termini_clinici", {})[da.lower()] = a
+            # Tre memorie (2026-09-06): «stile» va nella sua sezione, applicata
+            # a fine catena; il resto nel dizionario fonetico/terminologico.
+            sezione = "stile" if prendi("tipo") == "stile" else "termini_clinici"
+            locali.setdefault(sezione, {})[da.lower()] = a
             scrivi_locali(locali)
             segna_applicato(da, a)
             return self._reindirizza("/?msg=" + urllib.parse.quote(f"Aggiunta: «{da}» → «{a}». Attiva dal prossimo giro.") + "#dizionario")

@@ -180,7 +180,7 @@ export default async function RefertoBozza({
   // automatica della lettera precedente = ultimo referto CONFERMATO dello
   // stesso paziente (nome + data di nascita dai campi, confermati o estratti).
   const fusione = (p as any).fusione && typeof (p as any).fusione === 'object'
-    ? ((p as any).fusione as { stato?: string; lettera_precedente?: string; testo_fuso?: string; errore?: string; richiesta_at?: string; provenienza?: string[]; riepilogo?: Record<string, number>; variazioni?: { misura: string; prima: string; dopo: string }[] })
+    ? ((p as any).fusione as { stato?: string; lettera_precedente?: string; testo_fuso?: string; errore?: string; richiesta_at?: string; provenienza?: string[]; riepilogo?: Record<string, number>; variazioni?: { misura: string; prima: string; dopo: string; grande?: boolean }[] })
     : null;
   const campiRif = { ...(p.campi_estratti ?? {}), ...(row.campi_confermati ?? {}) } as Record<string, unknown>;
   const nomePaz = typeof campiRif.nome_paziente === 'string' ? campiRif.nome_paziente.trim() : '';
@@ -432,7 +432,7 @@ export default async function RefertoBozza({
                     <thead><tr><th>Misura</th><th>Lettera precedente</th><th>Dettato oggi</th></tr></thead>
                     <tbody>
                       {fusione.variazioni.map((v, i) => (
-                        <tr key={i}><td>{v.misura}</td><td>{v.prima}</td><td><strong>{v.dopo}</strong></td></tr>
+                        <tr key={i} style={v.grande ? { color: '#b3382c', fontWeight: 600 } : undefined}><td>{v.misura}{v.grande ? ' ⚠︎' : ''}</td><td>{v.prima}</td><td><strong>{v.dopo}</strong></td></tr>
                       ))}
                     </tbody>
                   </table>
@@ -618,6 +618,7 @@ export default async function RefertoBozza({
             rischioFrasi={Array.isArray(p.rischio_frasi) ? p.rischio_frasi : []}
             numeri={Array.isArray(p.numeri) ? p.numeri : []}
             frasiOmesse={Array.isArray(p.frasi_omesse) ? p.frasi_omesse : []}
+            variazioni={fusione?.stato === 'fatta' && Array.isArray(fusione.variazioni) ? fusione.variazioni : []}
             letteraPrecedente={fusione?.stato === 'fatta' && typeof fusione.lettera_precedente === 'string' ? fusione.lettera_precedente : ''}
             note={Array.isArray(p.note_segreteria) ? p.note_segreteria.filter((n): n is string => typeof n === 'string') : []}
             campi={Object.fromEntries(Object.entries(campi).filter(([, v]) => typeof v === 'string')) as Record<string, string>}

@@ -70,6 +70,25 @@ export async function confermaBozza(formData: FormData) {
         const tx = tassonomiaModifiche(row.ai_text, testo);
         m.classi = tx.classi;
         m.modifiche = tx.modifiche;
+        // Memoria di STILE (2026-09-06): una riformulazione senza numeri,
+        // negazioni o lateralità, di 2-6 parole per lato, diventa una regola
+        // PROPOSTA; entra nel dizionario solo quando il medico la conferma
+        // dal pannello (vista almeno 2 volte).
+        for (const md of tx.modifiche) {
+          if (md.classe !== 'STYLE') continue;
+          const np = md.prima.trim(), nd = md.dopo.trim();
+          const wp = np.split(/\s+/).length, wd = nd.split(/\s+/).length;
+          if (wp < 2 || wp > 6 || wd < 2 || wd > 6 || /\d/.test(np + nd)) continue;
+          if (np.toLowerCase() === nd.toLowerCase()) continue;
+          await query(
+            `insert into referti_suggerimenti (studio_id, da, a, tipo)
+             values ($1, $2, $3, 'stile')
+             on conflict (studio_id, da, a) do update
+               set conteggio = referti_suggerimenti.conteggio + 1,
+                   updated_at = now(), ignorato = false`,
+            [session.studioId, np.slice(0, 200), nd.slice(0, 200)]
+          );
+        }
       } catch (e: any) {
         console.error('Tassonomia modifiche fallita:', e?.message || e);
       }
