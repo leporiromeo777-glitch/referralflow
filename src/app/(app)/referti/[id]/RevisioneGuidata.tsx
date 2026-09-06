@@ -69,7 +69,7 @@ export function RevisioneGuidata({
   testoStrutturato?: string;
   provenienza?: [string, string][];
   avvisi?: string[];
-  rischioFrasi?: { frase: string; punteggio: number; motivi?: string[] }[];
+  rischioFrasi?: { frase: string; punteggio: number; motivi?: string[]; gravita?: string; supporto?: string; fonte?: string[] }[];
   numeri?: { valore: string; unita?: string; frase?: number | null; secondo?: number | null; confermato?: boolean | null }[];
   frasiOmesse?: { frase: string; secondo?: number | null; cifre?: boolean; farmaco?: boolean; copertura?: number | null }[];
   variazioni?: { misura: string; prima: string; dopo: string; grande?: boolean }[];
@@ -612,8 +612,16 @@ export function RevisioneGuidata({
             <div key={`k${v.k}`} className={`rg-item rg-arancione${fatte.has(`k${v.k}`) ? ' rg-fatta' : ''}`}>
               {cardFrase(v.idx)}
               <p className="rg-motivo">
+                {v.gravita && (
+                  <span className="rg-tab" style={{ marginRight: 6, fontSize: '0.8em', padding: '2px 9px', borderColor: v.gravita === 'critica' ? '#b3382c' : undefined, color: v.gravita === 'critica' ? '#b3382c' : undefined }}>
+                    gravità {v.gravita}
+                  </span>
+                )}
                 {(v.motivi ?? []).map((m, j) => (
                   <span key={j} className="rg-tab" style={{ marginRight: 6, fontSize: '0.8em', padding: '2px 9px' }}>{m}</span>
+                ))}
+                {(v.fonte ?? []).map((m, j) => (
+                  <span key={`f${j}`} className="muted small" style={{ marginRight: 8 }}>· {m}</span>
                 ))}
               </p>
               {!fatte.has(`k${v.k}`) && (

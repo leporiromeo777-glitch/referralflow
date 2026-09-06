@@ -142,6 +142,11 @@ export async function POST(req: NextRequest) {
         motivi: (Array.isArray(v.motivi) ? v.motivi : [])
           .filter((m: unknown): m is string => typeof m === 'string').slice(0, 8)
           .map((m: string) => m.slice(0, 120)),
+        gravita: typeof (v as any).gravita === 'string' ? String((v as any).gravita).slice(0, 12) : '',
+        supporto: typeof (v as any).supporto === 'string' ? String((v as any).supporto).slice(0, 16) : '',
+        fonte: (Array.isArray((v as any).fonte) ? (v as any).fonte : [])
+          .filter((m: unknown): m is string => typeof m === 'string').slice(0, 4)
+          .map((m: string) => m.slice(0, 40)),
       })),
     numeri: lista(body?.numeri)
       .filter((v: unknown): v is { valore: string; unita?: unknown; frase?: unknown; secondo?: unknown; confermato?: unknown } =>
@@ -180,6 +185,13 @@ export async function POST(req: NextRequest) {
           .filter(([k, x]) => /^[a-z_]{1,30}$/.test(k) && typeof x === 'string')
           .slice(0, 8)
           .map(([k, x]) => [k, (x as string).slice(0, MAX_TESTO)]))
+      : {},
+    // Registro di versione della catena (pipeline, prompt, dizionario, modelli).
+    versione_catena: body?.versione_catena && typeof body.versione_catena === 'object'
+      ? Object.fromEntries(Object.entries(body.versione_catena as Record<string, unknown>)
+          .filter(([k, x]) => /^[a-z_]{1,24}$/.test(k) && typeof x === 'string')
+          .slice(0, 16)
+          .map(([k, x]) => [k, (x as string).slice(0, 60)]))
       : {},
     // Bozza «ombra» (confronto cieco tra due versioni della catena).
     ombra: body?.ombra === true,

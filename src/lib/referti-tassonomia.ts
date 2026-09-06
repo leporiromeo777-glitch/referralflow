@@ -17,7 +17,7 @@ import os from 'node:os';
 //   STYLE             riformulazione senza numeri, farmaci o negazioni
 // Solo le classi ASR_* dovrebbero alimentare dizionario e memoria acustica.
 
-export type Modifica = { prima: string; dopo: string; classe: string };
+export type Modifica = { prima: string; dopo: string; classe: string; origine?: string };
 
 const NEG = /\b(non|nessun[ao]?|senza|assenz[ae]|negativ[oaie]|esclus[oaie]|né)\b/i;
 const LAT = /\b(destr[oaie]|sinistr[oaie]|dx|sx)\b/i;
@@ -103,4 +103,54 @@ export function tassonomiaModifiche(catena: string, finale: string): { classi: R
     if (modifiche.length < 60) modifiche.push({ prima: prima.slice(0, 80), dopo: dopo.slice(0, 80), classe });
   }
   return { classi, modifiche };
+}
+
+
+// ——— Lineage degli errori (2026-09-06, quarto documento) ———
+// Per una correzione «prima → dopo» del medico, la PRIMA versione della
+// catena in cui il valore giusto («dopo») è sparito dice chi ha sbagliato:
+//   motori        né whisper (A) né Voxtral (B) l'avevano sentito
+//   whisper       B l'aveva, A no, e l'arbitro ha tenuto A
+//   arbitro       era in A (o in B) dopo il dizionario, sparito dopo l'arbitro
+//   dizionario    era nei grezzi, sparito dopo il dizionario
+//   correttore    c'era fino all'arbitro, sparito dopo la correzione
+//   bella_copia   c'era dopo la correzione, sparito dopo la bella copia
+//   omissione     il medico ha aggiunto testo che non era in nessuna versione
+//   stile         solo forma: nessun componente ha «sbagliato»
+// Così la correzione alimenta la memoria giusta e non si insegna al
+// componente sbagliato.
+const ORDINE_VERSIONI = ['grezzo_a', 'grezzo_b', 'dopo_dizionario', 'dopo_arbitro', 'dopo_correzione', 'dopo_bella_copia', 'finale'] as const;
+
+function contiene(testo: string, frammento: string): boolean {
+  const n = (x: string) => x.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  const f = n(frammento);
+  if (!f) return false;
+  return (' ' + n(testo) + ' ').includes(' ' + f + ' ');
+}
+
+export function lineage(m: Modifica, versioni: Record<string, string>): string {
+  if (m.classe === 'FORMAT_ONLY' || m.classe === 'STYLE') return 'stile';
+  if (!m.dopo.trim()) return 'medico_toglie';
+  // il valore giusto è il «dopo»: dove c'era?
+  const presente = Object.fromEntries(ORDINE_VERSIONI.map((k) => [k, versioni[k] ? contiene(versioni[k], m.dopo) : null]));
+  const inA = presente.grezzo_a === true, inB = presente.grezzo_b === true;
+  if (!inA && !inB) return m.classe === 'OMISSION_RECOVERY' || !m.prima.trim() ? 'omissione' : 'motori';
+  // c'era almeno in un grezzo: prima versione successiva in cui manca
+  const dopoArbitro = presente.dopo_arbitro, dopoDiz = presente.dopo_dizionario;
+  if (inB && !inA) return dopoArbitro === true ? 'ok_poi_perso' : 'whisper_e_arbitro';
+  if (dopoDiz === false) return 'dizionario';
+  if (dopoArbitro === false) return 'arbitro';
+  if (presente.dopo_correzione === false) return 'correttore';
+  if (presente.dopo_bella_copia === false) return 'bella_copia';
+  return 'a_valle';
+}
+
+export function conLineage(modifiche: Modifica[], versioni: Record<string, string>): { modifiche: Modifica[]; origini: Record<string, number> } {
+  const origini: Record<string, number> = {};
+  const out = modifiche.map((m) => {
+    const o = lineage(m, versioni);
+    origini[o] = (origini[o] ?? 0) + 1;
+    return { ...m, origine: o };
+  });
+  return { modifiche: out, origini };
 }

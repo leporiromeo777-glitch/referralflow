@@ -54,7 +54,7 @@ function punteggio(nota: string[], testoDoc: string): number {
 }
 
 /** Trova il paziente citato nei campi estratti (match per cognome+nome). */
-async function trovaPaziente(studioId: string, nomePaziente: string | null): Promise<string | null> {
+export async function trovaPaziente(studioId: string, nomePaziente: string | null): Promise<string | null> {
   const pulito = (nomePaziente ?? '').trim();
   if (!pulito || pulito === 'non indicato') return null;
   const [p] = await query<{ id: string }>(

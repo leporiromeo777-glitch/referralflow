@@ -668,6 +668,44 @@ def file_id_di(percorso: Path) -> str:
     return h.hexdigest()[:16]
 
 
+def verifica_integrita_audio(ingresso: Path, file_id: str) -> dict:
+    """Controlli tecnici PRIMA della trascrizione (2026-09-06, quarto documento:
+    un audio rotto può essere trascritto «bene» e dare una bozza che sembra
+    completa). Errori di decodifica, saturazione (picco a 0 dB), quota di
+    silenzio. Nel log e nella cronologia solo numeri."""
+    esito = {"errori_decodifica": 0, "picco_db": None, "silenzio_pct": None, "durata_s": None}
+    try:
+        r = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-v", "error", "-i", str(ingresso),
+                            "-f", "null", "-"], capture_output=True, text=True, timeout=300)
+        esito["errori_decodifica"] = len([l for l in r.stderr.splitlines() if l.strip()])
+    except (subprocess.SubprocessError, OSError):
+        return esito
+    try:
+        r = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-i", str(ingresso),
+                            "-af", "volumedetect,silencedetect=noise=-35dB:d=2", "-f", "null", "-"],
+                           capture_output=True, text=True, timeout=300)
+        m = re.search(r"max_volume:\s*(-?[\d.]+) dB", r.stderr)
+        if m:
+            esito["picco_db"] = float(m.group(1))
+        durate = [float(x) for x in re.findall(r"silence_duration:\s*([\d.]+)", r.stderr)]
+        m2 = re.search(r"time=(\d+):(\d+):([\d.]+)", r.stderr.rsplit("time=", 1)[0] + "time=" + r.stderr.rsplit("time=", 1)[-1])
+        durata = None
+        try:
+            son = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                                  "-of", "default=nw=1:nk=1", str(ingresso)], capture_output=True, text=True, timeout=60)
+            durata = float(son.stdout.strip())
+        except (subprocess.SubprocessError, OSError, ValueError):
+            pass
+        esito["durata_s"] = durata
+        if durata:
+            esito["silenzio_pct"] = round(100.0 * sum(durate) / durata, 1)
+    except (subprocess.SubprocessError, OSError):
+        pass
+    log.info("fase=integrita_audio file=%s errori=%d picco_db=%s silenzio_pct=%s", file_id,
+             esito["errori_decodifica"], esito["picco_db"], esito["silenzio_pct"])
+    return esito
+
+
 def preprocessa(ingresso: Path, uscita: Path, file_id: str) -> None:
     """Passa-alto 80 Hz (via il rombo a bassa frequenza, la voce non ne
     risente) + loudnorm EBU R128 (dettati a volume disomogeneo), poi
@@ -1156,6 +1194,40 @@ def parole_da_json(percorso_json: Path) -> list[tuple[str, float]]:
         chiudi()  # il confine di segmento chiude sempre la parola
     return parole
 
+
+# Probabilità per parola di whisper (2026-09-06, quarto documento): il minimo
+# tra i token della parola. NON si colora il testo (la ricerca lo boccia):
+# entra solo nel punteggio di rischio per ordinare i flag. Per referto, in RAM.
+_PROB_PAROLE: dict[str, dict[str, float]] = {}
+
+
+def probabilita_parole(percorso_json: Path) -> dict[str, float]:
+    try:
+        dati = json.loads(percorso_json.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    fuori: dict[str, float] = {}
+    testo, pmin = "", 1.0
+    def chiudi() -> None:
+        nonlocal testo, pmin
+        k = re.sub(r"\W+", "", testo.lower())
+        if k:
+            fuori[k] = min(fuori.get(k, 1.0), pmin)
+        testo, pmin = "", 1.0
+    for seg in dati.get("transcription", []):
+        for tok in seg.get("tokens", []):
+            tx = tok.get("text", "")
+            if not tx or (tx.startswith("[") and tx.endswith("]")):
+                continue
+            if tx.startswith(" "):
+                chiudi()
+            testo += tx
+            try:
+                pmin = min(pmin, float(tok.get("p", 1.0)))
+            except (TypeError, ValueError):
+                pass
+        chiudi()
+    return fuori
 
 def allinea_parole(testo: str, parole_audio: list[tuple[str, float]]) -> list[list]:
     """[[parola, secondi], …] per ogni parola di `testo` (split su spazi).
@@ -5330,8 +5402,26 @@ def valuta_rischio_frasi(finale: str, divergenze: list, dubbi: list, frasi_non_s
         if n_num and len(parole_f) < 4:
             punti += _peso('frase_breve_con_numero', 2)
             motivi.append("frase brevissima con un numero")
+        # Parole che whisper stesso considerava poco probabili (min p < 0.45).
+        prob = _PROB_PAROLE.get(file_id) or {}
+        incerte = [w for w in parole_f if len(w) >= 4 and prob.get(w, 1.0) < 0.45]
+        if incerte:
+            punti += _peso('parola_incerta', 2) * min(len(incerte), 3)
+            motivi.append(f"{len(incerte)} parol{'a' if len(incerte) == 1 else 'e'} poco sicur{'a' if len(incerte) == 1 else 'e'} per whisper")
+        # Tre dimensioni (quarto documento): un punteggio solo comprime troppo.
+        critico = bool(non_conf or _RX_NEGAZIONE.search(f) or _RX_LATERALITA.search(f) or farm or contiene(non_supp, f_n))
+        gravita = "critica" if critico else ("alta" if (n_num or contiene(div_testi, f_n)) else "media")
+        supporto = ("non_supportata" if contiene(non_supp, f_n)
+                    else "dubbia" if (contiene(da_chiar, f_n) or contiene(dubbi_n, f_n)) else "ok")
+        fonte: list[str] = []
+        fonte.append("motori discordi" if contiene(div_testi, f_n) else "motori concordi")
+        if n_num and sentiti is not None:
+            fonte.append("secondo orecchio conferma" if not non_conf else "secondo orecchio non conferma")
+        if incerte:
+            fonte.append("whisper incerto")
         if punti >= _peso('soglia_lista', 5):
-            rischio.append({"frase": f[:500], "punteggio": punti, "motivi": motivi[:8]})
+            rischio.append({"frase": f[:500], "punteggio": punti, "motivi": motivi[:8],
+                            "gravita": gravita, "supporto": supporto, "fonte": fonte[:4]})
     rischio.sort(key=lambda r: -r["punteggio"])
     log.info("fase=rischio file=%s frasi=%d a_rischio=%d numeri=%d non_confermati=%d",
              file_id, len(frasi), len(rischio), len(numeri),
@@ -5439,6 +5529,53 @@ def applica_stile(testo: str, file_id: str) -> tuple[str, int]:
     return testo, n
 
 
+GUARDIE_VERSIONE = "2026-09-06"
+
+
+def _sha_breve(*pezzi: bytes) -> str:
+    h = hashlib.sha256()
+    for b in pezzi:
+        h.update(b)
+    return h.hexdigest()[:12]
+
+
+def versione_catena() -> dict[str, str]:
+    """Registro di versione (2026-09-06, quarto documento): con quale
+    combinazione di codice, prompt, dizionario, vocabolario, profilo e
+    modelli è nata questa bozza. Rende ricostruibile ogni regressione."""
+    try:
+        codice = _sha_breve(Path(__file__).read_bytes())
+    except OSError:
+        codice = "?"
+    prompt_txt = "\n".join(str(v) for k, v in sorted(globals().items()) if k.startswith("PROMPT_") and isinstance(v, str))
+    diz = b""
+    for pth in (PERCORSO_CORREZIONI, PERCORSO_CORREZIONI_LOCALI):
+        try:
+            diz += pth.read_bytes() if pth.is_file() else b""
+        except OSError:
+            pass
+    voc = b""
+    for pth in (PERCORSO_VOCABOLARIO, PERCORSO_VOCABOLARIO_LOCALI):
+        try:
+            voc += pth.read_bytes() if pth.is_file() else b""
+        except OSError:
+            pass
+    cfg = _config_esterno() or {}
+    return {
+        "pipeline": codice,
+        "prompt": _sha_breve(prompt_txt.encode("utf-8")),
+        "dizionario": _sha_breve(diz),
+        "vocabolario": _sha_breve(voc),
+        "profilo": str(PROFILO.get("versione", "")),
+        "guardie": GUARDIE_VERSIONE,
+        "asr_a": Path(str(PERCORSO_MODELLO)).name,
+        "asr_b": "voxtral-mini-3b" if VOXTRAL_B_SWITCH.is_file() else "whisper",
+        "llm_locale": MODELLO_LLM,
+        "anonimizzatore": MODELLO_ANONIMIZZA,
+        "esterno": str(cfg.get("modello", "")).split("/")[-1],
+    }
+
+
 def controlli_avvio():
     """Verifiche una-volta-sola prima di lavorare: strumenti, modelli,
     configurazione. Restituisce (sostituzioni, controlli) o None."""
@@ -5506,6 +5643,19 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         storia.append({"tappa": nome, "attore": attore, "secondi": round(time.monotonic() - t_avvio, 1),
                        **{k: v for k, v in dati.items() if isinstance(v, (int, float, str, bool))}})
     try:
+        integ = verifica_integrita_audio(ingresso, file_id)
+        tappa("integrita_audio", "codice", errori=integ["errori_decodifica"],
+              picco_db=integ["picco_db"] if integ["picco_db"] is not None else "",
+              silenzio_pct=integ["silenzio_pct"] if integ["silenzio_pct"] is not None else "")
+        if integ["errori_decodifica"] > 0:
+            avvisi.append(f"L'audio presenta {integ['errori_decodifica']} punti danneggiati in decodifica: "
+                          "parti del dettato potrebbero mancare. Riascolta per intero prima di confermare.")
+        if integ["silenzio_pct"] is not None and integ["silenzio_pct"] >= 60:
+            avvisi.append(f"L'audio è silenzioso per il {integ['silenzio_pct']:.0f}% della durata: "
+                          "controlla che la registrazione sia quella giusta e completa.")
+        if integ["picco_db"] is not None and integ["picco_db"] >= -0.2:
+            avvisi.append("L'audio è saturato (picchi a 0 dB): alcune parole possono essere distorte; "
+                          "in caso di dubbi riascolta i passaggi con numeri.")
         preprocessa(ingresso, percorso(".wav"), file_id)
         tappa("preprocessing", "codice")
         # Vocabolario di dominio per whisper (SPEC §4.2): stesso prompt per le due
@@ -5937,6 +6087,9 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             except ValueError:
                 durata_audio_originale = 0.0
             seg_vad = _segmenti_vad(percorso(".wav")) if USA_VAD else []
+            _PROB_PAROLE[file_id] = probabilita_parole(percorso(".json"))
+            while len(_PROB_PAROLE) > 12:
+                _PROB_PAROLE.pop(next(iter(_PROB_PAROLE)))
             if seg_vad:
                 parole_audio = parole_da_json(percorso(".json"))
                 giuntura = _giuntura_vad(
@@ -6094,6 +6247,10 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
     # attore e numeri; le versioni servono all'audit e al confronto cieco.
     payload["storia"] = storia
     payload["versioni"] = {k: v for k, v in versioni.items() if isinstance(v, str) and v.strip()}
+    try:
+        payload["versione_catena"] = versione_catena()
+    except Exception as e:  # noqa: BLE001
+        log.warning("fase=versione file=%s esito=errore tipo=%s", file_id, type(e).__name__)
     if not visita and testo_strutturato:
         # Proposta nel formato standard dello studio (fase struttura):
         # in pagina si applica con un clic, mai da sola.

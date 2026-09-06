@@ -48,6 +48,13 @@ export default async function Qualita() {
       group by k order by 2 desc`,
     [session.studioId]
   );
+  const origini = await query<{ origine: string; n: number }>(
+    `select k as origine, sum(v::int)::int as n
+       from referti_bozze b, jsonb_each_text(coalesce(b.payload->'revisione'->'origini', '{}'::jsonb)) as t(k, v)
+      where b.studio_id = $1 and b.stato = 'confermata'
+      group by k order by 2 desc`,
+    [session.studioId]
+  );
   const totale = settimane.reduce((s, r) => s + r.n, 0);
   const min = (s: number | null) => (s === null ? '—' : `${Math.round(s / 60)} min ${Math.round(s % 60)} s`);
 
@@ -108,6 +115,17 @@ export default async function Qualita() {
             </ul>
           </div>
         </>
+      )}
+      {origini.length > 0 && (
+        <div className="card">
+          <h2>Da dove nascono gli errori</h2>
+          <p className="muted small">Per ogni correzione del medico, la prima tappa della catena in cui il valore giusto è sparito: dice quale componente migliorare (motori = né whisper né Voxtral l&apos;avevano sentito; whisper e arbitro = Voxtral l&apos;aveva, l&apos;arbitro ha scelto male).</p>
+          <ul>
+            {origini.map((o) => (
+              <li key={o.origine}><strong>{o.origine.replaceAll('_', ' ')}</strong>: {o.n}</li>
+            ))}
+          </ul>
+        </div>
       )}
       <p className="muted small"><Link href="/referti/confronto">Confronto cieco tra versioni della catena →</Link></p>
     </div>

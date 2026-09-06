@@ -5,7 +5,8 @@ import { query } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
 import { dataOra } from '@/lib/format';
-import { confermaBozza, scartaBozza, ripristinaBozza, eliminaBozza, richiediFusione, applicaFusione } from '../actions';
+import { confermaBozza, scartaBozza, ripristinaBozza, eliminaBozza, richiediFusione, applicaFusione, creaRichiamoDaReferto } from '../actions';
+import { rilevaRichiamo } from '@/lib/referti-richiami';
 import { agganciaRiferimenti } from '@/lib/referti-allegati';
 import { AudioDettato } from '../AudioDettato';
 import { TestoDettato } from '../TestoDettato';
@@ -38,13 +39,15 @@ type Payload = {
   riparazioni_applicate?: { da: string; a: string }[];
   testo_grezzo?: string;
   testo_strutturato?: string;
-  revisione?: { quota_modificata?: number; distanza_parole?: number; parole_finali?: number; tempo_revisione_s?: number; flag_totali?: number; flag_accettati_senza_riascolto?: number; classi?: Record<string, number>; modifiche?: { prima: string; dopo: string; classe: string }[] };
+  revisione?: { quota_modificata?: number; distanza_parole?: number; parole_finali?: number; tempo_revisione_s?: number; flag_totali?: number; flag_accettati_senza_riascolto?: number; classi?: Record<string, number>; origini?: Record<string, number>; modifiche?: { prima: string; dopo: string; classe: string; origine?: string }[] };
   rischio_frasi?: { frase: string; punteggio: number; motivi?: string[] }[];
   numeri?: { valore: string; unita?: string; frase?: number | null; secondo?: number | null; confermato?: boolean | null }[];
   frasi_omesse?: { frase: string; secondo?: number | null; cifre?: boolean; farmaco?: boolean; copertura?: number | null }[];
   storia?: Record<string, string | number | boolean>[];
   versioni?: Record<string, string>;
+  versione_catena?: Record<string, string>;
   ombra?: boolean;
+  richiamo?: { mesi: number; referral_id: string; creato_at: string };
 };
 
 // Evidenzia i frammenti segnalati dentro il testo: prima occorrenza di ogni
@@ -286,6 +289,9 @@ export default async function RefertoBozza({
           {p.revisione.classi && Object.keys(p.revisione.classi).length > 0 && (
             <> Tipi di correzione: {Object.entries(p.revisione.classi).map(([k, n]) => `${k.toLowerCase().replaceAll('_', ' ')} ${n}`).join(', ')}.</>
           )}
+          {p.revisione.origini && Object.keys(p.revisione.origini).length > 0 && (
+            <> Da dove nascevano gli errori: {Object.entries(p.revisione.origini).map(([k, n]) => `${k.replaceAll('_', ' ')} ${n}`).join(', ')}.</>
+          )}
         </p>
       )}
       {(Array.isArray(p.storia) && p.storia.length > 0) && (
@@ -307,6 +313,11 @@ export default async function RefertoBozza({
               </tbody>
             </table>
           </div>
+          {p.versione_catena && (
+            <p className="muted small">
+              Versione della catena: {Object.entries(p.versione_catena).map(([k, v]) => `${k} ${v}`).join(' · ')}
+            </p>
+          )}
           {p.versioni && Object.entries(p.versioni).map(([k, testo]) => (
             <details key={k} style={{ marginTop: 8 }}>
               <summary className="sez-summary">Versione: {k.replaceAll('_', ' ')}</summary>
@@ -388,6 +399,37 @@ export default async function RefertoBozza({
           <AudioDettato src={`/api/referti/audio/${audio.id}`} />
         </div>
       )}
+
+      {(() => {
+        const proposta = p.richiamo ? null : rilevaRichiamo([
+          ...(Array.isArray(p.note_segreteria) ? p.note_segreteria.filter((n): n is string => typeof n === 'string') : []),
+          row.testo_finale ?? p.testo_corretto ?? '',
+        ]);
+        if (p.richiamo) {
+          return (
+            <div className="card notice">
+              <p>Richiamo impostato dal referto: tra {p.richiamo.mesi} mesi ({dataOra(p.richiamo.creato_at)}). Lo trovi nella pagina Follow-up.</p>
+            </div>
+          );
+        }
+        if (!proposta) return null;
+        return (
+          <div className="card ctrl-box">
+            <h2>Richiamo proposto</h2>
+            <p className="muted">
+              Nel dettato: «…{proposta.frase}…». Vuoi impostare il follow-up del paziente tra <strong>{proposta.mesi} mesi</strong>?
+              Va sull&apos;ultima referral del paziente; comparirà tra i richiami alla scadenza.
+            </p>
+            <form action={creaRichiamoDaReferto} className="form-actions">
+              <input type="hidden" name="id" value={row.id} />
+              <input type="hidden" name="mesi" value={proposta.mesi} />
+              <button className="btn btn-primary" type="submit">📅 Crea il richiamo a {proposta.mesi} mesi</button>
+            </form>
+          </div>
+        );
+      })()}
+      {searchParams.ok === 'richiamo' && <div className="card notice"><p>Richiamo creato ✓</p></div>}
+      {searchParams.err === 'richiamo_paziente' && <p className="error">Nessuna referral trovata per questo paziente nello studio: il richiamo va impostato dalla scheda della referral.</p>}
 
       {row.tipo !== 'visita' && (
         <div className="card">

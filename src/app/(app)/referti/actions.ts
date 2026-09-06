@@ -8,7 +8,8 @@ import { isUuid } from '@/lib/cartella';
 import { estraiSostituzioni } from '@/lib/referti-learn';
 import { deleteFile } from '@/lib/storage';
 import { misuraRevisione } from '@/lib/referti-misura';
-import { tassonomiaModifiche } from '@/lib/referti-tassonomia';
+import { tassonomiaModifiche, conLineage } from '@/lib/referti-tassonomia';
+import { trovaPaziente } from '@/lib/referti-allegati';
 
 const MAX_SUGGERIMENTI = 30;
 
@@ -38,12 +39,12 @@ export async function confermaBozza(formData: FormData) {
     }
   });
 
-  const [row] = await query<{ ai_text: string | null }>(
+  const [row] = await query<{ ai_text: string | null; versioni: Record<string, string> | null; grezzo: string | null }>(
     `update referti_bozze
         set stato = 'confermata', testo_finale = $3, campi_confermati = $4,
             reviewed_by = $5, reviewed_at = now()
       where id = $1 and studio_id = $2 and stato = 'bozza'
-      returning payload ->> 'testo_corretto' as ai_text`,
+      returning payload ->> 'testo_corretto' as ai_text, payload -> 'versioni' as versioni, payload ->> 'testo_grezzo' as grezzo`,
     [id, session.studioId, testo, JSON.stringify(campi), session.id]
   );
 
@@ -69,7 +70,12 @@ export async function confermaBozza(formData: FormData) {
       try {
         const tx = tassonomiaModifiche(row.ai_text, testo);
         m.classi = tx.classi;
-        m.modifiche = tx.modifiche;
+        // Lineage: quale componente ha introdotto ogni errore corretto.
+        const versioni: Record<string, string> = { ...(row.versioni ?? {}), finale: row.ai_text };
+        if (row.grezzo) versioni.grezzo_a = row.grezzo;
+        const lin = conLineage(tx.modifiche, versioni);
+        m.modifiche = lin.modifiche;
+        m.origini = lin.origini;
         // Memoria di STILE (2026-09-06): una riformulazione senza numeri,
         // negazioni o lateralità, di 2-6 parole per lato, diventa una regola
         // PROPOSTA; entra nel dizionario solo quando il medico la conferma
@@ -338,4 +344,51 @@ export async function decidiConfronto(formData: FormData) {
   );
   revalidatePath('/referti/confronto');
   redirect('/referti/confronto?ok=deciso');
+}
+
+
+// Richiamo proposto dal referto («controllo tra sei mesi»): imposta il
+// follow-up sull'ultima referral del paziente nello studio. Solo su clic.
+export async function creaRichiamoDaReferto(formData: FormData) {
+  const session = await getSession();
+  if (!session || !session.studioId) redirect('/login');
+  const id = String(formData.get('id') ?? '');
+  if (!isUuid(id)) redirect('/referti');
+  const mesi = parseInt(String(formData.get('mesi') ?? ''), 10);
+  if (!Number.isInteger(mesi) || mesi < 1 || mesi > 120) redirect(`/referti/${id}?err=richiamo`);
+  const [b] = await query<{ nome: string | null }>(
+    `select coalesce(campi_confermati->>'nome_paziente', payload->'campi_estratti'->>'nome_paziente') as nome
+       from referti_bozze where id = $1 and studio_id = $2`,
+    [id, session.studioId]
+  );
+  const patientId = await trovaPaziente(session.studioId, b?.nome ?? null);
+  if (!patientId) redirect(`/referti/${id}?err=richiamo_paziente`);
+  const [ref] = await query<{ id: string }>(
+    `select id from referrals where studio_id = $1 and patient_id = $2
+      order by created_at desc limit 1`,
+    [session.studioId, patientId]
+  );
+  if (!ref) redirect(`/referti/${id}?err=richiamo_paziente`);
+  await query(
+    `update referrals
+        set follow_up_months = $2,
+            follow_up_due = (coalesce(
+              (select max(changed_at) from referral_status_history
+                where referral_id = $1 and to_status = 'vista'),
+              appuntamento_at,
+              now()
+            ) + make_interval(months => $2))::date,
+            follow_up_done_at = null
+      where id = $1 and studio_id = $3`,
+    [ref.id, mesi, session.studioId]
+  );
+  await query(
+    `update referti_bozze
+        set payload = jsonb_set(payload, '{richiamo}', $3::jsonb)
+      where id = $1 and studio_id = $2`,
+    [id, session.studioId, JSON.stringify({ mesi, referral_id: ref.id, creato_at: new Date().toISOString(), da: session.id })]
+  );
+  revalidatePath(`/referti/${id}`);
+  revalidatePath('/richiami');
+  redirect(`/referti/${id}?ok=richiamo`);
 }
