@@ -2,21 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { generaDocxReferto, ricomponiParagrafi } from '@/lib/referto-docx';
+import { profiloMedico } from '@/lib/referti-medici';
+import { appellativo, conTitolo, dataCh, dataVisitaDalTesto, destinatarioInRubrica, siglaDaEmail } from '@/lib/referti-lettera';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 // Il referto in Word con la carta intestata dello studio (stampo in
 // modelli/referto-carta-intestata.docx): pronto da rifinire e spedire.
-// Solo utenti dello studio proprietario. Il nome del file scaricato è
-// NEUTRO: niente nome del paziente (stessa regola della pagina Anonimizza).
+// La carta segue il MEDICO che ha dettato (profilo pubblicato dal Mac):
+// nome e righe d'intestazione, titolo del rapporto, riga «Copia».
+// Formato «lettera» (2026-09-07, dalla versione della segretaria):
+// destinatario su più righe («Egregio Signor», nome, specialità, e-mail),
+// data della DETTATURA con la sigla di chi scrive, titolo con la data della
+// visita. Solo utenti dello studio proprietario. Il nome del file scaricato
+// è NEUTRO: niente nome del paziente (stessa regola della pagina Anonimizza).
 
 const MIME_DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-
-function dataCh(d: string | null): string {
-  if (!d) return '';
-  return new Date(d).toLocaleDateString('it-CH', { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();
@@ -25,11 +27,14 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const [b] = await query<{
     stato: string; testo_finale: string | null; payload: any;
     campi_confermati: any; created_at: string;
-    studio_nome: string; titolare: string | null; studio_telefono: string | null;
+    studio_nome: string; titolare: string | null; studio_telefono: string | null; studio_email: string | null;
+    reviewed_email: string | null;
   }>(
     `select b.stato, b.testo_finale, b.payload, b.campi_confermati, b.created_at::text,
-            s.nome as studio_nome, s.titolare, s.telefono as studio_telefono
+            s.nome as studio_nome, s.titolare, s.telefono as studio_telefono, s.notify_email as studio_email,
+            u.email as reviewed_email
        from referti_bozze b join studios s on s.id = b.studio_id
+       left join users u on u.id = b.reviewed_by
       where b.id = $1 and b.studio_id = $2`,
     [params.id, session.studioId]
   );
@@ -47,34 +52,71 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   const pazienteNome = campo('nome_paziente');
   const nascita = campo('data_nascita');
-  const destinatario = campo('medico_destinatario') || campo('medico_inviante');
-  const dataDoc = dataCh(b.created_at);
+  const destinatarioNome = campo('medico_destinatario') || campo('medico_inviante');
 
-  // Il medico in intestazione: CHI HA DETTATO (profilo scelto al
-  // caricamento, 2026-09-07 — richiesta dell'utente del 2026-08-17: la carta
-  // intestata segue il medico che firma), altrimenti il titolare dello
-  // studio (con il titolo, se non ce l'ha già). Vuoto se non configurato:
-  // si compila in Word.
-  const conTitolo = (n: string) => (n.toLowerCase().startsWith('dr') ? n : `Dr. med. ${n}`);
-  const dettante = typeof b.payload?.medico?.nome === 'string' ? b.payload.medico.nome.trim() : '';
+  // Il medico che ha dettato: profilo pubblicato dal Mac (carta intestata
+  // sua); altrimenti il titolare dello studio; altrimenti lo studio.
+  const dettante = b.payload?.medico && typeof b.payload.medico === 'object' ? b.payload.medico : null;
+  const profilo = await profiloMedico(session.studioId, dettante?.id);
+  const nomeMedico = (profilo?.nome ?? (typeof dettante?.nome === 'string' ? dettante.nome : '') ?? '').trim();
   const titolare = (b.titolare ?? '').trim();
-  const medico = dettante
-    ? conTitolo(dettante)
-    : titolare
-      ? conTitolo(titolare)
-      : b.studio_nome;
+  const medico = nomeMedico ? conTitolo(nomeMedico) : titolare ? conTitolo(titolare) : b.studio_nome;
+  const formato = profilo?.formato ?? 'rapporto';
+
+  // Righe dell'intestazione: dal profilo, con {telefono}/{email} dallo
+  // studio; una riga con un segnaposto non risolvibile viene tolta.
+  const telefono = (b.studio_telefono ?? '').trim();
+  const emailStudio = (b.studio_email ?? '').trim();
+  const intestazione = (profilo?.intestazione ?? [])
+    .map((r) => r.replace('{telefono}', telefono).replace('{email}', emailStudio))
+    .filter((r) => !/\{[a-z_]+\}/.test(r) && !/:\s*$/.test(r))
+    .join('\n');
+
+  // Data della lettera: la dettatura (dal dittafono o dai metadati audio),
+  // altrimenti l'arrivo della bozza; nel formato lettera con la sigla di
+  // chi ha confermato (o di chi scarica).
+  const dettatoIl = typeof b.payload?.dettato_il === 'string' ? b.payload.dettato_il : '';
+  const dataBase = dataCh(dettatoIl) || dataCh(b.created_at);
+  const sigla = siglaDaEmail(b.reviewed_email ?? session.email ?? '');
+  const data = formato === 'lettera' && sigla ? `${dataBase}/${sigla}` : dataBase;
+
+  // Destinatario: nel formato lettera su più righe, con e-mail e specialità
+  // dalla rubrica dei medici invianti se il cognome corrisponde.
+  let destinatario = destinatarioNome ? conTitolo(destinatarioNome.replace(/^dr\.?\s*(med\.?)?\s*/i, '')) : ' ';
+  let via = 'Via email';
+  if (formato === 'lettera') {
+    const rubrica = destinatarioNome ? await destinatarioInRubrica(session.studioId, destinatarioNome) : null;
+    const righe = destinatarioNome
+      ? [appellativo(destinatarioNome), destinatario,
+         rubrica?.specialita ? `FMH ${rubrica.specialita}` : '',
+         rubrica?.email ? `Via e-mail: ${rubrica.email}` : 'Via e-mail']
+      : ['Egregio Signor', 'Dr. med. ', 'Via e-mail'];
+    destinatario = righe.filter(Boolean).join('\n');
+    via = '';
+  }
+
+  // Titolo: dal profilo ({data_visita} = data citata nel testo, altrimenti
+  // della dettatura); di serie il titolo storico dello stampo.
+  const dataVisita = dataVisitaDalTesto(testo) || dataBase;
+  const titolo = (profilo?.titolo_rapporto || 'VISITA AMBULATORIALE, RAPPORTO').replace('{data_visita}', dataVisita);
+  // Riga «Copia»: dal profilo (Moschovitis la tiene, Moccetti no).
+  const copia = profilo ? profilo.copia : 'Copia: alla paziente';
 
   const docx = await generaDocxReferto({
     medico,
-    telefono: (b.studio_telefono ?? '').trim(),
-    destinatario: destinatario ? `Dr. med. ${destinatario.replace(/^dr\.?\s*(med\.?)?\s*/i, '')}` : ' ',
-    data: dataDoc,
+    intestazione,
+    telefono,
+    destinatario,
+    via,
+    data,
+    titolo,
     paziente: [pazienteNome, nascita].filter(Boolean).join(' – ') || ' ',
-    piede: [pazienteNome, nascita].filter(Boolean).join(', ') + (dataDoc ? `  ${dataDoc}` : ''),
+    piede: [pazienteNome, nascita].filter(Boolean).join(', ') + (dataBase ? `  ${dataBase}` : ''),
     testo: ricomponiParagrafi(testo),
+    copia,
   });
 
-  const nomeFile = `referto-${dataDoc.replaceAll('.', '-') || 'bozza'}.docx`;
+  const nomeFile = `referto-${dataBase.replaceAll('.', '-') || 'bozza'}.docx`;
   return new NextResponse(new Uint8Array(docx), {
     headers: {
       'Content-Type': MIME_DOCX,

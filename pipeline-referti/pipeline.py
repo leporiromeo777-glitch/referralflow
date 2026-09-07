@@ -138,6 +138,9 @@ def carica_medici() -> list[dict]:
         # Forma standard del referto: rapporto a sezioni o lettera semplice.
         formato = "lettera" if str(v.get("formato") or "").strip().lower() == "lettera" else "rapporto"
         nome = str(v.get("nome") or mid).strip()[:80]
+        def righe(chiave: str, massimo: int = 8) -> list[str]:
+            g = v.get(chiave)
+            return [str(x).strip()[:120] for x in (g if isinstance(g, list) else []) if str(x).strip()][:massimo]
         visti.add(mid)
         fuori.append({
             "id": mid,
@@ -145,6 +148,12 @@ def carica_medici() -> list[dict]:
             "breve": str(v.get("breve") or nome).strip()[:40],
             "modalita": modalita,
             "formato": formato,
+            # Carta intestata e chiusura della lettera (solo per la piattaforma).
+            "intestazione": righe("intestazione"),
+            "titolo_rapporto": str(v.get("titolo_rapporto") or "").strip()[:120],
+            "chiusura": str(v.get("chiusura") or "").strip()[:120],
+            "firma": righe("firma", 4),
+            "copia": str(v.get("copia") or "").strip()[:120],
             "atempo": atempo,
             "atempo_prova": prove[0] if prove else None,
             "atempo_prove": prove,
@@ -847,6 +856,29 @@ def _formato_ingresso(percorso: Path) -> list[str]:
 DS2_DECODER = Path(os.environ.get(
     "REFERTI_DS2_DECODER",
     str(Path(__file__).resolve().parent / "strumenti" / "dss-codec" / "ds2decode.py")))
+
+
+def data_dettato_dittafono(ingresso: Path) -> str | None:
+    """Data e ora di REGISTRAZIONE dal file del dittafono (.dss/.ds2): nel
+    header, all'offset 0x26, dodici cifre AAMMGGhhmmss. È la data che va
+    sulla lettera («Lugano, 02.09.2026»), non quella della conferma.
+    Ritorna ISO «AAAA-MM-GGThh:mm:ss» o None. Solo cifre: mai contenuti."""
+    if ingresso.suffix.lower() not in (".dss", ".ds2"):
+        return None
+    try:
+        with open(ingresso, "rb") as f:
+            f.seek(0x26)
+            grezzo = f.read(12).decode("ascii", "replace")
+    except OSError:
+        return None
+    if not re.fullmatch(r"\d{12}", grezzo):
+        return None
+    aa, mm, gg, h, mi, s = (int(grezzo[i:i + 2]) for i in range(0, 12, 2))
+    try:
+        d = datetime(2000 + aa, mm, gg, h, mi, s)
+    except ValueError:
+        return None
+    return d.isoformat(timespec="seconds")
 
 
 def decodifica_dittafono(ingresso: Path, dir_out: Path, file_id: str) -> Path:
@@ -6227,6 +6259,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # com'è in lavorazione/ → archivio → conserva.
         fase = "dittafono"
         formato_originale = ingresso.suffix.lower()
+        dettato_il = data_dettato_dittafono(ingresso)
         ingresso = decodifica_dittafono(ingresso, dir_out, file_id)
         if ingresso.name.endswith(".dittafono.wav"):
             tappa("dittafono", "codice", formato=formato_originale)
@@ -6831,6 +6864,9 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # «aggiornamento» — chiede da sola la fusione con la lettera precedente.
         "medico": ({"id": medico["id"], "nome": medico["nome"], "modalita": medico["modalita"],
                     "formato": medico["formato"], "atempo": atempo_corsa()} if medico else None),
+        # Data di registrazione dal dittafono (header DSS), se c'è: è la data
+        # della lettera. Per gli altri formati resta quella dei metadati audio.
+        "dettato_il": dettato_il or (integ.get("creato") or None),
         "testo_corretto": nota_visita if nota_visita else finale,
         "note_segreteria": note_segreteria,
         "campi_estratti": campi,
@@ -7003,7 +7039,7 @@ def scarica_coda(cartelle: dict) -> None:
             return
 
 
-_MEDICI_PUBBLICATI: tuple = ()
+_MEDICI_PUBBLICATI: str = ""
 _MEDICI_RIPROVA_DOPO = 0.0  # back-off: un solo tentativo ogni 10 minuti dopo un errore
 
 
@@ -7016,13 +7052,13 @@ def pubblica_medici() -> None:
     if not FLOW_URL or not FLOW_TOKEN:
         return
     medici = carica_medici()
-    impronta = tuple((m["id"], m["nome"], m["breve"], m["modalita"], m["formato"]) for m in medici)
+    CHIAVI = ("id", "nome", "breve", "modalita", "formato", "intestazione", "titolo_rapporto", "chiusura", "firma", "copia")
+    voci = [{k: m[k] for k in CHIAVI} for m in medici]
+    impronta = json.dumps(voci, sort_keys=True, ensure_ascii=False)
     if impronta == _MEDICI_PUBBLICATI or time.monotonic() < _MEDICI_RIPROVA_DOPO:
         return
     _MEDICI_RIPROVA_DOPO = time.monotonic() + 600
-    corpo = json.dumps({"medici": [
-        {"id": m["id"], "nome": m["nome"], "breve": m["breve"], "modalita": m["modalita"], "formato": m["formato"]}
-        for m in medici]}, ensure_ascii=False).encode("utf-8")
+    corpo = json.dumps({"medici": voci}, ensure_ascii=False).encode("utf-8")
     try:
         req = urllib.request.Request(
             FLOW_URL + "/api/referti/medici", data=corpo, method="POST",

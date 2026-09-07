@@ -1,5 +1,5 @@
 {
- "_nota": "Profili dei medici che dettano (2026-09-07). «formato» = forma standard del referto: «rapporto» (rapporto-tipo a sezioni: diagnosi, anamnesi, terapia, esami, valutazione, procedere) oppure «lettera» (Caro <medico>, a capo, corpo, a capo, saluto). La catena si adegua a CHI detta: chi carica un dettato sceglie il medico (pannello locale o pagina Referti) e il nome del file porta il marcatore «medico-<id>--». Qui SOLO nomi di medici e impostazioni tecniche: mai dati di pazienti. Per aggiungere un medico basta una voce nuova; i file facoltativi (vocabolario-<id>.txt, correzioni-<id>.json) vivono accanto a questo e non vengono toccati dagli aggiornamenti. Il servizio pubblica l'elenco alla piattaforma, così la pagina Referti mostra gli stessi nomi.",
+ "_nota": "Profili dei medici che dettano (2026-09-07). «formato» = forma standard del referto: «rapporto» (rapporto-tipo a sezioni: diagnosi, anamnesi, terapia, esami, valutazione, procedere) oppure «lettera» (Caro <medico>, a capo, corpo, a capo, saluto). «intestazione» = righe della carta intestata sotto il nome (segnaposto {telefono} e {email} dalle impostazioni dello studio; una riga con segnaposto non risolto viene tolta); «titolo_rapporto» = riga del titolo nel Word ({data_visita} = data della visita citata nel testo, altrimenti del dettato); «chiusura» = saluto finale fisso (vuota = quello dettato); «firma» = righe sotto il saluto; «copia» = riga finale (es. «Copia: alla paziente»). La catena si adegua a CHI detta: chi carica un dettato sceglie il medico (pannello locale o pagina Referti) e il nome del file porta il marcatore «medico-<id>--». Qui SOLO nomi di medici e impostazioni tecniche: mai dati di pazienti. Per aggiungere un medico basta una voce nuova; i file facoltativi (vocabolario-<id>.txt, correzioni-<id>.json) vivono accanto a questo e non vengono toccati dagli aggiornamenti. Il servizio pubblica l'elenco alla piattaforma, così la pagina Referti mostra gli stessi nomi.",
  "versione": "2026-09-07",
  "medici": [
   {
@@ -8,6 +8,10 @@
    "breve": "Moccetti",
    "modalita": "lettera",
    "formato": "lettera",
+   "intestazione": ["Via Pretorio 9, 6900 Lugano (CH)", "Tel: {telefono}", "e-mail: {email}"],
+   "titolo_rapporto": "RAPPORTO AMBULATORIALE del {data_visita}",
+   "chiusura": "Cordiali e collegiali saluti.",
+   "firma": ["Dr. med. Marco Moccetti", "(partito dopo dettatura)"],
    "atempo": 0.8,
    "vocabolario": "vocabolario-moccetti.txt",
    "correzioni": "correzioni-moccetti.json",
@@ -19,6 +23,11 @@
    "breve": "Moschovitis",
    "modalita": "aggiornamento",
    "formato": "rapporto",
+   "intestazione": ["Spec. FMH Medicina Interna e Cardiologia", "Certificazione Studi Avanzati (CAS) in Insufficienza Cardiaca-HF", "Via Pretorio 9, 6900 Lugano (CH)", "Tel: {telefono}"],
+   "titolo_rapporto": "VISITA AMBULATORIALE, RAPPORTO",
+   "chiusura": "",
+   "firma": [],
+   "copia": "Copia: alla paziente",
    "atempo": 0.8,
    "vocabolario": "vocabolario-moschovitis.txt",
    "correzioni": "correzioni-moschovitis.json",

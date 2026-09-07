@@ -1,5 +1,6 @@
 import 'server-only';
 import { relazioniIntatte } from './referti-misure-cliniche';
+import { normalizzaDate } from './referti-lettera';
 
 // Riorganizzazione del referto dettato nel formato standard dello studio
 // (bottone nel dettaglio referto). Il modello AI LOCALE (Ollama) rimappa il
@@ -59,12 +60,13 @@ const PROMPT_LETTERA = `Sei un assistente che mette in bella copia lettere medic
 2. Una riga vuota.
 3. IL CORPO DELLA LETTERA: tutto il contenuto clinico dettato, in prosa scorrevole divisa in paragrafi sensati (motivo della visita, anamnesi, esami, valutazione, proposta). Punteggiatura corretta, maiuscole a inizio frase, frasi complete — SENZA mai cambiare il significato né aggiungere informazioni. Niente titoli di sezione, niente elenchi puntati, niente numerazione.
 4. Una riga vuota.
-5. IL SALUTO FINALE: quello dettato (per esempio «Cordiali saluti» o «Con i migliori saluti») seguito dalla firma se dettata; se il testo non ha un saluto finale, scrivi «Cordiali saluti,» e basta.
+5. IL SALUTO FINALE: {chiusura}
 
 Regole obbligatorie:
 - NON inventare MAI nulla: niente diagnosi, valori, esami o frasi che non siano già nel testo.
 - Conserva TUTTI i numeri ESATTAMENTE come sono scritti (valori, date, dosaggi, unità): non aggiungerne, non toglierne, non riformattarli.
-- Le istruzioni rivolte alla segretaria («scrivi a…», «manda copia a…») restano fuori dalla lettera.
+- Le istruzioni rivolte alla segretaria («scrivi a…», «manda copia a…», «copia alla paziente») restano fuori dalla lettera; niente righe «Copia: …».
+- Elimina le ripetizioni tipiche del parlato quando dicono la stessa cosa due volte di seguito (per esempio «ho eseguito una medicazione, limitandomi a una semplice medicazione» → «ho eseguito una semplice medicazione»), SENZA perdere alcuna informazione.
 - Ripara i resti dei tagli fatti in revisione: apostrofi orfani, congiunzioni appese, doppi spazi, frasi che iniziano a metà. Un frammento senza NESSUNA informazione clinica può essere tolto; se contiene un dato, va ricucito nella frase più vicina.
 - Rispondi SOLO con la lettera, senza commenti né spiegazioni.
 
@@ -73,8 +75,45 @@ TESTO:
 
 export type FormatoReferto = 'rapporto' | 'lettera';
 
-function promptPer(formato: FormatoReferto): string {
-  return formato === 'lettera' ? PROMPT_LETTERA : PROMPT;
+// Dettagli della forma «lettera» dal profilo del medico e dal contesto:
+// saluto fisso, righe di firma, blocco terapia da riprendere (dalla lettera
+// precedente, quando il dettato dice che la terapia è invariata).
+export type OpzioniLettera = {
+  chiusura?: string;
+  firma?: string[];
+  terapia?: string[];
+};
+
+function promptPer(formato: FormatoReferto, opzioni: OpzioniLettera): string {
+  if (formato !== 'lettera') return PROMPT;
+  const chiusura = opzioni.chiusura?.trim()
+    ? `scrivi ESATTAMENTE «${opzioni.chiusura.trim()}» e nient'altro (la firma viene aggiunta dopo: non scriverla).`
+    : 'quello dettato (per esempio «Cordiali saluti» o «Con i migliori saluti») seguito dalla firma se dettata; se il testo non ha un saluto finale, scrivi «Cordiali saluti,» e basta.';
+  return PROMPT_LETTERA.replace('{chiusura}', chiusura);
+}
+
+// Rifiniture di CODICE dopo il modello, nella forma lettera: il blocco
+// «Terapia:» ripreso dalla lettera precedente prima del saluto (solo se il
+// dettato dice che la terapia è invariata) e le righe di firma in fondo.
+function rifinisciLettera(lettera: string, opzioni: OpzioniLettera): string {
+  let righe = lettera.replace(/\r\n/g, '\n').trimEnd().split('\n');
+  const chiusura = opzioni.chiusura?.trim();
+  let iSaluto = -1;
+  if (chiusura) {
+    iSaluto = righe.findIndex((r) => r.trim().toLowerCase() === chiusura.toLowerCase());
+  }
+  if (iSaluto === -1) {
+    iSaluto = righe.findIndex((r) => /^(cordiali|con i migliori|distinti|un caro saluto)/i.test(r.trim()));
+  }
+  if (opzioni.terapia?.length) {
+    const blocco = ['', 'Terapia:', ...opzioni.terapia, ''];
+    if (iSaluto === -1) righe = [...righe, ...blocco];
+    else righe = [...righe.slice(0, iSaluto), ...blocco, ...righe.slice(iSaluto)];
+  }
+  if (opzioni.firma?.length) {
+    righe = [...righe, '', ...opzioni.firma];
+  }
+  return righe.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function firmaNumerica(testo: string): string {
@@ -95,9 +134,13 @@ export type EsitoStruttura =
 export async function riorganizzaReferto(
   testo: string,
   avanzamento?: (percento: number) => void,
-  formato: FormatoReferto = 'rapporto'
+  formato: FormatoReferto = 'rapporto',
+  opzioni: OpzioniLettera = {}
 ): Promise<EsitoStruttura> {
-  const originale = testo.slice(0, TESTO_MAX);
+  // Forma lettera: le date «2 settembre 2026» diventano «02.09.2026» PRIMA
+  // del modello (codice, deterministico): così la guardia sui numeri
+  // confronta l'originale già normalizzato con la risposta.
+  const originale = (formato === 'lettera' ? normalizzaDate(testo) : testo).slice(0, TESTO_MAX);
   let risposta = '';
   try {
     const r = await fetch(`${OLLAMA_URL}/api/generate`, {
@@ -105,7 +148,7 @@ export async function riorganizzaReferto(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: MODELLO,
-        prompt: promptPer(formato).replace('{testo}', originale),
+        prompt: promptPer(formato, opzioni).replace('{testo}', originale),
         // Streaming: serve solo a misurare l'avanzamento (il testo
         // riorganizzato è lungo circa quanto l'originale, quindi i
         // caratteri già prodotti sono una percentuale onesta).
@@ -157,6 +200,9 @@ export async function riorganizzaReferto(
   if (risposta.length < originale.length * 0.6) {
     return { ok: false, motivo: 'troppo_corto' };
   }
+  // Rifiniture di codice DOPO le guardie: terapia ripresa e firma sono
+  // aggiunte deterministiche da fonti fidate, non parole del modello.
+  if (formato === 'lettera') risposta = rifinisciLettera(risposta, opzioni);
   return { ok: true, testo: risposta };
 }
 
@@ -182,7 +228,8 @@ export function avviaRiorganizzazione(
   bozzaId: string,
   testo: string,
   salva: (testo: string) => Promise<void>,
-  formato: FormatoReferto = 'rapporto'
+  formato: FormatoReferto = 'rapporto',
+  opzioni: OpzioniLettera = {}
 ): boolean {
   const gia = lavori.get(bozzaId);
   if (gia?.stato === 'lavora') return false;
@@ -191,7 +238,7 @@ export function avviaRiorganizzazione(
     const esito = await riorganizzaReferto(testo, (percento) => {
       const l = lavori.get(bozzaId);
       if (l?.stato === 'lavora') l.percento = Math.max(l.percento, percento);
-    }, formato);
+    }, formato, opzioni);
     if (esito.ok) {
       try {
         await salva(esito.testo);

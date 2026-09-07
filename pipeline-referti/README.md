@@ -78,6 +78,7 @@ script (solo nomi di medici e impostazioni: mai pazienti):
 |---|---|
 | `atempo` | rallentamento dell'audio per QUEL medico (chi parla veloce può averne uno più forte); `REFERTI_ATEMPO` impostata a mano vince su tutti (esperimenti) |
 | `formato` | forma standard del referto per il bottone «Riorganizza» in pagina: `rapporto` (rapporto-tipo a sezioni) o `lettera` («Caro <medico>,» a capo, corpo, a capo, saluto — Moccetti); con `lettera` la catena non prepara la proposta a sezioni |
+| `intestazione`, `titolo_rapporto`, `chiusura`, `firma`, `copia` | carta intestata e chiusura della lettera nel Word della piattaforma (segnaposto `{telefono}`/`{email}` dalle impostazioni dello studio, `{data_visita}` dal testo); la data della lettera è quella del dettato (header DSS, `payload.dettato_il`) |
 | `modalita` | `lettera` = detta una lettera nuova (scheda «Lettera precedente» ripiegata); `aggiornamento` = detta gli aggiornamenti alla lettera precedente: la piattaforma **chiede da sola la fusione** con l'ultima lettera confermata dello stesso paziente, se c'è (resta una proposta: si applica con un clic, con le stesse guardie) |
 | `vocabolario` | `vocabolario-<id>.txt`: termini suoi, in testa al prompt di whisper |
 | `correzioni` | `correzioni-<id>.json`: dizionario e stile suoi (stesse sezioni di correzioni-locali.json), vincono a parità di chiave |

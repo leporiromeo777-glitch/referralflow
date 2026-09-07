@@ -14,9 +14,27 @@ export type MedicoDettante = {
   // «rapporto» = rapporto-tipo a sezioni (Moschovitis), «lettera» = lettera
   // semplice: «Caro …,» / corpo / saluto (Moccetti, 2026-09-07).
   formato: FormatoReferto;
+  // Carta intestata e chiusura (dal profilo sul Mac, 2026-09-07): righe
+  // sotto il nome nell'intestazione ({telefono}/{email} dallo studio), riga
+  // del titolo ({data_visita}), saluto finale fisso, righe di firma, riga
+  // finale «Copia: …». Vuoti = comportamento di prima.
+  intestazione: string[];
+  titolo_rapporto: string;
+  chiusura: string;
+  firma: string[];
+  copia: string;
 };
 
 export type FormatoReferto = 'rapporto' | 'lettera';
+
+function righeValide(v: unknown, max = 8): string[] {
+  return (Array.isArray(v) ? v : [])
+    .filter((x): x is string => typeof x === 'string')
+    .map((x) => x.trim().slice(0, 120))
+    .filter(Boolean)
+    .slice(0, max);
+}
+const testoBreve = (v: unknown) => (typeof v === 'string' ? v.trim().slice(0, 120) : '');
 
 export function formatoValido(v: unknown): FormatoReferto {
   return v === 'lettera' ? 'lettera' : 'rapporto';
@@ -37,9 +55,22 @@ export function puliscoMedici(v: unknown): MedicoDettante[] {
     const breve = String((m as any).breve ?? nome).trim().slice(0, 40) || nome;
     const modalita = (m as any).modalita === 'aggiornamento' ? 'aggiornamento' : 'lettera';
     visti.add(id);
-    out.push({ id, nome, breve, modalita, formato: formatoValido((m as any).formato) });
+    out.push({
+      id, nome, breve, modalita,
+      formato: formatoValido((m as any).formato),
+      intestazione: righeValide((m as any).intestazione),
+      titolo_rapporto: testoBreve((m as any).titolo_rapporto),
+      chiusura: testoBreve((m as any).chiusura),
+      firma: righeValide((m as any).firma, 4),
+      copia: testoBreve((m as any).copia),
+    });
   }
   return out;
+}
+
+export async function profiloMedico(studioId: string, medicoId: string | null | undefined): Promise<MedicoDettante | null> {
+  if (!medicoId) return null;
+  return (await mediciDelloStudio(studioId)).find((m) => m.id === medicoId) ?? null;
 }
 
 // Il formato del referto per una bozza: dal profilo pubblicato dal Mac

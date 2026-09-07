@@ -370,8 +370,8 @@ export async function riorganizzaBozza(formData: FormData) {
   const id = String(formData.get('id') ?? '');
   if (!isUuid(id)) redirect('/referti');
 
-  const [b] = await query<{ testo_finale: string | null; payload: any }>(
-    `select testo_finale, payload from referti_bozze
+  const [b] = await query<{ testo_finale: string | null; payload: any; campi_confermati: Record<string, unknown> | null }>(
+    `select testo_finale, payload, campi_confermati from referti_bozze
       where id = $1 and studio_id = $2 and stato = 'bozza'`,
     [id, session.studioId]
   );
@@ -386,8 +386,9 @@ export async function riorganizzaBozza(formData: FormData) {
   if (!testo) redirect(`/referti/${id}?err=testo`);
 
   const { riorganizzaReferto } = await import('@/lib/referto-struttura');
-  const { formatoPerBozza } = await import('@/lib/referti-medici');
-  const esito = await riorganizzaReferto(testo, undefined, await formatoPerBozza(session.studioId, b.payload?.medico ?? null));
+  const { opzioniRiorganizzazione } = await import('@/lib/referti-formato');
+  const { formato, opzioni } = await opzioniRiorganizzazione(session.studioId, id, b.payload, b.campi_confermati, testo);
+  const esito = await riorganizzaReferto(testo, undefined, formato, opzioni);
   if (!esito.ok) redirect(`/referti/${id}?err=struttura_${esito.motivo}`);
 
   await query(

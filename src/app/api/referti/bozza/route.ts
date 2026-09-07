@@ -244,6 +244,10 @@ export async function POST(req: NextRequest) {
       : '',
     manifesto: manifestoPulito(body?.manifesto),
     medico: medicoPulito(body?.medico),
+    // Data di registrazione del dettato (header del dittafono o metadati
+    // audio): è la data della lettera. Solo ISO breve.
+    dettato_il: typeof body?.dettato_il === 'string' && /^\d{4}-\d{2}-\d{2}/.test(body.dettato_il)
+      ? body.dettato_il.slice(0, 25) : null,
     richiede_revisione: true,
   };
   const medicoId = payload.medico?.id ?? null;

@@ -68,6 +68,18 @@ done
 # correzioni-locali.json, vocabolario-locali.txt, vocabolario-<medico>.txt,
 # correzioni-<medico>.json, dati/, modelli/ sono dello studio: non si toccano mai.
 # Il pannello legge medici.json a ogni richiesta: non serve riavviarlo.
+# Dizionari per medico: SEMI dal repo, copiati SOLO se sul Mac non ci sono
+# ancora (poi sono dello studio e crescono dal pannello: mai sovrascritti).
+for f in "$QUI"/correzioni-*.json "$QUI"/vocabolario-*.txt; do
+  [ -f "$f" ] || continue
+  b="$(basename "$f")"
+  case "$b" in correzioni-locali.json|vocabolario-locali.txt) continue ;; esac
+  if [ ! -f "$DEST/$b" ]; then
+    cp "$f" "$DEST/$b"
+    n=$((n + 1))
+    echo "  seminato $b (prima copia: da qui in poi è dello studio)"
+  fi
+done
 # Strumenti vendorizzati (decoder DS2 del dittafono): stessa regola, file per file.
 if [ -d "$QUI/strumenti" ]; then
   while IFS= read -r f; do

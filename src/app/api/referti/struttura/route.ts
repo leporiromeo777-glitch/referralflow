@@ -3,7 +3,7 @@ import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
 import { avviaRiorganizzazione, statoRiorganizzazione } from '@/lib/referto-struttura';
-import { formatoPerBozza } from '@/lib/referti-medici';
+import { opzioniRiorganizzazione } from '@/lib/referti-formato';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -29,8 +29,8 @@ export async function POST(req: NextRequest) {
   const id = typeof body?.id === 'string' ? body.id : '';
   if (!isUuid(id)) return NextResponse.json({ errore: 'id_non_valido' }, { status: 400 });
 
-  const [b] = await query<{ testo_finale: string | null; payload: any }>(
-    `select testo_finale, payload from referti_bozze
+  const [b] = await query<{ testo_finale: string | null; payload: any; campi_confermati: Record<string, unknown> | null }>(
+    `select testo_finale, payload, campi_confermati from referti_bozze
       where id = $1 and studio_id = $2 and stato = 'bozza'`,
     [id, session.studioId]
   );
@@ -45,15 +45,17 @@ export async function POST(req: NextRequest) {
   if (!testo) return NextResponse.json({ errore: 'testo_mancante' }, { status: 400 });
 
   const studioId = session.studioId;
-  // Formato del medico che ha dettato (rapporto a sezioni o lettera).
-  const formato = await formatoPerBozza(studioId, b.payload?.medico ?? null);
+  // Formato del medico che ha dettato (rapporto a sezioni o lettera) e, per
+  // la lettera, saluto/firma dal profilo e terapia dalla lettera precedente.
+  const { formato, opzioni, terapiaRipresa } = await opzioniRiorganizzazione(studioId, id, b.payload, b.campi_confermati, testo);
   const avviato = avviaRiorganizzazione(id, testo, async (nuovo) => {
     await query(
-      `update referti_bozze set testo_finale = $3
+      `update referti_bozze set testo_finale = $3,
+              payload = jsonb_set(payload, '{riorganizzazione}', $4::jsonb)
         where id = $1 and studio_id = $2 and stato = 'bozza'`,
-      [id, studioId, nuovo]
+      [id, studioId, nuovo, JSON.stringify({ formato, terapia_ripresa: terapiaRipresa, at: new Date().toISOString() })]
     );
-  }, formato);
+  }, formato, opzioni);
   // Già in corso = va bene lo stesso: la pagina si aggancia al lavoro vivo.
   return NextResponse.json({ avviato }, { status: avviato ? 202 : 200 });
 }

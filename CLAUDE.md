@@ -321,6 +321,21 @@ pubblicato → payload.medico.formato → rapporto); il bottone si chiama
 «Impagina come lettera (AI)». Nell'ultimo passo della revisione guidata c'è
 «Inserisci nel referto (salva senza confermare)» (`salvaTesto`, evento
 `testo_salvato`).
+Forma della segretaria per Moccetti (7.9.2026, dal confronto catena vs
+segretaria sullo stesso referto): lo stampo Word ha ora SEGNAPOSTO anche in
+intestazione (`{{int_nome}}`, `{{intestazione}}`) e per `{{via}}`,
+`{{titolo}}`, `{{copia}}` — la carta segue il medico (profilo: `intestazione`
+con {telefono}/{email} dallo studio, `titolo_rapporto` con {data_visita},
+`chiusura`, `firma`, `copia`). Formato lettera nel Word: destinatario su più
+righe («Egregio Signor», nome, FMH dalla rubrica invianti, «Via e-mail: …»),
+data della DETTATURA (`payload.dettato_il`, letta dall'header DSS all'offset
+0x26) + sigla di chi conferma, titolo «RAPPORTO AMBULATORIALE del <data
+visita citata nel testo>». Impagina come lettera: date «2 settembre 2026» →
+«02.09.2026» dal CODICE prima del modello, chiusura fissa dal profilo, firma
+aggiunta dal codice, blocco «Terapia:» ripreso dall'ultima lettera confermata
+del paziente quando il dettato dice «terapia invariata»
+(`src/lib/referti-lettera.ts`, `referti-formato.ts`). Dizionario seme
+`correzioni-moccetti.json` (RIVA, RCx): distribuisci lo copia solo se assente.
 `REFERTI_ATEMPO` a mano vince sul profilo (esperimenti). Prova richiesta
 dall'utente: Moccetti parla molto veloce → `bash pipeline-referti/prova-atempo.sh
 <audio> moccetti` prova 0.7, 0.6 E 0.5 (una corsa per valore, bozze ombra

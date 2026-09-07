@@ -1,0 +1,22 @@
+{
+ "_nota": "Dizionario del dr. Moccetti (2026-09-07, dal confronto tra il primo referto della catena e la versione della segretaria): sigle coronariche che whisper scrive come parole comuni. Stesse sezioni di correzioni-locali.json; a parità di chiave vince questo. Mai cifre. distribuisci.sh lo copia sul Mac SOLO se non c'è già: le aggiunte fatte dallo studio restano.",
+ "termini_clinici": {
+  "riva media": "RIVA medio",
+  "riva medio": "RIVA medio",
+  "riva prossimale": "RIVA prossimale",
+  "riva distale": "RIVA distale",
+  "sulla riva": "sulla RIVA",
+  "della riva": "della RIVA",
+  "rcx distale": "RCx distale",
+  "rcx prossimale": "RCx prossimale",
+  "erre ci ics": "RCx",
+  "erre ci x": "RCx",
+  "post cateterismo": "post-cateterismo",
+  "anti aggregazione": "antiaggregazione",
+  "duplice anti-aggregazione": "duplice antiaggregazione"
+ },
+ "linguaggio_comune": {},
+ "stile": {
+  "Cordiali saluti": "Cordiali e collegiali saluti"
+ }
+}

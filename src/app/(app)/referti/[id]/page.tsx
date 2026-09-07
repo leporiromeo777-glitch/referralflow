@@ -52,6 +52,7 @@ type Payload = {
   manifesto?: Record<string, unknown>;
   // Chi ha dettato (profilo scelto al caricamento, medici.json sul Mac).
   medico?: { id: string; nome: string; modalita?: 'lettera' | 'aggiornamento'; formato?: 'rapporto' | 'lettera'; atempo?: number | null } | null;
+  dettato_il?: string | null;
 };
 
 // Evidenzia i frammenti segnalati dentro il testo: prima occorrenza di ogni
@@ -302,7 +303,7 @@ export default async function RefertoBozza({
       </div>
       <p className="muted">
         Ricevuta il {dataOra(row.created_at)}.{' '}
-        {p.medico?.nome ? `Dettato da ${p.medico.nome}. ` : ''}
+        {p.medico?.nome ? `Dettato da ${p.medico.nome}${p.dettato_il ? ` il ${dataOra(p.dettato_il)}` : ''}. ` : ''}
         {inBozza
           ? 'Rivedi il testo, correggi dove serve e conferma: niente diventa definitivo da solo.'
           : row.stato === 'confermata'
