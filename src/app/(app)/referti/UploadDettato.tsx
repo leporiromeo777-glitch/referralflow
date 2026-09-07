@@ -12,7 +12,8 @@ import type { MedicoDettante } from '@/lib/referti-medici';
 // dizionario suoi, modalità «lettera nuova» o «aggiornamento della lettera
 // precedente». La scelta è obbligatoria quando i profili ci sono.
 
-const ESTENSIONI = ['.mp3', '.m4a', '.mp4', '.wav', '.aac', '.ogg', '.flac', '.aiff', '.caf'];
+// .dss/.ds2 = dittafono Philips DPM (DSS e DSS Pro), decodificati sul Mac.
+const ESTENSIONI = ['.mp3', '.m4a', '.mp4', '.wav', '.aac', '.ogg', '.flac', '.aiff', '.caf', '.dss', '.ds2'];
 const CHIAVE_MEMORIA = 'referti-medico';
 
 export function UploadDettato({ tipo = 'referto', medici = [] }: { tipo?: 'referto' | 'visita'; medici?: MedicoDettante[] } = {}) {
@@ -51,7 +52,7 @@ export function UploadDettato({ tipo = 'referto', medici = [] }: { tipo?: 'refer
     );
     if (lista.length === 0) {
       setStato('errore');
-      setDettaglio('Formato non riconosciuto: trascina un file audio (m4a, mp3, wav…).');
+      setDettaglio('Formato non riconosciuto: trascina un file audio (m4a, mp3, wav, dss/ds2 del dittafono…).');
       return;
     }
     setStato('invio');
@@ -145,7 +146,7 @@ export function UploadDettato({ tipo = 'referto', medici = [] }: { tipo?: 'refer
         </svg>
         <div className="dz-testo">
           <b>Trascina qui il dettato{scelto ? ` di ${scelto.breve}` : ''}</b>
-          <span>oppure clicca per scegliere il file · la trascrizione parte da sola</span>
+          <span>oppure clicca per scegliere il file · anche .dss/.ds2 del dittafono · la trascrizione parte da sola</span>
         </div>
         {stato === 'invio' && <span className="dz-stato">Carico {dettaglio}…</span>}
         {stato === 'ok' && <span className="dz-stato ok">✓ {dettaglio} — in coda di trascrizione</span>}

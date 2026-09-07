@@ -15,6 +15,10 @@ const TIPI: Record<string, string> = {
   '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.mp4': 'audio/mp4',
   '.wav': 'audio/wav', '.aac': 'audio/aac', '.ogg': 'audio/ogg',
   '.flac': 'audio/flac', '.aiff': 'audio/aiff', '.caf': 'audio/x-caf',
+  // Dittafono Philips DPM (2026-09-07): DSS classico e DSS Pro. Il file
+  // resta com'è (lo decodifica ffmpeg sul Mac dello studio); per il
+  // riascolto nel browser la rotta audio lo converte al volo in WAV.
+  '.dss': 'audio/x-dss', '.ds2': 'audio/x-dss',
 };
 const MAX_BYTES = 200 * 1024 * 1024;
 

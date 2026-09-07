@@ -43,7 +43,11 @@ TIPI_AUDIO = {
     ".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".wav": "audio/wav",
     ".aac": "audio/aac", ".ogg": "audio/ogg", ".flac": "audio/flac",
     ".aiff": "audio/aiff", ".caf": "audio/x-caf", ".mp4": "audio/mp4",
+    # Dittafono Philips DPM (2026-09-07): DSS e DSS Pro. La catena li
+    # decodifica con ffmpeg; per il riascolto qui si convertono al volo in WAV.
+    ".dss": "audio/x-dss", ".ds2": "audio/x-dss",
 }
+ESTENSIONI_DITTAFONO = {".dss", ".ds2"}
 MAX_CARICO_BYTE = 500 * 1024 * 1024
 
 STILE = """
@@ -216,6 +220,24 @@ def scrivi_locali(dati: dict) -> None:
 
 
 # ── Suggerimenti dal server (imparati dalle conferme) ────────────────────────
+def converti_in_wav(audio: Path) -> bytes | None:
+    """DSS/DS2 → WAV 16 kHz mono per il player del browser. None se ffmpeg
+    manca o fallisce (si consegna l'originale). stdout/stderr scartati."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        uscita = Path(d) / "out.wav"
+        try:
+            esito = subprocess.run(
+                ["ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
+                 "-i", str(audio), "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", str(uscita)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if esito.returncode != 0 or not uscita.is_file():
+            return None
+        return uscita.read_bytes()
+
+
 def carica_medici() -> list:
     """Profili di medici.json (solo id, nome, modalità, atempo): la stessa
     validazione della catena, in piccolo — un id storto non entra mai nel
@@ -338,10 +360,10 @@ def sez_drop() -> str:
     return scelta_medico + """
 <div class="drop" id="zona">
 <b>Trascina qui i dettati vocali</b>
-memo vocali, m4a, mp3, wav… — finiscono in coda e il servizio li elabora da solo<br>
+memo vocali, m4a, mp3, wav, file .dss/.ds2 del dittafono Philips… — finiscono in coda e il servizio li elabora da solo<br>
 <span class="muted">(oppure clicca per sceglierli)</span>
 <div class="stato" id="statocarico"></div>
-<input type="file" id="scelta" multiple accept="audio/*,.m4a,.mp3,.wav,.aac,.ogg,.flac,.aiff,.caf" hidden>
+<input type="file" id="scelta" multiple accept="audio/*,.m4a,.mp3,.wav,.aac,.ogg,.flac,.aiff,.caf,.dss,.ds2" hidden>
 </div>"""
 
 
@@ -563,6 +585,12 @@ class Pannello(BaseHTTPRequestHandler):
             if fid.isalnum() and (BASE / "archivio_temp").is_dir():
                 audio = next((BASE / "archivio_temp").glob(fid + ".*"), None)
                 if audio:
+                    if audio.suffix.lower() in ESTENSIONI_DITTAFONO:
+                        # Il browser non suona i DSS: WAV al volo (ffmpeg),
+                        # file temporaneo cancellato subito, niente log.
+                        wav = converti_in_wav(audio)
+                        if wav:
+                            return self._rispondi(wav, "audio/wav")
                     tipo = TIPI_AUDIO.get(audio.suffix.lower(), "application/octet-stream")
                     return self._rispondi(audio.read_bytes(), tipo)
             return self._rispondi(b"non trovato", "text/plain", 404)
