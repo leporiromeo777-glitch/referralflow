@@ -825,6 +825,15 @@ def _analizza_integrita(err_decodifica: str, err_volume: str, err_coda: str,
     return esito
 
 
+def _formato_ingresso(percorso: Path) -> list[str]:
+    """Opzioni da mettere PRIMA di «-i» per i file del dittafono Philips
+    (.dss/.ds2): il riconoscimento automatico di ffmpeg 8 non li prende
+    («Invalid data found»), ma il demuxer «dss» forzato li decodifica
+    per intero (collaudato il 2026-09-07 su un DS2 vero del DPM: dss_sp,
+    11025 Hz). Vale per ffmpeg e ffprobe."""
+    return ["-f", "dss"] if percorso.suffix.lower() in (".dss", ".ds2") else []
+
+
 def verifica_integrita_audio(ingresso: Path, file_id: str) -> dict:
     """Certificato di completezza dell'audio PRIMA della trascrizione
     (2026-09-06, quarto documento + Ricerca 18 §4: un audio rotto o tagliato
@@ -836,20 +845,20 @@ def verifica_integrita_audio(ingresso: Path, file_id: str) -> dict:
     durata = None
     creato = ""
     try:
-        r = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-v", "error", "-i", str(ingresso),
+        r = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-v", "error", *_formato_ingresso(ingresso), "-i", str(ingresso),
                             "-f", "null", "-"], capture_output=True, text=True, timeout=300)
         err1 = r.stderr
     except (subprocess.SubprocessError, OSError):
         return _analizza_integrita("", "", "", None)
     try:
-        r = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-i", str(ingresso),
+        r = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", *_formato_ingresso(ingresso), "-i", str(ingresso),
                             "-af", "volumedetect,silencedetect=noise=-35dB:d=2", "-f", "null", "-"],
                            capture_output=True, text=True, timeout=300)
         err2 = r.stderr
     except (subprocess.SubprocessError, OSError):
         pass
     try:
-        son = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
+        son = subprocess.run(["ffprobe", "-v", "error", *_formato_ingresso(ingresso), "-show_entries",
                               "format=duration:format_tags=creation_time",
                               "-of", "default=nw=1", str(ingresso)], capture_output=True, text=True, timeout=60)
         m = re.search(r"^duration=([\d.]+)", son.stdout, re.MULTILINE)
@@ -859,7 +868,7 @@ def verifica_integrita_audio(ingresso: Path, file_id: str) -> dict:
     except (subprocess.SubprocessError, OSError, ValueError):
         pass
     try:
-        r = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-sseof", "-0.5", "-i", str(ingresso),
+        r = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-sseof", "-0.5", *_formato_ingresso(ingresso), "-i", str(ingresso),
                             "-af", "volumedetect", "-f", "null", "-"],
                            capture_output=True, text=True, timeout=120)
         err3 = r.stderr
@@ -892,7 +901,7 @@ def preprocessa(ingresso: Path, uscita: Path, file_id: str) -> None:
         "-hide_banner",
         "-nostdin",
         "-y",
-        "-i", str(ingresso),
+        *_formato_ingresso(ingresso), "-i", str(ingresso),
         "-af", filtri,
         "-ar", "16000",
         "-ac", "1",
@@ -1195,7 +1204,7 @@ def _ancore_audio(originale: Path) -> tuple[list[float], float]:
     (stessa pulizia della pipeline ma SENZA atempo, così l'orologio non
     cambia). Ritorna anche la durata dell'originale."""
     esito = subprocess.run(
-        ["ffmpeg", "-hide_banner", "-nostdin", "-i", str(originale),
+        ["ffmpeg", "-hide_banner", "-nostdin", *_formato_ingresso(originale), "-i", str(originale),
          "-af", ("highpass=f=80,afftdn=nf=-25,loudnorm=I=-16:TP=-1.5:LRA=11,"
                  f"silencedetect=noise={SILENZIO_DB}:d={SILENZIO_MIN_S}"),
          "-f", "null", "-"],
@@ -1206,7 +1215,7 @@ def _ancore_audio(originale: Path) -> tuple[list[float], float]:
             if tipo == "end"]
     durata = 0.0
     sonda = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+        ["ffprobe", "-v", "error", *_formato_ingresso(originale), "-show_entries", "format=duration",
          "-of", "default=nw=1:nk=1", str(originale)],
         capture_output=True, text=True, timeout=60,
     )
@@ -2080,7 +2089,7 @@ def trascrivi_voxtral_b(originale: Path, uscita_txt: Path, wav_voxtral: Path,
     # whisper lo PEGGIORA (misurato al banco 2026-09-03). Solo 16 kHz mono.
     try:
         subprocess.run(
-            ["ffmpeg", "-hide_banner", "-nostdin", "-y", "-i", str(originale),
+            ["ffmpeg", "-hide_banner", "-nostdin", "-y", *_formato_ingresso(originale), "-i", str(originale),
              "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", str(wav_voxtral)],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             timeout=600, check=True)
@@ -2135,7 +2144,7 @@ def avvia_voxtral_b(originale: Path, uscita_txt: Path, wav_voxtral: Path,
         return None
     try:
         subprocess.run(
-            ["ffmpeg", "-hide_banner", "-nostdin", "-y", "-i", str(originale),
+            ["ffmpeg", "-hide_banner", "-nostdin", "-y", *_formato_ingresso(originale), "-i", str(originale),
              "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", str(wav_voxtral)],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             timeout=600, check=True)
@@ -2181,7 +2190,7 @@ def rifinisci_tempi(originale: Path, wav_naturale: Path,
     if not wav_naturale.is_file():
         try:
             subprocess.run(
-                ["ffmpeg", "-hide_banner", "-nostdin", "-y", "-i", str(originale),
+                ["ffmpeg", "-hide_banner", "-nostdin", "-y", *_formato_ingresso(originale), "-i", str(originale),
                  "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", str(wav_naturale)],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 timeout=600, check=True)
@@ -2241,7 +2250,7 @@ def controllo_cifre_parakeet(originale: Path, wav_naturale: Path,
     if not wav_naturale.is_file():
         try:
             subprocess.run(
-                ["ffmpeg", "-hide_banner", "-nostdin", "-y", "-i", str(originale),
+                ["ffmpeg", "-hide_banner", "-nostdin", "-y", *_formato_ingresso(originale), "-i", str(originale),
                  "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", str(wav_naturale)],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 timeout=600, check=True)
@@ -6635,7 +6644,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         try:
             # Orologio PIENO della passata B (senza VAD): basta l'atempo.
             sonda = subprocess.run(
-                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                ["ffprobe", "-v", "error", *_formato_ingresso(ingresso), "-show_entries", "format=duration",
                  "-of", "default=nw=1:nk=1", str(ingresso)],
                 capture_output=True, text=True, timeout=60,
             )

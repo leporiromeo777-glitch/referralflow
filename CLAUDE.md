@@ -325,8 +325,10 @@ un dettato di Moccetti già lavorato in produzione.
 Formati dittafono Philips DPM (7.9.2026): `.dss`/`.ds2` ammessi su pannello e
 pagina Referti (MIME `audio/x-dss`), decodifica via ffmpeg (dss_sp / g723_1,
 presenti sul Mac), riascolto con conversione al volo in WAV (rotta
-`api/referti/audio` e `/audio` del pannello). NON ancora collaudato su un
-file vero; la modalità QP dei DSS Pro e i file cifrati potrebbero non aprirsi.
+`api/referti/audio` e `/audio` del pannello). Collaudato su un DS2 vero del
+DPM il 7.9.2026: l'autoriconoscimento di ffmpeg 8 lo RIFIUTA, serve `-f dss`
+forzato → helper `_formato_ingresso()` davanti a ogni `-i` sull'originale
+(catena, pannello, app, esporta-oro). Modalità QP e file cifrati: non provati.
 
 ## Catena referti: pagine e strumenti aggiunti il 5-6.9.2026
 - `/referti/qualita` cruscotto (parole modificate, tempo di revisione, segnalazioni

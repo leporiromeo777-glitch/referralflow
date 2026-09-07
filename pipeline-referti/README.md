@@ -55,11 +55,14 @@ come gli altri, dal pannello e dalla pagina Referti: la catena li decodifica
 con ffmpeg (demuxer `dss`, decoder `dss_sp` per la modalità SP e `g723_1`
 per la LP — verificati sul Mac dello studio). Il file originale resta
 com'è (conserva audio compresa); per il riascolto in pagina si converte al
-volo in WAV, perché i browser non suonano i DSS. Due limiti da sapere:
-la modalità **QP** dei DSS Pro usa un codec che ffmpeg potrebbe non
-decodificare (in tal caso il dettato finisce in errori/ alla prima fase e
-conviene impostare il dittafono su SP), e i file **cifrati** dal DPM non si
-aprono. Non avendo un file di prova, il primo dettato vero è il collaudo.
+volo in WAV, perché i browser non suonano i DSS. Collaudo sul primo DS2 vero
+del DPM (2026-09-07): l'autoriconoscimento di ffmpeg 8 lo rifiuta («Invalid
+data found»), ma col demuxer forzato `-f dss` decodifica tutto (dss_sp,
+11025 Hz) — perciò ogni chiamata a ffmpeg/ffprobe sull'originale passa da
+`_formato_ingresso()`. Due limiti da sapere: la modalità **QP** dei DSS Pro
+usa un codec che ffmpeg potrebbe non decodificare (in tal caso il dettato
+finisce in errori/ alla prima fase e conviene impostare il dittafono su SP),
+e i file **cifrati** dal DPM non si aprono.
 
 ## Profili per medico (2026-09-07)
 

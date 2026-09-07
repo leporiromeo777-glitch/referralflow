@@ -36,7 +36,9 @@ async function convertiInWav(originale: Buffer, ext: string): Promise<Buffer | n
     await fs.writeFile(ingresso, originale, { mode: 0o600 });
     await execFileP(
       process.env.FFMPEG_BIN || 'ffmpeg',
-      ['-hide_banner', '-nostdin', '-loglevel', 'error', '-y', '-i', ingresso,
+      // «-f dss» forzato: l'autoriconoscimento di ffmpeg 8 non prende i DS2
+      // del DPM (collaudato su un file vero il 2026-09-07).
+      ['-hide_banner', '-nostdin', '-loglevel', 'error', '-y', '-f', 'dss', '-i', ingresso,
         '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', uscita],
       { timeout: 120_000, maxBuffer: 1024 * 1024 }
     );

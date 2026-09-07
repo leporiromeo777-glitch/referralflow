@@ -229,6 +229,8 @@ def converti_in_wav(audio: Path) -> bytes | None:
         try:
             esito = subprocess.run(
                 ["ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
+                 # demuxer forzato: l'autoriconoscimento di ffmpeg 8 non prende i DS2
+                 *(["-f", "dss"] if audio.suffix.lower() in ESTENSIONI_DITTAFONO else []),
                  "-i", str(audio), "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", str(uscita)],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
         except (OSError, subprocess.TimeoutExpired):
