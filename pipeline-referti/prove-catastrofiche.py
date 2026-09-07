@@ -333,6 +333,29 @@ def _():
     assert not tolti5 and nuovo5 == t5
 
 
+@caso("20 · passata A collassata: la sentinella A-vs-B la vede")
+def _prova_20() -> None:
+    # Il caso vero del 2026-09-07: 289 s di dettato, whisper 600 caratteri,
+    # Voxtral 3'084, e la bozza è arrivata in pagina senza un avviso.
+    assert m.collasso_a_vs_b(600, 3084)
+    # Un dettato lungo con la A a metà: collasso.
+    assert m.collasso_a_vs_b(1000, 3000)
+    # Differenze normali tra due motori: NON è un collasso.
+    assert not m.collasso_a_vs_b(3000, 3300)
+    assert not m.collasso_a_vs_b(1000, 1500)
+    # Testi cortissimi (dettato di pochi secondi): mai allarme.
+    assert not m.collasso_a_vs_b(100, 380)
+    # La A più lunga della B non è mai un collasso della A.
+    assert not m.collasso_a_vs_b(3084, 600)
+
+
+@caso("21 · collasso della A: verifica al livello minimo")
+def _prova_21() -> None:
+    assert m.livello_verifica(["trascrizione principale completa"]) == "minimo"
+    assert m.livello_verifica(["verificatore cloud"]) == "ridotto"
+    assert m.livello_verifica([]) == "pieno"
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0

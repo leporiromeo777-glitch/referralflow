@@ -368,6 +368,7 @@ export async function POST(req: NextRequest) {
         `update referti_bozze
             set stato = 'bozza', payload = $3, tipo = $4, medico = $5,
                 testo_finale = null, campi_confermati = null,
+                revisione_stato = null,
                 reviewed_by = null, reviewed_at = null
           where id = $1 and studio_id = $2`,
         [esistente.id, studio.id, JSON.stringify(payload), tipo, medicoId]

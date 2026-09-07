@@ -1460,6 +1460,21 @@ def parole_da_json(percorso_json: Path) -> list[tuple[str, float]]:
 # tra i token della parola. NON si colora il testo (la ricerca lo boccia):
 # entra solo nel punteggio di rischio per ordinare i flag. Per referto, in RAM.
 _PROB_PAROLE: dict[str, dict[str, float]] = {}
+# Corsa A recuperata SENZA VAD (sentinella A-vs-B): i suoi tempi sono già
+# sull'orologio pieno, non vanno decompattati.
+_TEMPI_SENZA_VAD: set[str] = set()
+
+
+def collasso_a_vs_b(caratteri_a: int, caratteri_b: int) -> bool:
+    """La passata A è collassata rispetto alla B? Metro della sentinella
+    A-vs-B (2026-09-07): la B rende almeno il 60% in più della A e almeno
+    300 caratteri in più, e ha comunque un corpo (>= 400 caratteri). Sotto
+    queste soglie le due passate discordano come al solito."""
+    return (caratteri_b >= max(400, int(caratteri_a * 1.6))
+            and caratteri_b - caratteri_a >= 300)
+# Passata A collassata anche dopo il recupero: le omissioni si cercano
+# contro la passata B, che è l'unica ad avere il dettato intero.
+_COLLASSO_A: set[str] = set()
 
 
 def probabilita_parole(percorso_json: Path) -> dict[str, float]:
@@ -5929,7 +5944,8 @@ def livello_verifica(componenti_mancanti: list[str], troncato: bool = False) -> 
     con tutte le barriere attive, «ridotto» con almeno un ripiego, «minimo»
     quando mancano insieme il secondo motore indipendente e il verificatore
     cloud, o l'audio risulta troncato."""
-    if troncato or {"secondo motore indipendente", "verificatore cloud"} <= set(componenti_mancanti):
+    if (troncato or "trascrizione principale completa" in componenti_mancanti
+            or {"secondo motore indipendente", "verificatore cloud"} <= set(componenti_mancanti)):
         return "minimo"
     return "pieno" if not componenti_mancanti else "ridotto"
 
@@ -5956,6 +5972,10 @@ def costruisci_manifesto(integ: dict, fatto_b: bool, verif_cloud: bool, secondo_
                 and not integ.get("coda_parlata") and float(integ.get("silenzio_pct") or 0) < 60)
     if not integ_ok:
         mancanti.append("integrità audio")
+    # Passata A collassata rispetto alla B (sentinella A-vs-B del 2026-09-07):
+    # il referto nasce da un dettato incompleto, verifica al livello minimo.
+    if file_id in _COLLASSO_A:
+        mancanti.append("trascrizione principale completa")
     con_tempo = sum(1 for n in numeri if isinstance(n, dict) and n.get("secondo") is not None)
     return {
         "integrita_audio": "ok" if integ_ok else "avviso",
@@ -6598,6 +6618,50 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             "fase=deloop file=%s esito=ok rimosse_a=%d rimosse_b=%d fantasmi_a=%d fantasmi_b=%d durata=%.1fs",
             file_id, rip_a, rip_b, fant_a, fant_b, time.monotonic() - inizio,
         )
+        # Sentinella A-vs-B (2026-09-07, visto dal vivo: 289 s di dettato,
+        # whisper ha reso 600 caratteri e Voxtral 3'084, e la bozza è
+        # arrivata in pagina senza un avviso). La sentinella anti-nano non
+        # poteva vederlo: misura la densità PRIMA del deloop, e le 13 frasi
+        # ripetute del motore incantato tenevano su il conto. Qui il metro è
+        # l'altro testimone, dopo la pulizia. Causa più probabile: il VAD che
+        # butta via il parlato → corsa di recupero SENZA VAD, con i tempi
+        # (l'orologio diventa quello pieno: lo dice _TEMPI_SENZA_VAD).
+        if fatto_b and not visita and collasso_a_vs_b(len(grezzo_a), len(grezzo_b)):
+            log.warning(
+                "fase=trascrizione_a file=%s esito=sospetto_collasso_ab caratteri_a=%d caratteri_b=%d",
+                file_id, len(grezzo_a), len(grezzo_b),
+            )
+            recuperato = ""
+            try:
+                trascrivi(percorso(".wav"), percorso(".nv.txt"), file_id,
+                          "trascrizione_a_nc", "", con_tempi=True, usa_vad=False)
+                recuperato, _ = togli_frasi_fantasma(
+                    percorso(".nv.txt").read_text(encoding="utf-8"))
+                recuperato, _, punti_rec = deduplica_loop(recuperato)
+            except Exception:  # noqa: BLE001 — il recupero non blocca mai
+                recuperato, punti_rec = "", []
+            if len(recuperato) > len(grezzo_a) * 1.2:
+                grezzo_a, punti_loop = recuperato, punti_rec
+                percorso(".nv.txt").replace(percorso(".txt"))
+                if percorso(".nv.json").is_file():
+                    percorso(".nv.json").replace(percorso(".json"))
+                _TEMPI_SENZA_VAD.add(file_id)
+                versioni["grezzo_a_recuperato"] = grezzo_a
+                log.info(
+                    "fase=trascrizione_a file=%s esito=recuperato_senza_vad caratteri=%d",
+                    file_id, len(grezzo_a),
+                )
+            if collasso_a_vs_b(len(grezzo_a), len(grezzo_b)):
+                _COLLASSO_A.add(file_id)
+                log.warning(
+                    "fase=trascrizione_a file=%s esito=collasso_confermato caratteri_a=%d caratteri_b=%d",
+                    file_id, len(grezzo_a), len(grezzo_b),
+                )
+                avvisi.append(
+                    "ATTENZIONE: il primo motore di trascrizione ha reso molto meno testo del "
+                    "secondo sullo stesso audio — è quasi certo che al referto manchino pezzi "
+                    "del dettato. NON confermare questa bozza: riascolta l'audio, e i passaggi "
+                    "che mancano sono elencati nel primo passo della revisione.")
         tappa("trascrizione_a", "whisper", caratteri=len(grezzo_a))
         tappa("trascrizione_b", "voxtral" if fatto_b else "whisper", caratteri=len(grezzo_b))
         tappa("deloop", "codice", rimosse=rip_a + rip_b, fantasmi=fant_a + fant_b)
@@ -6935,10 +6999,15 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                 durata_audio_originale = float(sonda.stdout.strip())
             except ValueError:
                 durata_audio_originale = 0.0
-            seg_vad = _segmenti_vad(percorso(".wav")) if USA_VAD else []
+            seg_vad = (_segmenti_vad(percorso(".wav"))
+                       if USA_VAD and file_id not in _TEMPI_SENZA_VAD else [])
             _PROB_PAROLE[file_id] = probabilita_parole(percorso(".json"))
             while len(_PROB_PAROLE) > 12:
                 _PROB_PAROLE.pop(next(iter(_PROB_PAROLE)))
+            while len(_TEMPI_SENZA_VAD) > 12:
+                _TEMPI_SENZA_VAD.pop()
+            while len(_COLLASSO_A) > 12:
+                _COLLASSO_A.pop()
             if seg_vad:
                 parole_audio = parole_da_json(percorso(".json"))
                 giuntura = _giuntura_vad(
@@ -7099,7 +7168,10 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         except Exception as e:  # noqa: BLE001 — mai bloccare la consegna
             log.warning("fase=rischio file=%s esito=errore tipo=%s", file_id, type(e).__name__)
         try:
-            omesse = rileva_omissioni(grezzo_a, finale, note_segreteria, parole_audio, file_id)
+            # Con la A collassata il metro è la B: è l'unica ad avere il
+            # dettato intero, e chi rivede deve vedere che cosa manca.
+            sorgente = grezzo_b if file_id in _COLLASSO_A else grezzo_a
+            omesse = rileva_omissioni(sorgente, finale, note_segreteria, parole_audio, file_id)
             payload["frasi_omesse"] = omesse
             gravi = [o for o in omesse if o["cifre"] or o["farmaco"]]
             if gravi:
