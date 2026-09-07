@@ -379,6 +379,21 @@ audio dell'app (env `DS2_DECODER`/`DS2_DECODER_PYTHON`) e in esporta-oro.
 I .dss classici: ffmpeg con `-f dss` (`_formato_ingresso()`). File cifrati:
 password non gestita.
 
+Sentinella A-vs-B (7.9.2026, guasto vero): su 289 s di dettato whisper ha
+reso 600 caratteri e Voxtral 3'084 — al referto mancava l'80% e NESSUN
+avviso è arrivato in pagina. La sentinella anti-nano non poteva vederlo:
+misura la densità del testo PRIMA del deloop, e le 13 frasi ripetute dal
+motore incantato tenevano su il conto. Ora il metro è l'altro testimone,
+DOPO la pulizia (`collasso_a_vs_b`: B ≥ 1.6 × A e ≥ 300 caratteri in più):
+al sospetto parte una corsa di recupero SENZA VAD (causa vera: il VAD
+buttava via il parlato) — sul caso reale ha reso 3'055 caratteri contro 600,
+copertura audio 288 s su 288 — e se la A resta corta il referto porta un
+avviso in evidenza, le omissioni si cercano contro la passata B e il
+manifesto scende a «minimo» («trascrizione principale completa» tra i
+componenti mancanti). I tempi della corsa recuperata sono già sull'orologio
+pieno (`_TEMPI_SENZA_VAD`: niente decompattazione). Casi 20-21 nella suite.
+La rilavorazione di una bozza scartata azzera anche `revisione_stato`.
+
 Fase «doppioni» (7.9.2026, richiesta utente): `togli_doppioni()` in
 pipeline.py dopo lo stile, prima della struttura. Tre regole: frase identica
 o quasi ripetuta (Jaccard ≥ 0.9, ≥ 3 elementi) → via la seconda;
