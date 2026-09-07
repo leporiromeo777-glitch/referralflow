@@ -3,7 +3,7 @@ import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { generaDocxReferto, ricomponiParagrafi } from '@/lib/referto-docx';
 import { profiloMedico } from '@/lib/referti-medici';
-import { appellativo, conTitolo, dataCh, dataVisitaDalTesto, destinatarioAffidabile, destinatarioInRubrica, siglaDaEmail } from '@/lib/referti-lettera';
+import { appellativo, conTitolo, dataCh, dataVisitaDalTesto, destinatarioAffidabile, destinatarioDalSaluto, destinatarioInRubrica, siglaDaEmail } from '@/lib/referti-lettera';
 import { salvaDalModulo } from '@/lib/referti-salva';
 import { isUuid } from '@/lib/cartella';
 
@@ -101,13 +101,18 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   // dalla rubrica dei medici invianti se il cognome corrisponde. Se il nome
   // estratto è solo chi ha eseguito un esame citato nel testo (saluto
   // generico «Caro collega»), non è il destinatario: righe vuote da compilare.
-  const nomeDest = destinatarioNome && destinatarioAffidabile(testo, destinatarioNome) ? destinatarioNome : '';
-  let destinatario = nomeDest ? conTitolo(nomeDest.replace(/^dr\.?\s*(med\.?)?\s*/i, '')) : ' ';
+  // Se i campi non danno un destinatario affidabile, lo dà il saluto della
+  // lettera stessa («Cara dottoressa Bianchi,»), col suo genere.
+  const dalSaluto = formato === 'lettera' ? destinatarioDalSaluto(testo) : null;
+  const daiCampi = destinatarioNome && destinatarioAffidabile(testo, destinatarioNome) ? destinatarioNome : '';
+  const nomeDest = daiCampi || dalSaluto?.nome || '';
+  const femminile = (daiCampi ? /\b(dr\.?ssa|dott\.?ssa|dottoressa|signora)\b/i.test(daiCampi) : false) || (!daiCampi && (dalSaluto?.femminile ?? false));
+  let destinatario = nomeDest ? conTitolo(nomeDest.replace(/^dr\.?\s*(med\.?)?\s*/i, ''), femminile) : ' ';
   let via = 'Via email';
   if (formato === 'lettera') {
     const rubrica = nomeDest ? await destinatarioInRubrica(session.studioId, nomeDest) : null;
     const righe = nomeDest
-      ? [appellativo(nomeDest), destinatario,
+      ? [appellativo(nomeDest, femminile), destinatario,
          rubrica?.specialita ? `FMH ${rubrica.specialita}` : '',
          rubrica?.email ? `Via e-mail: ${rubrica.email}` : 'Via e-mail']
       : ['Egregio Signor', 'Dr. med. ', 'Via e-mail'];

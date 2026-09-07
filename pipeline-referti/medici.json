@@ -1,37 +1,48 @@
 {
- "_nota": "Profili dei medici che dettano (2026-09-07). «formato» = forma standard del referto: «rapporto» (rapporto-tipo a sezioni: diagnosi, anamnesi, terapia, esami, valutazione, procedere) oppure «lettera» (Caro <medico>, a capo, corpo, a capo, saluto). «intestazione» = righe della carta intestata sotto il nome (segnaposto {telefono} e {email} dalle impostazioni dello studio; una riga con segnaposto non risolto viene tolta); «titolo_rapporto» = riga del titolo nel Word ({data_visita} = data della visita citata nel testo, altrimenti del dettato); «chiusura» = saluto finale fisso (vuota = quello dettato); «firma» = righe sotto il saluto; «copia» = riga finale (es. «Copia: alla paziente»). La catena si adegua a CHI detta: chi carica un dettato sceglie il medico (pannello locale o pagina Referti) e il nome del file porta il marcatore «medico-<id>--». Qui SOLO nomi di medici e impostazioni tecniche: mai dati di pazienti. Per aggiungere un medico basta una voce nuova; i file facoltativi (vocabolario-<id>.txt, correzioni-<id>.json) vivono accanto a questo e non vengono toccati dagli aggiornamenti. Il servizio pubblica l'elenco alla piattaforma, così la pagina Referti mostra gli stessi nomi.",
- "versione": "2026-09-07",
- "medici": [
-  {
-   "id": "moccetti",
-   "nome": "Dr. med. Marco Moccetti",
-   "breve": "Moccetti",
-   "modalita": "lettera",
-   "formato": "lettera",
-   "intestazione": ["Via Pretorio 9, 6900 Lugano (CH)", "Tel: {telefono}", "e-mail: {email}"],
-   "titolo_rapporto": "RAPPORTO AMBULATORIALE del {data_visita}",
-   "chiusura": "Cordiali e collegiali saluti.",
-   "firma": ["Dr. med. Marco Moccetti", "(partito dopo dettatura)"],
-   "atempo": 0.8,
-   "vocabolario": "vocabolario-moccetti.txt",
-   "correzioni": "correzioni-moccetti.json",
-   "note": "Detta quasi sempre una lettera nuova da scrivere; raramente chiede di aggiornare altro. Parla molto veloce: provati 0.7 / 0.6 / 0.5 il 2026-09-07 sul primo dettato vero (divergenze 12/14/15 contro 11 a 0.8) — decisione del medico: resta 0.8. Per riprovare: prova-atempo.sh <audio> moccetti 0.7."
-  },
-  {
-   "id": "moschovitis",
-   "nome": "Dr. med. Giorgio Moschovitis",
-   "breve": "Moschovitis",
-   "modalita": "aggiornamento",
-   "formato": "rapporto",
-   "intestazione": ["Spec. FMH Medicina Interna e Cardiologia", "Certificazione Studi Avanzati (CAS) in Insufficienza Cardiaca-HF", "Via Pretorio 9, 6900 Lugano (CH)", "Tel: {telefono}"],
-   "titolo_rapporto": "VISITA AMBULATORIALE, RAPPORTO",
-   "chiusura": "",
-   "firma": [],
-   "copia": "Copia: alla paziente",
-   "atempo": 0.8,
-   "vocabolario": "vocabolario-moschovitis.txt",
-   "correzioni": "correzioni-moschovitis.json",
-   "note": "Detta gli aggiornamenti alla lettera precedente del paziente: la piattaforma chiede da sola la fusione con l'ultima lettera confermata, se c'è."
-  }
- ]
+  "_nota": "Profili dei medici che dettano (2026-09-07). «formato» = forma standard del referto: «rapporto» (rapporto-tipo a sezioni: diagnosi, anamnesi, terapia, esami, valutazione, procedere) oppure «lettera» (Caro <medico>, a capo, corpo, a capo, saluto). «intestazione» = righe della carta intestata sotto il nome (segnaposto {telefono} e {email} dalle impostazioni dello studio; una riga con segnaposto non risolto viene tolta); «titolo_rapporto» = riga del titolo nel Word ({data_visita} = data della visita citata nel testo, altrimenti del dettato); «chiusura» = saluto finale fisso (vuota = quello dettato); «firma» = righe sotto il saluto; «copia» = riga finale (es. «Copia: alla paziente»). La catena si adegua a CHI detta: chi carica un dettato sceglie il medico (pannello locale o pagina Referti) e il nome del file porta il marcatore «medico-<id>--». Qui SOLO nomi di medici e impostazioni tecniche: mai dati di pazienti. Per aggiungere un medico basta una voce nuova; i file facoltativi (vocabolario-<id>.txt, correzioni-<id>.json) vivono accanto a questo e non vengono toccati dagli aggiornamenti. Il servizio pubblica l'elenco alla piattaforma, così la pagina Referti mostra gli stessi nomi.",
+  "versione": "2026-09-07",
+  "medici": [
+    {
+      "id": "moccetti",
+      "nome": "Dr. med. Marco Moccetti",
+      "breve": "Moccetti",
+      "modalita": "lettera",
+      "formato": "lettera",
+      "intestazione": [
+        "Via Pretorio 9, 6900 Lugano (CH)",
+        "Tel: {telefono}"
+      ],
+      "titolo_rapporto": "RAPPORTO AMBULATORIALE del {data_visita}",
+      "chiusura": "Cordiali e collegiali saluti.",
+      "firma": [
+        "Dr. med. Marco Moccetti",
+        "(partito dopo dettatura)"
+      ],
+      "atempo": 0.8,
+      "vocabolario": "vocabolario-moccetti.txt",
+      "correzioni": "correzioni-moccetti.json",
+      "note": "Detta quasi sempre una lettera nuova da scrivere; raramente chiede di aggiornare altro. Parla molto veloce: provati 0.7 / 0.6 / 0.5 il 2026-09-07 sul primo dettato vero (divergenze 12/14/15 contro 11 a 0.8) — decisione del medico: resta 0.8. Per riprovare: prova-atempo.sh <audio> moccetti 0.7."
+    },
+    {
+      "id": "moschovitis",
+      "nome": "Dr. med. Giorgio Moschovitis",
+      "breve": "Moschovitis",
+      "modalita": "aggiornamento",
+      "formato": "rapporto",
+      "intestazione": [
+        "Spec. FMH Medicina Interna e Cardiologia",
+        "Certificazione Studi Avanzati (CAS) in Insufficienza Cardiaca-HF",
+        "Via Pretorio 9, 6900 Lugano (CH)",
+        "Tel: {telefono}"
+      ],
+      "titolo_rapporto": "VISITA AMBULATORIALE, RAPPORTO",
+      "chiusura": "",
+      "firma": [],
+      "copia": "Copia: alla paziente",
+      "atempo": 0.8,
+      "vocabolario": "vocabolario-moschovitis.txt",
+      "correzioni": "correzioni-moschovitis.json",
+      "note": "Detta gli aggiornamenti alla lettera precedente del paziente: la piattaforma chiede da sola la fusione con l'ultima lettera confermata, se c'è."
+    }
+  ]
 }

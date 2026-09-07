@@ -1,6 +1,6 @@
 import 'server-only';
 import { relazioniIntatte } from './referti-misure-cliniche';
-import { normalizzaDate } from './referti-lettera';
+import { normalizzaDate, numeriDiTempoInCifre } from './referti-lettera';
 
 // Riorganizzazione del referto dettato nel formato standard dello studio
 // (bottone nel dettaglio referto). Il modello AI LOCALE (Ollama) rimappa il
@@ -58,7 +58,7 @@ const PROMPT_LETTERA = `Sei un assistente che mette in bella copia lettere medic
 
 1. PRIMA RIGA: il saluto di apertura «Caro <titolo e nome del medico destinatario>,» (o «Cara …,» se il testo indica una dottoressa). Il destinatario è quello che il testo nomina (per esempio dopo «caro collega», «cara dottoressa Rossi», «al dottor Bianchi»); se il testo non nomina nessuno, scrivi «Caro collega,». Non inventare nomi.
 2. Una riga vuota.
-3. IL CORPO DELLA LETTERA: tutto il contenuto clinico dettato, in prosa scorrevole divisa in paragrafi sensati (motivo della visita, anamnesi, esami, valutazione, proposta), SEPARATI L'UNO DALL'ALTRO DA UNA RIGA VUOTA. Punteggiatura corretta, maiuscole a inizio frase, frasi complete — SENZA mai cambiare il significato né aggiungere informazioni. Niente titoli di sezione, niente elenchi puntati, niente numerazione.
+3. IL CORPO DELLA LETTERA (prima parola in MINUSCOLO: riprende dalla virgola del saluto): tutto il contenuto clinico dettato, in prosa scorrevole divisa in paragrafi sensati (motivo della visita, anamnesi, esami, valutazione, proposta), SEPARATI L'UNO DALL'ALTRO DA UNA RIGA VUOTA. Punteggiatura corretta, maiuscole a inizio frase, frasi complete — SENZA mai cambiare il significato né aggiungere informazioni. Niente titoli di sezione, niente elenchi puntati, niente numerazione.
 4. Una riga vuota.
 5. IL SALUTO FINALE: {chiusura}
 
@@ -95,8 +95,27 @@ function promptPer(formato: FormatoReferto, opzioni: OpzioniLettera): string {
 // Rifiniture di CODICE dopo il modello, nella forma lettera: il blocco
 // «Terapia:» ripreso dalla lettera precedente prima del saluto (solo se il
 // dettato dice che la terapia è invariata) e le righe di firma in fondo.
+// Dopo «Cara dottoressa Bianchi,» il corpo riprende in MINUSCOLO (forma
+// della segretaria: «…, / ho preso atto…», «…, / non ritorno…»). Si tocca
+// solo un elenco chiuso di aperture comuni: mai nomi, farmaci o sigle.
+const _APERTURE_MINUSCOLE = /^(ho|non|come|in|dopo|durante|con|per|mi|ti|si|abbiamo|ringrazio|faccio|invio|allego|riporto|questa|questo|la|il|le|lo|gli|i|a|ai|al|alla|di|da|dal|purtroppo|gentilmente|oggi|ieri|premetto|preciso|confermo|segnalo|rispondo|come da|in data|in occasione|a seguito|a margine)\b/i;
+
+function corpoInMinuscolo(righe: string[], iSaluto: number): string[] {
+  const i = righe.findIndex((r, k) => k > iSaluto && r.trim() !== '');
+  if (i === -1) return righe;
+  const r = righe[i];
+  if (!_APERTURE_MINUSCOLE.test(r.trim())) return righe;
+  const copia = [...righe];
+  copia[i] = r.replace(/^(\s*)(\p{Lu})/u, (_m, sp: string, c: string) => sp + c.toLowerCase());
+  return copia;
+}
+
 function rifinisciLettera(lettera: string, opzioni: OpzioniLettera): string {
   let righe = lettera.replace(/\r\n/g, '\n').trimEnd().split('\n');
+  const iApertura = righe.findIndex((r) => r.trim() !== '');
+  if (iApertura !== -1 && /^(car[oa]|gentil[ei]|egregi[oa]|stimat[oa])\b.*,$/i.test(righe[iApertura].trim())) {
+    righe = corpoInMinuscolo(righe, iApertura);
+  }
   const chiusura = opzioni.chiusura?.trim();
   let iSaluto = -1;
   if (chiusura) {
@@ -110,15 +129,26 @@ function rifinisciLettera(lettera: string, opzioni: OpzioniLettera): string {
     if (iSaluto === -1) righe = [...righe, ...blocco];
     else righe = [...righe.slice(0, iSaluto), ...blocco, ...righe.slice(iSaluto)];
   }
+  // Se il modello non ha scritto il saluto finale, lo mette il codice (è
+  // fisso nel profilo del medico).
+  if (iSaluto === -1 && chiusura) {
+    righe = [...righe, '', chiusura];
+  }
+  // L'indice del saluto va ricalcolato: il blocco della terapia lo ha
+  // spostato (altrimenti la ripulitura mangiava le righe vuote).
+  const iChiusuraVera = righe.findIndex((r) => (chiusura && r.trim().toLowerCase() === chiusura.toLowerCase())
+    || /^(cordiali|con i migliori|distinti|un caro saluto)/i.test(r.trim()));
   if (opzioni.firma?.length) {
     // Il modello a volte scrive comunque una firma dopo il saluto: via le
     // righe che sono già una riga di firma (o un nome con titolo), così la
     // firma del profilo non esce doppia.
     const norma = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
     const firmaNorm = new Set(opzioni.firma.map(norma));
-    const fine = iSaluto === -1 ? righe.length : righe.findIndex((r, k) => k > iSaluto && /^(cordiali|con i migliori|distinti|un caro saluto)/i.test(r.trim()));
-    const iChiusura = fine === -1 ? righe.length : fine;
-    if (iChiusura < righe.length) {
+    // Le righe da ripulire sono quelle DOPO il saluto finale (prima il
+    // codice cercava un secondo saluto: non trovandolo non ripuliva nulla e
+    // la firma usciva doppia — visto dal vivo 2026-09-07).
+    const iChiusura = iChiusuraVera;
+    if (iChiusura >= 0) {
       const dopo = righe.slice(iChiusura + 1).filter((r) => {
         const n = norma(r);
         return n && !firmaNorm.has(n) && !/^(dr|dott|prof)\b/.test(n) && !firmaNorm.has(norma(`Dr. med. ${r}`));
@@ -154,7 +184,7 @@ export async function riorganizzaReferto(
   // Forma lettera: le date «2 settembre 2026» diventano «02.09.2026» PRIMA
   // del modello (codice, deterministico): così la guardia sui numeri
   // confronta l'originale già normalizzato con la risposta.
-  const originale = (formato === 'lettera' ? normalizzaDate(testo) : testo).slice(0, TESTO_MAX);
+  const originale = (formato === 'lettera' ? numeriDiTempoInCifre(normalizzaDate(testo)) : testo).slice(0, TESTO_MAX);
   let risposta = '';
   try {
     const r = await fetch(`${OLLAMA_URL}/api/generate`, {

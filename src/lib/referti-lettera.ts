@@ -25,6 +25,26 @@ export function normalizzaDate(testo: string): string {
   );
 }
 
+// Quantità di tempo dettate a parole → cifre, come le scrive la segretaria
+// («fra 6 mesi», «ogni 2 settimane»; confronto del 2026-09-07). Solo davanti
+// a un'unità di tempo: nessun altro numero del testo viene toccato, e la
+// conversione avviene PRIMA del modello, quindi la firma numerica resta
+// coerente. «un/una» non si toccano («un mese» resta «un mese»).
+const _NUMERI_PAROLA: Record<string, string> = {
+  due: '2', tre: '3', quattro: '4', cinque: '5', sei: '6', sette: '7', otto: '8',
+  nove: '9', dieci: '10', undici: '11', dodici: '12', quindici: '15', diciotto: '18',
+  venti: '20', ventiquattro: '24', trenta: '30', quaranta: '40', sessanta: '60',
+};
+const _UNITA_TEMPO = '(mesi|settimane|giorni|anni|ore|minuti|secondi|volte)';
+
+export function numeriDiTempoInCifre(testo: string): string {
+  const parole = Object.keys(_NUMERI_PAROLA).join('|');
+  return testo.replace(
+    new RegExp(`\\b(${parole})\\s+${_UNITA_TEMPO}\\b`, 'gi'),
+    (_m, n: string, unita: string) => `${_NUMERI_PAROLA[n.toLowerCase()]} ${unita}`
+  );
+}
+
 export function dataCh(iso: string | null | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
@@ -86,6 +106,27 @@ export function destinatarioAffidabile(testo: string, nome: string): boolean {
   return nelSaluto || !(salutoGenerico && soloEsecutore);
 }
 
+// Il destinatario ricavato dal SALUTO d'apertura della lettera («Cara
+// dottoressa Bianchi,» → Bianchi, femminile). Serve quando l'estrazione dei
+// campi non ha trovato nessun destinatario («non indicato») ma il medico lo
+// ha nominato dettando (visto dal vivo 2026-09-07: riga «Dr. med.» vuota nel
+// Word). Un saluto generico («Caro collega,») non dà nessun nome.
+const _TITOLI_SALUTO = /\b(dott\.?ssa|dr\.?ssa|dottoressa|dottore|dottor|dott\.?|dr\.?|prof\.?ssa|prof\.?|med\.?|sig\.?ra|signora|signor|sig\.?)\b\.?/gi;
+const _GENERICI = /^(collega|colleghi|amico|amica|professore|professoressa|dottore|dottoressa)$/i;
+
+export function destinatarioDalSaluto(testo: string): { nome: string; femminile: boolean } | null {
+  const prima = testo.replace(/\r\n/g, '\n').split('\n').map((r) => r.trim()).find((r) => r) ?? '';
+  const m = /^(car[oa]|gentil[ei]|egregi[oa]|stimat[oa])\s+([^,]{2,60}),$/i.exec(prima);
+  if (!m) return null;
+  const apertura = m[1].toLowerCase();
+  const nome = m[2].trim().replace(/\s+/g, ' ');
+  if (/\d/.test(nome)) return null;
+  const senzaTitoli = nome.replace(_TITOLI_SALUTO, '').replace(/\s+/g, ' ').trim();
+  if (senzaTitoli.length < 3 || _GENERICI.test(senzaTitoli)) return null;
+  const femminile = /^(cara|egregia|stimata)$/.test(apertura) || /\b(dott\.?ssa|dr\.?ssa|dottoressa|signora|prof\.?ssa)\b/i.test(nome);
+  return { nome: senzaTitoli, femminile };
+}
+
 export function terapiaInvariata(testo: string): boolean {
   return /terapia[^.\n]{0,40}(rimane|resta|è|e')\s+invariata|terapia\s+invariata|senza modifiche (alla|della) terapia/i.test(testo);
 }
@@ -141,11 +182,15 @@ export async function destinatarioInRubrica(
 
 // «Egregio Signor» / «Egregia Signora» dal titolo che il testo usa per il
 // destinatario; senza indizi, il maschile come nella prassi dello studio.
-export function appellativo(destinatario: string): string {
-  return /\b(dr\.?ssa|dott\.?ssa|dottoressa|signora|cara)\b/i.test(destinatario) ? 'Egregia Signora' : 'Egregio Signor';
+// «Gentile Signora» per le donne, «Egregio Signor» per gli uomini: è la
+// forma della segretaria (documento del 2026-09-07).
+export function appellativo(destinatario: string, femminile = false): string {
+  return femminile || /\b(dr\.?ssa|dott\.?ssa|dottoressa|signora|cara)\b/i.test(destinatario)
+    ? 'Gentile Signora' : 'Egregio Signor';
 }
 
-export function conTitolo(nome: string): string {
+export function conTitolo(nome: string, femminile = false): string {
   const n = nome.trim();
-  return /^(dr|dott|prof)/i.test(n) ? n : `Dr. med. ${n}`;
+  if (/^(dr|dott|prof)/i.test(n)) return n;
+  return femminile ? `Dr.ssa med. ${n}` : `Dr. med. ${n}`;
 }

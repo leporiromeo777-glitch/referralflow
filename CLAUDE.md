@@ -343,8 +343,18 @@ visita citata nel testo>». Impagina come lettera: date «2 settembre 2026» →
 «02.09.2026» dal CODICE prima del modello, chiusura fissa dal profilo, firma
 aggiunta dal codice, blocco «Terapia:» ripreso dall'ultima lettera confermata
 del paziente quando il dettato dice «terapia invariata»
-(`src/lib/referti-lettera.ts`, `referti-formato.ts`). Dizionario seme
-`correzioni-moccetti.json` (RIVA, RCx): distribuisci lo copia solo se assente.
+(`src/lib/referti-lettera.ts`, `referti-formato.ts`). Terzo confronto (7.9.2026, doc 25 catena vs 26 segretaria — contenuto
+clinico identico, differenze solo di forma): destinatario ricavato dal
+SALUTO della lettera quando i campi dicono «non indicato»
+(`destinatarioDalSaluto`), «Gentile Signora» per le donne (era «Egregia»),
+quantità di tempo dettate a parole → cifre PRIMA del modello
+(`numeriDiTempoInCifre`: «sei mesi» → «6 mesi», solo davanti a un'unità di
+tempo), corpo che riprende in MINUSCOLO dopo il saluto (elenco chiuso di
+aperture), intestazione di Moccetti senza la riga e-mail (la segretaria mette
+solo Tel: serve il telefono in Impostazioni studio). Corretto un difetto
+vero: la ripulitura della firma doppia non scattava mai (cercava un SECONDO
+saluto finale) e il blocco terapia spostava l'indice del saluto. Dizionario
+seme `correzioni-moccetti.json` (RIVA, RCx, Ezetimibe): distribuisci lo copia solo se assente.
 `REFERTI_ATEMPO` a mano vince sul profilo (esperimenti). Prova richiesta
 dall'utente: Moccetti parla molto veloce → `bash pipeline-referti/prova-atempo.sh
 <audio> moccetti` prova 0.7, 0.6 E 0.5 (una corsa per valore, bozze ombra
