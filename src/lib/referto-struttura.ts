@@ -111,6 +111,20 @@ function rifinisciLettera(lettera: string, opzioni: OpzioniLettera): string {
     else righe = [...righe.slice(0, iSaluto), ...blocco, ...righe.slice(iSaluto)];
   }
   if (opzioni.firma?.length) {
+    // Il modello a volte scrive comunque una firma dopo il saluto: via le
+    // righe che sono già una riga di firma (o un nome con titolo), così la
+    // firma del profilo non esce doppia.
+    const norma = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    const firmaNorm = new Set(opzioni.firma.map(norma));
+    const fine = iSaluto === -1 ? righe.length : righe.findIndex((r, k) => k > iSaluto && /^(cordiali|con i migliori|distinti|un caro saluto)/i.test(r.trim()));
+    const iChiusura = fine === -1 ? righe.length : fine;
+    if (iChiusura < righe.length) {
+      const dopo = righe.slice(iChiusura + 1).filter((r) => {
+        const n = norma(r);
+        return n && !firmaNorm.has(n) && !/^(dr|dott|prof)\b/.test(n) && !firmaNorm.has(norma(`Dr. med. ${r}`));
+      });
+      righe = [...righe.slice(0, iChiusura + 1), ...dopo];
+    }
     righe = [...righe, '', ...opzioni.firma];
   }
   return righe.join('\n').replace(/\n{3,}/g, '\n\n').trim();

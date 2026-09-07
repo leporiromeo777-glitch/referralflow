@@ -3,7 +3,7 @@ import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { generaDocxReferto, ricomponiParagrafi } from '@/lib/referto-docx';
 import { profiloMedico } from '@/lib/referti-medici';
-import { appellativo, conTitolo, dataCh, dataVisitaDalTesto, destinatarioInRubrica, siglaDaEmail } from '@/lib/referti-lettera';
+import { appellativo, conTitolo, dataCh, dataVisitaDalTesto, destinatarioAffidabile, destinatarioInRubrica, siglaDaEmail } from '@/lib/referti-lettera';
 import { salvaDalModulo } from '@/lib/referti-salva';
 import { isUuid } from '@/lib/cartella';
 
@@ -86,22 +86,28 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     .filter((r) => !/\{[a-z_]+\}/.test(r) && !/:\s*$/.test(r))
     .join('\n');
 
-  // Data della lettera: la dettatura (dal dittafono o dai metadati audio),
-  // altrimenti l'arrivo della bozza; nel formato lettera con la sigla di
-  // chi ha confermato (o di chi scarica).
+  // Date (prassi della segretaria, confronto del 2026-09-07): «Lugano, …» è
+  // il giorno in cui la lettera viene SCRITTA (oggi), con la sigla di chi
+  // ha confermato (o di chi scarica); nel titolo va la data della
+  // DETTATURA (dal dittafono o dai metadati audio; altrimenti l'arrivo).
   const dettatoIl = typeof b.payload?.dettato_il === 'string' ? b.payload.dettato_il : '';
-  const dataBase = dataCh(dettatoIl) || dataCh(b.created_at);
+  const dataDettato = dataCh(dettatoIl) || dataCh(b.created_at);
+  const dataOggi = dataCh(new Date().toISOString());
   const sigla = siglaDaEmail(b.reviewed_email ?? session.email ?? '');
+  const dataBase = formato === 'lettera' ? dataOggi : dataDettato;
   const data = formato === 'lettera' && sigla ? `${dataBase}/${sigla}` : dataBase;
 
   // Destinatario: nel formato lettera su più righe, con e-mail e specialità
-  // dalla rubrica dei medici invianti se il cognome corrisponde.
-  let destinatario = destinatarioNome ? conTitolo(destinatarioNome.replace(/^dr\.?\s*(med\.?)?\s*/i, '')) : ' ';
+  // dalla rubrica dei medici invianti se il cognome corrisponde. Se il nome
+  // estratto è solo chi ha eseguito un esame citato nel testo (saluto
+  // generico «Caro collega»), non è il destinatario: righe vuote da compilare.
+  const nomeDest = destinatarioNome && destinatarioAffidabile(testo, destinatarioNome) ? destinatarioNome : '';
+  let destinatario = nomeDest ? conTitolo(nomeDest.replace(/^dr\.?\s*(med\.?)?\s*/i, '')) : ' ';
   let via = 'Via email';
   if (formato === 'lettera') {
-    const rubrica = destinatarioNome ? await destinatarioInRubrica(session.studioId, destinatarioNome) : null;
-    const righe = destinatarioNome
-      ? [appellativo(destinatarioNome), destinatario,
+    const rubrica = nomeDest ? await destinatarioInRubrica(session.studioId, nomeDest) : null;
+    const righe = nomeDest
+      ? [appellativo(nomeDest), destinatario,
          rubrica?.specialita ? `FMH ${rubrica.specialita}` : '',
          rubrica?.email ? `Via e-mail: ${rubrica.email}` : 'Via e-mail']
       : ['Egregio Signor', 'Dr. med. ', 'Via e-mail'];
@@ -109,9 +115,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     via = '';
   }
 
-  // Titolo: dal profilo ({data_visita} = data citata nel testo, altrimenti
-  // della dettatura); di serie il titolo storico dello stampo.
-  const dataVisita = dataVisitaDalTesto(testo) || dataBase;
+  // Titolo: dal profilo ({data_visita} = data della dettatura; se nel testo
+  // c'è «visita del …»/«in data …» conta per il formato rapporto).
+  const dataVisita = formato === 'lettera' ? dataDettato : (dataVisitaDalTesto(testo) || dataDettato);
   const titolo = (profilo?.titolo_rapporto || 'VISITA AMBULATORIALE, RAPPORTO').replace('{data_visita}', dataVisita);
   // Riga «Copia»: dal profilo (Moschovitis la tiene, Moccetti no).
   const copia = profilo ? profilo.copia : 'Copia: alla paziente';
@@ -125,7 +131,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     data,
     titolo,
     paziente: [pazienteNome, nascita].filter(Boolean).join(' – ') || ' ',
-    piede: [pazienteNome, nascita].filter(Boolean).join(', ') + (dataBase ? `  ${dataBase}` : ''),
+    piede: [pazienteNome, nascita].filter(Boolean).join(', ') + (formato === 'lettera' ? '' : (dataDettato ? `  ${dataDettato}` : '')),
     testo: ricomponiParagrafi(testo),
     copia,
   });

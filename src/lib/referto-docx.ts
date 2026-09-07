@@ -88,6 +88,13 @@ export function ricomponiParagrafi(testo: string): string {
       continue;
     }
     const elenco = /^([-•*]|\d{1,2}[.)])\s/.test(r);
+    // Saluto d'apertura di una lettera («Caro collega,», «Gentile Dottoressa Rossi,»):
+    // resta sulla sua riga, non scorre nel corpo (visto dal vivo 2026-09-07).
+    if (/^(car[oaie]|gentil[ei]|egregi[oaie]|stimat[oaie]|spett\.?)\b.*,$/i.test(r) && r.length <= 80) {
+      chiudi();
+      out.push(r);
+      continue;
+    }
     const titolo = r.length <= 40 && !/[.:;,!?]$/.test(r) && /^[A-ZÀ-Ý]/.test(r)
       && i + 1 < righe.length && righe[i + 1].trim() !== '' && !buf;
     if (elenco || titolo) {

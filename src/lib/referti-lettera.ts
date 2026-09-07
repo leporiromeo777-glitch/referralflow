@@ -64,6 +64,28 @@ export function estraiTerapia(lettera: string): string[] {
   return out;
 }
 
+// Il dettato contiene già una terapia (farmaci con dosaggio)? Se no, la
+// lettera riprende quella della lettera precedente (prassi della segretaria:
+// ogni lettera porta la terapia in corso, anche se il medico non la ridetta).
+export function dettatoConTerapia(testo: string): boolean {
+  return /^\s*terapia\s*:?\s*$/im.test(testo) || (testo.match(/\b\d+(?:[.,]\d+)?\s?(?:mg|mcg|µg|ml|ui)\b/gi) ?? []).length >= 2;
+}
+
+// Il nome estratto come destinatario è davvero il destinatario? Se compare
+// nel testo solo come chi ha ESEGUITO qualcosa («eseguita dal dottor X»,
+// «a cura del dr. X») e il saluto è generico («Caro collega»), non lo è:
+// l'estrazione ha preso l'unico medico nominato (visto dal vivo 2026-09-07).
+export function destinatarioAffidabile(testo: string, nome: string): boolean {
+  const cognome = nome.replace(/^(dr\.?|dott\.?|dr\.?ssa|dott\.?ssa|med\.?|prof\.?)\s*/gi, '').trim().split(/\s+/).pop() ?? '';
+  if (cognome.length < 3) return true;
+  const rx = new RegExp(`\\b${cognome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+  if (!rx.test(testo)) return true; // nome non nel corpo: viene dai campi confermati, ci si fida
+  const salutoGenerico = /^\s*car[oa]\s+(collega|dottore|dottoressa)\s*,/im.test(testo);
+  const soloEsecutore = new RegExp(`(?:eseguit[oaie]|effettuat[oaie]|refertat[oaie]|a cura)\\s+(?:da|dal|dalla|del|della)\\s+(?:dott\\.?|dr\\.?|dottor[e]?|dottoressa|prof\\.?)?\\s*(?:med\\.?\\s*)?[^.\\n]{0,40}\\b${cognome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(testo);
+  const nelSaluto = new RegExp(`^\\s*car[oa]\\b[^\\n,]{0,60}\\b${cognome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'im').test(testo);
+  return nelSaluto || !(salutoGenerico && soloEsecutore);
+}
+
 export function terapiaInvariata(testo: string): boolean {
   return /terapia[^.\n]{0,40}(rimane|resta|è|e')\s+invariata|terapia\s+invariata|senza modifiche (alla|della) terapia/i.test(testo);
 }

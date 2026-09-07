@@ -19,6 +19,11 @@ type Riparazione = { da: string; a: string };
 type DoppioneTolto = { tolta: string; tenuta: string; motivo: string };
 type DoppioneDubbio = { frase: string; simile_a: string; motivo: string };
 
+// Abbreviazioni col punto che NON chiudono la frase («Dr. med. Rossi»,
+// «Prof.», «Sig.ra», «ecc.», «es.»): senza questa lista la firma «Dr. med.
+// Marco Moccetti» usciva su tre righe (visto dal vivo 2026-09-07).
+const ABBREVIAZIONE = /(?:^|\s)(?:dr|dott|dr\.ssa|dott\.ssa|med|prof|sig|sig\.ra|ecc|es|ca|art|tel|n|p|pag|vs|approx)\.$/i;
+
 function spezzaInFrasi(testo: string): string[] {
   const pezzi: string[] = [];
   let corrente = '';
@@ -26,7 +31,7 @@ function spezzaInFrasi(testo: string): string[] {
     const frasi = riga.split(/(?<=[.!?;])\s+/);
     for (const f of frasi) {
       corrente = corrente ? `${corrente} ${f}` : f;
-      if (/[.!?;]["»)]?$/.test(f.trim())) {
+      if (/[.!?;]["»)]?$/.test(f.trim()) && !ABBREVIAZIONE.test(f.trim())) {
         pezzi.push(corrente);
         corrente = '';
       }

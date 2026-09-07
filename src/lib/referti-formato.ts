@@ -1,6 +1,6 @@
 import 'server-only';
 import { formatoPerBozza, profiloMedico, type FormatoReferto } from './referti-medici';
-import { estraiTerapia, letteraPrecedente, terapiaInvariata } from './referti-lettera';
+import { dettatoConTerapia, estraiTerapia, letteraPrecedente, terapiaInvariata } from './referti-lettera';
 import type { OpzioniLettera } from './referto-struttura';
 
 // Tutto ciò che serve al bottone «Riorganizza / Impagina come lettera» per
@@ -24,7 +24,11 @@ export async function opzioniRiorganizzazione(
     firma: profilo?.firma?.length ? profilo.firma : undefined,
   };
   let terapiaRipresa = false;
-  if (terapiaInvariata(testo)) {
+  // Prassi della segretaria (confronto del 2026-09-07): la terapia in corso
+  // va in ogni lettera, anche se il medico non la ridetta. Si riprende
+  // dalla lettera precedente quando il dettato dice «invariata» o quando
+  // non contiene farmaci con dosaggio (se li contiene, comanda il dettato).
+  if (terapiaInvariata(testo) || !dettatoConTerapia(testo)) {
     const campi = { ...(payload?.campi_estratti ?? {}), ...(campiConfermati ?? {}) } as Record<string, unknown>;
     const prec = await letteraPrecedente(studioId, bozzaId, campi);
     const terapia = prec ? estraiTerapia(prec.testo) : [];
