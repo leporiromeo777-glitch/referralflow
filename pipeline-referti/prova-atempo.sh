@@ -112,7 +112,9 @@ for ATEMPO in "${ATEMPI[@]}"; do
   fi
   # Numeri utili al confronto, presi SOLO dal log (mai dal testo).
   DIV=$(grep -oE "fase=confronto [^\n]*divergenze=[0-9]+" "$LOG" | tail -1 | grep -oE "divergenze=[0-9]+" || echo "divergenze=?")
-  DUB=$(grep -oE "fase=ispezione[^\n]*dubbi=[0-9]+" "$LOG" | tail -1 | grep -oE "dubbi=[0-9]+" || echo "dubbi=?")
+  # Rischio per frase (ultima riga «fase=rischio»: frasi, a_rischio, numeri, non_confermati).
+  DUB=$(grep -oE "fase=rischio [^\n]*" "$LOG" | tail -1 | sed -E 's/file=[^ ]+ //; s/fase=rischio //' || true)
+  DUB="${DUB:-rischio=?}"
   COP=$(grep -oE "fase=copertura [^\n]*" "$LOG" | tail -1 | sed -E 's/file=[^ ]+ //; s/fase=copertura //' || true)
   MAN=$(grep -oE "fase=manifesto [^\n]*" "$LOG" | tail -1 | sed -E 's/file=[^ ]+ //; s/fase=manifesto //' || true)
   echo "$ETICHETTA | $DIV | $DUB | copertura: ${COP:-?} | manifesto: ${MAN:-?}" >> "$RIEPILOGO"
