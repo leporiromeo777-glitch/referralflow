@@ -291,12 +291,33 @@ export default async function RefertoBozza({
         <h1>{row.tipo === 'visita'
           ? (row.stato === 'confermata' ? 'Nota di visita' : 'Bozza di nota di visita')
           : (row.stato === 'confermata' ? 'Referto' : 'Bozza di referto')}</h1>
-        <a className="btn btn-primary" href={`/api/referti/docx/${row.id}`}>
-          Word in carta intestata
-        </a>
-        <a className="btn" href={`/api/referti/pdf/${row.id}`} target="_blank">
-          Scarica PDF
-        </a>
+        {inBozza ? (
+          // Bozza aperta: Word e PDF INVIANO il modulo della revisione
+          // (testo com'è nella casella + campi), che viene salvato nel
+          // referto prima di generare il documento — così ciò che si
+          // modifica nella revisione guidata arriva nel file scaricato.
+          <>
+            <button type="submit" className="btn btn-primary" form="form-revisione"
+              formAction={`/api/referti/docx/${row.id}`} formMethod="post" formNoValidate
+              title="Salva le modifiche della revisione nel referto e scarica il Word">
+              Word in carta intestata
+            </button>
+            <button type="submit" className="btn" form="form-revisione"
+              formAction={`/api/referti/pdf/${row.id}`} formMethod="post" formNoValidate formTarget="_blank"
+              title="Salva le modifiche della revisione nel referto e apre il PDF">
+              Scarica PDF
+            </button>
+          </>
+        ) : (
+          <>
+            <a className="btn btn-primary" href={`/api/referti/docx/${row.id}`}>
+              Word in carta intestata
+            </a>
+            <a className="btn" href={`/api/referti/pdf/${row.id}`} target="_blank">
+              Scarica PDF
+            </a>
+          </>
+        )}
         <Link className="btn" href={row.tipo === 'visita' ? '/visite' : '/referti'}>
           {row.tipo === 'visita' ? '← Tutte le visite' : '← Tutti i referti'}
         </Link>
@@ -772,7 +793,7 @@ export default async function RefertoBozza({
       )}
 
       {inBozza ? (
-        <form action={confermaBozza} className="card form">
+        <form action={confermaBozza} className="card form" id="form-revisione">
           <input type="hidden" name="id" value={row.id} />
           <h2>Revisione guidata</h2>
           <RevisioneGuidata

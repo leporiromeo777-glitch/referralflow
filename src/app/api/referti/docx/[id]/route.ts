@@ -4,6 +4,8 @@ import { query } from '@/lib/db';
 import { generaDocxReferto, ricomponiParagrafi } from '@/lib/referto-docx';
 import { profiloMedico } from '@/lib/referti-medici';
 import { appellativo, conTitolo, dataCh, dataVisitaDalTesto, destinatarioInRubrica, siglaDaEmail } from '@/lib/referti-lettera';
+import { salvaDalModulo } from '@/lib/referti-salva';
+import { isUuid } from '@/lib/cartella';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,9 +22,21 @@ export const dynamic = 'force-dynamic';
 
 const MIME_DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
+// POST dal modulo della revisione guidata: prima salva testo e campi come
+// sono nella pagina (bozza aperta), poi genera il Word da ciò che è salvato.
+export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
+  const session = await getSession();
+  if (!session || !session.studioId) return new NextResponse('Non autorizzato', { status: 401 });
+  if (!isUuid(ctx.params.id)) return new NextResponse('Non trovato', { status: 404 });
+  const form = await req.formData().catch(() => null);
+  await salvaDalModulo(form, session.studioId, ctx.params.id, session.id, 'word');
+  return GET(req, ctx);
+}
+
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session || !session.studioId) return new NextResponse('Non autorizzato', { status: 401 });
+  if (!isUuid(params.id)) return new NextResponse('Non trovato', { status: 404 });
 
   const [b] = await query<{
     stato: string; testo_finale: string | null; payload: any;

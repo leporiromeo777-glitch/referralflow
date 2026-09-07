@@ -3,6 +3,8 @@ import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { generaPdfReferto } from '@/lib/pdf';
 import { ricomponiParagrafi } from '@/lib/referto-docx';
+import { salvaDalModulo } from '@/lib/referti-salva';
+import { isUuid } from '@/lib/cartella';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -13,6 +15,17 @@ export const dynamic = 'force-dynamic';
 function dataCh(d: string | null): string {
   if (!d) return '';
   return new Date(d).toLocaleDateString('it-CH', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+// POST dal modulo della revisione guidata: salva testo e campi come sono
+// nella pagina (bozza aperta), poi genera il PDF da ciò che è salvato.
+export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
+  const session = await getSession();
+  if (!session || !session.studioId) return new NextResponse('Non autorizzato', { status: 401 });
+  if (!isUuid(ctx.params.id)) return new NextResponse('Non trovato', { status: 404 });
+  const form = await req.formData().catch(() => null);
+  await salvaDalModulo(form, session.studioId, ctx.params.id, session.id, 'pdf');
+  return GET(req, ctx);
 }
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
