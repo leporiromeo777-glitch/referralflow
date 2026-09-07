@@ -25,7 +25,7 @@ comunicazione sicura): non li sostituisce. Cliente pilota reale: Centro Cardiolo
   multi-studio: crea prima lo studio slug `studio-demo` e un admin; il vecchio
   `db/seed.sql` è pre-migrazione 007 e non funziona più)
 - DB esistente da versione precedente: applicare in ordine le `db/migrations/0XX_*.sql`
-  mancanti (ultima: `030_referti_eventi.sql`)
+  mancanti (ultima: `032_referti_revisione_stato.sql`)
 - Anteprima locale sul Mac mini dello studio: `bash mac/avvia-anteprima.sh`
   (installa Node+Postgres, prepara DB e dati demo, avvia su http://localhost:3000;
   vedi `mac/LEGGIMI.md` — obiettivo: Mac mini come server dello studio)
@@ -320,7 +320,16 @@ Modalità `lettera` (Moccetti): scheda «Lettera precedente» ripiegata.
 pubblicato → payload.medico.formato → rapporto); il bottone si chiama
 «Impagina come lettera (AI)». Nell'ultimo passo della revisione guidata c'è
 «Inserisci nel referto (salva senza confermare)» (`salvaTesto`, evento
-`testo_salvato`).
+`testo_salvato`). Salvataggio AUTOMATICO della revisione (7.9.2026, richiesta
+utente «se esco dal referto le correzioni non si devono ripristinare»):
+il wizard manda il suo stato (frasi, spente, segnalazioni chiuse, passo,
+campi, telemetria) a `POST /api/referti/revisione/[id]` ~1 s dopo ogni
+modifica (e alla chiusura della pagina con keepalive) → colonna
+`referti_bozze.revisione_stato` (migrazione 032) + `testo_finale` +
+`campi_confermati`; la pagina lo ripassa al wizard con lo stesso
+`testo_base` SOLO se `testo_finale` è ancora il testo composto dallo stato
+(se impaginazione AI o fusione hanno riscritto il testo, la revisione
+riparte da quello). Le fotografie di «Annulla» non si salvano.
 Forma della segretaria per Moccetti (7.9.2026, dal confronto catena vs
 segretaria sullo stesso referto): lo stampo Word ha ora SEGNAPOSTO anche in
 intestazione (`{{int_nome}}`, `{{intestazione}}`) e per `{{via}}`,

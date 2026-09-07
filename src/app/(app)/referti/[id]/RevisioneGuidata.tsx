@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { salvaTesto } from '../actions';
 
 // Revisione guidata della bozza (2026-08-25, su richiesta dell'utente: la
@@ -55,11 +55,36 @@ function spezzaInFrasi(testo: string): string[] {
   return pezzi.filter((p) => p.trim());
 }
 
+// Stato della revisione salvato sul server (2026-09-07, richiesta
+// dell'utente: uscendo dal referto le correzioni non devono sparire). Il
+// wizard lo manda da solo dopo ogni modifica a /api/referti/revisione/<id>
+// e la pagina lo ripassa qui alla riapertura, con lo STESSO testo base
+// (così gli indici delle frasi tornano). Le fotografie di «Annulla» no:
+// valgono per la seduta.
+export type StatoRevisione = {
+  v: 1;
+  testo_base: string;
+  n_frasi: number;
+  frasi: string[];
+  spente: number[];
+  fatte: string[];
+  modificate: number[];
+  testo_libero: string | null;
+  passo: number;
+  chiuse: number;
+  chiuse_senza_riascolto: number;
+  riascolti: number;
+  campi: Record<string, string>;
+  salvato_il?: string;
+};
+
 function normalizza(s: string): string {
   return s.toLowerCase().replace(/\s+/g, ' ').replace(/[^\p{L}\p{N} ]/gu, '').trim();
 }
 
 export function RevisioneGuidata({
+  bozzaId = '',
+  statoIniziale = null,
   testo,
   divagazioni,
   frasiDaChiarire,
@@ -82,6 +107,8 @@ export function RevisioneGuidata({
   livelloVerifica = '',
   componentiMancanti = [],
 }: {
+  bozzaId?: string;
+  statoIniziale?: StatoRevisione | null;
   testo: string;
   divagazioni: string[];
   frasiDaChiarire: FraseDaChiarire[];
@@ -105,6 +132,10 @@ export function RevisioneGuidata({
   componentiMancanti?: string[];
 }) {
   const frasiIniziali = useMemo(() => spezzaInFrasi(testo), [testo]);
+  // Stato salvato: si riprende solo se il testo base si spezza ancora nello
+  // stesso numero di frasi (altrimenti gli indici non tornerebbero).
+  const st = statoIniziale && statoIniziale.n_frasi === frasiIniziali.length && statoIniziale.frasi.length === frasiIniziali.length
+    ? statoIniziale : null;
 
   // Provenienza (lettera incrementale): per ogni frase del wizard, da dove
   // viene — dettata oggi, copiata dalla lettera precedente, aggiornata. Le
@@ -170,7 +201,7 @@ export function RevisioneGuidata({
       </button>
     );
   };
-  const [frasi, setFrasi] = useState<string[]>(frasiIniziali);
+  const [frasi, setFrasi] = useState<string[]>(st?.frasi ?? frasiIniziali);
 
   const spenteIniziali = useMemo(() => {
     const divNorm = divagazioni.map(normalizza).filter((d) => d.length >= 8);
@@ -182,7 +213,7 @@ export function RevisioneGuidata({
     });
     return s;
   }, [frasiIniziali, divagazioni]);
-  const [spente, setSpente] = useState<Set<number>>(spenteIniziali);
+  const [spente, setSpente] = useState<Set<number>>(st ? new Set(st.spente) : spenteIniziali);
 
   // Abbinamento segnalazioni → indice frase (sulla frase INIZIALE: le
   // modifiche non spostano gli indici).
@@ -268,13 +299,13 @@ export function RevisioneGuidata({
     );
   };
 
-  const [fatte, setFatte] = useState<Set<string>>(new Set());
+  const [fatte, setFatte] = useState<Set<string>>(new Set(st?.fatte ?? []));
   // Telemetria della revisione: quando è iniziata, quante segnalazioni sono
   // state chiuse e quante senza aver riascoltato nulla nel frattempo.
   const [inizioRevisione] = useState(() => Date.now());
-  const [riascoltiFatti, setRiascoltiFatti] = useState(0);
-  const [chiuseSenzaRiascolto, setChiuseSenzaRiascolto] = useState(0);
-  const [chiuse, setChiuse] = useState(0);
+  const [riascoltiFatti, setRiascoltiFatti] = useState(st?.riascolti ?? 0);
+  const [chiuseSenzaRiascolto, setChiuseSenzaRiascolto] = useState(st?.chiuse_senza_riascolto ?? 0);
+  const [chiuse, setChiuse] = useState(st?.chiuse ?? 0);
 
   // Annulla (2026-09-07, richiesta dell'utente: «se sbaglio tasto dopo non
   // posso tornare indietro»): prima di OGNI azione che cambia il testo o
@@ -319,11 +350,16 @@ export function RevisioneGuidata({
   // Frasi già ritoccate a mano: badge verde sulla scheda, così il
   // salvataggio si VEDE (il testone evidenziato in cima alla pagina è la
   // fotografia della bozza originale e cambia solo alla conferma).
-  const [modificate, setModificate] = useState<Set<number>>(new Set());
+  const [modificate, setModificate] = useState<Set<number>>(new Set(st?.modificate ?? []));
+  // Campi estratti: controllati, così entrano nel salvataggio automatico.
+  const [campiValori, setCampiValori] = useState<Record<string, string>>(() => ({
+    ...Object.fromEntries(Object.entries(campi).filter(([, v]) => typeof v === 'string')),
+    ...(st?.campi ?? {}),
+  }));
 
   const componi = (fr: string[], esc: Set<number>) =>
     fr.filter((_, i) => !esc.has(i)).join('\n');
-  const [testoLibero, setTestoLibero] = useState<string | null>(null);
+  const [testoLibero, setTestoLibero] = useState<string | null>(st?.testo_libero ?? null);
   const testoAttuale = testoLibero ?? componi(frasi, spente);
 
   function salvaModifica(i: number) {
@@ -410,23 +446,60 @@ export function RevisioneGuidata({
     passi.push({ chiave: 'campi', titolo: 'Campi estratti' });
   passi.push({ chiave: 'fine', titolo: 'Rileggi e conferma' });
 
-  const [passo, setPasso] = useState(0);
+  // Si riparte dal passo lasciato (stato salvato sul server).
+  const [passo, setPasso] = useState(() => (st && st.passo > 0 && st.passo < passi.length ? st.passo : 0));
   const attivo = passi[passo].chiave;
   const ultimo = passo === passi.length - 1;
 
-  // Ripresa dal passo lasciato (per questa bozza, in questo browser).
-  const chiaveRipresa = typeof window !== 'undefined' ? `rg-passo:${window.location.pathname}` : '';
-  useEffect(() => {
+  // Salvataggio automatico: ~1 s dopo l'ultima modifica lo stato va al
+  // server (e il testo composto nel referto, come «Inserisci nel referto»);
+  // se si lascia la pagina con un salvataggio in sospeso, parte subito.
+  const [salvataggio, setSalvataggio] = useState<'fermo' | 'attesa' | 'salvato' | 'errore'>('fermo');
+  const primoGiro = useRef(true);
+  const sporco = useRef(false);
+  const ultimoCorpo = useRef('');
+  const statoDaSalvare = () => ({
+    stato: {
+      v: 1, testo_base: testo, n_frasi: frasiIniziali.length,
+      frasi, spente: [...spente], fatte: [...fatte], modificate: [...modificate],
+      testo_libero: testoLibero, passo, chiuse, chiuse_senza_riascolto: chiuseSenzaRiascolto,
+      riascolti: riascoltiFatti, campi: campiValori,
+    } satisfies StatoRevisione,
+    testo: testoLibero ?? componi(frasi, spente),
+  });
+  ultimoCorpo.current = JSON.stringify(statoDaSalvare());
+  const invia = async (corpo: string, allaChiusura = false) => {
+    if (!bozzaId) return;
     try {
-      const v = chiaveRipresa ? window.localStorage.getItem(chiaveRipresa) : null;
-      const n = v === null ? NaN : Number(v);
-      if (Number.isInteger(n) && n > 0 && n < passi.length) setPasso(n);
-    } catch { /* niente memoria locale: si parte dal primo passo */ }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+      const r = await fetch(`/api/referti/revisione/${bozzaId}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: corpo,
+        keepalive: allaChiusura && corpo.length < 60_000,
+      });
+      if (!r.ok) throw new Error(String(r.status));
+      sporco.current = false;
+      setSalvataggio('salvato');
+    } catch {
+      setSalvataggio('errore');
+    }
+  };
   useEffect(() => {
-    try { if (chiaveRipresa) window.localStorage.setItem(chiaveRipresa, String(passo)); } catch { /* ignorato */ }
-  }, [passo, chiaveRipresa]);
+    if (!bozzaId) return;
+    if (primoGiro.current) { primoGiro.current = false; return; }
+    sporco.current = true;
+    setSalvataggio('attesa');
+    const corpo = ultimoCorpo.current;
+    const t = setTimeout(() => { void invia(corpo); }, 1000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frasi, spente, fatte, modificate, testoLibero, passo, chiuse, chiuseSenzaRiascolto, riascoltiFatti, campiValori]);
+  useEffect(() => {
+    const flush = () => { if (sporco.current) void invia(ultimoCorpo.current, true); };
+    const nascosta = () => { if (document.visibilityState === 'hidden') flush(); };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', nascosta);
+    return () => { window.removeEventListener('pagehide', flush); document.removeEventListener('visibilitychange', nascosta); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bozzaId]);
 
   // Tasti: ← → cambiano passo (non mentre si scrive in un campo).
   useEffect(() => {
@@ -1006,14 +1079,17 @@ export function RevisioneGuidata({
         <input type="hidden" name="livello_verifica" value={livelloVerifica} readOnly />
         <input type="hidden" name="revisione_iniziata_at" value={new Date(inizioRevisione).toISOString()} readOnly />
         <div className="grid2">
-          {Object.entries(campi)
-            .filter(([, v]) => typeof v === 'string')
-            .map(([k, v]) => (
-              <label key={k}>
-                {k.replaceAll('_', ' ')}
-                <input name={`campo__${k}`} maxLength={2000} defaultValue={String(v)} />
-              </label>
-            ))}
+          {Object.entries(campiValori).map(([k, v]) => (
+            <label key={k}>
+              {k.replaceAll('_', ' ')}
+              <input
+                name={`campo__${k}`}
+                maxLength={2000}
+                value={v}
+                onChange={(e) => setCampiValori((prev) => ({ ...prev, [k]: e.target.value }))}
+              />
+            </label>
+          ))}
         </div>
         {valoriNumerici && Object.keys(valoriNumerici).length > 0 && (
           <>
@@ -1091,7 +1167,7 @@ export function RevisioneGuidata({
             💾 Inserisci nel referto (salva senza confermare)
           </button>
           <span className="muted small">
-            Le modifiche fatte qui vengono salvate nel referto; la conferma resta il passo finale.
+            Le modifiche vengono salvate da sole mentre lavori (anche se esci dal referto); la conferma resta il passo finale.
           </span>
         </div>
       </div>
@@ -1109,6 +1185,11 @@ export function RevisioneGuidata({
         >
           ↶ Annulla{storia.length > 0 ? ` (${storia.length})` : ''}
         </button>
+        {bozzaId && salvataggio !== 'fermo' && (
+          <span className="muted small" aria-live="polite">
+            {salvataggio === 'attesa' ? 'Salvataggio…' : salvataggio === 'salvato' ? '✓ Salvato' : 'Non salvato: riprovo alla prossima modifica'}
+          </span>
+        )}
         {!ultimo ? (
           <button type="button" className="btn btn-primary" title="Tasto →" onClick={() => setPasso(passo + 1)}>
             Avanti →

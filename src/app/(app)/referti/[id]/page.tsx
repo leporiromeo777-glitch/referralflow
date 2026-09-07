@@ -10,7 +10,7 @@ import { rilevaRichiamo } from '@/lib/referti-richiami';
 import { agganciaRiferimenti } from '@/lib/referti-allegati';
 import { AudioDettato } from '../AudioDettato';
 import { TestoDettato } from '../TestoDettato';
-import { RevisioneGuidata } from './RevisioneGuidata';
+import { RevisioneGuidata, type StatoRevisione } from './RevisioneGuidata';
 import RiorganizzaAI from './RiorganizzaAI';
 import { formatoPerBozza } from '@/lib/referti-medici';
 import { RiascoltaChip } from '../RiascoltaChip';
@@ -165,11 +165,12 @@ export default async function RefertoBozza({
     payload: Payload;
     testo_finale: string | null;
     campi_confermati: Record<string, string> | null;
+    revisione_stato: StatoRevisione | null;
     created_at: string;
     reviewed_at: string | null;
     reviewed_email: string | null;
   }>(
-    `select b.id, b.stato, b.tipo, b.payload, b.testo_finale, b.campi_confermati,
+    `select b.id, b.stato, b.tipo, b.payload, b.testo_finale, b.campi_confermati, b.revisione_stato,
             b.created_at::text, b.reviewed_at::text, u.email as reviewed_email
        from referti_bozze b
        left join users u on u.id = b.reviewed_by
@@ -200,6 +201,19 @@ export default async function RefertoBozza({
   }
 
   const p = row.payload;
+
+  // Stato della revisione guidata salvato da solo mentre si lavora
+  // (migrazione 032). Vale solo se il testo del referto è ancora quello che
+  // la revisione ha composto: se qualcos'altro (impaginazione AI, fusione)
+  // ha riscritto testo_finale, la revisione riparte da quel testo.
+  const statoRevisione: StatoRevisione | null = (() => {
+    const st = row.revisione_stato;
+    if (!st || st.v !== 1 || typeof st.testo_base !== 'string' || !Array.isArray(st.frasi)) return null;
+    if (row.testo_finale == null) return st;
+    const spente = new Set(Array.isArray(st.spente) ? st.spente : []);
+    const composto = st.testo_libero ?? st.frasi.filter((_, i) => !spente.has(i)).join('\n');
+    return composto.trim() === row.testo_finale.trim() ? st : null;
+  })();
   // Registro eventi del referto (append-only, senza contenuti).
   const eventi = await query<{ azione: string; attore_email: string | null; dettagli: Record<string, unknown>; created_at: string }>(
     `select e.azione, u.email as attore_email, e.dettagli, e.created_at::text
@@ -799,7 +813,9 @@ export default async function RefertoBozza({
           <input type="hidden" name="id" value={row.id} />
           <h2>Revisione guidata</h2>
           <RevisioneGuidata
-            testo={row.testo_finale ?? p.testo_corretto ?? ''}
+            bozzaId={row.id}
+            statoIniziale={statoRevisione}
+            testo={statoRevisione?.testo_base ?? row.testo_finale ?? p.testo_corretto ?? ''}
             divagazioni={Array.isArray(p.divagazioni) ? p.divagazioni : []}
             frasiDaChiarire={Array.isArray(p.frasi_da_chiarire) ? p.frasi_da_chiarire : []}
             frasiNonSupportate={Array.isArray(p.frasi_non_supportate) ? p.frasi_non_supportate : []}

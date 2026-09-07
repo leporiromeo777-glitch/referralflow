@@ -395,6 +395,8 @@ create table referti_bozze (
   tipo text not null default 'referto' check (tipo in ('referto','visita')),
   -- Id del profilo del medico che ha dettato (medici.json sul Mac dello studio).
   medico text check (medico is null or medico ~ '^[a-z0-9]+(-[a-z0-9]+)*$'),
+  -- Stato della revisione guidata (migrazione 032): ripreso alla riapertura.
+  revisione_stato jsonb,
   id          uuid primary key default gen_random_uuid(),
   studio_id   uuid not null references studios(id) on delete cascade,
   file_id     text not null,
