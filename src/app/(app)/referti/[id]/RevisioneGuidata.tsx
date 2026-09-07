@@ -27,6 +27,18 @@ const ABBREVIAZIONE = /(?:^|\s)(?:dr|dott|dr\.ssa|dott\.ssa|med|prof|sig|sig\.ra
 function spezzaInFrasi(testo: string): string[] {
   const pezzi: string[] = [];
   let corrente = '';
+  const attacca = (f: string) => {
+    // Frammento senza lettere né cifre («,» da sola, prodotta da «virgola»
+    // dettata a inizio segmento): non è una frase, si attacca alla
+    // precedente. Da sola diventava una frase vuota che si agganciava a
+    // TUTTE le segnalazioni (visto dal vivo 2026-09-07: schede con la sola
+    // virgola e nessun testo).
+    if (pezzi.length && !/[\p{L}\p{N}]/u.test(f)) {
+      pezzi[pezzi.length - 1] = `${pezzi[pezzi.length - 1].trimEnd()}${f.trim()}`;
+      return true;
+    }
+    return false;
+  };
   for (const riga of testo.replace(/\r\n/g, '\n').split('\n')) {
     // Una riga vuota è un cambio di paragrafo: resta attaccata (come «\n»
     // finale) alla frase prima, così ricomponendo il testo i paragrafi della
@@ -39,7 +51,7 @@ function spezzaInFrasi(testo: string): string[] {
     for (const f of frasi) {
       corrente = corrente ? `${corrente} ${f}` : f;
       if (/[.!?;]["»)]?$/.test(f.trim()) && !ABBREVIAZIONE.test(f.trim())) {
-        pezzi.push(corrente);
+        if (!attacca(corrente)) pezzi.push(corrente);
         corrente = '';
       }
     }
@@ -47,11 +59,11 @@ function spezzaInFrasi(testo: string): string[] {
     // («Dr.» / «med.» / «Marco Moccetti» su tre righe di un testo salvato
     // da una vecchia revisione tornano una frase sola).
     if (corrente && !ABBREVIAZIONE.test(corrente.trim())) {
-      pezzi.push(corrente);
+      if (!attacca(corrente)) pezzi.push(corrente);
       corrente = '';
     }
   }
-  if (corrente) pezzi.push(corrente);
+  if (corrente && !attacca(corrente)) pezzi.push(corrente);
   return pezzi.filter((p) => p.trim());
 }
 
@@ -222,15 +234,21 @@ export function RevisioneGuidata({
     if (c.length < 8) return -1;
     return frasiIniziali.findIndex((f) => {
       const n = normalizza(f);
+      // Una frase che si riduce a nulla («,») combacia con QUALSIASI
+      // citazione (c.includes('') è sempre vero): mai agganciarla.
+      if (n.length < 8) return false;
       return n.includes(c) || c.includes(n);
     });
   };
+  // Una segnalazione senza la frase citata non è rivedibile: non si mostra
+  // (in pagina usciva una scheda vuota con la sola spiegazione).
+  const conFrase = <T extends { frase?: string }>(v: T) => (v.frase ?? '').trim().length >= 8;
   const rosse = useMemo(
-    () => frasiNonSupportate.map((v, k) => ({ ...v, k, idx: trovaIndice(v.frase) })),
+    () => frasiNonSupportate.filter(conFrase).map((v, k) => ({ ...v, k, idx: trovaIndice(v.frase) })),
     [frasiNonSupportate] // eslint-disable-line react-hooks/exhaustive-deps
   );
   const arancioni = useMemo(
-    () => frasiDaChiarire.map((v, k) => ({ ...v, k, idx: trovaIndice(v.frase) })),
+    () => frasiDaChiarire.filter(conFrase).map((v, k) => ({ ...v, k, idx: trovaIndice(v.frase) })),
     [frasiDaChiarire] // eslint-disable-line react-hooks/exhaustive-deps
   );
 

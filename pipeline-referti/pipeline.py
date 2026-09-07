@@ -5799,6 +5799,28 @@ _RX_NUMERO_UNITA = re.compile(
     r"ml/min|kg/m2|kg/m²|watt|w|min|sec|s|anni|mesi|settimane|giorni|volte)?(?![\w/])", re.IGNORECASE)
 
 
+def ricuci_punteggiatura_orfana(testo: str) -> str:
+    """Una riga fatta di sola punteggiatura («,» rimasta da sola dopo un
+    «virgola» dettato a inizio segmento) si attacca alla riga prima. Da sola
+    diventa una «frase» del wizard che, ridotta a nulla, si aggancia a TUTTE
+    le segnalazioni: schede con la sola virgola e nessuna spiegazione (visto
+    dal vivo 2026-09-07). Non tocca numeri né parole."""
+    righe = testo.replace("\r\n", "\n").split("\n")
+    fuori: list[str] = []
+    for r in righe:
+        nudo = r.strip()
+        if nudo and not re.search(r"[^\W_]", nudo, re.UNICODE) and fuori:
+            for k in range(len(fuori) - 1, -1, -1):
+                if fuori[k].strip():
+                    fuori[k] = fuori[k].rstrip() + nudo
+                    break
+            else:
+                fuori.append(r)
+            continue
+        fuori.append(r)
+    return "\n".join(fuori)
+
+
 def _spezza_frasi_wizard(testo: str) -> list[str]:
     """Stessa suddivisione della revisione guidata (righe, poi . ! ? ;)."""
     fuori: list[str] = []
@@ -6841,8 +6863,13 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                 frasi_non_supportate = avvocato_diavolo(
                     nota_visita if nota_visita else finale, grezzo_a, file_id,
                     riassunto=bool(nota_visita))
+        # Guardia comune a tutte le fonti (locale o verificatore esterno):
+        # una segnalazione senza la frase citata non è rivedibile — in pagina
+        # usciva la scheda «Frase vuota» (visto dal vivo 2026-09-07).
         frasi_non_supportate = [
-            v for v in frasi_non_supportate if v["frase"] not in divagazioni
+            v for v in frasi_non_supportate
+            if isinstance(v, dict) and len(str(v.get("frase", "")).strip()) >= 8
+            and v["frase"] not in divagazioni
         ]
 
         fase = "ispezione_llm"
@@ -6914,6 +6941,13 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                 finale = pulito
                 testo_integrale = finale
                 versioni["dopo_bella_copia"] = finale
+        # Righe di sola punteggiatura ricucite alla riga prima: sono frasi
+        # fantasma per il wizard e si agganciano a tutte le segnalazioni.
+        ricucito = ricuci_punteggiatura_orfana(finale)
+        if ricucito != finale:
+            finale = ricucito
+            testo_integrale = finale
+            tappa("ricucitura", "codice")
         # Memoria di stile del medico (regole confermate dal pannello).
         if not visita:
             finale, n_stile = applica_stile(finale, file_id, medico["id"] if medico else None)

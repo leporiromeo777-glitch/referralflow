@@ -356,6 +356,24 @@ def _prova_21() -> None:
     assert m.livello_verifica([]) == "pieno"
 
 
+@caso("22 · riga di sola punteggiatura ricucita alla frase prima")
+def _prova_22() -> None:
+    # Il «virgola» dettato a inizio segmento lasciava una riga con la sola
+    # virgola: nel wizard diventava una frase vuota che si agganciava a
+    # TUTTE le segnalazioni (schede senza testo, 2026-09-07).
+    t = "Il paziente sta bene\n,\nla terapia resta invariata."
+    assert m.ricuci_punteggiatura_orfana(t) == "Il paziente sta bene,\nla terapia resta invariata."
+    # Righe normali intatte, righe vuote intatte.
+    t2 = "Prima riga.\n\nSeconda riga."
+    assert m.ricuci_punteggiatura_orfana(t2) == t2
+    # Niente riga prima: la punteggiatura orfana resta dov'è (non si perde).
+    t3 = ",\nTesto."
+    assert m.ricuci_punteggiatura_orfana(t3) == t3
+    # Nessuna frase del wizard può ridursi a nulla.
+    frasi = m._spezza_frasi_wizard(m.ricuci_punteggiatura_orfana(t))
+    assert all(any(c.isalnum() for c in f) for f in frasi), frasi
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0

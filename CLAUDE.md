@@ -397,6 +397,18 @@ parola portava PIÙ AVANTI nell'audio (ultima parola a 385 s su 289 s di
 registrazione, visto dal vivo 2026-09-07). Casi 20-21 nella suite.
 La rilavorazione di una bozza scartata azzera anche `revisione_stato`.
 
+Schede di segnalazione senza testo (7.9.2026, viste dall'utente): una riga
+di sola punteggiatura nel testo finale («,» rimasta da un «virgola» dettato
+a inizio segmento) diventava una «frase» del wizard; ridotta a nulla da
+`normalizza()`, si agganciava a QUALSIASI citazione (`c.includes('')` è
+sempre vero) e si prendeva le schede di mezza revisione, mostrando solo la
+virgola. Ora: `ricuci_punteggiatura_orfana()` nella catena attacca quelle
+righe alla riga prima (caso 22 della suite), `spezzaInFrasi` fa lo stesso
+lato pagina e `trovaIndice` non aggancia mai una frase che si riduce a meno
+di 8 caratteri. Le segnalazioni senza frase citata (< 8 caratteri) vengono
+scartate sia dalla catena sia dalla pagina: la scheda «Frase vuota» non
+esce più.
+
 Fase «doppioni» (7.9.2026, richiesta utente): `togli_doppioni()` in
 pipeline.py dopo lo stile, prima della struttura. Tre regole: frase identica
 o quasi ripetuta (Jaccard ≥ 0.9, ≥ 3 elementi) → via la seconda;
