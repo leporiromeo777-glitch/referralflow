@@ -28,10 +28,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   let body: Buffer;
   let tipo: string;
   if (eDittafono(audio.storage_key, audio.content_type)) {
-    const wav = await wavDaDittafono(audio.storage_key);
-    if (wav) {
-      body = wav;
-      tipo = 'audio/wav';
+    const convertito = await wavDaDittafono(audio.storage_key);
+    if (convertito) {
+      body = convertito.body;
+      tipo = convertito.tipo;
     } else {
       const letto = await getFile(audio.storage_key);
       body = letto.body;

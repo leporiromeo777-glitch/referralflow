@@ -59,19 +59,44 @@ async function convertiInWav(originale: Buffer, ext: string): Promise<Buffer> {
   }
 }
 
+// Dal WAV al formato che i browser dello studio già riproducono per gli
+// altri dettati (AAC in contenitore m4a, 64 kbit/s, indice in testa): il
+// WAV grezzo a 16 kHz non è partito su tutti i player (2026-09-07).
+async function codificaM4a(wav: Buffer): Promise<Buffer> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'rf-audio-'));
+  const ingresso = path.join(dir, 'in.wav');
+  const uscita = path.join(dir, 'out.m4a');
+  try {
+    await fs.writeFile(ingresso, wav, { mode: 0o600 });
+    await execFileP(
+      process.env.FFMPEG_BIN || 'ffmpeg',
+      ['-hide_banner', '-nostdin', '-loglevel', 'error', '-y', '-i', ingresso,
+        '-c:a', 'aac', '-b:a', '64k', '-movflags', '+faststart', uscita],
+      { timeout: 120_000, maxBuffer: 1024 * 1024 }
+    );
+    return await fs.readFile(uscita);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+export type AudioRiascolto = { body: Buffer; tipo: string };
+
 // Conversioni in corso, per chiave: due richieste Range simultanee non
 // devono lanciare due decodifiche.
-const inCorso = new Map<string, Promise<Buffer | null>>();
+const inCorso = new Map<string, Promise<AudioRiascolto | null>>();
 
-// Il WAV di riascolto per un file del dittafono: dalla cache nello storage
-// se c'è, altrimenti convertito e messo in cache. null se la conversione
-// fallisce (il chiamante consegna l'originale così com'è).
-export async function wavDaDittafono(key: string, originale?: Buffer): Promise<Buffer | null> {
-  const chiaveWav = `${key}.wav`;
-  try {
-    const cache = await getFile(chiaveWav);
-    if (cache.body.length > 44) return cache.body;
-  } catch { /* non ancora convertito */ }
+// L'audio di riascolto per un file del dittafono: dalla cache nello storage
+// se c'è («<originale>.m4a», o il vecchio «.wav»), altrimenti convertito e
+// messo in cache. null se la conversione fallisce (il chiamante consegna
+// l'originale così com'è).
+export async function wavDaDittafono(key: string, originale?: Buffer): Promise<AudioRiascolto | null> {
+  for (const [suffisso, tipo] of [['.m4a', 'audio/mp4'], ['.wav', 'audio/wav']] as const) {
+    try {
+      const cache = await getFile(`${key}${suffisso}`);
+      if (cache.body.length > 44) return { body: cache.body, tipo };
+    } catch { /* non ancora convertito */ }
+  }
   const pendente = inCorso.get(key);
   if (pendente) return pendente;
   const lavoro = (async () => {
@@ -80,11 +105,19 @@ export async function wavDaDittafono(key: string, originale?: Buffer): Promise<B
       const ext = ESTENSIONI_DITTAFONO.has(estensioneDi(key)) ? estensioneDi(key) : '.ds2';
       const inizio = Date.now();
       const wav = await convertiInWav(sorgente, ext);
-      await putFileAtKey(chiaveWav, wav, 'audio/wav');
-      console.log(`Dittafono: WAV di riascolto pronto (${Math.round((Date.now() - inizio) / 100) / 10} s, ${wav.length} byte)`);
-      return wav;
+      let esito: AudioRiascolto;
+      try {
+        esito = { body: await codificaM4a(wav), tipo: 'audio/mp4' };
+        await putFileAtKey(`${key}.m4a`, esito.body, 'audio/mp4');
+      } catch (e: any) {
+        console.error('Dittafono: codifica m4a fallita, resto sul WAV:', e?.code ?? e?.name ?? 'errore');
+        esito = { body: wav, tipo: 'audio/wav' };
+        await putFileAtKey(`${key}.wav`, wav, 'audio/wav');
+      }
+      console.log(`Dittafono: audio di riascolto pronto (${esito.tipo}, ${Math.round((Date.now() - inizio) / 100) / 10} s, ${esito.body.length} byte)`);
+      return esito;
     } catch (e: any) {
-      console.error('Dittafono: conversione in WAV fallita:', e?.code ?? e?.name ?? 'errore');
+      console.error('Dittafono: conversione fallita:', e?.code ?? e?.name ?? 'errore');
       return null;
     } finally {
       inCorso.delete(key);

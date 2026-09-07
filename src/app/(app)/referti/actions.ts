@@ -286,7 +286,8 @@ export async function eliminaBozza(formData: FormData) {
   );
   for (const a of audio) {
     await deleteFile(a.storage_key);
-    // Eventuale WAV di riascolto dei file del dittafono (cache accanto all'originale).
+    // Eventuale audio di riascolto dei file del dittafono (cache accanto all'originale).
+    await deleteFile(`${a.storage_key}.m4a`);
     await deleteFile(`${a.storage_key}.wav`);
   }
   await registraEvento(session.studioId, id, 'eliminazione', session.id, { audio: audio.length });
