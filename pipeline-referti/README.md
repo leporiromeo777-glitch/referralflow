@@ -50,19 +50,21 @@ menu. URL e modello sovrascrivibili con `REFERTI_OLLAMA` e `REFERTI_LLM`.)
 
 ## Formati del dittafono Philips DPM (2026-09-07)
 
-I file `.dss` (DSS classico) e `.ds2` (DSS Pro) del DPM 7200 si caricano
-come gli altri, dal pannello e dalla pagina Referti: la catena li decodifica
-con ffmpeg (demuxer `dss`, decoder `dss_sp` per la modalità SP e `g723_1`
-per la LP — verificati sul Mac dello studio). Il file originale resta
-com'è (conserva audio compresa); per il riascolto in pagina si converte al
-volo in WAV, perché i browser non suonano i DSS. Collaudo sul primo DS2 vero
-del DPM (2026-09-07): l'autoriconoscimento di ffmpeg 8 lo rifiuta («Invalid
-data found»), ma col demuxer forzato `-f dss` decodifica tutto (dss_sp,
-11025 Hz) — perciò ogni chiamata a ffmpeg/ffprobe sull'originale passa da
-`_formato_ingresso()`. Due limiti da sapere: la modalità **QP** dei DSS Pro
-usa un codec che ffmpeg potrebbe non decodificare (in tal caso il dettato
-finisce in errori/ alla prima fase e conviene impostare il dittafono su SP),
-e i file **cifrati** dal DPM non si aprono.
+I file `.dss` (DSS classico) e `.ds2` (DSS Pro, quello che il DPM 7200
+produce nelle modalità QP e SP) si caricano come gli altri, dal pannello e
+dalla pagina Referti. Collaudo sul primo DS2 vero (2026-09-07): **ffmpeg
+non li decodifica** — il suo `dss_sp` è un altro codec, e forzando il
+demuxer (`-f dss`) produce un rumore «parlante» su cui whisper collassa (36
+caratteri su 65 s). Perciò i `.ds2` passano dal decoder open source
+vendorizzato in `strumenti/dss-codec/` (MIT, Python + numpy, ~4 s per
+minuto; vedi il suo LEGGIMI): `decodifica_dittafono()` li porta a WAV
+all'inizio della catena e da lì tutto è come per gli altri audio; un `.ds2`
+non decodificabile è un errore esplicito, mai un ripiego su ffmpeg. I `.dss`
+classici li legge ffmpeg con `-f dss` (l'autoriconoscimento di ffmpeg 8 li
+rifiuta). L'originale resta com'è (conserva audio compresa); per il
+riascolto in pagina e nel pannello si converte al volo in WAV con lo stesso
+decoder. Limite noto: i file cifrati dal DPM richiedono la password
+(`ds2decode.py --password`), non gestita in automatico.
 
 ## Profili per medico (2026-09-07)
 

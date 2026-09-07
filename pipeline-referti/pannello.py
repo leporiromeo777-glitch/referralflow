@@ -226,13 +226,18 @@ def converti_in_wav(audio: Path) -> bytes | None:
     import tempfile
     with tempfile.TemporaryDirectory() as d:
         uscita = Path(d) / "out.wav"
+        decoder = QUI / "strumenti" / "dss-codec" / "ds2decode.py"
+        if audio.suffix.lower() == ".ds2" and decoder.is_file():
+            # DSS Pro: solo il decoder locale lo legge davvero (ffmpeg darebbe rumore).
+            comando = [sys.executable, str(decoder), str(audio), str(uscita)]
+        else:
+            comando = ["ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
+                       "-f", "dss", "-i", str(audio), "-ar", "16000", "-ac", "1",
+                       "-c:a", "pcm_s16le", str(uscita)]
         try:
-            esito = subprocess.run(
-                ["ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
-                 # demuxer forzato: l'autoriconoscimento di ffmpeg 8 non prende i DS2
-                 *(["-f", "dss"] if audio.suffix.lower() in ESTENSIONI_DITTAFONO else []),
-                 "-i", str(audio), "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", str(uscita)],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
+            # cwd = cartella del decoder (carica i codebook con percorso relativo).
+            esito = subprocess.run(comando, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                   timeout=300, cwd=str(decoder.parent) if decoder.is_file() else None)
         except (OSError, subprocess.TimeoutExpired):
             return None
         if esito.returncode != 0 or not uscita.is_file():

@@ -834,6 +834,50 @@ def _formato_ingresso(percorso: Path) -> list[str]:
     return ["-f", "dss"] if percorso.suffix.lower() in (".dss", ".ds2") else []
 
 
+# Decoder locale per i .ds2 del dittafono (DSS Pro, 2026-09-07): ffmpeg NON
+# sa decodificarli — il suo dss_sp è un codec diverso e produce spazzatura
+# «parlante» (collaudo sul primo DS2 vero di Moccetti: whisper collassava a
+# 36 caratteri; col decoder giusto 105 parole da 65 s). Si usa il decoder
+# open source di K. Hirpara (MIT, reverse engineering del DssDecoder di
+# Olympus) vendorizzato in strumenti/dss-codec/ (Python + numpy, ~4 s per
+# minuto d'audio, tutto sul Mac). I .dss classici li legge ffmpeg (-f dss).
+DS2_DECODER = Path(os.environ.get(
+    "REFERTI_DS2_DECODER",
+    str(Path(__file__).resolve().parent / "strumenti" / "dss-codec" / "ds2decode.py")))
+
+
+def decodifica_dittafono(ingresso: Path, dir_out: Path, file_id: str) -> Path:
+    """.ds2 → WAV PCM col decoder locale; .dss → WAV via ffmpeg (-f dss);
+    ogni altro formato passa così com'è. Il WAV nasce in dir_out col
+    prefisso del file_id (lo pulisce _pulisci_intermedi). stdout/stderr
+    scartati: portano metadati del file. Un .ds2 senza decoder o non
+    decodificabile è un ERRORE (mai il ripiego su ffmpeg: darebbe rumore
+    che la catena scambierebbe per un dettato vuoto)."""
+    suffisso = ingresso.suffix.lower()
+    if suffisso not in (".dss", ".ds2"):
+        return ingresso
+    uscita = dir_out / f"{file_id}.dittafono.wav"
+    inizio = time.monotonic()
+    if suffisso == ".ds2":
+        if not DS2_DECODER.is_file():
+            log.error("fase=dittafono file=%s esito=errore motivo=decoder_ds2_mancante", file_id)
+            raise RuntimeError("decoder ds2 mancante")
+        comando = [sys.executable, str(DS2_DECODER), str(ingresso), str(uscita)]
+        decoder = "ds2decode"
+    else:
+        comando = ["ffmpeg", "-hide_banner", "-nostdin", "-y", "-f", "dss", "-i", str(ingresso),
+                   "-c:a", "pcm_s16le", str(uscita)]
+        decoder = "ffmpeg-dss"
+    # cwd = cartella del decoder: carica i suoi codebook .npz con percorso relativo.
+    esito = subprocess.run(comando, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           timeout=FFMPEG_TIMEOUT_S, cwd=str(DS2_DECODER.parent) if DS2_DECODER.is_file() else None)
+    if esito.returncode != 0 or not uscita.exists() or uscita.stat().st_size <= 44:
+        log.error("fase=dittafono file=%s esito=errore decoder=%s codice=%d", file_id, decoder, esito.returncode)
+        raise RuntimeError("dittafono non decodificabile")
+    log.info("fase=dittafono file=%s esito=ok decoder=%s durata=%.1fs", file_id, decoder, time.monotonic() - inizio)
+    return uscita
+
+
 def verifica_integrita_audio(ingresso: Path, file_id: str) -> dict:
     """Certificato di completezza dell'audio PRIMA della trascrizione
     (2026-09-06, quarto documento + Ricerca 18 §4: un audio rotto o tagliato
@@ -6174,6 +6218,16 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         storia.append({"tappa": nome, "attore": attore, "secondi": round(time.monotonic() - t_avvio, 1),
                        **{k: v for k, v in dati.items() if isinstance(v, (int, float, str, bool))}})
     try:
+        # File del dittafono (.dss/.ds2): prima si porta a WAV col decoder
+        # giusto; da qui in poi la catena vede solo il WAV (integrità,
+        # preprocessing, orologio dei tempi, passata B). L'originale resta
+        # com'è in lavorazione/ → archivio → conserva.
+        fase = "dittafono"
+        formato_originale = ingresso.suffix.lower()
+        ingresso = decodifica_dittafono(ingresso, dir_out, file_id)
+        if ingresso.name.endswith(".dittafono.wav"):
+            tappa("dittafono", "codice", formato=formato_originale)
+        fase = "preprocessing"
         integ = verifica_integrita_audio(ingresso, file_id)
         tappa("integrita_audio", "codice", errori=integ["errori_decodifica"],
               picco_db=integ["picco_db"] if integ["picco_db"] is not None else "",

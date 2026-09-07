@@ -28,20 +28,35 @@ function estensioneDi(key: string): string {
   return punto === -1 ? '' : key.slice(punto).toLowerCase();
 }
 
+// I .ds2 (DSS Pro) NON li decodifica ffmpeg (il suo dss_sp è un altro codec e
+// produce rumore): serve il decoder locale della catena
+// (pipeline-referti/strumenti/dss-codec/ds2decode.py, Python + numpy), che
+// sul Mac dello studio sta in ~/referti-pipeline. Percorsi sovrascrivibili
+// con DS2_DECODER (script) e DS2_DECODER_PYTHON (interprete con numpy).
+const DS2_DECODER = process.env.DS2_DECODER
+  || path.join(os.homedir(), 'referti-pipeline', 'strumenti', 'dss-codec', 'ds2decode.py');
+const DS2_PYTHON = process.env.DS2_DECODER_PYTHON || '/opt/homebrew/bin/python3.14';
+
 async function convertiInWav(originale: Buffer, ext: string): Promise<Buffer | null> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'rf-audio-'));
   const ingresso = path.join(dir, `in${ext}`);
   const uscita = path.join(dir, 'out.wav');
   try {
     await fs.writeFile(ingresso, originale, { mode: 0o600 });
-    await execFileP(
-      process.env.FFMPEG_BIN || 'ffmpeg',
-      // «-f dss» forzato: l'autoriconoscimento di ffmpeg 8 non prende i DS2
-      // del DPM (collaudato su un file vero il 2026-09-07).
-      ['-hide_banner', '-nostdin', '-loglevel', 'error', '-y', '-f', 'dss', '-i', ingresso,
-        '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', uscita],
-      { timeout: 120_000, maxBuffer: 1024 * 1024 }
-    );
+    const decoderPresente = ext === '.ds2' && await fs.access(DS2_DECODER).then(() => true, () => false);
+    if (decoderPresente) {
+      // cwd = cartella del decoder: carica i suoi codebook con percorso relativo.
+      await execFileP(DS2_PYTHON, [DS2_DECODER, ingresso, uscita],
+        { timeout: 300_000, maxBuffer: 1024 * 1024, cwd: path.dirname(DS2_DECODER) });
+    } else {
+      await execFileP(
+        process.env.FFMPEG_BIN || 'ffmpeg',
+        // «-f dss» forzato: l'autoriconoscimento di ffmpeg 8 non prende i DSS.
+        ['-hide_banner', '-nostdin', '-loglevel', 'error', '-y', '-f', 'dss', '-i', ingresso,
+          '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', uscita],
+        { timeout: 120_000, maxBuffer: 1024 * 1024 }
+      );
+    }
     return await fs.readFile(uscita);
   } catch {
     return null;

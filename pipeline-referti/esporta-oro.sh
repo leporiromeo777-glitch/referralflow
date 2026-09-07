@@ -5,6 +5,8 @@
 # base del banco cardiologico vero (banco-audio.py --oro) e del confronto
 # cieco. Solo file, nessun contenuto a video. Da lanciare dal Mac dello studio.
 set -euo pipefail
+# Decoder DS2 accanto a questo script (risolto PRIMA del cd qui sotto).
+DEC="$(cd "$(dirname "$0")" && pwd)/strumenti/dss-codec/ds2decode.py"
 cd "$(dirname "$0")/../" 2>/dev/null || true
 ENV_FILE="${ENV_FILE:-$HOME/referralflow/.env}"
 set -a; source "$ENV_FILE"; set +a
@@ -16,9 +18,12 @@ while IFS='|' read -r fid testo_b64; do
   src=$(ls "$AUDIO"/"$fid".* 2>/dev/null | head -1 || true)
   if [ -z "$src" ]; then senza_audio=$((senza_audio+1)); continue; fi
   # il banco (banco-audio.py) vuole coppie .wav/.txt: si converte a 16 kHz mono
-  # File del dittafono (.dss/.ds2): demuxer forzato, l'autoriconoscimento non li prende.
-  FMT=(); case "${src##*.}" in dss|ds2|DSS|DS2) FMT=(-f dss) ;; esac
-  [ -f "$ORO/$fid.wav" ] || ffmpeg -hide_banner -loglevel error -y "${FMT[@]}" -i "$src" -ar 16000 -ac 1 "$ORO/$fid.wav"
+  # File del dittafono: .ds2 col decoder locale (ffmpeg darebbe rumore), .dss con ffmpeg -f dss.
+  case "${src##*.}" in
+    ds2|DS2) [ -f "$ORO/$fid.wav" ] || { (cd "$(dirname "$DEC")" && "${REFERTI_PYTHON:-/opt/homebrew/bin/python3.14}" ds2decode.py "$src" "$ORO/$fid.tmp.wav" >/dev/null 2>&1) && ffmpeg -hide_banner -loglevel error -y -i "$ORO/$fid.tmp.wav" -ar 16000 -ac 1 "$ORO/$fid.wav"; rm -f "$ORO/$fid.tmp.wav"; } ;;
+    dss|DSS) [ -f "$ORO/$fid.wav" ] || ffmpeg -hide_banner -loglevel error -y -f dss -i "$src" -ar 16000 -ac 1 "$ORO/$fid.wav" ;;
+    *)       [ -f "$ORO/$fid.wav" ] || ffmpeg -hide_banner -loglevel error -y -i "$src" -ar 16000 -ac 1 "$ORO/$fid.wav" ;;
+  esac
   printf '%s' "$testo_b64" | base64 -d > "$ORO/$fid.txt"
   n=$((n+1))
 done < <(psql "$DATABASE_URL" -At -F'|' -c "select payload->>'file_id', encode(convert_to(testo_finale,'UTF8'),'base64') from referti_bozze where stato='confermata' and testo_finale is not null and coalesce((payload->>'ombra')::boolean,false)=false")

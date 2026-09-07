@@ -326,9 +326,16 @@ Formati dittafono Philips DPM (7.9.2026): `.dss`/`.ds2` ammessi su pannello e
 pagina Referti (MIME `audio/x-dss`), decodifica via ffmpeg (dss_sp / g723_1,
 presenti sul Mac), riascolto con conversione al volo in WAV (rotta
 `api/referti/audio` e `/audio` del pannello). Collaudato su un DS2 vero del
-DPM il 7.9.2026: l'autoriconoscimento di ffmpeg 8 lo RIFIUTA, serve `-f dss`
-forzato → helper `_formato_ingresso()` davanti a ogni `-i` sull'originale
-(catena, pannello, app, esporta-oro). Modalità QP e file cifrati: non provati.
+DPM il 7.9.2026: ffmpeg NON decodifica i .ds2 (il suo dss_sp è un altro
+codec: con `-f dss` forzato esce rumore «parlante», whisper collassa a 36
+caratteri) → decoder open source vendorizzato in
+`pipeline-referti/strumenti/dss-codec/` (hirparak/dss-codec, MIT, Python +
+numpy), chiamato da `decodifica_dittafono()` all'inizio di `elabora` (il
+WAV `<file_id>.dittafono.wav` sostituisce l'ingresso; .ds2 non decodificabile
+= errore, mai ripiego su ffmpeg); stesso decoder nel pannello, nella rotta
+audio dell'app (env `DS2_DECODER`/`DS2_DECODER_PYTHON`) e in esporta-oro.
+I .dss classici: ffmpeg con `-f dss` (`_formato_ingresso()`). File cifrati:
+password non gestita.
 
 ## Catena referti: pagine e strumenti aggiunti il 5-6.9.2026
 - `/referti/qualita` cruscotto (parole modificate, tempo di revisione, segnalazioni

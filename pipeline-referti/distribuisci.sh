@@ -68,6 +68,18 @@ done
 # correzioni-locali.json, vocabolario-locali.txt, vocabolario-<medico>.txt,
 # correzioni-<medico>.json, dati/, modelli/ sono dello studio: non si toccano mai.
 # Il pannello legge medici.json a ogni richiesta: non serve riavviarlo.
+# Strumenti vendorizzati (decoder DS2 del dittafono): stessa regola, file per file.
+if [ -d "$QUI/strumenti" ]; then
+  while IFS= read -r f; do
+    rel="${f#"$QUI/"}"
+    if ! cmp -s "$f" "$DEST/$rel" 2>/dev/null; then
+      mkdir -p "$(dirname "$DEST/$rel")"
+      cp "$f" "$DEST/$rel"
+      n=$((n + 1))
+      echo "  aggiornato $rel"
+    fi
+  done < <(find "$QUI/strumenti" -type f ! -name ".*")
+fi
 if [ "$n" -eq 0 ]; then
   echo "  niente da copiare: la catena distribuita è già identica al repo."
 fi
