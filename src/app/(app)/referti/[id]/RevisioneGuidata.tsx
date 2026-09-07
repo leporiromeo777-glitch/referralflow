@@ -251,13 +251,43 @@ export function RevisioneGuidata({
   const [riascoltiFatti, setRiascoltiFatti] = useState(0);
   const [chiuseSenzaRiascolto, setChiuseSenzaRiascolto] = useState(0);
   const [chiuse, setChiuse] = useState(0);
-  const segna = (id: string) => {
+
+  // Annulla (2026-09-07, richiesta dell'utente: «se sbaglio tasto dopo non
+  // posso tornare indietro»): prima di OGNI azione che cambia il testo o
+  // chiude una segnalazione si fotografa lo stato; «↶ Annulla» ripristina
+  // l'ultima fotografia. Fino a 50 passi indietro; anche con ⌘Z / Ctrl+Z
+  // fuori dai campi di testo.
+  type Foto = { frasi: string[]; spente: Set<number>; testoLibero: string | null; modificate: Set<number>; fatte: Set<string> };
+  const [storia, setStoria] = useState<Foto[]>([]);
+  const ricorda = () => {
+    setStoria((prev) => [...prev.slice(-49), {
+      frasi, spente: new Set(spente), testoLibero, modificate: new Set(modificate), fatte: new Set(fatte),
+    }]);
+  };
+  const annullaUltima = () => {
+    const ultima = storia[storia.length - 1];
+    if (!ultima) return;
+    setStoria((prev) => prev.slice(0, -1));
+    setFrasi(ultima.frasi);
+    setSpente(ultima.spente);
+    setTestoLibero(ultima.testoLibero);
+    setModificate(ultima.modificate);
+    setFatte(ultima.fatte);
+    setInModifica(null);
+  };
+
+  // Chiude una segnalazione (senza fotografia: la fanno i chiamanti).
+  const segnaNudo = (id: string) => {
     setFatte((prev) => {
       if (prev.has(id)) return prev;
       setChiuse((c) => c + 1);
       if (riascoltiFatti === 0) setChiuseSenzaRiascolto((c) => c + 1);
       return new Set(prev).add(id);
     });
+  };
+  const segna = (id: string) => {
+    if (!fatte.has(id)) ricorda();
+    segnaNudo(id);
   };
 
   const [inModifica, setInModifica] = useState<number | null>(null);
@@ -273,6 +303,7 @@ export function RevisioneGuidata({
   const testoAttuale = testoLibero ?? componi(frasi, spente);
 
   function salvaModifica(i: number) {
+    ricorda();
     const vecchia = frasi[i];
     setFrasi((prev) => prev.map((f, j) => (j === i ? bozzaModifica : f)));
     // Se la rilettura finale è già stata toccata a mano, comanda lei: la
@@ -284,6 +315,7 @@ export function RevisioneGuidata({
     setInModifica(null);
   }
   function riaccendi(i: number) {
+    ricorda();
     setSpente((prev) => {
       const n = new Set(prev);
       if (n.has(i)) n.delete(i);
@@ -292,17 +324,19 @@ export function RevisioneGuidata({
     });
   }
   function inserisciNota(nota: string, id: string) {
+    ricorda();
     if (testoLibero !== null) setTestoLibero(testoLibero + '\n' + nota);
     else setFrasi((prev) => [...prev, nota]);
-    segna(id);
+    segnaNudo(id);
   }
 
   // Annulla una correzione automatica: la macchina l'aveva applicata
   // ovunque, l'annullamento la ripristina ovunque (parola per parola).
   function annullaRiparazione(v: Riparazione, id: string) {
+    ricorda();
     setFrasi((prev) => prev.map((f) => f.split(v.a).join(v.da)));
     if (testoLibero !== null) setTestoLibero(testoLibero.split(v.a).join(v.da));
-    segna(id);
+    segnaNudo(id);
   }
   const fraseConRiparazione = (v: Riparazione) =>
     frasiIniziali.find((f) => f.includes(v.a)) ?? null;
@@ -370,13 +404,19 @@ export function RevisioneGuidata({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName ?? '';
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      // ⌘Z / Ctrl+Z fuori dai campi: annulla l'ultima azione della revisione.
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') {
+        if (storia.length > 0) { e.preventDefault(); annullaUltima(); }
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === 'ArrowRight' && passo < passi.length - 1) { e.preventDefault(); setPasso(passo + 1); }
       if (e.key === 'ArrowLeft' && passo > 0) { e.preventDefault(); setPasso(passo - 1); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [passo, passi.length]);
+  }, [passo, passi.length, storia, annullaUltima]);
 
   const LIMITE = 7;
   const [estese, setEstese] = useState<Set<string>>(new Set());
@@ -744,8 +784,9 @@ export function RevisioneGuidata({
                       type="button"
                       className="btn btn-primary"
                       onClick={() => {
+                        ricorda();
                         setFrasi((prev) => prev.map((f, j) => (j === v.idx ? v.proposta : f)));
-                        segna(`c${v.k}`);
+                        segnaNudo(`c${v.k}`);
                       }}
                     >
                       Applica la proposta
@@ -892,6 +933,7 @@ export function RevisioneGuidata({
               type="button"
               className="btn btn-primary"
               onClick={() => {
+                ricorda();
                 let s = testoStrutturato;
                 frasiIniziali.forEach((orig, i) => {
                   if (spente.has(i)) {
@@ -906,7 +948,7 @@ export function RevisioneGuidata({
               📐 Applica il formato standard (con le tue correzioni)
             </button>
             {testoLibero !== null && (
-              <button type="button" className="btn" onClick={() => setTestoLibero(null)}>
+              <button type="button" className="btn" onClick={() => { ricorda(); setTestoLibero(null); }}>
                 ↩︎ Torna al testo dei passi
               </button>
             )}
@@ -944,6 +986,15 @@ export function RevisioneGuidata({
       <div className="rg-nav">
         <button type="button" className="btn" disabled={passo === 0} title="Tasto ←" onClick={() => setPasso(passo - 1)}>
           ← Indietro
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={storia.length === 0}
+          title="Annulla l'ultima correzione o chiusura (⌘Z / Ctrl+Z)"
+          onClick={annullaUltima}
+        >
+          ↶ Annulla{storia.length > 0 ? ` (${storia.length})` : ''}
         </button>
         {!ultimo ? (
           <button type="button" className="btn btn-primary" title="Tasto →" onClick={() => setPasso(passo + 1)}>
