@@ -134,6 +134,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     piede: [pazienteNome, nascita].filter(Boolean).join(', ') + (formato === 'lettera' ? '' : (dataDettato ? `  ${dataDettato}` : '')),
     testo: ricomponiParagrafi(testo),
     copia,
+    // Nella lettera due paragrafi vuoti tra destinatario e data (segretaria).
+    spaziDestinatario: formato === 'lettera' ? 2 : undefined,
   });
 
   const nomeFile = `referto-${dataBase.replaceAll('.', '-') || 'bozza'}.docx`;

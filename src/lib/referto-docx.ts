@@ -162,6 +162,24 @@ export function ricomponiParagrafi(testo: string): string {
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+// Il blocco del destinatario nello stampo è seguito da nove paragrafi vuoti
+// (la lettera di Moschovitis da cui deriva). La segretaria, nelle lettere di
+// Moccetti, ne lascia DUE prima di «Lugano, …» (confronto del 2026-09-07):
+// si tengono solo gli ultimi `n` paragrafi vuoti prima del paragrafo che
+// contiene `ancora`.
+function limitaVuotiPrimaDi(xml: string, ancora: string, n: number): string {
+  const pars = xml.match(PARAGRAFO) ?? [];
+  const i = pars.findIndex((p) => p.includes(ancora));
+  if (i === -1) return xml;
+  const vuoto = (p: string) => !/<w:t(?:\s[^>]*)?>[^<]*\S[^<]*<\/w:t>/.test(p) && !/<w:drawing|<w:pict|<w:tbl/.test(p);
+  let j = i - 1;
+  while (j >= 0 && vuoto(pars[j])) j--;
+  const daTogliere = pars.slice(j + 1, i).slice(0, Math.max(0, i - j - 1 - n));
+  let out = xml;
+  for (const p of daTogliere) out = out.replace(p, '');
+  return out;
+}
+
 export type DatiReferto = {
   medico: string;            // {{int_nome}}: riga del nome in intestazione
   intestazione: string;      // righe sotto il nome (separate da \n; vuoto = nessuna)
@@ -174,6 +192,7 @@ export type DatiReferto = {
   piede: string;
   testo: string;
   copia: string;             // riga finale «Copia: …» (vuoto = riga tolta)
+  spaziDestinatario?: number; // paragrafi vuoti tra il destinatario e «Lugano» (default: lo stampo)
 };
 
 export async function generaDocxReferto(dati: DatiReferto): Promise<Buffer> {
@@ -201,6 +220,9 @@ export async function generaDocxReferto(dati: DatiReferto): Promise<Buffer> {
     let xml = await file.async('string');
     for (const [chiave, valore] of Object.entries(multiriga)) xml = espandi(xml, chiave, valore);
     xml = riempiSegnaposto(xml, valori);
+    if (nome === 'word/document.xml' && dati.spaziDestinatario !== undefined) {
+      xml = limitaVuotiPrimaDi(xml, 'Lugano,', dati.spaziDestinatario);
+    }
     zip.file(nome, xml);
   }
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });

@@ -28,6 +28,13 @@ function spezzaInFrasi(testo: string): string[] {
   const pezzi: string[] = [];
   let corrente = '';
   for (const riga of testo.replace(/\r\n/g, '\n').split('\n')) {
+    // Una riga vuota è un cambio di paragrafo: resta attaccata (come «\n»
+    // finale) alla frase prima, così ricomponendo il testo i paragrafi della
+    // lettera restano staccati (prima si perdevano: tutto un blocco unico).
+    if (!riga.trim()) {
+      if (pezzi.length && !pezzi[pezzi.length - 1].endsWith('\n')) pezzi[pezzi.length - 1] += '\n';
+      continue;
+    }
     const frasi = riga.split(/(?<=[.!?;])\s+/);
     for (const f of frasi) {
       corrente = corrente ? `${corrente} ${f}` : f;
@@ -322,11 +329,13 @@ export function RevisioneGuidata({
   function salvaModifica(i: number) {
     ricorda();
     const vecchia = frasi[i];
-    setFrasi((prev) => prev.map((f, j) => (j === i ? bozzaModifica : f)));
+    // Il cambio di paragrafo («\n» finale) sopravvive alla modifica a mano.
+    const nuova = vecchia.endsWith('\n') && !bozzaModifica.endsWith('\n') ? `${bozzaModifica.trimEnd()}\n` : bozzaModifica;
+    setFrasi((prev) => prev.map((f, j) => (j === i ? nuova : f)));
     // Se la rilettura finale è già stata toccata a mano, comanda lei: la
     // stessa modifica va applicata anche lì, altrimenti andrebbe persa.
     if (testoLibero !== null && vecchia.trim()) {
-      setTestoLibero(testoLibero.replace(vecchia, bozzaModifica));
+      setTestoLibero(testoLibero.replace(vecchia, nuova));
     }
     setModificate((prev) => new Set(prev).add(i));
     setInModifica(null);

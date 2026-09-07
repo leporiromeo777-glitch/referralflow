@@ -58,7 +58,7 @@ const PROMPT_LETTERA = `Sei un assistente che mette in bella copia lettere medic
 
 1. PRIMA RIGA: il saluto di apertura «Caro <titolo e nome del medico destinatario>,» (o «Cara …,» se il testo indica una dottoressa). Il destinatario è quello che il testo nomina (per esempio dopo «caro collega», «cara dottoressa Rossi», «al dottor Bianchi»); se il testo non nomina nessuno, scrivi «Caro collega,». Non inventare nomi.
 2. Una riga vuota.
-3. IL CORPO DELLA LETTERA: tutto il contenuto clinico dettato, in prosa scorrevole divisa in paragrafi sensati (motivo della visita, anamnesi, esami, valutazione, proposta). Punteggiatura corretta, maiuscole a inizio frase, frasi complete — SENZA mai cambiare il significato né aggiungere informazioni. Niente titoli di sezione, niente elenchi puntati, niente numerazione.
+3. IL CORPO DELLA LETTERA: tutto il contenuto clinico dettato, in prosa scorrevole divisa in paragrafi sensati (motivo della visita, anamnesi, esami, valutazione, proposta), SEPARATI L'UNO DALL'ALTRO DA UNA RIGA VUOTA. Punteggiatura corretta, maiuscole a inizio frase, frasi complete — SENZA mai cambiare il significato né aggiungere informazioni. Niente titoli di sezione, niente elenchi puntati, niente numerazione.
 4. Una riga vuota.
 5. IL SALUTO FINALE: {chiusura}
 
