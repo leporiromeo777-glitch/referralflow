@@ -8,10 +8,10 @@
    "breve": "Moccetti",
    "modalita": "lettera",
    "atempo": 0.8,
-   "atempo_prova": 0.7,
+   "atempo_prova": [0.7, 0.6, 0.5],
    "vocabolario": "vocabolario-moccetti.txt",
    "correzioni": "correzioni-moccetti.json",
-   "note": "Detta quasi sempre una lettera nuova da scrivere; raramente chiede di aggiornare altro. Parla molto veloce: da provare un rallentamento maggiore (prova-atempo.sh)."
+   "note": "Detta quasi sempre una lettera nuova da scrivere; raramente chiede di aggiornare altro. Parla molto veloce: da provare rallentamenti maggiori 0.7 / 0.6 / 0.5 (prova-atempo.sh, richiesta utente 2026-09-07)."
   },
   {
    "id": "moschovitis",

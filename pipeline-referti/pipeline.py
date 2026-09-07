@@ -122,11 +122,16 @@ def carica_medici() -> list[dict]:
             continue
         if not 0.5 <= atempo <= 1.5:
             continue
-        prova = v.get("atempo_prova")
-        try:
-            prova = float(prova) if prova is not None else None
-        except (TypeError, ValueError):
-            prova = None
+        # Rallentamenti da provare (numero o lista, es. [0.7, 0.6, 0.5]).
+        grezzo = v.get("atempo_prova")
+        prove: list[float] = []
+        for x in (grezzo if isinstance(grezzo, list) else [grezzo]):
+            try:
+                x = float(x)
+            except (TypeError, ValueError):
+                continue
+            if 0.5 <= x <= 1.5 and x not in prove:
+                prove.append(x)
         modalita = str(v.get("modalita") or "lettera").strip().lower()
         if modalita not in MODALITA_MEDICO:
             modalita = "lettera"
@@ -138,7 +143,8 @@ def carica_medici() -> list[dict]:
             "breve": str(v.get("breve") or nome).strip()[:40],
             "modalita": modalita,
             "atempo": atempo,
-            "atempo_prova": prova if prova is not None and 0.5 <= prova <= 1.5 else None,
+            "atempo_prova": prove[0] if prove else None,
+            "atempo_prove": prove,
             "vocabolario": str(v.get("vocabolario") or f"vocabolario-{mid}.txt"),
             "correzioni": str(v.get("correzioni") or f"correzioni-{mid}.json"),
         })
@@ -6119,7 +6125,10 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
     ErroreElaborazione dopo aver loggato (mai contenuti nei log).
     `notifica(fase)`, se passata, viene chiamata a ogni cambio di fase
     (avanzamento vivo sulla piattaforma per i dettati del drag & drop)."""
-    file_id = file_id_di(ingresso) + ("-ombra" if OMBRA else "")
+    # Bozza ombra: suffisso «-ombra» e, se c'è, un'etichetta della variante
+    # (REFERTI_OMBRA_ETICHETTA, es. «atempo-0.6») così più candidate sullo
+    # stesso audio convivono e la pagina di confronto le mostra tutte.
+    file_id = file_id_di(ingresso) + ("-ombra" + ("-" + OMBRA_ETICHETTA if OMBRA_ETICHETTA else "") if OMBRA else "")
     # Registro delle riparazioni pulito a ogni corsa (il servizio è un
     # processo lungo: senza azzeramento un retry sommerebbe corse diverse).
     RIPARAZIONI_APPLICATE.pop(file_id, None)
@@ -6780,6 +6789,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         ],
         "richiede_revisione": True,
         "ombra": OMBRA,
+        "ombra_etichetta": OMBRA_ETICHETTA if OMBRA else "",
     }
     if not visita:
         try:
@@ -7188,6 +7198,9 @@ def servizio(sostituzioni, controlli) -> int:
 
 
 OMBRA = False  # confronto cieco: la bozza si consegna come «-ombra», mai al posto di quella vera
+# Etichetta della variante ombra (solo [a-z0-9.-], max 40): più candidate
+# sullo stesso audio, es. atempo-0.7 / atempo-0.6 / atempo-0.5.
+OMBRA_ETICHETTA = re.sub(r"[^a-z0-9.-]", "", os.environ.get("REFERTI_OMBRA_ETICHETTA", "").lower())[:40].strip("-.")
 
 
 def main(argv: list[str]) -> int:

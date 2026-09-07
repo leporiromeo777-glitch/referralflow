@@ -232,6 +232,11 @@ export async function POST(req: NextRequest) {
       : {},
     // Bozza «ombra» (confronto cieco tra due versioni della catena).
     ombra: body?.ombra === true,
+    // Etichetta della variante ombra (es. «atempo-0.6»): più candidate sullo
+    // stesso audio; la pagina di confronto la rivela solo a scelta fatta.
+    ombra_etichetta: typeof body?.ombra_etichetta === 'string'
+      ? body.ombra_etichetta.toLowerCase().replace(/[^a-z0-9.-]/g, '').slice(0, 40)
+      : '',
     manifesto: manifestoPulito(body?.manifesto),
     medico: medicoPulito(body?.medico),
     richiede_revisione: true,

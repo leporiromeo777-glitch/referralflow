@@ -316,8 +316,10 @@ in `api/referti/bozza`, `fusione.automatica=true`, sempre e solo proposta).
 Modalità `lettera` (Moccetti): scheda «Lettera precedente» ripiegata.
 `REFERTI_ATEMPO` a mano vince sul profilo (esperimenti). Prova richiesta
 dall'utente: Moccetti parla molto veloce → `bash pipeline-referti/prova-atempo.sh
-<audio> moccetti 0.7` (bozza ombra, confronto cieco in /referti/confronto;
-varianti `atempo-0.7`/`atempo-0.6` nel banco d'oro). DA FARE dal vivo: serve
+<audio> moccetti` prova 0.7, 0.6 E 0.5 (una corsa per valore, bozze ombra
+etichettate `…-ombra-atempo-0.6` via `REFERTI_OMBRA_ETICHETTA`, una coppia
+per variante nel confronto cieco, etichetta rivelata solo a scelta fatta;
+varianti `atempo-0.7/0.6/0.5` nel banco d'oro). DA FARE dal vivo: serve
 un dettato di Moccetti già lavorato in produzione.
 
 ## Catena referti: pagine e strumenti aggiunti il 5-6.9.2026

@@ -32,6 +32,7 @@ VARIANTI = {
     # dettati d'oro di QUEL medico, non sul set di tutti.
     "atempo-0.7": f"atempo=0.7,highpass=f=80,afftdn=nf=-25,{LOUDNORM}",
     "atempo-0.6": f"atempo=0.6,highpass=f=80,afftdn=nf=-25,{LOUDNORM}",
+    "atempo-0.5": f"atempo=0.5,highpass=f=80,afftdn=nf=-25,{LOUDNORM}",
     "senza-denoise": f"atempo=0.8,highpass=f=80,{LOUDNORM}",
     "senza-atempo": f"highpass=f=80,{LOUDNORM}",
     "solo-resample": None,

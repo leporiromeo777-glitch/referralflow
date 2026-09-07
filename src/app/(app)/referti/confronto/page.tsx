@@ -15,7 +15,11 @@ export const dynamic = 'force-dynamic';
 // affiancate in ordine casuale ma stabile, senza dire quale sia la nuova.
 // La preferenza del medico finisce in referti_confronti.
 
-type Riga = { id: string; file_id: string; testo: string; created_at: string; ombra: boolean };
+type Riga = { id: string; file_id: string; testo: string; created_at: string; ombra: boolean; etichetta: string };
+
+// file_id di una bozza ombra: «<id>-ombra» oppure «<id>-ombra-<etichetta>»
+// (più candidate sullo stesso audio, es. le prove di rallentamento).
+const RX_OMBRA = /-ombra(?:-[a-z0-9.-]+)?$/;
 
 export default async function Confronto({ searchParams }: { searchParams: { ok?: string } }) {
   const session = await getSession();
@@ -24,7 +28,8 @@ export default async function Confronto({ searchParams }: { searchParams: { ok?:
   const righe = await query<Riga>(
     `select id, payload->>'file_id' as file_id,
             coalesce(testo_finale, payload->>'testo_corretto', '') as testo,
-            created_at::text, coalesce((payload->>'ombra')::boolean, false) as ombra
+            created_at::text, coalesce((payload->>'ombra')::boolean, false) as ombra,
+            coalesce(payload->>'ombra_etichetta', '') as etichetta
        from referti_bozze
       where studio_id = $1 and created_at > now() - interval '90 days'
       order by created_at desc`,
@@ -37,9 +42,11 @@ export default async function Confronto({ searchParams }: { searchParams: { ok?:
   const decisione = new Map(decisi.map((d) => [`${d.bozza_a}|${d.bozza_b}`, d]));
 
   const base = new Map(righe.filter((r) => !r.ombra).map((r) => [r.file_id, r]));
+  // Una coppia per ogni bozza ombra: con più varianti sullo stesso audio il
+  // medico decide una coppia alla volta, sempre contro la produzione.
   const coppie = righe
-    .filter((r) => r.ombra && r.file_id.endsWith('-ombra'))
-    .map((o) => ({ ombra: o, prod: base.get(o.file_id.replace(/-ombra$/, '')) }))
+    .filter((r) => r.ombra && RX_OMBRA.test(r.file_id))
+    .map((o) => ({ ombra: o, prod: base.get(o.file_id.replace(RX_OMBRA, '')) }))
     .filter((c): c is { ombra: Riga; prod: Riga } => !!c.prod);
 
   const tally = { prod: 0, ombra: 0, pari: 0 };
@@ -73,7 +80,9 @@ export default async function Confronto({ searchParams }: { searchParams: { ok?:
           <p className="muted small">
             La catena candidata (nuovo motore, prompt o modello, impostati via variabili
             d&apos;ambiente) consegna una seconda bozza per lo stesso audio; qui compare accanto a quella di produzione.
+            Per le prove di rallentamento di un medico (più varianti sullo stesso dettato):
           </p>
+          <pre className="grezzo-testo">bash ~/referti-pipeline/prova-atempo.sh ~/referti-dataset/audio/&lt;file_id&gt;.m4a moccetti 0.7 0.6 0.5</pre>
         </div>
       )}
       {coppie.map(({ ombra, prod }) => {
@@ -89,6 +98,7 @@ export default async function Confronto({ searchParams }: { searchParams: { ok?:
             {d ? (
               <p className="muted">
                 Deciso il {d.deciso_at ? dataOra(d.deciso_at) : ''}: {d.scelta === 'pari' ? 'pari' : d.scelta === 'a' ? 'produzione' : 'candidata'}
+                {ombra.etichetta ? ` (candidata: ${ombra.etichetta})` : ''}
                 {d.motivo ? ` — ${d.motivo}` : ''}
               </p>
             ) : (

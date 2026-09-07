@@ -62,7 +62,7 @@ script (solo nomi di medici e impostazioni: mai pazienti):
 | `modalita` | `lettera` = detta una lettera nuova (scheda «Lettera precedente» ripiegata); `aggiornamento` = detta gli aggiornamenti alla lettera precedente: la piattaforma **chiede da sola la fusione** con l'ultima lettera confermata dello stesso paziente, se c'è (resta una proposta: si applica con un clic, con le stesse guardie) |
 | `vocabolario` | `vocabolario-<id>.txt`: termini suoi, in testa al prompt di whisper |
 | `correzioni` | `correzioni-<id>.json`: dizionario e stile suoi (stesse sezioni di correzioni-locali.json), vincono a parità di chiave |
-| `atempo_prova` | rallentamento da provare con `prova-atempo.sh` |
+| `atempo_prova` | rallentamenti da provare con `prova-atempo.sh` (numero o lista, es. `[0.7, 0.6, 0.5]`) |
 
 Il medico viaggia nel **nome del file** come marcatore `medico-<id>--` (come
 `visita-`): sopravvive a ingresso → lavorazione → errori → riprova. Il
@@ -79,19 +79,24 @@ Profili di partenza: `moccetti` (lettera nuova, parla molto veloce) e
 ### Prova di rallentamento per un medico
 
 ```bash
-bash prova-atempo.sh ~/referti-dataset/audio/<file_id>.m4a moccetti 0.7
+bash prova-atempo.sh ~/referti-dataset/audio/<file_id>.m4a moccetti          # 0.7, 0.6 e 0.5 dal profilo
+bash prova-atempo.sh ~/referti-dataset/audio/<file_id>.m4a moccetti 0.6 0.5  # valori a scelta
 ```
 
-Stesso audio, catena identica, solo l'atempo diverso: la bozza esce come
-«ombra» e `/referti/confronto` la mette accanto a quella di produzione alla
-cieca. Serve prima la bozza di produzione dello stesso audio (dettato
+Stesso audio, catena identica, solo l'atempo diverso: una corsa per valore,
+ogni bozza esce come «ombra» con la sua etichetta (file_id
+`…-ombra-atempo-0.6`, `REFERTI_OMBRA_ETICHETTA`) e `/referti/confronto` ne
+fa una coppia contro la produzione, alla cieca; l'etichetta compare solo a
+scelta fatta. Serve prima la bozza di produzione dello stesso audio (dettato
 caricato normalmente col medico scelto; l'originale resta in
-`~/referti-dataset/audio/` grazie alla conserva). Lo script stampa solo le
-righe di log (divergenze, dubbi, copertura), mai testo. Il giudizio vero è
-la scelta cieca del medico; a referto confermato, il banco d'oro misura le
-varianti `attuale`, `atempo-0.7`, `atempo-0.6` (`banco-audio.py`). Se una
-variante vince, si scrive nel profilo (`atempo`) e vale da lì in poi solo
-per quel medico.
+`~/referti-dataset/audio/` grazie alla conserva). Ogni corsa è una catena
+completa (anche mezz'ora su un dettato lungo): lanciarla con `nohup` quando
+il Mac è libero. Lo script stampa solo le righe di log e una tabella finale
+(divergenze, dubbi, copertura, manifesto) per variante, mai testo. Il
+giudizio vero è la scelta cieca del medico; a referto confermato, il banco
+d'oro misura le varianti `attuale`, `atempo-0.7`, `atempo-0.6`, `atempo-0.5`
+(`banco-audio.py`). Se una variante vince, si scrive nel profilo (`atempo`)
+e vale da lì in poi solo per quel medico.
 
 ## Vocabolario di dominio (affidabilità)
 
