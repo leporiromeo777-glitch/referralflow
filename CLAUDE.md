@@ -403,9 +403,12 @@ a inizio segmento) diventava una «frase» del wizard; ridotta a nulla da
 `normalizza()`, si agganciava a QUALSIASI citazione (`c.includes('')` è
 sempre vero) e si prendeva le schede di mezza revisione, mostrando solo la
 virgola. Ora: `ricuci_punteggiatura_orfana()` nella catena attacca quelle
-righe alla riga prima (caso 22 della suite), `spezzaInFrasi` fa lo stesso
-lato pagina e `trovaIndice` non aggancia mai una frase che si riduce a meno
-di 8 caratteri. Le segnalazioni senza frase citata (< 8 caratteri) vengono
+righe alla riga prima (caso 22 della suite) e `trovaIndice` non aggancia mai
+una frase che si riduce a meno di 8 caratteri. La ricucitura NON si fa lato
+pagina: cambierebbe gli indici delle frasi e butterebbe via le revisioni già
+in corso. Per lo stesso motivo la ripresa dello stato tollera un elenco di
+frasi più lungo di quello iniziale («Rimetti» su un doppione ne aggiunge
+una: senza tolleranza il lavoro andava perso alla riapertura). Le segnalazioni senza frase citata (< 8 caratteri) vengono
 scartate sia dalla catena sia dalla pagina: la scheda «Frase vuota» non
 esce più.
 

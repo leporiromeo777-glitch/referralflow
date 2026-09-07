@@ -27,18 +27,6 @@ const ABBREVIAZIONE = /(?:^|\s)(?:dr|dott|dr\.ssa|dott\.ssa|med|prof|sig|sig\.ra
 function spezzaInFrasi(testo: string): string[] {
   const pezzi: string[] = [];
   let corrente = '';
-  const attacca = (f: string) => {
-    // Frammento senza lettere né cifre («,» da sola, prodotta da «virgola»
-    // dettata a inizio segmento): non è una frase, si attacca alla
-    // precedente. Da sola diventava una frase vuota che si agganciava a
-    // TUTTE le segnalazioni (visto dal vivo 2026-09-07: schede con la sola
-    // virgola e nessun testo).
-    if (pezzi.length && !/[\p{L}\p{N}]/u.test(f)) {
-      pezzi[pezzi.length - 1] = `${pezzi[pezzi.length - 1].trimEnd()}${f.trim()}`;
-      return true;
-    }
-    return false;
-  };
   for (const riga of testo.replace(/\r\n/g, '\n').split('\n')) {
     // Una riga vuota è un cambio di paragrafo: resta attaccata (come «\n»
     // finale) alla frase prima, così ricomponendo il testo i paragrafi della
@@ -51,7 +39,7 @@ function spezzaInFrasi(testo: string): string[] {
     for (const f of frasi) {
       corrente = corrente ? `${corrente} ${f}` : f;
       if (/[.!?;]["»)]?$/.test(f.trim()) && !ABBREVIAZIONE.test(f.trim())) {
-        if (!attacca(corrente)) pezzi.push(corrente);
+        pezzi.push(corrente);
         corrente = '';
       }
     }
@@ -59,11 +47,11 @@ function spezzaInFrasi(testo: string): string[] {
     // («Dr.» / «med.» / «Marco Moccetti» su tre righe di un testo salvato
     // da una vecchia revisione tornano una frase sola).
     if (corrente && !ABBREVIAZIONE.test(corrente.trim())) {
-      if (!attacca(corrente)) pezzi.push(corrente);
+      pezzi.push(corrente);
       corrente = '';
     }
   }
-  if (corrente && !attacca(corrente)) pezzi.push(corrente);
+  if (corrente) pezzi.push(corrente);
   return pezzi.filter((p) => p.trim());
 }
 
@@ -146,7 +134,12 @@ export function RevisioneGuidata({
   const frasiIniziali = useMemo(() => spezzaInFrasi(testo), [testo]);
   // Stato salvato: si riprende solo se il testo base si spezza ancora nello
   // stesso numero di frasi (altrimenti gli indici non tornerebbero).
-  const st = statoIniziale && statoIniziale.n_frasi === frasiIniziali.length && statoIniziale.frasi.length === frasiIniziali.length
+  // Si riprende quando il testo di partenza si spezza ancora nello stesso
+  // numero di frasi. L'elenco salvato può essere PIÙ LUNGO: «Rimetti» su un
+  // doppione aggiunge una frase (senza questa tolleranza il lavoro fatto
+  // andava perso alla riapertura).
+  const st = statoIniziale && statoIniziale.n_frasi === frasiIniziali.length
+    && statoIniziale.frasi.length >= frasiIniziali.length
     ? statoIniziale : null;
 
   // Provenienza (lettera incrementale): per ogni frase del wizard, da dove
