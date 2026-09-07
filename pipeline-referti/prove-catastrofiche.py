@@ -374,6 +374,22 @@ def _prova_22() -> None:
     assert all(any(c.isalnum() for c in f) for f in frasi), frasi
 
 
+@caso("23 · divergenze che cambiano il senso marcate come pesanti")
+def _prova_23() -> None:
+    # Il caso vero: «diminuiti» sentito solo dalla passata B.
+    assert m.parole_pesanti("profili pressori", "profili pressori diminuiti") == ["diminuiti"]
+    # Negazione da una parte sola, lateralità, numero.
+    assert "non" in m.parole_pesanti("il soffio è presente", "il soffio non è presente")
+    assert m.parole_pesanti("arteria destra", "arteria sinistra")
+    assert "135" in m.parole_pesanti("pressione 135", "pressione 130")
+    # Differenze di sole parole neutre: nessun peso.
+    assert m.parole_pesanti("il paziente riferisce", "la paziente riferiva") == []
+    # La marcatura arriva nelle divergenze.
+    div = m.confronta("i profili pressori associati ad astenia",
+                      "i profili pressori diminuiti associati ad astenia")
+    assert any(d.get("pesanti") for d in div), div
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0

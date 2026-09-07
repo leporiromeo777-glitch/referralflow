@@ -39,10 +39,52 @@ const _UNITA_TEMPO = '(mesi|settimane|giorni|anni|ore|minuti|secondi|volte)';
 
 export function numeriDiTempoInCifre(testo: string): string {
   const parole = Object.keys(_NUMERI_PAROLA).join('|');
-  return testo.replace(
-    new RegExp(`\\b(${parole})\\s+${_UNITA_TEMPO}\\b`, 'gi'),
-    (_m, n: string, unita: string) => `${_NUMERI_PAROLA[n.toLowerCase()]} ${unita}`
+  const cifra = (n: string) => _NUMERI_PAROLA[n.toLowerCase()] ?? n;
+  // Prima gli intervalli («fra due o tre settimane», «due o 3 settimane» →
+  // «fra 2-3 settimane», come li scrive la segretaria).
+  let fuori = testo.replace(
+    new RegExp(`\\b(${parole}|\\d{1,3})\\s*(?:o|-|–|a)\\s*(${parole}|\\d{1,3})\\s+${_UNITA_TEMPO}\\b`, 'gi'),
+    (_m, a: string, b: string, unita: string) => `${cifra(a)}-${cifra(b)} ${unita}`
   );
+  return fuori.replace(
+    new RegExp(`\\b(${parole})\\s+${_UNITA_TEMPO}\\b`, 'gi'),
+    (_m, n: string, unita: string) => `${cifra(n)} ${unita}`
+  );
+}
+
+// Parole «di contenuto» aggiunte dal modello che nel testo dettato non
+// c'erano (2026-09-07: l'impaginazione ha scritto «con valori di partenza di
+// 135 su 105 mmHg» — i numeri erano intatti, la guardia sulle cifre non
+// poteva vederlo). Le parole vuote non contano; il confronto ignora accenti
+// e desinenze corte, così un plurale non fa rumore.
+const _PAROLE_VUOTE = new Set([
+  'il', 'lo', 'la', 'i', 'gli', 'le', 'un', 'uno', 'una', 'di', 'da', 'del', 'della', 'dei', 'delle',
+  'dal', 'dalla', 'in', 'nel', 'nella', 'con', 'su', 'sul', 'sulla', 'per', 'tra', 'fra', 'e', 'ed',
+  'o', 'che', 'chi', 'cui', 'come', 'non', 'si', 'se', 'al', 'alla', 'ai', 'alle', 'ad', 'a',
+  'questo', 'questa', 'questi', 'queste', 'quello', 'quella', 'suo', 'sua', 'suoi', 'sue', 'mio',
+  'mia', 'miei', 'mie', 'lei', 'lui', 'loro', 'egli', 'esso', 'essa', 'ho', 'ha', 'hanno', 'sono',
+  'era', 'erano', 'stato', 'stata', 'essere', 'avere', 'più', 'meno', 'anche', 'ancora', 'poi',
+  'quindi', 'pertanto', 'inoltre', 'dopo', 'prima', 'oggi', 'ieri', 'domani', 'molto', 'sempre',
+  'gentile', 'egregio', 'caro', 'cara', 'signor', 'signora', 'collega', 'dottore', 'dottoressa',
+  'saluti', 'cordiali', 'collegiali', 'dr', 'med', 'prof', 'lo', 'stesso', 'stessa',
+]);
+
+function _radice(p: string): string {
+  const n = p.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return n.length > 5 ? n.slice(0, n.length - 1) : n;
+}
+
+export function paroleAggiunte(originale: string, risposta: string): string[] {
+  const parole = (t: string) =>
+    (t.toLowerCase().match(/[a-zà-ÿ]{3,}/gu) ?? []).filter((w) => !_PAROLE_VUOTE.has(w));
+  const nell_originale = new Set<string>();
+  for (const w of parole(originale)) { nell_originale.add(w); nell_originale.add(_radice(w)); }
+  const fuori: string[] = [];
+  for (const w of parole(risposta)) {
+    if (nell_originale.has(w) || nell_originale.has(_radice(w))) continue;
+    if (!fuori.includes(w)) fuori.push(w);
+  }
+  return fuori;
 }
 
 export function dataCh(iso: string | null | undefined): string {

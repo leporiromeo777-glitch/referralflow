@@ -1563,6 +1563,34 @@ def _normalizza(parola: str) -> str:
     return re.sub(r"[^\w]+", "", parola.lower(), flags=re.UNICODE)
 
 
+# Parole che cambiano il senso clinico di una frase: se un motore le ha e
+# l'altro no, la divergenza non è una sfumatura — va messa in cima alla
+# revisione (2026-09-07: «profili pressori DIMINUITI» sentito solo da
+# Voxtral è finito in fondo a 58 divergenze e la parola si è persa).
+_RX_QUALIFICATORE = re.compile(
+    r"\b(?:diminuit[oaie]|ridott[oaie]|calat[oaie]|abbassat[oaie]|bass[oaie]|"
+    r"aumentat[oaie]|alzat[oaie]|elevat[oaie]|alt[oaie]|cresciut[oaie]|"
+    r"peggiorat[oaie]|miglior(?:at[oaie]|e|i)|stabil[ei]|invariat[oaie]|"
+    r"assent[ei]|present[ei]|comparso|scomparso|"
+    r"lieve|moderat[oaie]|sever[oaie]|grave|marcat[oaie]|significativ[oaie]|"
+    r"sospes[oaie]|sospension[ei]|interrott[oaie]|ripres[oaie]|reintrodott[oaie])\b",
+    re.IGNORECASE,
+)
+
+
+def parole_pesanti(seg_a: str, seg_b: str) -> list[str]:
+    """Qualificatori clinici, negazioni, lateralità e numeri presenti da una
+    parte sola della divergenza. Vuoto = differenza di sole parole neutre."""
+    def raccogli(s: str) -> set[str]:
+        fuori = {m.group(0).lower() for m in _RX_QUALIFICATORE.finditer(s)}
+        fuori |= {m.group(0).lower() for m in _RX_NEGAZIONE.finditer(s)}
+        fuori |= {m.group(0).lower() for m in _RX_LATERALITA.finditer(s)}
+        fuori |= set(re.findall(r"\d+(?:[.,]\d+)?", s))
+        return fuori
+    a, b = raccogli(seg_a), raccogli(seg_b)
+    return sorted((a - b) | (b - a))
+
+
 def confronta(testo_a: str, testo_b: str) -> list[dict]:
     tok_a = [(m.group(0), m.start(), m.end()) for m in re.finditer(r"\S+", testo_a)]
     tok_b = [m.group(0) for m in re.finditer(r"\S+", testo_b)]
@@ -1582,10 +1610,14 @@ def confronta(testo_a: str, testo_b: str) -> list[dict]:
         ctx_i1 = max(0, i1 - PAROLE_DI_CONTESTO)
         ctx_i2 = min(len(tok_a), i2 + PAROLE_DI_CONTESTO)
         contesto = testo_a[tok_a[ctx_i1][1]:tok_a[ctx_i2 - 1][2]] if ctx_i2 > ctx_i1 else ""
+        pesanti = parole_pesanti(seg_a, seg_b)
         divergenze.append({
             "contesto": contesto,
             "versione_a": seg_a,
             "versione_b": seg_b,
+            # Parole che cambiano il senso e stanno da una parte sola: la
+            # pagina mette queste divergenze in cima e le mostra aperte.
+            **({"pesanti": pesanti} if pesanti else {}),
         })
     return divergenze
 

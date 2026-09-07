@@ -22,7 +22,7 @@ export const dynamic = 'force-dynamic';
 // divergenze tra le due trascrizioni (mai risolte dal sistema: si mostrano
 // entrambe le versioni), allarmi numerici, campi estratti correggibili.
 
-type Divergenza = { contesto?: string; versione_a?: string; versione_b?: string };
+type Divergenza = { contesto?: string; versione_a?: string; versione_b?: string; pesanti?: string[] };
 type Allarme = { campo?: string; valore?: unknown; intervallo?: string; stato?: string };
 
 type Payload = {
@@ -152,7 +152,7 @@ export default async function RefertoBozza({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { ok?: string; err?: string };
+  searchParams: { ok?: string; err?: string; aggiunte?: string };
 }) {
   const session = await getSession();
   if (!session) redirect('/login');
@@ -246,7 +246,13 @@ export default async function RefertoBozza({
       )
     : [];
 
-  const divergenze = Array.isArray(p.divergenze) ? p.divergenze : [];
+  const divergenzeTutte = Array.isArray(p.divergenze) ? p.divergenze : [];
+  // Divergenze che cambiano il senso (un motore ha un qualificatore, una
+  // negazione, una lateralità o un numero che all'altro manca): in cima, e
+  // in un passo tutto loro nella revisione — dentro l'elenco tecnico da 58
+  // voci quella giusta non si vedeva (2026-09-07).
+  const divergenzePesanti = divergenzeTutte.filter((d) => Array.isArray(d.pesanti) && d.pesanti.length > 0);
+  const divergenze = [...divergenzePesanti, ...divergenzeTutte.filter((d) => !divergenzePesanti.includes(d))];
   const dubbi = Array.isArray(p.segmenti_dubbi) ? p.segmenti_dubbi.filter((s) => typeof s === 'string') : [];
   const allarmi = Array.isArray(p.allarmi_numerici) ? p.allarmi_numerici : [];
   const avvisi = Array.isArray(p.avvisi) ? p.avvisi.filter((a): a is string => typeof a === 'string') : [];
@@ -453,11 +459,22 @@ export default async function RefertoBozza({
         </p></div>
       )}
       {searchParams.ok === 'strutturato' && (
-        <div className="card notice"><p>
-          Proposta AI inserita nel «Testo da confermare»: il dettato è stato
-          riorganizzato nel formato standard. Controllala riga per riga prima
-          di confermare — i numeri sono verificati identici dal sistema.
-        </p></div>
+        <div className="card notice">
+          <p>
+            Proposta AI inserita nel «Testo da confermare»: il dettato è stato
+            riorganizzato nel formato standard. Controllala riga per riga prima
+            di confermare — i numeri sono verificati identici dal sistema.
+          </p>
+          {/* Parole che il modello ha messo e nel dettato non c'erano: i
+              numeri erano già controllati, queste no (2026-09-07). */}
+          {typeof searchParams.aggiunte === 'string' && searchParams.aggiunte.trim() !== '' && (
+            <p>
+              <strong>Parole aggiunte dall’impaginazione</strong>, che nel dettato non
+              compaiono: {searchParams.aggiunte.split(',').filter(Boolean).map((w) => `«${w}»`).join(', ')}.
+              Sono legami di frase o parole vere? Controllale prima di confermare.
+            </p>
+          )}
+        </div>
       )}
       {searchParams.err === 'struttura_numeri' && (
         <p className="error">
@@ -829,6 +846,7 @@ export default async function RefertoBozza({
                     .filter(([r, o]) => r.trim() && o && o !== 'modello')
                 : []
             }
+            divergenzePesanti={divergenzePesanti}
             avvisi={avvisi}
             rischioFrasi={Array.isArray(p.rischio_frasi) ? p.rischio_frasi : []}
             numeri={Array.isArray(p.numeri) ? p.numeri : []}

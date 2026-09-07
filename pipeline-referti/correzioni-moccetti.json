@@ -31,7 +31,10 @@
     "non ritorno sull'analisi": "non ritorno sull'anamnesi",
     "non ritorno sull’analisi": "non ritorno sull’anamnesi",
     "quando già presente nei miei incarti": "in quanto già presente nei miei incarti",
-    "a disposizione tu e": "a disposizione Tua e"
+    "a disposizione tu e": "a disposizione Tua e",
+    "quando è già presente nei miei incarti": "in quanto già presente nei miei incarti",
+    "quando è già presente": "in quanto già presente",
+    "quando già presente": "in quanto già presente"
   },
   "stile": {
     "Cordiali saluti": "Cordiali e collegiali saluti"

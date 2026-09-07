@@ -10,11 +10,12 @@ import { useEffect, useRef, useState } from 'react';
 type Stato =
   | { fase: 'fermo' }
   | { fase: 'lavora'; percento: number }
-  | { fase: 'errore'; messaggio: string };
+  | { fase: 'errore'; messaggio: string; aggiunte?: string[] };
 
 const MESSAGGI: Record<string, string> = {
   numeri: 'Proposta scartata: la riorganizzazione avrebbe cambiato dei numeri.',
   troppo_corto: 'Proposta scartata: il risultato perdeva contenuto.',
+  parole_aggiunte: 'Proposta scartata: il modello aggiungeva parole che nel dettato non ci sono.',
   ai_non_risponde: "L'AI locale non ha risposto: riprova tra qualche minuto.",
 };
 
@@ -35,10 +36,18 @@ export default function RiorganizzaAI({ bozzaId, formato = 'rapporto' }: { bozza
           setStato({ fase: 'lavora', percento: s.percento ?? 1 });
         } else if (s.stato === 'fatto') {
           if (timer.current) clearInterval(timer.current);
-          window.location.assign(`/referti/${bozzaId}?ok=strutturato`);
+          // Le parole che il modello ha aggiunto viaggiano nell'indirizzo:
+          // la pagina le mostra sopra il testo, da controllare una a una.
+          const agg = Array.isArray(s.aggiunte) && s.aggiunte.length
+            ? `&aggiunte=${encodeURIComponent(s.aggiunte.slice(0, 12).join(','))}` : '';
+          window.location.assign(`/referti/${bozzaId}?ok=strutturato${agg}`);
         } else if (s.stato === 'errore') {
           if (timer.current) clearInterval(timer.current);
-          setStato({ fase: 'errore', messaggio: MESSAGGI[s.motivo ?? ''] ?? MESSAGGI.ai_non_risponde });
+          setStato({
+            fase: 'errore',
+            messaggio: MESSAGGI[s.motivo ?? ''] ?? MESSAGGI.ai_non_risponde,
+            aggiunte: Array.isArray(s.aggiunte) ? s.aggiunte.slice(0, 12) : undefined,
+          });
         }
       } catch { /* rete assente per un attimo: si riprova al giro dopo */ }
     }, 2000);

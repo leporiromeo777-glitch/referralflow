@@ -412,6 +412,24 @@ una: senza tolleranza il lavoro andava perso alla riapertura). Le segnalazioni s
 scartate sia dalla catena sia dalla pagina: la scheda «Frase vuota» non
 esce più.
 
+Tre barriere dal quarto confronto (8.9.2026, doc 27 catena vs 28 segretaria
+— contenuto uguale salvo due eventi silenziosi): (1) guardia sulle PAROLE
+aggiunte dall'impaginazione, gemella di quella sui numeri
+(`paroleAggiunte()` in referti-lettera.ts): le parole di contenuto che nel
+dettato non c'erano vengono elencate a chi rivede e, se pesano sul senso
+clinico (diminuito/aumentato, negazioni, lateralità, urgente…) o sono più di
+sei, la proposta si scarta (`motivo: 'parole_aggiunte'`) — il caso vero era
+«con valori di partenza di 135 su 105 mmHg», numeri intatti e parole
+inventate; (2) divergenze A/B con `pesanti` (`parole_pesanti()` nella
+catena): qualificatore, negazione, lateralità o numero presente da una parte
+sola → passo dedicato «I due motori non concordano» nella revisione guidata,
+con riascolto e correzione, e in cima all'elenco tecnico (il caso vero,
+«profili pressori DIMINUITI» sentito solo da Voxtral, era la voce numero N
+di 58 dentro un pannello chiuso); (3) dizionario di Moccetti: «quando è già
+presente» → «in quanto già presente», e `numeriDiTempoInCifre` normalizza
+anche gli intervalli («fra due o 3 settimane» → «fra 2-3 settimane»).
+Casi 23 nella suite.
+
 Fase «doppioni» (7.9.2026, richiesta utente): `togli_doppioni()` in
 pipeline.py dopo lo stile, prima della struttura. Tre regole: frase identica
 o quasi ripetuta (Jaccard ≥ 0.9, ≥ 3 elementi) → via la seconda;

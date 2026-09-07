@@ -1,6 +1,6 @@
 import 'server-only';
 import { relazioniIntatte } from './referti-misure-cliniche';
-import { normalizzaDate, numeriDiTempoInCifre } from './referti-lettera';
+import { normalizzaDate, numeriDiTempoInCifre, paroleAggiunte } from './referti-lettera';
 
 // Riorganizzazione del referto dettato nel formato standard dello studio
 // (bottone nel dettaglio referto). Il modello AI LOCALE (Ollama) rimappa il
@@ -171,9 +171,21 @@ function firmaNumerica(testo: string): string {
   return voci.map((v) => v.toLowerCase().replace(/\s+/g, '')).sort().join('|');
 }
 
+// Parole aggiunte che cambierebbero il senso clinico: se il modello le
+// inventa, la proposta si scarta (gemella della guardia sui numeri, che non
+// poteva vedere «valori di partenza» — 2026-09-07).
+const PAROLA_PESANTE = new RegExp(
+  '^(?:diminuit|ridott|calat|abbassat|bass|aumentat|alzat|elevat|alt|cresciut|peggiorat|miglior|' +
+  'stabil|invariat|assent|present|comparso|scomparso|lieve|moderat|sever|grave|marcat|' +
+  'significativ|sospes|interrott|ripres|reintrodott|destr|sinistr|bilateral|nessun|senza|negativ|' +
+  'esclus|urgent|immediat|sospett|probabil|possibil|necessari)',
+  'i'
+);
+const MAX_PAROLE_AGGIUNTE = 6;
+
 export type EsitoStruttura =
-  | { ok: true; testo: string }
-  | { ok: false; motivo: 'numeri' | 'troppo_corto' | 'ai_non_risponde' };
+  | { ok: true; testo: string; aggiunte: string[] }
+  | { ok: false; motivo: 'numeri' | 'troppo_corto' | 'ai_non_risponde' | 'parole_aggiunte'; aggiunte?: string[] };
 
 export async function riorganizzaReferto(
   testo: string,
@@ -244,10 +256,17 @@ export async function riorganizzaReferto(
   if (risposta.length < originale.length * 0.6) {
     return { ok: false, motivo: 'troppo_corto' };
   }
+  // Parole di contenuto che nel dettato non c'erano: se pesano sul senso
+  // clinico la proposta cade, altrimenti si consegnano a chi rivede.
+  const aggiunte = paroleAggiunte(originale, risposta);
+  const pesanti = aggiunte.filter((w) => PAROLA_PESANTE.test(w));
+  if (pesanti.length || aggiunte.length > MAX_PAROLE_AGGIUNTE) {
+    return { ok: false, motivo: 'parole_aggiunte', aggiunte: pesanti.length ? pesanti : aggiunte };
+  }
   // Rifiniture di codice DOPO le guardie: terapia ripresa e firma sono
   // aggiunte deterministiche da fonti fidate, non parole del modello.
   if (formato === 'lettera') risposta = rifinisciLettera(risposta, opzioni);
-  return { ok: true, testo: risposta };
+  return { ok: true, testo: risposta, aggiunte };
 }
 
 // ——— Lavori in corso (barra di avanzamento del bottone) ———
@@ -259,7 +278,10 @@ export async function riorganizzaReferto(
 export type StatoLavoro = {
   stato: 'lavora' | 'fatto' | 'errore';
   percento: number;
-  motivo?: 'numeri' | 'troppo_corto' | 'ai_non_risponde';
+  motivo?: 'numeri' | 'troppo_corto' | 'ai_non_risponde' | 'parole_aggiunte';
+  // Parole che il modello ha aggiunto e che nel dettato non c'erano: chi
+  // rivede le vede sotto il bottone, con o senza scarto della proposta.
+  aggiunte?: string[];
 };
 
 const lavori = new Map<string, StatoLavoro>();
@@ -286,12 +308,12 @@ export function avviaRiorganizzazione(
     if (esito.ok) {
       try {
         await salva(esito.testo);
-        lavori.set(bozzaId, { stato: 'fatto', percento: 100 });
+        lavori.set(bozzaId, { stato: 'fatto', percento: 100, aggiunte: esito.aggiunte });
       } catch {
         lavori.set(bozzaId, { stato: 'errore', percento: 100, motivo: 'ai_non_risponde' });
       }
     } else {
-      lavori.set(bozzaId, { stato: 'errore', percento: 100, motivo: esito.motivo });
+      lavori.set(bozzaId, { stato: 'errore', percento: 100, motivo: esito.motivo, aggiunte: esito.aggiunte });
     }
     // Il registro si ripulisce da solo: l'esito resta leggibile 10 minuti.
     setTimeout(() => lavori.delete(bozzaId), 600_000).unref?.();

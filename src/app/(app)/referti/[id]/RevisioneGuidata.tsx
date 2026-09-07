@@ -18,6 +18,10 @@ type Riparazione = { da: string; a: string };
 // e frasi segnalate come possibili doppioni (si tolgono con un clic).
 type DoppioneTolto = { tolta: string; tenuta: string; motivo: string };
 type DoppioneDubbio = { frase: string; simile_a: string; motivo: string };
+// Divergenza tra i due motori in cui una parola che CAMBIA IL SENSO sta da
+// una parte sola (2026-09-07: «profili pressori diminuiti» sentito solo dal
+// secondo motore è finito in fondo a 58 divergenze e si è perso).
+type DivergenzaPesante = { contesto?: string; versione_a?: string; versione_b?: string; pesanti?: string[] };
 
 // Abbreviazioni col punto che NON chiudono la frase («Dr. med. Rossi»,
 // «Prof.», «Sig.ra», «ecc.», «es.»): senza questa lista la firma «Dr. med.
@@ -96,6 +100,7 @@ export function RevisioneGuidata({
   riparazioni = [],
   doppioniTolti = [],
   doppioniDubbi = [],
+  divergenzePesanti = [],
   testoStrutturato = '',
   provenienza = [],
   avvisi = [],
@@ -120,6 +125,7 @@ export function RevisioneGuidata({
   riparazioni?: Riparazione[];
   doppioniTolti?: DoppioneTolto[];
   doppioniDubbi?: DoppioneDubbio[];
+  divergenzePesanti?: DivergenzaPesante[];
   testoStrutturato?: string;
   provenienza?: [string, string][];
   avvisi?: string[];
@@ -451,6 +457,8 @@ export function RevisioneGuidata({
     passi.push({ chiave: 'ripar', titolo: 'Correzioni automatiche', conta: riparazioni.length });
   if (doppioniTolti.length + doppioniDubbi.length > 0)
     passi.push({ chiave: 'doppioni', titolo: 'Doppioni del parlato', conta: doppioniTolti.length + doppioniDubbi.length });
+  if (divergenzePesanti.length > 0)
+    passi.push({ chiave: 'divergenze', titolo: 'I due motori non concordano', conta: divergenzePesanti.length });
   if (note.length > 0)
     passi.push({ chiave: 'note', titolo: 'Note per la segreteria', conta: note.length });
   if (Object.keys(campi).filter((k) => typeof campi[k] === 'string').length > 0)
@@ -1043,6 +1051,72 @@ export function RevisioneGuidata({
                     <button type="button" className="btn btn-ghost" onClick={() => segna(id)}>
                       Va bene così, resta
                     </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {attivo === 'divergenze' && (
+        <div className="rg-corpo">
+          <p className="muted">
+            Qui i due motori di trascrizione hanno sentito cose diverse, e la
+            differenza cambia il senso: una parola come «diminuito» o
+            «aumentato», una negazione, una lateralità o un numero che uno dei
+            due non ha. Il referto porta la versione A. Riascolta e, se ha
+            ragione B, correggi la frase.
+          </p>
+          {divergenzePesanti.map((d, i) => {
+            const id = `dv${i}`;
+            const ancora = (d.contesto || d.versione_a || '').trim();
+            const idx = trovaIndice(ancora);
+            return (
+              <div key={id} className={`rg-item${fatte.has(id) ? ' rg-fatta' : ''}`}>
+                {d.contesto && <p className="muted small">…{d.contesto}…</p>}
+                <p className="rg-frase">
+                  <strong>A (nel referto):</strong> {d.versione_a?.trim() || '— niente —'}
+                </p>
+                <p className="rg-frase">
+                  <strong>B (secondo motore):</strong> {d.versione_b?.trim() || '— niente —'}
+                </p>
+                {d.pesanti && d.pesanti.length > 0 && (
+                  <p className="rg-motivo">Cambia il senso: {d.pesanti.map((w) => `«${w}»`).join(', ')}</p>
+                )}
+                {!fatte.has(id) && (
+                  <div className="rg-azioni">
+                    {bottoneRiascolta(ancora)}
+                    {idx >= 0 && inModifica !== idx && (
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => { setInModifica(idx); setBozzaModifica(frasi[idx]); }}
+                      >
+                        ✏️ Correggi la frase
+                      </button>
+                    )}
+                    <button type="button" className="btn-link" onClick={() => segna(id)}>
+                      ✓ Va bene così
+                    </button>
+                  </div>
+                )}
+                {inModifica === idx && idx >= 0 && (
+                  <div className="rg-modifica">
+                    <textarea
+                      value={bozzaModifica}
+                      onChange={(e) => setBozzaModifica(e.target.value)}
+                      rows={3}
+                      style={{ width: '100%', fontFamily: 'inherit' }}
+                    />
+                    <div className="rg-azioni">
+                      <button type="button" className="btn" onClick={() => { salvaModifica(idx); segna(id); }}>
+                        Salva la correzione
+                      </button>
+                      <button type="button" className="btn-link" onClick={() => setInModifica(null)}>
+                        Annulla
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
