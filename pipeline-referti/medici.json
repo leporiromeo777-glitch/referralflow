@@ -9,10 +9,9 @@
    "modalita": "lettera",
    "formato": "lettera",
    "atempo": 0.8,
-   "atempo_prova": [0.7, 0.6, 0.5],
    "vocabolario": "vocabolario-moccetti.txt",
    "correzioni": "correzioni-moccetti.json",
-   "note": "Detta quasi sempre una lettera nuova da scrivere; raramente chiede di aggiornare altro. Parla molto veloce: da provare rallentamenti maggiori 0.7 / 0.6 / 0.5 (prova-atempo.sh, richiesta utente 2026-09-07)."
+   "note": "Detta quasi sempre una lettera nuova da scrivere; raramente chiede di aggiornare altro. Parla molto veloce: provati 0.7 / 0.6 / 0.5 il 2026-09-07 sul primo dettato vero (divergenze 12/14/15 contro 11 a 0.8) — decisione del medico: resta 0.8. Per riprovare: prova-atempo.sh <audio> moccetti 0.7."
   },
   {
    "id": "moschovitis",

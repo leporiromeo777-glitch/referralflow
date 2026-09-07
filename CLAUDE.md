@@ -326,8 +326,9 @@ dall'utente: Moccetti parla molto veloce → `bash pipeline-referti/prova-atempo
 <audio> moccetti` prova 0.7, 0.6 E 0.5 (una corsa per valore, bozze ombra
 etichettate `…-ombra-atempo-0.6` via `REFERTI_OMBRA_ETICHETTA`, una coppia
 per variante nel confronto cieco, etichetta rivelata solo a scelta fatta;
-varianti `atempo-0.7/0.6/0.5` nel banco d'oro). DA FARE dal vivo: serve
-un dettato di Moccetti già lavorato in produzione.
+varianti `atempo-0.7/0.6/0.5` nel banco d'oro). FATTA il 7.9.2026 sul primo
+dettato vero (DS2, 65 s): divergenze 11 a 0.8 contro 12/14/15 — decisione
+del medico: RESTA 0.8 (registrata in referti_confronti, ombre scartate).
 
 Formati dittafono Philips DPM (7.9.2026): `.dss`/`.ds2` ammessi su pannello e
 pagina Referti (MIME `audio/x-dss`), decodifica via ffmpeg (dss_sp / g723_1,
