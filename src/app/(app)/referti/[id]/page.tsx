@@ -175,10 +175,23 @@ export default async function RefertoBozza({
   if (!row) notFound();
 
   // Audio collegato (dettato caricato dal drag & drop): riascoltabile qui.
-  const [audio] = await query<{ id: string; filename: string }>(
+  // Una bozza «ombra» (variante della catena sullo stesso audio, per il
+  // confronto cieco) non ha un audio suo: prende quello della bozza di
+  // produzione con lo stesso file_id di base.
+  let [audio] = await query<{ id: string; filename: string }>(
     'select id, filename from referti_audio where bozza_id = $1 and studio_id = $2',
     [params.id, session.studioId]
   );
+  const fileIdBase = String((row.payload as any)?.file_id ?? '').replace(/-ombra(?:-[a-z0-9.-]+)?$/, '');
+  if (!audio && row.payload.ombra && fileIdBase) {
+    [audio] = await query<{ id: string; filename: string }>(
+      `select a.id, a.filename
+         from referti_audio a join referti_bozze p on p.id = a.bozza_id
+        where p.studio_id = $1 and p.file_id = $2
+        order by a.created_at desc limit 1`,
+      [session.studioId, fileIdBase]
+    );
+  }
 
   const p = row.payload;
   // Registro eventi del referto (append-only, senza contenuti).
@@ -296,6 +309,16 @@ export default async function RefertoBozza({
 
       {searchParams.ok === 'confermata' && (
         <div className="card notice"><p>Bozza confermata ✓ — ora puoi scaricare il PDF.</p></div>
+      )}
+      {row.payload.ombra && (
+        <div className="card notice">
+          <p>
+            Questa è una <strong>bozza ombra</strong>: la stessa dettatura lavorata da una variante
+            della catena{(row.payload as any).ombra_etichetta ? ` (${(row.payload as any).ombra_etichetta})` : ''},
+            prodotta per il <Link href="/referti/confronto">confronto cieco</Link>. Non è la bozza da
+            rivedere: quella è nella lista dei referti.
+          </p>
+        </div>
       )}
       {!inBozza && p.revisione && typeof p.revisione.quota_modificata === 'number' && (
         <p className="muted small">

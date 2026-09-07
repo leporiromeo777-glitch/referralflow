@@ -32,7 +32,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     }>(
       `select
          (select count(*) from referrals where status = 'ricevuta' and studio_id = $1)::int as nuove,
-         (select count(*) from referti_bozze where studio_id = $1 and stato = 'bozza')::int as referti,
+         (select count(*) from referti_bozze where studio_id = $1 and stato = 'bozza'
+            and coalesce((payload->>'ombra')::boolean, false) = false)::int as referti,
          (select referti_token_set_at is not null from studios where id = $1) as referti_attivi,
          (select count(*) from consulti where studio_id = $1 and stato = 'aperto')::int as consulti,
          (select count(*) from referrals where studio_id = $1 and status = 'da_prenotare')::int as da_prenotare,

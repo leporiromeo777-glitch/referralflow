@@ -43,6 +43,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     tipo = audio.content_type ?? letto.contentType ?? 'application/octet-stream';
   }
   const totale = body.length;
+  // Diagnostica (mai contenuti): id dell'audio, tipo servito, byte, Range chiesto.
+  console.log(`Audio referto ${params.id.slice(0, 8)}: ${tipo}, ${totale} byte, range=${req.headers.get('range') ?? '-'}`);
 
   const range = req.headers.get('range');
   const m = range ? /^bytes=(\d*)-(\d*)$/.exec(range.trim()) : null;

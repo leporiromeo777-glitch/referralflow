@@ -46,6 +46,7 @@ export default async function Referti({
             payload -> 'medico' ->> 'nome' as medico_nome
        from referti_bozze
       where studio_id = $1 and tipo = 'referto'
+        and coalesce((payload->>'ombra')::boolean, false) = false
         and (stato = 'bozza' or reviewed_at > now() - interval '30 days')
       order by (stato = 'bozza') desc, created_at desc
       limit 200`,
@@ -54,6 +55,15 @@ export default async function Referti({
 
   const daRivedere = rows.filter((r) => r.stato === 'bozza');
   const gestite = rows.filter((r) => r.stato !== 'bozza');
+
+  // Bozze «ombra» (varianti della catena sullo stesso audio): non stanno in
+  // questa lista — si giudicano nel confronto cieco. Qui solo un rimando.
+  const [{ n_ombre }] = await query<{ n_ombre: number }>(
+    `select count(*)::int as n_ombre from referti_bozze
+      where studio_id = $1 and tipo = 'referto' and stato = 'bozza'
+        and coalesce((payload->>'ombra')::boolean, false)`,
+    [session.studioId]
+  );
 
   // Suggerimenti per il dizionario, imparati dalle correzioni ricorrenti
   // (mostrati quando la stessa sostituzione ricorre almeno due volte).
@@ -94,6 +104,7 @@ export default async function Referti({
       </PageHero>
       <p className="muted small" style={{ marginTop: 8 }}>
         <Link href="/referti/qualita">Qualità della dettatura</Link> · <Link href="/referti/confronto">Confronto cieco</Link>
+        {n_ombre > 0 ? ` (${n_ombre === 1 ? '1 variante da giudicare' : `${n_ombre} varianti da giudicare`})` : ''}
       </p>
 
       <UploadDettato medici={medici} />
