@@ -100,6 +100,7 @@ export function ricomponiParagrafi(testo: string): string {
   // ognuna resta sulla sua riga («Dr. med. Marco Moccetti» / «(partito dopo
   // dettatura)»), non scorrono l'una nell'altra.
   let dopoSaluto = false;
+  let firmaIniziata = false;
   const chiudi = () => {
     if (buf.trim()) out.push(buf.trim());
     buf = '';
@@ -112,12 +113,17 @@ export function ricomponiParagrafi(testo: string): string {
       continue;
     }
     if (dopoSaluto) {
+      // Una riga vuota tra il saluto finale e la firma.
+      if (out[out.length - 1] !== '' && !buf && !firmaIniziata) out.push('');
+      firmaIniziata = true;
       buf = buf ? `${buf} ${r}` : r;
       if (!ABBREVIAZIONE.test(r)) chiudi();
       continue;
     }
     if (/^(cordiali|con i migliori|distinti|un caro saluto)\b/i.test(r) && /[.,!]$/.test(r)) {
       chiudi();
+      // Una riga vuota prima del saluto finale.
+      if (out.length && out[out.length - 1] !== '') out.push('');
       out.push(r);
       dopoSaluto = true;
       continue;
@@ -126,14 +132,16 @@ export function ricomponiParagrafi(testo: string): string {
     // resta sulla sua riga, non scorre nel corpo (visto dal vivo 2026-09-07).
     // Se il corpo gli è attaccato sulla stessa riga, si stacca.
     if (!buf) {
+      // Dopo il saluto d'apertura una riga vuota (richiesta dell'utente
+      // 2026-09-07: «lascia uno spazio ulteriore», come fa la segretaria).
       const st = staccaSaluto(r);
       if (st) {
         chiudi();
-        out.push(st[0]);
+        out.push(st[0], '');
         r = st[1];
       } else if (SALUTO.test(r) && /,$/.test(r) && r.length <= 80) {
         chiudi();
-        out.push(r);
+        out.push(r, '');
         continue;
       }
     }
