@@ -37,7 +37,9 @@ if [ ! -d node_modules ] || [ package-lock.json -nt node_modules ]; then
 fi
 
 # Migrazioni recenti (dalla 019 in poi sono «if not exists», rieseguibili).
-for m in db/migrations/019_*.sql db/migrations/02*.sql; do
+# Il glob copre anche le decine successive (030, 040, …): la 031 restava
+# fuori con il vecchio «02*» e l'app partiva con colonne mancanti (7.9.2026).
+for m in db/migrations/019_*.sql db/migrations/0[2-9]*.sql; do
   [ -f "$m" ] && psql referralflow -q -f "$m" > /dev/null 2>&1 || true
 done
 
