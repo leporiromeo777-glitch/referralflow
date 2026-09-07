@@ -72,29 +72,72 @@ function espandi(xml: string, chiave: string, valore: string): string {
 // riga che non finisce con un segno di fine frase scorre in quella dopo;
 // una riga vuota, un titolo di sezione (riga corta senza punto finale
 // seguita da testo) o una voce di elenco chiudono il paragrafo.
+// Abbreviazioni col punto che NON chiudono la frase: «Dr.», «med.»,
+// «Prof.», «Sig.ra», «ecc.»… Senza, la firma «Dr. med. Marco Moccetti»
+// salvata su tre righe da una vecchia revisione usciva su tre paragrafi.
+const ABBREVIAZIONE = /(?:^|\s)(?:dr|dott|dr\.ssa|dott\.ssa|med|prof|sig|sig\.ra|ecc|es|ca|art|tel|n|p|pag|vs|approx)\.$/i;
+const SALUTO = /^(car[oaie]|gentil[ei]|egregi[oaie]|stimat[oaie]|spett\.?)\b/i;
+
+// «Caro collega, ho rivisto…» su una sola riga → il saluto («Caro collega,»)
+// va sulla sua riga e il resto scorre nel corpo. Restituisce [saluto, resto]
+// o null se la riga non è un saluto seguito da testo.
+function staccaSaluto(r: string): [string, string] | null {
+  if (!SALUTO.test(r)) return null;
+  const m = /^([^,]{2,60},)\s+(\S[\s\S]*)$/.exec(r);
+  if (!m) return null;
+  // Il saluto non contiene numeri né punti, salvo quelli delle abbreviazioni
+  // («Gentile Dr. med. Rossi,» sì; «Caro collega, oggi 12.03.2026» no).
+  const saluto = m[1];
+  if (/[.\d]/.test(saluto.replace(/\b(dr|dott|prof|sig|med|ssa|ra)\./gi, ''))) return null;
+  return [saluto, m[2]];
+}
+
 export function ricomponiParagrafi(testo: string): string {
   const righe = testo.replace(/\r\n/g, '\n').split('\n');
   const out: string[] = [];
   let buf = '';
+  // Dopo il saluto finale («Cordiali saluti.») vengono solo righe di firma:
+  // ognuna resta sulla sua riga («Dr. med. Marco Moccetti» / «(partito dopo
+  // dettatura)»), non scorrono l'una nell'altra.
+  let dopoSaluto = false;
   const chiudi = () => {
     if (buf.trim()) out.push(buf.trim());
     buf = '';
   };
   for (let i = 0; i < righe.length; i++) {
-    const r = righe[i].trim();
+    let r = righe[i].trim();
     if (!r) {
       chiudi();
       out.push('');
       continue;
     }
-    const elenco = /^([-•*]|\d{1,2}[.)])\s/.test(r);
-    // Saluto d'apertura di una lettera («Caro collega,», «Gentile Dottoressa Rossi,»):
-    // resta sulla sua riga, non scorre nel corpo (visto dal vivo 2026-09-07).
-    if (/^(car[oaie]|gentil[ei]|egregi[oaie]|stimat[oaie]|spett\.?)\b.*,$/i.test(r) && r.length <= 80) {
-      chiudi();
-      out.push(r);
+    if (dopoSaluto) {
+      buf = buf ? `${buf} ${r}` : r;
+      if (!ABBREVIAZIONE.test(r)) chiudi();
       continue;
     }
+    if (/^(cordiali|con i migliori|distinti|un caro saluto)\b/i.test(r) && /[.,!]$/.test(r)) {
+      chiudi();
+      out.push(r);
+      dopoSaluto = true;
+      continue;
+    }
+    // Saluto d'apertura di una lettera («Caro collega,», «Gentile Dottoressa Rossi,»):
+    // resta sulla sua riga, non scorre nel corpo (visto dal vivo 2026-09-07).
+    // Se il corpo gli è attaccato sulla stessa riga, si stacca.
+    if (!buf) {
+      const st = staccaSaluto(r);
+      if (st) {
+        chiudi();
+        out.push(st[0]);
+        r = st[1];
+      } else if (SALUTO.test(r) && /,$/.test(r) && r.length <= 80) {
+        chiudi();
+        out.push(r);
+        continue;
+      }
+    }
+    const elenco = /^([-•*]|\d{1,2}[.)])\s/.test(r);
     const titolo = r.length <= 40 && !/[.:;,!?]$/.test(r) && /^[A-ZÀ-Ý]/.test(r)
       && i + 1 < righe.length && righe[i + 1].trim() !== '' && !buf;
     if (elenco || titolo) {
@@ -103,7 +146,9 @@ export function ricomponiParagrafi(testo: string): string {
       continue;
     }
     buf = buf ? `${buf} ${r}` : r;
-    if (/[.!?»)]$/.test(r) || /:$/.test(r)) chiudi();
+    // Una riga che finisce con un'abbreviazione («Dr.», «med.») continua
+    // in quella dopo: «Dr.» / «med.» / «Marco Moccetti» → una riga sola.
+    if ((/[.!?»)]$/.test(r) || /:$/.test(r)) && !ABBREVIAZIONE.test(r)) chiudi();
   }
   chiudi();
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();

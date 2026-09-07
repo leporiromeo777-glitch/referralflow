@@ -36,11 +36,15 @@ function spezzaInFrasi(testo: string): string[] {
         corrente = '';
       }
     }
-    if (corrente) {
+    // A fine riga la frase si chiude, salvo se finisce con un'abbreviazione
+    // («Dr.» / «med.» / «Marco Moccetti» su tre righe di un testo salvato
+    // da una vecchia revisione tornano una frase sola).
+    if (corrente && !ABBREVIAZIONE.test(corrente.trim())) {
       pezzi.push(corrente);
       corrente = '';
     }
   }
+  if (corrente) pezzi.push(corrente);
   return pezzi.filter((p) => p.trim());
 }
 
