@@ -12,6 +12,7 @@ import { AudioDettato } from '../AudioDettato';
 import { TestoDettato } from '../TestoDettato';
 import { RevisioneGuidata } from './RevisioneGuidata';
 import RiorganizzaAI from './RiorganizzaAI';
+import { formatoPerBozza } from '@/lib/referti-medici';
 import { RiascoltaChip } from '../RiascoltaChip';
 import { tempoDiFrase } from '@/lib/referti-tempi';
 
@@ -50,7 +51,7 @@ type Payload = {
   richiamo?: { mesi: number; referral_id: string; creato_at: string };
   manifesto?: Record<string, unknown>;
   // Chi ha dettato (profilo scelto al caricamento, medici.json sul Mac).
-  medico?: { id: string; nome: string; modalita?: 'lettera' | 'aggiornamento'; atempo?: number | null } | null;
+  medico?: { id: string; nome: string; modalita?: 'lettera' | 'aggiornamento'; formato?: 'rapporto' | 'lettera'; atempo?: number | null } | null;
 };
 
 // Evidenzia i frammenti segnalati dentro il testo: prima occorrenza di ogni
@@ -182,6 +183,8 @@ export default async function RefertoBozza({
     'select id, filename from referti_audio where bozza_id = $1 and studio_id = $2',
     [params.id, session.studioId]
   );
+  // Formato standard del medico che ha dettato (bottone «Riorganizza»).
+  const formatoReferto = await formatoPerBozza(session.studioId, row.payload.medico ?? null);
   const fileIdBase = String((row.payload as any)?.file_id ?? '').replace(/-ombra(?:-[a-z0-9.-]+)?$/, '');
   if (!audio && row.payload.ombra && fileIdBase) {
     [audio] = await query<{ id: string; filename: string }>(
@@ -404,6 +407,12 @@ export default async function RefertoBozza({
       )}
       {searchParams.err === 'testo' && (
         <p className="error">Il testo del referto non può essere vuoto.</p>
+      )}
+      {searchParams.ok === 'salvato' && (
+        <div className="card notice"><p>
+          Modifiche inserite nel referto ✓ — la bozza resta da confermare: puoi
+          continuare la revisione o confermarla quando vuoi.
+        </p></div>
       )}
       {searchParams.ok === 'strutturato' && (
         <div className="card notice"><p>
@@ -805,7 +814,7 @@ export default async function RefertoBozza({
                 comprese le correzioni non ancora confermate. Il lavoro dura
                 minuti (modello locale): il componente mostra la percentuale
                 interrogando /api/referti/struttura. */}
-            <RiorganizzaAI bozzaId={row.id} />
+            <RiorganizzaAI bozzaId={row.id} formato={formatoReferto} />
           </div>
         </form>
       ) : (

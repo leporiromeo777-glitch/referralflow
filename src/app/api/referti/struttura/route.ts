@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
 import { avviaRiorganizzazione, statoRiorganizzazione } from '@/lib/referto-struttura';
+import { formatoPerBozza } from '@/lib/referti-medici';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -44,13 +45,15 @@ export async function POST(req: NextRequest) {
   if (!testo) return NextResponse.json({ errore: 'testo_mancante' }, { status: 400 });
 
   const studioId = session.studioId;
+  // Formato del medico che ha dettato (rapporto a sezioni o lettera).
+  const formato = await formatoPerBozza(studioId, b.payload?.medico ?? null);
   const avviato = avviaRiorganizzazione(id, testo, async (nuovo) => {
     await query(
       `update referti_bozze set testo_finale = $3
         where id = $1 and studio_id = $2 and stato = 'bozza'`,
       [id, studioId, nuovo]
     );
-  });
+  }, formato);
   // Già in corso = va bene lo stesso: la pagina si aggancia al lavoro vivo.
   return NextResponse.json({ avviato }, { status: avviato ? 202 : 200 });
 }

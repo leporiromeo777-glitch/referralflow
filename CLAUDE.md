@@ -314,6 +314,13 @@ bozza; Word in carta intestata col nome di chi ha dettato. Modalità
 con l'ultima lettera confermata dello stesso paziente (`fusioneAutomatica`
 in `api/referti/bozza`, `fusione.automatica=true`, sempre e solo proposta).
 Modalità `lettera` (Moccetti): scheda «Lettera precedente» ripiegata.
+`formato` per medico (7.9.2026): `rapporto` (sezioni, Moschovitis) o `lettera`
+(«Caro <medico>,» / corpo / saluto — Moccetti): `PROMPT_LETTERA` in
+`src/lib/referto-struttura.ts`, scelto da `formatoPerBozza()` (profilo
+pubblicato → payload.medico.formato → rapporto); il bottone si chiama
+«Impagina come lettera (AI)». Nell'ultimo passo della revisione guidata c'è
+«Inserisci nel referto (salva senza confermare)» (`salvaTesto`, evento
+`testo_salvato`).
 `REFERTI_ATEMPO` a mano vince sul profilo (esperimenti). Prova richiesta
 dall'utente: Moccetti parla molto veloce → `bash pipeline-referti/prova-atempo.sh
 <audio> moccetti` prova 0.7, 0.6 E 0.5 (una corsa per valore, bozze ombra

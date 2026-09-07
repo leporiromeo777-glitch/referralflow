@@ -44,13 +44,18 @@ function manifestoPulito(m: unknown): Record<string, unknown> {
 
 // Chi ha dettato (profilo scelto al caricamento, medici.json sul Mac): id,
 // nome, modalità di lavoro e rallentamento usato. Solo etichette.
-function medicoPulito(m: unknown): { id: string; nome: string; modalita: 'lettera' | 'aggiornamento'; atempo: number | null } | null {
+function medicoPulito(m: unknown): { id: string; nome: string; modalita: 'lettera' | 'aggiornamento'; formato: 'rapporto' | 'lettera'; atempo: number | null } | null {
   if (!m || typeof m !== 'object' || Array.isArray(m)) return null;
   const id = String((m as any).id ?? '').trim().toLowerCase();
   if (!id || id.length > 32 || !RX_MEDICO_ID.test(id)) return null;
   const nome = String((m as any).nome ?? id).trim().slice(0, 80) || id;
   const atempo = typeof (m as any).atempo === 'number' && Number.isFinite((m as any).atempo) ? (m as any).atempo : null;
-  return { id, nome, modalita: (m as any).modalita === 'aggiornamento' ? 'aggiornamento' : 'lettera', atempo };
+  return {
+    id, nome,
+    modalita: (m as any).modalita === 'aggiornamento' ? 'aggiornamento' : 'lettera',
+    formato: (m as any).formato === 'lettera' ? 'lettera' : 'rapporto',
+    atempo,
+  };
 }
 
 export async function POST(req: NextRequest) {

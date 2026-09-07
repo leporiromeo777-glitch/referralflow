@@ -18,7 +18,7 @@ const MESSAGGI: Record<string, string> = {
   ai_non_risponde: "L'AI locale non ha risposto: riprova tra qualche minuto.",
 };
 
-export default function RiorganizzaAI({ bozzaId }: { bozzaId: string }) {
+export default function RiorganizzaAI({ bozzaId, formato = 'rapporto' }: { bozzaId: string; formato?: 'rapporto' | 'lettera' }) {
   const [stato, setStato] = useState<Stato>({ fase: 'fermo' });
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -82,8 +82,11 @@ export default function RiorganizzaAI({ bozzaId }: { bozzaId: string }) {
 
   return (
     <span style={{ display: 'inline-flex', flexDirection: 'column', gap: 6 }}>
-      <button className="btn" type="button" onClick={avvia}>
-        Riorganizza nel formato standard (AI)
+      <button className="btn" type="button" onClick={avvia}
+        title={formato === 'lettera'
+          ? 'Formato del medico: «Caro …,», a capo, il corpo della lettera, a capo, il saluto'
+          : 'Formato del medico: rapporto-tipo a sezioni (diagnosi, anamnesi, terapia, esami, valutazione, procedere)'}>
+        {formato === 'lettera' ? 'Impagina come lettera (AI)' : 'Riorganizza nel formato standard (AI)'}
       </button>
       {stato.fase === 'errore' && (
         <span className="muted small" role="alert">{stato.messaggio}</span>

@@ -135,6 +135,8 @@ def carica_medici() -> list[dict]:
         modalita = str(v.get("modalita") or "lettera").strip().lower()
         if modalita not in MODALITA_MEDICO:
             modalita = "lettera"
+        # Forma standard del referto: rapporto a sezioni o lettera semplice.
+        formato = "lettera" if str(v.get("formato") or "").strip().lower() == "lettera" else "rapporto"
         nome = str(v.get("nome") or mid).strip()[:80]
         visti.add(mid)
         fuori.append({
@@ -142,6 +144,7 @@ def carica_medici() -> list[dict]:
             "nome": nome,
             "breve": str(v.get("breve") or nome).strip()[:40],
             "modalita": modalita,
+            "formato": formato,
             "atempo": atempo,
             "atempo_prova": prove[0] if prove else None,
             "atempo_prove": prove,
@@ -6652,8 +6655,12 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # PROPOSTA già impaginata come il rapporto-tipo — in pagina si
         # applica con un clic. Il testo ufficiale resta `finale`.
         testo_strutturato: str | None = None
+        # La proposta a sezioni vale per il formato «rapporto»; chi ha il
+        # formato «lettera» (Caro …, corpo, saluto) la ottiene dal bottone
+        # in pagina, che conosce il suo formato.
         if (not visita and _esterno_attivo() == "openai"
-                and (_config_esterno() or {}).get("struttura") == "1"):
+                and (_config_esterno() or {}).get("struttura") == "1"
+                and (medico or {}).get("formato", "rapporto") == "rapporto"):
             fase = "struttura"
             _ = notifica and notifica(fase)
             testo_strutturato = struttura_standard(finale, file_id)
@@ -6823,7 +6830,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # mostra, mette il suo nome in carta intestata e — in modalità
         # «aggiornamento» — chiede da sola la fusione con la lettera precedente.
         "medico": ({"id": medico["id"], "nome": medico["nome"], "modalita": medico["modalita"],
-                    "atempo": atempo_corsa()} if medico else None),
+                    "formato": medico["formato"], "atempo": atempo_corsa()} if medico else None),
         "testo_corretto": nota_visita if nota_visita else finale,
         "note_segreteria": note_segreteria,
         "campi_estratti": campi,
@@ -7009,12 +7016,12 @@ def pubblica_medici() -> None:
     if not FLOW_URL or not FLOW_TOKEN:
         return
     medici = carica_medici()
-    impronta = tuple((m["id"], m["nome"], m["breve"], m["modalita"]) for m in medici)
+    impronta = tuple((m["id"], m["nome"], m["breve"], m["modalita"], m["formato"]) for m in medici)
     if impronta == _MEDICI_PUBBLICATI or time.monotonic() < _MEDICI_RIPROVA_DOPO:
         return
     _MEDICI_RIPROVA_DOPO = time.monotonic() + 600
     corpo = json.dumps({"medici": [
-        {"id": m["id"], "nome": m["nome"], "breve": m["breve"], "modalita": m["modalita"]}
+        {"id": m["id"], "nome": m["nome"], "breve": m["breve"], "modalita": m["modalita"], "formato": m["formato"]}
         for m in medici]}, ensure_ascii=False).encode("utf-8")
     try:
         req = urllib.request.Request(

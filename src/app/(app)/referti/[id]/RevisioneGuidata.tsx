@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { salvaTesto } from '../actions';
 
 // Revisione guidata della bozza (2026-08-25, su richiesta dell'utente: la
 // pagina «tutto insieme» era diventata incasinata): un passo alla volta,
@@ -925,6 +926,19 @@ export function RevisioneGuidata({
             la casella.
           </p>
         )}
+        {/* Salva il testo di questa casella nel referto SENZA confermare
+            (2026-09-07): ciò che si aggiunge o si cambia qui entra subito
+            nel referto — testo in cima, Word, PDF — e la revisione può
+            continuare. formNoValidate: la presa d'atto del gate vale solo
+            per la conferma vera. */}
+        <div className="rg-azioni" style={{ marginTop: 10 }}>
+          <button type="submit" className="btn" formAction={salvaTesto} formNoValidate>
+            💾 Inserisci nel referto (salva senza confermare)
+          </button>
+          <span className="muted small">
+            Le modifiche fatte qui vengono salvate nel referto; la conferma resta il passo finale.
+          </span>
+        </div>
       </div>
 
       <div className="rg-nav">

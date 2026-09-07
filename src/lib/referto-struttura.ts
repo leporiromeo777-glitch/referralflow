@@ -50,6 +50,33 @@ Regole obbligatorie:
 TESTO:
 {testo}`;
 
+// Formato «lettera» (dr. Moccetti, richiesta dell'utente 2026-09-07): niente
+// sezioni — «Caro <medico>,», a capo, il corpo della lettera, a capo, il
+// saluto. Stesse regole ferree: nulla di inventato, numeri identici.
+const PROMPT_LETTERA = `Sei un assistente che mette in bella copia lettere mediche dettate a voce da un cardiologo a un collega. Riscrivi il TESTO qui sotto come LETTERA con ESATTAMENTE questa forma:
+
+1. PRIMA RIGA: il saluto di apertura «Caro <titolo e nome del medico destinatario>,» (o «Cara …,» se il testo indica una dottoressa). Il destinatario è quello che il testo nomina (per esempio dopo «caro collega», «cara dottoressa Rossi», «al dottor Bianchi»); se il testo non nomina nessuno, scrivi «Caro collega,». Non inventare nomi.
+2. Una riga vuota.
+3. IL CORPO DELLA LETTERA: tutto il contenuto clinico dettato, in prosa scorrevole divisa in paragrafi sensati (motivo della visita, anamnesi, esami, valutazione, proposta). Punteggiatura corretta, maiuscole a inizio frase, frasi complete — SENZA mai cambiare il significato né aggiungere informazioni. Niente titoli di sezione, niente elenchi puntati, niente numerazione.
+4. Una riga vuota.
+5. IL SALUTO FINALE: quello dettato (per esempio «Cordiali saluti» o «Con i migliori saluti») seguito dalla firma se dettata; se il testo non ha un saluto finale, scrivi «Cordiali saluti,» e basta.
+
+Regole obbligatorie:
+- NON inventare MAI nulla: niente diagnosi, valori, esami o frasi che non siano già nel testo.
+- Conserva TUTTI i numeri ESATTAMENTE come sono scritti (valori, date, dosaggi, unità): non aggiungerne, non toglierne, non riformattarli.
+- Le istruzioni rivolte alla segretaria («scrivi a…», «manda copia a…») restano fuori dalla lettera.
+- Ripara i resti dei tagli fatti in revisione: apostrofi orfani, congiunzioni appese, doppi spazi, frasi che iniziano a metà. Un frammento senza NESSUNA informazione clinica può essere tolto; se contiene un dato, va ricucito nella frase più vicina.
+- Rispondi SOLO con la lettera, senza commenti né spiegazioni.
+
+TESTO:
+{testo}`;
+
+export type FormatoReferto = 'rapporto' | 'lettera';
+
+function promptPer(formato: FormatoReferto): string {
+  return formato === 'lettera' ? PROMPT_LETTERA : PROMPT;
+}
+
 function firmaNumerica(testo: string): string {
   // La numerazione d'elenco a inizio riga («1. », «2. »…) non conta: è il
   // formato stesso a chiederla, non è un valore clinico. Tutti gli altri
@@ -67,7 +94,8 @@ export type EsitoStruttura =
 
 export async function riorganizzaReferto(
   testo: string,
-  avanzamento?: (percento: number) => void
+  avanzamento?: (percento: number) => void,
+  formato: FormatoReferto = 'rapporto'
 ): Promise<EsitoStruttura> {
   const originale = testo.slice(0, TESTO_MAX);
   let risposta = '';
@@ -77,7 +105,7 @@ export async function riorganizzaReferto(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: MODELLO,
-        prompt: PROMPT.replace('{testo}', originale),
+        prompt: promptPer(formato).replace('{testo}', originale),
         // Streaming: serve solo a misurare l'avanzamento (il testo
         // riorganizzato è lungo circa quanto l'originale, quindi i
         // caratteri già prodotti sono una percentuale onesta).
@@ -153,7 +181,8 @@ export function statoRiorganizzazione(bozzaId: string): StatoLavoro | null {
 export function avviaRiorganizzazione(
   bozzaId: string,
   testo: string,
-  salva: (testo: string) => Promise<void>
+  salva: (testo: string) => Promise<void>,
+  formato: FormatoReferto = 'rapporto'
 ): boolean {
   const gia = lavori.get(bozzaId);
   if (gia?.stato === 'lavora') return false;
@@ -162,7 +191,7 @@ export function avviaRiorganizzazione(
     const esito = await riorganizzaReferto(testo, (percento) => {
       const l = lavori.get(bozzaId);
       if (l?.stato === 'lavora') l.percento = Math.max(l.percento, percento);
-    });
+    }, formato);
     if (esito.ok) {
       try {
         await salva(esito.testo);

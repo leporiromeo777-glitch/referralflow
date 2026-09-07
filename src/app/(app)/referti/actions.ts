@@ -21,6 +21,30 @@ const MAX_SUGGERIMENTI = 30;
 
 const MAX_TESTO = 200_000;
 
+// «Inserisci nel referto» (2026-09-07, richiesta dell'utente mentre rivede):
+// salva il testo com'è nell'ultimo passo della revisione guidata SENZA
+// confermare la bozza. Le modifiche entrano nel referto (testo in cima,
+// Word, PDF, punto di partenza di fusione e riorganizzazione) e la revisione
+// può continuare più tardi. Solo sulle bozze aperte; evento registrato.
+export async function salvaTesto(formData: FormData) {
+  const session = await getSession();
+  if (!session || !session.studioId) redirect('/login');
+  const id = String(formData.get('id') ?? '');
+  if (!isUuid(id)) redirect('/referti');
+  const testo = String(formData.get('testo') ?? '').slice(0, MAX_TESTO);
+  if (!testo.trim()) redirect(`/referti/${id}?err=testo`);
+  await query(
+    `update referti_bozze set testo_finale = $3
+      where id = $1 and studio_id = $2 and stato = 'bozza'`,
+    [id, session.studioId, testo]
+  );
+  await registraEvento(session.studioId, id, 'testo_salvato', session.id, {
+    impronta_testo: impronta(testo), caratteri: testo.length,
+  });
+  revalidatePath(`/referti/${id}`);
+  redirect(`/referti/${id}?ok=salvato`);
+}
+
 export async function confermaBozza(formData: FormData) {
   const session = await getSession();
   if (!session || !session.studioId) redirect('/login');
@@ -362,7 +386,8 @@ export async function riorganizzaBozza(formData: FormData) {
   if (!testo) redirect(`/referti/${id}?err=testo`);
 
   const { riorganizzaReferto } = await import('@/lib/referto-struttura');
-  const esito = await riorganizzaReferto(testo);
+  const { formatoPerBozza } = await import('@/lib/referti-medici');
+  const esito = await riorganizzaReferto(testo, undefined, await formatoPerBozza(session.studioId, b.payload?.medico ?? null));
   if (!esito.ok) redirect(`/referti/${id}?err=struttura_${esito.motivo}`);
 
   await query(

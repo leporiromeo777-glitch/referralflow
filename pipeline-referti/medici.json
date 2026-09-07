@@ -1,5 +1,5 @@
 {
- "_nota": "Profili dei medici che dettano (2026-09-07). La catena si adegua a CHI detta: chi carica un dettato sceglie il medico (pannello locale o pagina Referti) e il nome del file porta il marcatore «medico-<id>--». Qui SOLO nomi di medici e impostazioni tecniche: mai dati di pazienti. Per aggiungere un medico basta una voce nuova; i file facoltativi (vocabolario-<id>.txt, correzioni-<id>.json) vivono accanto a questo e non vengono toccati dagli aggiornamenti. Il servizio pubblica l'elenco alla piattaforma, così la pagina Referti mostra gli stessi nomi.",
+ "_nota": "Profili dei medici che dettano (2026-09-07). «formato» = forma standard del referto: «rapporto» (rapporto-tipo a sezioni: diagnosi, anamnesi, terapia, esami, valutazione, procedere) oppure «lettera» (Caro <medico>, a capo, corpo, a capo, saluto). La catena si adegua a CHI detta: chi carica un dettato sceglie il medico (pannello locale o pagina Referti) e il nome del file porta il marcatore «medico-<id>--». Qui SOLO nomi di medici e impostazioni tecniche: mai dati di pazienti. Per aggiungere un medico basta una voce nuova; i file facoltativi (vocabolario-<id>.txt, correzioni-<id>.json) vivono accanto a questo e non vengono toccati dagli aggiornamenti. Il servizio pubblica l'elenco alla piattaforma, così la pagina Referti mostra gli stessi nomi.",
  "versione": "2026-09-07",
  "medici": [
   {
@@ -7,6 +7,7 @@
    "nome": "Dr. med. Marco Moccetti",
    "breve": "Moccetti",
    "modalita": "lettera",
+   "formato": "lettera",
    "atempo": 0.8,
    "atempo_prova": [0.7, 0.6, 0.5],
    "vocabolario": "vocabolario-moccetti.txt",
@@ -18,6 +19,7 @@
    "nome": "Dr. med. Giorgio Moschovitis",
    "breve": "Moschovitis",
    "modalita": "aggiornamento",
+   "formato": "rapporto",
    "atempo": 0.8,
    "vocabolario": "vocabolario-moschovitis.txt",
    "correzioni": "correzioni-moschovitis.json",
