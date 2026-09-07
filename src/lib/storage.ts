@@ -42,6 +42,26 @@ export async function putFile(buffer: Buffer, contentType: string, ext: string):
   return key;
 }
 
+// Scrittura con chiave scelta dal chiamante (file derivati: es. il WAV di
+// riascolto accanto all'originale del dittafono, chiave «<originale>.wav»).
+export async function putFileAtKey(key: string, buffer: Buffer, contentType: string): Promise<void> {
+  if (s3) {
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: process.env.S3_BUCKET,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+        ...(process.env.S3_SSE ? { ServerSideEncryption: process.env.S3_SSE as 'AES256' } : {}),
+      })
+    );
+    return;
+  }
+  const full = path.join(LOCAL_DIR, key);
+  await fs.mkdir(path.dirname(full), { recursive: true });
+  await fs.writeFile(full, buffer);
+}
+
 // Cancellazione definitiva (es. eliminazione di una bozza scartata con il suo
 // audio). Best-effort: un file già assente non è un errore.
 export async function deleteFile(key: string): Promise<void> {

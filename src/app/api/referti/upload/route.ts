@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { putFile } from '@/lib/storage';
 import { mediciDelloStudio } from '@/lib/referti-medici';
+import { ESTENSIONI_DITTAFONO, wavDaDittafono } from '@/lib/dittafono';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -54,6 +55,10 @@ export async function POST(req: NextRequest) {
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const key = await putFile(buffer, TIPI[ext], ext);
+  // File del dittafono: il WAV di riascolto si prepara subito in sottofondo
+  // (decoder locale), così il player nel dettaglio parte senza attese.
+  // Best-effort: se fallisce, la rotta audio riprova alla prima richiesta.
+  if (ESTENSIONI_DITTAFONO.has(ext)) void wavDaDittafono(key, buffer);
   const [row] = await query<{ id: string }>(
     `insert into referti_audio (studio_id, filename, storage_key, content_type, uploaded_by, tipo, medico)
      values ($1, $2, $3, $4, $5, $6, $7) returning id`,
