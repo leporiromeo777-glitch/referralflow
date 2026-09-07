@@ -7019,6 +7019,17 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                 log.info(
                     "fase=tempi file=%s orologio=mappa_vad segmenti=%d giuntura=%.3f",
                     file_id, len(seg_vad), giuntura)
+            elif file_id in _TEMPI_SENZA_VAD:
+                # Corsa di recupero SENZA VAD: i tempi di whisper sono già
+                # sull'orologio pieno del WAV rallentato, basta togliere il
+                # rallentamento. Le ancore servono a raddrizzare l'orologio
+                # COMPATTO: qui lo storcerebbero, e il clic su una parola
+                # porterebbe più avanti nell'audio (visto dal vivo 2026-09-07).
+                parole_audio = parole_da_json(percorso(".json"))
+                if atempo_corsa() != 1.0:
+                    parole_audio = [(w, t * atempo_corsa()) for w, t in parole_audio]
+                log.info("fase=tempi file=%s orologio=pieno_senza_vad parole=%d",
+                         file_id, len(parole_audio))
             else:
                 # Ripiego (JSON della B assente): vecchio metodo ad ancore.
                 parole_audio = parole_da_json(percorso(".json"))

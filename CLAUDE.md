@@ -391,7 +391,10 @@ copertura audio 288 s su 288 — e se la A resta corta il referto porta un
 avviso in evidenza, le omissioni si cercano contro la passata B e il
 manifesto scende a «minimo» («trascrizione principale completa» tra i
 componenti mancanti). I tempi della corsa recuperata sono già sull'orologio
-pieno (`_TEMPI_SENZA_VAD`: niente decompattazione). Casi 20-21 nella suite.
+pieno (`_TEMPI_SENZA_VAD`): niente decompattazione E niente ritaratura ad
+ancore — basta togliere l'atempo. Senza questo secondo pezzo il clic su una
+parola portava PIÙ AVANTI nell'audio (ultima parola a 385 s su 289 s di
+registrazione, visto dal vivo 2026-09-07). Casi 20-21 nella suite.
 La rilavorazione di una bozza scartata azzera anche `revisione_stato`.
 
 Fase «doppioni» (7.9.2026, richiesta utente): `togli_doppioni()` in
