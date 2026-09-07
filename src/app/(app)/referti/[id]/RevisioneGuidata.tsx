@@ -131,7 +131,7 @@ export function RevisioneGuidata({
   avvisi?: string[];
   rischioFrasi?: { frase: string; punteggio: number; motivi?: string[]; gravita?: string; supporto?: string; fonte?: string[] }[];
   numeri?: { valore: string; unita?: string; frase?: number | null; secondo?: number | null; confermato?: boolean | null }[];
-  frasiOmesse?: { frase: string; secondo?: number | null; cifre?: boolean; farmaco?: boolean; copertura?: number | null }[];
+  frasiOmesse?: { frase: string; pulita?: string; secondo?: number | null; cifre?: boolean; farmaco?: boolean; copertura?: number | null }[];
   variazioni?: { misura: string; prima: string; dopo: string; grande?: boolean }[];
   letteraPrecedente?: string;
   livelloVerifica?: string;
@@ -849,7 +849,11 @@ export function RevisioneGuidata({
                       🎧 Riascolta qui ({mmss(o.secondo)})
                     </button>
                   )}
-                  <button type="button" className="btn" onClick={() => inserisciNota(o.frase, `o${o.k}`)}>
+                  {/* Si rimette la versione PULITA della frase grezza: la
+                      punteggiatura dettata a parole («due punti», «chiusa
+                      parentesi») e le correzioni del dizionario sono già
+                      applicate (2026-09-08). */}
+                  <button type="button" className="btn" onClick={() => inserisciNota(o.pulita || o.frase, `o${o.k}`)}>
                     ↩︎ Inserisci nel testo
                   </button>
                   <button type="button" className="btn btn-ghost" onClick={() => segna(`o${o.k}`)}>

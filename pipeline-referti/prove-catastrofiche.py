@@ -390,6 +390,20 @@ def _prova_23() -> None:
     assert any(d.get("pesanti") for d in div), div
 
 
+@caso("24 · «barra» dettata diventa / e le omissioni tornano pulite")
+def _prova_24() -> None:
+    t, n = m.punteggiatura_dettata("vena su RPLA barra RIVP")
+    assert "RPLA/RIVP" in t, t
+    # Le frasi omesse portano la versione pulita: chi le rimette nel referto
+    # non si ritrova la punteggiatura scritta a parole (2026-09-08).
+    grezzo = "Il paziente sta bene. Tabagismo pregresso tra parentesi stoppa due punti cumulativo chiusa parentesi virgola."
+    finale = "Il paziente sta bene."
+    omesse = m.rileva_omissioni(grezzo, finale, [], [], "prova-24", [])
+    assert omesse, omesse
+    pulita = omesse[0].get("pulita", omesse[0]["frase"])
+    assert "due punti" not in pulita and "chiusa parentesi" not in pulita, pulita
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0

@@ -1880,6 +1880,9 @@ _PUNT_LOCUZIONI: list[tuple[re.Pattern, str]] = [
     # storpia «virgola» dettata in fretta.
     (re.compile(r"\b(?:virgola|vergola)\b", re.IGNORECASE), _PUNT_M + ","),
     (re.compile(r"[ \t]*\btrattino\b[ \t]*", re.IGNORECASE), "-"),
+    # «RPLA barra RIVP» → «RPLA/RIVP» (dettata come gli altri segni: visto
+    # dal vivo 2026-09-08 nel referto dei bypass).
+    (re.compile(r"[ \t]*\bbarra\b[ \t]*", re.IGNORECASE), "/"),
 ]
 # «punto» da solo è ambiguo («dal punto di vista», «a questo punto», «punto
 # di repere»): diventa segno solo se NON preceduto da articoli/dimostrativi
@@ -6111,7 +6114,7 @@ def scadenza_dataset_audio() -> None:
 
 
 def rileva_omissioni(grezzo: str, finale: str, note: list, parole_audio: list,
-                     file_id: str) -> list[dict]:
+                     file_id: str, sostituzioni: list | None = None) -> list[dict]:
     """Frasi del DETTATO GREZZO che non si ritrovano nel referto né nelle note
     per la segreteria (2026-09-06, analisi dei concorrenti: gli scribe
     omettono più di quanto inventino e nessuno mostra il controllo inverso
@@ -6148,8 +6151,21 @@ def rileva_omissioni(grezzo: str, finale: str, note: list, parole_audio: list,
         cifre = bool(re.search(r"\d", f))
         farm = any(w in farmaci for w in sig)
         secondo = next((tempi[re.sub(r"\W+", "", w)] for w in sig if re.sub(r"\W+", "", w) in tempi), None)
+        # Versione PULITA della frase grezza: chi la rimette nel referto dal
+        # wizard non deve ritrovarsi «due punti», «chiusa parentesi» o
+        # «virgola» scritti a parole (visto dal vivo 2026-09-08: due
+        # frammenti rimessi a mano hanno riportato la punteggiatura dettata).
+        pulita = f
+        try:
+            pulita, _ = punteggiatura_dettata(pulita)
+            if sostituzioni:
+                pulita, _ = applica_correzioni(pulita, sostituzioni)
+            pulita = pulita.strip()
+        except Exception:  # noqa: BLE001 — la pulizia non blocca mai
+            pulita = f
         omesse.append({"frase": f[:400], "secondo": secondo, "cifre": cifre, "farmaco": farm,
-                       "copertura": round(migliore, 2)})
+                       "copertura": round(migliore, 2),
+                       **({"pulita": pulita[:400]} if pulita and pulita != f else {})})
     omesse.sort(key=lambda o: (-(o["cifre"] or o["farmaco"]), o["copertura"]))
     log.info("fase=omissioni file=%s grezze=%d omesse=%d con_cifre=%d", file_id,
              len(_spezza_frasi_wizard(grezzo)), len(omesse), sum(1 for o in omesse if o["cifre"]))
@@ -7248,7 +7264,8 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             # Con la A collassata il metro è la B: è l'unica ad avere il
             # dettato intero, e chi rivede deve vedere che cosa manca.
             sorgente = grezzo_b if file_id in _COLLASSO_A else grezzo_a
-            omesse = rileva_omissioni(sorgente, finale, note_segreteria, parole_audio, file_id)
+            omesse = rileva_omissioni(sorgente, finale, note_segreteria, parole_audio,
+                                      file_id, sostituzioni)
             payload["frasi_omesse"] = omesse
             gravi = [o for o in omesse if o["cifre"] or o["farmaco"]]
             if gravi:

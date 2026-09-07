@@ -25,7 +25,10 @@
     "beta-blocco": "betablocco",
     "ezetimiba": "Ezetimibe",
     "ezetimibo": "Ezetimibe",
-    "inibitore pcsk9": "inibitore del PCSK9"
+    "inibitore pcsk9": "inibitore del PCSK9",
+    "coro-tac": "CoroTAC",
+    "coro tac": "CoroTAC",
+    "corotac": "CoroTAC"
   },
   "linguaggio_comune": {
     "non ritorno sull'analisi": "non ritorno sull'anamnesi",
@@ -34,7 +37,15 @@
     "a disposizione tu e": "a disposizione Tua e",
     "quando è già presente nei miei incarti": "in quanto già presente nei miei incarti",
     "quando è già presente": "in quanto già presente",
-    "quando già presente": "in quanto già presente"
+    "quando già presente": "in quanto già presente",
+    "tucarografico": "elettrocardiografico",
+    "prioricamente": "periodicamente",
+    "sintomatologia scrivibile": "sintomatologia ascrivibile",
+    "confermatata": "confermata",
+    "cardioreabilitazione": "cardioriabilitazione",
+    "e gli giunge": "egli giunge",
+    "per salto all'episodio": "per saltuari episodi",
+    "salto all'episodio": "saltuari episodi"
   },
   "stile": {
     "Cordiali saluti": "Cordiali e collegiali saluti"

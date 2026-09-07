@@ -430,6 +430,23 @@ presente» → «in quanto già presente», e `numeriDiTempoInCifre` normalizza
 anche gli intervalli («fra due o 3 settimane» → «fra 2-3 settimane»).
 Casi 23 nella suite.
 
+Quinto confronto (8.9.2026, doc 29 catena vs 30 segretaria): il Word della
+catena era il testo della REVISIONE, non una lettera — «Impagina come
+lettera» non era stato premuto, quindi niente saluto, niente firma e le
+istruzioni parlate alla segreteria ancora dentro. Difetti veri trovati e
+corretti: «barra» dettata non diventava «/» («RPLA barra RIVP»); le frasi
+omesse rimesse nel referto dal wizard tornavano GREZZE, con la punteggiatura
+dettata a parole («due punti», «chiusa parentesi») — ora `rileva_omissioni`
+porta anche `pulita` (punteggiatura + dizionario) e il bottone «Inserisci nel
+testo» usa quella; dizionario di Moccetti allargato (tucarografico →
+elettrocardiografico, prioricamente → periodicamente, sintomatologia
+scrivibile → ascrivibile, confermatata, cardioriabilitazione, CoroTAC, «e gli
+giunge» → «egli giunge», «salto all'episodio» → «saltuari episodi»). Caso 24
+nella suite. Il blocco dell'ecocardiogramma e la terapia della segretaria NON
+erano nel dettato (vengono dai referti strumentali). La pressione al picco
+160/70 l'aveva sentita solo Voxtral: con la marcatura `pesanti` (distribuita
+poche ore dopo) sarebbe finita nel passo «I due motori non concordano».
+
 Fase «doppioni» (7.9.2026, richiesta utente): `togli_doppioni()` in
 pipeline.py dopo lo stile, prima della struttura. Tre regole: frase identica
 o quasi ripetuta (Jaccard ≥ 0.9, ≥ 3 elementi) → via la seconda;
