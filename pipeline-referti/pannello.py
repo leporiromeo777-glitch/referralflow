@@ -15,6 +15,7 @@ Uso:
 import html
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -29,7 +30,10 @@ QUI = Path(__file__).resolve().parent
 CORREZIONI = QUI / "correzioni.json"
 LOCALI = QUI / "correzioni-locali.json"
 INVIO_CONF = QUI / "invio.conf"
+MEDICI = QUI / "medici.json"
 PORTA = int(os.environ.get("REFERTI_PANNELLO_PORTA", "8737"))
+# Marcatore nel nome del file (stessa regola di pipeline.py: «medico-<id>--»).
+RX_MEDICO_ID = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 SEZIONI = {
     "termini_clinici": "Termine clinico",
     "linguaggio_comune": "Linguaggio comune",
@@ -144,7 +148,14 @@ SCRIPT = """
 const zona = document.getElementById('zona');
 const scelta = document.getElementById('scelta');
 const stato = document.getElementById('statocarico');
+const medico = document.getElementById('medico');
 const ESTENSIONI = %s;
+
+// Chi detta: la scelta resta memorizzata su questo computer (solo l'id).
+if (medico) {
+  try { const m = localStorage.getItem('referti-medico'); if (m && [...medico.options].some(o => o.value === m)) medico.value = m; } catch (e) {}
+  medico.addEventListener('change', () => { try { localStorage.setItem('referti-medico', medico.value); } catch (e) {} });
+}
 
 function estensioneOk(nome) {
   const p = nome.lastIndexOf('.');
@@ -152,13 +163,19 @@ function estensioneOk(nome) {
 }
 
 async function carica(files) {
+  if (medico && !medico.value) {
+    stato.textContent = 'Prima scegli chi ha dettato: la catena si adegua al medico.';
+    medico.focus();
+    return;
+  }
   const buoni = [...files].filter(f => estensioneOk(f.name));
   const scartati = [...files].length - buoni.length;
   let fatti = 0;
   for (const f of buoni) {
     stato.textContent = `Carico ${f.name}… (${fatti + 1}/${buoni.length})`;
     try {
-      const r = await fetch('/carica?nome=' + encodeURIComponent(f.name), { method: 'POST', body: f });
+      const r = await fetch('/carica?nome=' + encodeURIComponent(f.name)
+        + (medico ? '&medico=' + encodeURIComponent(medico.value) : ''), { method: 'POST', body: f });
       if (r.ok) fatti++;
     } catch (e) {}
   }
@@ -199,6 +216,28 @@ def scrivi_locali(dati: dict) -> None:
 
 
 # ── Suggerimenti dal server (imparati dalle conferme) ────────────────────────
+def carica_medici() -> list:
+    """Profili di medici.json (solo id, nome, modalità, atempo): la stessa
+    validazione della catena, in piccolo — un id storto non entra mai nel
+    nome di un file."""
+    dati = leggi_json(MEDICI, {})
+    fuori = []
+    for v in (dati.get("medici") if isinstance(dati, dict) else None) or []:
+        if not isinstance(v, dict):
+            continue
+        mid = str(v.get("id") or "").strip().lower()
+        if not mid or len(mid) > 32 or not RX_MEDICO_ID.fullmatch(mid):
+            continue
+        fuori.append({
+            "id": mid,
+            "nome": str(v.get("nome") or mid).strip()[:80],
+            "breve": str(v.get("breve") or v.get("nome") or mid).strip()[:40],
+            "modalita": "aggiornamento" if v.get("modalita") == "aggiornamento" else "lettera",
+            "atempo": v.get("atempo", 0.8),
+        })
+    return fuori
+
+
 def _conf_invio() -> dict:
     """URL e token di ReferralFlow: da ambiente o da invio.conf (una credenziale,
     resta sul Mac)."""
@@ -282,7 +321,21 @@ def _evidenzia(testo: str, divergenze: list, dubbi: list) -> str:
 # ── Sezioni della pagina unica ───────────────────────────────────────────────
 
 def sez_drop() -> str:
-    return """
+    medici = carica_medici()
+    scelta_medico = ""
+    if medici:
+        opzioni = "".join(
+            f'<option value="{e(m["id"])}">{e(m["nome"])} · '
+            f'{"aggiorna la lettera precedente" if m["modalita"] == "aggiornamento" else "lettera nuova"}'
+            f' · audio ×{e(m["atempo"])}</option>'
+            for m in medici)
+        scelta_medico = f"""
+<div class="card" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+<b>Chi ha dettato?</b>
+<select id="medico" style="flex:1;min-width:260px"><option value="">— scegli il medico —</option>{opzioni}</select>
+<span class="muted">La catena si adegua al medico: rallentamento dell'audio, vocabolario e dizionario suoi, modalità di lavoro. Profili in <code>medici.json</code>.</span>
+</div>"""
+    return scelta_medico + """
 <div class="drop" id="zona">
 <b>Trascina qui i dettati vocali</b>
 memo vocali, m4a, mp3, wav… — finiscono in coda e il servizio li elabora da solo<br>
@@ -349,9 +402,11 @@ def sez_bozze() -> str:
             for a in allarmi if isinstance(a, dict)
         )
         riassunto = f"{len(divergenze)} divergenze · {len(dubbi)} dubbi · {len(allarmi)} allarmi"
+        med = d.get("medico") if isinstance(d.get("medico"), dict) else None
+        chi = f" · {e(med.get('nome') or med.get('id') or '')}" if med else ""
         blocchi += f"""
 <details class="card"><summary>{e(paz)}
-<span class="muted">{e(d.get('timestamp') or '')} · {e(riassunto)}</span></summary>
+<span class="muted">{e(d.get('timestamp') or '')}{chi} · {e(riassunto)}</span></summary>
 {audio_html}
 {'<h2 style="margin-top:14px">⚠ Allarmi numerici</h2><ul>' + righe_allarmi + '</ul>' if righe_allarmi else ''}
 <h2 style="margin-top:14px">Testo del referto</h2>
@@ -523,6 +578,15 @@ class Pannello(BaseHTTPRequestHandler):
             estensione = Path(nome).suffix.lower()
             if not nome or estensione not in TIPI_AUDIO or n <= 0 or n > MAX_CARICO_BYTE:
                 return self._rispondi(b'{"errore":"file_non_valido"}', "application/json", 400)
+            # Chi detta → marcatore in testa al nome (la catena legge da lì).
+            # Con i profili configurati la scelta è obbligatoria; un id
+            # sconosciuto viene rifiutato, mai messo nel nome di un file.
+            mid = (q.get("medico") or [""])[0].strip().lower()
+            medici = {m["id"] for m in carica_medici()}
+            if medici and mid not in medici:
+                return self._rispondi(b'{"errore":"medico_mancante"}', "application/json", 400)
+            if mid in medici:
+                nome = f"medico-{mid}--{nome}"
             ingresso = BASE / "ingresso"
             ingresso.mkdir(parents=True, exist_ok=True)
             if (ingresso / nome).exists():

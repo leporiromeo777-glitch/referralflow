@@ -6,6 +6,7 @@ import { dataOra } from '@/lib/format';
 import { PageHero } from '../PageHero';
 import { UploadDettato } from '../referti/UploadDettato';
 import { ProgressoTrascrizione } from '../referti/ProgressoTrascrizione';
+import { mediciDelloStudio } from '@/lib/referti-medici';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,6 +19,8 @@ export const dynamic = 'force-dynamic';
 export default async function Visite() {
   const session = await getSession();
   if (!session || !session.studioId) redirect('/login');
+  // Chi conduce la visita (stessi profili dei referti dettati).
+  const medici = await mediciDelloStudio(session.studioId);
 
   const bozze = await query<{
     id: string; stato: string; created_at: string; reviewed_at: string | null;
@@ -69,9 +72,9 @@ export default async function Visite() {
         </p>
       </div>
 
-      <UploadDettato tipo="visita" />
+      <UploadDettato tipo="visita" medici={medici} />
 
-      <ProgressoTrascrizione iniziali={inLavorazione} tipo="visita" />
+      <ProgressoTrascrizione iniziali={inLavorazione} tipo="visita" medici={medici} />
 
       <div className="card">
         <h2>Note di visita da rivedere {daRivedere.length > 0 ? `(${daRivedere.length})` : ''}</h2>

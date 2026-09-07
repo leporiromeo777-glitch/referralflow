@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'crypto';
 import { query } from '@/lib/db';
-import { registraEvento } from '@/lib/referti-eventi';
+import { registraEvento, impronta } from '@/lib/referti-eventi';
+import { RX_MEDICO_ID } from '@/lib/referti-medici';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -39,6 +40,17 @@ function manifestoPulito(m: unknown): Record<string, unknown> {
     }
   }
   return out;
+}
+
+// Chi ha dettato (profilo scelto al caricamento, medici.json sul Mac): id,
+// nome, modalità di lavoro e rallentamento usato. Solo etichette.
+function medicoPulito(m: unknown): { id: string; nome: string; modalita: 'lettera' | 'aggiornamento'; atempo: number | null } | null {
+  if (!m || typeof m !== 'object' || Array.isArray(m)) return null;
+  const id = String((m as any).id ?? '').trim().toLowerCase();
+  if (!id || id.length > 32 || !RX_MEDICO_ID.test(id)) return null;
+  const nome = String((m as any).nome ?? id).trim().slice(0, 80) || id;
+  const atempo = typeof (m as any).atempo === 'number' && Number.isFinite((m as any).atempo) ? (m as any).atempo : null;
+  return { id, nome, modalita: (m as any).modalita === 'aggiornamento' ? 'aggiornamento' : 'lettera', atempo };
 }
 
 export async function POST(req: NextRequest) {
@@ -221,8 +233,10 @@ export async function POST(req: NextRequest) {
     // Bozza «ombra» (confronto cieco tra due versioni della catena).
     ombra: body?.ombra === true,
     manifesto: manifestoPulito(body?.manifesto),
+    medico: medicoPulito(body?.medico),
     richiede_revisione: true,
   };
+  const medicoId = payload.medico?.id ?? null;
 
   // Audio caricato dal drag & drop della piattaforma: la bozza vi si collega
   // (per il riascolto) e la voce di coda si chiude. Facoltativo e best-effort.
@@ -242,16 +256,65 @@ export async function POST(req: NextRequest) {
   // Visita registrata o referto dettato: lo dice la pipeline nel payload.
   const tipo = body?.tipo === 'visita' ? 'visita' : 'referto';
 
+  // Modalità «aggiornamento» del medico (2026-09-07, es. dr. Moschovitis,
+  // che detta gli aggiornamenti alla lettera precedente): se nel sistema c'è
+  // l'ultima lettera CONFERMATA dello stesso paziente, la fusione viene
+  // chiesta da sola — la persona la trova già pronta invece di doverla
+  // richiedere. Resta una PROPOSTA: si applica solo con «Applica», con le
+  // stesse guardie (identità, gate temporale). Mai sulle bozze ombra, mai
+  // sulle visite. Best-effort: un intoppo qui non tocca il 201.
+  async function fusioneAutomatica(bozzaId: string) {
+    if (tipo !== 'referto' || payload.ombra || payload.medico?.modalita !== 'aggiornamento') return;
+    const campi = payload.campi_estratti as Record<string, unknown>;
+    const nome = typeof campi?.nome_paziente === 'string' ? campi.nome_paziente.trim() : '';
+    const nascita = typeof campi?.data_nascita === 'string' ? campi.data_nascita.trim() : '';
+    if (!nome || nome.toLowerCase() === 'non indicato') return;
+    try {
+      const [prec] = await query<{ id: string; testo_finale: string }>(
+        `select id, testo_finale
+           from referti_bozze
+          where studio_id = $1 and id <> $2 and stato = 'confermata' and tipo = 'referto'
+            and testo_finale is not null
+            and lower(coalesce(campi_confermati->>'nome_paziente', payload->'campi_estratti'->>'nome_paziente', '')) = lower($3)
+            and ($4 = '' or coalesce(campi_confermati->>'data_nascita', payload->'campi_estratti'->>'data_nascita', '') in ('', $4))
+          order by reviewed_at desc
+          limit 1`,
+        [studio.id, bozzaId, nome, nascita]
+      );
+      const lettera = (prec?.testo_finale ?? '').trim();
+      if (!prec || lettera.length < 200) return;
+      const richiesta = {
+        stato: 'in_attesa',
+        lettera_precedente: lettera.slice(0, MAX_TESTO),
+        richiesta_at: new Date().toISOString(),
+        richiesta_da: null,
+        automatica: true,
+        da_bozza: prec.id,
+      };
+      await query(
+        `update referti_bozze set payload = jsonb_set(payload, '{fusione}', $3::jsonb)
+          where id = $1 and studio_id = $2 and stato = 'bozza'`,
+        [bozzaId, studio.id, JSON.stringify(richiesta)]
+      );
+      await registraEvento(studio.id, bozzaId, 'fusione_richiesta', null, {
+        impronta_lettera: impronta(lettera), caratteri: lettera.length, automatica: true, medico: payload.medico!.id,
+      });
+    } catch (e: any) {
+      console.error('Fusione automatica non avviata:', e?.message || e);
+    }
+  }
+
   const [inserita] = await query<{ id: string }>(
-    `insert into referti_bozze (studio_id, file_id, payload, tipo)
-       values ($1, $2, $3, $4)
+    `insert into referti_bozze (studio_id, file_id, payload, tipo, medico)
+       values ($1, $2, $3, $4, $5)
        on conflict (studio_id, file_id) do nothing
        returning id`,
-    [studio.id, fileId, JSON.stringify(payload), tipo]
+    [studio.id, fileId, JSON.stringify(payload), tipo, medicoId]
   );
   if (inserita) {
     await collega(inserita.id);
-    await registraEvento(studio.id, inserita?.id ?? null, 'bozza_ricevuta', null, { versione: String((payload as any).versione_catena?.pipeline ?? ''), ombra: (payload as any).ombra === true });
+    await registraEvento(studio.id, inserita?.id ?? null, 'bozza_ricevuta', null, { versione: String((payload as any).versione_catena?.pipeline ?? ''), ombra: (payload as any).ombra === true, medico: medicoId ?? '' });
+    await fusioneAutomatica(inserita.id);
   return NextResponse.json({ id: inserita.id }, { status: 201 });
   }
 
@@ -269,12 +332,13 @@ export async function POST(req: NextRequest) {
     if (esistente.stato === 'scartata') {
       await query(
         `update referti_bozze
-            set stato = 'bozza', payload = $3, tipo = $4,
+            set stato = 'bozza', payload = $3, tipo = $4, medico = $5,
                 testo_finale = null, campi_confermati = null,
                 reviewed_by = null, reviewed_at = null
           where id = $1 and studio_id = $2`,
-        [esistente.id, studio.id, JSON.stringify(payload), tipo]
+        [esistente.id, studio.id, JSON.stringify(payload), tipo, medicoId]
       );
+      await fusioneAutomatica(esistente.id);
     }
     await collega(esistente.id);
   }

@@ -22,8 +22,10 @@ export async function GET(req: NextRequest) {
 
   // Anche gli audio rimasti in 'elaborazione' da più di un'ora tornano in
   // coda: il Mac può essersi spento a metà (i retry sono idempotenti).
-  const righe = await query<{ id: string; filename: string; tipo: string }>(
-    `select id, filename, tipo from referti_audio
+  // `medico`: il profilo scelto al caricamento — la pipeline lo mette nel
+  // nome del file locale (medico-<id>--) e da lì adegua la catena.
+  const righe = await query<{ id: string; filename: string; tipo: string; medico: string | null }>(
+    `select id, filename, tipo, medico from referti_audio
       where studio_id = $1
         and (stato = 'in_coda' or (stato = 'elaborazione' and updated_at < now() - interval '1 hour'))
       order by created_at asc

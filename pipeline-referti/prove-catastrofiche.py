@@ -225,6 +225,75 @@ def _():
     m._CIFRE_SENTITE.pop("prova-14a", None)
 
 
+# 15. Profili per medico (2026-09-07): il marcatore nel nome del file deve
+# essere letto e tolto correttamente su entrambi gli ingressi, un profilo
+# sconosciuto non deve cambiare la catena, e il rallentamento deve seguire
+# il medico (o l'ambiente, se forzato).
+@caso("doctor marker in file names")
+def _():
+    uuid = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"
+    assert m._medico_da_nome("medico-moccetti--dettato.m4a") == "moccetti"
+    assert m._medico_da_nome("piattaforma-medico-moschovitis--" + uuid + ".m4a") == "moschovitis"
+    assert m._medico_da_nome("piattaforma-visita-medico-moccetti--" + uuid + ".m4a") == "moccetti"
+    assert m._medico_da_nome("dettato.m4a") is None
+    assert m._medico_da_nome("medico-Rossi--x.m4a") is None, "maiuscole = marcatore non valido"
+    assert m._audio_id_da_nome("piattaforma-medico-moccetti--" + uuid + ".m4a") == uuid
+    assert m._audio_id_da_nome("piattaforma-visita-medico-moccetti--" + uuid + ".m4a") == uuid
+    assert m._audio_id_da_nome("piattaforma-" + uuid + ".m4a") == uuid
+    assert m._e_visita("piattaforma-visita-medico-moccetti--" + uuid + ".m4a")
+    assert not m._e_visita("piattaforma-medico-moccetti--" + uuid + ".m4a")
+
+
+@caso("doctor profile drives atempo, unknown doctor stays default")
+def _():
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d, "medici.json")
+        p.write_text('{"medici": [{"id": "lento", "nome": "Dr. Lento", "atempo": 0.7, "modalita": "aggiornamento"},'
+                     ' {"id": "ro tto", "atempo": 0.7}, {"id": "fuori", "atempo": 3}, {"id": "lento", "atempo": 0.9}]}',
+                     encoding="utf-8")
+        vecchio, vecchio_env = m.PERCORSO_MEDICI, m.ATEMPO_ENV
+        try:
+            m.PERCORSO_MEDICI = p
+            m.ATEMPO_ENV = None
+            medici = m.carica_medici()
+            assert [x["id"] for x in medici] == ["lento"], medici
+            assert medici[0]["modalita"] == "aggiornamento"
+            prof = m._imposta_corsa("lento")
+            assert prof and abs(m.atempo_corsa() - 0.7) < 1e-9, m.atempo_corsa()
+            assert m._imposta_corsa("ignoto") is None and abs(m.atempo_corsa() - m.ATEMPO) < 1e-9
+            assert m._imposta_corsa(None) is None and abs(m.atempo_corsa() - m.ATEMPO) < 1e-9
+            # Ambiente forzato (esperimenti): vince sul profilo.
+            m.ATEMPO_ENV = "0.9"
+            m._imposta_corsa("lento")
+            assert abs(m.atempo_corsa() - m.ATEMPO) < 1e-9
+        finally:
+            m.PERCORSO_MEDICI, m.ATEMPO_ENV = vecchio, vecchio_env
+            m._imposta_corsa(None)
+
+
+@caso("doctor dictionary never carries digits")
+def _():
+    with tempfile.TemporaryDirectory() as d:
+        base = Path(d).resolve()  # su macOS /var → /private/var: si confronta il percorso risolto
+        (base / "medici.json").write_text('{"medici": [{"id": "uno", "correzioni": "correzioni-uno.json"}]}', encoding="utf-8")
+        vecchio_med, vecchio_file = m.PERCORSO_MEDICI, m.__file__
+        try:
+            m.PERCORSO_MEDICI = base / "medici.json"
+            # _file_medico cerca accanto allo script: si simula spostando __file__.
+            (base / "pipeline.py").write_text("", encoding="utf-8")
+            m.__file__ = str(base / "pipeline.py")
+            (base / "correzioni-uno.json").write_text(
+                '{"termini_clinici": {"sensuale": "sinusale", "fe 35": "FE 40"}}', encoding="utf-8")
+            assert m._file_medico("uno", "correzioni") == base / "correzioni-uno.json"
+            assert m._file_medico("uno", "vocabolario") is None
+            assert m._file_medico("due", "correzioni") is None
+            sost = m.carica_sostituzioni("uno")
+            nuove = {s for _, s in sost}
+            assert "sinusale" in nuove and "FE 40" not in nuove, "una coppia con cifre è entrata nel dizionario"
+        finally:
+            m.PERCORSO_MEDICI, m.__file__ = vecchio_med, vecchio_file
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0

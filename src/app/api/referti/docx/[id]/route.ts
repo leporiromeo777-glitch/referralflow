@@ -50,12 +50,19 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const destinatario = campo('medico_destinatario') || campo('medico_inviante');
   const dataDoc = dataCh(b.created_at);
 
-  // Il medico in intestazione: il titolare dello studio (con il titolo, se
-  // non ce l'ha già). Vuoto se non configurato: si compila in Word.
+  // Il medico in intestazione: CHI HA DETTATO (profilo scelto al
+  // caricamento, 2026-09-07 — richiesta dell'utente del 2026-08-17: la carta
+  // intestata segue il medico che firma), altrimenti il titolare dello
+  // studio (con il titolo, se non ce l'ha già). Vuoto se non configurato:
+  // si compila in Word.
+  const conTitolo = (n: string) => (n.toLowerCase().startsWith('dr') ? n : `Dr. med. ${n}`);
+  const dettante = typeof b.payload?.medico?.nome === 'string' ? b.payload.medico.nome.trim() : '';
   const titolare = (b.titolare ?? '').trim();
-  const medico = titolare
-    ? (titolare.toLowerCase().startsWith('dr') ? titolare : `Dr. med. ${titolare}`)
-    : b.studio_nome;
+  const medico = dettante
+    ? conTitolo(dettante)
+    : titolare
+      ? conTitolo(titolare)
+      : b.studio_nome;
 
   const docx = await generaDocxReferto({
     medico,

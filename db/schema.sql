@@ -29,6 +29,8 @@ create table studios (
   -- Endpoint bozze referto (pipeline di trascrizione locale): solo l'hash
   -- sha256 del token, il chiaro si vede una volta sola alla generazione.
   referti_token_hash   text unique,
+  -- Medici che dettano, pubblicati dal Mac dello studio (medici.json): [{id, nome, breve, modalita}]
+  referti_medici       jsonb not null default '[]'::jsonb,
   referti_token_set_at timestamptz,
   created_at   timestamptz not null default now()
 );
@@ -391,6 +393,8 @@ create index on appointments (follow_up_due) where follow_up_done_at is null;
 -- o le scarta da /referti. Il payload della pipeline resta intatto come riferimento.
 create table referti_bozze (
   tipo text not null default 'referto' check (tipo in ('referto','visita')),
+  -- Id del profilo del medico che ha dettato (medici.json sul Mac dello studio).
+  medico text check (medico is null or medico ~ '^[a-z0-9]+(-[a-z0-9]+)*$'),
   id          uuid primary key default gen_random_uuid(),
   studio_id   uuid not null references studios(id) on delete cascade,
   file_id     text not null,
@@ -406,6 +410,7 @@ create table referti_bozze (
 );
 
 create index on referti_bozze (studio_id, stato, created_at);
+create index on referti_bozze (studio_id, medico, created_at);
 
 -- Consulto rapido tra medici (eConsult): domanda breve dal portale
 -- dell'inviante, risposta scritta dello specialista da /consulti;
@@ -475,6 +480,8 @@ create index on referti_suggerimenti (studio_id, ignorato, conteggio desc);
 -- alla bozza per il riascolto.
 create table referti_audio (
   tipo text not null default 'referto' check (tipo in ('referto','visita')),
+  -- Medico scelto al caricamento: la pipeline lo mette nel nome del file.
+  medico text check (medico is null or medico ~ '^[a-z0-9]+(-[a-z0-9]+)*$'),
   id          uuid primary key default gen_random_uuid(),
   studio_id   uuid not null references studios(id) on delete cascade,
   filename    text not null,

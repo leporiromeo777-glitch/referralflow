@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 
 type Voce = {
   id: string; filename: string; stato: string; tipo?: string; fase: string | null;
-  fase_at: string | null; created_at: string; bozza_id: string | null;
+  fase_at: string | null; created_at: string; bozza_id: string | null; medico?: string | null;
 };
 
 // Le fasi nell'ordine reale della pipeline, con etichetta umana e avanzamento.
@@ -45,9 +45,10 @@ function minutiDa(iso: string | null): string {
   return min === 0 ? 'meno di un minuto' : min === 1 ? '1 minuto' : `${min} minuti`;
 }
 
-export function ProgressoTrascrizione({ iniziali, tipo = 'referto' }: { iniziali: Voce[]; tipo?: string }) {
+export function ProgressoTrascrizione({ iniziali, tipo = 'referto', medici = [] }: { iniziali: Voce[]; tipo?: string; medici?: { id: string; breve: string }[] }) {
   const router = useRouter();
   const [voci, setVoci] = useState<Voce[]>(iniziali);
+  const nomeMedico = (id?: string | null) => (id ? medici.find((m) => m.id === id)?.breve ?? id : '');
 
   useEffect(() => {
     let vivo = true;
@@ -94,7 +95,10 @@ export function ProgressoTrascrizione({ iniziali, tipo = 'referto' }: { iniziali
               <details className="prog-tr">
                 <summary>
                   <span className="trasc-spin" aria-hidden="true"></span>
-                  <span className="prog-tr-nome">{v.filename}</span>
+                  <span className="prog-tr-nome">
+                    {v.filename}
+                    {v.medico ? <span className="muted"> · {nomeMedico(v.medico)}</span> : null}
+                  </span>
                   <span className="prog-tr-fase">
                     {f.label}
                     {v.fase_at ? <span className="muted"> · da {minutiDa(v.fase_at)}</span> : null}

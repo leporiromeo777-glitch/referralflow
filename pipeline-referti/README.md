@@ -48,6 +48,51 @@ ollama pull gemma3:12b
 (~8 GB, una volta sola; l'app deve essere in esecuzione — icona nella barra
 menu. URL e modello sovrascrivibili con `REFERTI_OLLAMA` e `REFERTI_LLM`.)
 
+## Profili per medico (2026-09-07)
+
+Più medici dettano con la stessa catena e ognuno ha abitudini diverse. Chi
+carica il dettato sceglie **chi ha dettato** — nel pannello locale (menu
+sopra la zona di trascinamento) o nella pagina Referti di ReferralFlow — e
+la catena si adegua a lui. I profili stanno in `medici.json` accanto allo
+script (solo nomi di medici e impostazioni: mai pazienti):
+
+| Voce | Effetto |
+|---|---|
+| `atempo` | rallentamento dell'audio per QUEL medico (chi parla veloce può averne uno più forte); `REFERTI_ATEMPO` impostata a mano vince su tutti (esperimenti) |
+| `modalita` | `lettera` = detta una lettera nuova (scheda «Lettera precedente» ripiegata); `aggiornamento` = detta gli aggiornamenti alla lettera precedente: la piattaforma **chiede da sola la fusione** con l'ultima lettera confermata dello stesso paziente, se c'è (resta una proposta: si applica con un clic, con le stesse guardie) |
+| `vocabolario` | `vocabolario-<id>.txt`: termini suoi, in testa al prompt di whisper |
+| `correzioni` | `correzioni-<id>.json`: dizionario e stile suoi (stesse sezioni di correzioni-locali.json), vincono a parità di chiave |
+| `atempo_prova` | rallentamento da provare con `prova-atempo.sh` |
+
+Il medico viaggia nel **nome del file** come marcatore `medico-<id>--` (come
+`visita-`): sopravvive a ingresso → lavorazione → errori → riprova. Il
+servizio pubblica l'elenco alla piattaforma (`POST /api/referti/medici`)
+appena cambia, così i due ingressi mostrano gli stessi nomi; la bozza porta
+`payload.medico` (id, nome, modalità, atempo usato) e la carta intestata
+Word prende il nome del medico che ha dettato. Un id sconosciuto (profilo
+tolto dopo il caricamento) = catena di serie, con avviso nel log.
+
+Profili di partenza: `moccetti` (lettera nuova, parla molto veloce) e
+`moschovitis` (aggiornamento). I file per-medico sono dello studio:
+`distribuisci.sh` non li tocca.
+
+### Prova di rallentamento per un medico
+
+```bash
+bash prova-atempo.sh ~/referti-dataset/audio/<file_id>.m4a moccetti 0.7
+```
+
+Stesso audio, catena identica, solo l'atempo diverso: la bozza esce come
+«ombra» e `/referti/confronto` la mette accanto a quella di produzione alla
+cieca. Serve prima la bozza di produzione dello stesso audio (dettato
+caricato normalmente col medico scelto; l'originale resta in
+`~/referti-dataset/audio/` grazie alla conserva). Lo script stampa solo le
+righe di log (divergenze, dubbi, copertura), mai testo. Il giudizio vero è
+la scelta cieca del medico; a referto confermato, il banco d'oro misura le
+varianti `attuale`, `atempo-0.7`, `atempo-0.6` (`banco-audio.py`). Se una
+variante vince, si scrive nel profilo (`atempo`) e vale da lì in poi solo
+per quel medico.
+
 ## Vocabolario di dominio (affidabilità)
 
 whisper riceve un **prompt di dominio** con i termini cardiologici e i farmaci

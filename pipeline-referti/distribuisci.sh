@@ -58,15 +58,16 @@ n=0
 for f in pipeline.py profilo-cardiologia.json allinea-tempi.py trascrivi-voxtral.py pannello.py \
          palestra.py suite-cattiva.py banco-audio.py esporta-oro.sh prove-catastrofiche.py \
          distribuisci.sh farmaci-swissmedic.py prepara-dataset.py proposte-glossario.py \
-         installa-avvio.sh CLAUDE.md correzioni.json vocabolario.txt; do
+         installa-avvio.sh CLAUDE.md correzioni.json vocabolario.txt medici.json prova-atempo.sh; do
   if [ -f "$QUI/$f" ] && ! cmp -s "$QUI/$f" "$DEST/$f" 2>/dev/null; then
     cp "$QUI/$f" "$DEST/$f"
     n=$((n + 1))
     echo "  aggiornato $f"
   fi
 done
-# correzioni-locali.json, vocabolario-locali.txt, dati/, modelli/ sono dello
-# studio: non si toccano mai.
+# correzioni-locali.json, vocabolario-locali.txt, vocabolario-<medico>.txt,
+# correzioni-<medico>.json, dati/, modelli/ sono dello studio: non si toccano mai.
+# Il pannello legge medici.json a ogni richiesta: non serve riavviarlo.
 if [ "$n" -eq 0 ]; then
   echo "  niente da copiare: la catena distribuita è già identica al repo."
 fi

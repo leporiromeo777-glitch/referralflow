@@ -1314,6 +1314,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 }
 .dropzone:hover, .dropzone.drag { border-color: var(--primary); background: var(--primary-soft); color: var(--primary-ink); }
 .dropzone:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.dz-blocco { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.dz-blocco .dropzone { margin-bottom: 0; }
+/* Chi ha dettato (profili per medico): pulsanti stile filtri della Coda. */
+.dz-medici { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dz-medici-label { font-weight: 600; font-size: 14px; margin-right: 4px; }
+.dz-medici .qf-btn { padding: 6px 14px; }
 .dz-testo { display: flex; flex-direction: column; gap: 2px; }
 .dz-testo b { color: var(--ink); font-size: 15px; }
 .dz-testo span { font-size: 13px; }

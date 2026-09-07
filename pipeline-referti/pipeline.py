@@ -75,7 +75,124 @@ FFMPEG_TIMEOUT_S = 600
 # le divergenze A/B sono scese da 65 a 42 — il medico detta veloce, riportarlo
 # verso una velocità normale rende l'audio più «sicuro» per il modello.
 # 1.0 = disattivato. Sovrascrivibile con REFERTI_ATEMPO.
-ATEMPO = float(os.environ.get("REFERTI_ATEMPO", "0.8"))
+# Dal 2026-09-07 il valore di serie può essere diverso PER MEDICO (medici.json,
+# voce «atempo»): ogni medico detta a un ritmo suo. Precedenza: REFERTI_ATEMPO
+# se impostata a mano (esperimenti, es. prova-atempo.sh) → atempo del medico
+# che detta → 0.8. Il valore in vigore per la corsa si legge da atempo_corsa().
+ATEMPO_ENV = os.environ.get("REFERTI_ATEMPO")
+ATEMPO = float(ATEMPO_ENV or "0.8")
+
+# ——— Profili per medico (2026-09-07) ———
+# Più medici dettano con la stessa catena e ognuno ha abitudini diverse: chi
+# carica il dettato sceglie CHI detta e la catena si adegua (rallentamento,
+# vocabolario e dizionario propri, modalità di lavoro «lettera nuova» o
+# «aggiornamento della lettera precedente» — quest'ultima decisa dalla
+# piattaforma, che chiede da sola la fusione). L'elenco vive in medici.json
+# accanto allo script (solo nomi di medici e impostazioni: mai pazienti) e
+# viene pubblicato alla piattaforma dal servizio, così i due ingressi —
+# pannello locale e pagina Referti — mostrano gli stessi nomi.
+# Il medico viaggia nel NOME DEL FILE come marcatore «medico-<id>--» (stessa
+# tecnica di «visita-»): sopravvive a ingresso → lavorazione → errori →
+# riprova senza file a fianco da portarsi dietro.
+PERCORSO_MEDICI = Path(os.environ.get(
+    "REFERTI_MEDICI", str(Path(__file__).resolve().parent / "medici.json")))
+_RX_MEDICO_ID = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+_RX_MARCATORE_MEDICO = re.compile(r"^medico-([a-z0-9]+(?:-[a-z0-9]+)*)--")
+MODALITA_MEDICO = ("lettera", "aggiornamento")
+
+
+def carica_medici() -> list[dict]:
+    """I profili validi di medici.json (voci senza id valido o con atempo
+    fuori [0.5, 1.5] vengono scartate, mai fatte passare a metà)."""
+    try:
+        dati = json.loads(PERCORSO_MEDICI.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    fuori: list[dict] = []
+    visti: set[str] = set()
+    for v in (dati.get("medici") if isinstance(dati, dict) else None) or []:
+        if not isinstance(v, dict):
+            continue
+        mid = str(v.get("id") or "").strip().lower()
+        if not mid or len(mid) > 32 or not _RX_MEDICO_ID.fullmatch(mid) or mid in visti:
+            continue
+        try:
+            atempo = float(v.get("atempo", ATEMPO))
+        except (TypeError, ValueError):
+            continue
+        if not 0.5 <= atempo <= 1.5:
+            continue
+        prova = v.get("atempo_prova")
+        try:
+            prova = float(prova) if prova is not None else None
+        except (TypeError, ValueError):
+            prova = None
+        modalita = str(v.get("modalita") or "lettera").strip().lower()
+        if modalita not in MODALITA_MEDICO:
+            modalita = "lettera"
+        nome = str(v.get("nome") or mid).strip()[:80]
+        visti.add(mid)
+        fuori.append({
+            "id": mid,
+            "nome": nome,
+            "breve": str(v.get("breve") or nome).strip()[:40],
+            "modalita": modalita,
+            "atempo": atempo,
+            "atempo_prova": prova if prova is not None and 0.5 <= prova <= 1.5 else None,
+            "vocabolario": str(v.get("vocabolario") or f"vocabolario-{mid}.txt"),
+            "correzioni": str(v.get("correzioni") or f"correzioni-{mid}.json"),
+        })
+    return fuori
+
+
+def profilo_medico(mid: str | None) -> dict | None:
+    if not mid:
+        return None
+    return next((m for m in carica_medici() if m["id"] == mid), None)
+
+
+def _medico_da_nome(nome_file: str) -> str | None:
+    """«medico-<id>--…» in testa al nome locale (dopo gli eventuali prefissi
+    piattaforma-/visita-) → id del medico; None se assente."""
+    resto = nome_file
+    if resto.startswith(_PREFISSO_PIATTAFORMA):
+        resto = resto[len(_PREFISSO_PIATTAFORMA):]
+    if resto.startswith("visita-"):
+        resto = resto[len("visita-"):]
+    m = _RX_MARCATORE_MEDICO.match(resto)
+    return m.group(1) if m else None
+
+
+def _file_medico(mid: str | None, nome: str) -> Path | None:
+    """Percorso del file per-medico (vocabolario/correzioni) accanto allo
+    script, se il profilo lo prevede e il file esiste."""
+    prof = profilo_medico(mid)
+    if not prof:
+        return None
+    p = Path(__file__).resolve().parent / os.path.basename(str(prof.get(nome) or ""))
+    return p if p.name and p.is_file() else None
+
+
+# Stato della corsa in corso (il servizio lavora UN dettato alla volta):
+# atempo in vigore e medico. Impostato da elabora, letto dalle fasi che
+# hanno bisogno del rallentamento (preprocessing, orologio dei tempi).
+_CORSA: dict = {"atempo": ATEMPO, "medico": None}
+
+
+def atempo_corsa() -> float:
+    return float(_CORSA.get("atempo") or ATEMPO)
+
+
+def _imposta_corsa(mid: str | None) -> dict | None:
+    """Sceglie le impostazioni della corsa dal profilo del medico. Con
+    REFERTI_ATEMPO impostata a mano vince l'ambiente (esperimenti)."""
+    prof = profilo_medico(mid)
+    _CORSA["medico"] = prof["id"] if prof else None
+    if ATEMPO_ENV is not None or not prof:
+        _CORSA["atempo"] = ATEMPO
+    else:
+        _CORSA["atempo"] = float(prof["atempo"])
+    return prof
 
 # Riduzione del rumore di fondo (afftdn) tra passa-alto e normalizzazione.
 # Validata il 2026-07-24 col confronto a quattro celle sul dettato di prova
@@ -761,8 +878,9 @@ def preprocessa(ingresso: Path, uscita: Path, file_id: str) -> None:
     if DENOISE:
         filtri += ",afftdn=nf=-25"
     filtri += ",loudnorm=I=-16:TP=-1.5:LRA=11"
-    if ATEMPO != 1.0:
-        filtri = f"atempo={ATEMPO},{filtri}"
+    atempo = atempo_corsa()
+    if atempo != 1.0:
+        filtri = f"atempo={atempo},{filtri}"
     comando = [
         "ffmpeg",
         "-hide_banner",
@@ -820,12 +938,14 @@ def _ultimo_secondo(percorso_json: Path) -> float:
     return parole[-1][1] if parole else 0.0
 
 
-def carica_vocabolario() -> str:
+def carica_vocabolario(medico: str | None = None) -> str:
     """Costruisce il prompt di dominio per whisper: termini del file base +
     di quello locale dello studio + i termini «giusti» del dizionario (i valori
     delle correzioni sono esattamente le parole da riconoscere bene). Ritorna
     stringa vuota se non c'è nulla. Contiene solo gergo clinico generico, mai
-    dati di pazienti."""
+    dati di pazienti. Con `medico` i termini del suo vocabolario e del suo
+    dizionario (vocabolario-<id>.txt, correzioni-<id>.json) vanno IN TESTA:
+    sono i più specifici, il tetto taglia la coda."""
     def da_file(p: Path) -> list[str]:
         if not p.is_file():
             return []
@@ -856,8 +976,12 @@ def carica_vocabolario() -> str:
     # Priorità (il tetto taglia la coda): prima ciò che è specifico dello studio
     # — le sue aggiunte al dizionario e al vocabolario —, poi il vocabolario base
     # (farmaci e termini ostici in testa), infine il dizionario base generico.
+    voc_medico = _file_medico(medico, "vocabolario")
+    diz_medico = _file_medico(medico, "correzioni")
     termini: list[str] = (
-        da_dizionario(PERCORSO_CORREZIONI_LOCALI)
+        (da_dizionario(diz_medico) if diz_medico else [])
+        + (da_file(voc_medico) if voc_medico else [])
+        + da_dizionario(PERCORSO_CORREZIONI_LOCALI)
         + da_file(PERCORSO_VOCABOLARIO_LOCALI)
         + da_file(PERCORSO_VOCABOLARIO)
         + da_dizionario(PERCORSO_CORREZIONI)
@@ -1102,7 +1226,7 @@ def _accoppia_ancore(anc_w: list[float], anc_a: list[float]) -> list[tuple[float
         dw, da = w1 - w0, a1 - a0
         if dw <= 0 or da <= 0:
             return INF
-        atteso = dw * ATEMPO
+        atteso = dw * atempo_corsa()
         if da < atteso - 2:
             return INF
         if da > atteso * 6 + 60:  # stiramento assurdo = accoppiamento sbagliato
@@ -1156,7 +1280,7 @@ def _ritara_parole(parole: list[tuple[str, float]], coppie: list[tuple[float, fl
             if x <= w1:
                 return a1 if w1 == w0 else a0 + (x - w0) * (a1 - a0) / (w1 - w0)
         w0, a0 = nodi[-1]
-        return a0 + (x - w0) * ATEMPO
+        return a0 + (x - w0) * atempo_corsa()
 
     tetto = durata_audio - 0.5 if durata_audio > 1 else float("inf")
     return [(w, min(deforma(t), tetto)) for w, t in parole]
@@ -1519,18 +1643,33 @@ def arbitra_divergenze(testo: str, divergenze: list[dict], file_id: str) -> tupl
     return testo, applicate
 
 
-def carica_sostituzioni() -> list[tuple[re.Pattern, str]]:
+def carica_sostituzioni(medico: str | None = None) -> list[tuple[re.Pattern, str]]:
     """Sostituzioni da correzioni.json (termini_clinici + linguaggio_comune),
     compilate come regex: frasi intere con confini di parola, spazi che
     accettano anche gli a-capo, confronto senza maiuscole/minuscole.
     Le chiavi più lunghe si applicano per prime («sensuale regolare» prima
     di «sensuale»). Regola invariabile del file: mai cifre — qualsiasi voce
-    che ne contenga viene scartata per principio (SPEC §2.4)."""
+    che ne contenga viene scartata per principio (SPEC §2.4).
+    Con `medico`, il suo correzioni-<id>.json (stesse sezioni) vince a parità
+    di chiave: è come pronuncia LUI."""
     config = json.loads(PERCORSO_CORREZIONI.read_text(encoding="utf-8"))
-    if PERCORSO_CORREZIONI_LOCALI.is_file():
-        locali = json.loads(PERCORSO_CORREZIONI_LOCALI.read_text(encoding="utf-8"))
+    strati = [PERCORSO_CORREZIONI_LOCALI]
+    diz_medico = _file_medico(medico, "correzioni")
+    if diz_medico:
+        strati.append(diz_medico)
+    for strato in strati:
+        if not strato.is_file():
+            continue
+        try:
+            locali = json.loads(strato.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            if strato is PERCORSO_CORREZIONI_LOCALI:
+                raise
+            continue  # un file per-medico rotto non ferma la catena
+        if not isinstance(locali, dict):
+            continue
         for sezione in ("termini_clinici", "linguaggio_comune"):
-            config.setdefault(sezione, {}).update(locali.get(sezione, {}))
+            config.setdefault(sezione, {}).update(locali.get(sezione, {}) or {})
     voci: dict[str, str] = {}
     for sezione in ("termini_clinici", "linguaggio_comune"):
         for da, a in config.get(sezione, {}).items():
@@ -5849,18 +5988,27 @@ def rileva_omissioni(grezzo: str, finale: str, note: list, parole_audio: list,
     return omesse[:30]
 
 
-def applica_stile(testo: str, file_id: str) -> tuple[str, int]:
+def applica_stile(testo: str, file_id: str, medico: str | None = None) -> tuple[str, int]:
     """Memoria di STILE del medico (2026-09-06): formulazioni preferite
     confermate dal pannello (correzioni-locali.json, sezione «stile»),
     applicate a FINE catena come sostituzioni di frase intere. Guardie: mai
     cifre nelle coppie, mai ribaltamenti clinici, confini di parola. Lo stile
-    non può toccare un oggetto protetto."""
+    non può toccare un oggetto protetto. Con `medico`, la sezione «stile» del
+    suo correzioni-<id>.json si aggiunge (e vince a parità di chiave)."""
     try:
         locali = json.loads(PERCORSO_CORREZIONI_LOCALI.read_text(encoding="utf-8")) if PERCORSO_CORREZIONI_LOCALI.is_file() else {}
     except (OSError, ValueError):
         return testo, 0
-    regole = locali.get("stile") if isinstance(locali, dict) else None
-    if not isinstance(regole, dict) or not regole:
+    regole = dict(locali.get("stile") or {}) if isinstance(locali, dict) and isinstance(locali.get("stile"), dict) else {}
+    diz_medico = _file_medico(medico, "correzioni")
+    if diz_medico:
+        try:
+            proprie = json.loads(diz_medico.read_text(encoding="utf-8"))
+            if isinstance(proprie, dict) and isinstance(proprie.get("stile"), dict):
+                regole.update(proprie["stile"])
+        except (OSError, ValueError):
+            pass
+    if not regole:
         return testo, 0
     n = 0
     for da in sorted(regole, key=len, reverse=True):
@@ -5929,6 +6077,15 @@ def controlli_avvio():
     if not 0.5 <= ATEMPO <= 1.5:
         log.error("fase=avvio file=? esito=errore motivo=atempo_non_valido")
         return None
+    # Profili dei medici: facoltativi (senza file la catena è quella di
+    # serie), ma un file presente e illeggibile va detto subito.
+    if PERCORSO_MEDICI.is_file():
+        medici = carica_medici()
+        if not medici:
+            log.warning("fase=avvio file=? esito=avviso motivo=medici_non_validi")
+        else:
+            log.info("fase=avvio file=? medici=%d ids=%s", len(medici),
+                     ",".join(m["id"] for m in medici))
     if shutil.which(WHISPER_BIN) is None:
         log.error("fase=avvio file=? esito=errore motivo=whisper_mancante")
         return None
@@ -5970,12 +6127,20 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
     _TRASPORTI.pop(file_id, None)
     # Visita registrata o dettato classico? Dal nome del file (vedi _e_visita).
     visita = _e_visita(ingresso.name)
+    # Chi detta? Dal marcatore nel nome del file (vedi _medico_da_nome): il
+    # profilo decide il rallentamento e i file propri del medico. Un id
+    # sconosciuto (profilo tolto dopo il caricamento) = catena di serie.
+    medico_id = _medico_da_nome(ingresso.name)
+    medico = _imposta_corsa(medico_id)
+    if medico_id and not medico:
+        log.warning("fase=avvio file=%s esito=avviso motivo=medico_sconosciuto", file_id)
     # Avvisi per chi rivede: raccolti lungo tutta la corsa.
     avvisi: list[str] = []
     # La configurazione nel log (mai contenuti): serve a sapere, a posteriori,
     # con quali impostazioni è stata prodotta una corsa.
-    log.info("fase=avvio file=%s atempo=%s denoise=%d vad=%d visita=%d",
-             file_id, ATEMPO, int(DENOISE), int(USA_VAD), int(visita))
+    log.info("fase=avvio file=%s atempo=%s denoise=%d vad=%d visita=%d medico=%s",
+             file_id, atempo_corsa(), int(DENOISE), int(USA_VAD), int(visita),
+             medico["id"] if medico else "-")
 
     def percorso(suffisso: str) -> Path:
         return dir_out / f"{file_id}{suffisso}"
@@ -6021,9 +6186,17 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         tappa("preprocessing", "codice")
         # Vocabolario di dominio per whisper (SPEC §4.2): stesso prompt per le due
         # passate. Nel log solo il numero di termini, mai il contenuto.
-        vocab = carica_vocabolario()
+        vocab = carica_vocabolario(medico["id"] if medico else None)
         n_vocab = vocab.count(",") + 1 if vocab else 0
         log.info("fase=vocabolario file=%s termini=%d", file_id, n_vocab)
+        # Dizionario del medico (correzioni-<id>.json) sopra quello dello
+        # studio: se il suo file manca o è rotto resta quello di serie.
+        if medico and _file_medico(medico["id"], "correzioni"):
+            try:
+                sostituzioni = carica_sostituzioni(medico["id"])
+                log.info("fase=dizionario file=%s medico=%s voci=%d", file_id, medico["id"], len(sostituzioni))
+            except (OSError, ValueError, AttributeError, TypeError):
+                log.warning("fase=dizionario file=%s esito=avviso motivo=dizionario_medico_non_leggibile", file_id)
         fase = "trascrizione_a"
         _ = notifica and notifica(fase)
         # Prima delle trascrizioni: via il modello LLM dalla memoria — sulla
@@ -6398,7 +6571,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                 versioni["dopo_bella_copia"] = finale
         # Memoria di stile del medico (regole confermate dal pannello).
         if not visita:
-            finale, n_stile = applica_stile(finale, file_id)
+            finale, n_stile = applica_stile(finale, file_id, medico["id"] if medico else None)
             if n_stile:
                 testo_integrale = finale
                 tappa("stile", "codice", sostituzioni=n_stile)
@@ -6470,7 +6643,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                 giuntura = _giuntura_vad(
                     seg_vad, parole_audio[-1][1] if parole_audio else 0.0)
                 parole_audio = [
-                    (w, _decompatta_su_segmenti(x, seg_vad, giuntura) * ATEMPO)
+                    (w, _decompatta_su_segmenti(x, seg_vad, giuntura) * atempo_corsa())
                     for w, x in parole_audio
                 ]
                 log.info(
@@ -6486,8 +6659,8 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                 coppie = _accoppia_ancore(anc_w, anc_a) if USA_VAD else []
                 if len(coppie) >= 3:
                     parole_audio = _ritara_parole(parole_audio, coppie, durata_orig)
-                elif ATEMPO != 1.0:
-                    parole_audio = [(w, t * ATEMPO) for w, t in parole_audio]
+                elif atempo_corsa() != 1.0:
+                    parole_audio = [(w, t * atempo_corsa()) for w, t in parole_audio]
             parole = allinea_parole(finale, parole_audio)
             log.info("fase=tempi file=%s esito=ok parole=%d", file_id, len(parole))
             # Rifinitura col ForcedAligner (interruttore ~/.referralflow-
@@ -6574,6 +6747,11 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # Visita: la nota strutturata (se ha superato le guardie), altrimenti
         # la trascrizione integrale; dettato classico: il testo di sempre.
         "tipo": "visita" if visita else "referto",
+        # Chi ha dettato (profilo scelto al caricamento): la piattaforma lo
+        # mostra, mette il suo nome in carta intestata e — in modalità
+        # «aggiornamento» — chiede da sola la fusione con la lettera precedente.
+        "medico": ({"id": medico["id"], "nome": medico["nome"], "modalita": medico["modalita"],
+                    "atempo": atempo_corsa()} if medico else None),
         "testo_corretto": nota_visita if nota_visita else finale,
         "note_segreteria": note_segreteria,
         "campi_estratti": campi,
@@ -6712,6 +6890,11 @@ def scarica_coda(cartelle: dict) -> None:
         # Le visite registrate portano il marcatore nel nome locale: da lì
         # elabora sceglie il binario della nota di visita (vedi _e_visita).
         marcatore = "visita-" if voce.get("tipo") == "visita" else ""
+        # Il medico scelto al caricamento viaggia nel nome (medico-<id>--):
+        # da lì elabora prende il profilo. Id non valido = nessun marcatore.
+        mid = str(voce.get("medico") or "").strip().lower()
+        if mid and len(mid) <= 32 and _RX_MEDICO_ID.fullmatch(mid):
+            marcatore += f"medico-{mid}--"
         destinazione = cartelle["ingresso"] / f"{_PREFISSO_PIATTAFORMA}{marcatore}{audio_id}{ext}"
         # Già scaricato (o già in lavorazione/archivio): non duplicare.
         occupato = any(
@@ -6740,13 +6923,46 @@ def scarica_coda(cartelle: dict) -> None:
             return
 
 
+_MEDICI_PUBBLICATI: tuple = ()
+_MEDICI_RIPROVA_DOPO = 0.0  # back-off: un solo tentativo ogni 10 minuti dopo un errore
+
+
+def pubblica_medici() -> None:
+    """Manda alla piattaforma l'elenco dei medici che dettano (id, nome,
+    modalità) quando cambia rispetto all'ultimo invio riuscito: la pagina
+    Referti mostra così gli stessi nomi del pannello locale. Best-effort,
+    solo etichette: mai contenuti."""
+    global _MEDICI_PUBBLICATI, _MEDICI_RIPROVA_DOPO
+    if not FLOW_URL or not FLOW_TOKEN:
+        return
+    medici = carica_medici()
+    impronta = tuple((m["id"], m["nome"], m["breve"], m["modalita"]) for m in medici)
+    if impronta == _MEDICI_PUBBLICATI or time.monotonic() < _MEDICI_RIPROVA_DOPO:
+        return
+    _MEDICI_RIPROVA_DOPO = time.monotonic() + 600
+    corpo = json.dumps({"medici": [
+        {"id": m["id"], "nome": m["nome"], "breve": m["breve"], "modalita": m["modalita"]}
+        for m in medici]}, ensure_ascii=False).encode("utf-8")
+    try:
+        req = urllib.request.Request(
+            FLOW_URL + "/api/referti/medici", data=corpo, method="POST",
+            headers={"Authorization": f"Bearer {FLOW_TOKEN}", "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=FLOW_TIMEOUT_S):
+            pass
+        _MEDICI_PUBBLICATI = impronta
+        log.info("fase=medici esito=pubblicati n=%d", len(medici))
+    except Exception:
+        log.warning("fase=medici esito=rinviato")
+
+
 def _audio_id_da_nome(nome: str) -> str | None:
-    """piattaforma-[visita-]<uuid>.<ext> → <uuid>; altrimenti None."""
+    """piattaforma-[visita-][medico-<id>--]<uuid>.<ext> → <uuid>; altrimenti None."""
     if not nome.startswith(_PREFISSO_PIATTAFORMA):
         return None
     resto = nome[len(_PREFISSO_PIATTAFORMA):]
     if resto.startswith("visita-"):
         resto = resto[len("visita-"):]
+    resto = _RX_MARCATORE_MEDICO.sub("", resto, count=1)
     punto = resto.rfind(".")
     candidato = resto[:punto] if punto != -1 else resto
     return candidato if re.fullmatch(r"[0-9a-f-]{36}", candidato) else None
@@ -6949,6 +7165,8 @@ def servizio(sostituzioni, controlli) -> int:
                 _processa_uno(f, cartelle, sostituzioni, controlli)
             in_attesa = {p: d for p, d in in_attesa.items() if p.exists()}
             invia_bozze(cartelle)
+            # Elenco dei medici che dettano alla piattaforma (solo se cambiato).
+            pubblica_medici()
             # Dopo l'invio: prendi eventuali dettati caricati dalla pagina
             # Referti (drag & drop). Al giro dopo entrano nella catena normale.
             scarica_coda(cartelle)

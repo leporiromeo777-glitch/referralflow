@@ -1,0 +1,27 @@
+{
+ "_nota": "Profili dei medici che dettano (2026-09-07). La catena si adegua a CHI detta: chi carica un dettato sceglie il medico (pannello locale o pagina Referti) e il nome del file porta il marcatore «medico-<id>--». Qui SOLO nomi di medici e impostazioni tecniche: mai dati di pazienti. Per aggiungere un medico basta una voce nuova; i file facoltativi (vocabolario-<id>.txt, correzioni-<id>.json) vivono accanto a questo e non vengono toccati dagli aggiornamenti. Il servizio pubblica l'elenco alla piattaforma, così la pagina Referti mostra gli stessi nomi.",
+ "versione": "2026-09-07",
+ "medici": [
+  {
+   "id": "moccetti",
+   "nome": "Dr. med. Marco Moccetti",
+   "breve": "Moccetti",
+   "modalita": "lettera",
+   "atempo": 0.8,
+   "atempo_prova": 0.7,
+   "vocabolario": "vocabolario-moccetti.txt",
+   "correzioni": "correzioni-moccetti.json",
+   "note": "Detta quasi sempre una lettera nuova da scrivere; raramente chiede di aggiornare altro. Parla molto veloce: da provare un rallentamento maggiore (prova-atempo.sh)."
+  },
+  {
+   "id": "moschovitis",
+   "nome": "Dr. med. Giorgio Moschovitis",
+   "breve": "Moschovitis",
+   "modalita": "aggiornamento",
+   "atempo": 0.8,
+   "vocabolario": "vocabolario-moschovitis.txt",
+   "correzioni": "correzioni-moschovitis.json",
+   "note": "Detta gli aggiornamenti alla lettera precedente del paziente: la piattaforma chiede da sola la fusione con l'ultima lettera confermata, se c'è."
+  }
+ ]
+}

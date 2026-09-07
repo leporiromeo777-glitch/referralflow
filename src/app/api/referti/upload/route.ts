@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { putFile } from '@/lib/storage';
+import { mediciDelloStudio } from '@/lib/referti-medici';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -38,12 +39,21 @@ export async function POST(req: NextRequest) {
   }
 
   const tipo = String(form?.get('tipo') ?? '') === 'visita' ? 'visita' : 'referto';
+
+  // Chi ha dettato (2026-09-07): obbligatorio quando lo studio ha profili
+  // pubblicati dal Mac (studios.referti_medici); deve essere uno di quelli.
+  const ids = new Set((await mediciDelloStudio(session.studioId)).map((m) => m.id));
+  const medico = String(form?.get('medico') ?? '').trim().toLowerCase();
+  if (ids.size > 0 && !ids.has(medico)) {
+    return NextResponse.json({ errore: 'medico_mancante' }, { status: 400 });
+  }
+
   const buffer = Buffer.from(await file.arrayBuffer());
   const key = await putFile(buffer, TIPI[ext], ext);
   const [row] = await query<{ id: string }>(
-    `insert into referti_audio (studio_id, filename, storage_key, content_type, uploaded_by, tipo)
-     values ($1, $2, $3, $4, $5, $6) returning id`,
-    [session.studioId, file.name.slice(0, 200), key, TIPI[ext], session.id, tipo]
+    `insert into referti_audio (studio_id, filename, storage_key, content_type, uploaded_by, tipo, medico)
+     values ($1, $2, $3, $4, $5, $6, $7) returning id`,
+    [session.studioId, file.name.slice(0, 200), key, TIPI[ext], session.id, tipo, ids.has(medico) ? medico : null]
   );
 
   return NextResponse.json({ ok: true, id: row.id }, { status: 201 });

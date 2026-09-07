@@ -6,6 +6,7 @@ import { dataOra } from '@/lib/format';
 import { PageHero, StatStrip } from '../PageHero';
 import { ignoraSuggerimento } from './actions';
 import { UploadDettato } from './UploadDettato';
+import { mediciDelloStudio } from '@/lib/referti-medici';
 import { ProgressoTrascrizione } from './ProgressoTrascrizione';
 
 export const dynamic = 'force-dynamic';
@@ -24,6 +25,7 @@ type Row = {
   n_dubbi: number;
   n_allarmi: number;
   n_note: number;
+  medico_nome: string | null;
 };
 
 export default async function Referti({
@@ -40,7 +42,8 @@ export default async function Referti({
             coalesce(jsonb_array_length(payload -> 'divergenze'), 0)::int as n_divergenze,
             coalesce(jsonb_array_length(payload -> 'segmenti_dubbi'), 0)::int as n_dubbi,
             coalesce(jsonb_array_length(payload -> 'allarmi_numerici'), 0)::int as n_allarmi,
-            coalesce(jsonb_array_length(payload -> 'note_segreteria'), 0)::int as n_note
+            coalesce(jsonb_array_length(payload -> 'note_segreteria'), 0)::int as n_note,
+            payload -> 'medico' ->> 'nome' as medico_nome
        from referti_bozze
       where studio_id = $1 and tipo = 'referto'
         and (stato = 'bozza' or reviewed_at > now() - interval '30 days')
@@ -66,9 +69,9 @@ export default async function Referti({
   // (con la fase in corso per l'avanzamento; gli errori recenti restano visibili).
   const inTrascrizione = await query<{
     id: string; filename: string; stato: string; fase: string | null;
-    fase_at: string | null; created_at: string; bozza_id: string | null;
+    fase_at: string | null; created_at: string; bozza_id: string | null; medico: string | null;
   }>(
-    `select id, filename, stato, fase, fase_at::text, created_at::text, bozza_id
+    `select id, filename, stato, fase, fase_at::text, created_at::text, bozza_id, medico
        from referti_audio
       where studio_id = $1 and tipo = 'referto'
         and (stato in ('in_coda', 'elaborazione')
@@ -77,6 +80,10 @@ export default async function Referti({
       limit 50`,
     [session.studioId]
   );
+
+  // Medici che dettano (profili pubblicati dal Mac dello studio): chi carica
+  // sceglie chi ha dettato e la catena si adegua a lui.
+  const medici = await mediciDelloStudio(session.studioId!);
 
   return (
     <>
@@ -89,7 +96,7 @@ export default async function Referti({
         <Link href="/referti/qualita">Qualità della dettatura</Link> · <Link href="/referti/confronto">Confronto cieco</Link>
       </p>
 
-      <UploadDettato />
+      <UploadDettato medici={medici} />
 
       {searchParams.ok === 'eliminata' && (
         <p className="success">Bozza eliminata definitivamente, insieme al suo audio.</p>
@@ -103,7 +110,7 @@ export default async function Referti({
         ]}
       />
 
-      <ProgressoTrascrizione iniziali={inTrascrizione} />
+      <ProgressoTrascrizione iniziali={inTrascrizione} medici={medici} />
 
       {suggerimenti.length > 0 && (
         <div className="card learn-box">
@@ -147,7 +154,10 @@ export default async function Referti({
               </strong>
               <span className="badge badge-warn">da rivedere</span>
             </div>
-            <div className="qrow-sub">Trascritto il {dataOra(r.created_at)}</div>
+            <div className="qrow-sub">
+              Trascritto il {dataOra(r.created_at)}
+              {r.medico_nome ? ` · dettato da ${r.medico_nome}` : ''}
+            </div>
             <div className="qrow-meta">
               {r.n_divergenze > 0 && <span className="badge badge-warn">{r.n_divergenze} divergenze audio</span>}
               {r.n_dubbi > 0 && <span className="badge badge-warn">{r.n_dubbi} segmenti dubbi</span>}
@@ -178,6 +188,7 @@ export default async function Referti({
                 </div>
                 <div className="qrow-sub">
                   Trascritto il {dataOra(r.created_at)}
+                  {r.medico_nome ? ` · ${r.medico_nome}` : ''}
                   {r.reviewed_at ? ` · gestito il ${dataOra(r.reviewed_at)}` : ''}
                 </div>
               </Link>

@@ -49,6 +49,8 @@ type Payload = {
   ombra?: boolean;
   richiamo?: { mesi: number; referral_id: string; creato_at: string };
   manifesto?: Record<string, unknown>;
+  // Chi ha dettato (profilo scelto al caricamento, medici.json sul Mac).
+  medico?: { id: string; nome: string; modalita?: 'lettera' | 'aggiornamento'; atempo?: number | null } | null;
 };
 
 // Evidenzia i frammenti segnalati dentro il testo: prima occorrenza di ogni
@@ -284,6 +286,7 @@ export default async function RefertoBozza({
       </div>
       <p className="muted">
         Ricevuta il {dataOra(row.created_at)}.{' '}
+        {p.medico?.nome ? `Dettato da ${p.medico.nome}. ` : ''}
         {inBozza
           ? 'Rivedi il testo, correggi dove serve e conferma: niente diventa definitivo da solo.'
           : row.stato === 'confermata'
@@ -491,8 +494,19 @@ export default async function RefertoBozza({
       {searchParams.err === 'richiamo_paziente' && <p className="error">Nessuna referral trovata per questo paziente nello studio: il richiamo va impostato dalla scheda della referral.</p>}
 
       {row.tipo !== 'visita' && (
-        <div className="card">
-          <h2>Lettera precedente</h2>
+        // Profilo del medico: chi detta AGGIORNAMENTI (modalità
+        // «aggiornamento») trova la scheda aperta e la fusione già chiesta;
+        // chi detta lettere nuove la trova ripiegata, a portata di clic.
+        <details className="card" open={p.medico?.modalita !== 'lettera' || !!fusione}>
+          <summary className="sez-summary">
+            Lettera precedente
+            {p.medico?.modalita === 'aggiornamento' && (
+              <span className="badge badge-accent" style={{ marginLeft: 10 }}>modalità aggiornamento</span>
+            )}
+            {p.medico?.modalita === 'lettera' && !fusione && (
+              <span className="muted small" style={{ marginLeft: 10 }}>di solito {p.medico.nome} detta una lettera nuova</span>
+            )}
+          </summary>
           <p className="muted">
             Quando il medico detta gli aggiornamenti («le diagnosi secondarie
             sono quelle dell&apos;altra volta», «prendi l&apos;esame clinico e cambia
@@ -500,6 +514,13 @@ export default async function RefertoBozza({
             del paziente: le parti invariate restano identiche, il nuovo entra
             al posto giusto. Risultato sempre da rivedere.
           </p>
+          {(fusione as any)?.automatica === true && (
+            <p className="muted small">
+              Fusione chiesta in automatico dal profilo di {p.medico?.nome ?? 'questo medico'}
+              (modalità aggiornamento) con l&apos;ultima lettera confermata dello stesso paziente.
+              Se non è la lettera giusta, sostituiscila qui sotto.
+            </p>
+          )}
           {fusione?.stato === 'in_attesa' || fusione?.stato === 'in_lavorazione' ? (
             <p className="muted">
               ⏳ Fusione in corso (richiesta {fusione.richiesta_at ? dataOra(fusione.richiesta_at) : ''}):
@@ -624,7 +645,7 @@ export default async function RefertoBozza({
               </div>
             </form>
           )}
-        </div>
+        </details>
       )}
 
       {Array.isArray(p.note_segreteria) && p.note_segreteria.length > 0 && (

@@ -300,6 +300,26 @@ creati/collegati da `/programma/feed`), menu profilo e campanella nuove richiest
 (`notifyStudio`, env `STUDIO_NOTIFY_EMAIL`), notifiche reali all'inviante, scadenza + rotazione
 token pubblici, programma del giorno da feed iCal Cassa dei Medici.
 
+## Catena referti: profili per medico (7.9.2026)
+Più medici dettano con la stessa catena: chi carica il dettato SCEGLIE chi ha
+dettato (pannello locale e pagina Referti — obbligatorio quando i profili ci
+sono) e la catena si adegua. Profili in `pipeline-referti/medici.json`
+(`atempo` per medico, `modalita` lettera|aggiornamento, `vocabolario-<id>.txt`,
+`correzioni-<id>.json`, `atempo_prova`); marcatore `medico-<id>--` nel nome
+del file (come `visita-`); il servizio pubblica l'elenco su
+`POST /api/referti/medici` → `studios.referti_medici` (migrazione 031, +
+colonna `medico` su `referti_audio`/`referti_bozze`); `payload.medico` nella
+bozza; Word in carta intestata col nome di chi ha dettato. Modalità
+`aggiornamento` (Moschovitis): la bozza in arrivo chiede DA SOLA la fusione
+con l'ultima lettera confermata dello stesso paziente (`fusioneAutomatica`
+in `api/referti/bozza`, `fusione.automatica=true`, sempre e solo proposta).
+Modalità `lettera` (Moccetti): scheda «Lettera precedente» ripiegata.
+`REFERTI_ATEMPO` a mano vince sul profilo (esperimenti). Prova richiesta
+dall'utente: Moccetti parla molto veloce → `bash pipeline-referti/prova-atempo.sh
+<audio> moccetti 0.7` (bozza ombra, confronto cieco in /referti/confronto;
+varianti `atempo-0.7`/`atempo-0.6` nel banco d'oro). DA FARE dal vivo: serve
+un dettato di Moccetti già lavorato in produzione.
+
 ## Catena referti: pagine e strumenti aggiunti il 5-6.9.2026
 - `/referti/qualita` cruscotto (parole modificate, tempo di revisione, segnalazioni
   chiuse senza riascolto, classi di correzione da `src/lib/referti-tassonomia.ts`);
