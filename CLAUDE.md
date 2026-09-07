@@ -360,6 +360,20 @@ audio dell'app (env `DS2_DECODER`/`DS2_DECODER_PYTHON`) e in esporta-oro.
 I .dss classici: ffmpeg con `-f dss` (`_formato_ingresso()`). File cifrati:
 password non gestita.
 
+Fase «doppioni» (7.9.2026, richiesta utente): `togli_doppioni()` in
+pipeline.py dopo lo stile, prima della struttura. Tre regole: frase identica
+o quasi ripetuta (Jaccard ≥ 0.9, ≥ 3 elementi) → via la seconda;
+autocorrezione («anzi», «volevo dire», «correggo»…) → vince la frase col
+marcatore se condivide ≥ metà delle parole; contenimento proposto dall'AI
+locale (solo numeri di frase, `PROMPT_DOPPIONI`) accettato solo se ≥ 80% delle
+parole di contenuto stanno nella frase tenuta. Guardia oggetti protetti
+(numeri, negazioni, lateralità, farmaci Swissmedic): se la frase tolta ne ha
+uno che la tenuta non ha → NON si toglie, va in `doppioni_dubbi`. Le tolte in
+`doppioni_tolti`; passo «Doppioni del parlato» nella revisione guidata con
+«Rimetti» (frase riaccostata alla tenuta, stessi indici) e «Togli» sui dubbi.
+Caso di scuola nella suite: «lettera del 1 settembre» e «rapporto operatorio
+del 1 settembre» devono restare entrambe.
+
 ## Catena referti: pagine e strumenti aggiunti il 5-6.9.2026
 - `/referti/qualita` cruscotto (parole modificate, tempo di revisione, segnalazioni
   chiuse senza riascolto, classi di correzione da `src/lib/referti-tassonomia.ts`);

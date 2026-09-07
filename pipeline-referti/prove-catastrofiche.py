@@ -294,6 +294,45 @@ def _():
             m.PERCORSO_MEDICI, m.__file__ = vecchio_med, vecchio_file
 
 
+# 18. Doppioni (2026-09-07): via solo le ripetizioni sicure; le frasi che
+# somigliano ma dicono cose diverse restano; gli oggetti protetti bloccano.
+@caso("duplicate removal keeps look-alike sentences")
+def _():
+    t = ("Il paziente sta bene e l'ECG non mostra particolarità, in linea con la mia lettera del 1 settembre. "
+         "Come da mio rapporto operatorio del 1 settembre 2026, prevedo una risonanza fra 3-4 settimane. "
+         "Nel frattempo la terapia rimane invariata. Nel frattempo la terapia rimane invariata. "
+         "Cordiali saluti.")
+    nuovo, tolti, dubbi = m.togli_doppioni(t, "prova-18", usa_ai=False)
+    assert len(tolti) == 1 and "terapia rimane invariata" in tolti[0]["tolta"], tolti
+    assert nuovo.count("terapia rimane invariata") == 1
+    assert "lettera del 1 settembre" in nuovo and "rapporto operatorio del 1 settembre 2026" in nuovo, "le due frasi del 1 settembre devono restare"
+    assert m._numeri(nuovo) == m._numeri(t), "un doppione tolto non deve cambiare la firma numerica"
+
+
+@caso("duplicate removal: protected object blocks, self-correction wins")
+def _():
+    # Quasi identiche ma la seconda porta un numero in più: NON si toglie, si segnala.
+    t = "La frazione di eiezione è conservata. La frazione di eiezione è conservata, 55%. Fine."
+    nuovo, tolti, dubbi = m.togli_doppioni(t, "prova-18b", usa_ai=False)
+    assert not tolti and nuovo == t, (tolti, nuovo)
+    # Stessa frase due volte con lo stesso numero: la seconda va via.
+    t2 = "La frazione di eiezione è del 55%. La frazione di eiezione è del 55%. Fine della storia clinica."
+    nuovo2, tolti2, _d = m.togli_doppioni(t2, "prova-18c", usa_ai=False)
+    assert len(tolti2) == 1 and nuovo2.count("55%") == 1
+    # Autocorrezione senza numeri: vince la seconda, senza marcatore.
+    t3 = "Il paziente assume la terapia al mattino. Anzi, il paziente assume la terapia alla sera. Controllo tra sei mesi."
+    nuovo3, tolti3, _d3 = m.togli_doppioni(t3, "prova-18d", usa_ai=False)
+    assert len(tolti3) == 1 and "al mattino" not in nuovo3 and nuovo3.startswith("Il paziente assume la terapia alla sera"), nuovo3
+    # Autocorrezione CON numeri diversi: non si applica, si segnala.
+    t4 = "La frazione di eiezione è del 45%. Anzi, la frazione di eiezione è del 55%. Controllo tra sei mesi."
+    nuovo4, tolti4, dubbi4 = m.togli_doppioni(t4, "prova-18e", usa_ai=False)
+    assert not tolti4 and nuovo4 == t4 and dubbi4, (tolti4, dubbi4)
+    # Negazione: «non» presente solo nella tolta blocca.
+    t5 = "Il soffio è presente. Il soffio non è presente. Fine della visita odierna."
+    nuovo5, tolti5, _d5 = m.togli_doppioni(t5, "prova-18f", usa_ai=False)
+    assert not tolti5 and nuovo5 == t5
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0

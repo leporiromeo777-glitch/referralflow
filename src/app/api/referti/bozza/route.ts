@@ -124,6 +124,26 @@ export async function POST(req: NextRequest) {
         frase: v.frase.slice(0, 400),
         proposta: typeof v.proposta === 'string' ? v.proposta.slice(0, 400) : '',
       })),
+    // Doppioni del parlato (2026-09-07): frasi tolte dalla catena (rimettibili
+    // dalla revisione) e frasi segnalate come possibili doppioni.
+    doppioni_tolti: lista(body?.doppioni_tolti)
+      .filter((v: unknown): v is { tolta: string; tenuta?: string; motivo?: string } =>
+        !!v && typeof v === 'object' && typeof (v as any).tolta === 'string')
+      .slice(0, 40)
+      .map((v) => ({
+        tolta: v.tolta.slice(0, 600),
+        tenuta: typeof v.tenuta === 'string' ? v.tenuta.slice(0, 600) : '',
+        motivo: typeof v.motivo === 'string' ? v.motivo.slice(0, 160) : '',
+      })),
+    doppioni_dubbi: lista(body?.doppioni_dubbi)
+      .filter((v: unknown): v is { frase: string; simile_a?: string; motivo?: string } =>
+        !!v && typeof v === 'object' && typeof (v as any).frase === 'string')
+      .slice(0, 40)
+      .map((v) => ({
+        frase: v.frase.slice(0, 600),
+        simile_a: typeof v.simile_a === 'string' ? v.simile_a.slice(0, 600) : '',
+        motivo: typeof v.motivo === 'string' ? v.motivo.slice(0, 160) : '',
+      })),
     // Avvocato del diavolo (piano precisione, punto 6): frasi della bozza
     // che il verificatore separato non trova supportate dal dettato grezzo,
     // col motivo. Solo bandierine per chi rivede.

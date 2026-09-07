@@ -26,6 +26,7 @@ const FASI: Array<{ key: string; label: string; pct: number }> = [
   { key: 'riassunto',      label: 'Nota di visita (riassunto AI)',           pct: 82 },
   { key: 'pertinenza',     label: 'Evidenziatore (frasi fuori tema)',        pct: 84 },
   { key: 'senso',          label: 'Controllo del senso delle frasi',         pct: 86 },
+  { key: 'doppioni',       label: 'Doppioni del parlato',                    pct: 87 },
   { key: 'avvocato',       label: 'Avvocato del diavolo (verifica col dettato)', pct: 88 },
   { key: 'ispezione_llm',  label: 'Ricerca dei punti dubbi',                 pct: 90 },
   { key: 'estrazione',     label: 'Estrazione dei campi',                    pct: 92 },

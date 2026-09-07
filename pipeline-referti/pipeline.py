@@ -6118,7 +6118,180 @@ def applica_stile(testo: str, file_id: str, medico: str | None = None) -> tuple[
     return testo, n
 
 
-GUARDIE_VERSIONE = "2026-09-06"
+# ——— Doppioni (2026-09-07, richiesta dell'utente dal confronto con la
+# segretaria) ———
+# Il parlato si ripete: la stessa frase dettata due volte, l'autocorrezione
+# («anzi», «volevo dire»), una frase interamente contenuta in quella accanto.
+# Questa fase toglie SOLO ciò che è sicuro. Tre regole, tutte di codice:
+#   1. frase identica (o quasi) ripetuta più avanti → via la seconda;
+#   2. autocorrezione: la frase che inizia con un marcatore («anzi», «no,»,
+#      «scusi», «volevo dire», «correggo», «rettifico») sostituisce la
+#      precedente se ne condivide almeno metà delle parole di contenuto;
+#   3. contenimento: l'AI locale PROPONE «la n è già detta nella m»
+#      (risponde solo con numeri), il codice ACCETTA solo se le parole di
+#      contenuto della n stanno quasi tutte nella m.
+# Guardia degli oggetti protetti (numeri, date, negazioni, lateralità,
+# farmaci): una frase tolta non può contenerne uno che la frase tenuta non
+# ha. Se lo contiene, non si tocca: diventa una SEGNALAZIONE («doppione
+# dubbio») per chi rivede. Ogni frase tolta resta in bozza (doppioni_tolti)
+# e si rimette con un clic. Caso di scuola che DEVE restare: «in linea con
+# la mia lettera del 1 settembre» e «come da mio rapporto operatorio del 1
+# settembre» sono due documenti diversi, non un doppione.
+PROMPT_DOPPIONI = """Sei un correttore di bozze. Qui sotto ci sono FRASI NUMERATE di un referto medico dettato a voce. Trova i DOPPIONI: frasi che ripetono per intero un'informazione già presente in una frase vicina (al massimo due posizioni prima o dopo), senza aggiungere NULLA di nuovo.
+
+NON è un doppione:
+- una frase che aggiunge anche solo un dettaglio (un numero, una data, un esame, un documento diverso, una negazione);
+- due frasi che si somigliano ma parlano di cose diverse (es. «come da mia lettera del 1 settembre» e «come da rapporto operatorio del 1 settembre»);
+- una precisazione o una conseguenza.
+
+Rispondi SOLO con JSON: {"doppioni": [{"togli": N, "tieni": M}, …]} dove N è la frase da togliere e M quella che già contiene la stessa informazione. Se non ci sono doppioni sicuri: {"doppioni": []}. Nel dubbio, NON è un doppione.
+
+FRASI:
+{frasi}"""
+
+_STOP_DOPPIONI = set((
+    "il lo la i gli le un uno una di a da in con su per tra fra e ed o che chi cui non del della dei "
+    "delle al alla ai alle dal dalla dai dalle nel nella nei nelle sul sulla sui sulle è sono ho ha hanno "
+    "essere stato stata stati state come anche più molto già poi quindi dove quando mentre se ma però "
+    "ne si ci vi lui lei loro questo questa questi queste quello quella quelli quelle suo sua suoi sue "
+    "mio mia miei mie nostro nostra all agli sull nell dell col coi"
+).split())
+_RX_MARCATORE_CORREZIONE = re.compile(
+    r"^(?:anzi|no[,.]|scusi|scusate|pardon|volevo dire|cio[èe] no|correggo|mi correggo|rettifico|rettifica)\b[\s,:]*",
+    re.IGNORECASE)
+
+
+def _gettoni_contenuto(frase: str) -> set[str]:
+    parole = re.findall(r"[\w'àèéìíòóùú-]+", frase.lower())
+    return {p.strip("'-") for p in parole if len(p.strip("'-")) >= 3 and p.strip("'-") not in _STOP_DOPPIONI}
+
+
+def _norma_frase(frase: str) -> str:
+    return re.sub(r"[^\w]+", " ", frase.lower()).strip()
+
+
+def _oggetti_protetti(frase: str) -> set[str]:
+    """Numeri e date, negazioni, lateralità, nomi di farmaci noti: ciò che
+    una frase tolta non può portarsi via se la frase tenuta non ce l'ha."""
+    fuori: set[str] = set(_numeri(frase))
+    fuori.update(m.lower() for m in _RX_NEGAZIONE.findall(frase))
+    fuori.update(m.lower() for m in _RX_LATERALITA.findall(frase))
+    try:
+        f = _farmaci() or {}
+        nomi = f.get("nomi") if isinstance(f.get("nomi"), dict) else {}
+        principi = f.get("principi") if isinstance(f.get("principi"), dict) else {}
+        for p in re.findall(r"[a-zA-Zàèéìòù]{5,}", frase):
+            if p.lower() in nomi or p.lower() in principi:
+                fuori.add("farmaco:" + p.lower())
+    except Exception:  # noqa: BLE001 — senza registro farmaci, solo le altre guardie
+        pass
+    return fuori
+
+
+def togli_doppioni(testo: str, file_id: str, usa_ai: bool = True) -> tuple[str, list[dict], list[dict]]:
+    """(testo senza doppioni, tolti, dubbi). Ogni voce: frase tolta/segnalata,
+    frase tenuta, motivo. Mai contenuti nei log: solo conteggi."""
+    inizio = time.monotonic()
+    spans = _frasi_span(testo)
+    grezze = [testo[a:b] for a, b in spans]
+    pulite = [g.strip() for g in grezze]
+    n = len(pulite)
+    if n < 2:
+        return testo, [], []
+    gettoni = [_gettoni_contenuto(f) for f in pulite]
+    protetti = [_oggetti_protetti(f) for f in pulite]
+    norme = [_norma_frase(f) for f in pulite]
+    tolti: list[dict] = []
+    dubbi: list[dict] = []
+    rimuovi: set[int] = set()
+
+    def guardia_ok(i_tolta: int, i_tenuta: int) -> bool:
+        return protetti[i_tolta] <= protetti[i_tenuta]
+
+    # 1) identiche (parole + numeri: almeno 3 elementi, così «Fine.» non
+    #    conta) o quasi identiche (Jaccard ≥ 0.9 su almeno 3 parole di contenuto).
+    peso = [len(gettoni[i]) + len(_numeri(pulite[i])) for i in range(n)]
+    for i in range(n):
+        if i in rimuovi or peso[i] < 3:
+            continue
+        for j in range(i + 1, n):
+            if j in rimuovi or peso[j] < 3:
+                continue
+            uguali = norme[i] == norme[j]
+            unione = gettoni[i] | gettoni[j]
+            jac = len(gettoni[i] & gettoni[j]) / len(unione) if unione else 0.0
+            quasi = len(gettoni[i]) >= 3 and len(gettoni[j]) >= 3 and jac >= 0.9
+            if uguali or quasi:
+                if guardia_ok(j, i):
+                    rimuovi.add(j)
+                    tolti.append({"tolta": pulite[j], "tenuta": pulite[i], "motivo": "frase ripetuta"})
+                else:
+                    dubbi.append({"frase": pulite[j], "simile_a": pulite[i],
+                                  "motivo": "sembra ripetuta, ma contiene un numero o un dato che l'altra non ha"})
+
+    # 2) autocorrezione del dettato: la frase col marcatore vince sulla precedente.
+    for j in range(1, n):
+        if j in rimuovi or (j - 1) in rimuovi:
+            continue
+        if not _RX_MARCATORE_CORREZIONE.match(pulite[j]):
+            continue
+        i = j - 1
+        if not gettoni[i] or not gettoni[j]:
+            continue
+        condivise = len(gettoni[i] & gettoni[j]) / max(1, len(gettoni[i]))
+        if condivise < 0.5:
+            continue
+        if guardia_ok(i, j):
+            rimuovi.add(i)
+            tolti.append({"tolta": pulite[i], "tenuta": pulite[j], "motivo": "autocorrezione del dettato"})
+            grezze[j] = _RX_MARCATORE_CORREZIONE.sub("", grezze[j], count=1)
+            grezze[j] = grezze[j][:1].upper() + grezze[j][1:]
+        else:
+            dubbi.append({"frase": pulite[i], "simile_a": pulite[j],
+                          "motivo": "il dettato sembra correggersi qui: i numeri cambiano, decidi tu quale vale"})
+
+    # 3) contenimento proposto dall'AI locale, accettato solo dal codice.
+    if usa_ai and n >= 3:
+        candidati = [i for i in range(n) if i not in rimuovi]
+        elenco = "\n".join(f"{k + 1}. {pulite[i]}" for k, i in enumerate(candidati))
+        try:
+            uscita = chiama_ollama(PROMPT_DOPPIONI.replace("{frasi}", elenco), file_id, "doppioni",
+                                   formato_json=True, max_gettoni=400)
+            dati = _estrai_json(uscita) or {}
+        except RuntimeError:
+            dati = {}
+            log.warning("fase=doppioni file=%s esito=ai_saltata", file_id)
+        for v in (dati.get("doppioni") if isinstance(dati.get("doppioni"), list) else []):
+            if not isinstance(v, dict):
+                continue
+            try:
+                a, b = int(v.get("togli")), int(v.get("tieni"))
+            except (TypeError, ValueError):
+                continue
+            if not (1 <= a <= len(candidati) and 1 <= b <= len(candidati)) or a == b or abs(a - b) > 2:
+                continue
+            i_t, i_k = candidati[a - 1], candidati[b - 1]
+            if i_t in rimuovi or i_k in rimuovi or len(gettoni[i_t]) < 3:
+                continue
+            copertura = len(gettoni[i_t] & gettoni[i_k]) / len(gettoni[i_t])
+            if copertura >= 0.8 and guardia_ok(i_t, i_k):
+                rimuovi.add(i_t)
+                tolti.append({"tolta": pulite[i_t], "tenuta": pulite[i_k], "motivo": "già detta nella frase accanto"})
+            elif copertura >= 0.5:
+                dubbi.append({"frase": pulite[i_t], "simile_a": pulite[i_k],
+                              "motivo": "l'AI la considera un doppione, ma non è contenuta per intero nell'altra"})
+
+    if rimuovi:
+        nuovo = "".join(g for k, g in enumerate(grezze) if k not in rimuovi)
+        nuovo = re.sub(r"[ \t]{2,}", " ", nuovo).replace("\n\n\n", "\n\n").strip()
+    else:
+        nuovo = testo
+    log.info("fase=doppioni file=%s tolti=%d dubbi=%d frasi=%d durata=%.1fs",
+             file_id, len(tolti), len(dubbi), n, time.monotonic() - inizio)
+    return nuovo, tolti, dubbi
+
+
+GUARDIE_VERSIONE = "2026-09-07"
 
 
 def _sha_breve(*pezzi: bytes) -> str:
@@ -6684,6 +6857,22 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                 testo_integrale = finale
                 tappa("stile", "codice", sostituzioni=n_stile)
 
+        # Doppioni del parlato (2026-09-07): via le ripetizioni sicure, il
+        # resto segnalato. Le frasi tolte restano in bozza, rimettibili.
+        doppioni_tolti: list[dict] = []
+        doppioni_dubbi: list[dict] = []
+        if not visita:
+            fase = "doppioni"
+            _ = notifica and notifica(fase)
+            try:
+                finale, doppioni_tolti, doppioni_dubbi = togli_doppioni(finale, file_id)
+            except Exception as e:  # noqa: BLE001 — mai bloccare la catena per una rifinitura
+                log.warning("fase=doppioni file=%s esito=errore tipo=%s", file_id, type(e).__name__)
+            if doppioni_tolti:
+                testo_integrale = finale
+                versioni["dopo_doppioni"] = finale
+            tappa("doppioni", "modello+codice", tolti=len(doppioni_tolti), dubbi=len(doppioni_dubbi))
+
         # Formato standard dello studio (struttura=1): la catena prepara la
         # PROPOSTA già impaginata come il rapporto-tipo — in pagina si
         # applica con un clic. Il testo ufficiale resta `finale`.
@@ -6879,6 +7068,9 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # decide) e frasi prive di senso con proposta dal glossario.
         "divagazioni": divagazioni,
         "frasi_da_chiarire": frasi_da_chiarire,
+        # Doppioni del parlato: tolti (rimettibili dalla revisione) e dubbi.
+        "doppioni_tolti": doppioni_tolti[:40],
+        "doppioni_dubbi": doppioni_dubbi[:40],
         # Avvocato del diavolo + dettato grezzo (punto 6): la pagina di
         # revisione mostra le frasi non supportate col motivo e permette di
         # confrontare la bozza con ciò che è stato davvero trascritto.

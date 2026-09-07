@@ -14,6 +14,10 @@ import { salvaTesto } from '../actions';
 type FraseDaChiarire = { frase: string; proposta: string };
 type FraseNonSupportata = { frase: string; motivo: string };
 type Riparazione = { da: string; a: string };
+// Doppioni del parlato (2026-09-07): frasi tolte dalla catena (rimettibili)
+// e frasi segnalate come possibili doppioni (si tolgono con un clic).
+type DoppioneTolto = { tolta: string; tenuta: string; motivo: string };
+type DoppioneDubbio = { frase: string; simile_a: string; motivo: string };
 
 function spezzaInFrasi(testo: string): string[] {
   const pezzi: string[] = [];
@@ -49,6 +53,8 @@ export function RevisioneGuidata({
   valoriNumerici,
   parole = [],
   riparazioni = [],
+  doppioniTolti = [],
+  doppioniDubbi = [],
   testoStrutturato = '',
   provenienza = [],
   avvisi = [],
@@ -69,6 +75,8 @@ export function RevisioneGuidata({
   valoriNumerici: Record<string, unknown> | null;
   parole?: [string, number][];
   riparazioni?: Riparazione[];
+  doppioniTolti?: DoppioneTolto[];
+  doppioniDubbi?: DoppioneDubbio[];
   testoStrutturato?: string;
   provenienza?: [string, string][];
   avvisi?: string[];
@@ -376,6 +384,8 @@ export function RevisioneGuidata({
     passi.push({ chiave: 'spente', titolo: 'Frasi spente dall’AI', conta: spenteIniziali.size });
   if (riparazioni.length > 0)
     passi.push({ chiave: 'ripar', titolo: 'Correzioni automatiche', conta: riparazioni.length });
+  if (doppioniTolti.length + doppioniDubbi.length > 0)
+    passi.push({ chiave: 'doppioni', titolo: 'Doppioni del parlato', conta: doppioniTolti.length + doppioniDubbi.length });
   if (note.length > 0)
     passi.push({ chiave: 'note', titolo: 'Note per la segreteria', conta: note.length });
   if (Object.keys(campi).filter((k) => typeof campi[k] === 'string').length > 0)
@@ -851,6 +861,91 @@ export function RevisioneGuidata({
             </div>
           ))}
           {bottoneAltre('spente', spenteIniziali.size)}
+        </div>
+      )}
+
+      {attivo === 'doppioni' && (
+        <div className="rg-corpo">
+          <p className="muted">
+            Il parlato si ripete: la catena ha tolto le ripetizioni sicure (stessa
+            frase due volte, autocorrezioni del dettato, frasi già dette in quella
+            accanto) e ha lasciato al posto tutto ciò che portava un numero, una
+            negazione o un dato in più. Qui rimetti quello che vuoi tenere e
+            togli i dubbi che confermi.
+          </p>
+          {doppioniTolti.map((v, i) => {
+            const id = `dt${i}`;
+            return (
+              <div key={id} className={`rg-item${fatte.has(id) ? ' rg-fatta' : ''}`}>
+                <p className="rg-frase"><s className="muted">{v.tolta}</s></p>
+                <p className="rg-motivo">
+                  Tolta ({v.motivo}). Resta: «{v.tenuta}»
+                </p>
+                {!fatte.has(id) && (
+                  <div className="rg-azioni">
+                    {bottoneRiascolta(v.tolta) || bottoneRiascolta(v.tenuta)}
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => {
+                        // Rimette la frase accanto a quella tenuta (stesso
+                        // posto), senza spostare gli indici delle altre frasi.
+                        ricorda();
+                        const nt = normalizza(v.tenuta);
+                        const idx = frasi.findIndex((f) => normalizza(f) === nt || (nt.length >= 12 && normalizza(f).includes(nt)));
+                        if (testoLibero !== null) {
+                          setTestoLibero(testoLibero.includes(v.tenuta)
+                            ? testoLibero.replace(v.tenuta, `${v.tenuta} ${v.tolta}`)
+                            : `${testoLibero}\n${v.tolta}`);
+                        } else if (idx >= 0) {
+                          setFrasi((prev) => prev.map((f, j) => (j === idx ? `${f} ${v.tolta}` : f)));
+                          setModificate((prev) => new Set(prev).add(idx));
+                        } else {
+                          setFrasi((prev) => [...prev, v.tolta]);
+                        }
+                        segnaNudo(id);
+                      }}
+                    >
+                      ↩ Rimetti la frase
+                    </button>
+                    <button type="button" className="btn btn-ghost" onClick={() => segna(id)}>
+                      Va bene tolta
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {doppioniDubbi.map((v, i) => {
+            const id = `dd${i}`;
+            const nf = normalizza(v.frase);
+            const idx = frasi.findIndex((f) => normalizza(f) === nf || (nf.length >= 12 && normalizza(f).includes(nf)));
+            return (
+              <div key={id} className={`rg-item${fatte.has(id) ? ' rg-fatta' : ''}`}>
+                <p className="rg-frase">{v.frase}</p>
+                <p className="rg-motivo">
+                  Possibile doppione ({v.motivo}). Simile a: «{v.simile_a}»
+                </p>
+                {!fatte.has(id) && (
+                  <div className="rg-azioni">
+                    {bottoneRiascolta(v.frase)}
+                    {idx >= 0 && !spente.has(idx) && (
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => { riaccendi(idx); segnaNudo(id); }}
+                      >
+                        🗑 Togli questa frase
+                      </button>
+                    )}
+                    <button type="button" className="btn btn-ghost" onClick={() => segna(id)}>
+                      Va bene così, resta
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

@@ -66,6 +66,20 @@ riascolto in pagina e nel pannello si converte al volo in WAV con lo stesso
 decoder. Limite noto: i file cifrati dal DPM richiedono la password
 (`ds2decode.py --password`), non gestita in automatico.
 
+## Doppioni del parlato (2026-09-07)
+
+Fase di codice dopo lo stile: toglie solo le ripetizioni sicure — stessa
+frase due volte, autocorrezione del dettato («anzi…»: vale l'ultima), frase
+già detta per intero in quella accanto (proposta dall'AI locale con soli
+numeri di frase, accettata dal codice se le parole di contenuto stanno quasi
+tutte nell'altra). Una frase che porta un numero, una data, una negazione,
+una lateralità o un farmaco che l'altra non ha non si tocca mai: diventa un
+«doppione dubbio». Tolte e dubbi arrivano in bozza (`doppioni_tolti`,
+`doppioni_dubbi`) e nella revisione guidata si rimettono o si tolgono con
+un clic. Le riformulazioni dentro la stessa frase («una medicazione,
+limitandomi a una semplice medicazione») restano al bottone «Impagina come
+lettera», che le asciuga sotto guardia numerica.
+
 ## Profili per medico (2026-09-07)
 
 Più medici dettano con la stessa catena e ognuno ha abitudini diverse. Chi

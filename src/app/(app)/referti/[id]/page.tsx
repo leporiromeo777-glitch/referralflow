@@ -38,6 +38,8 @@ type Payload = {
   frasi_da_chiarire?: { frase: string; proposta: string }[];
   frasi_non_supportate?: { frase: string; motivo: string }[];
   riparazioni_applicate?: { da: string; a: string }[];
+  doppioni_tolti?: { tolta: string; tenuta: string; motivo: string }[];
+  doppioni_dubbi?: { frase: string; simile_a: string; motivo: string }[];
   testo_grezzo?: string;
   testo_strutturato?: string;
   revisione?: { quota_modificata?: number; distanza_parole?: number; parole_finali?: number; tempo_revisione_s?: number; flag_totali?: number; flag_accettati_senza_riascolto?: number; flag_critici_totali?: number; flag_critici_chiusi?: number; classi?: Record<string, number>; origini?: Record<string, number>; modifiche?: { prima: string; dopo: string; classe: string; origine?: string }[] };
@@ -802,6 +804,8 @@ export default async function RefertoBozza({
             frasiDaChiarire={Array.isArray(p.frasi_da_chiarire) ? p.frasi_da_chiarire : []}
             frasiNonSupportate={Array.isArray(p.frasi_non_supportate) ? p.frasi_non_supportate : []}
             riparazioni={Array.isArray(p.riparazioni_applicate) ? p.riparazioni_applicate : []}
+            doppioniTolti={Array.isArray(p.doppioni_tolti) ? p.doppioni_tolti : []}
+            doppioniDubbi={Array.isArray(p.doppioni_dubbi) ? p.doppioni_dubbi : []}
             testoStrutturato={typeof p.testo_strutturato === 'string' ? p.testo_strutturato : ''}
             provenienza={
               fusione?.stato === 'fatta' && fusione.testo_fuso && Array.isArray(fusione.provenienza)
