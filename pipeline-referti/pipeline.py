@@ -1507,6 +1507,10 @@ def collasso_a_vs_b(caratteri_a: int, caratteri_b: int) -> bool:
 # Passata A collassata anche dopo il recupero: le omissioni si cercano
 # contro la passata B, che è l'unica ad avere il dettato intero.
 _COLLASSO_A: set[str] = set()
+# Testimone promosso: la passata A è rimasta incompleta anche dopo il
+# recupero e il testo di BASE è diventato quello della B (Voxtral); la A fa
+# da testimone. I tempi delle parole restano quelli di whisper.
+_TESTIMONE_PROMOSSO: set[str] = set()
 
 
 def probabilita_parole(percorso_json: Path) -> dict[str, float]:
@@ -6063,13 +6067,16 @@ def costruisci_manifesto(integ: dict, fatto_b: bool, verif_cloud: bool, secondo_
         mancanti.append("integrità audio")
     # Passata A collassata rispetto alla B (sentinella A-vs-B del 2026-09-07):
     # il referto nasce da un dettato incompleto, verifica al livello minimo.
-    if file_id in _COLLASSO_A:
+    if file_id in _TESTIMONE_PROMOSSO:
+        mancanti.append("primo motore completo (base: secondo motore)")
+    elif file_id in _COLLASSO_A:
         mancanti.append("trascrizione principale completa")
     con_tempo = sum(1 for n in numeri if isinstance(n, dict) and n.get("secondo") is not None)
     return {
         "integrita_audio": "ok" if integ_ok else "avviso",
         "legame_audio": "hash del contenuto",
-        "testimoni": ["whisper-large-v3", "voxtral-mini" if fatto_b else "whisper-large-v3 (seconda passata)"],
+        "testimoni": (["voxtral-mini (base)", "whisper-large-v3 (testimone)"] if file_id in _TESTIMONE_PROMOSSO
+                      else ["whisper-large-v3", "voxtral-mini" if fatto_b else "whisper-large-v3 (seconda passata)"]),
         "indipendenza_testimoni": "alta" if fatto_b else "bassa",
         "verifica_cloud": "ok" if verif_cloud else "classica",
         "secondo_orecchio": bool(secondo_orecchio),
@@ -6766,6 +6773,22 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                     "fase=trascrizione_a file=%s esito=buco_confermato motivo=%s caratteri_a=%d caratteri_b=%d",
                     file_id, residuo, len(grezzo_a), len(grezzo_b),
                 )
+            # Promozione del testimone (2026-09-09, terzo caso in tre giorni):
+            # se la A resta incompleta anche dopo il recupero e la B ha un
+            # corpo paragonabile, il testo di BASE diventa quello della B e la
+            # A fa da testimone. Le divergenze restano simmetriche; i tempi
+            # delle parole restano quelli di whisper (allinea_parole aggancia
+            # le parole in comune e interpola le altre).
+            if residuo and len(grezzo_b) >= len(grezzo_a) * 0.8:
+                grezzo_a, grezzo_b = grezzo_b, grezzo_a
+                _TESTIMONE_PROMOSSO.add(file_id)
+                log.warning("fase=trascrizione_a file=%s esito=testimone_promosso base=voxtral motivo=%s", file_id, residuo)
+                tappa("promozione_testimone", "codice", base="voxtral", motivo=residuo)
+                avvisi.append(
+                    "Il primo motore di trascrizione (whisper) ha perso pezzi del dettato anche dopo "
+                    "il recupero: il testo di partenza è quello del secondo motore (Voxtral) e whisper "
+                    "fa da testimone. Riascolta con attenzione numeri e farmaci prima di confermare.")
+            elif residuo:
                 avvisi.append(
                     "ATTENZIONE: al primo motore di trascrizione manca probabilmente un pezzo del "
                     "dettato (" + {"lunghezza": "ha reso molto meno testo del secondo",
@@ -7131,6 +7154,8 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                 _TEMPI_SENZA_VAD.pop()
             while len(_COLLASSO_A) > 12:
                 _COLLASSO_A.pop()
+            while len(_TESTIMONE_PROMOSSO) > 12:
+                _TESTIMONE_PROMOSSO.pop()
             if seg_vad:
                 parole_audio = parole_da_json(percorso(".json"))
                 giuntura = _giuntura_vad(
@@ -7304,7 +7329,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         try:
             # Con la A collassata il metro è la B: è l'unica ad avere il
             # dettato intero, e chi rivede deve vedere che cosa manca.
-            sorgente = grezzo_b if file_id in _COLLASSO_A else grezzo_a
+            sorgente = grezzo_a if file_id in _TESTIMONE_PROMOSSO else (grezzo_b if file_id in _COLLASSO_A else grezzo_a)
             omesse = rileva_omissioni(sorgente, finale, note_segreteria, parole_audio,
                                       file_id, sostituzioni)
             payload["frasi_omesse"] = omesse

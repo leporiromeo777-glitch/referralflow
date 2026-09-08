@@ -419,6 +419,19 @@ def _prova_25() -> None:
     assert m.collasso_a_vs_b(600, 3084)
 
 
+@caso("26 · testimone promosso: base Voxtral, verifica ridotta e non minima")
+def _prova_26() -> None:
+    m._TESTIMONE_PROMOSSO.add("prova-26"); m._COLLASSO_A.add("prova-26")
+    mf = m.costruisci_manifesto({}, True, True, True, "aligner", [], [], [], [], 0, [], "prova-26")
+    assert mf["testimoni"][0].startswith("voxtral"), mf["testimoni"]
+    assert "primo motore completo (base: secondo motore)" in mf["componenti_mancanti"]
+    assert mf["livello_verifica"] == "ridotto", mf["livello_verifica"]
+    m._TESTIMONE_PROMOSSO.discard("prova-26"); m._COLLASSO_A.discard("prova-26")
+    m._COLLASSO_A.add("prova-26b")
+    assert m.costruisci_manifesto({}, True, True, True, "aligner", [], [], [], [], 0, [], "prova-26b")["livello_verifica"] == "minimo"
+    m._COLLASSO_A.discard("prova-26b")
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0

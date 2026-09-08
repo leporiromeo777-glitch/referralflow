@@ -402,8 +402,16 @@ sulla sola lunghezza NON scattava. Ora `motivo_buco_in_a()` guarda tre
 segnali (lunghezza; NUMERI presenti solo nella B, ≥2 e ≥25%; righe tolte
 dall'anti-loop ≥ max(6, 30%)) e la corsa di recupero senza VAD vince se
 `accordo_con_b()` (numeri in comune ×3 + parole significative in comune) è
-maggiore, non se è solo più lunga. Caso 25 nella suite. Se ricapita: valutare
-la corsa senza VAD come passata principale (costa ~45 s in più).
+maggiore, non se è solo più lunga. Caso 25 nella suite. E se la A resta incompleta ANCHE dopo il recupero
+(caso vero, stesso giorno: 1411 caratteri recuperati ma ancora numeri solo
+in B), scatta la PROMOZIONE DEL TESTIMONE: il testo di base diventa quello
+di Voxtral, whisper fa da testimone (`_TESTIMONE_PROMOSSO`, tappa
+`promozione_testimone`, manifesto «primo motore completo (base: secondo
+motore)» → livello ridotto, testimoni invertiti; le omissioni si cercano
+contro la base nuova). I tempi delle parole restano quelli di whisper:
+`allinea_parole` aggancia le parole in comune e interpola le altre. Caso 26
+nella suite. Tre casi in tre giorni tutti sullo stesso medico: valutare la
+corsa senza VAD come passata principale.
 
 Schede di segnalazione senza testo (7.9.2026, viste dall'utente): una riga
 di sola punteggiatura nel testo finale («,» rimasta da un «virgola» dettato
