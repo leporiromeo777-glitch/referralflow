@@ -404,6 +404,21 @@ def _prova_24() -> None:
     assert "due punti" not in pulita and "chiusa parentesi" not in pulita, pulita
 
 
+@caso("25 · buco nel mezzo della passata A: numeri solo in B o motore incantato")
+def _prova_25() -> None:
+    # Caso vero 2026-09-09: lunghezze simili, ma 8 numeri su 15 solo in B.
+    a = "Il paziente sta bene e la terapia resta invariata. Controllo fra 6 mesi. Valori 120 e 80."
+    b = "Il paziente sta bene, pressione 135 su 85, frequenza 70, peso 84 chili per 174 cm. Controllo fra 6 mesi. Valori 120 e 80."
+    assert m.motivo_buco_in_a(a, b, rimosse_a=0, righe_a=10) == "numeri"
+    # Motore incantato: molte righe tolte dall'anti-loop.
+    assert m.motivo_buco_in_a(b, b, rimosse_a=21, righe_a=30) == "loop"
+    # Accordo normale: nessun motivo.
+    assert m.motivo_buco_in_a(b, b, rimosse_a=1, righe_a=30) is None
+    # La corsa di recupero vince solo se concorda di più col testimone.
+    assert m.accordo_con_b(b, b) > m.accordo_con_b(a, b)
+    assert m.collasso_a_vs_b(600, 3084)
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0

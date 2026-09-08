@@ -1465,6 +1465,38 @@ _PROB_PAROLE: dict[str, dict[str, float]] = {}
 _TEMPI_SENZA_VAD: set[str] = set()
 
 
+def _numeri_di(testo: str) -> set[str]:
+    return set(re.findall(r"\d+(?:[.,]\d+)?", testo))
+
+
+def motivo_buco_in_a(grezzo_a: str, grezzo_b: str, rimosse_a: int, righe_a: int) -> str | None:
+    """Perché sospettare che alla passata A manchi un pezzo (2026-09-09,
+    secondo caso vero in due giorni: 123 s di dettato, whisper incantato per
+    21 righe, 8 numeri su 15 sentiti solo da Voxtral, e la lunghezza totale
+    non lo diceva). Tre segnali: la lunghezza (collasso intero), i NUMERI
+    che stanno solo nella B (buco nel mezzo), le righe tolte dall'anti-loop
+    (motore incantato). Torna il motivo o None."""
+    if collasso_a_vs_b(len(grezzo_a), len(grezzo_b)):
+        return "lunghezza"
+    nb, na = _numeri_di(grezzo_b), _numeri_di(grezzo_a)
+    mancanti = nb - na
+    if len(nb) >= 3 and len(mancanti) >= 2 and len(mancanti) / len(nb) >= 0.25:
+        return "numeri"
+    if rimosse_a >= max(6, int(0.3 * max(righe_a, 1))):
+        return "loop"
+    return None
+
+
+def accordo_con_b(a: str, b: str) -> int:
+    """Quanto una passata A concorda col testimone B: numeri in comune
+    (pesano 3) più parole significative in comune. Serve a scegliere tra la
+    corsa normale e quella di recupero: vince chi concorda di più."""
+    na, nb = _numeri_di(a), _numeri_di(b)
+    wa = set(re.findall(r"[a-zà-ÿ]{4,}", a.lower()))
+    wb = set(re.findall(r"[a-zà-ÿ]{4,}", b.lower()))
+    return 3 * len(na & nb) + len(wa & wb)
+
+
 def collasso_a_vs_b(caratteri_a: int, caratteri_b: int) -> bool:
     """La passata A è collassata rispetto alla B? Metro della sentinella
     A-vs-B (2026-09-07): la B rende almeno il 60% in più della A e almeno
@@ -6678,6 +6710,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # su disco intatti; l'intervento si segnala in bozza (punti_loop).
         fase = "deloop"
         inizio = time.monotonic()
+        righe_a_grezze = sum(1 for r in percorso(".txt").read_text(encoding="utf-8").splitlines() if r.strip())
         grezzo_a, fant_a = togli_frasi_fantasma(
             percorso(".txt").read_text(encoding="utf-8"))
         grezzo_b, fant_b = togli_frasi_fantasma(
@@ -6696,42 +6729,50 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # l'altro testimone, dopo la pulizia. Causa più probabile: il VAD che
         # butta via il parlato → corsa di recupero SENZA VAD, con i tempi
         # (l'orologio diventa quello pieno: lo dice _TEMPI_SENZA_VAD).
-        if fatto_b and not visita and collasso_a_vs_b(len(grezzo_a), len(grezzo_b)):
+        motivo_buco = motivo_buco_in_a(grezzo_a, grezzo_b, rip_a, righe_a_grezze) if (fatto_b and not visita) else None
+        if motivo_buco:
             log.warning(
-                "fase=trascrizione_a file=%s esito=sospetto_collasso_ab caratteri_a=%d caratteri_b=%d",
-                file_id, len(grezzo_a), len(grezzo_b),
+                "fase=trascrizione_a file=%s esito=sospetto_buco motivo=%s caratteri_a=%d caratteri_b=%d rimosse_a=%d numeri_solo_b=%d",
+                file_id, motivo_buco, len(grezzo_a), len(grezzo_b), rip_a, len(_numeri_di(grezzo_b) - _numeri_di(grezzo_a)),
             )
-            recuperato = ""
+            recuperato, rip_rec, punti_rec = "", 0, []
             try:
                 trascrivi(percorso(".wav"), percorso(".nv.txt"), file_id,
                           "trascrizione_a_nc", "", con_tempi=True, usa_vad=False)
                 recuperato, _ = togli_frasi_fantasma(
                     percorso(".nv.txt").read_text(encoding="utf-8"))
-                recuperato, _, punti_rec = deduplica_loop(recuperato)
+                recuperato, rip_rec, punti_rec = deduplica_loop(recuperato)
             except Exception:  # noqa: BLE001 — il recupero non blocca mai
-                recuperato, punti_rec = "", []
-            if len(recuperato) > len(grezzo_a) * 1.2:
-                grezzo_a, punti_loop = recuperato, punti_rec
+                recuperato, rip_rec, punti_rec = "", 0, []
+            # Vince la passata che concorda di più col testimone B (numeri in
+            # comune pesano tre volte le parole): non più la sola lunghezza.
+            if recuperato and accordo_con_b(recuperato, grezzo_b) > accordo_con_b(grezzo_a, grezzo_b):
+                log.info(
+                    "fase=trascrizione_a file=%s esito=recuperato_senza_vad caratteri=%d accordo_prima=%d accordo_dopo=%d",
+                    file_id, len(recuperato), accordo_con_b(grezzo_a, grezzo_b), accordo_con_b(recuperato, grezzo_b),
+                )
+                grezzo_a, punti_loop, rip_a = recuperato, punti_rec, rip_rec
                 percorso(".nv.txt").replace(percorso(".txt"))
                 if percorso(".nv.json").is_file():
                     percorso(".nv.json").replace(percorso(".json"))
                 _TEMPI_SENZA_VAD.add(file_id)
                 versioni["grezzo_a_recuperato"] = grezzo_a
-                log.info(
-                    "fase=trascrizione_a file=%s esito=recuperato_senza_vad caratteri=%d",
-                    file_id, len(grezzo_a),
-                )
-            if collasso_a_vs_b(len(grezzo_a), len(grezzo_b)):
+            else:
+                log.info("fase=trascrizione_a file=%s esito=recupero_non_migliore", file_id)
+            residuo = motivo_buco_in_a(grezzo_a, grezzo_b, rip_a, righe_a_grezze)
+            if residuo:
                 _COLLASSO_A.add(file_id)
                 log.warning(
-                    "fase=trascrizione_a file=%s esito=collasso_confermato caratteri_a=%d caratteri_b=%d",
-                    file_id, len(grezzo_a), len(grezzo_b),
+                    "fase=trascrizione_a file=%s esito=buco_confermato motivo=%s caratteri_a=%d caratteri_b=%d",
+                    file_id, residuo, len(grezzo_a), len(grezzo_b),
                 )
                 avvisi.append(
-                    "ATTENZIONE: il primo motore di trascrizione ha reso molto meno testo del "
-                    "secondo sullo stesso audio — è quasi certo che al referto manchino pezzi "
-                    "del dettato. NON confermare questa bozza: riascolta l'audio, e i passaggi "
-                    "che mancano sono elencati nel primo passo della revisione.")
+                    "ATTENZIONE: al primo motore di trascrizione manca probabilmente un pezzo del "
+                    "dettato (" + {"lunghezza": "ha reso molto meno testo del secondo",
+                                   "numeri": "il secondo motore ha sentito numeri che il primo non ha",
+                                   "loop": "si è incantato ripetendo le stesse frasi"}[residuo] +
+                    "). NON confermare questa bozza senza riascoltare: i passaggi che mancano "
+                    "sono nel primo passo della revisione e nel passo «I due motori non concordano».")
         tappa("trascrizione_a", "whisper", caratteri=len(grezzo_a))
         tappa("trascrizione_b", "voxtral" if fatto_b else "whisper", caratteri=len(grezzo_b))
         tappa("deloop", "codice", rimosse=rip_a + rip_b, fantasmi=fant_a + fant_b)

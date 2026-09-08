@@ -396,6 +396,14 @@ ancore — basta togliere l'atempo. Senza questo secondo pezzo il clic su una
 parola portava PIÙ AVANTI nell'audio (ultima parola a 385 s su 289 s di
 registrazione, visto dal vivo 2026-09-07). Casi 20-21 nella suite.
 La rilavorazione di una bozza scartata azzera anche `revisione_stato`.
+SECONDO caso (9.9.2026): 123 s di dettato, whisper incantato per 21 righe,
+8 numeri su 15 sentiti solo da Voxtral, lunghezze simili → la sentinella
+sulla sola lunghezza NON scattava. Ora `motivo_buco_in_a()` guarda tre
+segnali (lunghezza; NUMERI presenti solo nella B, ≥2 e ≥25%; righe tolte
+dall'anti-loop ≥ max(6, 30%)) e la corsa di recupero senza VAD vince se
+`accordo_con_b()` (numeri in comune ×3 + parole significative in comune) è
+maggiore, non se è solo più lunga. Caso 25 nella suite. Se ricapita: valutare
+la corsa senza VAD come passata principale (costa ~45 s in più).
 
 Schede di segnalazione senza testo (7.9.2026, viste dall'utente): una riga
 di sola punteggiatura nel testo finale («,» rimasta da un «virgola» dettato
