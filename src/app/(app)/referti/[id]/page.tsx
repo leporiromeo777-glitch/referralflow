@@ -11,6 +11,7 @@ import { agganciaRiferimenti } from '@/lib/referti-allegati';
 import { AudioDettato } from '../AudioDettato';
 import { TestoDettato } from '../TestoDettato';
 import { RevisioneGuidata, type StatoRevisione } from './RevisioneGuidata';
+import { inizioRevisione } from '@/lib/audit/revisione';
 import RiorganizzaAI from './RiorganizzaAI';
 import { formatoPerBozza } from '@/lib/referti-medici';
 import { RiascoltaChip } from '../RiascoltaChip';
@@ -202,6 +203,12 @@ export default async function RefertoBozza({
 
   const p = row.payload;
 
+  // Audit (§36-§37): aprire una bozza = revisione INIZIATA per il ruolo di
+  // chi la apre. Distingue «mai aperto» da «rivisto senza modifiche».
+  if (row.stato === 'bozza' && !row.payload?.ombra) {
+    try { await inizioRevisione(session.studioId, row.id, session.id, session.role); } catch { /* mai bloccare la pagina */ }
+  }
+
   // Stato della revisione guidata salvato da solo mentre si lavora
   // (migrazione 032). Vale solo se il testo del referto è ancora quello che
   // la revisione ha composto: se qualcos'altro (impaginazione AI, fusione)
@@ -313,6 +320,7 @@ export default async function RefertoBozza({
         <h1>{row.tipo === 'visita'
           ? (row.stato === 'confermata' ? 'Nota di visita' : 'Bozza di nota di visita')
           : (row.stato === 'confermata' ? 'Referto' : 'Bozza di referto')}</h1>
+      <p className="muted small"><Link href={`/referti/${row.id}/storia`}>🧬 Storia e lineage del referto</Link> — ogni versione, ogni tappa AI, ogni modifica umana.</p>
         {inBozza ? (
           // Bozza aperta: Word e PDF INVIANO il modulo della revisione
           // (testo com'è nella casella + campi), che viene salvato nel

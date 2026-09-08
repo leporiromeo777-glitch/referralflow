@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { registraCorsa, registraCorsaFallita } from '@/lib/audit/lineage';
 import { createHash } from 'crypto';
 import { query } from '@/lib/db';
 import { registraEvento, impronta } from '@/lib/referti-eventi';
@@ -77,6 +78,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ errore: 'json_non_valido' }, { status: 400 });
   }
 
+  // Corsa FALLITA della catena (§43): resta registrata nell'audit con fase e
+  // tipo d'errore; nessuna bozza. Risposta 200 = la catena può archiviare.
+  if (body?.esito === 'fallita') {
+    try { await registraCorsaFallita(studio.id, body); } catch (e: any) { console.error('audit corsa fallita:', e?.message || e); }
+    return NextResponse.json({ ok: true, fallita: true }, { status: 200 });
+  }
   const fileId = typeof body?.file_id === 'string' ? body.file_id.trim().slice(0, 200) : '';
   const testo = typeof body?.testo_corretto === 'string' ? body.testo_corretto : '';
   if (!fileId) return NextResponse.json({ errore: 'file_id_mancante' }, { status: 400 });
@@ -345,8 +352,17 @@ export async function POST(req: NextRequest) {
        returning id`,
     [studio.id, fileId, JSON.stringify(payload), tipo, medicoId]
   );
+  // Audit/lineage (9.9.2026): la corsa, le tappe e gli artefatti nascono dal
+  // payload appena arrivato. Best-effort: mai bloccare la consegna.
+  const registraAudit = async (bozzaId: string) => {
+    try {
+      const [au] = audioId ? await query<{ storage_key: string }>('select storage_key from referti_audio where id = $1', [audioId]) : [];
+      await registraCorsa(studio.id, bozzaId, payload, { audioStorage: au?.storage_key ?? null });
+    } catch (e: any) { console.error('audit corsa:', e?.message || e); }
+  };
   if (inserita) {
     await collega(inserita.id);
+    await registraAudit(inserita.id);
     await registraEvento(studio.id, inserita?.id ?? null, 'bozza_ricevuta', null, { versione: String((payload as any).versione_catena?.pipeline ?? ''), ombra: (payload as any).ombra === true, medico: medicoId ?? '' });
     await fusioneAutomatica(inserita.id);
   return NextResponse.json({ id: inserita.id }, { status: 201 });
@@ -374,6 +390,7 @@ export async function POST(req: NextRequest) {
         [esistente.id, studio.id, JSON.stringify(payload), tipo, medicoId]
       );
       await fusioneAutomatica(esistente.id);
+      await registraAudit(esistente.id);
     }
     await collega(esistente.id);
   }

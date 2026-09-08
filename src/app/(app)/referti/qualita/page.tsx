@@ -62,6 +62,7 @@ export default async function Qualita() {
     <div className="content">
       <p className="muted small"><Link href="/referti">← Referti</Link></p>
       <h1>Qualità della dettatura</h1>
+      <p className="muted small"><Link href="/referti/qualita/pipeline">📈 AI Pipeline → Quality</Link> — correzioni della segretaria referto per referto, media mobile, versioni, rilasci.</p>
       <p className="muted">
         Quanto il medico corregge, quanto tempo impiega a firmare, quante segnalazioni chiude senza
         riascoltare e di che tipo sono le correzioni. Bersaglio: mediana di revisione sotto 2 minuti,

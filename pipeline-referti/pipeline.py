@@ -7500,6 +7500,20 @@ def _processa_uno(audio: Path, cartelle: dict, sostituzioni, controlli) -> None:
             f"file_id={e.file_id or '?'} fase={e.fase} tipo={e.tipo}\n",
             encoding="utf-8",
         )
+        # Audit (9.9.2026): anche il tentativo FALLITO va all'app, come corsa
+        # con fase e tipo d'errore (mai testo clinico). Parte con il prossimo
+        # giro di invio; l'audio resta in errori/, non viene mai cancellato.
+        if e.file_id:
+            try:
+                avviso = {
+                    "esito": "fallita", "file_id": e.file_id, "fase": e.fase, "tipo": e.tipo,
+                    "messaggio": "", "versione_catena": versione_catena(),
+                    "iniziata_il": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                }
+                (cartelle["output"] / f"{e.file_id}.fallita.json").write_text(
+                    json.dumps(avviso, ensure_ascii=False) + "\n", encoding="utf-8")
+            except Exception:  # noqa: BLE001
+                pass
         if e.file_id:
             _pulisci_intermedi(cartelle["lavorazione"], e.file_id)
         _ = notifica and notifica("errore")

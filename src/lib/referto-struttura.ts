@@ -84,7 +84,7 @@ export type OpzioniLettera = {
   terapia?: string[];
 };
 
-function promptPer(formato: FormatoReferto, opzioni: OpzioniLettera): string {
+export function promptPer(formato: FormatoReferto, opzioni: OpzioniLettera): string {
   if (formato !== 'lettera') return PROMPT;
   const chiusura = opzioni.chiusura?.trim()
     ? `scrivi ESATTAMENTE «${opzioni.chiusura.trim()}» e nient'altro (la firma viene aggiunta dopo: non scriverla).`
@@ -295,16 +295,21 @@ export function avviaRiorganizzazione(
   testo: string,
   salva: (testo: string) => Promise<void>,
   formato: FormatoReferto = 'rapporto',
-  opzioni: OpzioniLettera = {}
+  opzioni: OpzioniLettera = {},
+  // Audit: chiamato a fine lavoro con l'esito (anche fallito) e l'istante
+  // d'inizio, per registrare la tappa AI dell'app col suo prompt.
+  alTermine?: (esito: EsitoStruttura, inizio: number, prompt: string) => Promise<void>
 ): boolean {
   const gia = lavori.get(bozzaId);
   if (gia?.stato === 'lavora') return false;
   lavori.set(bozzaId, { stato: 'lavora', percento: 1 });
+  const inizio = Date.now();
   void (async () => {
     const esito = await riorganizzaReferto(testo, (percento) => {
       const l = lavori.get(bozzaId);
       if (l?.stato === 'lavora') l.percento = Math.max(l.percento, percento);
     }, formato, opzioni);
+    if (alTermine) { try { await alTermine(esito, inizio, promptPer(formato, opzioni)); } catch { /* audit best-effort */ } }
     if (esito.ok) {
       try {
         await salva(esito.testo);

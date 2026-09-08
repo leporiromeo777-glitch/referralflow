@@ -1592,3 +1592,25 @@ mark[title] { cursor: help; }
 .manifesto.livello-minimo { border-left-color: var(--danger); }
 .rg-gate { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--warn); border-radius: 12px; background: var(--warn-bg); }
 .rg-gate input[type="checkbox"] { margin-top: 4px; }
+
+/* Audit / qualità della catena (9.9.2026) */
+.aq-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 14px 0; }
+.aq-card { background: #fff; border: 1px solid #e8e6e0; border-radius: 16px; padding: 14px 16px; }
+.aq-card .aq-n { font-size: 28px; font-weight: 600; color: var(--cta, #0d5c48); }
+.aq-card .aq-l { font-size: 12.5px; color: #6b6b6b; margin-top: 2px; }
+.aq-due { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 860px) { .aq-due { grid-template-columns: 1fr; } }
+.aq-tab { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 8px 0 14px; }
+.aq-tab th, .aq-tab td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eeece6; vertical-align: top; }
+.aq-tab th { font-weight: 600; color: #555; }
+.aq-outlier td { background: #fff4f3; }
+.aq-timeline { list-style: none; padding: 0; margin: 0; border-left: 2px solid #d9d6cf; }
+.aq-timeline li { padding: 4px 0 4px 14px; position: relative; font-size: 13.5px; }
+.aq-timeline li::before { content: ''; position: absolute; left: -6px; top: 10px; width: 8px; height: 8px; border-radius: 50%; background: var(--cta, #0d5c48); }
+.aq-quando { color: #6b6b6b; font-variant-numeric: tabular-nums; margin-right: 8px; font-size: 12.5px; }
+.aq-tappa { border: 1px solid #eeece6; border-radius: 12px; padding: 8px 12px; margin: 6px 0; }
+.aq-tappa summary { cursor: pointer; }
+.aq-testo { white-space: pre-wrap; font-family: inherit; font-size: 13px; line-height: 1.5; background: #faf9f6; border-radius: 10px; padding: 10px; max-height: 420px; overflow: auto; }
+.aq-inline { line-height: 1.7; }
+.aq-tolto { background: #fbd9d6; text-decoration: line-through; padding: 0 2px; }
+.aq-aggiunto { background: #d6f0e4; padding: 0 2px; }

@@ -3,6 +3,8 @@ import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
 import { avviaRiorganizzazione, statoRiorganizzazione } from '@/lib/referto-struttura';
+import { registraPassoApp } from '@/lib/audit/lineage';
+import { ruoloRevisore } from '@/lib/audit/revisione';
 import { opzioniRiorganizzazione } from '@/lib/referti-formato';
 
 export const runtime = 'nodejs';
@@ -55,7 +57,16 @@ export async function POST(req: NextRequest) {
         where id = $1 and studio_id = $2 and stato = 'bozza'`,
       [id, studioId, nuovo, JSON.stringify({ formato, terapia_ripresa: terapiaRipresa, at: new Date().toISOString() })]
     );
-  }, formato, opzioni);
+  }, formato, opzioni, async (esito, inizio, prompt) => {
+    await registraPassoApp({
+      studioId, bozzaId: id, nome: formato === 'lettera' ? 'impaginazione_lettera' : 'riorganizzazione_rapporto',
+      tipo: 'report_structuring', modello: process.env.REFERTO_STRUTTURA_LLM || 'gemma3:27b', provider: 'local',
+      promptNome: formato === 'lettera' ? 'impaginazione_lettera' : 'riorganizzazione_rapporto', promptTesto: prompt,
+      ingresso: testo, uscita: esito.ok ? esito.testo : null, inizio, stato: esito.ok ? 'SUCCESS' : 'FAILED',
+      errore: esito.ok ? undefined : esito.motivo, producerIngresso: ruoloRevisore(session.role),
+      metadata: esito.ok ? { parole_aggiunte: esito.aggiunte } : { motivo: esito.motivo, aggiunte: esito.aggiunte ?? [] },
+    });
+  });
   // Già in corso = va bene lo stesso: la pagina si aggancia al lavoro vivo.
   return NextResponse.json({ avviato }, { status: avviato ? 202 : 200 });
 }

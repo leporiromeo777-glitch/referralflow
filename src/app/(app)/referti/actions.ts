@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
+import { registraRevisione } from '@/lib/audit/revisione';
 import { query } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
@@ -85,9 +86,23 @@ export async function confermaBozza(formData: FormData) {
         set stato = 'confermata', testo_finale = $3, campi_confermati = $4,
             reviewed_by = $5, reviewed_at = now()
       where id = $1 and studio_id = $2 and stato = 'bozza'
-      returning payload ->> 'testo_corretto' as ai_text, payload -> 'versioni' as versioni, payload ->> 'testo_grezzo' as grezzo`,
+      returning payload ->> 'testo_corretto' as ai_text, payload -> 'versioni' as versioni, payload ->> 'testo_grezzo' as grezzo,
+                payload -> 'versione_catena' ->> 'pipeline' as pipeline_version, payload -> 'versione_catena' ->> 'prompt' as prompt_version,
+                payload -> 'medico' ->> 'id' as medico`,
     [id, session.studioId, testo, JSON.stringify(campi), session.id]
   );
+  // Audit (9.9.2026): la versione confermata diventa un artefatto e il diff
+  // con l'ultimo output AI una riga di human_edits, col ruolo di chi firma.
+  if (row) {
+    try {
+      const sec = Number(formData.get('tempo_revisione_s'));
+      await registraRevisione({
+        studioId: session.studioId, bozzaId: id, userId: session.id, ruoloUtente: session.role, testo,
+        secondi: Number.isFinite(sec) && sec >= 0 ? Math.min(Math.round(sec), 6 * 3600) : null,
+        pipelineVersion: (row as any).pipeline_version ?? null, promptVersion: (row as any).prompt_version ?? null, medico: (row as any).medico ?? null,
+      });
+    } catch (e: any) { console.error('audit revisione:', e?.message || e); }
+  }
 
   // Misura della revisione: quanto la persona ha corretto la catena.
   // Best-effort, mai bloccante, solo numeri.

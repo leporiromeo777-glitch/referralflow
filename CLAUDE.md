@@ -25,7 +25,7 @@ comunicazione sicura): non li sostituisce. Cliente pilota reale: Centro Cardiolo
   multi-studio: crea prima lo studio slug `studio-demo` e un admin; il vecchio
   `db/seed.sql` è pre-migrazione 007 e non funziona più)
 - DB esistente da versione precedente: applicare in ordine le `db/migrations/0XX_*.sql`
-  mancanti (ultima: `032_referti_revisione_stato.sql`)
+  mancanti (ultima: `033_audit.sql`)
 - Anteprima locale sul Mac mini dello studio: `bash mac/avvia-anteprima.sh`
   (installa Node+Postgres, prepara DB e dati demo, avvia su http://localhost:3000;
   vedi `mac/LEGGIMI.md` — obiettivo: Mac mini come server dello studio)
@@ -460,6 +460,52 @@ uno che la tenuta non ha → NON si toglie, va in `doppioni_dubbi`. Le tolte in
 «Rimetti» (frase riaccostata alla tenuta, stessi indici) e «Togli» sui dubbi.
 Caso di scuola nella suite: «lettera del 1 settembre» e «rapporto operatorio
 del 1 settembre» devono restare entrambe.
+
+## Audit trail, lineage, versioni e qualità della catena (9.9.2026)
+Proposta e principi in `docs/audit/ARCHITETTURA.md` (letta PRIMA di toccare
+questa parte). Schema SEPARATO `audit` (migrazione 033): `pipeline_runs`
+(una corsa per audio, `attempt` crescente, status SUCCESS/FAILED),
+`pipeline_steps` (tappa: tipo, produttore AI/SYSTEM/SECRETARY/DOCTOR,
+modello, `prompt_version_id`, tempi, esito), `artifacts` (output IMMUTABILI
+con sha256, `version_no` progressivo nel referto; trigger che vieta
+UPDATE/DELETE), `artifact_parents` (DAG di provenienza), `prompt_versions`,
+`deployments` (rilasci = linee verticali nel grafico), `report_reviews`
+(NOT_REVIEWED / IN_REVIEW / REVIEWED_NO_CHANGES / REVIEWED_WITH_CHANGES per
+ruolo), `human_edits` (UNA riga per revisione confermata: diff tra l'ultimo
+output AI e la versione della persona, conteggi, categorie, severità,
+`diff` jsonb). Gli eventi restano in `referti_eventi`.
+Lib `src/lib/audit/`: `diff.ts` (PURO: normalizzazione, diff a parole
+INSERT/DELETE/REPLACE, «2.5 mg → 5 mg» aggancia l'unità, categorie
+punctuation/formatting/spelling/grammar/drug/dose/measurement/date/
+patient_information/medical_terminology/clinical_meaning/other, severità
+LOW/MEDIUM/HIGH/CRITICAL), `lineage.ts` (corsa+tappe+artefatti dal payload
+della catena — `storia`, `versioni`, `versione_catena`, `manifesto` —,
+corse fallite, tappe AI dell'app, nuovi artefatti), `revisione.ts` (stati
+per ruolo e diff umano), `metriche.ts` (media mobile, percentili, outlier
+3·MAD, punteggio 0-100 spiegabile), `prompt.ts` (registro per hash).
+Agganci: `POST /api/referti/bozza` registra la corsa (e accetta
+`{esito:'fallita'}` dalla catena: `_processa_uno` scrive
+`<file_id>.fallita.json` in output/, spedito dal giro di invio);
+`confermaBozza` registra la revisione col ruolo di chi firma (segretaria =
+ruoli `segretaria,admin`, env `AUDIT_RUOLI_SEGRETARIA`; medico = DOCTOR);
+l'apertura della bozza segna IN_REVIEW; «Impagina come lettera» è una tappa
+AI dell'app col suo prompt registrato col testo. REGOLE: la metrica
+principale conta SOLO `editor_role='SECRETARY'`; AI→AI mai contate; medico
+separato; zero-touch solo se REVIEWED_NO_CHANGES; gli autosave
+(`revisione_stato`) sono working_draft, mai contati; MAI usare le correzioni
+per addestrare in automatico (sono un dataset per una funzione futura).
+Pagine: `/referti/qualita/pipeline` (solo admin: card, grafico a punti SVG
+con media mobile 10/25/50/100, rilasci, outlier, filtri, per versione di
+catena/prompt/medico, mese per mese, esploratore, errori, vista avanzata con
+latenze) e `/referti/[id]/storia` (linea del tempo, corse e tappe
+espandibili con modello/prompt/ingresso/uscita/durata, versioni con
+provenienza, modifiche umane con tabella delle operazioni, diff in linea e
+affiancato). Test: `npm run test:audit` (node:test via tsx, 11 casi §74-§75).
+Riempimento dello storico: `npm run audit-backfill` (idempotente; gira con
+`--conditions=react-server` così `server-only` è vuoto — dipendenza
+`server-only` installata apposta). Limite noto: per le bozze precedenti al
+9.9.2026 la tappa «Impagina» non era registrata, quindi il diff della
+segretaria è contro il testo della catena.
 
 ## Catena referti: pagine e strumenti aggiunti il 5-6.9.2026
 - `/referti/qualita` cruscotto (parole modificate, tempo di revisione, segnalazioni
