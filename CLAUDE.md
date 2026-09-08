@@ -439,7 +439,11 @@ sei, la proposta si scarta (`motivo: 'parole_aggiunte'`) — il caso vero era
 inventate; (2) divergenze A/B con `pesanti` (`parole_pesanti()` nella
 catena): qualificatore, negazione, lateralità o numero presente da una parte
 sola → passo dedicato «I due motori non concordano» nella revisione guidata,
-con riascolto e correzione, e in cima all'elenco tecnico (il caso vero,
+con riascolto e TRE scelte per divergenza (9.9.2026, richiesta utente): «Ha
+ragione A», «Ha ragione B» (la versione B entra da sola nella frase: al posto
+della A, oppure — se la A è vuota — dopo `contesto_prima` / prima di
+`contesto_dopo`, campi nuovi di `confronta()`), «Nessuno dei due: correggo
+io»; e in cima all'elenco tecnico (il caso vero,
 «profili pressori DIMINUITI» sentito solo da Voxtral, era la voce numero N
 di 58 dentro un pannello chiuso); (3) dizionario di Moccetti: «quando è già
 presente» → «in quanto già presente», e `numeriDiTempoInCifre` normalizza

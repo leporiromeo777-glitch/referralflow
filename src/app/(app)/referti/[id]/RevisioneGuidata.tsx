@@ -21,7 +21,7 @@ type DoppioneDubbio = { frase: string; simile_a: string; motivo: string };
 // Divergenza tra i due motori in cui una parola che CAMBIA IL SENSO sta da
 // una parte sola (2026-09-07: «profili pressori diminuiti» sentito solo dal
 // secondo motore è finito in fondo a 58 divergenze e si è perso).
-type DivergenzaPesante = { contesto?: string; versione_a?: string; versione_b?: string; pesanti?: string[] };
+type DivergenzaPesante = { contesto?: string; contesto_prima?: string; contesto_dopo?: string; versione_a?: string; versione_b?: string; pesanti?: string[] };
 
 // Abbreviazioni col punto che NON chiudono la frase («Dr. med. Rossi»,
 // «Prof.», «Sig.ra», «ecc.», «es.»): senza questa lista la firma «Dr. med.
@@ -1069,21 +1069,47 @@ export function RevisioneGuidata({
             Qui i due motori di trascrizione hanno sentito cose diverse, e la
             differenza cambia il senso: una parola come «diminuito» o
             «aumentato», una negazione, una lateralità o un numero che uno dei
-            due non ha. Il referto porta la versione A. Riascolta e, se ha
-            ragione B, correggi la frase.
+            due non ha. Il referto porta la versione A. Riascolta e decidi:
+            ha ragione A, ha ragione B (entra da sola nella frase), oppure
+            nessuno dei due e correggi tu.
           </p>
           {divergenzePesanti.map((d, i) => {
             const id = `dv${i}`;
             const ancora = (d.contesto || d.versione_a || '').trim();
             const idx = trovaIndice(ancora);
+            const vA = (d.versione_a ?? '').trim(), vB = (d.versione_b ?? '').trim();
+            // «Ha ragione B»: la versione B prende il posto della A nella frase;
+            // se la A è vuota (B ha una parola in più) si inserisce dopo il
+            // contesto che precede. Se non si aggancia, si apre la correzione.
+            const applicaB = () => {
+              const applica = (testo: string): string | null => {
+                if (vA && testo.includes(vA)) return testo.replace(vA, vB);
+                const pr = (d.contesto_prima ?? '').trim(), dp = (d.contesto_dopo ?? '').trim();
+                if (!vA && pr && testo.includes(pr)) return testo.replace(pr, `${pr} ${vB}`);
+                if (!vA && dp && testo.includes(dp)) return testo.replace(dp, `${vB} ${dp}`);
+                return null;
+              };
+              if (testoLibero !== null) {
+                const nuovo = applica(testoLibero);
+                if (nuovo === null) { if (idx >= 0) { setInModifica(idx); setBozzaModifica(frasi[idx]); } return; }
+                ricorda(); setTestoLibero(nuovo); segnaNudo(id); return;
+              }
+              if (idx < 0) return;
+              const nuovo = applica(frasi[idx]);
+              if (nuovo === null) { setInModifica(idx); setBozzaModifica(frasi[idx]); return; }
+              ricorda();
+              setFrasi((prev) => prev.map((f, j) => (j === idx ? nuovo : f)));
+              setModificate((prev) => new Set(prev).add(idx));
+              segnaNudo(id);
+            };
             return (
               <div key={id} className={`rg-item${fatte.has(id) ? ' rg-fatta' : ''}`}>
                 {d.contesto && <p className="muted small">…{d.contesto}…</p>}
                 <p className="rg-frase">
-                  <strong>A (nel referto):</strong> {d.versione_a?.trim() || '— niente —'}
+                  <strong>A (nel referto):</strong> {vA || '— niente —'}
                 </p>
                 <p className="rg-frase">
-                  <strong>B (secondo motore):</strong> {d.versione_b?.trim() || '— niente —'}
+                  <strong>B (secondo motore):</strong> {vB || '— niente —'}
                 </p>
                 {d.pesanti && d.pesanti.length > 0 && (
                   <p className="rg-motivo">Cambia il senso: {d.pesanti.map((w) => `«${w}»`).join(', ')}</p>
@@ -1091,18 +1117,23 @@ export function RevisioneGuidata({
                 {!fatte.has(id) && (
                   <div className="rg-azioni">
                     {bottoneRiascolta(ancora)}
+                    <button type="button" className="btn" onClick={() => segna(id)}>
+                      ✓ Ha ragione A (lascia com’è)
+                    </button>
+                    {(idx >= 0 || testoLibero !== null) && (
+                      <button type="button" className="btn" onClick={applicaB}>
+                        ↔ Ha ragione B (metti la sua versione)
+                      </button>
+                    )}
                     {idx >= 0 && inModifica !== idx && (
                       <button
                         type="button"
-                        className="btn"
+                        className="btn btn-ghost"
                         onClick={() => { setInModifica(idx); setBozzaModifica(frasi[idx]); }}
                       >
-                        ✏️ Correggi la frase
+                        ✏️ Nessuno dei due: correggo io
                       </button>
                     )}
-                    <button type="button" className="btn-link" onClick={() => segna(id)}>
-                      ✓ Va bene così
-                    </button>
                   </div>
                 )}
                 {inModifica === idx && idx >= 0 && (

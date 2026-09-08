@@ -23,7 +23,7 @@ export const dynamic = 'force-dynamic';
 // divergenze tra le due trascrizioni (mai risolte dal sistema: si mostrano
 // entrambe le versioni), allarmi numerici, campi estratti correggibili.
 
-type Divergenza = { contesto?: string; versione_a?: string; versione_b?: string; pesanti?: string[] };
+type Divergenza = { contesto?: string; contesto_prima?: string; contesto_dopo?: string; versione_a?: string; versione_b?: string; pesanti?: string[] };
 type Allarme = { campo?: string; valore?: unknown; intervallo?: string; stato?: string };
 
 type Payload = {

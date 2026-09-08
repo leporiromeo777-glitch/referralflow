@@ -1647,8 +1647,14 @@ def confronta(testo_a: str, testo_b: str) -> list[dict]:
         ctx_i2 = min(len(tok_a), i2 + PAROLE_DI_CONTESTO)
         contesto = testo_a[tok_a[ctx_i1][1]:tok_a[ctx_i2 - 1][2]] if ctx_i2 > ctx_i1 else ""
         pesanti = parole_pesanti(seg_a, seg_b)
+        # Contesto spezzato in «prima» e «dopo» (2026-09-09): la revisione
+        # può inserire la versione B al posto giusto anche quando la A è vuota.
+        prima_ctx = testo_a[tok_a[ctx_i1][1]:tok_a[i1 - 1][2]] if i1 > ctx_i1 else ""
+        dopo_ctx = testo_a[tok_a[i2][1]:tok_a[ctx_i2 - 1][2]] if ctx_i2 > i2 else ""
         divergenze.append({
             "contesto": contesto,
+            "contesto_prima": prima_ctx,
+            "contesto_dopo": dopo_ctx,
             "versione_a": seg_a,
             "versione_b": seg_b,
             # Parole che cambiano il senso e stanno da una parte sola: la

@@ -384,10 +384,14 @@ def _prova_23() -> None:
     assert "135" in m.parole_pesanti("pressione 135", "pressione 130")
     # Differenze di sole parole neutre: nessun peso.
     assert m.parole_pesanti("il paziente riferisce", "la paziente riferiva") == []
-    # La marcatura arriva nelle divergenze.
+    # La marcatura arriva nelle divergenze, col contesto spezzato in prima/dopo
+    # (serve al tasto «ha ragione B» per inserire al posto giusto).
     div = m.confronta("i profili pressori associati ad astenia",
                       "i profili pressori diminuiti associati ad astenia")
     assert any(d.get("pesanti") for d in div), div
+    d0 = div[0]
+    assert d0["versione_a"] == "" and d0["versione_b"] == "diminuiti", d0
+    assert d0["contesto_prima"].endswith("pressori") and d0["contesto_dopo"].startswith("associati"), d0
 
 
 @caso("24 · «barra» dettata diventa / e le omissioni tornano pulite")
