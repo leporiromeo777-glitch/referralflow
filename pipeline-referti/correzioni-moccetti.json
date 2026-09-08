@@ -28,7 +28,13 @@
     "inibitore pcsk9": "inibitore del PCSK9",
     "coro-tac": "CoroTAC",
     "coro tac": "CoroTAC",
-    "corotac": "CoroTAC"
+    "corotac": "CoroTAC",
+    "normoassi cardiaca": "normocardico",
+    "normo assi cardiaca": "normocardico",
+    "normoassi cardiaco": "normocardico",
+    "normo assi cardiaco": "normocardico",
+    "normoassicardiaca": "normocardico",
+    "normo-assi cardiaca": "normocardico"
   },
   "linguaggio_comune": {
     "non ritorno sull'analisi": "non ritorno sull'anamnesi",
