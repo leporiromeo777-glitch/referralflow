@@ -548,6 +548,15 @@ una prova per condizione): sul modello esterno gemma-4-31B il contesto
 porta le correzioni da 2/8 a 6/8 senza proposte fuori bersaglio (2 s →
 21 s per chiamata, ~1.9k gettoni); sul locale gemma3:27b nessun guadagno
 (4/8 → 3/8). Il contesto serve al modello grande, non a quello piccolo.
+FATTO (9.9.2026) il primo dei prompt mancanti: OMISSIONI SEMANTICHE
+(`PROMPT_OMISSIONI`, `omissioni_esterno`, guardie `_filtra_omissioni`:
+citazione esatta nel dettato, ≥3 parole significative, scartata se per l'80%
+già nella bozza, max 15) — il contrario dell'avvocato: passaggi del dettato
+il cui contenuto clinico manca nella bozza. Stessa pseudonimizzazione
+dell'avvocato; attivo col percorso esterno salvo `omissioni=0` nella conf.
+Le voci si fondono in `payload.frasi_omesse` (`fonte: "modello"`, `motivo`,
+`pulita`), senza doppioni con quelle del codice; il wizard le mostra nel
+passo delle omissioni con l'etichetta «vista dal modello». Caso 28.
 Prossimi passi concordati: stessa cosa per l'arbitro (preferire la versione
 con numero/negazione/qualificatore in più), avvocato con lista OMISSIONI,
 controllo della lettera dopo l'impaginazione.

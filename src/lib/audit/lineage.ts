@@ -36,7 +36,7 @@ function descriviTappa(t: Tappa, vc: Record<string, string>, trasporti: Record<s
     correzione: 'linguistic_correction', verificatore: 'clinical_validation', avvocato: 'clinical_validation',
     ispezione: 'clinical_validation', estrazione: 'field_extraction', bella_copia: 'linguistic_correction',
     stile: 'style_memory', doppioni: 'duplicate_removal', struttura: 'report_structuring', ricucitura: 'transcript_cleanup',
-    promozione_testimone: 'engine_promotion',
+    promozione_testimone: 'engine_promotion', omissioni_modello: 'clinical_validation',
   };
   return { nome, tipo: tipo[nome] ?? nome, producer: (ai ? 'AI' : 'SYSTEM') as 'AI' | 'SYSTEM', modello, provider };
 }

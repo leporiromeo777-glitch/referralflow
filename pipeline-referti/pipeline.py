@@ -3985,6 +3985,96 @@ def _filtra_avvocato(voci: list, bozza: str, grezzo: str,
 AVVOCATO_SEP = "\n=====BOZZA=====\n"
 
 
+PROMPT_OMISSIONI = """Sei un revisore di referti medici in italiano. Confronta il DETTATO (trascrizione grezza dell'audio) con la BOZZA (versione ripulita dello stesso referto).
+
+Elenca i passaggi del DETTATO il cui contenuto clinico NON si ritrova nella bozza: un valore, un farmaco, un esame, una data, un qualificatore («diminuito», «aumentato», «lieve», «severo»), una negazione, una lateralità, una diagnosi o una raccomandazione che nel dettato c'è e nella bozza manca o dice il contrario.
+
+Regole obbligatorie:
+1. Cita il passaggio ESATTAMENTE come compare nel dettato (una frase o un pezzo di frase, max 25 parole).
+2. NON segnalare: istruzioni alla segretaria, saluti, chiacchiere, ripetizioni del parlato, autocorrezioni, riformulazioni fedeli, differenze di forma.
+3. Poche segnalazioni e fondate: nel dubbio, non segnalare. Se non manca nulla, lista vuota.
+4. I segnaposto come «Persona 1», «[Medico 2]», «[data 3]» sono normali.
+
+Rispondi SOLO con un oggetto JSON valido:
+{"omesse": [{"frase": "...", "motivo": "..."}]}
+
+DETTATO:
+{grezzo}
+
+BOZZA:
+{bozza}"""
+
+
+def _filtra_omissioni(voci: list, dettato: str, bozza: str) -> list[dict]:
+    """Guardie delle omissioni proposte dal modello: citazione esatta nel
+    dettato; almeno 3 parole significative; scartata se quelle parole stanno
+    già per l'80% nella bozza (non è un'omissione); al più 15 voci."""
+    def sig(s: str) -> set[str]:
+        return {w for w in re.findall(r"[a-zà-ÿ0-9][a-zà-ÿ0-9,.]*", s.lower()) if len(w) >= 4 or w[0].isdigit()}
+    nella_bozza = sig(bozza)
+    fuori: list[dict] = []
+    viste: set[str] = set()
+    for v in voci[:30]:
+        if not isinstance(v, dict):
+            continue
+        frase = str(v.get("frase", "")).strip()
+        motivo = str(v.get("motivo", "")).strip()[:200]
+        if len(frase) < 8 or frase not in dettato:
+            continue
+        s = sig(frase)
+        if len(s) < 3:
+            continue
+        if len(s & nella_bozza) / len(s) >= 0.8:
+            continue
+        chiave = " ".join(sorted(s))
+        if chiave in viste:
+            continue
+        viste.add(chiave)
+        fuori.append({"frase": frase[:400], "motivo": motivo})
+    return fuori[:15]
+
+
+def omissioni_esterno(bozza: str, grezzo: str, file_id: str) -> list[dict] | None:
+    """Omissioni SEMANTICHE sul modello esterno (2026-09-09, richiesta
+    dell'utente): il contrario dell'avvocato — passaggi del dettato il cui
+    contenuto clinico non è nella bozza. Il controllo per sovrapposizione
+    di parole non coglie una parola sola («diminuiti»). Stessa
+    pseudonimizzazione e stesse guardie dell'avvocato. None = niente."""
+    inizio = time.monotonic()
+    if AVVOCATO_SEP.strip() in bozza or AVVOCATO_SEP.strip() in grezzo:
+        return None
+    esito_anon = _anonimizza_per_esterno(grezzo + AVVOCATO_SEP + bozza,
+                                         file_id, con_mappa=True, riusa=True)
+    if esito_anon is None:
+        return None
+    anon, mappa = esito_anon
+    if AVVOCATO_SEP not in anon:
+        return None
+    anon_grezzo, anon_bozza = anon.split(AVVOCATO_SEP, 1)
+    try:
+        uscita = _chiama_esterno_openai(
+            PROMPT_OMISSIONI.replace("{grezzo}", anon_grezzo).replace("{bozza}", anon_bozza), file_id)
+    except RuntimeError:
+        log.warning("fase=omissioni_modello file=%s esito=esterno_fallito", file_id)
+        return None
+    dati = _estrai_json(uscita)
+    voci = dati.get("omesse") if isinstance(dati, dict) else None
+    if not isinstance(voci, list):
+        return None
+
+    def rip(s: str) -> str:
+        for segnaposto, vero in mappa.items():
+            s = s.replace(segnaposto, vero)
+        return s
+
+    voci = [{"frase": rip(str(v.get("frase", ""))), "motivo": rip(str(v.get("motivo", "")))}
+            for v in voci if isinstance(v, dict)]
+    fuori = _filtra_omissioni(voci, grezzo, bozza)
+    log.info("fase=omissioni_modello file=%s esito=ok proposte=%d tenute=%d durata=%.1fs",
+             file_id, len(voci), len(fuori), time.monotonic() - inizio)
+    return fuori
+
+
 def avvocato_esterno(bozza: str, grezzo: str, file_id: str) -> list[dict] | None:
     """Avvocato del diavolo sul modello di punta ESTERNO (2026-08-27,
     «opus per tutto»): seconda chiamata indipendente dal correttore.
@@ -7427,6 +7517,36 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             sorgente = grezzo_a if file_id in _TESTIMONE_PROMOSSO else (grezzo_b if file_id in _COLLASSO_A else grezzo_a)
             omesse = rileva_omissioni(sorgente, finale, note_segreteria, parole_audio,
                                       file_id, sostituzioni)
+            # Omissioni semantiche dal modello esterno (2026-09-09): si fondono
+            # con quelle del codice, senza doppioni; portano il motivo.
+            cfg_om = _config_esterno() or {}
+            if (not visita and _esterno_attivo() == "openai" and cfg_om.get("omissioni", "1") != "0"):
+                dal_modello = omissioni_esterno(finale, sorgente, file_id) or []
+                def _sig(s: str) -> set[str]:
+                    return {w for w in re.findall(r"[a-zà-ÿ0-9][a-zà-ÿ0-9,.]*", s.lower()) if len(w) >= 4 or w[0].isdigit()}
+                gia = [_sig(o["frase"]) for o in omesse]
+                aggiunte = 0
+                for v in dal_modello:
+                    sv = _sig(v["frase"])
+                    if any(sv and len(sv & g) / len(sv) >= 0.6 for g in gia):
+                        continue
+                    pulita = v["frase"]
+                    try:
+                        pulita, _ = punteggiatura_dettata(pulita)
+                        if sostituzioni:
+                            pulita, _ = applica_correzioni(pulita, sostituzioni)
+                    except Exception:  # noqa: BLE001
+                        pulita = v["frase"]
+                    omesse.append({"frase": v["frase"], "secondo": None,
+                                   "cifre": bool(re.search(r"\d", v["frase"])),
+                                   "farmaco": bool(_RX_QUALIFICATORE.search(v["frase"]) or _RX_NEGAZIONE.search(v["frase"])),
+                                   "copertura": None, "motivo": v["motivo"], "fonte": "modello",
+                                   **({"pulita": pulita.strip()} if pulita.strip() != v["frase"] else {})})
+                    gia.append(sv)
+                    aggiunte += 1
+                tappa("omissioni_modello", "modello", proposte=len(dal_modello), aggiunte=aggiunte,
+                      trasporto=_trasporto(file_id, "omissioni_modello"))
+                omesse = omesse[:30]
             payload["frasi_omesse"] = omesse
             gravi = [o for o in omesse if o["cifre"] or o["farmaco"]]
             if gravi:

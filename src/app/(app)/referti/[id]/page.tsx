@@ -46,7 +46,7 @@ type Payload = {
   revisione?: { quota_modificata?: number; distanza_parole?: number; parole_finali?: number; tempo_revisione_s?: number; flag_totali?: number; flag_accettati_senza_riascolto?: number; flag_critici_totali?: number; flag_critici_chiusi?: number; classi?: Record<string, number>; origini?: Record<string, number>; modifiche?: { prima: string; dopo: string; classe: string; origine?: string }[] };
   rischio_frasi?: { frase: string; punteggio: number; motivi?: string[] }[];
   numeri?: { valore: string; unita?: string; frase?: number | null; secondo?: number | null; confermato?: boolean | null }[];
-  frasi_omesse?: { frase: string; pulita?: string; secondo?: number | null; cifre?: boolean; farmaco?: boolean; copertura?: number | null }[];
+  frasi_omesse?: { frase: string; pulita?: string; secondo?: number | null; cifre?: boolean; farmaco?: boolean; copertura?: number | null; motivo?: string; fonte?: string }[];
   storia?: Record<string, string | number | boolean>[];
   versioni?: Record<string, string>;
   versione_catena?: Record<string, string>;

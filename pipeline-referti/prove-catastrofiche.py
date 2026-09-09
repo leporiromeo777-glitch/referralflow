@@ -455,6 +455,20 @@ def _prova_27() -> None:
     assert "CONTESTO DEL MEDICO" not in pr0 and "{contesto_medico}" not in pr0
 
 
+@caso("28 · omissioni semantiche: guardie sulle proposte del modello")
+def _prova_28() -> None:
+    dettato = "I profili pressori risultano diminuiti e associati ad astenia. Sospendo il Valsartan. Saluti alla segretaria."
+    bozza = "I profili pressori risultano associati ad astenia. Sospendo il Valsartan."
+    voci = [
+        {"frase": "I profili pressori risultano diminuiti e associati ad astenia", "motivo": "manca diminuiti"},  # vera omissione
+        {"frase": "Sospendo il Valsartan", "motivo": "…"},                       # già nella bozza → scartata
+        {"frase": "frase inventata non nel dettato", "motivo": "…"},            # non citazione → scartata
+        {"frase": "I profili pressori risultano diminuiti e associati ad astenia", "motivo": "doppione"},
+    ]
+    fuori = m._filtra_omissioni(voci, dettato, bozza)
+    assert len(fuori) == 1 and "diminuiti" in fuori[0]["frase"], fuori
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0

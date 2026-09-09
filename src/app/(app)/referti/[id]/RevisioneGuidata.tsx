@@ -131,7 +131,7 @@ export function RevisioneGuidata({
   avvisi?: string[];
   rischioFrasi?: { frase: string; punteggio: number; motivi?: string[]; gravita?: string; supporto?: string; fonte?: string[] }[];
   numeri?: { valore: string; unita?: string; frase?: number | null; secondo?: number | null; confermato?: boolean | null }[];
-  frasiOmesse?: { frase: string; pulita?: string; secondo?: number | null; cifre?: boolean; farmaco?: boolean; copertura?: number | null }[];
+  frasiOmesse?: { frase: string; pulita?: string; secondo?: number | null; cifre?: boolean; farmaco?: boolean; copertura?: number | null; motivo?: string; fonte?: string }[];
   variazioni?: { misura: string; prima: string; dopo: string; grande?: boolean }[];
   letteraPrecedente?: string;
   livelloVerifica?: string;
@@ -840,8 +840,10 @@ export function RevisioneGuidata({
             <div key={`o${o.k}`} className={`rg-item${o.cifre || o.farmaco ? ' rg-rossa' : ''}${fatte.has(`o${o.k}`) ? ' rg-fatta' : ''}`}>
               <p className="rg-frase">«{o.frase}»
                 {o.cifre && <span className="rg-tab" style={{ marginLeft: 8, fontSize: '0.8em', padding: '2px 9px' }}>numeri</span>}
-                {o.farmaco && <span className="rg-tab" style={{ marginLeft: 6, fontSize: '0.8em', padding: '2px 9px' }}>farmaco</span>}
+                {o.farmaco && <span className="rg-tab" style={{ marginLeft: 6, fontSize: '0.8em', padding: '2px 9px' }}>{o.fonte === 'modello' ? 'cambia il senso' : 'farmaco'}</span>}
+                {o.fonte === 'modello' && <span className="rg-tab" style={{ marginLeft: 6, fontSize: '0.8em', padding: '2px 9px' }}>vista dal modello</span>}
               </p>
+              {o.motivo && <p className="rg-motivo">{o.motivo}</p>}
               {!fatte.has(`o${o.k}`) && (
                 <div className="rg-azioni">
                   {typeof o.secondo === 'number' && (
