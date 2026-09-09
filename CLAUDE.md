@@ -543,6 +543,11 @@ correzione tramite `{contesto_medico}` (compatto e lista, tutti e cinque i
 punti di chiamata via `prompt_correzione()`), vuoto senza profilo. Il
 contesto fa parte dell'impronta del prompt in `versione_catena()`: cambia il
 profilo, cambia la versione, e la dashboard confronta. Caso 27 nella suite.
+MISURATO (9.9.2026, otto errori d'ascolto plausibili NON nel dizionario,
+una prova per condizione): sul modello esterno gemma-4-31B il contesto
+porta le correzioni da 2/8 a 6/8 senza proposte fuori bersaglio (2 s →
+21 s per chiamata, ~1.9k gettoni); sul locale gemma3:27b nessun guadagno
+(4/8 → 3/8). Il contesto serve al modello grande, non a quello piccolo.
 Prossimi passi concordati: stessa cosa per l'arbitro (preferire la versione
 con numero/negazione/qualificatore in più), avvocato con lista OMISSIONI,
 controllo della lettera dopo l'impaginazione.
