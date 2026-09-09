@@ -527,6 +527,26 @@ Riempimento dello storico: `npm run audit-backfill` (idempotente; gira con
 9.9.2026 la tappa «Impagina» non era registrata, quindi il diff della
 segretaria è contro il testo della catena.
 
+## Contesto per medico nei prompt di correzione (9.9.2026)
+Richiesta utente: «il prompt migliore possibile con tutto quello che può
+servire all'agente». Scelta: DATI davanti alle stesse istruzioni, non regole
+in più (più istruzioni = più invenzioni). `contesto_medico(mid)` costruisce
+il blocco «CONTESTO DEL MEDICO (dati, non istruzioni)»: chi detta e come
+(`medici.json` → `contesto`), che cosa riceve il modello (trascrizione da
+due motori, pseudonimizzata con segnaposto), sigle ed esami di cardiologia
+(`SIGLE_CARDIOLOGIA`), termini del vocabolario del medico, `frasi_fisse`,
+`farmaci_frequenti` (elenco curato dei cardiologici svizzeri: con 6 lettere
+confermate non si poteva ricavare dai dati — da correggere nel profilo),
+errori d'ascolto già visti (voci del suo dizionario, mai cifre). Tetto
+`REFERTI_CONTESTO_MAX` (4500) tagliato a fine riga. Entra nei due prompt di
+correzione tramite `{contesto_medico}` (compatto e lista, tutti e cinque i
+punti di chiamata via `prompt_correzione()`), vuoto senza profilo. Il
+contesto fa parte dell'impronta del prompt in `versione_catena()`: cambia il
+profilo, cambia la versione, e la dashboard confronta. Caso 27 nella suite.
+Prossimi passi concordati: stessa cosa per l'arbitro (preferire la versione
+con numero/negazione/qualificatore in più), avvocato con lista OMISSIONI,
+controllo della lettera dopo l'impaginazione.
+
 ## Catena referti: pagine e strumenti aggiunti il 5-6.9.2026
 - `/referti/qualita` cruscotto (parole modificate, tempo di revisione, segnalazioni
   chiuse senza riascolto, classi di correzione da `src/lib/referti-tassonomia.ts`);

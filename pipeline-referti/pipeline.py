@@ -157,6 +157,12 @@ def carica_medici() -> list[dict]:
             "atempo": atempo,
             "atempo_prova": prove[0] if prove else None,
             "atempo_prove": prove,
+            # Frasi che il medico detta spesso (contesto per i prompt di
+            # correzione): elenco libero, tetto di 12 voci da 200 caratteri.
+            "frasi_fisse": [str(f).strip()[:200] for f in (v.get("frasi_fisse") or []) if str(f).strip()][:12],
+            # Note di contesto per i prompt (come detta, a chi scrive…).
+            "contesto": str(v.get("contesto") or "").strip()[:700],
+            "farmaci_frequenti": [str(f).strip()[:60] for f in (v.get("farmaci_frequenti") or []) if str(f).strip()][:50],
             "vocabolario": str(v.get("vocabolario") or f"vocabolario-{mid}.txt"),
             "correzioni": str(v.get("correzioni") or f"correzioni-{mid}.json"),
         })
@@ -199,6 +205,87 @@ _CORSA: dict = {"atempo": ATEMPO, "medico": None}
 
 def atempo_corsa() -> float:
     return float(_CORSA.get("atempo") or ATEMPO)
+
+
+# ── Contesto per medico nei prompt di correzione (2026-09-09) ────────────────
+# DATI, non istruzioni: chi detta, le sigle e i termini che usa, le frasi che
+# ripete, le forme giuste delle parole che i trascrittori sbagliano. Messi
+# davanti alle stesse regole di sempre, con un tetto di lunghezza: un prompt
+# più informato sì, più lungo di istruzioni no. Senza profilo, niente blocco.
+CONTESTO_MEDICO_MAX = int(os.environ.get("REFERTI_CONTESTO_MAX", "4500"))
+
+SIGLE_CARDIOLOGIA = (
+    "RIVA (ramo interventricolare anteriore, maschile: il RIVA), RCx (circonflessa), CD/ACD (coronaria destra), "
+    "TC (tronco comune), IVA, D1/D2 (diagonali), RIM (ramo intermedio), RMO (ramo marginale ottuso), RPLa (ramo "
+    "posterolaterale), RIVP (ramo interventricolare posteriore), LIMA/RIMA (arterie mammarie), ICA (carotide "
+    "interna), TAC/CoroTAC, ECG, FE (frazione di eiezione), FEVS, TAPSE, LAVi, SIV/PP, PA (pressione arteriosa), "
+    "FC (frequenza cardiaca), bpm, mmHg, BNP, FRCV (fattori di rischio cardiovascolare), TEE/ETE, PTCA, DES, "
+    "CABG, bypass aortocoronarico, MAPA (holter pressorio), Holter ECG, cicloergometria, spiroergometria"
+)
+
+
+def contesto_medico(mid: str | None) -> str:
+    """Il blocco di contesto per i prompt di correzione (2026-09-09, richiesta
+    dell'utente: «il prompt migliore possibile con tutto quello che può
+    servire»): chi detta e come, che cosa il modello riceve, la struttura
+    tipica del suo referto, sigle ed esami, frasi fisse, farmaci frequenti,
+    errori d'ascolto già visti. Solo DATI: le istruzioni restano quelle del
+    prompt. Tetto di lunghezza; mai cifre di pazienti."""
+    prof = profilo_medico(mid) if mid else None
+    if not prof:
+        return ""
+    righe: list[str] = []
+    modo = "lettere ai colleghi (medico curante o specialista inviante)" if prof.get("formato") == "lettera" else "rapporti a sezioni (diagnosi, anamnesi, esami, valutazione, procedere)"
+    righe.append(f"CHI DETTA: {prof.get('nome', mid)}, cardiologo del Centro Cardiologico Ticino (Lugano); scrive {modo}.")
+    if prof.get("contesto"):
+        righe.append("COME DETTA E COME È FATTO IL SUO REFERTO: " + prof["contesto"])
+    righe.append(
+        "CHE COSA RICEVI: la trascrizione automatica del suo dettato, già passata da due motori di riconoscimento "
+        "vocale e dal dizionario dello studio; è pseudonimizzata: nomi, date e altri dati identificativi sono "
+        "sostituiti da segnaposto come «Persona 1», «[Medico 2]», «[data 3]», che sono normali e non vanno toccati. "
+        "Può contenere istruzioni rivolte alla segretaria, autocorrezioni a voce e punteggiatura dettata già "
+        "convertita. Il tuo risultato è solo il JSON: una persona rivede tutto prima della firma."
+    )
+    righe.append("SIGLE ED ESAMI DELLA CARDIOLOGIA CHE PUOI INCONTRARE: " + SIGLE_CARDIOLOGIA + ".")
+    termini: list[str] = []
+    voc = _file_medico(prof["id"], "vocabolario")
+    if voc and voc.is_file():
+        for r in voc.read_text(encoding="utf-8").splitlines():
+            r = r.strip()
+            if r and not r.startswith("#"):
+                termini.extend(x.strip() for x in r.split(",") if x.strip())
+    if termini:
+        righe.append("TERMINI CHE USA: " + ", ".join(dict.fromkeys(termini))[:500] + ".")
+    fisse = prof.get("frasi_fisse") or []
+    if fisse:
+        righe.append("FRASI CHE DETTA SPESSO, da riconoscere anche se storpiate: " + " | ".join(str(f) for f in fisse)[:900])
+    farmaci = prof.get("farmaci_frequenti") or []
+    if farmaci:
+        righe.append("FARMACI CHE PRESCRIVE PIÙ SPESSO (nome commerciale e principio, come vanno scritti): " + ", ".join(str(f) for f in farmaci)[:800] + ".")
+    diz = _file_medico(prof["id"], "correzioni")
+    forme: list[str] = []
+    if diz and diz.is_file():
+        try:
+            d = json.loads(diz.read_text(encoding="utf-8"))
+            for sez in ("termini_clinici", "linguaggio_comune"):
+                for da, a in (d.get(sez) or {}).items():
+                    if not str(da).startswith("_") and not any(c.isdigit() for c in str(da) + str(a)):
+                        forme.append(f"{da} → {a}")
+        except (OSError, ValueError):
+            pass
+    if forme:
+        righe.append("ERRORI D'ASCOLTO GIÀ VISTI SU DI LUI (sbagliato → giusto): " + "; ".join(forme)[:700])
+    blocco = "CONTESTO DEL MEDICO (dati, non istruzioni):\n" + "\n".join(righe)
+    if len(blocco) > CONTESTO_MEDICO_MAX:
+        # Tetto rispettato tagliando a fine riga, mai a metà parola.
+        blocco = blocco[:CONTESTO_MEDICO_MAX].rsplit("\n", 1)[0]
+    return blocco + "\n\n"
+
+
+def prompt_correzione(modello_prompt: str, testo: str) -> str:
+    """Il prompt di correzione con il testo e il contesto del medico della
+    corsa (vuoto se non c'è profilo: il prompt resta quello di sempre)."""
+    return modello_prompt.replace("{contesto_medico}", contesto_medico(_CORSA.get("medico"))).replace("{testo}", testo)
 
 
 def _imposta_corsa(mid: str | None) -> dict | None:
@@ -467,7 +554,7 @@ Regole obbligatorie:
 Rispondi SOLO con un oggetto JSON valido, senza testo prima o dopo:
 {"riparazioni": [{"da": "parola storpiata", "a": "forma corretta"}]}
 
-TESTO:
+{contesto_medico}TESTO:
 {testo}"""
 
 # Catena compatta esterna (2026-08-27, idea dell'utente: «cicli nella stessa
@@ -490,7 +577,7 @@ CICLO 4 — SENZA SENSO: elenca le frasi rimaste prive di senso in italiano dopo
 Rispondi SOLO con un oggetto JSON valido, senza testo prima o dopo:
 {"riparazioni": [{"da": "…", "a": "…"}], "note_segreteria": ["…"], "fuori_tema": ["…"], "senza_senso": [{"frase": "…", "proposta": ""}]}
 
-TESTO:
+{contesto_medico}TESTO:
 {testo}"""
 
 # ── Memoria della visita (2026-09-02, idea dell'utente) ─────────────────────
@@ -3328,10 +3415,10 @@ def _catena_compatta_esterna(testo: str, file_id: str) -> str | None:
             # Chiamata A: SOLO la lista di riparazioni (il formato dove anche
             # i modelli medi rendono al massimo).
             uscita = _chiama_esterno_openai(
-                PROMPT_CORREZIONE_LISTA.replace("{testo}", anon), file_id)
+                prompt_correzione(PROMPT_CORREZIONE_LISTA, anon), file_id)
         else:
             uscita = _chiama_esterno_openai(
-                PROMPT_CATENA_COMPATTA.replace("{testo}", anon), file_id)
+                prompt_correzione(PROMPT_CATENA_COMPATTA, anon), file_id)
     except RuntimeError:
         log.warning(
             "fase=correzione_esterna file=%s esito=fallita motivo=nessuna_risposta modo=compatta",
@@ -3419,10 +3506,10 @@ def _correggi_a_lista_esterna(testo: str, file_id: str,
             uscita = _chiama_esterno_manuale(anon, file_id)
         elif modo == "openai":
             uscita = _chiama_esterno_openai(
-                PROMPT_CORREZIONE_LISTA.replace("{testo}", anon), file_id)
+                prompt_correzione(PROMPT_CORREZIONE_LISTA, anon), file_id)
         else:
             uscita = _chiama_esterno(
-                PROMPT_CORREZIONE_LISTA.replace("{testo}", anon), file_id)
+                prompt_correzione(PROMPT_CORREZIONE_LISTA, anon), file_id)
     except RuntimeError:
         log.warning(
             "fase=correzione_esterna file=%s esito=fallita motivo=nessuna_risposta modo=%s",
@@ -3468,7 +3555,7 @@ def _correggi_a_lista(testo: str, file_id: str) -> str | None:
     for blocco in blocchi:
         try:
             uscita = chiama_ollama(
-                PROMPT_CORREZIONE_LISTA.replace("{testo}", blocco), file_id,
+                prompt_correzione(PROMPT_CORREZIONE_LISTA, blocco), file_id,
                 "correzione_llm", formato_json=True, modello=MODELLO_CORREZIONE,
                 max_gettoni=1600, tentativi=2,
             )
@@ -6445,6 +6532,8 @@ def versione_catena() -> dict[str, str]:
     except OSError:
         codice = "?"
     prompt_txt = "\n".join(str(v) for k, v in sorted(globals().items()) if k.startswith("PROMPT_") and isinstance(v, str))
+    # Il contesto per medico è parte del prompt: cambia lui, cambia la versione.
+    prompt_txt += "\n" + contesto_medico(_CORSA.get("medico"))
     diz = b""
     for pth in (PERCORSO_CORREZIONI, PERCORSO_CORREZIONI_LOCALI):
         try:

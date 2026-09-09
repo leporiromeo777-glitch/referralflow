@@ -436,6 +436,25 @@ def _prova_26() -> None:
     m._COLLASSO_A.discard("prova-26b")
 
 
+@caso("27 · contesto per medico nel prompt di correzione: dati, con tetto, mai cifre")
+def _prova_27() -> None:
+    m._CORSA["medico"] = "moccetti"
+    try:
+        c = m.contesto_medico("moccetti")
+        assert c.startswith("CONTESTO DEL MEDICO"), c[:40]
+        assert "anamnesi" in c and "RIVA" in c, c[:300]
+        assert not any(ch.isdigit() for ch in c.split("ERRORI D'ASCOLTO")[-1]), "cifre nel contesto"
+        assert len(c) <= m.CONTESTO_MEDICO_MAX + 2
+        pr = m.prompt_correzione(m.PROMPT_CATENA_COMPATTA, "testo di prova")
+        assert "{contesto_medico}" not in pr and "{testo}" not in pr and "CONTESTO DEL MEDICO" in pr
+        assert pr.index("CONTESTO DEL MEDICO") < pr.index("TESTO:\ntesto di prova")
+    finally:
+        m._CORSA["medico"] = None
+    assert m.contesto_medico("nessuno-di-nome") == ""
+    pr0 = m.prompt_correzione(m.PROMPT_CATENA_COMPATTA, "x")
+    assert "CONTESTO DEL MEDICO" not in pr0 and "{contesto_medico}" not in pr0
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0
