@@ -576,6 +576,22 @@ già nella bozza» buttavano via proprio i casi giusti: ora basta che manchi
 ALMENO una parola significativa, e sotto le 3 parole devono mancare tutte o
 una pesante; (2) negazioni, lateralità, qualificatori e numeri contano come
 significativi anche se corti («non»). Manca ancora la lateralità sola.
+FATTO (9.9.2026) il terzo: TERAPIA STRUTTURATA DAL DETTATO, solo per i
+profili con `terapia_strutturata: true` (oggi Moccetti). `PROMPT_TERAPIA`
+estrae (nome, dose, posologia come detta, stato in corso/nuovo/modificato/
+sospeso, nota) sul modello esterno con testo pseudonimizzato; il CODICE fa
+il resto: `posologia_schema()` («una al mattino e mezza la sera» →
+«1-0-1/2-0», «1-0-0» → «1-0-0-0», «al bisogno» e le cadenze restano parole,
+altrimenti resta com'è dettato), `_nome_farmaco_canonico()` sull'elenco
+Swissmedic (nome intero a distanza ≤2, «aspirina cardio» → ASPIRIN CARDIO),
+`righe_terapia()` con le guardie: ogni numero della riga deve stare nel
+dettato, sospesi fuori, nome non trovato o dose non in commercio → dubbio,
+max 15 righe. Tappa «terapia» dopo i doppioni → `payload.terapia`
+{righe, voci, dubbi, fonte:"dettato"}; `opzioniRiorganizzazione` la usa al
+posto della terapia ripresa dalla lettera precedente; card «Terapia dal
+dettato» nella bozza. Caso 29 nella suite; banco `banco-terapia.py` (codice
+5/5; `--modello` a pagamento). Secondo tempo NON fatto: modifiche sulla
+lettera precedente («sospendo X, aumento Y»).
 Prossimi passi concordati: stessa cosa per l'arbitro (preferire la versione
 con numero/negazione/qualificatore in più), avvocato con lista OMISSIONI,
 controllo della lettera dopo l'impaginazione.

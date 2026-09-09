@@ -28,6 +28,7 @@ type Allarme = { campo?: string; valore?: unknown; intervallo?: string; stato?: 
 
 type Payload = {
   testo_corretto: string;
+  terapia?: { righe?: string[]; dubbi?: { riga: string; motivo: string }[]; fonte?: string } | null;
   riorganizzazione?: { formato?: string; at?: string; verifica?: { non_supportate: { frase: string; motivo: string }[]; omesse: { frase: string; motivo: string }[]; modello?: string } | null };
   note_segreteria?: string[];
   campi_estratti: Record<string, unknown>;
@@ -482,6 +483,25 @@ export default async function RefertoBozza({
               compaiono: {searchParams.aggiunte.split(',').filter(Boolean).map((w) => `«${w}»`).join(', ')}.
               Sono legami di frase o parole vere? Controllale prima di confermare.
             </p>
+          )}
+        </div>
+      )}
+      {/* Terapia dal dettato (9.9.2026): il blocco «Terapia:» estratto dalla
+          catena, con i dubbi delle guardie. Entra nella lettera impaginata. */}
+      {inBozza && p.terapia && (
+        <div className="card">
+          <h2>Terapia dal dettato</h2>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            Righe estratte dal dettato nel formato della segretaria: entrano nella lettera con «Impagina come lettera».
+            Ogni numero è stato controllato contro il dettato; i nomi contro l’elenco Swissmedic.
+          </p>
+          {Array.isArray(p.terapia.righe) && p.terapia.righe.length > 0 && (
+            <pre className="aq-testo" style={{ maxHeight: 220 }}>{'Terapia:\n' + p.terapia.righe.join('\n')}</pre>
+          )}
+          {Array.isArray(p.terapia.dubbi) && p.terapia.dubbi.length > 0 && (
+            <ul>{p.terapia.dubbi.map((d: { riga: string; motivo: string }, i: number) => (
+              <li key={i}><mark className="aq-tolto">{d.riga}</mark> <span className="muted small">— {d.motivo}</span></li>
+            ))}</ul>
           )}
         </div>
       )}

@@ -163,6 +163,8 @@ def carica_medici() -> list[dict]:
             # Note di contesto per i prompt (come detta, a chi scrive…).
             "contesto": str(v.get("contesto") or "").strip()[:700],
             "farmaci_frequenti": [str(f).strip()[:60] for f in (v.get("farmaci_frequenti") or []) if str(f).strip()][:50],
+            # Blocco «Terapia:» estratto dal dettato (tappa «terapia»).
+            "terapia_strutturata": bool(v.get("terapia_strutturata")),
             "vocabolario": str(v.get("vocabolario") or f"vocabolario-{mid}.txt"),
             "correzioni": str(v.get("correzioni") or f"correzioni-{mid}.json"),
         })
@@ -4090,6 +4092,190 @@ def omissioni_esterno(bozza: str, grezzo: str, file_id: str) -> list[dict] | Non
     return fuori
 
 
+# ── Terapia strutturata dal dettato (2026-09-09, terzo dei prompt mancanti;
+# acceso solo sui profili con `terapia_strutturata`, oggi Moccetti) ─────────
+# La segretaria mette in ogni lettera il blocco «Terapia:» con una riga per
+# farmaco: NOME dose posologia (mattino-mezzogiorno-sera-notte). Il modello
+# ESTRAE soltanto (nome, dose, posologia come detta, nota); il codice
+# traduce la posologia nello schema, riconosce il nome sull'elenco
+# Swissmedic, controlla che ogni numero esista nel dettato. Solo dettato
+# per intero: le modifiche sulla lettera precedente sono un secondo tempo.
+PROMPT_TERAPIA = """Sei l'assistente di redazione di un cardiologo. Nel TESTO qui sotto (un referto dettato, già ripulito) il medico può aver dettato la terapia del paziente.
+
+Estrai OGNI farmaco citato con la sua prescrizione, così com'è detto, senza inventare nulla:
+- "nome": il nome del farmaco ESATTAMENTE come compare nel testo;
+- "dose": la dose con l'unità come compare nel testo (es. «100 mg», «2.5 mg»), vuota se non detta;
+- "posologia": come detta nel testo (es. «1-0-0-0», «una al mattino», «mezza compressa la sera», «ogni due settimane», «al bisogno»), vuota se non detta;
+- "stato": "in corso" se il paziente lo assume o continua, "nuovo" se viene introdotto, "modificato" se cambia dose, "sospeso" se viene sospeso o sostituito;
+- "nota": eventuale precisazione (es. «per un mese, poi 150 mg»), altrimenti vuota.
+
+Regole obbligatorie: nessun farmaco che non sia nel testo; nessun numero che non sia nel testo; se il testo non parla di terapia, lista vuota. I segnaposto come «Persona 1» o «[data 2]» sono normali.
+
+Rispondi SOLO con un oggetto JSON valido:
+{"farmaci": [{"nome": "...", "dose": "...", "posologia": "...", "stato": "...", "nota": "..."}]}
+
+TESTO:
+{testo}"""
+
+_QTA = {
+    "una": "1", "uno": "1", "un": "1", "1": "1", "due": "2", "2": "2", "tre": "3", "3": "3",
+    "mezza": "1/2", "mezzo": "1/2", "½": "1/2", "1/2": "1/2", "0,5": "1/2", "0.5": "1/2",
+    "un quarto": "1/4", "1/4": "1/4", "una e mezza": "1 1/2", "1,5": "1 1/2", "1.5": "1 1/2",
+}
+_MOMENTI = (
+    (r"(?:al|la|di|alla|il)?\s*mattin[oa]|colazione", 0),
+    (r"(?:a|il)?\s*mezzogiorno|(?:a|al)?\s*pranzo", 1),
+    (r"(?:la|alla|di|a)?\s*sera|(?:a)?\s*cena", 2),
+    (r"(?:la|alla|di)?\s*notte|prima di (?:dormire|coricarsi)|al momento di coricarsi", 3),
+)
+# Le frazioni PRIMA dei numeri interi, sennò «1/2» si ferma a «1».
+_RX_SCHEMA = re.compile(r"\b(1/2|1/4|½|\d+(?:[.,]\d+)?)\s*-\s*(1/2|1/4|½|\d+(?:[.,]\d+)?)\s*-\s*(1/2|1/4|½|\d+(?:[.,]\d+)?)(?:\s*-\s*(1/2|1/4|½|\d+(?:[.,]\d+)?))?(?![\d/])")
+
+
+def posologia_schema(testo: str) -> str:
+    """«una al mattino e mezza la sera» → «1-0-1/2-0»; «1-0-0» → «1-0-0-0»;
+    «al bisogno» e le cadenze («ogni 2 settimane») restano parole. Se non si
+    capisce, resta com'è dettato: mai inventare una posologia."""
+    t = (testo or "").strip().lower().replace("compresse", "").replace("compressa", "").replace("cp", "")
+    t = re.sub(r"\s+", " ", t).strip()
+    if not t:
+        return ""
+    m = _RX_SCHEMA.search(t)
+    if m:
+        slot = [g for g in m.groups() if g is not None]
+        slot = [("1/2" if g in ("½", "0,5", "0.5") else g.replace(",", ".")) for g in slot]
+        while len(slot) < 4:
+            slot.append("0")
+        return "-".join(slot)
+    if re.search(r"\bal bisogno\b|\bse necessario\b|\bin caso di\b", t):
+        return "al bisogno"
+    if re.search(r"\bogni\b|\bvolt[ae] (?:al|alla|a)\b|\bsettiman|\bmese\b|\bmensil", t):
+        return testo.strip()
+    slots = ["0", "0", "0", "0"]
+    trovato = False
+    qta_rx = "|".join(sorted((re.escape(k) for k in _QTA), key=len, reverse=True))
+    # «una al mattino e mezza la sera», «una mattina e sera», «1 la sera»
+    for pezzo in re.split(r"\s*(?:,|\be\b|\bpiù\b)\s*", t):
+        pezzo = pezzo.strip()
+        if not pezzo:
+            continue
+        mq = re.search(rf"\b({qta_rx})\b", pezzo)
+        qta = _QTA[mq.group(1)] if mq else "1"
+        momenti = [idx for rx, idx in _MOMENTI if re.search(rx, pezzo)]
+        if not momenti:
+            continue
+        for idx in momenti:
+            slots[idx] = qta
+            trovato = True
+    return "-".join(slots) if trovato else testo.strip()
+
+
+def _nome_farmaco_canonico(nome: str) -> tuple[str, bool, list[str]]:
+    """(nome in maiuscolo, trovato nell'elenco Swissmedic, dosi note)."""
+    diz = _farmaci()
+    nomi = diz.get("nomi") or {}
+    principi = diz.get("principi") or {}
+    n = re.sub(r"\s+", " ", (nome or "").strip().lower())
+    if not n:
+        return "", False, []
+    if n in nomi:
+        return n.upper(), True, list((nomi[n] or {}).get("dosi") or [])
+    if n in principi:
+        return n.upper(), True, []
+    # Nome intero a distanza ≤ 2 da una voce che comincia allo stesso modo
+    # («aspirina cardio» → «aspirin cardio»): vince la voce più lunga.
+    testa = n[:4]
+    candidati = [k for k in nomi if k[:4] == testa and _distanza_breve(n, k, 2) <= 2]
+    if candidati:
+        k = max(candidati, key=len)
+        return k.upper(), True, list((nomi[k] or {}).get("dosi") or [])
+    prima = n.split(" ")[0]
+    if prima in nomi:
+        return prima.upper(), True, list((nomi[prima] or {}).get("dosi") or [])
+    if prima in principi:
+        return prima.upper(), True, []
+    vicino = _farmaco_vicino(prima, nomi, principi)
+    if vicino:
+        voce = nomi.get(vicino) or {}
+        return vicino.upper(), True, list(voce.get("dosi") or [])
+    return n.upper(), False, []
+
+
+def righe_terapia(voci: list, dettato: str) -> tuple[list[str], list[dict], list[dict]]:
+    """Dalle voci estratte alle righe del blocco. Guardie: ogni numero della
+    riga deve stare nel dettato; il nome va cercato sull'elenco Swissmedic
+    (se manca resta in maiuscolo ma finisce nei dubbi); i sospesi non
+    entrano; al più 15 righe. Torna (righe, voci_tenute, dubbi)."""
+    numeri_dettato = {x.replace(",", ".") for x in re.findall(r"\d+(?:[.,]\d+)?", dettato)}
+    righe: list[str] = []
+    tenute: list[dict] = []
+    dubbi: list[dict] = []
+    for v in (voci or [])[:20]:
+        if not isinstance(v, dict):
+            continue
+        nome = str(v.get("nome", "")).strip()
+        dose = str(v.get("dose", "")).strip()
+        posol = str(v.get("posologia", "")).strip()
+        stato = str(v.get("stato", "in corso")).strip().lower()
+        nota = str(v.get("nota", "")).strip()
+        if not nome:
+            continue
+        if stato == "sospeso":
+            dubbi.append({"riga": nome.upper(), "motivo": "sospeso nel dettato: non entra nel blocco"})
+            continue
+        canonico, trovato, dosi_note = _nome_farmaco_canonico(nome)
+        numeri_riga = {x.replace(",", ".") for x in re.findall(r"\d+(?:[.,]\d+)?", dose + " " + posol + " " + nota)}
+        if not numeri_riga <= numeri_dettato:
+            dubbi.append({"riga": f"{canonico} {dose} {posol}".strip(), "motivo": "numero non presente nel dettato"})
+            continue
+        schema = posologia_schema(posol)
+        riga = " ".join(x for x in (canonico, dose, schema) if x)
+        if nota and nota.lower() not in riga.lower():
+            riga += f" ({nota})"
+        righe.append(riga)
+        tenute.append({"nome": canonico, "dose": dose, "posologia": schema, "stato": stato, "nota": nota, "trovato": trovato})
+        if not trovato:
+            dubbi.append({"riga": riga, "motivo": "nome non trovato nell'elenco Swissmedic: controlla la grafia"})
+        elif dose and dosi_note and not any(dose.replace(",", ".").lower().replace(" ", "") == d.replace(",", ".").lower().replace(" ", "") for d in dosi_note):
+            dubbi.append({"riga": riga, "motivo": "dose non tra quelle in commercio per questo nome"})
+        if len(righe) >= 15:
+            break
+    return righe, tenute, dubbi
+
+
+def estrai_terapia(finale: str, file_id: str) -> dict | None:
+    """Tappa «terapia»: modello esterno (testo pseudonimizzato) + guardie di
+    codice. None se il dettato non parla di terapia o se il modello tace."""
+    inizio = time.monotonic()
+    esito_anon = _anonimizza_per_esterno(finale, file_id, con_mappa=True, riusa=True)
+    if esito_anon is None:
+        return None
+    anon, mappa = esito_anon
+    try:
+        uscita = _chiama_esterno_openai(PROMPT_TERAPIA.replace("{testo}", anon), file_id)
+    except RuntimeError:
+        log.warning("fase=terapia file=%s esito=esterno_fallito", file_id)
+        return None
+    dati = _estrai_json(uscita)
+    voci = dati.get("farmaci") if isinstance(dati, dict) else None
+    if not isinstance(voci, list) or not voci:
+        log.info("fase=terapia file=%s esito=nessun_farmaco durata=%.1fs", file_id, time.monotonic() - inizio)
+        return None
+
+    def rip(s: str) -> str:
+        for segnaposto, vero in mappa.items():
+            s = s.replace(segnaposto, vero)
+        return s
+
+    voci = [{k: rip(str(v.get(k, ""))) for k in ("nome", "dose", "posologia", "stato", "nota")} for v in voci if isinstance(v, dict)]
+    righe, tenute, dubbi = righe_terapia(voci, finale)
+    log.info("fase=terapia file=%s esito=ok voci=%d righe=%d dubbi=%d durata=%.1fs",
+             file_id, len(voci), len(righe), len(dubbi), time.monotonic() - inizio)
+    if not righe and not dubbi:
+        return None
+    return {"righe": righe, "voci": tenute, "dubbi": dubbi, "fonte": "dettato"}
+
+
 def avvocato_esterno(bozza: str, grezzo: str, file_id: str) -> list[dict] | None:
     """Avvocato del diavolo sul modello di punta ESTERNO (2026-08-27,
     «opus per tutto»): seconda chiamata indipendente dal correttore.
@@ -7283,6 +7469,27 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                 versioni["dopo_doppioni"] = finale
             tappa("doppioni", "modello+codice", tolti=len(doppioni_tolti), dubbi=len(doppioni_dubbi))
 
+        # Terapia strutturata dal dettato (2026-09-09): solo per i profili che
+        # la chiedono (Moccetti) e col percorso esterno; PROPOSTA nel payload,
+        # la lettera la usa al posto della terapia ripresa dalla precedente.
+        if (not visita and _esterno_attivo() == "openai"
+                and (medico or {}).get("terapia_strutturata")):
+            fase = "terapia"
+            _ = notifica and notifica(fase)
+            try:
+                terapia = estrai_terapia(finale, file_id)
+            except Exception as e:  # noqa: BLE001 — mai bloccare la catena
+                log.warning("fase=terapia file=%s esito=errore tipo=%s", file_id, type(e).__name__)
+                terapia = None
+            if terapia:
+                payload_terapia = terapia
+            else:
+                payload_terapia = None
+            tappa("terapia", "modello+codice", righe=len((terapia or {}).get("righe") or []),
+                  dubbi=len((terapia or {}).get("dubbi") or []), trasporto=_trasporto(file_id, "terapia"))
+        else:
+            payload_terapia = None
+
         # Formato standard dello studio (struttura=1): la catena prepara la
         # PROPOSTA già impaginata come il rapporto-tipo — in pagina si
         # applica con un clic. Il testo ufficiale resta `finale`.
@@ -7514,6 +7721,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             for da, a in RIPARAZIONI_APPLICATE.get(file_id, [])[:80]
         ],
         "richiede_revisione": True,
+        "terapia": payload_terapia,
         "ombra": OMBRA,
         "ombra_etichetta": OMBRA_ETICHETTA if OMBRA else "",
     }

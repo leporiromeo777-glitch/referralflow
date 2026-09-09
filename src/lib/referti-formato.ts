@@ -24,6 +24,14 @@ export async function opzioniRiorganizzazione(
     firma: profilo?.firma?.length ? profilo.firma : undefined,
   };
   let terapiaRipresa = false;
+  // Terapia STRUTTURATA dal dettato (tappa «terapia» della catena, 9.9.2026,
+  // solo per i profili che la chiedono): se c'è, vince sul blocco ripreso
+  // dalla lettera precedente. Righe già nel formato della segretaria.
+  const dettata = Array.isArray(payload?.terapia?.righe) ? (payload.terapia.righe as unknown[]).filter((r) => typeof r === 'string' && r.trim()) as string[] : [];
+  if (dettata.length) {
+    opzioni.terapia = dettata;
+    return { formato, opzioni, terapiaRipresa: true };
+  }
   // Prassi della segretaria (confronto del 2026-09-07): la terapia in corso
   // va in ogni lettera, anche se il medico non la ridetta. Si riprende
   // dalla lettera precedente quando il dettato dice «invariata» o quando

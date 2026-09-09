@@ -81,7 +81,8 @@
         "Tambocor (flecainide)",
         "Multaq (dronedarone)"
       ],
-      "contesto": "Parla molto veloce, con frasi lunghe e incisi; detta lettere a colleghi che gli hanno inviato il paziente. Struttura tipica: saluto al collega; rimando agli incarti precedenti o breve anamnesi; esami eseguiti con date, sigle e valori (ecocardiogramma, cicloergometria o spiroergometria, CoroTAC, coronarografia, Holter); valutazione; proposta terapeutica con farmaci e dosaggi; controllo successivo; «Cordiali e collegiali saluti». Le istruzioni alla segretaria (a chi inviare, copia, cosa recuperare dalla cartella) le detta dentro il flusso."
+      "contesto": "Parla molto veloce, con frasi lunghe e incisi; detta lettere a colleghi che gli hanno inviato il paziente. Struttura tipica: saluto al collega; rimando agli incarti precedenti o breve anamnesi; esami eseguiti con date, sigle e valori (ecocardiogramma, cicloergometria o spiroergometria, CoroTAC, coronarografia, Holter); valutazione; proposta terapeutica con farmaci e dosaggi; controllo successivo; «Cordiali e collegiali saluti». Le istruzioni alla segretaria (a chi inviare, copia, cosa recuperare dalla cartella) le detta dentro il flusso.",
+      "terapia_strutturata": true
     },
     {
       "id": "moschovitis",

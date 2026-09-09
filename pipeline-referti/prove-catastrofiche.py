@@ -472,6 +472,29 @@ def _prova_28() -> None:
     assert not m._filtra_omissioni([{"frase": "astenia", "motivo": ""}], dettato, bozza)
 
 
+@caso("29 · terapia dal dettato: posologie tradotte, numeri e nomi controllati")
+def _prova_29() -> None:
+    ps = m.posologia_schema
+    assert ps("una al mattino e mezza la sera") == "1-0-1/2-0", ps("una al mattino e mezza la sera")
+    assert ps("1-0-0") == "1-0-0-0" and ps("0-0-1/2-0") == "0-0-1/2-0" and ps("½-0-0-0") == "1/2-0-0-0"
+    assert ps("una compressa la sera") == "0-0-1-0" and ps("una mattina e sera") == "1-0-1-0"
+    assert ps("al bisogno") == "al bisogno" and ps("ogni due settimane") == "ogni due settimane"
+    assert ps("come da schema") == "come da schema" and ps("") == ""
+    dettato = "Prosegue con Aspirina Cardio 100 mg una al mattino e Concor 2.5 mg mezza la sera. Sospendo il Valsartan."
+    voci = [
+        {"nome": "Aspirina Cardio", "dose": "100 mg", "posologia": "una al mattino", "stato": "in corso", "nota": ""},
+        {"nome": "Concor", "dose": "2.5 mg", "posologia": "mezza la sera", "stato": "in corso", "nota": ""},
+        {"nome": "Valsartan", "dose": "160 mg", "posologia": "", "stato": "sospeso", "nota": ""},
+        {"nome": "Farmacoinventato", "dose": "50 mg", "posologia": "1-0-0", "stato": "nuovo", "nota": ""},  # numero non nel dettato
+    ]
+    righe, tenute, dubbi = m.righe_terapia(voci, dettato)
+    assert len(righe) == 2, righe
+    assert righe[0].startswith("ASPIRIN") and righe[0].endswith("100 mg 1-0-0-0"), righe[0]
+    assert righe[1].endswith("2.5 mg 0-0-1/2-0"), righe[1]
+    motivi = " ".join(d["motivo"] for d in dubbi)
+    assert "sospeso" in motivi and "numero non presente" in motivi, dubbi
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0
