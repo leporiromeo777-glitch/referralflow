@@ -4,6 +4,7 @@ import { query } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
 import { avviaRiorganizzazione, statoRiorganizzazione } from '@/lib/referto-struttura';
 import { registraPassoApp } from '@/lib/audit/lineage';
+import { verificaLettera, PROMPT_VERIFICA_LETTERA } from '@/lib/referto-verifica';
 import { ruoloRevisore } from '@/lib/audit/revisione';
 import { opzioniRiorganizzazione } from '@/lib/referti-formato';
 
@@ -51,12 +52,27 @@ export async function POST(req: NextRequest) {
   // la lettera, saluto/firma dal profilo e terapia dalla lettera precedente.
   const { formato, opzioni, terapiaRipresa } = await opzioniRiorganizzazione(studioId, id, b.payload, b.campi_confermati, testo);
   const avviato = avviaRiorganizzazione(id, testo, async (nuovo) => {
+    // Controllo della lettera (9.9.2026): il modello esterno confronta il
+    // testo di partenza con la lettera in entrambe le direzioni. Solo
+    // segnalazioni, salvate accanto alla lettera; best-effort.
+    let verifica: any = null;
+    const t0 = Date.now();
+    try { verifica = formato === 'lettera' ? await verificaLettera(testo, nuovo) : null; } catch { verifica = null; }
     await query(
       `update referti_bozze set testo_finale = $3,
               payload = jsonb_set(payload, '{riorganizzazione}', $4::jsonb)
         where id = $1 and studio_id = $2 and stato = 'bozza'`,
-      [id, studioId, nuovo, JSON.stringify({ formato, terapia_ripresa: terapiaRipresa, at: new Date().toISOString() })]
+      [id, studioId, nuovo, JSON.stringify({ formato, terapia_ripresa: terapiaRipresa, at: new Date().toISOString(), verifica })]
     );
+    if (verifica) {
+      try {
+        await registraPassoApp({
+          studioId, bozzaId: id, nome: 'verifica_lettera', tipo: 'clinical_validation', modello: verifica.modello, provider: 'cloud',
+          promptNome: 'verifica_lettera', promptTesto: PROMPT_VERIFICA_LETTERA, ingresso: nuovo, uscita: null, inizio: t0, stato: 'SUCCESS',
+          producerIngresso: 'SYSTEM', metadata: { non_supportate: verifica.non_supportate.length, omesse: verifica.omesse.length },
+        });
+      } catch { /* audit best-effort */ }
+    }
   }, formato, opzioni, async (esito, inizio, prompt) => {
     await registraPassoApp({
       studioId, bozzaId: id, nome: formato === 'lettera' ? 'impaginazione_lettera' : 'riorganizzazione_rapporto',

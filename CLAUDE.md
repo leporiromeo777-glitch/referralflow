@@ -557,6 +557,18 @@ dell'avvocato; attivo col percorso esterno salvo `omissioni=0` nella conf.
 Le voci si fondono in `payload.frasi_omesse` (`fonte: "modello"`, `motivo`,
 `pulita`), senza doppioni con quelle del codice; il wizard le mostra nel
 passo delle omissioni con l'etichetta «vista dal modello». Caso 28.
+FATTO (9.9.2026) anche il secondo: CONTROLLO DELLA LETTERA dopo
+«Impagina come lettera» (`src/lib/referto-verifica.ts`, prompt
+`PROMPT_VERIFICA_LETTERA` in due direzioni: frasi della lettera non
+sostenute dal testo di partenza e passaggi del testo spariti; guardie pure
+`filtraSegnalazioni`, test `npm run test:app`). Gira sul modello esterno
+dall'APP (`src/lib/esterno.ts`: stessa conf `~/.referralflow-esterno.conf`,
+solo fornitori autorizzati) con testo pseudonimizzato dal piano di
+`anonimizza.ts`; esito in `payload.riorganizzazione.verifica`, card
+«Controllo della lettera» nella pagina della bozza, tappa audit
+`verifica_lettera`. Solo segnalazioni, mai correzioni. Banco delle omissioni
+`pipeline-referti/banco-omissioni.py` (dettati finti): il CODICE trova 1
+omissione su 9 (0 falsi), il modello si misura con `--modello` (a pagamento).
 Prossimi passi concordati: stessa cosa per l'arbitro (preferire la versione
 con numero/negazione/qualificatore in più), avvocato con lista OMISSIONI,
 controllo della lettera dopo l'impaginazione.

@@ -28,6 +28,7 @@ type Allarme = { campo?: string; valore?: unknown; intervallo?: string; stato?: 
 
 type Payload = {
   testo_corretto: string;
+  riorganizzazione?: { formato?: string; at?: string; verifica?: { non_supportate: { frase: string; motivo: string }[]; omesse: { frase: string; motivo: string }[]; modello?: string } | null };
   note_segreteria?: string[];
   campi_estratti: Record<string, unknown>;
   divergenze: Divergenza[];
@@ -481,6 +482,34 @@ export default async function RefertoBozza({
               compaiono: {searchParams.aggiunte.split(',').filter(Boolean).map((w) => `«${w}»`).join(', ')}.
               Sono legami di frase o parole vere? Controllale prima di confermare.
             </p>
+          )}
+        </div>
+      )}
+      {/* Controllo della lettera (9.9.2026): esito del confronto tra il testo
+          di partenza e la lettera impaginata, in entrambe le direzioni. */}
+      {inBozza && p.riorganizzazione?.verifica && (
+        <div className="card">
+          <h2>Controllo della lettera</h2>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            Un secondo modello ha confrontato la lettera con il testo da cui è nata.
+            {p.riorganizzazione.verifica.non_supportate.length === 0 && p.riorganizzazione.verifica.omesse.length === 0
+              ? ' Nessuna differenza di contenuto trovata.' : ' Sono segnalazioni, non correzioni: decidi tu.'}
+          </p>
+          {p.riorganizzazione.verifica.non_supportate.length > 0 && (
+            <>
+              <h3>Nella lettera ma non nel testo di partenza</h3>
+              <ul>{p.riorganizzazione.verifica.non_supportate.map((v: { frase: string; motivo: string }, i: number) => (
+                <li key={i}><mark className="aq-aggiunto">{v.frase}</mark>{v.motivo ? <span className="muted small"> — {v.motivo}</span> : null}</li>
+              ))}</ul>
+            </>
+          )}
+          {p.riorganizzazione.verifica.omesse.length > 0 && (
+            <>
+              <h3>Nel testo di partenza ma non nella lettera</h3>
+              <ul>{p.riorganizzazione.verifica.omesse.map((v: { frase: string; motivo: string }, i: number) => (
+                <li key={i}><mark className="aq-tolto">{v.frase}</mark>{v.motivo ? <span className="muted small"> — {v.motivo}</span> : null}</li>
+              ))}</ul>
+            </>
           )}
         </div>
       )}
