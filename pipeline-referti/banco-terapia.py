@@ -34,10 +34,13 @@ CASI = [
       {"nome": "Temesta", "dose": "1 mg", "posologia": "al bisogno", "stato": "in corso", "nota": ""},
       {"nome": "Pantoprazolo", "dose": "20 mg", "posologia": "al mattino", "stato": "in corso", "nota": ""}],
      ["TEMESTA 1 mg al bisogno", "PANTOPRAZOLO 20 mg 1-0-0-0"]),
+    # Caso delle GUARDIE: le voci simulate portano una dose che nel dettato non
+    # c'è (2.5 invece di 5) e la riga deve cadere; col modello vero, che estrae
+    # bene, la riga giusta è invece attesa.
     ("numero inventato dal modello",
      "Prosegue con Eliquis 5 mg mattina e sera.",
      [{"nome": "Eliquis", "dose": "2.5 mg", "posologia": "mattina e sera", "stato": "in corso", "nota": ""}],
-     []),
+     [], ["ELIQUIS 5 mg 1-0-1-0"]),
     ("nessuna terapia",
      "Il paziente sta bene e nega sintomi. Controllo fra 12 mesi.",
      [],
@@ -45,9 +48,12 @@ CASI = [
 ]
 
 
-def confronta(nome_ctrl, estrai):
+def confronta(nome_ctrl, estrai, col_modello=False):
     ok = 0
-    for nome, dettato, voci_perfette, attese in CASI:
+    for caso in CASI:
+        nome, dettato, voci_perfette, attese = caso[:4]
+        if col_modello and len(caso) > 4:
+            attese = caso[4]
         voci = estrai(dettato, voci_perfette)
         righe, _t, dubbi = m.righe_terapia(voci, dettato)
         esatte = [r for r in attese if r in righe]
@@ -67,7 +73,7 @@ def main(argv):
         def dal_modello(d, _v):
             t = m.estrai_terapia(d, "banco-terapia")
             return t["voci_grezze"] if t and "voci_grezze" in t else _voci_grezze(d)
-        confronta("modello", dal_modello)
+        confronta("modello", dal_modello, col_modello=True)
     return 0
 
 

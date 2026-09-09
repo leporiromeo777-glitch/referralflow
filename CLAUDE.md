@@ -527,6 +527,21 @@ Riempimento dello storico: `npm run audit-backfill` (idempotente; gira con
 9.9.2026 la tappa «Impagina» non era registrata, quindi il diff della
 segretaria è contro il testo della catena.
 
+## Qwen 3.8 in locale (9.9.2026, misurato)
+`qwen3.8:27b` di Ollama (q4, 17 GB) NON gira su questo Mac da 24 GB: Metal
+«Insufficient Memory» con qualsiasi contesto, risposta vuota. Gira invece
+`hf.co/unsloth/Qwen3.8-27B-GGUF:UD-IQ4_XS` (14,3 GB, 15 GB residenti, 100%
+GPU) con `REFERTI_NUM_CTX=8192` (12288 no). Banco dei correttori
+(`~/referti-dataset/banco-locali.py`, stesse guardie): Qwen 3.8 leggero
+11/17 nel consenso, pari ai migliori cloud (Qwen 3.5-397B, deepseek) e SOPRA
+gemma-4-31B (10/17, il modello esterno in uso), ma 225 s per chiamata contro
+pochi secondi; gemma3:27b 4/17, medgemma 0/17. Contesto per medico su Qwen
+locale: 4/8 → 6/8 su due giri, 0 fuori bersaglio, 27-42 s → 61-75 s. Quindi:
+qualità da cloud senza far uscire il testo, al prezzo di ~4× la latenza.
+Decisione dell'utente pendente: esterno per la correzione (veloce) e Qwen
+locale al posto di gemma3:27b nelle tappe locali, oppure «modalità tutto in
+casa» con Qwen ovunque.
+
 ## Contesto per medico nei prompt di correzione (9.9.2026)
 Richiesta utente: «il prompt migliore possibile con tutto quello che può
 servire all'agente». Scelta: DATI davanti alle stesse istruzioni, non regole
@@ -590,7 +605,7 @@ max 15 righe. Tappa «terapia» dopo i doppioni → `payload.terapia`
 {righe, voci, dubbi, fonte:"dettato"}; `opzioniRiorganizzazione` la usa al
 posto della terapia ripresa dalla lettera precedente; card «Terapia dal
 dettato» nella bozza. Caso 29 nella suite; banco `banco-terapia.py` (codice
-5/5; `--modello` a pagamento). Secondo tempo NON fatto: modifiche sulla
+5/5; MODELLO esterno 5/5 misurato il 9.9.2026, ~CHF 0.002). Secondo tempo NON fatto: modifiche sulla
 lettera precedente («sospendo X, aumento Y»).
 Prossimi passi concordati: stessa cosa per l'arbitro (preferire la versione
 con numero/negazione/qualificatore in più), avvocato con lista OMISSIONI,
