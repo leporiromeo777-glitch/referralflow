@@ -34,7 +34,8 @@ LETTERA:
 export type Segnalazione = { frase: string; motivo: string };
 export type EsitoVerifica = { non_supportate: Segnalazione[]; omesse: Segnalazione[]; modello: string; at: string };
 
-const sig = (s: string) => new Set((s.toLowerCase().match(/[a-zà-ÿ0-9][a-zà-ÿ0-9.,]*/g) ?? []).filter((w) => w.length >= 4 || /^\d/.test(w)));
+const PESANTE = /^(non|nessun[ao]?|senza|né|destr[oaie]|sinistr[oaie]|dx|sx|bilateral[ei]|diminuit[oaie]|ridott[oaie]|aumentat[oaie]|elevat[oaie]|peggiorat[oaie]|migliorat[oaie]|stabil[ei]|invariat[oaie]|assent[ei]|present[ei]|lieve|moderat[oaie]|sever[oaie]|grave|sospes[oaie]|\d.*)$/i;
+const sig = (s: string) => new Set((s.toLowerCase().match(/[a-zà-ÿ0-9]+(?:[.,][0-9]+)?/g) ?? []).filter((w) => w.length >= 4 || PESANTE.test(w)));
 
 // Guardie di codice (pure, testabili): citazione esatta nel testo giusto,
 // almeno 3 parole significative, scartata se quelle parole stanno già per
@@ -50,9 +51,15 @@ export function filtraSegnalazioni(voci: unknown, dentro: string, contro: string
     const motivo = String((v as any).motivo ?? '').trim().slice(0, 200);
     if (frase.length < 8 || !dentro.includes(frase)) continue;
     const s = sig(frase);
-    if (s.size < 3) continue;
-    let comuni = 0; for (const w of s) if (nelContro.has(w)) comuni += 1;
-    if (comuni / s.size >= 0.8) continue;
+    if (s.size === 0) continue;
+    // Segnalazione valida solo se almeno una parola significativa manca
+    // dall'altro testo: la parola sola persa in una frase lunga è il caso
+    // da prendere (la soglia all'80% la buttava via, banco del 9.9.2026).
+    // Il modello spesso cita la parola da sola: sotto le 3 parole devono
+    // mancare tutte.
+    const mancanti = [...s].filter((w) => !nelContro.has(w));
+    if (mancanti.length === 0) continue;
+    if (s.size < 3 && mancanti.length < s.size && !mancanti.some((w) => PESANTE.test(w))) continue;
     const chiave = [...s].sort().join(' ');
     if (viste.has(chiave)) continue;
     viste.add(chiave);

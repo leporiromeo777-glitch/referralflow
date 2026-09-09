@@ -568,7 +568,14 @@ solo fornitori autorizzati) con testo pseudonimizzato dal piano di
 «Controllo della lettera» nella pagina della bozza, tappa audit
 `verifica_lettera`. Solo segnalazioni, mai correzioni. Banco delle omissioni
 `pipeline-referti/banco-omissioni.py` (dettati finti): il CODICE trova 1
-omissione su 9 (0 falsi), il modello si misura con `--modello` (a pagamento).
+omissione su 9 (0 falsi); il MODELLO esterno 8 su 9 con 0 falsi allarmi
+(misurato 9.9.2026, `--modello`, ~CHF 0.01 in tutto). Due lezioni sulle
+guardie, valide anche per `filtraSegnalazioni` dell'app: (1) il modello cita
+spesso la parola sola («diminuiti») → la soglia «≥3 parole» e quella «80%
+già nella bozza» buttavano via proprio i casi giusti: ora basta che manchi
+ALMENO una parola significativa, e sotto le 3 parole devono mancare tutte o
+una pesante; (2) negazioni, lateralità, qualificatori e numeri contano come
+significativi anche se corti («non»). Manca ancora la lateralità sola.
 Prossimi passi concordati: stessa cosa per l'arbitro (preferire la versione
 con numero/negazione/qualificatore in più), avvocato con lista OMISSIONI,
 controllo della lettera dopo l'impaginazione.

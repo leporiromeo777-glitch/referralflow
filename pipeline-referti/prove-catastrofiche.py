@@ -467,6 +467,9 @@ def _prova_28() -> None:
     ]
     fuori = m._filtra_omissioni(voci, dettato, bozza)
     assert len(fuori) == 1 and "diminuiti" in fuori[0]["frase"], fuori
+    # La parola citata da sola passa se manca davvero; se c'è già, no.
+    assert m._filtra_omissioni([{"frase": "diminuiti", "motivo": ""}], dettato, bozza)
+    assert not m._filtra_omissioni([{"frase": "astenia", "motivo": ""}], dettato, bozza)
 
 
 def main() -> int:

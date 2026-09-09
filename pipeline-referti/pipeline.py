@@ -4009,8 +4009,13 @@ def _filtra_omissioni(voci: list, dettato: str, bozza: str) -> list[dict]:
     """Guardie delle omissioni proposte dal modello: citazione esatta nel
     dettato; almeno 3 parole significative; scartata se quelle parole stanno
     già per l'80% nella bozza (non è un'omissione); al più 15 voci."""
+    def pesante(w: str) -> bool:
+        return bool(_RX_NEGAZIONE.fullmatch(w) or _RX_LATERALITA.fullmatch(w) or _RX_QUALIFICATORE.fullmatch(w) or w[0].isdigit())
+
     def sig(s: str) -> set[str]:
-        return {w for w in re.findall(r"[a-zà-ÿ0-9][a-zà-ÿ0-9,.]*", s.lower()) if len(w) >= 4 or w[0].isdigit()}
+        # Parole senza la punteggiatura attaccata («astenia.» = «astenia»);
+        # negazioni, lateralità, qualificatori e numeri contano anche se corti.
+        return {w for w in re.findall(r"[a-zà-ÿ0-9]+(?:[.,][0-9]+)?", s.lower()) if len(w) >= 4 or pesante(w)}
     nella_bozza = sig(bozza)
     fuori: list[dict] = []
     viste: set[str] = set()
@@ -4022,9 +4027,19 @@ def _filtra_omissioni(voci: list, dettato: str, bozza: str) -> list[dict]:
         if len(frase) < 8 or frase not in dettato:
             continue
         s = sig(frase)
-        if len(s) < 3:
+        if not s:
             continue
-        if len(s & nella_bozza) / len(s) >= 0.8:
+        # È un'omissione solo se ALMENO una parola significativa (o un numero)
+        # della citazione manca dalla bozza: la parola sola persa dentro una
+        # frase lunga («diminuiti») è proprio il caso da prendere (banco del
+        # 9.9.2026: la soglia all'80% la buttava via). Il modello spesso cita
+        # la parola da sola: con meno di 3 parole devono mancare TUTTE.
+        mancanti = s - nella_bozza
+        if not mancanti:
+            continue
+        # Citazione corta (< 3 parole): passa se mancano tutte le sue parole
+        # oppure se manca una parola pesante («leggermente aumentati»).
+        if len(s) < 3 and len(mancanti) < len(s) and not any(pesante(w) for w in mancanti):
             continue
         chiave = " ".join(sorted(s))
         if chiave in viste:
