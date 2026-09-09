@@ -213,6 +213,9 @@ export async function riorganizzaReferto(
         // sconfina su CPU e manda in pressione la memoria dell'intera
         // macchina (visto dal vivo 2026-09-03); un referto sta in ~5k token.
         options: { temperature: 0, num_ctx: 8192 },
+        // Qwen 3.x pensa prima di rispondere: spento, sennò il pensiero si
+        // mangia il testo (9.9.2026).
+        ...(MODELLO.toLowerCase().includes('qwen3') ? { think: false } : {}),
       }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
       cache: 'no-store',

@@ -538,9 +538,15 @@ gemma-4-31B (10/17, il modello esterno in uso), ma 225 s per chiamata contro
 pochi secondi; gemma3:27b 4/17, medgemma 0/17. Contesto per medico su Qwen
 locale: 4/8 → 6/8 su due giri, 0 fuori bersaglio, 27-42 s → 61-75 s. Quindi:
 qualità da cloud senza far uscire il testo, al prezzo di ~4× la latenza.
-Decisione dell'utente pendente: esterno per la correzione (veloce) e Qwen
-locale al posto di gemma3:27b nelle tappe locali, oppure «modalità tutto in
-casa» con Qwen ovunque.
+DECISO dall'utente (9.9.2026, «sostituiscilo»): strada prudente —
+correzione resta sull'esterno; Qwen 3.8 leggero AL POSTO di gemma3:27b (e di
+medgemma) in tutte le tappe locali: `REFERTI_LLM` e `REFERTI_LLM_CORREZIONE`
+in `~/referti-pipeline/invio.conf` E nel plist del servizio (il plist
+copia le variabili all'installazione: cambiare entrambi), `REFERTO_STRUTTURA_LLM`
+nel `.env` dell'app per «Impagina come lettera». `think: false` mandato a
+Ollama per i modelli qwen3 (pipeline e app): il pensiero si mangiava la
+risposta. L'anonimizzatore resta gemma3:12b. Contesto 12288 verificato in
+GPU. Se serve tornare indietro: rimettere `gemma3:27b` nei tre punti.
 
 ## Contesto per medico nei prompt di correzione (9.9.2026)
 Richiesta utente: «il prompt migliore possibile con tutto quello che può

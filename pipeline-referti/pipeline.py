@@ -2563,6 +2563,10 @@ def chiama_ollama(prompt: str, file_id: str, fase: str, formato_json: bool = Fal
         richiesta_dati["options"]["num_predict"] = max_gettoni
     if formato_json:
         richiesta_dati["format"] = "json"  # SPEC §6.3: output JSON garantito
+    # Qwen 3.x «pensa» prima di rispondere: col tetto ai gettoni il pensiero
+    # si mangerebbe la risposta. Spento; per gli altri modelli non si manda.
+    if "qwen3" in str(richiesta_dati.get("model", "")).lower():
+        richiesta_dati["think"] = False
     corpo = json.dumps(richiesta_dati).encode("utf-8")
     giri = tentativi or OLLAMA_TENTATIVI
     for tentativo in range(1, giri + 1):
