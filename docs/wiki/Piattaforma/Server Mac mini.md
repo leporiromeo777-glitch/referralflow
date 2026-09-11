@@ -19,6 +19,7 @@ Aggiornamento: `bash mac/aggiorna-server.sh` (pull + kickstart). Livello 2 (domi
 | `ch.referralflow.referti-pannello` | pannello locale di caricamento dettati |
 | `ch.referralflow.silverbullet` | questa wiki, solo `localhost:3400` (vedi [[Wiki/Come si usa]]) |
 | `ch.referralflow.caddy` | HTTPS davanti alla wiki per la LAN, `https://192.168.1.146:3443`, CA interna |
+| `ch.referralflow.consolidatore` | alle 03:30 `npm run consolida`: proposte nella wiki (`Proposte/`), log `~/referti/log/consolidatore.log` |
 
 Le variabili del servizio referti stanno in `~/referti-pipeline/invio.conf` E nel plist (copiate all'installazione): cambiarle in entrambi, poi `launchctl unload/load`.
 

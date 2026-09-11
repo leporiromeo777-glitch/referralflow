@@ -12,7 +12,8 @@ aggiornata: 2026-09-11
 | tappe locali della catena (`REFERTI_LLM`, `REFERTI_LLM_CORREZIONE`) | `hf.co/unsloth/Qwen3.8-27B-GGUF:UD-IQ4_XS` | dal 9.9.2026, al posto di gemma3:27b e medgemma |
 | impaginazione nell'app (`REFERTO_STRUTTURA_LLM` nel `.env`) | lo stesso Qwen 3.8 leggero | il gemma3 12b duplicava le sezioni |
 | anonimizzatore (`ANONIMIZZA_LLM`, `MODELLO_ANONIMIZZA`) | gemma3:12b | non si contende la GPU con whisper |
-| correzione, arbitro, omissioni, terapia, coerenza, estrazione (esterno) | `google/gemma-4-31B-it` via Infomaniak | testo pseudonimizzato |
+| correzione, arbitro, terapia, estrazione (esterno, `modello=`) | `google/gemma-4-31B-it` via Infomaniak | testo pseudonimizzato |
+| verificatori: avvocato, omissioni, coerenza, verificatore selettivo (esterno, `modello_verifica=`) | `Qwen/Qwen3.5-397B-A17B-FP8` via Infomaniak | un'altra famiglia dal correttore (11.9.2026), vedi [[Catena/Registro dei fatti e fiducia]] |
 | cattura impegnativa (app) | claude-opus-5 | spenta senza `ANTHROPIC_API_KEY` |
 
 ## Qwen 3.8 (misurato 9.9.2026)

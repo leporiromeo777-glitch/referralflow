@@ -603,6 +603,45 @@ def _prova_33() -> None:
     assert m.conoscenza_agente("agente-inesistente") == ""
 
 
+@caso("34 · registro dei fatti e punteggio di fiducia: fonti, confidenza, detrazioni spiegate; verifier su altra famiglia")
+def _prova_34() -> None:
+    finale = "Prosegue con Concor 2.5 mg e Aspirina Cardio 100 mg. FE del 35 per cento. Pressione 135 su 85."
+    grezzo_b = "prosegue con concor 2.5 mg e aspirina cardio 100 mg FE del 35 per cento pressione 130 su 85"
+    numeri = [{"valore": "2.5", "unita": "mg", "frase": 0, "secondo": 1.0, "confermato": True},
+              {"valore": "135", "unita": "", "frase": 2, "secondo": 5.0, "confermato": False},
+              {"valore": "35", "unita": "per cento", "frase": 1, "secondo": 3.0, "confermato": None}]
+    divergenze = [{"contesto": "profili pressori diminuiti associati", "versione_a": "", "versione_b": "diminuiti", "pesanti": ["diminuiti"]}]
+    terapia = {"righe": ["CONCOR 2.5 mg 1-0-0-0"], "dubbi": [{"riga": "XYZ 5 mg", "motivo": "nome non trovato"}]}
+    omesse = [{"frase": "e Xarelto 20 mg la sera", "cifre": True, "farmaco": False, "secondo": 9.0}]
+    incoerenze = [{"passaggio_a": "funzione conservata", "passaggio_b": "FE del 35 per cento", "motivo": "x"}]
+    led = m.costruisci_ledger(finale, grezzo_b, numeri, divergenze, terapia, omesse, incoerenze, [{"frase": "frase inventata"}])
+    fatti = led["fatti"]
+    assert fatti and fatti[0]["confidenza"] <= fatti[-1]["confidenza"], "ordinato dal meno sicuro"
+    n25 = next(f for f in fatti if f["tipo"] == "numero" and f["valore"].startswith("2.5"))
+    assert n25["stato"] == "concorde" and "motore 2" in n25["fonti"] and "secondo orecchio" in n25["fonti"] and n25["confidenza"] >= 0.9, n25
+    n135 = next(f for f in fatti if f["valore"].startswith("135"))
+    assert n135["confidenza"] < 0.5 and "non confermato" in n135["stato"], n135
+    assert any(f["tipo"] == "farmaco" and f["valore"].startswith("CONCOR") and f["stato"] == "concorde" for f in fatti), [f for f in fatti if f["tipo"] == "farmaco"]
+    assert any(f["tipo"] == "qualificatore" and f["valore"] == "diminuiti" and f["stato"] == "discorde tra i motori" for f in fatti)
+    assert any(f["tipo"] == "omissione" for f in fatti) and any(f["tipo"] == "coerenza" for f in fatti) and any(f["tipo"] == "frase" for f in fatti)
+    assert led["riepilogo"]["bassa_confidenza"] >= 5 and led["riepilogo"]["numeri"] == 3
+    mf = {"numeri_non_confermati": 1, "omissioni_gravi": 1, "frasi_non_supportate": 1, "livello_verifica": "ridotto", "indipendenza_testimoni": "alta"}
+    fid = m.punteggio_fiducia(led, mf)
+    # 100 - 6 (numero) - 4 (pesante) - 5 (omissione) - 5 (coerenza) - 3 (frase) - 4 (terapia dubbia) - 10 (ridotto) = 63
+    assert fid["punteggio"] == 63 and fid["livello"] == "media", fid
+    assert len(fid["motivi"]) == 7 and all(mo.startswith("-") for mo in fid["motivi"]), fid["motivi"]
+    assert m.punteggio_fiducia({"fatti": []}, {}) == {"punteggio": 100, "livello": "alta", "motivi": []}
+    # Il verifier va su un'altra famiglia se la config lo dice; senza riga, sullo stesso modello.
+    vecchio = m._config_esterno
+    try:
+        m._config_esterno = lambda: {"attivo": "1", "url": "u", "chiave": "k", "modello": "a/b", "modello_verifica": "c/d"}
+        assert m._modello_verifica() == "c/d"
+        m._config_esterno = lambda: {"attivo": "1", "url": "u", "chiave": "k", "modello": "a/b"}
+        assert m._modello_verifica() is None
+    finally:
+        m._config_esterno = vecchio
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0

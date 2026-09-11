@@ -559,6 +559,21 @@ def _config_esterno() -> dict | None:
         return None
 
 
+def _modello_verifica() -> str | None:
+    """Il modello dei VERIFICATORI (avvocato, omissioni, coerenza, verificatore
+    selettivo): un'altra famiglia rispetto al correttore, così gli errori
+    sistematici non si sommano (2026-09-11, riga modello_verifica= nella
+    config esterna; vuota = lo stesso modello di sempre)."""
+    cfg = _config_esterno() or {}
+    return (cfg.get("modello_verifica") or "").strip() or None
+
+
+def _chiama_esterno_verifica(prompt: str, file_id: str, **kw) -> str:
+    """Come _chiama_esterno_openai, ma sul modello dei verificatori."""
+    modello = kw.pop("modello", None) or _modello_verifica()
+    return _chiama_esterno_openai(prompt, file_id, modello=modello, **kw)
+
+
 def _esterno_attivo() -> str | None:
     """Com'è acceso il percorso esterno, valutato A OGNI referto (così le
     modalità manuale e cloud si accendono/spengono da file, senza riavvii)."""
@@ -4171,7 +4186,7 @@ def omissioni_esterno(bozza: str, grezzo: str, file_id: str) -> list[dict] | Non
         return None
     anon_grezzo, anon_bozza = anon.split(AVVOCATO_SEP, 1)
     try:
-        uscita = _chiama_esterno_openai(
+        uscita = _chiama_esterno_verifica(
             _prompt_agente(PROMPT_OMISSIONI, "omissioni").replace("{grezzo}", anon_grezzo).replace("{bozza}", anon_bozza), file_id)
     except RuntimeError:
         log.warning("fase=omissioni_modello file=%s esito=esterno_fallito", file_id)
@@ -4263,7 +4278,7 @@ def incoerenze_esterno(testo: str, file_id: str) -> list[dict] | None:
               .replace("{contesto_medico}", contesto_medico(_CORSA.get("medico")))
               .replace("{testo}", anon))
     try:
-        uscita = _chiama_esterno_openai(prompt, file_id)
+        uscita = _chiama_esterno_verifica(prompt, file_id)
     except RuntimeError:
         log.warning("fase=coerenza file=%s esito=esterno_fallito", file_id)
         return None
@@ -4504,7 +4519,7 @@ def avvocato_esterno(bozza: str, grezzo: str, file_id: str) -> list[dict] | None
         return None
     anon_grezzo, anon_bozza = anon.split(AVVOCATO_SEP, 1)
     try:
-        uscita = _chiama_esterno_openai(
+        uscita = _chiama_esterno_verifica(
             PROMPT_AVVOCATO.replace("{grezzo}", anon_grezzo)
             .replace("{bozza}", anon_bozza), file_id)
     except RuntimeError:
@@ -4647,7 +4662,7 @@ def verificatore_selettivo(finale: str, grezzo: str, riparazioni: list, divergen
             "sensata": {"type": "boolean"},
             "motivo": {"type": "string"}})}})
     try:
-        uscita = _chiama_esterno_openai(
+        uscita = _chiama_esterno_verifica(
             PROMPT_VERIFICATORE.replace("{correzioni}", "\n".join(righe_c) or "(nessuna)")
                                .replace("{frasi}", "\n".join(righe_f) or "(nessuna)"),
             file_id, schema=schema)
@@ -6636,6 +6651,111 @@ def livello_verifica(componenti_mancanti: list[str], troncato: bool = False) -> 
     return "pieno" if not componenti_mancanti else "ridotto"
 
 
+# ── Registro dei fatti e punteggio di fiducia (2026-09-11) ────────────────────
+# I fatti atomici della bozza (numeri con unità, farmaci, parole pesanti
+# sentite da un motore solo, righe di terapia, omissioni gravi, contraddizioni,
+# frasi non sostenute) in UN registro: valore, dove sta, chi l'ha sentito,
+# confidenza 0-1, stato. Solo codice, deterministico; la pagina lo mostra dal
+# meno sicuro al più sicuro; il punteggio di fiducia ne è la somma leggibile.
+def costruisci_ledger(finale: str, grezzo_b: str, numeri: list, divergenze: list, terapia: dict | None,
+                      omesse: list, incoerenze: list, frasi_non_supportate: list) -> dict:
+    fatti: list[dict] = []
+    nb = _numeri_di(grezzo_b) if grezzo_b else set()
+    for n in numeri or []:
+        if not isinstance(n, dict):
+            continue
+        val = str(n.get("valore", ""))
+        vn = val.replace(",", ".")
+        in_b = bool(nb) and (val in nb or vn in nb or val.replace(".", ",") in nb)
+        conf = 0.5 + (0.3 if in_b else 0.0)
+        if n.get("confermato") is True:
+            conf += 0.2
+        elif n.get("confermato") is False:
+            conf -= 0.3
+        fonti = ["motore 1"] + (["motore 2"] if in_b else []) + (["secondo orecchio"] if n.get("confermato") else [])
+        fatti.append({"tipo": "numero", "valore": (val + " " + str(n.get("unita") or "")).strip(), "frase": n.get("frase"),
+                      "secondo": n.get("secondo"), "fonti": fonti, "confidenza": round(min(0.99, max(0.05, conf)), 2),
+                      "stato": "concorde" if in_b else ("non confermato dal secondo orecchio" if n.get("confermato") is False else "solo motore 1")})
+    nomi = _farmaci().get("nomi") or {}
+    basso, bb = finale.lower(), (grezzo_b or "").lower()
+    for nome in sorted(nomi, key=len, reverse=True):
+        if len(nome) < 5 or not re.search(r"\b" + re.escape(nome) + r"\b", basso):
+            continue
+        in_b = bool(bb) and re.search(r"\b" + re.escape(nome) + r"\b", bb) is not None
+        fatti.append({"tipo": "farmaco", "valore": nome.upper(), "fonti": ["motore 1"] + (["motore 2"] if in_b else []),
+                      "confidenza": 0.9 if in_b else 0.6, "stato": "concorde" if in_b else "solo motore 1"})
+        if sum(1 for f in fatti if f["tipo"] == "farmaco") >= 30:
+            break
+    for d in divergenze or []:
+        if not isinstance(d, dict):
+            continue
+        for w in d.get("pesanti") or []:
+            w = str(w)
+            tipo = "numero" if re.match(r"\d", w) else ("negazione" if _RX_NEGAZIONE.search(w) else ("lateralità" if _RX_LATERALITA.search(w) else "qualificatore"))
+            fatti.append({"tipo": tipo, "valore": w, "contesto": str(d.get("contesto") or "")[:160], "fonti": ["un solo motore"],
+                          "confidenza": 0.3, "stato": "discorde tra i motori"})
+    for r in (terapia or {}).get("righe") or []:
+        fatti.append({"tipo": "terapia", "valore": str(r)[:160], "fonti": ["dettato"], "confidenza": 0.8, "stato": "numeri e nome controllati"})
+    for dch in (terapia or {}).get("dubbi") or []:
+        if isinstance(dch, dict):
+            fatti.append({"tipo": "terapia", "valore": str(dch.get("riga", ""))[:160], "fonti": ["dettato"], "confidenza": 0.4,
+                          "stato": "dubbia: " + str(dch.get("motivo", ""))[:80]})
+    for o in omesse or []:
+        if isinstance(o, dict) and (o.get("cifre") or o.get("farmaco")):
+            fatti.append({"tipo": "omissione", "valore": str(o.get("frase", ""))[:160], "secondo": o.get("secondo"),
+                          "fonti": ["dettato grezzo"], "confidenza": 0.4, "stato": "manca nel referto"})
+    for c in incoerenze or []:
+        if isinstance(c, dict):
+            fatti.append({"tipo": "coerenza", "valore": f"{str(c.get('passaggio_a', ''))[:80]} ↔ {str(c.get('passaggio_b', ''))[:80]}",
+                          "fonti": ["revisore"], "confidenza": 0.3, "stato": "contraddizione"})
+    for f in frasi_non_supportate or []:
+        if isinstance(f, dict) and f.get("frase"):
+            fatti.append({"tipo": "frase", "valore": str(f.get("frase"))[:160], "fonti": ["avvocato"], "confidenza": 0.3,
+                          "stato": "non sostenuta dal dettato"})
+    fatti.sort(key=lambda x: (x["confidenza"], x["tipo"]))
+    fatti = fatti[:200]
+    riepilogo = {
+        "fatti": len(fatti),
+        "bassa_confidenza": sum(1 for f in fatti if f["confidenza"] < 0.5),
+        "numeri": sum(1 for f in fatti if f["tipo"] == "numero" and "frase" in f),
+        "numeri_concordi": sum(1 for f in fatti if f["tipo"] == "numero" and "frase" in f and f["stato"] == "concorde"),
+        "farmaci": sum(1 for f in fatti if f["tipo"] == "farmaco"),
+        "discordi": sum(1 for f in fatti if f["stato"] == "discorde tra i motori"),
+    }
+    return {"fatti": fatti, "riepilogo": riepilogo}
+
+
+def punteggio_fiducia(ledger: dict, manifesto: dict) -> dict:
+    """0-100, spiegato: parte da 100 e ogni segnale toglie punti con un tetto.
+    Non è un giudizio clinico: dice dove spendere l'attenzione."""
+    p = 100.0
+    motivi: list[str] = []
+    fatti = (ledger or {}).get("fatti") or []
+    mf = manifesto or {}
+
+    def togli(n: int, per: float, tetto: float, testo: str) -> None:
+        nonlocal p
+        if n > 0:
+            d = min(n * per, tetto)
+            p -= d
+            motivi.append(f"-{d:g}: {testo}")
+    togli(int(mf.get("numeri_non_confermati") or 0), 6, 30, f"{mf.get('numeri_non_confermati')} numeri non confermati dal secondo orecchio")
+    togli(sum(1 for f in fatti if f.get("stato") == "discorde tra i motori"), 4, 20, "parole pesanti sentite da un motore solo")
+    togli(int(mf.get("omissioni_gravi") or 0), 5, 20, f"{mf.get('omissioni_gravi')} passaggi con numeri o farmaci non nel referto")
+    togli(sum(1 for f in fatti if f.get("tipo") == "coerenza"), 5, 15, "contraddizioni interne")
+    togli(int(mf.get("frasi_non_supportate") or 0), 3, 15, f"{mf.get('frasi_non_supportate')} frasi non sostenute dal dettato")
+    togli(sum(1 for f in fatti if f.get("tipo") == "terapia" and str(f.get("stato", "")).startswith("dubbia")), 4, 12, "righe di terapia dubbie")
+    livello = str(mf.get("livello_verifica") or "pieno")
+    if livello == "ridotto":
+        p -= 10; motivi.append("-10: verifica ridotta (un componente mancante)")
+    elif livello == "minimo":
+        p -= 25; motivi.append("-25: verifica minima (trascrizione principale incompleta)")
+    if mf.get("indipendenza_testimoni") == "bassa":
+        p -= 5; motivi.append("-5: un solo motore di trascrizione")
+    p = max(0.0, min(100.0, p))
+    return {"punteggio": int(round(p)), "livello": "alta" if p >= 80 else ("media" if p >= 55 else "bassa"), "motivi": motivi[:10]}
+
+
 def costruisci_manifesto(integ: dict, fatto_b: bool, verif_cloud: bool, secondo_orecchio: bool,
                          motore_tempi: str, rischio_frasi: list, numeri: list,
                          frasi_non_supportate: list, omesse: list, avvisi_farmaci: int,
@@ -7092,6 +7212,7 @@ def versione_catena() -> dict[str, str]:
         "llm_locale": MODELLO_LLM,
         "anonimizzatore": MODELLO_ANONIMIZZA,
         "esterno": str(cfg.get("modello", "")).split("/")[-1],
+        "esterno_verifica": str(cfg.get("modello_verifica", "")).split("/")[-1],
     }
 
 
@@ -8054,6 +8175,17 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                  mf["numeri_non_confermati"], mf["omissioni_gravi"])
     except Exception as e:  # noqa: BLE001
         log.warning("fase=manifesto file=%s esito=errore tipo=%s", file_id, type(e).__name__)
+    # Registro dei fatti e punteggio di fiducia (2026-09-11): mai bloccante.
+    try:
+        payload["ledger"] = costruisci_ledger(
+            payload.get("testo_corretto") or "", grezzo_b if fatto_b else "", payload.get("numeri") or [], divergenze,
+            payload.get("terapia"), payload.get("frasi_omesse") or [], payload.get("incoerenze") or [], frasi_non_supportate)
+        payload["fiducia"] = punteggio_fiducia(payload["ledger"], payload.get("manifesto") or {})
+        log.info("fase=fiducia file=%s punteggio=%d livello=%s fatti=%d bassa_confidenza=%d", file_id,
+                 payload["fiducia"]["punteggio"], payload["fiducia"]["livello"],
+                 payload["ledger"]["riepilogo"]["fatti"], payload["ledger"]["riepilogo"]["bassa_confidenza"])
+    except Exception as e:  # noqa: BLE001
+        log.warning("fase=fiducia file=%s esito=errore tipo=%s", file_id, type(e).__name__)
     # Cronologia e versioni intermedie (2026-09-06): ogni trasformazione con
     # attore e numeri; le versioni servono all'audit e al confronto cieco.
     payload["storia"] = storia

@@ -289,6 +289,27 @@ export async function POST(req: NextRequest) {
     // stato, sospesi, dubbi delle guardie. Fino all'11.9.2026 mancava da
     // questa lista e non arrivava mai in tabella.
     terapia: terapiaPulita(body?.terapia),
+    // Registro dei fatti e punteggio di fiducia (11.9.2026): fatti atomici
+    // con fonti e confidenza, e un 0-100 spiegato. Solo dal codice della catena.
+    ledger: (() => {
+      const l = body?.ledger;
+      if (!l || typeof l !== 'object') return null;
+      const fatti = (Array.isArray(l.fatti) ? l.fatti : []).filter((f: unknown): f is Record<string, unknown> => !!f && typeof f === 'object' && typeof (f as any).tipo === 'string').slice(0, 200)
+        .map((f: Record<string, unknown>) => ({
+          tipo: String(f.tipo).slice(0, 20), valore: typeof f.valore === 'string' ? f.valore.slice(0, 200) : '',
+          stato: typeof f.stato === 'string' ? f.stato.slice(0, 120) : '', confidenza: typeof f.confidenza === 'number' ? f.confidenza : null,
+          fonti: (Array.isArray(f.fonti) ? f.fonti : []).filter((x: unknown): x is string => typeof x === 'string').slice(0, 5),
+          frase: typeof f.frase === 'number' ? f.frase : null, secondo: typeof f.secondo === 'number' ? f.secondo : null,
+          contesto: typeof f.contesto === 'string' ? f.contesto.slice(0, 200) : undefined,
+        }));
+      const riepilogo = l.riepilogo && typeof l.riepilogo === 'object'
+        ? Object.fromEntries(Object.entries(l.riepilogo as Record<string, unknown>).filter(([k, v]) => /^[a-z_]{1,30}$/.test(k) && typeof v === 'number')) : {};
+      return { fatti, riepilogo };
+    })(),
+    fiducia: body?.fiducia && typeof body.fiducia === 'object' && typeof body.fiducia.punteggio === 'number'
+      ? { punteggio: Math.max(0, Math.min(100, Math.round(body.fiducia.punteggio))), livello: ['alta', 'media', 'bassa'].includes(body.fiducia.livello) ? body.fiducia.livello : 'media',
+          motivi: (Array.isArray(body.fiducia.motivi) ? body.fiducia.motivi : []).filter((x: unknown): x is string => typeof x === 'string').slice(0, 10).map((x: string) => x.slice(0, 160)) }
+      : null,
     // Coerenza interna (tappa «coerenza», 11.9.2026): contraddizioni dentro
     // il referto, due citazioni e un motivo. Solo segnalazioni.
     incoerenze: lista(body?.incoerenze)

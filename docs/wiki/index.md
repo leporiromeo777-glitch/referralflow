@@ -42,7 +42,8 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 - [[Catena/Revisione guidata]] — wizard, autosave, passi
 - [[Catena/Dittafono DSS]]
 - [[Catena/Modelli locali]] — Qwen 3.8, gemma, whisper, Voxtral
-- [[Catena/Audit e qualità]] — schema audit, lineage, cruscotto, dizionario dalle correzioni
+- [[Catena/Registro dei fatti e fiducia]] — evidence ledger, punteggio 0-100, verifier di un'altra famiglia, consolidatore notturno
+- [[Catena/Audit e qualità]] — schema audit, lineage, cruscotto, dizionario dalle correzioni, attribuzione per tappa, frasi ripetute
 - [[Catena/Strumenti e pagine]] — confronto cieco, ombre, manifesto, eventi
 
 ## Conoscenza per gli agenti della catena (compilata nei prompt)
@@ -56,6 +57,9 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 
 ## Decisioni chiuse (con il perché)
 - [[Decisioni/Registro]]
+
+## Proposte del consolidatore notturno (da approvare a mano)
+- [[Proposte/Ultime]] — andamento, tappe da guardare, dizionario, frasi fisse; una pagina per data nella stessa cartella
 
 ## Misure
 - [[Misure/Banchi]] — ogni banco con numeri e data

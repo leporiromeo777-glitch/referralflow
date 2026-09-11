@@ -14,6 +14,9 @@ File Markdown in `docs/wiki/` del repo, una pagina per argomento, con un'intesta
 ## Le pagine che la catena usa davvero
 `Agenti/` è l'unica cartella che finisce nei prompt: compilata al deploy in `medici.json` e `conoscenza-agenti.json` ([[Agenti/Come funziona]]). Chi cambia una di quelle pagine cambia il comportamento della catena dal deploy successivo, e la versione del prompt nel cruscotto. Tutte le altre pagine sono per le persone e per le sessioni di sviluppo.
 
+## Le pagine che scrive la macchina
+`Proposte/` la scrive il consolidatore notturno (03:30, `npm run consolida`): una pagina per data e `Proposte/Ultime`. Sono proposte da approvare a mano; non modificarle, decidono nel cruscotto o nelle pagine `Agenti/`. Vedi [[Catena/Registro dei fatti e fiducia]].
+
 ## Regole delle pagine
 - Dice che cos'è vero oggi; la storia sta in git.
 - Niente dati clinici, niente esempi presi da referti veri, niente credenziali.

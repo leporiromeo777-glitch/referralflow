@@ -26,6 +26,8 @@ type Row = {
   n_allarmi: number;
   n_note: number;
   medico_nome: string | null;
+  fiducia: number | null;
+  fiducia_livello: string | null;
 };
 
 export default async function Referti({
@@ -43,7 +45,9 @@ export default async function Referti({
             coalesce(jsonb_array_length(payload -> 'segmenti_dubbi'), 0)::int as n_dubbi,
             coalesce(jsonb_array_length(payload -> 'allarmi_numerici'), 0)::int as n_allarmi,
             coalesce(jsonb_array_length(payload -> 'note_segreteria'), 0)::int as n_note,
-            payload -> 'medico' ->> 'nome' as medico_nome
+            payload -> 'medico' ->> 'nome' as medico_nome,
+            (payload -> 'fiducia' ->> 'punteggio')::int as fiducia,
+            payload -> 'fiducia' ->> 'livello' as fiducia_livello
        from referti_bozze
       where studio_id = $1 and tipo = 'referto'
         and coalesce((payload->>'ombra')::boolean, false) = false
@@ -170,6 +174,11 @@ export default async function Referti({
               {r.medico_nome ? ` · dettato da ${r.medico_nome}` : ''}
             </div>
             <div className="qrow-meta">
+              {typeof r.fiducia === 'number' && (
+                <span className={`badge ${r.fiducia_livello === 'alta' ? 'badge-success' : r.fiducia_livello === 'bassa' ? 'badge-danger' : 'badge-warn'}`} title="Punteggio di fiducia della catena: non è un giudizio clinico, dice quanta attenzione serve">
+                  fiducia {r.fiducia}/100
+                </span>
+              )}
               {r.n_divergenze > 0 && <span className="badge badge-warn">{r.n_divergenze} divergenze audio</span>}
               {r.n_dubbi > 0 && <span className="badge badge-warn">{r.n_dubbi} segmenti dubbi</span>}
               {r.n_note > 0 && <span className="badge badge-accent">📋 {r.n_note} note per la segreteria</span>}

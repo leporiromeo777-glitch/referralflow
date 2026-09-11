@@ -43,6 +43,8 @@ type Payload = {
   frasi_da_chiarire?: { frase: string; proposta: string }[];
   frasi_non_supportate?: { frase: string; motivo: string }[];
   incoerenze?: { passaggio_a: string; passaggio_b: string; motivo: string }[];
+  ledger?: { fatti: { tipo: string; valore: string; stato: string; confidenza: number | null; fonti: string[]; frase: number | null; secondo: number | null; contesto?: string }[]; riepilogo: Record<string, number> } | null;
+  fiducia?: { punteggio: number; livello: 'alta' | 'media' | 'bassa'; motivi: string[] } | null;
   riparazioni_applicate?: { da: string; a: string }[];
   doppioni_tolti?: { tolta: string; tenuta: string; motivo: string }[];
   doppioni_dubbi?: { frase: string; simile_a: string; motivo: string }[];
@@ -528,6 +530,31 @@ export default async function RefertoBozza({
           </div>
         );
       })()}
+      {/* Punteggio di fiducia e registro dei fatti (11.9.2026): dove spendere
+          l'attenzione. Fatti dal meno sicuro al più sicuro, con chi li ha sentiti. */}
+      {inBozza && p.fiducia && (
+        <div className={`card manifesto livello-${p.fiducia.livello === 'alta' ? 'pieno' : p.fiducia.livello === 'media' ? 'ridotto' : 'minimo'}`}>
+          <h2>Fiducia nella bozza: {p.fiducia.punteggio}/100 <span className="muted small">({p.fiducia.livello})</span></h2>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            Non è un giudizio clinico: parte da 100 e ogni segnale toglie punti. Dice quanta attenzione serve, non se il referto è giusto.
+            {p.fiducia.motivi.length === 0 ? ' Nessun segnale ha tolto punti.' : ''}
+          </p>
+          {p.fiducia.motivi.length > 0 && <ul>{p.fiducia.motivi.map((m, i) => <li key={i}>{m}</li>)}</ul>}
+          {p.ledger && Array.isArray(p.ledger.fatti) && p.ledger.fatti.length > 0 && (
+            <details style={{ marginTop: 8 }}>
+              <summary className="sez-summary">Registro dei fatti ({p.ledger.fatti.length}; da controllare {p.ledger.riepilogo?.bassa_confidenza ?? 0})</summary>
+              <p className="muted small">Ogni numero, farmaco, parola pesante e riga di terapia della bozza, con chi l’ha sentito e quanto è sicuro. Dal meno sicuro al più sicuro.</p>
+              <table className="aq-tab"><thead><tr><th>tipo</th><th>fatto</th><th>stato</th><th>fonti</th><th>fiducia</th></tr></thead>
+                <tbody>{p.ledger.fatti.slice(0, 80).map((f, i) => (
+                  <tr key={i} className={(f.confidenza ?? 1) < 0.5 ? 'aq-outlier' : ''}>
+                    <td>{f.tipo}</td><td><code>{f.valore}</code>{f.contesto ? <span className="muted small"> — «{f.contesto}»</span> : null}</td>
+                    <td>{f.stato}</td><td className="muted small">{f.fonti.join(', ')}</td><td>{f.confidenza === null ? '—' : Math.round(f.confidenza * 100) + '%'}</td>
+                  </tr>
+                ))}</tbody></table>
+            </details>
+          )}
+        </div>
+      )}
       {/* Coerenza interna (11.9.2026): contraddizioni dentro il referto viste
           dal modello esterno, con le due citazioni. Solo segnalazioni. */}
       {inBozza && Array.isArray(p.incoerenze) && p.incoerenze.length > 0 && (
