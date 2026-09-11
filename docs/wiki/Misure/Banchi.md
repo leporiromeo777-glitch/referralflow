@@ -23,7 +23,7 @@ Ogni banco usa SOLO dati sintetici. Le chiamate al modello esterno costano cente
 | 2026-09-11 | conoscenza dalla wiki nei prompt (attenzioni + esempi finti, [[Agenti/Come funziona]]) | i quattro banchi sopra, `REFERTI_CONOSCENZA=0` per il confronto | arbitro 14/15 → **15/15**; terapia modello 7/8 → **8/8**; omissioni 8/9 → 8/9 (lateralità sola ancora persa); coerenza 5/5, 0 falsi → uguale. Nessuna regressione, tenuta |
 
 | 2026-09-11 | omissioni, lateralità sola nel codice | `banco-omissioni.py` | codice 1/9 → 2/9, 0 falsi allarmi |
-| 2026-09-11 | VAD contro senza VAD sull'audio vero conservato (accordo col testimone B) | `banco-vad.py [N]` dalla copia viva `~/referti-pipeline/` (servono i modelli) | vedi la riga sotto quando c'è |
+| 2026-09-11 | VAD contro senza VAD sull'audio vero conservato (6 dettati, accordo col testimone B) | `banco-vad.py [N]` dalla copia viva `~/referti-pipeline/` (servono i modelli; solo numeri) | 3 a 3; accordo totale VAD 735, senza VAD 712; senza VAD un dettato lungo in loop (108 righe tolte, accordo 152 vs 201); col VAD un altro perde 400 caratteri e 2 numeri (accordo 93 vs 117) senza sentinella → passata DOPPIA sempre |
 
 Suite permanente: `python3.14 pipeline-referti/prove-catastrofiche.py` → 33/33 (11.9.2026). Test app: `npm run test:app` → 25 casi.
 

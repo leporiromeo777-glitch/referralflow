@@ -415,6 +415,9 @@ PERCORSO_VAD = Path(
     )
 )
 USA_VAD = os.environ.get("REFERTI_VAD", "1") != "0" and PERCORSO_VAD.exists()
+# Seconda corsa di whisper SENZA VAD su ogni dettato (vince chi concorda di
+# più col testimone B): vedi il commento in elabora, «Passata DOPPIA».
+PASSATA_DOPPIA = os.environ.get("REFERTI_PASSATA_DOPPIA", "1") != "0"
 VAD_PAD_MS = os.environ.get("REFERTI_VAD_PAD_MS", "120")
 
 # ── Anti-troncamento (loop «incantato» sulla coda del dettato) ───────────────
@@ -7362,11 +7365,22 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # butta via il parlato → corsa di recupero SENZA VAD, con i tempi
         # (l'orologio diventa quello pieno: lo dice _TEMPI_SENZA_VAD).
         motivo_buco = motivo_buco_in_a(grezzo_a, grezzo_b, rip_a, righe_a_grezze) if (fatto_b and not visita) else None
+        # Passata DOPPIA (2026-09-11, banco VAD su 6 dettati veri: 3 a 3,
+        # accordo 735 contro 712): né il VAD né la corsa senza VAD vincono
+        # sempre — senza VAD un dettato lungo va in loop, col VAD un altro
+        # perde 400 caratteri e 2 numeri SENZA far scattare la sentinella.
+        # Quindi la corsa senza VAD si fa sempre (REFERTI_PASSATA_DOPPIA=0
+        # torna al solo recupero su sospetto) e vince chi concorda di più
+        # col testimone B. Costo: 10-100 s di whisper in più per dettato.
         if motivo_buco:
             log.warning(
                 "fase=trascrizione_a file=%s esito=sospetto_buco motivo=%s caratteri_a=%d caratteri_b=%d rimosse_a=%d numeri_solo_b=%d",
                 file_id, motivo_buco, len(grezzo_a), len(grezzo_b), rip_a, len(_numeri_di(grezzo_b) - _numeri_di(grezzo_a)),
             )
+        elif PASSATA_DOPPIA and fatto_b and not visita and USA_VAD:
+            motivo_buco = "passata_doppia"
+            log.info("fase=trascrizione_a file=%s esito=passata_doppia caratteri_a=%d caratteri_b=%d", file_id, len(grezzo_a), len(grezzo_b))
+        if motivo_buco:
             recuperato, rip_rec, punti_rec = "", 0, []
             try:
                 trascrivi(percorso(".wav"), percorso(".nv.txt"), file_id,
@@ -7390,7 +7404,8 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                 _TEMPI_SENZA_VAD.add(file_id)
                 versioni["grezzo_a_recuperato"] = grezzo_a
             else:
-                log.info("fase=trascrizione_a file=%s esito=recupero_non_migliore", file_id)
+                log.info("fase=trascrizione_a file=%s esito=%s", file_id,
+                         "seconda_passata_non_migliore" if motivo_buco == "passata_doppia" else "recupero_non_migliore")
             residuo = motivo_buco_in_a(grezzo_a, grezzo_b, rip_a, righe_a_grezze)
             if residuo:
                 _COLLASSO_A.add(file_id)

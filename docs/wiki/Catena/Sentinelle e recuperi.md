@@ -17,7 +17,10 @@ I tempi della corsa recuperata sono già sull'orologio pieno (`_TEMPI_SENZA_VAD`
 ## Promozione del testimone
 Se la A resta incompleta ANCHE dopo il recupero (caso vero: 1411 caratteri ma ancora numeri solo in B): il testo di base diventa quello di Voxtral, whisper fa da testimone (`_TESTIMONE_PROMOSSO`, tappa `promozione_testimone`, manifesto «primo motore completo (base: secondo motore)» → livello ridotto). I tempi restano quelli di whisper: `allinea_parole` aggancia le parole in comune e interpola.
 
-Casi 20, 21, 25, 26 nella suite. Tre casi in tre giorni sullo stesso medico: valutare la corsa senza VAD come passata principale ([[Piattaforma/Prossimi lavori]]).
+Casi 20, 21, 25, 26 nella suite.
+
+## Passata doppia (11.9.2026)
+Dopo tre collassi in tre giorni il banco VAD su 6 dettati veri ha dato 3 a 3 (accordo totale 735 contro 712): né il VAD né la corsa senza VAD vincono sempre, e un caso col VAD perdeva 400 caratteri e 2 numeri SENZA far scattare le sentinelle. Quindi la corsa senza VAD si fa SEMPRE (`REFERTI_PASSATA_DOPPIA=1`, default; `0` torna al solo recupero su sospetto) e vince quella che concorda di più con la B (`accordo_con_b`); a parità resta la VAD, che ha l'orologio compatto. Log `esito=passata_doppia` / `recuperato_senza_vad` / `seconda_passata_non_migliore`. Costo 10-100 s di whisper in più per dettato. Le sentinelle restano per il caso in cui entrambe le passate siano corte. Decisione in [[Decisioni/Registro]], numeri in [[Misure/Banchi]].
 
 ## Altre barriere
 `payload.manifesto` (livello pieno/ridotto/minimo, testimoni, trasporti, conteggi), gate pre-firma nel wizard con presa d'atto registrata (`override_critici`), guardia d'identità e gate temporale sulla fusione, lucchetto delle relazioni (`src/lib/referti-misure-cliniche.ts`). La rilavorazione di una bozza scartata azzera anche `revisione_stato`.

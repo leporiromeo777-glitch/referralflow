@@ -28,7 +28,8 @@ Una riga per decisione, con la data e il perché. Non si rilitigano senza un dat
 | 2026-09-11 | Documentazione in wiki per argomento (questa), CLAUDE.md ridotto alle regole | il CLAUDE.md era 800 righe di storia narrata |
 | 2026-09-11 | La conoscenza degli agenti della catena vive in `Agenti/` e viene COMPILATA nei prompt (attenzioni + esempi finti), niente recupero automatico a ogni chiamata | misurato: arbitro 14→15/15, terapia 7→8/8, gli altri uguali, nessuna regressione; il RAG su pagine intere porterebbe rumore e costi per compiti stretti |
 
+| 2026-09-11 | Whisper fa SEMPRE due passate (con VAD e senza) e vince quella che concorda di più con Voxtral (`REFERTI_PASSATA_DOPPIA`, default acceso); il VAD NON diventa spento di serie | banco VAD su 6 dettati veri: 3 a 3, accordo 735 contro 712; senza VAD un dettato lungo va in loop, col VAD un altro perde 400 caratteri e 2 numeri senza far scattare la sentinella; costo 10-100 s in più per dettato |
+
 ## Aperte
-- Corsa senza VAD come passata principale (tre collassi in tre giorni su Moccetti).
 - Conservare l'audio per un LoRA futuro; togliere il denoise se arriva un oro verificato dal medico.
 - Livello 2 del server (dominio, HTTPS) dopo la parte legale.

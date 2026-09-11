@@ -11,7 +11,7 @@ Dettato (dittafono o drag & drop dalla pagina Referti) → `pipeline-referti/pip
 |---|---|---|
 | decodifica dittafono | codice | [[Catena/Dittafono DSS]] |
 | preprocessing audio (passa-alto, denoise, atempo dal profilo) | codice | [[Decisioni/Registro]] |
-| trascrizione A: whisper.cpp large-v3 con VAD | motore 1 | [[Catena/Sentinelle e recuperi]] |
+| trascrizione A: whisper.cpp large-v3, DUE passate (con VAD e senza), vince quella che concorda di più con la B | motore 1 | [[Catena/Sentinelle e recuperi]] |
 | trascrizione B: Voxtral-mini | motore 2 | [[Catena/Modelli locali]] |
 | anti-loop, ricucitura punteggiatura orfana, punteggiatura dettata, dizionario | codice | [[Catena/Doppioni e segreteria]] |
 | confronto A/B → divergenze con `pesanti` e `contesto_prima/dopo` | codice | [[Catena/Arbitro]] |
