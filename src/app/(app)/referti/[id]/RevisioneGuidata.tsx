@@ -131,7 +131,7 @@ export function RevisioneGuidata({
   avvisi?: string[];
   rischioFrasi?: { frase: string; punteggio: number; motivi?: string[]; gravita?: string; supporto?: string; fonte?: string[] }[];
   numeri?: { valore: string; unita?: string; frase?: number | null; secondo?: number | null; confermato?: boolean | null }[];
-  frasiOmesse?: { frase: string; pulita?: string; secondo?: number | null; cifre?: boolean; farmaco?: boolean; copertura?: number | null; motivo?: string; fonte?: string }[];
+  frasiOmesse?: { frase: string; pulita?: string; secondo?: number | null; cifre?: boolean; farmaco?: boolean; copertura?: number | null; motivo?: string; fonte?: string; simile?: string }[];
   variazioni?: { misura: string; prima: string; dopo: string; grande?: boolean }[];
   letteraPrecedente?: string;
   livelloVerifica?: string;
@@ -848,6 +848,14 @@ export function RevisioneGuidata({
                 {o.fonte === 'modello' && <span className="rg-tab" style={{ marginLeft: 6, fontSize: '0.8em', padding: '2px 9px' }}>vista dal modello</span>}
               </p>
               {o.motivo && <p className="rg-motivo">{o.motivo}</p>}
+              {/* La frase del referto più simile (12.9.2026): sul secondo
+                  referto vero due omissioni erano la stessa frase con parole
+                  storpiate, e sono state rimesse in doppio. */}
+              {o.simile && (
+                <p className="rg-motivo">
+                  Forse è già nel referto{typeof o.copertura === 'number' ? ` (${Math.round(o.copertura * 100)}% di parole in comune)` : ''}: «{o.simile}». Se è la stessa frase, non inserirla.
+                </p>
+              )}
               {!fatte.has(`o${o.k}`) && (
                 <div className="rg-azioni">
                   {typeof o.secondo === 'number' && (

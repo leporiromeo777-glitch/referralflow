@@ -6994,15 +6994,41 @@ def rileva_omissioni(grezzo: str, finale: str, note: list, parole_audio: list,
                 pass
     farmaci = _farmaci().get("nomi") or {}
     omesse: list[dict] = []
+    # Parole di regia della dettatura: non contano come contenuto (12.9.2026,
+    # secondo referto vero: «tra parentesi», «virgola» gonfiavano la frase
+    # grezza e la facevano sembrare assente dal referto).
+    REGIA = {"virgola", "punto", "capo", "parentesi", "aperta", "chiusa", "punti", "virgolette", "lineetta", "trattino"}
+    tutte_dest_lista = sorted(tutte_dest)
+
+    def coperta(w: str, d: set[str]) -> bool:
+        # Copertura anche a distanza ≤ 2 per le parole lunghe: «affronte» e
+        # «fronte», «minimamente» storpiata di una lettera: sono la stessa parola.
+        if w in d:
+            return True
+        if len(w) >= 6:
+            return any(abs(len(x) - len(w)) <= 2 and _distanza_breve(w, x, 2) <= 2 for x in d if x[:2] == w[:2])
+        return False
+
     for f in _spezza_frasi_wizard(grezzo):
-        sig = parole_sig(f)
+        # La sovrapposizione si misura sulla frase PULITA (dizionario +
+        # punteggiatura dettata): è la forma che il referto contiene.
+        base_f = f
+        try:
+            base_f, _ = punteggiatura_dettata(f)
+            if sostituzioni:
+                base_f, _ = applica_correzioni(base_f, sostituzioni)
+        except Exception:  # noqa: BLE001
+            base_f = f
+        sig = [w for w in parole_sig(base_f) if w not in REGIA]
         if len(sig) < 4:
             continue
         s = set(sig)
-        if re.search(r"\b(virgola|punto|a capo|punto e virgola|per favore|scusa|ripeto|copia|incolla)\b", f.lower()) and len(sig) < 7:
+        if re.search(r"\b(virgola|punto|a capo|punto e virgola|per favore|scusa|ripeto|copia|incolla)\b", f.lower()) and len(parole_sig(f)) < 7:
             continue
-        migliore = max((len(s & d) / len(s) for d in dest_set), default=0.0)
-        copertura_globale = len(s & tutte_dest) / len(s)
+        coperture = [sum(1 for w in s if coperta(w, d)) / len(s) for d in dest_set]
+        migliore = max(coperture, default=0.0)
+        i_migliore = coperture.index(migliore) if coperture else -1
+        copertura_globale = sum(1 for w in s if coperta(w, tutte_dest)) / len(s)
         if migliore >= 0.5 or copertura_globale >= 0.8:
             continue
         cifre = bool(re.search(r"\d", f))
@@ -7020,9 +7046,12 @@ def rileva_omissioni(grezzo: str, finale: str, note: list, parole_audio: list,
             pulita = pulita.strip()
         except Exception:  # noqa: BLE001 — la pulizia non blocca mai
             pulita = f
+        # La frase del referto più vicina, per chi rivede: «forse è già qui».
+        simile = destinazioni[i_migliore][:200] if 0 <= i_migliore < len(destinazioni) and migliore >= 0.25 else ""
         omesse.append({"frase": f[:400], "secondo": secondo, "cifre": cifre, "farmaco": farm,
                        "copertura": round(migliore, 2),
-                       **({"pulita": pulita[:400]} if pulita and pulita != f else {})})
+                       **({"pulita": pulita[:400]} if pulita and pulita != f else {}),
+                       **({"simile": simile} if simile else {})})
     # Lateralità sola (2026-09-11, l'unico caso che il banco perdeva):
     # «carotide interna destra» → «carotide interna» combacia per il 90% e
     # il controllo sopra la dà per coperta. Per ogni frase grezza con una

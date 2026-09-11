@@ -245,7 +245,7 @@ export async function POST(req: NextRequest) {
     // Omission detector: frasi del dettato grezzo senza destinazione nel
     // referto (con secondo di audio, cifre/farmaco).
     frasi_omesse: lista(body?.frasi_omesse)
-      .filter((v: unknown): v is { frase: string; secondo?: unknown; cifre?: unknown; farmaco?: unknown; copertura?: unknown } =>
+      .filter((v: unknown): v is { frase: string; secondo?: unknown; cifre?: unknown; farmaco?: unknown; copertura?: unknown; pulita?: unknown; motivo?: unknown; fonte?: unknown; simile?: unknown } =>
         !!v && typeof v === 'object' && typeof (v as any).frase === 'string')
       .slice(0, 30)
       .map((v) => ({
@@ -254,6 +254,13 @@ export async function POST(req: NextRequest) {
         cifre: v.cifre === true,
         farmaco: v.farmaco === true,
         copertura: typeof v.copertura === 'number' ? v.copertura : null,
+        // Versione pulita (punteggiatura dettata + dizionario), motivo e fonte
+        // del modello, frase del referto più simile: fino al 12.9.2026 questi
+        // campi cadevano qui e il wizard rimetteva la frase GREZZA.
+        ...(typeof v.pulita === 'string' && v.pulita.trim() ? { pulita: v.pulita.slice(0, 400) } : {}),
+        ...(typeof v.motivo === 'string' && v.motivo.trim() ? { motivo: v.motivo.slice(0, 200) } : {}),
+        ...(v.fonte === 'modello' ? { fonte: 'modello' } : {}),
+        ...(typeof v.simile === 'string' && v.simile.trim() ? { simile: v.simile.slice(0, 200) } : {}),
       })),
     // Cronologia delle trasformazioni (attore, numeri, secondi dall'avvio) e
     // versioni intermedie del testo: audit e confronto.
