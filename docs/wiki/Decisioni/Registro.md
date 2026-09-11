@@ -27,9 +27,7 @@ Una riga per decisione, con la data e il perché. Non si rilitigano senza un dat
 | 2026-09-11 | Coerenza interna accesa di serie (`coerenza=1` implicito) | banco 5/5 con 0 falsi allarmi; da rivedere sui dettati veri |
 | 2026-09-11 | Documentazione in wiki per argomento (questa), CLAUDE.md ridotto alle regole | il CLAUDE.md era 800 righe di storia narrata |
 | 2026-09-11 | La conoscenza degli agenti della catena vive in `Agenti/` e viene COMPILATA nei prompt (attenzioni + esempi finti), niente recupero automatico a ogni chiamata | misurato: arbitro 14→15/15, terapia 7→8/8, gli altri uguali, nessuna regressione; il RAG su pagine intere porterebbe rumore e costi per compiti stretti |
-
 | 2026-09-11 | Whisper fa SEMPRE due passate (con VAD e senza) e vince quella che concorda di più con Voxtral (`REFERTI_PASSATA_DOPPIA`, default acceso); il VAD NON diventa spento di serie | banco VAD su 6 dettati veri: 3 a 3, accordo 735 contro 712; senza VAD un dettato lungo va in loop, col VAD un altro perde 400 caratteri e 2 numeri senza far scattare la sentinella; costo 10-100 s in più per dettato |
-
 | 2026-09-11 | Architettura «memorie diverse + verifica + rischio»: presi il registro dei fatti, il verifier di un'altra famiglia (Qwen 3.5-397B per avvocato/omissioni/coerenza/verificatore), il punteggio di fiducia e il consolidatore notturno; NON presi il grafo del paziente, la memoria episodica sui casi clinici, l'escalation automatica di modello | i primi quattro sono codice deterministico o lavoro già a metà; il grafo e la memoria sui casi sono una cartella clinica primaria (art. 67 LSan, DSFA da chiudere); l'escalation di modello non risparmia nulla dove la revisione umana è obbligatoria e le chiamate costano centesimi |
 | 2026-09-12 | Revisione guidata: prima le parole (motori discordi, correzioni automatiche), poi le frasi | richiesta utente dopo il primo referto vero: chi sistema le parole prima trova le frasi già a posto e non le tocca due volte |
 
