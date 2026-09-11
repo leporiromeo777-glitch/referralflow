@@ -12,7 +12,7 @@ Scritta per chi usa la piattaforma, non per chi la sviluppa. Se qualcosa qui non
 - Se un file finisce tra gli **errori** del pannello, «Riprova» una volta. Se fallisce ancora, lascia il file dov'è (l'audio non si cancella mai in caso di errore) e segnalalo.
 
 ## 2. Aprire la bozza
-Nella pagina Referti la bozza compare con il nome del paziente (o «Paziente non indicato» se il dettato non lo dice) e il numero di segnalazioni. Aprendola:
+Nella pagina Referti la bozza compare con il nome del paziente (o «Paziente non indicato» se il dettato non lo dice), il badge «fiducia N/100» e il numero di segnalazioni: comincia dalle bozze con la fiducia più bassa. Aprendola:
 - in alto ci sono gli **avvisi** della catena: leggili prima di tutto. «Dettato forse incompleto» o «trascrizione principale completa mancante» significano che va riascoltato tutto.
 - il testo ha i punti evidenziati: gialli dove i due motori di trascrizione non concordano, rossi dove l'audio era poco chiaro. Cliccando una parola l'audio salta lì.
 
@@ -31,6 +31,7 @@ Tutto ciò che fai nel wizard si **salva da solo**: puoi chiudere e riaprire sen
 ## 4. Le card sotto il testo
 - **Note per la segreteria**: le frasi che il medico ha rivolto a te («allega…», «manda copia a…»), tolte dal referto. Se una era in realtà parte della lettera, ricopiala nel testo. Le cose da allegare, se sono nella cartella del paziente, compaiono già agganciate.
 - **Terapia per la lettera** (solo per chi detta le lettere con il blocco terapia): le righe già nel formato del blocco «Terapia:», con la provenienza di ognuna (dalla lettera precedente, dettata, modificata, nuova) e le sospese barrate. Controlla i dubbi segnalati (dose non in commercio, nome non trovato).
+- **Fiducia nella bozza**: un numero da 0 a 100 con scritto che cosa ha tolto punti. Non dice se il referto è giusto: dice quanta attenzione serve. Dentro, il **registro dei fatti**: ogni numero, farmaco e parola pesante con chi l'ha sentito e quanto è sicuro, dal meno sicuro al più sicuro. Parti da lì.
 - **Coerenza interna** e **Controllo della lettera**: sono segnalazioni, non correzioni. Riascolta e decidi tu.
 - **Lettera precedente**: per i medici che aggiornano la lettera del paziente, la fusione proposta va letta riga per riga.
 - **Richiamo proposto**: se il dettato dice «controllo fra 12 mesi», un clic crea il follow-up.

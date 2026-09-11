@@ -13,7 +13,9 @@ aggiornata: 2026-09-11
 - **Catena compatta**: la chiamata unica al modello esterno che svolge riparazioni, note segreteria, fuori tema e senza senso.
 - **Contesto del medico**: blocco di dati nei prompt ([[Catena/Contesto per medico]]).
 - **Divergenza**: punto in cui A e B non concordano; **pesante** se contiene qualificatore, negazione, lateralità o numero da una parte sola.
+- **Fiducia (punteggio)**: 0-100 spiegato, calcolato dal codice dal registro dei fatti e dal manifesto; dice quanta attenzione serve ([[Catena/Registro dei fatti e fiducia]]).
 - **Fusione**: la lettera precedente del paziente aggiornata col nuovo dettato (modalità aggiornamento).
+- **Ledger (registro dei fatti)**: i fatti atomici della bozza con fonti, confidenza e stato.
 - **Manifesto**: `payload.manifesto`, livello di verifica pieno/ridotto/minimo con testimoni e trasporti.
 - **Ombra**: bozza alternativa prodotta da una variante della catena per il confronto cieco.
 - **Pseudonimizzato**: testo con nomi, date e contatti sostituiti da segnaposto, mappa in RAM sul Mac. Non «anonimo».
@@ -21,5 +23,6 @@ aggiornata: 2026-09-11
 - **Suite catastrofica**: `prove-catastrofiche.py`, i casi peggiori congelati come test permanenti; `distribuisci.sh` la esegue prima di copiare.
 - **Testimone promosso**: quando la B diventa base ([[Catena/Sentinelle e recuperi]]).
 - **Trasporto**: dove è girata una tappa: `locale`, `esterno`, `manuale`.
+- **Verifier / verificatori**: avvocato, omissioni, coerenza, verificatore selettivo; girano su un'altra famiglia di modelli rispetto al correttore.
 - **Versione della catena**: impronta di codice, prompt (+ contesto medico), dizionario, vocabolario, profilo, modelli (`versione_catena()`).
 - **Zero-touch**: referto confermato senza correzioni (REVIEWED_NO_CHANGES).

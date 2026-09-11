@@ -23,14 +23,15 @@ Dettato (dittafono o drag & drop dalla pagina Referti) → `pipeline-referti/pip
 | estrazione campi (sul testo integrale, note comprese) | modello | SPEC §6.3 |
 | controlli: cifre (Parakeet), farmaci Swissmedic, avvocato/verificatore, rischio frasi | codice + modello | [[Catena/Strumenti e pagine]] |
 | omissioni (codice + modello) | | [[Catena/Omissioni]] |
-| coerenza interna | modello esterno | [[Catena/Coerenza interna]] |
+| coerenza interna | modello esterno (verifier) | [[Catena/Coerenza interna]] |
+| registro dei fatti e punteggio di fiducia | codice | [[Catena/Registro dei fatti e fiducia]] |
 | manifesto, storia, versioni, versione_catena | codice | [[Catena/Audit e qualità]] |
 
 ## Percorso esterno
-`~/.referralflow-esterno.conf` (`attivo=1`, url Infomaniak, modello `google/gemma-4-31B-it`, interruttori per fase: `arbitro=1`, `estrazione`, `omissioni`, `coerenza`, `verificatore`…). Il testo esce SOLO pseudonimizzato (`_anonimizza_per_esterno`: gemma3:12b locale trova i dati, il codice sostituisce con segnaposto, controprova in due tempi; nei log solo conteggi). Su qualunque intoppo si resta in locale. Modalità manuale con `~/referti/scambio-esterno/ATTIVO`.
+`~/.referralflow-esterno.conf` (`attivo=1`, url Infomaniak, modello `google/gemma-4-31B-it`, `modello_verifica=Qwen/Qwen3.5-397B-A17B-FP8` per i verificatori, interruttori per fase: `arbitro=1`, `estrazione`, `omissioni`, `coerenza`, `verificatore`…). Il testo esce SOLO pseudonimizzato (`_anonimizza_per_esterno`: gemma3:12b locale trova i dati, il codice sostituisce con segnaposto, controprova in due tempi; nei log solo conteggi). Su qualunque intoppo si resta in locale. Modalità manuale con `~/referti/scambio-esterno/ATTIVO`.
 
 ## Payload della bozza (chiavi principali)
-`testo_corretto`, `note_segreteria`, `campi_estratti`, `parole` (tempi), `divergenze`, `segmenti_dubbi`, `allarmi_numerici`, `avvisi`, `divagazioni`, `frasi_da_chiarire`, `doppioni_tolti/dubbi`, `frasi_non_supportate`, `riparazioni_applicate`, `numeri`, `rischio_frasi`, `frasi_omesse`, `terapia`, `incoerenze`, `storia`, `versioni`, `versione_catena`, `manifesto`, `medico`, `dettato_il`, `ombra`, `richiede_revisione` (sempre true). L'endpoint accetta SOLO le chiavi in lista (`src/app/api/referti/bozza/route.ts`): una tappa nuova va aggiunta lì o non arriva in tabella (successo nel 2026-09-11 con `terapia`).
+`testo_corretto`, `note_segreteria`, `campi_estratti`, `parole` (tempi), `divergenze`, `segmenti_dubbi`, `allarmi_numerici`, `avvisi`, `divagazioni`, `frasi_da_chiarire`, `doppioni_tolti/dubbi`, `frasi_non_supportate`, `riparazioni_applicate`, `numeri`, `rischio_frasi`, `frasi_omesse`, `terapia`, `incoerenze`, `ledger`, `fiducia`, `storia`, `versioni`, `versione_catena`, `manifesto`, `medico`, `dettato_il`, `ombra`, `richiede_revisione` (sempre true). L'endpoint accetta SOLO le chiavi in lista (`src/app/api/referti/bozza/route.ts`): una tappa nuova va aggiunta lì o non arriva in tabella (successo nel 2026-09-11 con `terapia`).
 
 ## Servizio
 Loop: dizionario ricaricato a ogni giro, dettati in `~/referti/ingresso`, `invia_bozze`, `pubblica_medici`, `sincronizza_dizionario` (10 min), `scarica_coda`, `lavora_fusioni`, scadenza dataset audio, pulizia. Log `~/referti/log/servizio.log` (mai contenuti clinici). Corse fallite: `<file_id>.fallita.json` spedito come `{esito:'fallita'}`.
