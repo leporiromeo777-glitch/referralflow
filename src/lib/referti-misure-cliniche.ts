@@ -56,14 +56,19 @@ export function misureCliniche(testo: string): Record<string, string[]> {
   return out;
 }
 
-/** Vero se ogni misura ha gli stessi valori (a prescindere dall'ordine) nei due testi. */
+/** Vero se ogni misura presente in ENTRAMBI i testi ha gli stessi valori
+ * (a prescindere dall'ordine). Una misura riconosciuta da una parte sola
+ * non è uno scambio: il dettato dice «frequenza 64 battiti» e la lettera
+ * «FC 64 bpm», e l'espressione della frequenza aggancia solo la seconda
+ * (visto al banco di forma il 12.9.2026: la lettera giusta veniva
+ * scartata). I numeri in sé li protegge già la firma numerica. */
 export function relazioniIntatte(prima: string, dopo: string): boolean {
   const a = misureCliniche(prima);
   const b = misureCliniche(dopo);
-  const nomi = new Set([...Object.keys(a), ...Object.keys(b)]);
-  for (const n of nomi) {
-    const x = [...(a[n] ?? [])].sort().join('|');
-    const y = [...(b[n] ?? [])].sort().join('|');
+  for (const n of Object.keys(a)) {
+    if (!(n in b)) continue;
+    const x = [...a[n]].sort().join('|');
+    const y = [...b[n]].sort().join('|');
     if (x !== y) return false;
   }
   return true;

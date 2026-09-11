@@ -6,7 +6,7 @@ aggiornata: 2026-09-11
 
 Le pagine in `Agenti/` sono la fonte unica di ciò che gli agenti della catena sanno oltre al dettato. Non le leggono a ogni chiamata: lo script `pipeline-referti/compila-conoscenza.py` le **compila** al deploy (`distribuisci.sh` lo esegue) in due file:
 
-- `pipeline-referti/medici.json` — dalle pagine dei medici ([[Agenti/Moccetti]], [[Agenti/Moschovitis]]): «Come detta» → `contesto`, «Frasi fisse» → `frasi_fisse`, «Farmaci frequenti» → `farmaci_frequenti`. Entrano nel blocco «contesto del medico» dei prompt ([[Catena/Contesto per medico]]).
+- `pipeline-referti/medici.json` — dalle pagine dei medici ([[Agenti/Moccetti]], [[Agenti/Moschovitis]]): «Come detta» → `contesto`, «Frasi fisse» → `frasi_fisse`, «Farmaci frequenti» → `farmaci_frequenti` (entrano nel blocco «contesto del medico» dei prompt, [[Catena/Contesto per medico]]); «Lettera tipo» (blocco recintato con ```) → `lettera_tipo` e «Regole di forma» → `regole_forma`, pubblicate alla piattaforma e usate dal prompt di «Impagina come lettera» ([[Catena/Formato lettera e Word]]).
 - `pipeline-referti/conoscenza-agenti.json` — dalle pagine degli agenti ([[Agenti/Correttore]], [[Agenti/Arbitro]], [[Agenti/Omissioni]], [[Agenti/Terapia]], [[Agenti/Coerenza]]): «A cosa fare attenzione» → elenco ATTENZIONE, «Esempi» → ESEMPI con la risposta giusta. Entrano nel prompt dell'agente (`conoscenza_agente()` in pipeline.py), prima della richiesta del JSON.
 
 Il file compilato fa parte dell'impronta del prompt (`versione_catena`): cambi una pagina, cambia la versione, e il cruscotto Qualità AI confronta prima e dopo. `REFERTI_CONOSCENZA=0` spegne l'iniezione senza toccare le pagine.
