@@ -27,6 +27,8 @@ Ogni banco usa SOLO dati sintetici. Le chiamate al modello esterno costano cente
 
 | 2026-09-11 | verificatori su un'altra famiglia (`modello_verifica=Qwen/Qwen3.5-397B-A17B-FP8`) | `banco-coerenza.py`, `banco-omissioni.py --modello` | coerenza 5/5, 0 falsi (uguale a gemma); omissioni modello 7/9 contro 8/9 di gemma (perde «T difasica» nella frase lunga; la lateralità la prende il codice) → tenuto per l'indipendenza dal correttore, da rivedere sui dati veri con «Quale tappa aiuta davvero» |
 
-Suite permanente: `python3.14 pipeline-referti/prove-catastrofiche.py` → 34/34 (11.9.2026). Test app: `npm run test:app` → 25 casi.
+| 2026-09-12 | forma dell'impaginazione: lettera tipo + regole dalla wiki (da 12 lettere anonimizzate di Moccetti), modello locale Qwen 3.8 | `npm run banco-forma` (dettato finto, 12 tratti della forma della segretaria) | senza 7/12 → con **12/12**, ~60 s per corsa. Prima del risultato due guardie scartavano la lettera giusta: il lucchetto delle relazioni (misura riconosciuta solo nella lettera) e la firma numero+unità («chili» vs «Kg») → corretti nel codice con test |
+
+Suite permanente: `python3.14 pipeline-referti/prove-catastrofiche.py` → 34/34 (12.9.2026). Test app: `npm run test:app` → 29 casi.
 
 Dati reali osservati (solo numeri): destinatario estratto = confermato in 9 bozze su 11 (11.9.2026); collassi di whisper: 3 in 3 giorni sullo stesso medico (7-9.9.2026).
