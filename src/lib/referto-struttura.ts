@@ -1,6 +1,7 @@
 import 'server-only';
 import { relazioniIntatte } from './referti-misure-cliniche';
 import { normalizzaDate, numeriDiTempoInCifre, paroleAggiunte } from './referti-lettera';
+import { unitaInSigle } from './referti-terapia';
 
 // Riorganizzazione del referto dettato nel formato standard dello studio
 // (bottone nel dettaglio referto). Il modello AI LOCALE (Ollama) rimappa il
@@ -225,7 +226,10 @@ export async function riorganizzaReferto(
   // Forma lettera: le date «2 settembre 2026» diventano «02.09.2026» PRIMA
   // del modello (codice, deterministico): così la guardia sui numeri
   // confronta l'originale già normalizzato con la risposta.
-  const originale = (formato === 'lettera' ? numeriDiTempoInCifre(normalizzaDate(testo)) : testo).slice(0, TESTO_MAX);
+  // Forma lettera: anche le unità dettate a parole diventano sigle («chili»
+  // → «Kg», «per cento» → «%», «pressione 128 su 76» → «128/76 mmHg») dal
+  // codice, prima del modello: la firma numerica è numero+unità.
+  const originale = (formato === 'lettera' ? unitaInSigle(numeriDiTempoInCifre(normalizzaDate(testo))) : testo).slice(0, TESTO_MAX);
   let risposta = '';
   try {
     const r = await fetch(`${OLLAMA_URL}/api/generate`, {

@@ -34,6 +34,25 @@ export function dettatoConTerapia(testo: string): boolean {
   return /^\s*terapia\s*:?\s*$/im.test(testo) || (testo.match(/\b\d+(?:[.,]\d+)?\s?(?:mg|mcg|µg|ml|ui)\b/gi) ?? []).length >= 2;
 }
 
+// Unità dettate a parole → sigle della lettera (12.9.2026, dal banco di
+// forma): «78 chili per 175 centimetri, pressione 128 su 76, frequenza 64
+// battiti, frazione di eiezione del 60 per cento» → «78 Kg per 175 cm,
+// pressione 128/76 mmHg, frequenza 64 bpm, frazione di eiezione del 60%».
+// Va fatto dal CODICE prima del modello: la guardia sui numeri confronta
+// numero+unità, e il modello che scrive «Kg» come la segretaria veniva
+// scartato. Solo forme inequivocabili; il numero non cambia mai.
+export function unitaInSigle(testo: string): string {
+  return testo
+    .replace(/(\d+(?:[.,]\d+)?)\s+chil[io](?:grammi)?\b/gi, '$1 Kg')
+    .replace(/(\d+(?:[.,]\d+)?)\s+centimetri\b/gi, '$1 cm')
+    .replace(/(\d+(?:[.,]\d+)?)\s+millimetri di mercurio\b/gi, '$1 mmHg')
+    .replace(/(\d+(?:[.,]\d+)?)\s+milligrammi\b/gi, '$1 mg')
+    .replace(/(\d+(?:[.,]\d+)?)\s+microgrammi\b/gi, '$1 mcg')
+    .replace(/(\d+(?:[.,]\d+)?)\s+per\s?cento\b/gi, '$1%')
+    .replace(/(\d+(?:[.,]\d+)?)\s+battiti(?:\s+al\s+minuto)?\b/gi, '$1 bpm')
+    .replace(/(\bpression[ei](?:\s+arteriosa)?(?:\s+\w+){0,3}?\s+)(\d{2,3})\s+su\s+(\d{2,3})\b(?!\s*mmHg)/gi, '$1$2/$3 mmHg');
+}
+
 // La chiave di una riga o di un nome: la prima parola in maiuscolo senza
 // accenti. «ASPIRIN CARDIO 100 mg 1-0-0-0» → ASPIRIN; «Aspirina Cardio» →
 // ASPIRINA. Due chiavi combaciano se uguali o se condividono le prime sei
