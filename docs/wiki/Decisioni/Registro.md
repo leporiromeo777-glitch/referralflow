@@ -1,0 +1,33 @@
+---
+tipo: decisioni
+aggiornata: 2026-09-11
+---
+# Registro delle decisioni chiuse
+
+Una riga per decisione, con la data e il perché. Non si rilitigano senza un dato nuovo.
+
+| data | decisione | perché |
+|---|---|---|
+| 2026-07-17 | Palette verde, niente nero; caselle metriche solo su Coda e Follow-up; le tre sezioni della lista d'attesa restano | scelte esplicite dell'utente sul design |
+| 2026-07-18 | 2FA accesa solo dopo «Ho salvato i codici» | il refresh post-action faceva sparire i codici (bug trovato) |
+| 2026-07-24 | Denoise (afftdn) + atempo insieme come impostazione di serie | confronto a quattro celle: divergenze 65 liscio, 52 solo denoise, 70 solo atempo, 23 insieme |
+| 2026-08-14 | Robot MediOnline in SOLA LETTURA | vincolo esplicito dell'utente |
+| 2026-08-17 | Anonimizzatore su gemma3:12b, non 27b | non si contende la GPU con whisper |
+| 2026-08-23 | Denoise RESTA ACCESO nonostante il set sintetico dica il contrario (riconfermato 5.9.2026) | sull'audio VERO del DPM 7200 whisper senza denoise va in loop (416 frasi-copia su 441); non rilitigare senza un dettato vero con oro verificato dal medico |
+| 2026-08 | Niente whisper turbo | rifiutato dall'utente; resta large-v3 |
+| 2026-09-05 | Percorso esterno a Infomaniak (gemma-4-31B) con testo pseudonimizzato, fornitori in lista | qualità della correzione; nLPD con controprova doppia |
+| 2026-09-07 | Atempo di Moccetti RESTA 0.8 | prova 0.7/0.6/0.5 su DS2 vero: divergenze 11 contro 12/14/15 |
+| 2026-09-07 | Ricucitura della punteggiatura orfana nella catena, non in pagina | cambierebbe gli indici delle frasi e butterebbe via le revisioni in corso |
+| 2026-09-08 | Voxtral NON diventa il motore principale; whisper resta base con promozione del testimone solo quando serve | i tempi delle parole vengono da whisper; la promozione copre i collassi |
+| 2026-09-08 | Niente spezzettamento dell'audio in blocchi da 30 s | il VAD era la causa dei buchi, non la lunghezza; la corsa senza VAD risolve |
+| 2026-09-09 | Contesto per medico = dati, non regole in più | più istruzioni = più invenzioni; misurato 2/8 → 6/8 sull'esterno |
+| 2026-09-09 | La correzione resta sul modello esterno; Qwen 3.8 leggero sostituisce gemma3:27b e medgemma nelle tappe locali e nell'impaginazione | Qwen 11/17 come i migliori cloud ma 225 s per chiamata («sostituiscilo», strada prudente) |
+| 2026-09-09 | Le correzioni umane non addestrano nulla in automatico | principio del sistema di audit; l'unico apprendimento è il dizionario confermato a mano |
+| 2026-09-11 | Fase «destinatario dalle note» NON fatta | sui dati reali il destinatario è già giusto 9/11 e le 2 mancanti non hanno indizi nelle note |
+| 2026-09-11 | Coerenza interna accesa di serie (`coerenza=1` implicito) | banco 5/5 con 0 falsi allarmi; da rivedere sui dettati veri |
+| 2026-09-11 | Documentazione in wiki per argomento (questa), CLAUDE.md ridotto alle regole | il CLAUDE.md era 800 righe di storia narrata |
+
+## Aperte
+- Corsa senza VAD come passata principale (tre collassi in tre giorni su Moccetti).
+- Conservare l'audio per un LoRA futuro; togliere il denoise se arriva un oro verificato dal medico.
+- Livello 2 del server (dominio, HTTPS) dopo la parte legale.

@@ -24,6 +24,14 @@ rf_page_tmp.html
 Thumbs.db
 .DS_Store
 
+# SilverBullet (wiki in docs/wiki): file di servizio, mai le pagine
+docs/wiki/.silverbullet*
+docs/wiki/_plug/
+docs/wiki/Library/
+docs/wiki/SETTINGS.md
+docs/wiki/CONFIG.md
+docs/wiki/*.db
+
 # Anteprima locale sul Mac: traccia della versione compilata
 .build-stamp
 vocabolario-locali.txt
