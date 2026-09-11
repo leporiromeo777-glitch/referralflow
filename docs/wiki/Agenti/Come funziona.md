@@ -18,5 +18,8 @@ Il file compilato fa parte dell'impronta del prompt (`versione_catena`): cambi u
 - **Ogni cambiamento si misura** con il banco dell'agente ([[Misure/Banchi]]). Se peggiora, si toglie la riga, non si spegne il sistema.
 - Le regole del prompt (che cosa può e non può fare l'agente) restano nel codice: qui stanno i dati e gli esempi.
 
+## Da dove arrivano le proposte
+Il cruscotto Qualità AI propone materiale per queste pagine, sempre da confermare a mano: «Frasi che il medico ripete» (frasi uguali in almeno tre lettere confermate → sezione «Frasi fisse» del medico) e «Che cosa insegnano le correzioni» (voci di dizionario). «Quale tappa aiuta davvero» dice, sui referti veri, se una tappa avvicina o allontana dal testo firmato: è lì che si vede se un esempio nuovo è servito.
+
 ## Perché così e non un recupero automatico (RAG)
 Gli agenti della catena fanno una chiamata sola su un compito stretto. Ricevere pagine intere o pezzi recuperati per somiglianza porta rumore e costa; ricevere pochi esempi scelti e i dati del medico è ciò che, misurato, aiuta. Il recupero dinamico resta una prova possibile con un banco, non l'impostazione di serie.

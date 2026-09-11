@@ -15,5 +15,5 @@ aggiornata: 2026-09-11
 ## Catena dei referti
 - Valutare la corsa senza VAD come passata principale (tre casi di collasso in tre giorni sullo stesso medico, vedi [[Catena/Sentinelle e recuperi]]).
 - Terapia: ripulire il tag `qwen3.8:27b` inutilizzabile (17 GB) da Ollama; telefono dello studio in Impostazioni per la riga Tel della carta intestata.
-- Omissioni: manca ancora la lateralità sola.
-- Guardare ogni settimana le proposte di dizionario nel cruscotto ([[Catena/Audit e qualità]]).
+- Guardare ogni settimana nel cruscotto: proposte di dizionario, frasi che il medico ripete, quale tappa aiuta davvero ([[Catena/Audit e qualità]]).
+- Whisper addestrato sulla voce del medico (audio conservato + testi confermati): solo con un oro verificato; per ora si accumulano dati.

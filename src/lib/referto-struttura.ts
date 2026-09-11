@@ -70,7 +70,7 @@ Regole obbligatorie:
 - Ripara i resti dei tagli fatti in revisione: apostrofi orfani, congiunzioni appese, doppi spazi, frasi che iniziano a metà. Un frammento senza NESSUNA informazione clinica può essere tolto; se contiene un dato, va ricucito nella frase più vicina.
 - Rispondi SOLO con la lettera, senza commenti né spiegazioni.
 
-TESTO:
+{esempi}TESTO:
 {testo}`;
 
 export type FormatoReferto = 'rapporto' | 'lettera';
@@ -82,14 +82,30 @@ export type OpzioniLettera = {
   chiusura?: string;
   firma?: string[];
   terapia?: string[];
+  // Lettere precedenti dello stesso medico, PSEUDONIMIZZATE, solo per la
+  // forma (11.9.2026): il modello gira in locale, nulla esce dal Mac.
+  esempi?: string[];
 };
+
+// Il blocco degli esempi di forma nel prompt della lettera: chiaro che il
+// contenuto viene solo dal testo, e che segnaposto e frasi degli esempi
+// non vanno copiati. Le guardie sui numeri e sulle parole aggiunte
+// restano il paracadute.
+export function bloccoEsempi(esempi: string[] | undefined): string {
+  const puliti = (esempi ?? []).map((e) => e.trim()).filter(Boolean).slice(0, 2);
+  if (!puliti.length) return '';
+  return 'ESEMPI DI FORMA: lettere precedenti dello stesso medico, pseudonimizzate (nomi, date e contatti sostituiti da segnaposto). '
+    + 'Servono SOLO per la forma (saluto, andamento dei paragrafi, tono, chiusura). Il contenuto della nuova lettera viene ESCLUSIVAMENTE dal TESTO qui sotto: '
+    + 'non copiare da questi esempi frasi, valori, farmaci né segnaposto.\n'
+    + puliti.map((e, i) => `--- ESEMPIO ${i + 1} ---\n${e}`).join('\n') + '\n--- FINE ESEMPI ---\n\n';
+}
 
 export function promptPer(formato: FormatoReferto, opzioni: OpzioniLettera): string {
   if (formato !== 'lettera') return PROMPT;
   const chiusura = opzioni.chiusura?.trim()
     ? `scrivi ESATTAMENTE «${opzioni.chiusura.trim()}» e nient'altro (la firma viene aggiunta dopo: non scriverla).`
     : 'quello dettato (per esempio «Cordiali saluti» o «Con i migliori saluti») seguito dalla firma se dettata; se il testo non ha un saluto finale, scrivi «Cordiali saluti,» e basta.';
-  return PROMPT_LETTERA.replace('{chiusura}', chiusura);
+  return PROMPT_LETTERA.replace('{chiusura}', chiusura).replace('{esempi}', bloccoEsempi(opzioni.esempi));
 }
 
 // Rifiniture di CODICE dopo il modello, nella forma lettera: il blocco
@@ -312,7 +328,9 @@ export function avviaRiorganizzazione(
       const l = lavori.get(bozzaId);
       if (l?.stato === 'lavora') l.percento = Math.max(l.percento, percento);
     }, formato, opzioni);
-    if (alTermine) { try { await alTermine(esito, inizio, promptPer(formato, opzioni)); } catch { /* audit best-effort */ } }
+    // Nel registro dei prompt va la versione SENZA gli esempi di forma (che
+    // cambiano a ogni bozza): la versione del prompt resta confrontabile.
+    if (alTermine) { try { await alTermine(esito, inizio, promptPer(formato, { ...opzioni, esempi: undefined })); } catch { /* audit best-effort */ } }
     if (esito.ok) {
       try {
         await salva(esito.testo);

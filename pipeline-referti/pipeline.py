@@ -6795,6 +6795,35 @@ def rileva_omissioni(grezzo: str, finale: str, note: list, parole_audio: list,
         omesse.append({"frase": f[:400], "secondo": secondo, "cifre": cifre, "farmaco": farm,
                        "copertura": round(migliore, 2),
                        **({"pulita": pulita[:400]} if pulita and pulita != f else {})})
+    # Lateralità sola (2026-09-11, l'unico caso che il banco perdeva):
+    # «carotide interna destra» → «carotide interna» combacia per il 90% e
+    # il controllo sopra la dà per coperta. Per ogni frase grezza con una
+    # lateralità si prende la frase di destinazione più simile: se lì la
+    # lateralità manca (o è l'opposta) è un'omissione, citata con la
+    # finestra di parole attorno, così il wizard la ritrova nel dettato.
+    gia = {o["frase"] for o in omesse}
+    for f in _spezza_frasi_wizard(grezzo):
+        lat = [x.group(0) for x in _RX_LATERALITA.finditer(f)]
+        sig = parole_sig(f)
+        if not lat or len(sig) < 3 or f[:400] in gia:
+            continue
+        s = set(sig)
+        migliore_d, ov = None, 0.0
+        for dst, d in zip(destinazioni, dest_set):
+            cop = len(s & d) / len(s)
+            if cop > ov:
+                migliore_d, ov = dst, cop
+        if migliore_d is None or ov < 0.5:
+            continue
+        lat_dest = {x.group(0).lower() for x in _RX_LATERALITA.finditer(migliore_d)}
+        for w in lat:
+            if w.lower() in lat_dest:
+                continue
+            mm = re.search(r"((?:\S+\s+){0,4})" + re.escape(w) + r"\b", f)
+            finestra = (mm.group(0) if mm else w).strip()
+            k = re.sub(r"\W+", "", w.lower())
+            omesse.append({"frase": finestra[:400], "secondo": tempi.get(k), "cifre": False, "farmaco": False,
+                           "copertura": round(ov, 2), "motivo": "lateralità presente nel dettato e assente nel referto"})
     omesse.sort(key=lambda o: (-(o["cifre"] or o["farmaco"]), o["copertura"]))
     log.info("fase=omissioni file=%s grezze=%d omesse=%d con_cifre=%d", file_id,
              len(_spezza_frasi_wizard(grezzo)), len(omesse), sum(1 for o in omesse if o["cifre"]))

@@ -7,6 +7,8 @@ import { getSession } from '@/lib/auth';
 import { mediaMobile, statistiche, outlier } from '@/lib/audit/metriche';
 import { registraRilascio } from '@/lib/audit/lineage';
 import { proposteDizionario } from '@/lib/audit/dizionario';
+import { attribuisci, riepilogo, NOMI_TAPPE, type Passo } from '@/lib/audit/attribuzione';
+import { frasiCandidate } from '@/lib/audit/frasi';
 import { annotaRilascio, decidiVoceDizionario } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -145,6 +147,51 @@ export default async function QualitaPipeline({ searchParams }: { searchParams: 
   const confermate = decise.filter((d) => d.stato === 'confermata');
   const rifiutate = decise.filter((d) => d.stato === 'rifiutata').length;
 
+  // ——— Quale tappa aiuta davvero (11.9.2026): dalle versioni immutabili di
+  // ogni referto confermato dalla segretaria, la distanza di ogni tappa dal
+  // testo confermato e il delta rispetto alla tappa prima. ———
+  const perReferto: Passo[][] = [];
+  if (punti.length) {
+    const versioni = await query<{ bozza_id: string; label: string; version_no: number; producer_type: string; content_text: string | null }>(
+      `select a.bozza_id::text, a.label, a.version_no, a.producer_type, a.content_text
+         from audit.artifacts a
+        where a.studio_id = $1 and a.kind = 'text' and a.content_text is not null
+          and a.bozza_id = any($2::uuid[])
+        order by a.bozza_id, a.version_no`, [studioId, punti.map((p) => p.bozza_id)]);
+    const finali = await query<{ bozza_id: string; testo: string }>(
+      `select h.bozza_id::text, a.content_text as testo from audit.human_edits h join audit.artifacts a on a.id = h.to_artifact_id
+        where h.studio_id = $1 and h.editor_role = 'SECRETARY' and h.bozza_id = any($2::uuid[])`, [studioId, punti.map((p) => p.bozza_id)]);
+    const perBozza = new Map<string, typeof versioni>();
+    for (const v of versioni) perBozza.set(v.bozza_id, [...(perBozza.get(v.bozza_id) ?? []), v]);
+    for (const f of finali) {
+      const vs = perBozza.get(f.bozza_id);
+      if (vs && f.testo) perReferto.push(attribuisci(vs.map((v) => ({ label: v.label, version_no: v.version_no, testo: v.content_text ?? '', producer_type: v.producer_type })), f.testo));
+    }
+  }
+  const tappe = riepilogo(perReferto).filter((t) => t.referti >= 1);
+
+  // ——— Frasi fisse proposte dalle lettere confermate (11.9.2026): per
+  // medico, le frasi ripetute in almeno tre lettere; si copiano a mano
+  // nella pagina Agenti/<medico> della wiki. ———
+  const lettereConfermate = await query<{ medico: string; id: string; testo: string; nome: string | null }>(
+    `select payload->'medico'->>'id' as medico, id::text, testo_finale as testo,
+            coalesce(campi_confermati->>'nome_paziente', payload->'campi_estratti'->>'nome_paziente') as nome
+       from referti_bozze
+      where studio_id = $1 and stato = 'confermata' and tipo = 'referto' and testo_finale is not null
+        and coalesce((payload->>'ombra')::boolean, false) = false and payload->'medico'->>'id' is not null
+      order by reviewed_at desc limit 300`, [studioId]);
+  const frasiPerMedico = new Map<string, { candidate: ReturnType<typeof frasiCandidate>; lettere: number }>();
+  for (const medicoId of new Set(lettereConfermate.map((l) => l.medico))) {
+    const mie = lettereConfermate.filter((l) => l.medico === medicoId).map((l) => ({ id: l.id, testo: l.testo, nomi: l.nome ? [l.nome] : [] }));
+    let gia: string[] = [];
+    try {
+      const pagina = fs.readFileSync(path.join(process.cwd(), 'docs', 'wiki', 'Agenti', `${medicoId[0].toUpperCase()}${medicoId.slice(1)}.md`), 'utf8');
+      const sez = pagina.split(/^## /m).find((s) => s.toLowerCase().startsWith('frasi fisse')) ?? '';
+      gia = sez.split('\n').filter((r) => r.trim().startsWith('-')).map((r) => r.replace(/^\s*-\s*/, '').trim());
+    } catch { gia = []; }
+    frasiPerMedico.set(medicoId, { candidate: frasiCandidate(mie, gia), lettere: mie.length });
+  }
+
   // ——— Grafico ———
   const W = 960, H = 320, PL = 40, PR = 16, PT = 26, PB = 40;
   const yMax = Math.max(5, ...valori);
@@ -282,6 +329,41 @@ export default async function QualitaPipeline({ searchParams }: { searchParams: 
             {n > 15 && !searchParams.tutti && <p><Link href={qs({ tutti: '1' })}>Mostra tutti i {n} referti</Link></p>}
           </div>
         </>
+      )}
+
+      {tappe.length > 0 && (
+        <div className="card" id="tappe">
+          <h2>Quale tappa aiuta davvero</h2>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            Per ogni referto confermato, ogni tappa della catena viene confrontata con il testo che la segretaria ha firmato: «distanza» è quante parole
+            mancano ancora; «avvicina» conta i referti in cui la tappa ha ridotto quella distanza rispetto alla tappa prima, «allontana» quelli in cui l’ha aumentata.
+            È la misura sui dettati veri, non sui banchi. Una tappa che allontana spesso va guardata; una che non avvicina mai costa tempo per niente.
+          </p>
+          <table className="aq-tab"><thead><tr><th>tappa</th><th>chi</th><th>referti</th><th>avvicina</th><th>allontana</th><th>uguale</th><th>delta medio (parole)</th><th>distanza media dal finale</th></tr></thead>
+            <tbody>{tappe.map((t) => (
+              <tr key={t.label}>
+                <td>{NOMI_TAPPE[t.label] ?? t.label.replaceAll('_', ' ')}</td><td className="muted small">{t.producer === 'AI' ? 'AI' : t.producer === 'SYSTEM' ? 'codice' : 'persona'}</td>
+                <td>{t.referti}</td><td>{t.avvicina}</td><td>{t.allontana ? <span className="aq-tag aq-tag-rosso">{t.allontana}</span> : 0}</td><td>{t.neutro}</td>
+                <td>{t.delta_medio > 0 ? '+' : ''}{n1(t.delta_medio)}</td><td>{n1(t.distanza_media)}</td>
+              </tr>
+            ))}</tbody></table>
+        </div>
+      )}
+
+      {[...frasiPerMedico.entries()].some(([, v]) => v.candidate.length > 0) && (
+        <div className="card" id="frasi">
+          <h2>Frasi che il medico ripete</h2>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            Frasi uguali in almeno tre lettere confermate dello stesso medico e non ancora tra le sue «frasi fisse». Se è davvero una sua formula, copiala
+            nella pagina della wiki <code>Agenti/&lt;medico&gt;</code>, sezione «Frasi fisse»: dal deploy successivo il correttore la riconosce anche storpiata. Niente entra da solo.
+          </p>
+          {[...frasiPerMedico.entries()].filter(([, v]) => v.candidate.length > 0).map(([medicoId, v]) => (
+            <div key={medicoId} style={{ marginTop: 8 }}>
+              <h3>{medicoId} <span className="muted small">({v.lettere} lettere confermate)</span></h3>
+              <ul>{v.candidate.slice(0, 15).map((c) => <li key={c.frase}><code>{c.frase}</code> <span className="muted small">— in {c.lettere} lettere</span></li>)}</ul>
+            </div>
+          ))}
+        </div>
       )}
 
       <div className="card" id="dizionario">

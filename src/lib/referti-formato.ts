@@ -1,4 +1,6 @@
 import 'server-only';
+import { query } from './db';
+import { applicaPiano, pianoAnonimizzazione } from './anonimizza';
 import { formatoPerBozza, profiloMedico, type FormatoReferto } from './referti-medici';
 import { estraiTerapia, letteraPrecedente } from './referti-lettera';
 import { dettatoConTerapia, fondiTerapia, terapiaInvariata, type TerapiaFusa } from './referti-terapia';
@@ -41,5 +43,52 @@ export async function opzioniRiorganizzazione(
   const fusa = fondiTerapia(precedenti, dettata, testo);
   if (fusa.righe.length) opzioni.terapia = fusa.righe.map((r) => r.riga);
   const terapiaRipresa = fusa.righe.some((r) => r.fonte === 'precedente');
+  // Esempi di forma (11.9.2026): le ultime due lettere confermate e già
+  // impaginate dello STESSO medico (qualunque paziente), pseudonimizzate
+  // dal piano locale e senza blocco terapia né firma. Il modello
+  // dell'impaginazione gira in locale: nulla esce dal Mac. Best-effort,
+  // REFERTO_STRUTTURA_ESEMPI=0 spegne.
+  if (process.env.REFERTO_STRUTTURA_ESEMPI !== '0' && medico?.id) {
+    try { opzioni.esempi = await esempiDiForma(studioId, bozzaId, String(medico.id), profilo?.chiusura); } catch { opzioni.esempi = undefined; }
+  }
   return { formato, opzioni, terapiaRipresa, terapia: fusa.righe.length || fusa.sospese.length || fusa.avvisi.length ? fusa : null };
+}
+
+// Le ultime lettere confermate e impaginate dello stesso medico, ridotte
+// alla forma: via il blocco «Terapia:» e le righe dopo la chiusura (la
+// firma), poi pseudonimizzate col piano locale (gemma3:12b + regex), max
+// 1800 caratteri l'una. Mai contenuti nei log.
+export async function esempiDiForma(studioId: string, bozzaId: string, medicoId: string, chiusura?: string | null, quante = 2): Promise<string[]> {
+  const righe = await query<{ testo_finale: string }>(
+    `select testo_finale from referti_bozze
+      where studio_id = $1 and id <> $2 and stato = 'confermata' and tipo = 'referto'
+        and testo_finale is not null and coalesce((payload->>'ombra')::boolean, false) = false
+        and payload->'medico'->>'id' = $3 and payload ? 'riorganizzazione'
+      order by reviewed_at desc limit $4`,
+    [studioId, bozzaId, medicoId, quante]
+  );
+  const fuori: string[] = [];
+  for (const r of righe) {
+    const t = soloForma(r.testo_finale, chiusura);
+    if (!t) continue;
+    const piano = await pianoAnonimizzazione(t);
+    const [pseudo] = applicaPiano(t, piano);
+    fuori.push(pseudo.slice(0, 1800));
+  }
+  return fuori;
+}
+
+export function soloForma(lettera: string, chiusura?: string | null): string {
+  const righe = lettera.replace(/\r\n/g, '\n').split('\n');
+  const out: string[] = [];
+  let inTerapia = false;
+  for (const r of righe) {
+    const t = r.trim();
+    if (/^terapia(\s+domiciliare)?\s*:?\s*$/i.test(t)) { inTerapia = true; continue; }
+    if (inTerapia) { if (!t) inTerapia = false; continue; }
+    out.push(r);
+    const chiusa = (chiusura && t.toLowerCase() === chiusura.trim().toLowerCase()) || /^(cordiali|con i migliori|distinti|un caro saluto)/i.test(t);
+    if (chiusa) break;
+  }
+  return out.join('\n').trim();
 }
