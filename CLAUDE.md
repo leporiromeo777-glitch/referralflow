@@ -636,6 +636,38 @@ su 11 bozze reali il destinatario estratto coincide con quello confermato in
 9, le 2 «non indicato» non hanno nessun medico nelle note; le cose da
 allegare le aggancia già la pagina (`agganciaRiferimenti`). Nessun margine
 misurabile.
+FATTO (11.9.2026) fase 3, TERAPIA SECONDO TEMPO: il medico detta spesso solo
+le modifiche («sospendo X, aumento Y a 5 mg», «invariata, aggiungo Z»).
+`src/lib/referti-terapia.ts` (PURO, `fondiTerapia`): blocco «Terapia:»
+dell'ultima lettera confermata del paziente + voci dettate (righe già
+formattate dalla catena, `voci` con stato, `sospesi` nuovi nel payload,
+`sospesi_terapia()` in pipeline) → righe con PROVENIENZA (precedente /
+dettata / modificata / nuova), sospese tolte, avvisi (sospeso non in
+lettera; terapia ridettata per intero con farmaci della precedente non
+nominati). Modo «dettato» quando tutte le voci sono «in corso» e il testo
+non dice «invariata»; senza dettato sulla terapia vale la regola di prima
+(precedente se «invariata» o senza dosaggi). Chiavi dei farmaci a prime 6
+lettere (ASPIRIN/ASPIRINA). Entra in `opzioniRiorganizzazione` (quindi in
+«Impagina come lettera», con `terapia` in `payload.riorganizzazione`) e
+nella card «Terapia per la lettera» della bozza (la pagina ha già la
+lettera precedente). BUG VERO trovato: `payload.terapia` NON era nella lista
+dell'endpoint `/api/referti/bozza` e non arrivava mai in tabella (0 bozze
+con terapia): ora `terapiaPulita`. Test `src/lib/prove-terapia.test.ts`
+(6 casi, `npm run test:app`); banco `banco-terapia.py` esteso a 8 casi:
+codice 8/8, MODELLO esterno 7/8 (unico scarto: motivazione clinica finita
+nella nota → ora la nota entra nella riga solo se porta numero o tempo).
+La nota della terapia: solo precisazioni di prescrizione.
+FATTO (11.9.2026) fase 4, COERENZA INTERNA: tappa «coerenza» dopo le
+omissioni (`PROMPT_COERENZA` col contesto del medico, modello esterno,
+testo pseudonimizzato; spenta con `coerenza=0` nella config esterna):
+contraddizioni DENTRO il referto, due citazioni + motivo; guardie
+`_filtra_incoerenze` (citazioni vere, ≥ 2 parole, distinte, non una dentro
+l'altra, max 5) → `payload.incoerenze`, card «Coerenza interna» nella bozza
+(solo segnalazioni). Caso 31 nella suite. Banco `banco-coerenza.py` (10
+referti finti: 5 contraddizioni piantate, 5 esche con evoluzioni nel tempo,
+esami diversi, «invariata salvo», ripetizioni, due carotidi diverse) sul
+modello esterno: richiamo 5/5, falsi allarmi 0 — il rumore temuto non c'è
+stato, resta da vedere sui dettati veri.
 
 ## Catena referti: pagine e strumenti aggiunti il 5-6.9.2026
 - `/referti/qualita` cruscotto (parole modificate, tempo di revisione, segnalazioni
