@@ -25,7 +25,7 @@ comunicazione sicura): non li sostituisce. Cliente pilota reale: Centro Cardiolo
   multi-studio: crea prima lo studio slug `studio-demo` e un admin; il vecchio
   `db/seed.sql` è pre-migrazione 007 e non funziona più)
 - DB esistente da versione precedente: applicare in ordine le `db/migrations/0XX_*.sql`
-  mancanti (ultima: `033_audit.sql`)
+  mancanti (ultima: `034_referti_dizionario.sql`)
 - Anteprima locale sul Mac mini dello studio: `bash mac/avvia-anteprima.sh`
   (installa Node+Postgres, prepara DB e dati demo, avvia su http://localhost:3000;
   vedi `mac/LEGGIMI.md` — obiettivo: Mac mini come server dello studio)
@@ -668,6 +668,31 @@ referti finti: 5 contraddizioni piantate, 5 esche con evoluzioni nel tempo,
 esami diversi, «invariata salvo», ripetizioni, due carotidi diverse) sul
 modello esterno: richiamo 5/5, falsi allarmi 0 — il rumore temuto non c'è
 stato, resta da vedere sui dettati veri.
+FATTO (11.9.2026) fase 5, DIZIONARIO DALLE CORREZIONI UMANE — l'unico
+apprendimento ammesso, e passa da una persona. `src/lib/audit/dizionario.ts`
+(PURO, `proposteDizionario`): dalle operazioni REPLACE della segretaria
+(`audit.human_edits`, 180 giorni) alle coppie «sbagliato → giusto» per
+medico; guardie: mai cifre, ≤ 4 parole, da ≥ 3 lettere, escluse le
+categorie che non sono errori d'ascolto (misure, dosi, date, dati del
+paziente, punteggiatura, forma, senso clinico) e i cambi di sola desinenza
+(«diminuito → diminuiti»); raggruppate con conteggio, referti distinti,
+alternative. Sezione «Che cosa insegnano le correzioni» in
+`/referti/qualita/pipeline` (admin): «Metti nel dizionario» / «Non è un
+errore d'ascolto» / «Togli» (`decidiVoceDizionario`) → tabella
+`referti_dizionario` (migrazione 034, stato confermata/rifiutata, chiave
+studio+medico+lower(da)). Il servizio legge le confermate ogni 10 minuti
+(`GET /api/referti/dizionario`, token referti; `sincronizza_dizionario` in
+pipeline.py) e le scrive in `correzioni-<medico>-piattaforma.json` accanto
+allo script (riscritto ogni volta, svuotato se le voci spariscono: NON
+modificarlo a mano, non è nel repo); `carica_sostituzioni` lo carica tra il
+dizionario locale e quello del medico, `contesto_medico` lo mette prima
+delle voci del medico (la riga ha un tetto). Caso 32 nella suite; test
+`prove-dizionario.test.ts` (`npm run test:audit`). MISURATO sui primi
+referti veri (5 revisioni con medico, 56 REPLACE): 20 candidate → 19
+proposte, 1 sola ricorrente, 12 di categoria «altro» → in vista normale
+solo le ricorrenti e le singole di categoria termine/ortografia/farmaco/
+grammatica, `?dizionario=tutte` per il resto. Vale poco finché i referti
+confermati sono pochi: è il posto dove guardare ogni settimana.
 
 ## Catena referti: pagine e strumenti aggiunti il 5-6.9.2026
 - `/referti/qualita` cruscotto (parole modificate, tempo di revisione, segnalazioni

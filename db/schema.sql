@@ -681,3 +681,18 @@ create trigger artifacts_immutabili before update or delete on audit.artifacts
 drop trigger if exists human_edits_immutabili on audit.human_edits;
 create trigger human_edits_immutabili before update or delete on audit.human_edits
   for each row execute function audit.vieta_modifica();
+
+-- 034: voci di dizionario dalle correzioni umane (proposte, confermate a mano)
+create table if not exists referti_dizionario (
+  id          bigserial primary key,
+  studio_id   uuid not null references studios(id) on delete cascade,
+  medico      text not null,
+  da          text not null,
+  a           text not null,
+  stato       text not null check (stato in ('confermata', 'rifiutata')),
+  occorrenze  int not null default 0,
+  deciso_da   uuid references users(id) on delete set null,
+  deciso_at   timestamptz not null default now(),
+  created_at  timestamptz not null default now()
+);
+create unique index if not exists referti_dizionario_chiave on referti_dizionario (studio_id, medico, lower(da));

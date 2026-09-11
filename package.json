@@ -8,9 +8,9 @@
     "start": "next start",
     "create-user": "node --env-file=.env scripts/create-user.mjs",
     "create-studio": "node --env-file=.env scripts/create-studio.mjs",
-    "test:audit": "tsx --test src/lib/audit/prove.test.ts",
+    "test:audit": "tsx --test src/lib/audit/prove.test.ts src/lib/audit/prove-dizionario.test.ts",
     "audit-backfill": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/audit-backfill.ts",
-    "test:app": "NODE_OPTIONS=--conditions=react-server tsx --test src/lib/audit/prove.test.ts src/lib/prove-verifica.test.ts src/lib/prove-terapia.test.ts"
+    "test:app": "NODE_OPTIONS=--conditions=react-server tsx --test src/lib/audit/prove.test.ts src/lib/prove-verifica.test.ts src/lib/prove-terapia.test.ts src/lib/audit/prove-dizionario.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

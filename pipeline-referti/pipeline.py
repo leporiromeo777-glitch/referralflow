@@ -189,6 +189,15 @@ def _medico_da_nome(nome_file: str) -> str | None:
     return m.group(1) if m else None
 
 
+def _file_dizionario_piattaforma(mid: str | None) -> Path | None:
+    """correzioni-<medico>-piattaforma.json accanto allo script: le voci
+    confermate dall'admin nel cruscotto, riscritte dal servizio. Solo per id
+    di medico ben formati (mai percorsi)."""
+    if not mid or not re.fullmatch(r"[a-z0-9-]{1,40}", str(mid)):
+        return None
+    return Path(__file__).resolve().parent / f"correzioni-{mid}-piattaforma.json"
+
+
 def _file_medico(mid: str | None, nome: str) -> Path | None:
     """Percorso del file per-medico (vocabolario/correzioni) accanto allo
     script, se il profilo lo prevede e il file esiste."""
@@ -264,9 +273,13 @@ def contesto_medico(mid: str | None) -> str:
     farmaci = prof.get("farmaci_frequenti") or []
     if farmaci:
         righe.append("FARMACI CHE PRESCRIVE PIÙ SPESSO (nome commerciale e principio, come vanno scritti): " + ", ".join(str(f) for f in farmaci)[:800] + ".")
-    diz = _file_medico(prof["id"], "correzioni")
     forme: list[str] = []
-    if diz and diz.is_file():
+    # Il dizionario del medico più le voci confermate nel cruscotto.
+    # Prima le voci del cruscotto (poche e recenti), poi il file del medico:
+    # la riga ha un tetto e le ultime voci di un dizionario lungo si perdono.
+    for diz in (_file_dizionario_piattaforma(prof["id"]), _file_medico(prof["id"], "correzioni")):
+        if not diz or not diz.is_file():
+            continue
         try:
             d = json.loads(diz.read_text(encoding="utf-8"))
             for sez in ("termini_clinici", "linguaggio_comune"):
@@ -1955,6 +1968,11 @@ def carica_sostituzioni(medico: str | None = None) -> list[tuple[re.Pattern, str
     di chiave: è come pronuncia LUI."""
     config = json.loads(PERCORSO_CORREZIONI.read_text(encoding="utf-8"))
     strati = [PERCORSO_CORREZIONI_LOCALI]
+    # Voci confermate dall'admin nel cruscotto Qualità AI (2026-09-11),
+    # scritte da sincronizza_dizionario(): tra le locali e il file del medico.
+    piattaforma = _file_dizionario_piattaforma(medico)
+    if piattaforma is not None and piattaforma.is_file():
+        strati.append(piattaforma)
     diz_medico = _file_medico(medico, "correzioni")
     if diz_medico:
         strati.append(diz_medico)
@@ -8082,6 +8100,71 @@ def pubblica_medici() -> None:
         log.warning("fase=medici esito=rinviato")
 
 
+_DIZIONARIO_IMPRONTA: str = ""
+_DIZIONARIO_RIPROVA_DOPO = 0.0  # una lettura ogni 10 minuti
+
+
+def scrivi_dizionario_piattaforma(voci: dict) -> int:
+    """Scrive correzioni-<medico>-piattaforma.json per ogni medico presente
+    in `voci` ({medico: {da: a}}) e svuota i file dei medici assenti (voce
+    tolta dal cruscotto = via anche qui). Mai cifre. Torna le voci scritte."""
+    base = Path(__file__).resolve().parent
+    n = 0
+    presenti: set[str] = set()
+    for mid, coppie in (voci or {}).items():
+        p = _file_dizionario_piattaforma(str(mid))
+        if p is None or not isinstance(coppie, dict):
+            continue
+        pulite = {str(k).strip(): str(v).strip() for k, v in coppie.items()
+                  if str(k).strip() and str(v).strip() and not any(c.isdigit() for c in str(k) + str(v))}
+        contenuto = json.dumps({
+            "_origine": "voci confermate dall'admin nel cruscotto Qualità AI della piattaforma; "
+                        "il servizio riscrive questo file a ogni sincronizzazione: non modificarlo a mano",
+            "linguaggio_comune": pulite,
+        }, ensure_ascii=False, indent=2) + "\n"
+        tmp = p.with_suffix(".tmp")
+        tmp.write_text(contenuto, encoding="utf-8")
+        tmp.replace(p)
+        presenti.add(p.name)
+        n += len(pulite)
+    for vecchio in base.glob("correzioni-*-piattaforma.json"):
+        if vecchio.name not in presenti:
+            vecchio.write_text(json.dumps({"_origine": "nessuna voce confermata", "linguaggio_comune": {}}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return n
+
+
+def sincronizza_dizionario() -> None:
+    """Legge dalla piattaforma le voci di dizionario confermate dall'admin
+    (GET /api/referti/dizionario, token referti) e le scrive nei file
+    per-medico. Best-effort, ogni 10 minuti; solo conteggi nei log."""
+    global _DIZIONARIO_IMPRONTA, _DIZIONARIO_RIPROVA_DOPO
+    if not FLOW_URL or not FLOW_TOKEN or time.monotonic() < _DIZIONARIO_RIPROVA_DOPO:
+        return
+    _DIZIONARIO_RIPROVA_DOPO = time.monotonic() + 600
+    try:
+        req = urllib.request.Request(
+            FLOW_URL + "/api/referti/dizionario", method="GET",
+            headers={"Authorization": f"Bearer {FLOW_TOKEN}"})
+        with urllib.request.urlopen(req, timeout=FLOW_TIMEOUT_S) as r:
+            dati = json.loads(r.read().decode("utf-8"))
+    except Exception:
+        log.warning("fase=dizionario esito=rinviato")
+        return
+    voci = dati.get("voci") if isinstance(dati, dict) else None
+    if not isinstance(voci, dict):
+        return
+    impronta = json.dumps(voci, sort_keys=True, ensure_ascii=False)
+    if impronta == _DIZIONARIO_IMPRONTA:
+        return
+    try:
+        n = scrivi_dizionario_piattaforma(voci)
+    except OSError:
+        log.warning("fase=dizionario esito=scrittura_fallita")
+        return
+    _DIZIONARIO_IMPRONTA = impronta
+    log.info("fase=dizionario esito=sincronizzato medici=%d voci=%d", len(voci), n)
+
+
 def _audio_id_da_nome(nome: str) -> str | None:
     """piattaforma-[visita-][medico-<id>--]<uuid>.<ext> → <uuid>; altrimenti None."""
     if not nome.startswith(_PREFISSO_PIATTAFORMA):
@@ -8308,6 +8391,8 @@ def servizio(sostituzioni, controlli) -> int:
             invia_bozze(cartelle)
             # Elenco dei medici che dettano alla piattaforma (solo se cambiato).
             pubblica_medici()
+            # Voci di dizionario confermate nel cruscotto (ogni 10 minuti).
+            sincronizza_dizionario()
             # Dopo l'invio: prendi eventuali dettati caricati dalla pagina
             # Referti (drag & drop). Al giro dopo entrano nella catena normale.
             scarica_coda(cartelle)

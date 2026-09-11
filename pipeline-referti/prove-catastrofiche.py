@@ -555,6 +555,29 @@ def _prova_31() -> None:
     assert "{contesto_medico}" in m.PROMPT_COERENZA and "{testo}" in m.PROMPT_COERENZA
 
 
+@caso("32 · dizionario dalla piattaforma: file per medico letto dal dizionario, mai cifre, svuotato se tolto")
+def _prova_32() -> None:
+    p = m._file_dizionario_piattaforma("moccetti")
+    assert p is not None and p.name == "correzioni-moccetti-piattaforma.json"
+    assert m._file_dizionario_piattaforma("../x") is None and m._file_dizionario_piattaforma(None) is None
+    esisteva = p.is_file()
+    vecchio = p.read_text(encoding="utf-8") if esisteva else None
+    try:
+        n = m.scrivi_dizionario_piattaforma({"moccetti": {"tucarografico di prova": "elettrocardiografico", "dose 5": "x"}, "../y": {"a": "b"}})
+        assert n == 1, n
+        sost = m.carica_sostituzioni("moccetti")
+        testo, k = m.applica_correzioni("Tracciato tucarografico di prova normale.", sost)
+        assert k >= 1 and "elettrocardiografico" in testo, testo
+        assert "tucarografico di prova" in m.contesto_medico("moccetti")
+        m.scrivi_dizionario_piattaforma({})
+        assert json.loads(p.read_text(encoding="utf-8"))["linguaggio_comune"] == {}
+    finally:
+        if esisteva and vecchio is not None:
+            p.write_text(vecchio, encoding="utf-8")
+        elif p.is_file():
+            p.unlink()
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0

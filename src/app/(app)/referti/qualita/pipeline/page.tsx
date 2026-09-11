@@ -6,7 +6,8 @@ import { query } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { mediaMobile, statistiche, outlier } from '@/lib/audit/metriche';
 import { registraRilascio } from '@/lib/audit/lineage';
-import { annotaRilascio } from './actions';
+import { proposteDizionario } from '@/lib/audit/dizionario';
+import { annotaRilascio, decidiVoceDizionario } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -123,6 +124,26 @@ export default async function QualitaPipeline({ searchParams }: { searchParams: 
   const latenze = await query<{ step_name: string; media_ms: number; n: number }>(
     `select s.step_name, avg(s.duration_ms)::int as media_ms, count(*)::int as n from audit.pipeline_steps s join audit.pipeline_runs r on r.id = s.run_id
       where r.studio_id = $1 and r.status = 'SUCCESS' and r.created_at > now() - interval '90 days' and s.duration_ms > 0 group by s.step_name order by media_ms desc limit 12`, [studioId]);
+
+  // ——— Proposte di dizionario dalle correzioni umane (11.9.2026) ———
+  // Dalle operazioni REPLACE della segretaria (ultimi 180 giorni, tutti i
+  // medici, senza i filtri della pagina) alle coppie ricorrenti; lo stato
+  // (confermata/rifiutata) viene dalla tabella referti_dizionario.
+  const modifiche = await query<{ medico: string | null; bozza_id: string; created_at: string; diff: unknown }>(
+    `select medico, bozza_id::text, created_at::text, diff from audit.human_edits
+      where studio_id = $1 and editor_role = 'SECRETARY' and created_at > now() - interval '180 days' and medico is not null`, [studioId]);
+  const decise = await query<{ medico: string; da: string; a: string; stato: string; occorrenze: number; deciso_at: string }>(
+    `select medico, da, a, stato, occorrenze, deciso_at::text from referti_dizionario where studio_id = $1 order by medico, da`, [studioId]);
+  const decisa = (medico: string, da: string) => decise.find((d) => d.medico === medico && d.da.toLowerCase() === da.toLowerCase());
+  const proposteTutte = proposteDizionario(modifiche).filter((p) => !decisa(p.medico, p.da));
+  // In vista normale: le ricorrenti e, tra quelle viste una volta sola, i
+  // termini medici, l'ortografia, i farmaci e la grammatica (sui primi
+  // referti veri: 19 proposte, 1 ricorrente, 12 di categoria «altro»).
+  const proposte = searchParams.dizionario === 'tutte'
+    ? proposteTutte
+    : proposteTutte.filter((p) => p.occorrenze >= 2 || ['medical_terminology', 'spelling', 'drug', 'grammar'].includes(p.categoria));
+  const confermate = decise.filter((d) => d.stato === 'confermata');
+  const rifiutate = decise.filter((d) => d.stato === 'rifiutata').length;
 
   // ——— Grafico ———
   const W = 960, H = 320, PL = 40, PR = 16, PT = 26, PB = 40;
@@ -262,6 +283,47 @@ export default async function QualitaPipeline({ searchParams }: { searchParams: 
           </div>
         </>
       )}
+
+      <div className="card" id="dizionario">
+        <h2>Che cosa insegnano le correzioni</h2>
+        <p className="muted small" style={{ marginTop: 0 }}>
+          Le parole che la segretaria corregge allo stesso modo, referto dopo referto, sono errori d’ascolto stabili della catena
+          («tucarografico» → «elettrocardiografico»). Qui sono proposte: chi conferma le mette nel dizionario del medico, e da lì
+          la catena le corregge da sola nei dettati futuri. Conferma solo errori d’ascolto ricorrenti, mai cambiamenti di senso clinico
+          (quelli non compaiono) né correzioni che valgono solo in una frase. Niente entra da solo.
+        </p>
+        {proposte.length === 0 ? (
+          <p className="muted">Nessuna proposta nuova{proposteTutte.length ? ' (le altre sono già decise)' : ''}. La lista si riempie con le conferme della segretaria.</p>
+        ) : (
+          <table className="aq-tab"><thead><tr><th>medico</th><th>dettato trascritto così</th><th>la segretaria scrive</th><th>volte</th><th></th></tr></thead>
+            <tbody>{proposte.slice(0, 40).map((p) => (
+              <tr key={`${p.medico} ${p.da}`}>
+                <td>{p.medico}</td>
+                <td><code>{p.da}</code></td>
+                <td><code>{p.a}</code>{p.alternative.length > 0 && <span className="muted small"> (altre volte: {p.alternative.map((x) => `«${x}»`).join(', ')})</span>}</td>
+                <td>{p.occorrenze}<span className="muted small"> in {p.bozze} {p.bozze === 1 ? 'referto' : 'referti'}</span></td>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  <form action={decidiVoceDizionario} style={{ display: 'inline-flex', gap: 6 }}>
+                    <input type="hidden" name="medico" value={p.medico} /><input type="hidden" name="da" value={p.da} /><input type="hidden" name="a" value={p.a} /><input type="hidden" name="occorrenze" value={p.occorrenze} />
+                    <button className="btn btn-small btn-primary" name="azione" value="conferma" type="submit">Metti nel dizionario</button>
+                    <button className="btn btn-small btn-ghost" name="azione" value="rifiuta" type="submit">Non è un errore d’ascolto</button>
+                  </form>
+                </td>
+              </tr>
+            ))}</tbody></table>
+        )}
+        {confermate.length > 0 && (
+          <details style={{ marginTop: 10 }}>
+            <summary className="sez-summary">Voci confermate ({confermate.length}){rifiutate ? ` · scartate ${rifiutate}` : ''}</summary>
+            <table className="aq-tab"><thead><tr><th>medico</th><th>da</th><th>a</th><th>quando</th><th></th></tr></thead>
+              <tbody>{confermate.map((d) => (
+                <tr key={`${d.medico} ${d.da}`}><td>{d.medico}</td><td><code>{d.da}</code></td><td><code>{d.a}</code></td><td>{dataCh(d.deciso_at)}</td>
+                  <td><form action={decidiVoceDizionario}><input type="hidden" name="medico" value={d.medico} /><input type="hidden" name="da" value={d.da} /><input type="hidden" name="a" value={d.a} /><button className="btn btn-small btn-ghost" name="azione" value="togli" type="submit">Togli</button></form></td></tr>
+              ))}</tbody></table>
+            <p className="muted small">Il servizio sul Mac dello studio legge queste voci ogni dieci minuti e le scrive nel file correzioni-&lt;medico&gt;-piattaforma.json: valgono dal dettato successivo.</p>
+          </details>
+        )}
+      </div>
 
       <details className="card">
         <summary className="btn">Filtra per periodo, medico o versione della catena{filtriAttivi ? ' · filtri attivi' : ''}</summary>
