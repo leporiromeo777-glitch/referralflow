@@ -494,6 +494,7 @@ def _prova_29() -> None:
     assert righe[1].endswith("2.5 mg 0-0-1/2-0"), righe[1]
     motivi = " ".join(d["motivo"] for d in dubbi)
     assert "sospeso" in motivi and "numero non presente" in motivi, dubbi
+    assert m.sospesi_terapia(voci) == ["VALSARTAN"], m.sospesi_terapia(voci)
 
 
 @caso("30 · arbitro informato: contesto, parole pesanti, A vuota inserita, numeri e B vuota alla persona")

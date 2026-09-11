@@ -14,6 +14,8 @@ import { RevisioneGuidata, type StatoRevisione } from './RevisioneGuidata';
 import { inizioRevisione } from '@/lib/audit/revisione';
 import RiorganizzaAI from './RiorganizzaAI';
 import { formatoPerBozza } from '@/lib/referti-medici';
+import { estraiTerapia } from '@/lib/referti-lettera';
+import { fondiTerapia } from '@/lib/referti-terapia';
 import { RiascoltaChip } from '../RiascoltaChip';
 import { tempoDiFrase } from '@/lib/referti-tempi';
 
@@ -28,7 +30,7 @@ type Allarme = { campo?: string; valore?: unknown; intervallo?: string; stato?: 
 
 type Payload = {
   testo_corretto: string;
-  terapia?: { righe?: string[]; dubbi?: { riga: string; motivo: string }[]; fonte?: string } | null;
+  terapia?: { righe?: string[]; voci?: unknown[]; sospesi?: string[]; dubbi?: { riga: string; motivo: string }[]; fonte?: string } | null;
   riorganizzazione?: { formato?: string; at?: string; verifica?: { non_supportate: { frase: string; motivo: string }[]; omesse: { frase: string; motivo: string }[]; modello?: string } | null };
   note_segreteria?: string[];
   campi_estratti: Record<string, unknown>;
@@ -486,25 +488,45 @@ export default async function RefertoBozza({
           )}
         </div>
       )}
-      {/* Terapia dal dettato (9.9.2026): il blocco «Terapia:» estratto dalla
-          catena, con i dubbi delle guardie. Entra nella lettera impaginata. */}
-      {inBozza && p.terapia && (
-        <div className="card">
-          <h2>Terapia dal dettato</h2>
-          <p className="muted small" style={{ marginTop: 0 }}>
-            Righe estratte dal dettato nel formato della segretaria: entrano nella lettera con «Impagina come lettera».
-            Ogni numero è stato controllato contro il dettato; i nomi contro l’elenco Swissmedic.
-          </p>
-          {Array.isArray(p.terapia.righe) && p.terapia.righe.length > 0 && (
-            <pre className="aq-testo" style={{ maxHeight: 220 }}>{'Terapia:\n' + p.terapia.righe.join('\n')}</pre>
-          )}
-          {Array.isArray(p.terapia.dubbi) && p.terapia.dubbi.length > 0 && (
-            <ul>{p.terapia.dubbi.map((d: { riga: string; motivo: string }, i: number) => (
-              <li key={i}><mark className="aq-tolto">{d.riga}</mark> <span className="muted small">— {d.motivo}</span></li>
-            ))}</ul>
-          )}
-        </div>
-      )}
+      {/* Terapia per la lettera (9.9.2026, secondo tempo 11.9.2026): le voci
+          estratte dal dettato fuse dal codice con il blocco «Terapia:» della
+          lettera precedente del paziente; ogni riga dice da dove viene. Entra
+          nella lettera con «Impagina come lettera». */}
+      {inBozza && p.terapia && (() => {
+        const fusa = fondiTerapia(precedente?.testo_finale ? estraiTerapia(precedente.testo_finale) : [], p.terapia, row.testo_finale ?? p.testo_corretto ?? '');
+        const etichetta: Record<string, string> = { precedente: 'dalla lettera precedente', dettato: 'dettata', modificata: 'modificata nel dettato', nuova: 'nuova nel dettato' };
+        return (
+          <div className="card">
+            <h2>Terapia per la lettera</h2>
+            <p className="muted small" style={{ marginTop: 0 }}>
+              {fusa.modo === 'fusione' && 'Il dettato porta solo le modifiche: qui sono applicate al blocco «Terapia:» della lettera precedente del paziente. '}
+              {fusa.modo === 'dettato' && 'Righe estratte dal dettato nel formato della segretaria. '}
+              {fusa.modo === 'precedente' && 'Il dettato non parla della terapia: si riprende quella della lettera precedente. '}
+              Ogni numero è stato controllato contro il dettato; i nomi contro l’elenco Swissmedic. Entra nella lettera con «Impagina come lettera».
+            </p>
+            {fusa.righe.length > 0 && (
+              <ul className="seg-note-list">
+                {fusa.righe.map((r, i) => (
+                  <li key={i}><code>{r.riga}</code> <span className="muted small">— {etichetta[r.fonte]}</span></li>
+                ))}
+              </ul>
+            )}
+            {fusa.sospese.length > 0 && (
+              <ul>{fusa.sospese.map((r, i) => (
+                <li key={i}><mark className="aq-tolto">{r}</mark> <span className="muted small">— sospesa nel dettato: tolta dal blocco</span></li>
+              ))}</ul>
+            )}
+            {(fusa.avvisi.length > 0 || (Array.isArray(p.terapia.dubbi) && p.terapia.dubbi.length > 0)) && (
+              <ul>
+                {fusa.avvisi.map((a, i) => <li key={'a' + i}>⚠️ {a}</li>)}
+                {(p.terapia.dubbi ?? []).map((d: { riga: string; motivo: string }, i: number) => (
+                  <li key={'d' + i}><mark className="aq-tolto">{d.riga}</mark> <span className="muted small">— {d.motivo}</span></li>
+                ))}
+              </ul>
+            )}
+          </div>
+        );
+      })()}
       {/* Controllo della lettera (9.9.2026): esito del confronto tra il testo
           di partenza e la lettera impaginata, in entrambe le direzioni. */}
       {inBozza && p.riorganizzazione?.verifica && (

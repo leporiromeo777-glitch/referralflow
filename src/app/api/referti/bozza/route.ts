@@ -22,6 +22,20 @@ const MAX_LISTA = 500;
 // Manifesto di sicurezza della catena (Ricerca 18 §16): certificato tecnico
 // del percorso (testimoni, ripieghi, conteggi dei fatti critici). Solo
 // etichette e numeri: mai testo clinico.
+function terapiaPulita(t: unknown): Record<string, unknown> | null {
+  if (!t || typeof t !== 'object' || Array.isArray(t)) return null;
+  const o = t as Record<string, unknown>;
+  const str = (v: unknown, n: number) => (typeof v === 'string' ? v.slice(0, n) : '');
+  const righe = (Array.isArray(o.righe) ? o.righe : []).filter((x): x is string => typeof x === 'string' && x.trim() !== '').slice(0, 15).map((x) => x.slice(0, 160));
+  const voci = (Array.isArray(o.voci) ? o.voci : []).filter((v): v is Record<string, unknown> => !!v && typeof v === 'object').slice(0, 15)
+    .map((v) => ({ nome: str(v.nome, 80), dose: str(v.dose, 30), posologia: str(v.posologia, 60), stato: str(v.stato, 20), nota: str(v.nota, 120), trovato: v.trovato === true }));
+  const sospesi = (Array.isArray(o.sospesi) ? o.sospesi : []).filter((x): x is string => typeof x === 'string' && x.trim() !== '').slice(0, 15).map((x) => x.slice(0, 80));
+  const dubbi = (Array.isArray(o.dubbi) ? o.dubbi : []).filter((d): d is Record<string, unknown> => !!d && typeof d === 'object' && typeof d.riga === 'string').slice(0, 20)
+    .map((d) => ({ riga: str(d.riga, 160), motivo: str(d.motivo, 160) }));
+  if (!righe.length && !dubbi.length && !sospesi.length) return null;
+  return { righe, voci, sospesi, dubbi, fonte: 'dettato' };
+}
+
 function manifestoPulito(m: unknown): Record<string, unknown> {
   if (!m || typeof m !== 'object' || Array.isArray(m)) return {};
   const out: Record<string, unknown> = {};
@@ -270,6 +284,11 @@ export async function POST(req: NextRequest) {
       ? body.ombra_etichetta.toLowerCase().replace(/[^a-z0-9.-]/g, '').slice(0, 40)
       : '',
     manifesto: manifestoPulito(body?.manifesto),
+    // Terapia strutturata dal dettato (tappa «terapia», profili con
+    // terapia_strutturata): righe già nel formato della segretaria, voci con
+    // stato, sospesi, dubbi delle guardie. Fino all'11.9.2026 mancava da
+    // questa lista e non arrivava mai in tabella.
+    terapia: terapiaPulita(body?.terapia),
     medico: medicoPulito(body?.medico),
     // Data di registrazione del dettato (header del dittafono o metadati
     // audio): è la data della lettera. Solo ISO breve.

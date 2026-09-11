@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
   const studioId = session.studioId;
   // Formato del medico che ha dettato (rapporto a sezioni o lettera) e, per
   // la lettera, saluto/firma dal profilo e terapia dalla lettera precedente.
-  const { formato, opzioni, terapiaRipresa } = await opzioniRiorganizzazione(studioId, id, b.payload, b.campi_confermati, testo);
+  const { formato, opzioni, terapiaRipresa, terapia } = await opzioniRiorganizzazione(studioId, id, b.payload, b.campi_confermati, testo);
   const avviato = avviaRiorganizzazione(id, testo, async (nuovo) => {
     // Controllo della lettera (9.9.2026): il modello esterno confronta il
     // testo di partenza con la lettera in entrambe le direzioni. Solo
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       `update referti_bozze set testo_finale = $3,
               payload = jsonb_set(payload, '{riorganizzazione}', $4::jsonb)
         where id = $1 and studio_id = $2 and stato = 'bozza'`,
-      [id, studioId, nuovo, JSON.stringify({ formato, terapia_ripresa: terapiaRipresa, at: new Date().toISOString(), verifica })]
+      [id, studioId, nuovo, JSON.stringify({ formato, terapia_ripresa: terapiaRipresa, terapia, at: new Date().toISOString(), verifica })]
     );
     if (verifica) {
       try {

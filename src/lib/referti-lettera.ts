@@ -126,12 +126,8 @@ export function estraiTerapia(lettera: string): string[] {
   return out;
 }
 
-// Il dettato contiene già una terapia (farmaci con dosaggio)? Se no, la
-// lettera riprende quella della lettera precedente (prassi della segretaria:
-// ogni lettera porta la terapia in corso, anche se il medico non la ridetta).
-export function dettatoConTerapia(testo: string): boolean {
-  return /^\s*terapia\s*:?\s*$/im.test(testo) || (testo.match(/\b\d+(?:[.,]\d+)?\s?(?:mg|mcg|µg|ml|ui)\b/gi) ?? []).length >= 2;
-}
+// terapiaInvariata / dettatoConTerapia: in referti-terapia.ts (pure), riesportate qui.
+export { terapiaInvariata, dettatoConTerapia } from './referti-terapia';
 
 // Il nome estratto come destinatario è davvero il destinatario? Se compare
 // nel testo solo come chi ha ESEGUITO qualcosa («eseguita dal dottor X»,
@@ -167,10 +163,6 @@ export function destinatarioDalSaluto(testo: string): { nome: string; femminile:
   if (senzaTitoli.length < 3 || _GENERICI.test(senzaTitoli)) return null;
   const femminile = /^(cara|egregia|stimata)$/.test(apertura) || /\b(dott\.?ssa|dr\.?ssa|dottoressa|signora|prof\.?ssa)\b/i.test(nome);
   return { nome: senzaTitoli, femminile };
-}
-
-export function terapiaInvariata(testo: string): boolean {
-  return /terapia[^.\n]{0,40}(rimane|resta|è|e')\s+invariata|terapia\s+invariata|senza modifiche (alla|della) terapia/i.test(testo);
 }
 
 // L'ultima lettera CONFERMATA dello stesso paziente (nome + data di nascita

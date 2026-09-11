@@ -33,7 +33,7 @@ CASI = [
      [{"nome": "Valsartan", "dose": "160 mg", "posologia": "", "stato": "sospeso", "nota": ""},
       {"nome": "Temesta", "dose": "1 mg", "posologia": "al bisogno", "stato": "in corso", "nota": ""},
       {"nome": "Pantoprazolo", "dose": "20 mg", "posologia": "al mattino", "stato": "in corso", "nota": ""}],
-     ["TEMESTA 1 mg al bisogno", "PANTOPRAZOLO 20 mg 1-0-0-0"]),
+     ["TEMESTA 1 mg al bisogno", "PANTOPRAZOLO 20 mg 1-0-0-0"], None, ["VALSARTAN"]),
     # Caso delle GUARDIE: le voci simulate portano una dose che nel dettato non
     # c'è (2.5 invece di 5) e la riga deve cadere; col modello vero, che estrae
     # bene, la riga giusta è invece attesa.
@@ -45,6 +45,23 @@ CASI = [
      "Il paziente sta bene e nega sintomi. Controllo fra 12 mesi.",
      [],
      []),
+    # Secondo tempo (11.9.2026): il medico detta SOLO le modifiche. Le righe
+    # attese sono quelle dettate; i sospesi (quinto elemento) li toglie l'app
+    # dal blocco della lettera precedente.
+    ("solo modifiche: sospeso e dose aumentata",
+     "Sospendo il Valsartan e aumento il Concor a 5 mg la sera. Per il resto terapia invariata.",
+     [{"nome": "Valsartan", "dose": "", "posologia": "", "stato": "sospeso", "nota": ""},
+      {"nome": "Concor", "dose": "5 mg", "posologia": "la sera", "stato": "modificato", "nota": ""}],
+     ["CONCOR 5 mg 0-0-1-0"], None, ["VALSARTAN"]),
+    ("invariata più un farmaco nuovo",
+     "La terapia resta invariata, aggiungo Ezetimibe 10 mg al mattino.",
+     [{"nome": "Ezetimibe", "dose": "10 mg", "posologia": "al mattino", "stato": "nuovo", "nota": ""}],
+     ["EZETIMIB 10 mg 1-0-0-0"], None, []),
+    ("sostituzione: uno sospeso, uno nuovo",
+     "Sostituisco il Xarelto con Eliquis 5 mg mattina e sera per la migliore tollerabilità.",
+     [{"nome": "Xarelto", "dose": "", "posologia": "", "stato": "sospeso", "nota": ""},
+      {"nome": "Eliquis", "dose": "5 mg", "posologia": "mattina e sera", "stato": "nuovo", "nota": ""}],
+     ["ELIQUIS 5 mg 1-0-1-0"], None, ["XARELTO"]),
 ]
 
 
@@ -52,15 +69,18 @@ def confronta(nome_ctrl, estrai, col_modello=False):
     ok = 0
     for caso in CASI:
         nome, dettato, voci_perfette, attese = caso[:4]
-        if col_modello and len(caso) > 4:
+        if col_modello and len(caso) > 4 and caso[4] is not None:
             attese = caso[4]
+        sospesi_attesi = caso[5] if len(caso) > 5 else []
         voci = estrai(dettato, voci_perfette)
         righe, _t, dubbi = m.righe_terapia(voci, dettato)
+        sospesi = m.sospesi_terapia(voci)
         esatte = [r for r in attese if r in righe]
-        esito = "OK " if righe == attese else "..."
-        ok += righe == attese
-        print(f"  {esito} {nome:32} attese {len(attese)} esatte {len(esatte)} in più {len(righe) - len(esatte)} dubbi {len(dubbi)}")
-        if righe != attese:
+        giusto = righe == attese and sospesi == sospesi_attesi
+        esito = "OK " if giusto else "..."
+        ok += giusto
+        print(f"  {esito} {nome:40} attese {len(attese)} esatte {len(esatte)} in più {len(righe) - len(esatte)} dubbi {len(dubbi)} sospesi {sospesi}")
+        if not giusto:
             print(f"        ottenute: {righe}")
     print(f"{nome_ctrl}: {ok}/{len(CASI)} casi esatti\n")
 

@@ -4276,6 +4276,18 @@ def righe_terapia(voci: list, dettato: str) -> tuple[list[str], list[dict], list
     return righe, tenute, dubbi
 
 
+def sospesi_terapia(voci: list) -> list[str]:
+    """I farmaci che il dettato SOSPENDE (nome canonico): il secondo tempo
+    nell'app li toglie dal blocco della lettera precedente."""
+    fuori: list[str] = []
+    for v in (voci or [])[:20]:
+        if isinstance(v, dict) and str(v.get("stato", "")).strip().lower() == "sospeso" and str(v.get("nome", "")).strip():
+            nome = _nome_farmaco_canonico(str(v["nome"]))[0]
+            if nome and nome not in fuori:
+                fuori.append(nome)
+    return fuori
+
+
 def estrai_terapia(finale: str, file_id: str) -> dict | None:
     """Tappa «terapia»: modello esterno (testo pseudonimizzato) + guardie di
     codice. None se il dettato non parla di terapia o se il modello tace."""
@@ -4302,11 +4314,12 @@ def estrai_terapia(finale: str, file_id: str) -> dict | None:
 
     voci = [{k: rip(str(v.get(k, ""))) for k in ("nome", "dose", "posologia", "stato", "nota")} for v in voci if isinstance(v, dict)]
     righe, tenute, dubbi = righe_terapia(voci, finale)
-    log.info("fase=terapia file=%s esito=ok voci=%d righe=%d dubbi=%d durata=%.1fs",
-             file_id, len(voci), len(righe), len(dubbi), time.monotonic() - inizio)
-    if not righe and not dubbi:
+    sospesi = sospesi_terapia(voci)
+    log.info("fase=terapia file=%s esito=ok voci=%d righe=%d sospesi=%d dubbi=%d durata=%.1fs",
+             file_id, len(voci), len(righe), len(sospesi), len(dubbi), time.monotonic() - inizio)
+    if not righe and not dubbi and not sospesi:
         return None
-    return {"righe": righe, "voci": tenute, "dubbi": dubbi, "fonte": "dettato"}
+    return {"righe": righe, "voci": tenute, "sospesi": sospesi, "dubbi": dubbi, "fonte": "dettato"}
 
 
 def avvocato_esterno(bozza: str, grezzo: str, file_id: str) -> list[dict] | None:
