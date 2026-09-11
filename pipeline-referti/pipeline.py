@@ -2922,9 +2922,28 @@ ANTONIMI_CLINICI = list(ANTONIMI_CLINICI) + [
     ("destri", "sinistri"), ("dx", "sx"), ("dx", "sn"),
 ]
 
+
+def _prefisso_privativo(x: str, y: str) -> bool:
+    """«asintomatica» ↔ «sintomatico», «incompleto» ↔ «completo», «irregolare»
+    ↔ «regolare»: stessa radice con un prefisso negativo da una parte sola."""
+    def radice(w: str) -> str:
+        return re.sub(r"[aeiou]+$", "", (w or "").strip().lower())
+    rx, ry = radice(x), radice(y)
+    if not rx or not ry or rx == ry:
+        return False
+    for pre in ("a", "in", "im", "ir", "il", "dis", "non"):
+        if rx == pre + ry or ry == pre + rx:
+            return len(rx) >= 6 and len(ry) >= 5
+    return False
+
 def _ribaltamento_clinico(da: str, a: str) -> bool:
     """Vero se la coppia scambia due opposti clinici (o un prefisso
     iper-/ipo- sullo stesso stelo, es. ipertensione → ipotensione)."""
+    # Prefisso privativo (2026-09-12, primo referto vero: il glossario fonetico
+    # ha trasformato «asintomatica» in «sintomatico»): a-/in-/im-/ir-/dis-/non
+    # davanti alla stessa radice ribaltano il senso, qualunque sia la desinenza.
+    if _prefisso_privativo(da, a):
+        return True
     tda = set(re.findall(r"[a-zà-ÿ]+", da.lower()))
     ta = set(re.findall(r"[a-zà-ÿ]+", a.lower()))
     for x, y in ANTONIMI_CLINICI:

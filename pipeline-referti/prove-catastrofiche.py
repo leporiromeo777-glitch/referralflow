@@ -652,6 +652,20 @@ def _prova_34() -> None:
         m._config_esterno = vecchio
 
 
+@caso("35 · prefisso privativo: «asintomatica» non diventa «sintomatico» né dal glossario fonetico né dalla lista AI")
+def _prova_35() -> None:
+    assert m._prefisso_privativo("asintomatica", "sintomatico") and m._prefisso_privativo("regolare", "irregolare")
+    assert m._prefisso_privativo("completo", "incompleto") and not m._prefisso_privativo("aorta", "porta")
+    assert not m._prefisso_privativo("atrio", "trio") and not m._prefisso_privativo("pressoria", "pressorio")
+    assert m._ribaltamento_clinico("asintomatica", "sintomatico") is True
+    m._imposta_corsa("moccetti")
+    try:
+        t, n = m.riparazioni_glossario("Ricordo che la paziente è asintomatica. Nega sintomatologia.", "prova-35")
+        assert "asintomatica" in t, t
+    finally:
+        m._imposta_corsa(None)
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0

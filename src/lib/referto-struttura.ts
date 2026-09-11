@@ -208,7 +208,7 @@ const PAROLA_PESANTE = new RegExp(
   '^(?:diminuit|ridott|calat|abbassat|bass|aumentat|alzat|elevat|alt|cresciut|peggiorat|miglior|' +
   'stabil|invariat|assent|present|comparso|scomparso|lieve|moderat|sever|grave|marcat|' +
   'significativ|sospes|interrott|ripres|reintrodott|destr|sinistr|bilateral|nessun|senza|negativ|' +
-  'esclus|urgent|immediat|sospett|probabil|possibil|necessari)',
+  'esclus|urgent|immediat|sospett|probabil|possibil|necessari|maggior|minor|frequen|eventualment)',
   'i'
 );
 const MAX_PAROLE_AGGIUNTE = 6;

@@ -35,7 +35,9 @@
     "normo assi cardiaco": "normocardico",
     "normoassicardiaca": "normocardico",
     "normo-assi cardiaca": "normocardico",
-    "all'atto precedente": "alla TAC precedente"
+    "all'atto precedente": "alla TAC precedente",
+    "all'attacco precedente": "alla TAC precedente",
+    "riscontrate all'attacco": "riscontrate alla TAC"
   },
   "linguaggio_comune": {
     "non ritorno sull'analisi": "non ritorno sull'anamnesi",

@@ -94,7 +94,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const dataDettato = dataCh(dettatoIl) || dataCh(b.created_at);
   const dataOggi = dataCh(new Date().toISOString());
   const sigla = siglaDaEmail(b.reviewed_email ?? session.email ?? '');
-  const dataBase = formato === 'lettera' ? dataOggi : dataDettato;
+  // La segretaria data la lettera al giorno del dettato (12 lettere su 12,
+  // visto il 12.9.2026), non al giorno in cui la scarica.
+  const dataBase = dataDettato || dataOggi;
   const data = formato === 'lettera' && sigla ? `${dataBase}/${sigla}` : dataBase;
 
   // Destinatario: nel formato lettera su più righe, con e-mail e specialità
