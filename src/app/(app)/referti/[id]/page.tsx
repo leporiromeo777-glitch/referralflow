@@ -42,6 +42,7 @@ type Payload = {
   divagazioni?: string[];
   frasi_da_chiarire?: { frase: string; proposta: string }[];
   frasi_non_supportate?: { frase: string; motivo: string }[];
+  incoerenze?: { passaggio_a: string; passaggio_b: string; motivo: string }[];
   riparazioni_applicate?: { da: string; a: string }[];
   doppioni_tolti?: { tolta: string; tenuta: string; motivo: string }[];
   doppioni_dubbi?: { frase: string; simile_a: string; motivo: string }[];
@@ -527,6 +528,19 @@ export default async function RefertoBozza({
           </div>
         );
       })()}
+      {/* Coerenza interna (11.9.2026): contraddizioni dentro il referto viste
+          dal modello esterno, con le due citazioni. Solo segnalazioni. */}
+      {inBozza && Array.isArray(p.incoerenze) && p.incoerenze.length > 0 && (
+        <div className="card">
+          <h2>Coerenza interna</h2>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            Passaggi del referto che sembrano contraddirsi. Sono segnalazioni, non correzioni: riascolta e decidi tu.
+          </p>
+          <ul>{p.incoerenze.map((c, i) => (
+            <li key={i}>«{c.passaggio_a}» ↔ «{c.passaggio_b}»{c.motivo ? <span className="muted small"> — {c.motivo}</span> : null}</li>
+          ))}</ul>
+        </div>
+      )}
       {/* Controllo della lettera (9.9.2026): esito del confronto tra il testo
           di partenza e la lettera impaginata, in entrambe le direzioni. */}
       {inBozza && p.riorganizzazione?.verifica && (

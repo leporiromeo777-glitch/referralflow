@@ -4125,6 +4125,96 @@ def omissioni_esterno(bozza: str, grezzo: str, file_id: str) -> list[dict] | Non
     return fuori
 
 
+# ── Coerenza interna del referto (2026-09-11, fase 4 del giro dei prompt) ──
+# Contraddizioni DENTRO lo stesso testo (pressione «diminuita» e poi
+# «aumentata» senza evoluzione, funzione «conservata» con FE bassa, «nega
+# sintomi» e «riferisce dispnea», «terapia invariata» e una dose cambiata).
+# Solo segnalazioni con le due citazioni letterali: mai correzioni. Guardie di
+# codice: entrambi i passaggi devono stare nel testo, distinti, al più 5.
+PROMPT_COERENZA = """{contesto_medico}Sei il revisore finale di un referto cardiologico dettato a voce e trascritto automaticamente. Il testo è pseudonimizzato: i segnaposto come «Persona 1», «[Medico 2]», «[data 3]» sono normali.
+
+Cerca SOLO le contraddizioni INTERNE al testo: due passaggi dello stesso referto che non possono essere veri insieme.
+Sono contraddizioni, per esempio: la stessa grandezza detta «diminuita» e poi «aumentata» senza un'evoluzione nel tempo; «funzione sistolica conservata» insieme a una frazione di eiezione bassa; «nega sintomi» e poi «riferisce dispnea»; «terapia invariata» e poi una sospensione o un cambio di dose presentati come modifica; lateralità diverse per la stessa lesione; un giudizio e una raccomandazione che si escludono («nessuna indicazione a ulteriori accertamenti» e «coronarografia urgente»).
+NON sono contraddizioni: evoluzioni nel tempo («a inizio agosto…, oggi…»), valori diversi in esami o date diverse, «invariata salvo/tranne…», dati mancanti, ripetizioni, questioni di stile.
+
+Per ogni contraddizione cita i DUE passaggi ESATTAMENTE come compaiono nel testo (copia letterale, brevi) e un motivo di una riga.
+Regole obbligatorie: non correggere, non proporre testo; nel dubbio NON segnalare; al massimo 5.
+
+Rispondi SOLO con un oggetto JSON valido:
+{"contraddizioni": [{"passaggio_a": "…", "passaggio_b": "…", "motivo": "…"}]}
+Se non ce ne sono: {"contraddizioni": []}
+
+TESTO:
+{testo}"""
+
+
+def _filtra_incoerenze(voci: list, testo: str) -> list[dict]:
+    """Guardie pure: i due passaggi devono essere citazioni del testo (senza
+    maiuscole e con spazi normalizzati), lunghi almeno 8 caratteri, distinti
+    e in punti diversi; niente coppie doppie; al più 5."""
+    def norm(x: str) -> str:
+        return re.sub(r"\s+", " ", str(x or "")).strip().lower()
+    t = norm(testo)
+    fuori: list[dict] = []
+    viste: set[tuple[str, str]] = set()
+    for v in voci or []:
+        if not isinstance(v, dict):
+            continue
+        a, b = norm(v.get("passaggio_a")), norm(v.get("passaggio_b"))
+        # Almeno due parole per passaggio: una parola sola («diminuiti») non
+        # dice dove sta la contraddizione.
+        if len(a) < 8 or len(b) < 8 or a == b or len(a.split()) < 2 or len(b.split()) < 2:
+            continue
+        ia, ib = t.find(a), t.find(b)
+        if ia < 0 or ib < 0 or ia == ib:
+            continue
+        if (a in b) or (b in a):
+            continue
+        chiave = (a, b) if a < b else (b, a)
+        if chiave in viste:
+            continue
+        viste.add(chiave)
+        fuori.append({"passaggio_a": str(v.get("passaggio_a")).strip()[:300],
+                      "passaggio_b": str(v.get("passaggio_b")).strip()[:300],
+                      "motivo": str(v.get("motivo", "")).strip()[:200]})
+        if len(fuori) >= 5:
+            break
+    return fuori
+
+
+def incoerenze_esterno(testo: str, file_id: str) -> list[dict] | None:
+    """Tappa «coerenza» sul modello esterno (testo pseudonimizzato) con le
+    guardie di codice. None = niente da dire o percorso non disponibile."""
+    inizio = time.monotonic()
+    esito_anon = _anonimizza_per_esterno(testo, file_id, con_mappa=True, riusa=True)
+    if esito_anon is None:
+        return None
+    anon, mappa = esito_anon
+    prompt = (PROMPT_COERENZA.replace("{contesto_medico}", contesto_medico(_CORSA.get("medico")))
+              .replace("{testo}", anon))
+    try:
+        uscita = _chiama_esterno_openai(prompt, file_id)
+    except RuntimeError:
+        log.warning("fase=coerenza file=%s esito=esterno_fallito", file_id)
+        return None
+    dati = _estrai_json(uscita)
+    voci = dati.get("contraddizioni") if isinstance(dati, dict) else None
+    if not isinstance(voci, list):
+        return None
+
+    def rip(x: str) -> str:
+        for segnaposto, vero in mappa.items():
+            x = x.replace(segnaposto, vero)
+        return x
+
+    voci = [{k: rip(str(v.get(k, ""))) for k in ("passaggio_a", "passaggio_b", "motivo")}
+            for v in voci if isinstance(v, dict)]
+    fuori = _filtra_incoerenze(voci, testo)
+    log.info("fase=coerenza file=%s esito=ok proposte=%d tenute=%d durata=%.1fs",
+             file_id, len(voci), len(fuori), time.monotonic() - inizio)
+    return fuori
+
+
 # ── Terapia strutturata dal dettato (2026-09-09, terzo dei prompt mancanti;
 # acceso solo sui profili con `terapia_strutturata`, oggi Moccetti) ─────────
 # La segretaria mette in ogni lettera il blocco «Terapia:» con una riga per
@@ -4263,7 +4353,10 @@ def righe_terapia(voci: list, dettato: str) -> tuple[list[str], list[dict], list
             continue
         schema = posologia_schema(posol)
         riga = " ".join(x for x in (canonico, dose, schema) if x)
-        if nota and nota.lower() not in riga.lower():
+        # La nota entra nella riga solo se è una precisazione di prescrizione
+        # (numero o tempo: «per un mese, poi 150 mg»), non una motivazione
+        # clinica («per la migliore tollerabilità», vista nel banco 11.9.2026).
+        if nota and nota.lower() not in riga.lower() and re.search(r"\d|\b(?:poi|fino|giorn\w*|settiman\w*|mes[ei]|ann[oi]|sospender\w*)\b", nota, re.IGNORECASE):
             riga += f" ({nota})"
         righe.append(riga)
         tenute.append({"nome": canonico, "dose": dose, "posologia": schema, "stato": stato, "nota": nota, "trovato": trovato})
@@ -7824,6 +7917,16 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                     f"ritrovano nel referto: controllali nel primo passo della revisione."]
         except Exception as e:  # noqa: BLE001
             log.warning("fase=omissioni file=%s esito=errore tipo=%s", file_id, type(e).__name__)
+        # Coerenza interna (2026-09-11): contraddizioni dentro il referto,
+        # solo segnalazioni; spenta con coerenza=0 nella config esterna.
+        try:
+            cfg_co = _config_esterno() or {}
+            if _esterno_attivo() == "openai" and cfg_co.get("coerenza", "1") != "0":
+                incoerenze = incoerenze_esterno(finale, file_id) or []
+                payload["incoerenze"] = incoerenze
+                tappa("coerenza", "modello", segnalate=len(incoerenze), trasporto="esterno")
+        except Exception as e:  # noqa: BLE001
+            log.warning("fase=coerenza file=%s esito=errore tipo=%s", file_id, type(e).__name__)
     # Manifesto di sicurezza (Ricerca 18 §16): mai bloccare la consegna.
     try:
         payload["manifesto"] = costruisci_manifesto(

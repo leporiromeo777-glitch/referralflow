@@ -289,6 +289,13 @@ export async function POST(req: NextRequest) {
     // stato, sospesi, dubbi delle guardie. Fino all'11.9.2026 mancava da
     // questa lista e non arrivava mai in tabella.
     terapia: terapiaPulita(body?.terapia),
+    // Coerenza interna (tappa «coerenza», 11.9.2026): contraddizioni dentro
+    // il referto, due citazioni e un motivo. Solo segnalazioni.
+    incoerenze: lista(body?.incoerenze)
+      .filter((v: unknown): v is { passaggio_a: string; passaggio_b: string; motivo?: string } =>
+        !!v && typeof v === 'object' && typeof (v as any).passaggio_a === 'string' && typeof (v as any).passaggio_b === 'string')
+      .slice(0, 5)
+      .map((v) => ({ passaggio_a: v.passaggio_a.slice(0, 300), passaggio_b: v.passaggio_b.slice(0, 300), motivo: typeof v.motivo === 'string' ? v.motivo.slice(0, 200) : '' })),
     medico: medicoPulito(body?.medico),
     // Data di registrazione del dettato (header del dittafono o metadati
     // audio): è la data della lettera. Solo ISO breve.

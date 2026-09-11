@@ -537,6 +537,24 @@ def _prova_30() -> None:
     assert "CONTESTO DEL MEDICO" not in pr0 and "{contesto_medico}" not in pr0
 
 
+@caso("31 · coerenza interna: guardie sulle contraddizioni proposte dal modello")
+def _prova_31() -> None:
+    testo = "I profili pressori risultano diminuiti. La terapia resta invariata. Sospendo il Valsartan per i profili pressori aumentati."
+    voci = [
+        {"passaggio_a": "profili pressori risultano diminuiti", "passaggio_b": "profili pressori aumentati", "motivo": "segno opposto"},
+        {"passaggio_a": "La terapia resta invariata", "passaggio_b": "Sospendo il Valsartan", "motivo": "modifica dichiarata"},
+        {"passaggio_a": "La terapia resta invariata", "passaggio_b": "Sospendo il Valsartan", "motivo": "doppione"},
+        {"passaggio_a": "frase che non c'è", "passaggio_b": "Sospendo il Valsartan", "motivo": "non citazione"},
+        {"passaggio_a": "profili pressori", "passaggio_b": "profili pressori risultano diminuiti", "motivo": "uno dentro l'altro"},
+        {"passaggio_a": "diminuiti", "passaggio_b": "aumentati", "motivo": "troppo corti"},
+    ]
+    fuori = m._filtra_incoerenze(voci, testo)
+    assert len(fuori) == 2, fuori
+    assert fuori[0]["motivo"] == "segno opposto" and fuori[1]["passaggio_b"] == "Sospendo il Valsartan", fuori
+    assert m._filtra_incoerenze([], testo) == [] and m._filtra_incoerenze([None, "x"], testo) == []
+    assert "{contesto_medico}" in m.PROMPT_COERENZA and "{testo}" in m.PROMPT_COERENZA
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0
