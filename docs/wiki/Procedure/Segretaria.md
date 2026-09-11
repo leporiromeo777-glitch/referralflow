@@ -18,14 +18,14 @@ Nella pagina Referti la bozza compare con il nome del paziente (o «Paziente non
 
 ## 3. La revisione guidata (il wizard)
 Segui i passi nell'ordine: ogni passo mostra una cosa sola.
-1. **Passaggi del dettato che mancano nel referto** («omissioni»): riascolta e, se la frase va davvero nel referto, «Inserisci nel testo» (entra già pulita).
-2. **I due motori non concordano**: per ogni punto scegli «Ha ragione A», «Ha ragione B» (entra da sola) o «Nessuno dei due: correggo io». Sono in cima i punti che cambiano il senso (diminuito/aumentato, non, destra/sinistra, numeri).
-3. **Doppioni del parlato**: frasi ripetute tolte dalla catena; «Rimetti» se una serviva.
-4. **Correzioni fatte in automatico**: ognuna si può annullare.
-5. **Frasi non sostenute dal dettato** e **frasi da chiarire**: riascolta e decidi.
-6. **Campi estratti** (paziente, data di nascita, medico destinatario…): correggi ciò che è sbagliato; «non indicato» vuol dire che nel dettato non c'è.
-7. Se un controllo critico è aperto, il sistema chiede una **presa d'atto** prima di andare avanti: è registrata.
-8. **Inserisci nel referto (salva senza confermare)**: il testo rivisto va nella casella «Testo da confermare».
+Prima le parole, poi le frasi: così quando arrivi alle frasi molte sono già a posto.
+1. **I due motori non concordano**: per ogni punto scegli «Ha ragione A», «Ha ragione B» (entra da sola) o «Nessuno dei due: correggo io». Sono in cima i punti che cambiano il senso (diminuito/aumentato, non, destra/sinistra, numeri).
+2. **Correzioni fatte in automatico**: ognuna si può annullare.
+3. **Da controllare subito**: numeri non confermati, passaggi del dettato che mancano nel referto (riascolta e, se la frase va davvero nel referto, «Inserisci nel testo»: entra già pulita), frasi non sostenute dal dettato.
+4. **Frasi da chiarire** e **frasi spente dall'AI**: riascolta e decidi.
+5. **Doppioni del parlato**: frasi ripetute tolte dalla catena; «Rimetti» se una serviva.
+6. **Note per la segreteria** e **campi estratti** (paziente, data di nascita, medico destinatario…): correggi ciò che è sbagliato; «non indicato» vuol dire che nel dettato non c'è.
+7. **Rileggi e conferma**: se un controllo critico è aperto, il sistema chiede una **presa d'atto**, registrata. «Inserisci nel referto (salva senza confermare)» mette il testo rivisto nella casella «Testo da confermare».
 Tutto ciò che fai nel wizard si **salva da solo**: puoi chiudere e riaprire senza perdere il lavoro.
 
 ## 4. Le card sotto il testo

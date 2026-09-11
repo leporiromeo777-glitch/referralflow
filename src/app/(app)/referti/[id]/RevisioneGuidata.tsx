@@ -447,18 +447,22 @@ export function RevisioneGuidata({
   const criticiChiusi = [...fatte].filter((id) => /^(a|r|k|g)\d/.test(id) || (id.startsWith('o') && omesseGravi.some((_, i) => id === `o${i}`))).length;
   const criticiAperti = Math.max(0, criticiTotali - criticiChiusi);
   const gateAttivo = criticiAperti > 0 || (livelloVerifica !== '' && livelloVerifica !== 'pieno');
+  // Ordine (12.9.2026, richiesta utente dopo il primo referto vero): prima le
+  // PAROLE (i due motori che non concordano, le correzioni automatiche), poi
+  // le FRASI (critiche, da chiarire, spente, doppioni): chi sistema le parole
+  // prima trova le frasi già a posto e non le tocca due volte.
+  if (divergenzePesanti.length > 0)
+    passi.push({ chiave: 'divergenze', titolo: 'I due motori non concordano', conta: divergenzePesanti.length });
+  if (riparazioni.length > 0)
+    passi.push({ chiave: 'ripar', titolo: 'Correzioni automatiche', conta: riparazioni.length });
   if (criticiTotali > 0)
     passi.push({ chiave: 'subito', titolo: 'Da controllare subito', conta: criticiTotali });
   if (arancioni.length > 0)
     passi.push({ chiave: 'arancioni', titolo: 'Frasi da chiarire', conta: arancioni.length });
   if (spenteIniziali.size > 0)
     passi.push({ chiave: 'spente', titolo: 'Frasi spente dall’AI', conta: spenteIniziali.size });
-  if (riparazioni.length > 0)
-    passi.push({ chiave: 'ripar', titolo: 'Correzioni automatiche', conta: riparazioni.length });
   if (doppioniTolti.length + doppioniDubbi.length > 0)
     passi.push({ chiave: 'doppioni', titolo: 'Doppioni del parlato', conta: doppioniTolti.length + doppioniDubbi.length });
-  if (divergenzePesanti.length > 0)
-    passi.push({ chiave: 'divergenze', titolo: 'I due motori non concordano', conta: divergenzePesanti.length });
   if (note.length > 0)
     passi.push({ chiave: 'note', titolo: 'Note per la segreteria', conta: note.length });
   if (Object.keys(campi).filter((k) => typeof campi[k] === 'string').length > 0)
