@@ -1,7 +1,7 @@
 ---
 tipo: agente
 medico: moccetti
-aggiornata: 2026-09-11
+aggiornata: 2026-09-12
 ---
 # Conoscenza per gli agenti: Moccetti
 

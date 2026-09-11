@@ -1,7 +1,7 @@
 ---
 tipo: tappa
 medico: moccetti
-aggiornata: 2026-09-11
+aggiornata: 2026-09-12
 ---
 # Terapia strutturata dal dettato
 

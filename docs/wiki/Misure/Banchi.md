@@ -1,6 +1,6 @@
 ---
 tipo: misure
-aggiornata: 2026-09-11
+aggiornata: 2026-09-12
 ---
 # Banchi e misure
 
