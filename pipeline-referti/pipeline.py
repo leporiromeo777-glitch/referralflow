@@ -6171,6 +6171,37 @@ def _applica_note_segreteria(testo: str, frasi: list) -> tuple[str, list[str]]:
     return pulito, note
 
 
+_RX_APERTURA_DETTATURA = re.compile(
+    r"^\s*((?:detto|dettiamo|dettatura|scrivo|scrivi|scriviamo|lettera|referto|rapporto)\b[^\n]{0,320}?"
+    r"\b(?:e\s+scrivi|e\s+scrive|scrivi|scriviamo|scrivere|e\s+dico)\s*[:,]?\s*)",
+    re.IGNORECASE,
+)
+
+
+def stacca_apertura_dettatura(testo: str) -> tuple[str, str]:
+    """La regia iniziale del dettato («Detto la lettera della signora X,
+    lettera che va al dottor Y e scrive: caro Y, …»), vista dal vivo il
+    12.9.2026 restare nel referto perché il modello della segreteria non la
+    citava per intero. Regola deterministica: dall'inizio del testo fino a
+    «e scrive/scrivi:» (max 320 caratteri) diventa una nota per la
+    segreteria; il testo riparte da lì con la maiuscola. Torna (testo, nota)."""
+    m = _RX_APERTURA_DETTATURA.match(testo or "")
+    if not m:
+        return testo, ""
+    nota = m.group(1).strip().rstrip(",:").strip()
+    resto = testo[m.end():].lstrip()
+    if len(resto) < 40 or len(nota) < 12:
+        return testo, ""
+    return resto[:1].upper() + resto[1:], nota
+
+
+def _posologie_puntate(testo: str) -> str:
+    """«1.0.0» / «1.0.0.0» dettati con i punti → «1-0-0» (12.9.2026): whisper
+    scrive i punti dove il medico dice «uno zero zero»."""
+    return re.sub(r"\b([0-9½]|1/2)\.([0-9½]|1/2)\.([0-9½]|1/2)(?:\.([0-9½]|1/2))?\b(?!\.\d)",
+                  lambda m: "-".join(g for g in m.groups() if g is not None), testo)
+
+
 def separa_segreteria(testo: str, file_id: str) -> tuple[str, list[str]]:
     """Fase «segretaria» (SPEC §6.4): individua le frasi in cui il medico si
     rivolge alla segreteria e le sposta nelle note. Difensiva come tutto il
@@ -7641,6 +7672,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         inizio = time.monotonic()
         corretto_a, n_sost = applica_correzioni(grezzo_a, sostituzioni)
         corretto_b, _ = applica_correzioni(grezzo_b, sostituzioni)
+        corretto_a, corretto_b = _posologie_puntate(corretto_a), _posologie_puntate(corretto_b)
         # Aggancio fonetico al glossario (punto 3 del piano precisione):
         # riparazioni deterministiche delle storpiature evidenti, senza AI.
         corretto_a, n_fon = riparazioni_glossario(corretto_a, file_id)
@@ -7727,6 +7759,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             # del referto e diventano note. L'ispezione lavora sul testo pulito.
             fase = "segreteria"
             _ = notifica and notifica(fase)
+            finale, apertura_regia = stacca_apertura_dettatura(finale)
             if compatta is not None:
                 finale, note_segreteria = _applica_note_segreteria(
                     finale, compatta["note"])
@@ -7734,6 +7767,9 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                          file_id, len(note_segreteria))
             else:
                 finale, note_segreteria = separa_segreteria(finale, file_id)
+            if apertura_regia:
+                note_segreteria = [apertura_regia] + list(note_segreteria)
+                log.info("fase=segreteria file=%s esito=apertura_regia_staccata caratteri=%d", file_id, len(apertura_regia))
             percorso(".segreteria.json").write_text(
                 json.dumps(note_segreteria, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",

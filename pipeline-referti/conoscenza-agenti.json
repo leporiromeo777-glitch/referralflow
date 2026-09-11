@@ -4,7 +4,8 @@
       "I sistemi di riconoscimento vocale perdono parole più spesso di quanto ne inventino: una negazione, un qualificatore o una lateralità presenti da una parte sola sono di solito la versione giusta, se la frase resta coerente.",
       "Una parola in più che rende la frase assurda o contraddice il contesto è invece un'invenzione: scegli l'altra versione.",
       "Le sigle si scrivono come nel contesto del medico (RIVA, RCx, CoroTAC, FE); «il RIVA» è maschile.",
-      "Se il contesto non basta a decidere, «incerto» è la risposta giusta, non una scelta a caso."
+      "Se il contesto non basta a decidere, «incerto» è la risposta giusta, non una scelta a caso.",
+      "Le formule fisse della lettera (saluto di chiusura, «non ritorno sull'anamnesi», «alla luce degli elementi di cui sopra») hanno una sola forma giusta: una versione storpiata («Corriere di saluti») non va mai scelta, anche se l'altra è imperfetta."
     ],
     "esempi": [
       {
@@ -26,6 +27,11 @@
         "dato": "contesto «il paziente riferisce dolore toracico … da due settimane»; a: «dolore toracico atipico»; b: «dolore toracico tipico»",
         "risposta": "incerto (cambia la diagnosi e il contesto non dice quale sia vera)",
         "titolo": "Contesto insufficiente"
+      },
+      {
+        "dato": "contesto «…a disposizione della paziente. … Persona 2»; a: «Cordiali saluti»; b: «Corriere di saluti»",
+        "risposta": "a (le formule fisse hanno una sola forma; «Corriere di saluti» non esiste)",
+        "titolo": "Formula di chiusura storpiata"
       }
     ]
   },
@@ -76,6 +82,11 @@
         "dato": "«non ritorno sulle note del paziente in quanto già presente nei miei incarti»",
         "risposta": "da «sulle note» a «sull'anamnesi»",
         "titolo": "Frase fissa storpiata"
+      },
+      {
+        "dato": "«la carriota mostra, malgrado numerosi artefatti a movimento, una malattia critica dell'IVA»",
+        "risposta": "da «carriota» a «CardioTAC»; da «artefatti a movimento» a «artefatti da movimento»",
+        "titolo": "Esame sentito male"
       },
       {
         "dato": "«Persona 1 presenta una FE del 55 per cento, pressione 135 su 85»",

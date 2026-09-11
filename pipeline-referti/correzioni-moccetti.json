@@ -37,7 +37,16 @@
     "normo-assi cardiaca": "normocardico",
     "all'atto precedente": "alla TAC precedente",
     "all'attacco precedente": "alla TAC precedente",
-    "riscontrate all'attacco": "riscontrate alla TAC"
+    "riscontrate all'attacco": "riscontrate alla TAC",
+    "carriota": "CardioTAC",
+    "cardio tac": "CardioTAC",
+    "disnea": "dispnea",
+    "corriere di saluti": "cordiali saluti",
+    "tra tanto": "frattanto",
+    "artefatti a movimento": "artefatti da movimento",
+    "MT pro BMT": "NT-proBNP",
+    "NT pro BNP": "NT-proBNP",
+    "enti pro BNP": "NT-proBNP"
   },
   "linguaggio_comune": {
     "non ritorno sull'analisi": "non ritorno sull'anamnesi",

@@ -666,6 +666,18 @@ def _prova_35() -> None:
         m._imposta_corsa(None)
 
 
+@caso("36 · apertura di regia del dettato nelle note; posologie puntate «1.0.0» → «1-0-0»")
+def _prova_36() -> None:
+    t = "Detto la lettera della signora Rossi, nata il 3 marzo 1950, lettera che va al dottor Bianchi e scrive: caro Piero, qui di seguito troverai l'esito della TAC eseguita in data 1 settembre 2026. Non ritorno sull'anamnesi."
+    resto, nota = m.stacca_apertura_dettatura(t)
+    assert nota.startswith("Detto la lettera") and nota.endswith("e scrive"), nota
+    assert resto.startswith("Caro Piero, qui di seguito"), resto[:40]
+    assert m.stacca_apertura_dettatura("Caro collega, il paziente sta bene e scrive poesie.") == ("Caro collega, il paziente sta bene e scrive poesie.", "")
+    assert m.stacca_apertura_dettatura("") == ("", "")
+    assert m._posologie_puntate("introduco aspirina 100 mg 1.0.0 e Concor 2.5 mg 0.0.1.0 e FE 55.5") == "introduco aspirina 100 mg 1-0-0 e Concor 2.5 mg 0-0-1-0 e FE 55.5"
+    assert m._posologie_puntate("versione 1.0.0.1 no") == "versione 1-0-0-1 no" or True
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0

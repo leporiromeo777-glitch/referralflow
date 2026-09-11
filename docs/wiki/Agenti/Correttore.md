@@ -32,6 +32,10 @@ Risposta giusta: da «Concorde» a «Concor»
 Dato: «non ritorno sulle note del paziente in quanto già presente nei miei incarti»
 Risposta giusta: da «sulle note» a «sull'anamnesi»
 
+### Esame sentito male
+Dato: «la carriota mostra, malgrado numerosi artefatti a movimento, una malattia critica dell'IVA»
+Risposta giusta: da «carriota» a «CardioTAC»; da «artefatti a movimento» a «artefatti da movimento»
+
 ### Che cosa NON correggere
 Dato: «Persona 1 presenta una FE del 55 per cento, pressione 135 su 85»
 Risposta giusta: nessuna riparazione (segnaposto e numeri restano come sono)

@@ -18,6 +18,7 @@ Per ogni punto rispondere «a», «b» o «incerto». Non riscrive nulla. I punt
 - Una parola in più che rende la frase assurda o contraddice il contesto è invece un'invenzione: scegli l'altra versione.
 - Le sigle si scrivono come nel contesto del medico (RIVA, RCx, CoroTAC, FE); «il RIVA» è maschile.
 - Se il contesto non basta a decidere, «incerto» è la risposta giusta, non una scelta a caso.
+- Le formule fisse della lettera (saluto di chiusura, «non ritorno sull'anamnesi», «alla luce degli elementi di cui sopra») hanno una sola forma giusta: una versione storpiata («Corriere di saluti») non va mai scelta, anche se l'altra è imperfetta.
 
 ## Esempi
 ### Negazione sentita da un solo motore, coerente col contesto
@@ -35,3 +36,7 @@ Risposta giusta: b
 ### Contesto insufficiente
 Dato: contesto «il paziente riferisce dolore toracico … da due settimane»; a: «dolore toracico atipico»; b: «dolore toracico tipico»
 Risposta giusta: incerto (cambia la diagnosi e il contesto non dice quale sia vera)
+
+### Formula di chiusura storpiata
+Dato: contesto «…a disposizione della paziente. … Persona 2»; a: «Cordiali saluti»; b: «Corriere di saluti»
+Risposta giusta: a (le formule fisse hanno una sola forma; «Corriere di saluti» non esiste)
