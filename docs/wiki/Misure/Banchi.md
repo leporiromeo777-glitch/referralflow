@@ -25,6 +25,8 @@ Ogni banco usa SOLO dati sintetici. Le chiamate al modello esterno costano cente
 | 2026-09-11 | omissioni, lateralità sola nel codice | `banco-omissioni.py` | codice 1/9 → 2/9, 0 falsi allarmi |
 | 2026-09-11 | VAD contro senza VAD sull'audio vero conservato (6 dettati, accordo col testimone B) | `banco-vad.py [N]` dalla copia viva `~/referti-pipeline/` (servono i modelli; solo numeri) | 3 a 3; accordo totale VAD 735, senza VAD 712; senza VAD un dettato lungo in loop (108 righe tolte, accordo 152 vs 201); col VAD un altro perde 400 caratteri e 2 numeri (accordo 93 vs 117) senza sentinella → passata DOPPIA sempre |
 
-Suite permanente: `python3.14 pipeline-referti/prove-catastrofiche.py` → 33/33 (11.9.2026). Test app: `npm run test:app` → 25 casi.
+| 2026-09-11 | verificatori su un'altra famiglia (`modello_verifica=Qwen/Qwen3.5-397B-A17B-FP8`) | `banco-coerenza.py`, `banco-omissioni.py --modello` | coerenza 5/5, 0 falsi (uguale a gemma); omissioni modello 7/9 contro 8/9 di gemma (perde «T difasica» nella frase lunga; la lateralità la prende il codice) → tenuto per l'indipendenza dal correttore, da rivedere sui dati veri con «Quale tappa aiuta davvero» |
+
+Suite permanente: `python3.14 pipeline-referti/prove-catastrofiche.py` → 34/34 (11.9.2026). Test app: `npm run test:app` → 25 casi.
 
 Dati reali osservati (solo numeri): destinatario estratto = confermato in 9 bozze su 11 (11.9.2026); collassi di whisper: 3 in 3 giorni sullo stesso medico (7-9.9.2026).

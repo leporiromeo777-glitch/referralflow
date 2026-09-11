@@ -57,7 +57,7 @@ def main(argv: list[str]) -> int:
     cfg = m._config_esterno()
     if not cfg:
         print("percorso esterno non attivo"); return 2
-    print(f"modello esterno: {cfg.get('modello')}")
+    print(f"modello esterno (verificatori): {cfg.get('modello_verifica') or cfg.get('modello')}")
     m._CORSA["medico"] = "moccetti"
     tot = prese = falsi = 0
     t0 = time.monotonic()
