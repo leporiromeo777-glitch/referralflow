@@ -490,11 +490,21 @@ def _prova_29() -> None:
     ]
     righe, tenute, dubbi = m.righe_terapia(voci, dettato)
     assert len(righe) == 2, righe
-    assert righe[0].startswith("ASPIRIN") and righe[0].endswith("100 mg 1-0-0-0"), righe[0]
+    assert righe[0].startswith("Aspirin") and righe[0].endswith("100 mg 1-0-0-0"), righe[0]
     assert righe[1].endswith("2.5 mg 0-0-1/2-0"), righe[1]
     motivi = " ".join(d["motivo"] for d in dubbi)
     assert "sospeso" in motivi and "numero non presente" in motivi, dubbi
-    assert m.sospesi_terapia(voci) == ["VALSARTAN"], m.sospesi_terapia(voci)
+    assert m.sospesi_terapia(voci) == ["Valsartan"], m.sospesi_terapia(voci)
+    # Con il profilo del medico vince il suo elenco (dalla wiki): «aspirina» non
+    # finisce su Aspirin-C e «Xenone» trova Zenon (visto dal vivo il 12.9.2026).
+    m._CORSA["medico"] = "moccetti"
+    try:
+        assert m._nome_farmaco_canonico("aspirina")[0] == "Aspirina Cardio", m._nome_farmaco_canonico("aspirina")
+        assert m._nome_farmaco_canonico("Xenone")[0] == "Zenon", m._nome_farmaco_canonico("Xenone")
+        assert m._nome_farmaco_canonico("bisoprololo")[0] == "Concor"
+    finally:
+        m._CORSA["medico"] = None
+    assert m._nome_farmaco_canonico("aspirina cardio")[0] == "Aspirin Cardio"
 
 
 @caso("30 · arbitro informato: contesto, parole pesanti, A vuota inserita, numeri e B vuota alla persona")

@@ -4382,35 +4382,73 @@ def posologia_schema(testo: str) -> str:
     return "-".join(slots) if trovato else testo.strip()
 
 
+def _titolo(nome: str) -> str:
+    """«aspirin cardio» → «Aspirin Cardio», «co-diovan» → «Co-Diovan»."""
+    return re.sub(r"(^|[\s\-/])(\w)", lambda m: m.group(1) + m.group(2).upper(), nome.lower())
+
+
+def _farmaci_medico() -> list[tuple[str, list[str]]]:
+    """L'elenco «farmaci frequenti» del medico della corsa (dalla wiki,
+    compilato in medici.json): [(nome commerciale come lo scrive la
+    segretaria, [alias: principio attivo, altri nomi])]."""
+    prof = profilo_medico(_CORSA.get("medico"))
+    fuori: list[tuple[str, list[str]]] = []
+    for voce in (prof or {}).get("farmaci_frequenti") or []:
+        m = re.match(r"^\s*([^()]+?)\s*(?:\(([^)]*)\))?\s*$", str(voce))
+        if not m:
+            continue
+        nome = m.group(1).strip()
+        alias = [a.strip() for a in re.split(r"[,/]", m.group(2) or "") if a.strip()]
+        if nome:
+            fuori.append((nome, alias))
+    return fuori
+
+
 def _nome_farmaco_canonico(nome: str) -> tuple[str, bool, list[str]]:
-    """(nome in maiuscolo, trovato nell'elenco Swissmedic, dosi note)."""
+    """(nome come va scritto, trovato, dosi note). Prima l'elenco del MEDICO
+    (2026-09-12, visto dal vivo: «aspirina» finiva su ASPIRIN-C e «Xenone»
+    non trovava Zenon): nome intero, principio attivo o prima parola a
+    distanza ≤ 2. Poi l'elenco Swissmedic, in forma Title Case come nelle
+    lettere della segretaria."""
     diz = _farmaci()
     nomi = diz.get("nomi") or {}
     principi = diz.get("principi") or {}
     n = re.sub(r"\s+", " ", (nome or "").strip().lower())
     if not n:
         return "", False, []
+    prima_parola = n.split(" ")[0]
+    for commerciale, alias in _farmaci_medico():
+        c = commerciale.lower()
+        candidati = [c] + [a.lower() for a in alias]
+        vicino = any(
+            n == x or prima_parola == x.split(" ")[0]
+            or (len(prima_parola) >= 5 and _distanza_breve(prima_parola, x.split(" ")[0], 2) <= 2)
+            for x in candidati
+        )
+        if vicino:
+            chiave = next((k for k in (c, c.split(" ")[0]) if k in nomi), None)
+            return commerciale, True, list((nomi[chiave] or {}).get("dosi") or []) if chiave else []
     if n in nomi:
-        return n.upper(), True, list((nomi[n] or {}).get("dosi") or [])
+        return _titolo(n), True, list((nomi[n] or {}).get("dosi") or [])
     if n in principi:
-        return n.upper(), True, []
+        return _titolo(n), True, []
     # Nome intero a distanza ≤ 2 da una voce che comincia allo stesso modo
     # («aspirina cardio» → «aspirin cardio»): vince la voce più lunga.
     testa = n[:4]
     candidati = [k for k in nomi if k[:4] == testa and _distanza_breve(n, k, 2) <= 2]
     if candidati:
         k = max(candidati, key=len)
-        return k.upper(), True, list((nomi[k] or {}).get("dosi") or [])
+        return _titolo(k), True, list((nomi[k] or {}).get("dosi") or [])
     prima = n.split(" ")[0]
     if prima in nomi:
-        return prima.upper(), True, list((nomi[prima] or {}).get("dosi") or [])
+        return _titolo(prima), True, list((nomi[prima] or {}).get("dosi") or [])
     if prima in principi:
-        return prima.upper(), True, []
+        return _titolo(prima), True, []
     vicino = _farmaco_vicino(prima, nomi, principi)
     if vicino:
         voce = nomi.get(vicino) or {}
-        return vicino.upper(), True, list(voce.get("dosi") or [])
-    return n.upper(), False, []
+        return _titolo(vicino), True, list(voce.get("dosi") or [])
+    return _titolo(n), False, []
 
 
 def righe_terapia(voci: list, dettato: str) -> tuple[list[str], list[dict], list[dict]]:
@@ -4433,7 +4471,7 @@ def righe_terapia(voci: list, dettato: str) -> tuple[list[str], list[dict], list
         if not nome:
             continue
         if stato == "sospeso":
-            dubbi.append({"riga": nome.upper(), "motivo": "sospeso nel dettato: non entra nel blocco"})
+            dubbi.append({"riga": _nome_farmaco_canonico(nome)[0] or nome, "motivo": "sospeso nel dettato: non entra nel blocco"})
             continue
         canonico, trovato, dosi_note = _nome_farmaco_canonico(nome)
         numeri_riga = {x.replace(",", ".") for x in re.findall(r"\d+(?:[.,]\d+)?", dose + " " + posol + " " + nota)}
@@ -6716,6 +6754,18 @@ def costruisci_ledger(finale: str, grezzo_b: str, numeri: list, divergenze: list
         if isinstance(f, dict) and f.get("frase"):
             fatti.append({"tipo": "frase", "valore": str(f.get("frase"))[:160], "fonti": ["avvocato"], "confidenza": 0.3,
                           "stato": "non sostenuta dal dettato"})
+    # Date nel FUTURO dopo un riferimento al passato («rapporto del
+    # 10.08.2027», visto dal vivo il 12.9.2026): quasi sempre un anno sentito
+    # male. Solo segnalazione, mai correzione.
+    oggi = datetime.now().date()
+    for m in re.finditer(r"\b(?:del|in data|datat[oa]|eseguit[oa] il|esame del|rapporto del|lettera del|incarto del)\s+(\d{1,2})[./](\d{1,2})[./](\d{4})\b", finale, re.IGNORECASE):
+        try:
+            d = datetime(int(m.group(3)), int(m.group(2)), int(m.group(1))).date()
+        except ValueError:
+            continue
+        if d > oggi:
+            fatti.append({"tipo": "data", "valore": f"{m.group(1)}.{m.group(2)}.{m.group(3)}", "contesto": finale[max(0, m.start() - 30):m.end()][:120],
+                          "fonti": ["motore 1"], "confidenza": 0.2, "stato": "data nel futuro dopo un riferimento al passato"})
     fatti.sort(key=lambda x: (x["confidenza"], x["tipo"]))
     fatti = fatti[:200]
     riepilogo = {
@@ -6749,6 +6799,7 @@ def punteggio_fiducia(ledger: dict, manifesto: dict) -> dict:
     togli(sum(1 for f in fatti if f.get("tipo") == "coerenza"), 5, 15, "contraddizioni interne")
     togli(int(mf.get("frasi_non_supportate") or 0), 3, 15, f"{mf.get('frasi_non_supportate')} frasi non sostenute dal dettato")
     togli(sum(1 for f in fatti if f.get("tipo") == "terapia" and str(f.get("stato", "")).startswith("dubbia")), 4, 12, "righe di terapia dubbie")
+    togli(sum(1 for f in fatti if f.get("tipo") == "data"), 5, 10, "date nel futuro dopo un riferimento al passato")
     livello = str(mf.get("livello_verifica") or "pieno")
     if livello == "ridotto":
         p -= 10; motivi.append("-10: verifica ridotta (un componente mancante)")

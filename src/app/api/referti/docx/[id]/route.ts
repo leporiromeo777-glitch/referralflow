@@ -135,7 +135,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     via,
     data,
     titolo,
-    paziente: [pazienteNome, nascita].filter(Boolean).join(' – ') || ' ',
+    // Formato lettera: riga «Paziente» sopra il nome, come nelle lettere
+    // della segretaria (9 su 12, visto il 12.9.2026).
+    paziente: (formato === 'lettera' && pazienteNome ? 'Paziente\n' : '') + ([pazienteNome, nascita].filter(Boolean).join(' – ') || ' '),
     piede: [pazienteNome, nascita].filter(Boolean).join(', ') + (formato === 'lettera' ? '' : (dataDettato ? `  ${dataDettato}` : '')),
     testo: ricomponiParagrafi(testo),
     copia,

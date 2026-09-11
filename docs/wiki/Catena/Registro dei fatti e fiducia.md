@@ -13,6 +13,7 @@ I fatti atomici della bozza in un posto solo, ognuno con valore, dove sta (indic
 - **parole pesanti** sentite da un motore solo (dalle divergenze `pesanti`: negazioni, lateralità, qualificatori, numeri): 0.3, «discorde tra i motori».
 - **terapia**: righe controllate 0.8; righe dubbie 0.4 con il motivo.
 - **omissioni gravi** (con numeri o farmaci): 0.4; **contraddizioni** (coerenza): 0.3; **frasi non sostenute** (avvocato): 0.3.
+- **date nel futuro dopo un riferimento al passato** («rapporto del 10.08.2027», primo referto vero del 12.9.2026: quasi sempre un anno sentito male): 0.2, e −5 nel punteggio (max 10).
 Ordinato dal meno sicuro al più sicuro, max 200; `riepilogo` con conteggi. In pagina: dentro la card della fiducia, «Registro dei fatti», righe sotto 0.5 evidenziate.
 
 ## Punteggio di fiducia (`payload.fiducia`)

@@ -29,6 +29,8 @@ Ogni banco usa SOLO dati sintetici. Le chiamate al modello esterno costano cente
 
 | 2026-09-12 | forma dell'impaginazione: lettera tipo + regole dalla wiki (da 12 lettere anonimizzate di Moccetti), modello locale Qwen 3.8 | `npm run banco-forma` (dettato finto, 12 tratti della forma della segretaria) | senza 7/12 → con **12/12**, ~60 s per corsa. Prima del risultato due guardie scartavano la lettera giusta: il lucchetto delle relazioni (misura riconosciuta solo nella lettera) e la firma numero+unità («chili» vs «Kg») → corretti nel codice con test |
 
+| 2026-09-12 | PRIMO REFERTO VERO con la catena nuova (Moccetti, DS2 di 94 s, solo numeri dal log) | `~/referti/log/servizio.log` | 4½ min in tutto; passata doppia: vince senza VAD (accordo 82 → 94); 10 divergenze, arbitro 9 punti / 3 scelte B; correzione 6 riparazioni (4 scartate), verificatore Qwen 9 correzioni riviste / 2 rifiutate; terapia 2 righe + 1 dubbio; omissioni 0 (1 proposta scartata); coerenza 1; fiducia 61/100, 10 fatti, 7 sotto 0.5. Dal Word puro anonimizzato: forma giusta al 90%; due difetti corretti (nome del farmaco su Aspirin-C, Zenon non trovato → elenco del medico; data futura non segnalata → fatto «data») |
+
 Suite permanente: `python3.14 pipeline-referti/prove-catastrofiche.py` → 34/34 (12.9.2026). Test app: `npm run test:app` → 29 casi.
 
 Dati reali osservati (solo numeri): destinatario estratto = confermato in 9 bozze su 11 (11.9.2026); collassi di whisper: 3 in 3 giorni sullo stesso medico (7-9.9.2026).
