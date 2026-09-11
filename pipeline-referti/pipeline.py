@@ -1818,18 +1818,27 @@ def riassunto_visita(trascrizione: str, file_id: str) -> str | None:
     return nota
 
 
-PROMPT_ARBITRO = """Sei un correttore di trascrizioni mediche in italiano. Lo stesso dettato è stato trascritto DUE volte da due sistemi diversi: nei punti elencati le versioni divergono. Per ogni punto scegli la versione che è italiano corretto e ha senso medico nel contesto dato.
+PROMPT_ARBITRO = """{contesto_medico}Sei un correttore di trascrizioni mediche in italiano. Lo stesso dettato è stato trascritto DUE volte da due sistemi diversi: nei punti elencati le versioni divergono. Per ogni punto scegli la versione che è italiano corretto e ha senso medico nel contesto dato.
 
 Regole obbligatorie:
 1. Scegli "a" oppure "b". Se nessuna delle due è chiaramente giusta, rispondi "incerto".
 2. Non inventare una terza versione: puoi solo scegliere.
 3. Nel dubbio, "incerto": il punto resterà segnalato a una persona.
+4. I sistemi di riconoscimento vocale PERDONO parole più spesso di quanto ne inventino. Se una sola delle due versioni contiene una negazione, un qualificatore clinico (diminuito, aumentato, lieve, severo…) o una lateralità (destra, sinistra) e la frase con quella parola resta coerente col contesto, preferisci quella versione. Se invece quella parola contraddice il contesto, scegli l'altra.
+5. Le sigle e i termini del contesto del medico (se presente) sono la forma giusta: preferisci la versione che li scrive così.
 
 Rispondi SOLO con un oggetto JSON valido:
 {"scelte": [{"punto": 1, "scelta": "a"}, {"punto": 2, "scelta": "incerto"}]}
 
 PUNTI:
 {punti}"""
+
+
+def _prompt_arbitro(punti: str) -> str:
+    """Il prompt dell'arbitro con il contesto del medico della corsa (vuoto
+    senza profilo) e i punti da giudicare."""
+    return (PROMPT_ARBITRO.replace("{contesto_medico}", contesto_medico(_CORSA.get("medico")))
+            .replace("{punti}", punti))
 
 
 def arbitra_divergenze(testo: str, divergenze: list[dict], file_id: str) -> tuple[str, int]:
@@ -1843,11 +1852,19 @@ def arbitra_divergenze(testo: str, divergenze: list[dict], file_id: str) -> tupl
     candidate: list[dict] = []
     for d in divergenze:
         va, vb = d.get("versione_a", ""), d.get("versione_b", "")
-        if not va or not vb or va == vb:
+        if not vb or va == vb:
             continue
         if _numeri(va) != _numeri(vb):
             continue
         if len(va) > 80 or len(vb) > 80:
+            continue
+        # A vuota = parola sentita dal solo secondo motore (2026-09-11: il
+        # caso vero «profili pressori DIMINUITI»): l'arbitro la giudica, e
+        # la scelta «b» la inserisce dopo il contesto che precede — solo se
+        # quel contesto è unico nel testo e non porta numeri (quelli restano
+        # alla persona, come sempre). B vuota resta fuori: togliere parole
+        # dalla base non spetta all'arbitro.
+        if not va and not d.get("contesto_prima"):
             continue
         candidate.append(d)
     candidate = candidate[:30]
@@ -1857,6 +1874,7 @@ def arbitra_divergenze(testo: str, divergenze: list[dict], file_id: str) -> tupl
     punti = "\n".join(
         f'{k + 1}) contesto: «{d["contesto"]}»\n'
         f'   a: «{d["versione_a"]}»\n   b: «{d["versione_b"]}»'
+        + (f'\n   parole presenti da una parte sola: {", ".join(d["pesanti"])}' if d.get("pesanti") else "")
         for k, d in enumerate(candidate)
     )
     # Al cloud svizzero sul testo ANONIMO (2026-09-05, cfg arbitro=1): qui
@@ -1872,7 +1890,7 @@ def arbitra_divergenze(testo: str, divergenze: list[dict], file_id: str) -> tupl
         if an_punti is not None:
             try:
                 uscita = _chiama_esterno_openai(
-                    PROMPT_ARBITRO.replace("{punti}", an_punti[0]), file_id,
+                    _prompt_arbitro(an_punti[0]), file_id,
                     schema=_oggetto({"scelte": {"type": "array", "items": _oggetto({
                         "punto": {"type": "integer", "minimum": 1, "maximum": len(candidate)},
                         "scelta": {"type": "string", "enum": ["a", "b", "incerto"]}})}}))
@@ -1883,7 +1901,7 @@ def arbitra_divergenze(testo: str, divergenze: list[dict], file_id: str) -> tupl
     if not isinstance(dati, dict):
         try:
             uscita = chiama_ollama(
-                PROMPT_ARBITRO.replace("{punti}", punti), file_id, "confronto",
+                _prompt_arbitro(punti), file_id, "confronto",
                 formato_json=True, modello=MODELLO_CORREZIONE, max_gettoni=800,
             )
             dati = json.loads(uscita)
@@ -1904,7 +1922,18 @@ def arbitra_divergenze(testo: str, divergenze: list[dict], file_id: str) -> tupl
         if not 0 <= k < len(candidate):
             continue
         va, vb = candidate[k]["versione_a"], candidate[k]["versione_b"]
-        if testo.count(va) == 1:
+        if not va:
+            prima = candidate[k].get("contesto_prima", "")
+            if prima and testo.count(prima) == 1:
+                i = testo.index(prima) + len(prima)
+                resto = testo[i:]
+                # Parola inserita a inizio frase («Non Sospendo»): la parola
+                # che segue perde la maiuscola.
+                if vb[:1].isupper() and resto[:1] == " " and resto[1:2].isupper() and not resto[1:3].isupper():
+                    resto = " " + resto[1].lower() + resto[2:]
+                testo = testo[:i] + " " + vb + resto
+                applicate += 1
+        elif testo.count(va) == 1:
             testo = testo.replace(va, vb, 1)
             applicate += 1
     _segna_trasporto(file_id, "arbitro", trasporto)

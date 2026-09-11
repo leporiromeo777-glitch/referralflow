@@ -613,9 +613,29 @@ posto della terapia ripresa dalla lettera precedente; card «Terapia dal
 dettato» nella bozza. Caso 29 nella suite; banco `banco-terapia.py` (codice
 5/5; MODELLO esterno 5/5 misurato il 9.9.2026, ~CHF 0.002). Secondo tempo NON fatto: modifiche sulla
 lettera precedente («sospendo X, aumento Y»).
-Prossimi passi concordati: stessa cosa per l'arbitro (preferire la versione
-con numero/negazione/qualificatore in più), avvocato con lista OMISSIONI,
-controllo della lettera dopo l'impaginazione.
+FATTO (11.9.2026) l'ARBITRO INFORMATO, fase 1 del giro «tutte le fasi, una
+alla volta, misurando»: `PROMPT_ARBITRO` porta il contesto del medico
+(`_prompt_arbitro`, stesso blocco della correzione) e due regole in più
+(i motori perdono parole più di quanto ne inventino → la versione con
+negazione/qualificatore/lateralità in più vince se coerente col contesto;
+le sigle del contesto sono la forma giusta); ogni punto elenca le «parole
+presenti da una parte sola» (`pesanti`). CODICE: i punti con A VUOTA (parola
+sentita dal solo secondo motore, il caso vero «DIMINUITI») prima erano
+scartati in blocco; ora l'arbitro li giudica e la scelta «b» inserisce la
+parola dopo `contesto_prima` (solo se unico nel testo; minuscola alla parola
+seguente se a inizio frase). Restano alla persona: numeri diversi e B vuota.
+Caso 30 nella suite; banco `pipeline-referti/banco-arbitro.py` (15
+divergenze finte: pesanti coerenti, esche contraddittorie, termini/sigle/
+farmaci storpiati, due guardie) sul modello esterno: prompt vecchio 13/15,
+nuovo 14/15 (=15/15 al netto di un artefatto di maiuscole), col contesto
+del medico uguale (14/15) — il contesto qui non sposta; con il codice
+vecchio i primi 4 casi non arrivavano all'arbitro (10/15 di fatto).
+Fase 2 (destinatario/cornice dalle note alla segretaria) VERIFICATA SUI
+DATI e NON fatta: l'estrazione gira già sul testo integrale, note comprese;
+su 11 bozze reali il destinatario estratto coincide con quello confermato in
+9, le 2 «non indicato» non hanno nessun medico nelle note; le cose da
+allegare le aggancia già la pagina (`agganciaRiferimenti`). Nessun margine
+misurabile.
 
 ## Catena referti: pagine e strumenti aggiunti il 5-6.9.2026
 - `/referti/qualita` cruscotto (parole modificate, tempo di revisione, segnalazioni

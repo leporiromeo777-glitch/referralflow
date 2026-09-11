@@ -10,6 +10,7 @@ Uso: python3.14 prove-catastrofiche.py            (exit 0 = tutto ok)
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import sys
 import tempfile
@@ -493,6 +494,46 @@ def _prova_29() -> None:
     assert righe[1].endswith("2.5 mg 0-0-1/2-0"), righe[1]
     motivi = " ".join(d["motivo"] for d in dubbi)
     assert "sospeso" in motivi and "numero non presente" in motivi, dubbi
+
+
+@caso("30 · arbitro informato: contesto, parole pesanti, A vuota inserita, numeri e B vuota alla persona")
+def _prova_30() -> None:
+    a = "Ho rivisto il paziente per profili pressori associati ad astenia. Frequenza 70. Sospendo il Valsartan."
+    b = "Ho rivisto il paziente per profili pressori diminuiti associati ad astenia. Frequenza 70 e pressione 160 su 70. Non sospendo il Valsartan."
+    div = m.confronta(a, b)
+    assert any(d["versione_a"] == "" and d["versione_b"] == "diminuiti" and d.get("pesanti") for d in div), div
+    catturato: dict = {}
+
+    def finto_ollama(prompt, file_id, fase, **kw):
+        catturato["prompt"] = prompt
+        n = prompt.count("\n   a: «")
+        return json.dumps({"scelte": [{"punto": k + 1, "scelta": "b"} for k in range(n)]})
+
+    vecchi = (m.chiama_ollama, m._config_esterno, m.CORREZIONE_ESTERNA, m._CORSA.get("medico"))
+    m.chiama_ollama, m._config_esterno, m.CORREZIONE_ESTERNA = finto_ollama, (lambda: None), False
+    m._CORSA["medico"] = "moccetti"
+    try:
+        fuori, n = m.arbitra_divergenze(a, div, "prova-30")
+        pr = catturato["prompt"]
+        assert pr.startswith("CONTESTO DEL MEDICO") and "parole presenti da una parte sola: diminuiti" in pr, pr[:200]
+        assert "{contesto_medico}" not in pr and "{punti}" not in pr
+        # La parola sentita dal solo B entra dopo il contesto che precede…
+        assert "profili pressori diminuiti associati" in fuori, fuori
+        # …i numeri solo in B NON entrano (restano alla persona)…
+        assert "160" not in fuori, fuori
+        # …e la negazione in B su una frase con la A piena entra come prima
+        # (segmento unico), mentre i punti con B vuota non sono mai candidati.
+        assert "Non sospendo" in fuori or "non sospendo" in fuori, fuori
+        assert n == 2, n
+        div2 = m.confronta("profili pressori diminuiti associati", "profili pressori associati")
+        assert div2 and div2[0]["versione_b"] == ""
+        fuori2, n2 = m.arbitra_divergenze("profili pressori diminuiti associati", div2, "prova-30b")
+        assert n2 == 0 and fuori2 == "profili pressori diminuiti associati"
+    finally:
+        m.chiama_ollama, m._config_esterno, m.CORREZIONE_ESTERNA = vecchi[:3]
+        m._CORSA["medico"] = vecchi[3]
+    pr0 = m._prompt_arbitro("x")
+    assert "CONTESTO DEL MEDICO" not in pr0 and "{contesto_medico}" not in pr0
 
 
 def main() -> int:
