@@ -19,11 +19,17 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 - [[Piattaforma/Automazioni]] — cron, SMS, watchdog, report
 - [[Piattaforma/Robot agenda MediOnline]]
 - [[Piattaforma/Funzioni fatte]] — tutto ciò che esiste già, in ordine inverso
+- [[Piattaforma/Documenti legali]] — che cosa c'è in docs/legale e a che punto è
 - [[Piattaforma/Prossimi lavori]] e [[Piattaforma/Visione]]
 - [[Piattaforma/Convenzioni UI]] — palette, layout delle pagine, regole di stile
 
+## Per chi usa la piattaforma
+- [[Procedure/Segretaria]] — dal dettato alla lettera, passo per passo
+
 ## Catena dei referti (dettato → bozza)
+- [[Catena/SPEC in breve]] — i vincoli della SPEC e dove la pratica se n'è allontanata
 - [[Catena/Panoramica]] — le tappe in ordine, i file, i modelli, dove sta ogni cosa
+- [[Catena/Pannello locale]] — lo strumento d'esercizio sul Mac
 - [[Catena/Profili per medico]] — medici.json, modalità, formati, dizionari
 - [[Catena/Sentinelle e recuperi]] — collasso A/B, corsa senza VAD, promozione del testimone, tempi
 - [[Catena/Arbitro]] — scelta tra i due motori
@@ -48,6 +54,7 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 
 ## Misure
 - [[Misure/Banchi]] — ogni banco con numeri e data
+- [[Misure/Dataset]] — la cartella dei dati sul Mac: veri e sintetici
 
 ## Altro
 - [[Glossario]]
