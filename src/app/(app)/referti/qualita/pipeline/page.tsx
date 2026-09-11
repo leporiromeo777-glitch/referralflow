@@ -23,7 +23,7 @@ type Punto = {
   severity_max: string | null; pipeline_version: string | null; prompt_version: string | null; medico: string | null;
   review_seconds: number | null; doctor_edits: number | null; tipo: string; revisore: string | null; categories: Record<string, number>;
 };
-type Filtri = { da?: string; a?: string; medico?: string; pipeline?: string; finestra?: string; tutti?: string };
+type Filtri = { da?: string; a?: string; medico?: string; pipeline?: string; finestra?: string; tutti?: string; dizionario?: string };
 
 const CATEGORIE: Record<string, string> = {
   punctuation: 'Punteggiatura', formatting: 'Formattazione', spelling: 'Ortografia', grammar: 'Grammatica', drug: 'Farmaco',
@@ -312,6 +312,10 @@ export default async function QualitaPipeline({ searchParams }: { searchParams: 
               </tr>
             ))}</tbody></table>
         )}
+        {proposteTutte.length > proposte.length && (
+          <p className="muted small"><Link href={qs({ dizionario: 'tutte' })}>Mostra anche le {proposteTutte.length - proposte.length} viste una volta sola di categoria «altro»</Link></p>
+        )}
+        {searchParams.dizionario === 'tutte' && <p className="muted small"><Link href="/referti/qualita/pipeline#dizionario">Torna alla vista normale</Link></p>}
         {confermate.length > 0 && (
           <details style={{ marginTop: 10 }}>
             <summary className="sez-summary">Voci confermate ({confermate.length}){rifiutate ? ` · scartate ${rifiutate}` : ''}</summary>
