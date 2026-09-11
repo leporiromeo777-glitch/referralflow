@@ -11,6 +11,7 @@ con --locale. Nessun dato clinico vero. Uso:
     python3.14 banco-arbitro.py            (esterno, tre condizioni)
     python3.14 banco-arbitro.py --locale   (modello locale, lento)
     python3.14 banco-arbitro.py --solo-nuovo
+    REFERTI_CONOSCENZA=0 python3.14 banco-arbitro.py --solo-nuovo   (senza esempi dalla wiki)
 """
 from __future__ import annotations
 import importlib.util, os, sys, time

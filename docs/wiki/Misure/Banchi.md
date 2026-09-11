@@ -20,6 +20,7 @@ Ogni banco usa SOLO dati sintetici. Le chiamate al modello esterno costano cente
 | 2026-09-11 | terapia (8 casi, con modifiche) | `banco-terapia.py --modello` | codice 8/8, modello 7/8 (nota clinica nella riga → guardia aggiunta) |
 | 2026-09-11 | coerenza interna (10 referti) | `banco-coerenza.py` | richiamo 5/5, falsi allarmi 0, 48 s |
 | 2026-09-11 | dizionario dalle correzioni (dati reali, solo conteggi) | script una tantum | 5 revisioni, 56 REPLACE, 20 candidate → 19 proposte, 1 ricorrente, 12 «altro» |
+| 2026-09-11 | conoscenza dalla wiki nei prompt (attenzioni + esempi finti, [[Agenti/Come funziona]]) | i quattro banchi sopra, `REFERTI_CONOSCENZA=0` per il confronto | arbitro 14/15 → **15/15**; terapia modello 7/8 → **8/8**; omissioni 8/9 → 8/9 (lateralità sola ancora persa); coerenza 5/5, 0 falsi → uguale. Nessuna regressione, tenuta |
 
 Suite permanente: `python3.14 pipeline-referti/prove-catastrofiche.py` → 32/32 (11.9.2026). Test app: `npm run test:app` → 22 casi.
 

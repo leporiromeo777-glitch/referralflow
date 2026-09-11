@@ -26,6 +26,7 @@ Una riga per decisione, con la data e il perché. Non si rilitigano senza un dat
 | 2026-09-11 | Fase «destinatario dalle note» NON fatta | sui dati reali il destinatario è già giusto 9/11 e le 2 mancanti non hanno indizi nelle note |
 | 2026-09-11 | Coerenza interna accesa di serie (`coerenza=1` implicito) | banco 5/5 con 0 falsi allarmi; da rivedere sui dettati veri |
 | 2026-09-11 | Documentazione in wiki per argomento (questa), CLAUDE.md ridotto alle regole | il CLAUDE.md era 800 righe di storia narrata |
+| 2026-09-11 | La conoscenza degli agenti della catena vive in `Agenti/` e viene COMPILATA nei prompt (attenzioni + esempi finti), niente recupero automatico a ogni chiamata | misurato: arbitro 14→15/15, terapia 7→8/8, gli altri uguali, nessuna regressione; il RAG su pagine intere porterebbe rumore e costi per compiti stretti |
 
 ## Aperte
 - Corsa senza VAD come passata principale (tre collassi in tre giorni su Moccetti).

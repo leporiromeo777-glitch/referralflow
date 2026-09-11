@@ -26,7 +26,7 @@ Mai inserire password o credenziali; il robot MediOnline è in SOLA LETTURA (ved
 
 ## Come si consegna
 - Commit con `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`; i fix della catena si committano E si pushano (branch `claude/ai-chain-collaboration-prompt-heacx2`).
-- Catena: `bash pipeline-referti/distribuisci.sh` (esegue la suite `prove-catastrofiche.py`, si ferma se un referto è in lavorazione, copia in `~/referti-pipeline/`, riavvia il servizio). Mai cp+kickstart a mano. Copia i `correzioni-<medico>.json` solo se assenti: il dizionario vivo si modifica in `~/referti-pipeline/`.
+- Catena: `bash pipeline-referti/distribuisci.sh` (compila la conoscenza degli agenti dalla wiki, esegue la suite `prove-catastrofiche.py`, si ferma se un referto è in lavorazione, copia in `~/referti-pipeline/`, riavvia il servizio). Mai cp+kickstart a mano. Copia i `correzioni-<medico>.json` solo se assenti: il dizionario vivo si modifica in `~/referti-pipeline/`.
 - App: `bash mac/aggiorna-server.sh` (pull + kickstart; la ricompilazione parte quando `.build-stamp` non coincide con HEAD, 1-2 minuti).
 - Variabili del servizio: `~/referti-pipeline/invio.conf` viene copiato nel plist all'installazione → per cambiare un modello vanno modificati ENTRAMBI, poi `launchctl unload/load`.
 - Ogni modifica di comportamento va misurata (banco o suite) e documentata nella pagina dell'argomento di questa wiki.

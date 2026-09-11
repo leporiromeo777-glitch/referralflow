@@ -1,0 +1,142 @@
+{
+  "arbitro": {
+    "attenzione": [
+      "I sistemi di riconoscimento vocale perdono parole più spesso di quanto ne inventino: una negazione, un qualificatore o una lateralità presenti da una parte sola sono di solito la versione giusta, se la frase resta coerente.",
+      "Una parola in più che rende la frase assurda o contraddice il contesto è invece un'invenzione: scegli l'altra versione.",
+      "Le sigle si scrivono come nel contesto del medico (RIVA, RCx, CoroTAC, FE); «il RIVA» è maschile.",
+      "Se il contesto non basta a decidere, «incerto» è la risposta giusta, non una scelta a caso."
+    ],
+    "esempi": [
+      {
+        "dato": "contesto «nonostante la statina i profili lipidici … per cui aumento la dose»; a: «profili lipidici controllati»; b: «profili lipidici non controllati»",
+        "risposta": "b (l'aumento della dose ha senso solo se i profili NON sono controllati)",
+        "titolo": "Negazione sentita da un solo motore, coerente col contesto"
+      },
+      {
+        "dato": "contesto «stenosi dell'arteria renale … trattata con angioplastica»; a: «arteria renale sinistra»; b: «arteria renale sinistra destra»",
+        "risposta": "a (due lateralità sulla stessa arteria non hanno senso)",
+        "titolo": "Parola in più che rende la frase assurda"
+      },
+      {
+        "dato": "contesto «stenosi serrata della … trattata con stent»; a: «erre ci ics»; b: «RCx»",
+        "risposta": "b",
+        "titolo": "Sigla detta a lettere"
+      },
+      {
+        "dato": "contesto «il paziente riferisce dolore toracico … da due settimane»; a: «dolore toracico atipico»; b: «dolore toracico tipico»",
+        "risposta": "incerto (cambia la diagnosi e il contesto non dice quale sia vera)",
+        "titolo": "Contesto insufficiente"
+      }
+    ]
+  },
+  "coerenza": {
+    "attenzione": [
+      "Un'evoluzione nel tempo («a giugno…, oggi…») non è una contraddizione; due valori dello stesso parametro senza un tempo che li separi lo sono.",
+      "Un esame e un giudizio possono divergere solo se il testo lo spiega; «funzione conservata» con una frazione di eiezione bassa non è spiegato.",
+      "«Terapia invariata» seguito da una modifica presentata come tale è una contraddizione; «invariata salvo…» no.",
+      "Al massimo cinque coppie, le più gravi prima; nel dubbio nessuna."
+    ],
+    "esempi": [
+      {
+        "dato": "«L'ECG mostra ritmo sinusale regolare. … All'ECG odierno fibrillazione atriale a risposta ventricolare controllata.»",
+        "risposta": "«ritmo sinusale regolare» ↔ «fibrillazione atriale a risposta ventricolare controllata» (lo stesso ECG non può mostrare entrambi)",
+        "titolo": "Stesso esame, due esiti"
+      },
+      {
+        "dato": "«Nega dispnea e dolore toracico. … Riferisce dispnea per sforzi lievi da un mese.»",
+        "risposta": "«Nega dispnea» ↔ «Riferisce dispnea per sforzi lievi»",
+        "titolo": "Sintomo negato e poi riferito"
+      },
+      {
+        "dato": "«A giugno la frazione di eiezione era del 35 per cento. Oggi, dopo l'ottimizzazione della terapia, è del 50 per cento.»",
+        "risposta": "nessuna contraddizione",
+        "titolo": "Esca: evoluzione nel tempo"
+      }
+    ]
+  },
+  "correttore": {
+    "attenzione": [
+      "Una parola strana in un contesto cardiologico è quasi sempre un termine medico sentito male: cerca il termine più vicino per suono che abbia senso nella frase (sensuale → sinusale, paradossistica → parossistica).",
+      "I nomi commerciali svizzeri dei farmaci vanno scritti come nell'elenco del medico; un nome che somiglia a un farmaco ma non esiste è un errore d'ascolto.",
+      "Le frasi fisse del medico vanno riconosciute anche se storpiate: la forma giusta è quella nel contesto.",
+      "Non toccare: numeri e unità, segnaposto come «Persona 1», istruzioni alla segretaria, autocorrezioni a voce (le gestisce un'altra fase)."
+    ],
+    "esempi": [
+      {
+        "dato": "«episodi di fibrillazione atriale paradossistica documentati all'Holter»",
+        "risposta": "da «paradossistica» a «parossistica»",
+        "titolo": "Termine medico per suono"
+      },
+      {
+        "dato": "«prosegue con Concorde 5 mg al mattino»",
+        "risposta": "da «Concorde» a «Concor»",
+        "titolo": "Farmaco che non esiste"
+      },
+      {
+        "dato": "«non ritorno sulle note del paziente in quanto già presente nei miei incarti»",
+        "risposta": "da «sulle note» a «sull'anamnesi»",
+        "titolo": "Frase fissa storpiata"
+      },
+      {
+        "dato": "«Persona 1 presenta una FE del 55 per cento, pressione 135 su 85»",
+        "risposta": "nessuna riparazione (segnaposto e numeri restano come sono)",
+        "titolo": "Che cosa NON correggere"
+      }
+    ]
+  },
+  "omissioni": {
+    "attenzione": [
+      "Conta il contenuto clinico, non la forma: una riformulazione fedele non è un'omissione; una parola sola persa («non», «destra», «lieve») lo è.",
+      "Le frasi rivolte alla segretaria, i saluti, le ripetizioni e le autocorrezioni a voce sono tolte apposta: non segnalarle.",
+      "Cita il passaggio esattamente come sta nel dettato, anche se è una parola sola; il codice lo verifica lettera per lettera.",
+      "Nel dubbio tra «forse manca» e «sicuramente manca», segnala solo il secondo caso."
+    ],
+    "esempi": [
+      {
+        "dato": "DETTATO «all'esame obiettivo non presenta edemi declivi»; BOZZA «All'esame obiettivo presenta edemi declivi.»",
+        "risposta": "segnalare «non presenta edemi declivi» (la bozza dice il contrario)",
+        "titolo": "Negazione persa"
+      },
+      {
+        "dato": "DETTATO «consiglio di ripetere il profilo lipidico fra tre mesi e di rivedere il paziente»; BOZZA «Consiglio di rivedere il paziente.»",
+        "risposta": "segnalare «ripetere il profilo lipidico fra tre mesi»",
+        "titolo": "Raccomandazione persa"
+      },
+      {
+        "dato": "DETTATO «manda una copia anche al medico di famiglia, il paziente sta bene»; BOZZA «Il paziente sta bene.»",
+        "risposta": "nessuna omissione",
+        "titolo": "Esca: istruzione alla segretaria tolta"
+      },
+      {
+        "dato": "DETTATO «propongo di rivederlo non prima di un anno»; BOZZA «Un prossimo controllo è da prevedersi non prima di 12 mesi.»",
+        "risposta": "nessuna omissione",
+        "titolo": "Esca: riformulazione fedele"
+      }
+    ]
+  },
+  "terapia": {
+    "attenzione": [
+      "«Sospendo», «stoppo», «sostituisco X con Y» → X è sospeso; Y è nuovo.",
+      "«Aumento», «riduco», «porto a» → modificato, con la dose nuova.",
+      "«Continua», «prosegue», «in atto» → in corso. «Terapia invariata» senza farmaci = lista vuota.",
+      "La nota serve solo per precisazioni di prescrizione (durata, poi, fino a); la ragione clinica («per la tollerabilità») non è una nota."
+    ],
+    "esempi": [
+      {
+        "dato": "«Continua Beloc Zok 50 mg mezza compressa al mattino, introduco Torasemide 5 mg al mattino e sospendo l'Esidrex per la potassiemia.»",
+        "risposta": "Beloc Zok, 50 mg, «mezza compressa al mattino», in corso; Torasemide, 5 mg, «al mattino», nuovo; Esidrex, dose vuota, sospeso, nota vuota",
+        "titolo": "Modifica, sospensione e nuovo insieme"
+      },
+      {
+        "dato": "«Repatha 140 mg ogni due settimane, da rivalutare dopo tre mesi.»",
+        "risposta": "Repatha, 140 mg, «ogni due settimane», in corso, nota «da rivalutare dopo tre mesi»",
+        "titolo": "Cadenza e durata"
+      },
+      {
+        "dato": "«La terapia resta invariata. Controllo fra un anno.»",
+        "risposta": "lista vuota",
+        "titolo": "Niente terapia"
+      }
+    ]
+  }
+}

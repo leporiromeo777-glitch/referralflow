@@ -11,6 +11,9 @@ File Markdown in `docs/wiki/` del repo, una pagina per argomento, con un'intesta
 - Il modello (Claude Code), a ogni modifica del codice: aggiorna la pagina dell'argomento con lo stato nuovo, sposta i numeri in [[Misure/Banchi]] e le scelte in [[Decisioni/Registro]]. Non appende paragrafi in coda: riscrive ciò che non è più vero.
 - Le persone dello studio, dal browser con SilverBullet o con qualunque editor. Una decisione scritta a parole in [[Decisioni/Registro]] vale come istruzione per il modello.
 
+## Le pagine che la catena usa davvero
+`Agenti/` è l'unica cartella che finisce nei prompt: compilata al deploy in `medici.json` e `conoscenza-agenti.json` ([[Agenti/Come funziona]]). Chi cambia una di quelle pagine cambia il comportamento della catena dal deploy successivo, e la versione del prompt nel cruscotto. Tutte le altre pagine sono per le persone e per le sessioni di sviluppo.
+
 ## Regole delle pagine
 - Dice che cos'è vero oggi; la storia sta in git.
 - Niente dati clinici, niente esempi presi da referti veri, niente credenziali.

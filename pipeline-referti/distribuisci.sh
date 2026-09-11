@@ -14,6 +14,12 @@ PY="${REFERTI_PYTHON:-/opt/homebrew/bin/python3.14}"
 [ -x "$PY" ] || PY="python3"
 SERVIZIO="ch.referralflow.referti-servizio"
 
+echo "0/3 · conoscenza per gli agenti dalla wiki (docs/wiki/Agenti)"
+if ! "$PY" "$QUI/compila-conoscenza.py"; then
+  echo "BLOCCO: compila-conoscenza.py è fallito. Nessun file copiato." >&2
+  exit 1
+fi
+
 echo "1/3 · suite catastrofica"
 if ! "$PY" "$QUI/prove-catastrofiche.py"; then
   echo "BLOCCO: la suite catastrofica non passa. Nessun file copiato, servizio non toccato." >&2
@@ -58,7 +64,8 @@ n=0
 for f in pipeline.py profilo-cardiologia.json allinea-tempi.py trascrivi-voxtral.py pannello.py \
          palestra.py suite-cattiva.py banco-audio.py esporta-oro.sh prove-catastrofiche.py \
          distribuisci.sh farmaci-swissmedic.py prepara-dataset.py proposte-glossario.py \
-         installa-avvio.sh CLAUDE.md correzioni.json vocabolario.txt medici.json prova-atempo.sh; do
+         installa-avvio.sh CLAUDE.md correzioni.json vocabolario.txt medici.json prova-atempo.sh \
+         compila-conoscenza.py conoscenza-agenti.json banco-arbitro.py banco-omissioni.py banco-terapia.py banco-coerenza.py; do
   if [ -f "$QUI/$f" ] && ! cmp -s "$QUI/$f" "$DEST/$f" 2>/dev/null; then
     cp "$QUI/$f" "$DEST/$f"
     n=$((n + 1))

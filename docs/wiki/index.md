@@ -45,6 +45,11 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 - [[Catena/Audit e qualità]] — schema audit, lineage, cruscotto, dizionario dalle correzioni
 - [[Catena/Strumenti e pagine]] — confronto cieco, ombre, manifesto, eventi
 
+## Conoscenza per gli agenti della catena (compilata nei prompt)
+- [[Agenti/Come funziona]] — le pagine qui sotto diventano `medici.json` e `conoscenza-agenti.json` al deploy
+- [[Agenti/Moccetti]], [[Agenti/Moschovitis]] — come detta, frasi fisse, farmaci → contesto del medico
+- [[Agenti/Correttore]], [[Agenti/Arbitro]], [[Agenti/Omissioni]], [[Agenti/Terapia]], [[Agenti/Coerenza]] — attenzioni ed esempi finti con la risposta giusta
+
 ## Medici
 - [[Medici/Moccetti]]
 - [[Medici/Moschovitis]]

@@ -14,6 +14,10 @@ Regole d'uso in `docs/wiki/Wiki/Come si usa.md` (SilverBullet su :3400 in LAN la
   (riscrivi ciò che non è più vero; non appendere in coda), i numeri in
   `Misure/Banchi.md`, le scelte in `Decisioni/Registro.md`.
 - Le decisioni scritte in `Decisioni/Registro.md` valgono come istruzioni: non rilitigarle senza un dato nuovo.
+- **Ciò che gli agenti della catena sanno sta in `docs/wiki/Agenti/`** (medici: come detta, frasi fisse,
+  farmaci; agenti: attenzioni ed esempi finti). `pipeline-referti/compila-conoscenza.py` le compila in
+  `medici.json` e `conoscenza-agenti.json` (distribuisci.sh lo fa da solo): non modificare quei campi a mano,
+  modifica la pagina e ricompila. Ogni cambiamento si misura col banco dell'agente.
 - Niente dati clinici nella wiki, mai esempi presi da referti veri.
 
 ## Regole che non si negoziano (dettaglio in `docs/wiki/Regole/`)

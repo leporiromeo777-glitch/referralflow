@@ -297,10 +297,57 @@ def contesto_medico(mid: str | None) -> str:
     return blocco + "\n\n"
 
 
+PERCORSO_CONOSCENZA = Path(__file__).resolve().parent / "conoscenza-agenti.json"
+CONOSCENZA_ATTIVA = os.environ.get("REFERTI_CONOSCENZA", "1") != "0"
+_CONOSCENZA_CACHE: dict = {}
+
+
+def _conoscenza() -> dict:
+    """conoscenza-agenti.json, compilato dalla wiki (docs/wiki/Agenti) da
+    compila-conoscenza.py: per agente, attenzioni ed esempi finti con la
+    risposta giusta. Ricaricato quando cambia il file."""
+    try:
+        st = PERCORSO_CONOSCENZA.stat()
+    except OSError:
+        return {}
+    chiave = (st.st_mtime_ns, st.st_size)
+    if _CONOSCENZA_CACHE.get("chiave") != chiave:
+        try:
+            dati = json.loads(PERCORSO_CONOSCENZA.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            dati = {}
+        _CONOSCENZA_CACHE.update(chiave=chiave, dati=dati if isinstance(dati, dict) else {})
+    return _CONOSCENZA_CACHE.get("dati", {})
+
+
+def conoscenza_agente(nome: str) -> str:
+    """Il blocco ATTENZIONE + ESEMPI dell'agente (vuoto se spento o assente)."""
+    if not CONOSCENZA_ATTIVA:
+        return ""
+    voce = _conoscenza().get(nome) or {}
+    righe: list[str] = []
+    att = [str(a) for a in (voce.get("attenzione") or []) if str(a).strip()][:8]
+    if att:
+        righe.append("ATTENZIONE:")
+        righe.extend(f"- {a}" for a in att)
+    es = [e for e in (voce.get("esempi") or []) if isinstance(e, dict) and e.get("dato") and e.get("risposta")][:6]
+    if es:
+        righe.append("ESEMPI (casi finti con la risposta giusta):")
+        for k, e in enumerate(es, 1):
+            righe.append(f"{k}) {e['dato']}")
+            righe.append(f"   Risposta giusta: {e['risposta']}")
+    return ("\n".join(righe) + "\n\n") if righe else ""
+
+
+def _prompt_agente(modello_prompt: str, nome: str) -> str:
+    return modello_prompt.replace("{conoscenza}", conoscenza_agente(nome))
+
+
 def prompt_correzione(modello_prompt: str, testo: str) -> str:
     """Il prompt di correzione con il testo e il contesto del medico della
     corsa (vuoto se non c'è profilo: il prompt resta quello di sempre)."""
-    return modello_prompt.replace("{contesto_medico}", contesto_medico(_CORSA.get("medico"))).replace("{testo}", testo)
+    blocco = contesto_medico(_CORSA.get("medico")) + conoscenza_agente("correttore")
+    return modello_prompt.replace("{contesto_medico}", blocco).replace("{testo}", testo)
 
 
 def _imposta_corsa(mid: str | None) -> dict | None:
@@ -1840,7 +1887,7 @@ Regole obbligatorie:
 4. I sistemi di riconoscimento vocale PERDONO parole più spesso di quanto ne inventino. Se una sola delle due versioni contiene una negazione, un qualificatore clinico (diminuito, aumentato, lieve, severo…) o una lateralità (destra, sinistra) e la frase con quella parola resta coerente col contesto, preferisci quella versione. Se invece quella parola contraddice il contesto, scegli l'altra.
 5. Le sigle e i termini del contesto del medico (se presente) sono la forma giusta: preferisci la versione che li scrive così.
 
-Rispondi SOLO con un oggetto JSON valido:
+{conoscenza}Rispondi SOLO con un oggetto JSON valido:
 {"scelte": [{"punto": 1, "scelta": "a"}, {"punto": 2, "scelta": "incerto"}]}
 
 PUNTI:
@@ -1850,7 +1897,8 @@ PUNTI:
 def _prompt_arbitro(punti: str) -> str:
     """Il prompt dell'arbitro con il contesto del medico della corsa (vuoto
     senza profilo) e i punti da giudicare."""
-    return (PROMPT_ARBITRO.replace("{contesto_medico}", contesto_medico(_CORSA.get("medico")))
+    return (_prompt_agente(PROMPT_ARBITRO, "arbitro")
+            .replace("{contesto_medico}", contesto_medico(_CORSA.get("medico")))
             .replace("{punti}", punti))
 
 
@@ -4048,7 +4096,7 @@ Regole obbligatorie:
 3. Poche segnalazioni e fondate: nel dubbio, non segnalare. Se non manca nulla, lista vuota.
 4. I segnaposto come «Persona 1», «[Medico 2]», «[data 3]» sono normali.
 
-Rispondi SOLO con un oggetto JSON valido:
+{conoscenza}Rispondi SOLO con un oggetto JSON valido:
 {"omesse": [{"frase": "...", "motivo": "..."}]}
 
 DETTATO:
@@ -4121,7 +4169,7 @@ def omissioni_esterno(bozza: str, grezzo: str, file_id: str) -> list[dict] | Non
     anon_grezzo, anon_bozza = anon.split(AVVOCATO_SEP, 1)
     try:
         uscita = _chiama_esterno_openai(
-            PROMPT_OMISSIONI.replace("{grezzo}", anon_grezzo).replace("{bozza}", anon_bozza), file_id)
+            _prompt_agente(PROMPT_OMISSIONI, "omissioni").replace("{grezzo}", anon_grezzo).replace("{bozza}", anon_bozza), file_id)
     except RuntimeError:
         log.warning("fase=omissioni_modello file=%s esito=esterno_fallito", file_id)
         return None
@@ -4158,7 +4206,7 @@ NON sono contraddizioni: evoluzioni nel tempo («a inizio agosto…, oggi…»),
 Per ogni contraddizione cita i DUE passaggi ESATTAMENTE come compaiono nel testo (copia letterale, brevi) e un motivo di una riga.
 Regole obbligatorie: non correggere, non proporre testo; nel dubbio NON segnalare; al massimo 5.
 
-Rispondi SOLO con un oggetto JSON valido:
+{conoscenza}Rispondi SOLO con un oggetto JSON valido:
 {"contraddizioni": [{"passaggio_a": "…", "passaggio_b": "…", "motivo": "…"}]}
 Se non ce ne sono: {"contraddizioni": []}
 
@@ -4208,7 +4256,8 @@ def incoerenze_esterno(testo: str, file_id: str) -> list[dict] | None:
     if esito_anon is None:
         return None
     anon, mappa = esito_anon
-    prompt = (PROMPT_COERENZA.replace("{contesto_medico}", contesto_medico(_CORSA.get("medico")))
+    prompt = (_prompt_agente(PROMPT_COERENZA, "coerenza")
+              .replace("{contesto_medico}", contesto_medico(_CORSA.get("medico")))
               .replace("{testo}", anon))
     try:
         uscita = _chiama_esterno_openai(prompt, file_id)
@@ -4252,7 +4301,7 @@ Estrai OGNI farmaco citato con la sua prescrizione, così com'è detto, senza in
 
 Regole obbligatorie: nessun farmaco che non sia nel testo; nessun numero che non sia nel testo; se il testo non parla di terapia, lista vuota. I segnaposto come «Persona 1» o «[data 2]» sono normali.
 
-Rispondi SOLO con un oggetto JSON valido:
+{conoscenza}Rispondi SOLO con un oggetto JSON valido:
 {"farmaci": [{"nome": "...", "dose": "...", "posologia": "...", "stato": "...", "nota": "..."}]}
 
 TESTO:
@@ -4408,7 +4457,7 @@ def estrai_terapia(finale: str, file_id: str) -> dict | None:
         return None
     anon, mappa = esito_anon
     try:
-        uscita = _chiama_esterno_openai(PROMPT_TERAPIA.replace("{testo}", anon), file_id)
+        uscita = _chiama_esterno_openai(_prompt_agente(PROMPT_TERAPIA, "terapia").replace("{testo}", anon), file_id)
     except RuntimeError:
         log.warning("fase=terapia file=%s esito=esterno_fallito", file_id)
         return None
@@ -6982,6 +7031,10 @@ def versione_catena() -> dict[str, str]:
     prompt_txt = "\n".join(str(v) for k, v in sorted(globals().items()) if k.startswith("PROMPT_") and isinstance(v, str))
     # Il contesto per medico è parte del prompt: cambia lui, cambia la versione.
     prompt_txt += "\n" + contesto_medico(_CORSA.get("medico"))
+    try:
+        prompt_txt += "\n" + (PERCORSO_CONOSCENZA.read_text(encoding="utf-8") if CONOSCENZA_ATTIVA and PERCORSO_CONOSCENZA.is_file() else "")
+    except OSError:
+        pass
     diz = b""
     for pth in (PERCORSO_CORREZIONI, PERCORSO_CORREZIONI_LOCALI):
         try:

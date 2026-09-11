@@ -102,7 +102,7 @@ def _voci_grezze(dettato):
     if esito is None:
         return []
     anon, mappa = esito
-    out = m._chiama_esterno_openai(m.PROMPT_TERAPIA.replace("{testo}", anon), "banco-terapia")
+    out = m._chiama_esterno_openai(m._prompt_agente(m.PROMPT_TERAPIA, "terapia").replace("{testo}", anon), "banco-terapia")
     dati = m._estrai_json(out) or {}
     def rip(s):
         for k, v in mappa.items():

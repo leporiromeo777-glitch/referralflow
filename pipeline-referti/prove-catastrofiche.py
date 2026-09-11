@@ -578,6 +578,31 @@ def _prova_32() -> None:
             p.unlink()
 
 
+@caso("33 · conoscenza dalla wiki: compilata nei prompt degli agenti, spegnibile, nell'impronta della versione")
+def _prova_33() -> None:
+    import importlib.util as _iu
+    spec_c = _iu.spec_from_file_location("compila", QUI / "compila-conoscenza.py")
+    c = _iu.module_from_spec(spec_c); spec_c.loader.exec_module(c)
+    medici, agenti = c.compila()
+    # La compilazione è un'identità sui file già allineati (distribuisci la esegue).
+    assert json.dumps(medici, ensure_ascii=False, indent=2) + "\n" == (QUI / "medici.json").read_text(encoding="utf-8"), "medici.json non allineato alla wiki"
+    assert set(agenti) >= {"arbitro", "correttore", "omissioni", "terapia", "coerenza"}, set(agenti)
+    for nome, v in agenti.items():
+        assert v["esempi"] and all(e["dato"] and e["risposta"] for e in v["esempi"]), nome
+    # Il blocco entra nei prompt e sparisce con REFERTI_CONOSCENZA=0.
+    pr = m._prompt_arbitro("x")
+    assert "ESEMPI (casi finti con la risposta giusta)" in pr and "{conoscenza}" not in pr and pr.index("ESEMPI") < pr.index("Rispondi SOLO"), pr[-400:]
+    assert "{conoscenza}" not in m._prompt_agente(m.PROMPT_TERAPIA, "terapia")
+    assert "ATTENZIONE:" in m.prompt_correzione(m.PROMPT_CORREZIONE_LISTA, "t")
+    vecchio = m.CONOSCENZA_ATTIVA
+    m.CONOSCENZA_ATTIVA = False
+    try:
+        assert "ESEMPI" not in m._prompt_arbitro("x") and "{conoscenza}" not in m._prompt_arbitro("x")
+    finally:
+        m.CONOSCENZA_ATTIVA = vecchio
+    assert m.conoscenza_agente("agente-inesistente") == ""
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0
