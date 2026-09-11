@@ -23,6 +23,11 @@ export type MedicoDettante = {
   chiusura: string;
   firma: string[];
   copia: string;
+  // Lettera tipo (scheletro con segnaposto) e regole di forma dalla wiki
+  // Agenti/<medico> (2026-09-12): primo esempio e regole nel prompt di
+  // «Impagina come lettera». Vuoti = nessun esempio fisso.
+  lettera_tipo: string;
+  regole_forma: string[];
 };
 
 export type FormatoReferto = 'rapporto' | 'lettera';
@@ -63,6 +68,9 @@ export function puliscoMedici(v: unknown): MedicoDettante[] {
       chiusura: testoBreve((m as any).chiusura),
       firma: righeValide((m as any).firma, 4),
       copia: testoBreve((m as any).copia),
+      lettera_tipo: typeof (m as any).lettera_tipo === 'string' ? (m as any).lettera_tipo.trim().slice(0, 3000) : '',
+      regole_forma: (Array.isArray((m as any).regole_forma) ? (m as any).regole_forma : [])
+        .filter((x: unknown): x is string => typeof x === 'string').map((x: string) => x.trim().slice(0, 200)).filter(Boolean).slice(0, 12),
     });
   }
   return out;

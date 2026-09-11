@@ -101,6 +101,13 @@ def compila() -> tuple[dict, dict]:
                 prof["frasi_fisse"] = elenco(sez["frasi fisse"])
             if "farmaci frequenti" in sez:
                 prof["farmaci_frequenti"] = farmaci(sez["farmaci frequenti"])
+            # Lettera tipo (blocco recintato ```) e regole di forma (elenco):
+            # entrano nel prompt dell'impaginazione via la piattaforma.
+            if "lettera tipo" in sez:
+                m = re.search(r"```\n(.*?)\n```", sez["lettera tipo"], re.S)
+                prof["lettera_tipo"] = m.group(1).strip() if m else ""
+            if "regole di forma" in sez:
+                prof["regole_forma"] = elenco(sez["regole di forma"])
         elif meta.get("agente"):
             nome = meta["agente"].strip().lower()
             voce = {"attenzione": elenco(sez.get("a cosa fare attenzione", "")), "esempi": esempi(sez.get("esempi", ""))}

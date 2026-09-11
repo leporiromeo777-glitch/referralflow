@@ -24,9 +24,22 @@
       "note": "Detta quasi sempre una lettera nuova da scrivere; raramente chiede di aggiornare altro. Parla molto veloce: provati 0.7 / 0.6 / 0.5 il 2026-09-07 sul primo dettato vero (divergenze 12/14/15 contro 11 a 0.8) — decisione del medico: resta 0.8. Per riprovare: prova-atempo.sh <audio> moccetti 0.7.",
       "frasi_fisse": [
         "non ritorno sull'anamnesi del paziente in quanto già presente nei miei incarti precedenti",
-        "rimanendo a disposizione Tua e del paziente qualora la clinica richiedesse una rivalutazione anticipata",
+        "già presente nel mio incarto del",
+        "rivedo in data … il paziente a margine",
+        "Mi limito ad inviarti le mie considerazioni a seguito della valutazione avvenuta in data",
+        "riferisce di stare bene e nega sintomatologia ascrivibile alla sfera cardiologica",
+        "Clinicamente mi confronto con un paziente di … Kg per … cm, PA … mmHg, FC … bpm",
+        "Non vi sono segni per scompenso cardiaco",
+        "ritmo sinusale regolare normocardico con PR nella norma e QRS fine",
+        "Assenza di alterazioni specifiche della ripolarizzazione",
+        "In conclusione, alla luce degli elementi di cui sopra",
+        "a completamento diagnostico prevedo nelle prossime settimane",
+        "Frattanto la terapia in atto rimane invariata",
+        "Dal canto mio un prossimo controllo è da prevedersi non prima di",
+        "rimanendo a disposizione Tua e del paziente qualora la clinica richiedesse un controllo anticipato",
+        "A Te chiedo di ricontrollare periodicamente il profilo lipidico e l'evoluzione pressoria",
         "propongo di continuare con la terapia in atto lasciando a Te il compito di rivalutare periodicamente il profilo lipidico e l'evoluzione pressoria",
-        "un prossimo controllo è da prevedersi non prima di",
+        "che mi legge in copia",
         "Cordiali e collegiali saluti"
       ],
       "farmaci_frequenti": [
@@ -82,7 +95,18 @@
         "Multaq (dronedarone)"
       ],
       "contesto": "Parla molto veloce, con frasi lunghe e incisi; detta lettere a colleghi che gli hanno inviato il paziente. Struttura tipica: saluto al collega; rimando agli incarti precedenti o breve anamnesi; esami eseguiti con date, sigle e valori (ecocardiogramma, cicloergometria o spiroergometria, CoroTAC, coronarografia, Holter); valutazione; proposta terapeutica con farmaci e dosaggi; controllo successivo; «Cordiali e collegiali saluti». Le istruzioni alla segretaria (a chi inviare, copia, cosa recuperare dalla cartella) le detta dentro il flusso.",
-      "terapia_strutturata": true
+      "terapia_strutturata": true,
+      "lettera_tipo": "Caro {nome del collega},\n\nnon ritorno sull'anamnesi del paziente in quanto già presente nei miei incarti precedenti.\nRivedo in data {gg.mm.aaaa} il paziente a margine nell'ambito di un controllo annuale. Egli riferisce di stare bene e nega sintomatologia ascrivibile alla sfera cardiologica.\n\nFRCV: {fattori di rischio}.\n\nComorbidità: {comorbidità}.\n\nClinicamente mi confronto con un paziente di {peso} Kg per {altezza} cm, PA {sistolica}/{diastolica} mmHg, FC {frequenza} bpm. Non vi sono segni per scompenso cardiaco.\n\nElettrocardiogramma: ritmo sinusale regolare normocardico con PR nella norma e QRS fine. Assenza di alterazioni specifiche della ripolarizzazione.\n\nEcocardiogramma: {esito in una o due frasi, con FE in percentuale}.\n\nIn conclusione, alla luce degli elementi di cui sopra, {valutazione e proposta}. Frattanto la terapia in atto rimane invariata.\nDal canto mio un prossimo controllo è da prevedersi non prima di 12 mesi, rimanendo a disposizione Tua e del paziente qualora la clinica richiedesse un controllo anticipato.\nA Te chiedo di ricontrollare periodicamente il profilo lipidico e l'evoluzione pressoria.\n\nCordiali e collegiali saluti.",
+      "regole_forma": [
+        "Saluto «Caro {nome},» o «Cara {nome},» con il nome del collega; senza nome «Gentile Collega,». Il corpo riprende in minuscolo.",
+        "Paragrafi separati da una riga vuota; etichette a inizio riga: «FRCV:», «Comorbidità:», «Allergie e intolleranze:», «Elettrocardiogramma:», «Ecocardiogramma:», «Holter ({data}):».",
+        "Misure sempre così: «{n} Kg per {n} cm, PA {n}/{n} mmHg, FC {n} bpm»; frazione di eiezione «FE {n}%»; date «gg.mm.aaaa».",
+        "Forme di cortesia con la maiuscola: «Ti», «Te», «Tua», «Tuo».",
+        "«il paziente a margine» indica il paziente della lettera; poi «egli», «ella», «la paziente».",
+        "La conclusione comincia con «In conclusione, alla luce degli elementi di cui sopra,».",
+        "Il blocco «Terapia:» (una riga per farmaco: NOME dose schema, «IR» = in riserva) e la chiusura «Cordiali e collegiali saluti.» li mette il codice: il modello non li scrive.",
+        "«Copia:», «Allegato:», «(partito dopo dettatura)» stanno fuori dalla lettera: mai nel corpo."
+      ]
     },
     {
       "id": "moschovitis",

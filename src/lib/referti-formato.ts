@@ -25,6 +25,11 @@ export async function opzioniRiorganizzazione(
   const opzioni: OpzioniLettera = {
     chiusura: profilo?.chiusura || undefined,
     firma: profilo?.firma?.length ? profilo.firma : undefined,
+    // Lettera tipo e regole di forma dalla wiki Agenti/<medico> (2026-09-12),
+    // pubblicate dal servizio col profilo. REFERTO_STRUTTURA_ESEMPI=0 spegne
+    // anche queste.
+    letteraTipo: process.env.REFERTO_STRUTTURA_ESEMPI !== '0' && profilo?.lettera_tipo ? profilo.lettera_tipo : undefined,
+    regole: process.env.REFERTO_STRUTTURA_ESEMPI !== '0' && profilo?.regole_forma?.length ? profilo.regole_forma : undefined,
   };
   // Terapia della lettera (11.9.2026, secondo tempo): la terapia STRUTTURATA
   // dal dettato (tappa «terapia» della catena) fusa con il blocco della

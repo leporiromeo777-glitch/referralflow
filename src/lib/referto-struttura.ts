@@ -85,19 +85,32 @@ export type OpzioniLettera = {
   // Lettere precedenti dello stesso medico, PSEUDONIMIZZATE, solo per la
   // forma (11.9.2026): il modello gira in locale, nulla esce dal Mac.
   esempi?: string[];
+  // Lettera tipo (scheletro con segnaposto) e regole di forma dalla wiki
+  // Agenti/<medico> (2026-09-12): la lettera tipo è il primo esempio.
+  letteraTipo?: string;
+  regole?: string[];
 };
 
-// Il blocco degli esempi di forma nel prompt della lettera: chiaro che il
-// contenuto viene solo dal testo, e che segnaposto e frasi degli esempi
-// non vanno copiati. Le guardie sui numeri e sulle parole aggiunte
-// restano il paracadute.
-export function bloccoEsempi(esempi: string[] | undefined): string {
+// Il blocco della forma nel prompt della lettera: regole del medico, la
+// lettera tipo (scheletro con segnaposto) e le lettere precedenti
+// pseudonimizzate. Chiaro che il contenuto viene solo dal testo e che
+// segnaposto e frasi degli esempi non vanno copiati. Le guardie sui numeri
+// e sulle parole aggiunte restano il paracadute.
+export function bloccoEsempi(esempi: string[] | undefined, letteraTipo?: string, regole?: string[]): string {
   const puliti = (esempi ?? []).map((e) => e.trim()).filter(Boolean).slice(0, 2);
-  if (!puliti.length) return '';
-  return 'ESEMPI DI FORMA: lettere precedenti dello stesso medico, pseudonimizzate (nomi, date e contatti sostituiti da segnaposto). '
-    + 'Servono SOLO per la forma (saluto, andamento dei paragrafi, tono, chiusura). Il contenuto della nuova lettera viene ESCLUSIVAMENTE dal TESTO qui sotto: '
-    + 'non copiare da questi esempi frasi, valori, farmaci né segnaposto.\n'
-    + puliti.map((e, i) => `--- ESEMPIO ${i + 1} ---\n${e}`).join('\n') + '\n--- FINE ESEMPI ---\n\n';
+  const tipo = (letteraTipo ?? '').trim();
+  const reg = (regole ?? []).map((r) => r.trim()).filter(Boolean).slice(0, 12);
+  if (!puliti.length && !tipo && !reg.length) return '';
+  let out = '';
+  if (reg.length) out += 'FORMA DEL MEDICO (regole della sua segretaria):\n' + reg.map((r) => `- ${r}`).join('\n') + '\n\n';
+  if (tipo) out += 'LETTERA TIPO del medico: uno scheletro con segnaposto tra graffe, che mostra SOLO la forma (ordine, formule, paragrafi). Non copiare i segnaposto né le frasi che il TESTO non contiene.\n--- LETTERA TIPO ---\n' + tipo + '\n--- FINE LETTERA TIPO ---\n\n';
+  if (puliti.length) {
+    out += 'ESEMPI DI FORMA: lettere precedenti dello stesso medico, pseudonimizzate (nomi, date e contatti sostituiti da segnaposto). '
+      + 'Servono SOLO per la forma (saluto, andamento dei paragrafi, tono, chiusura). Il contenuto della nuova lettera viene ESCLUSIVAMENTE dal TESTO qui sotto: '
+      + 'non copiare da questi esempi frasi, valori, farmaci né segnaposto.\n'
+      + puliti.map((e, i) => `--- ESEMPIO ${i + 1} ---\n${e}`).join('\n') + '\n--- FINE ESEMPI ---\n\n';
+  }
+  return out;
 }
 
 export function promptPer(formato: FormatoReferto, opzioni: OpzioniLettera): string {
@@ -105,7 +118,7 @@ export function promptPer(formato: FormatoReferto, opzioni: OpzioniLettera): str
   const chiusura = opzioni.chiusura?.trim()
     ? `scrivi ESATTAMENTE «${opzioni.chiusura.trim()}» e nient'altro (la firma viene aggiunta dopo: non scriverla).`
     : 'quello dettato (per esempio «Cordiali saluti» o «Con i migliori saluti») seguito dalla firma se dettata; se il testo non ha un saluto finale, scrivi «Cordiali saluti,» e basta.';
-  return PROMPT_LETTERA.replace('{chiusura}', chiusura).replace('{esempi}', bloccoEsempi(opzioni.esempi));
+  return PROMPT_LETTERA.replace('{chiusura}', chiusura).replace('{esempi}', bloccoEsempi(opzioni.esempi, opzioni.letteraTipo, opzioni.regole));
 }
 
 // Rifiniture di CODICE dopo il modello, nella forma lettera: il blocco

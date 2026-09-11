@@ -159,10 +159,14 @@ def carica_medici() -> list[dict]:
             "atempo_prove": prove,
             # Frasi che il medico detta spesso (contesto per i prompt di
             # correzione): elenco libero, tetto di 12 voci da 200 caratteri.
-            "frasi_fisse": [str(f).strip()[:200] for f in (v.get("frasi_fisse") or []) if str(f).strip()][:12],
+            "frasi_fisse": [str(f).strip()[:200] for f in (v.get("frasi_fisse") or []) if str(f).strip()][:24],
+            # Lettera tipo e regole di forma (dalla wiki Agenti/, 2026-09-12):
+            # per il prompt dell'impaginazione nella piattaforma.
+            "lettera_tipo": str(v.get("lettera_tipo") or "").strip()[:3000],
+            "regole_forma": [str(f).strip()[:200] for f in (v.get("regole_forma") or []) if str(f).strip()][:12],
             # Note di contesto per i prompt (come detta, a chi scrive…).
             "contesto": str(v.get("contesto") or "").strip()[:700],
-            "farmaci_frequenti": [str(f).strip()[:60] for f in (v.get("farmaci_frequenti") or []) if str(f).strip()][:50],
+            "farmaci_frequenti": [str(f).strip()[:60] for f in (v.get("farmaci_frequenti") or []) if str(f).strip()][:80],
             # Blocco «Terapia:» estratto dal dettato (tappa «terapia»).
             "terapia_strutturata": bool(v.get("terapia_strutturata")),
             "vocabolario": str(v.get("vocabolario") or f"vocabolario-{mid}.txt"),
@@ -223,7 +227,7 @@ def atempo_corsa() -> float:
 # ripete, le forme giuste delle parole che i trascrittori sbagliano. Messi
 # davanti alle stesse regole di sempre, con un tetto di lunghezza: un prompt
 # più informato sì, più lungo di istruzioni no. Senza profilo, niente blocco.
-CONTESTO_MEDICO_MAX = int(os.environ.get("REFERTI_CONTESTO_MAX", "4500"))
+CONTESTO_MEDICO_MAX = int(os.environ.get("REFERTI_CONTESTO_MAX", "7000"))
 
 SIGLE_CARDIOLOGIA = (
     "RIVA (ramo interventricolare anteriore, maschile: il RIVA), RCx (circonflessa), CD/ACD (coronaria destra), "
@@ -269,7 +273,7 @@ def contesto_medico(mid: str | None) -> str:
         righe.append("TERMINI CHE USA: " + ", ".join(dict.fromkeys(termini))[:500] + ".")
     fisse = prof.get("frasi_fisse") or []
     if fisse:
-        righe.append("FRASI CHE DETTA SPESSO, da riconoscere anche se storpiate: " + " | ".join(str(f) for f in fisse)[:900])
+        righe.append("FRASI CHE DETTA SPESSO, da riconoscere anche se storpiate: " + " | ".join(str(f) for f in fisse)[:1400])
     farmaci = prof.get("farmaci_frequenti") or []
     if farmaci:
         righe.append("FARMACI CHE PRESCRIVE PIÙ SPESSO (nome commerciale e principio, come vanno scritti): " + ", ".join(str(f) for f in farmaci)[:800] + ".")
@@ -8311,7 +8315,9 @@ def pubblica_medici() -> None:
         return
     medici = carica_medici()
     CHIAVI = ("id", "nome", "breve", "modalita", "formato", "intestazione", "titolo_rapporto", "chiusura", "firma", "copia")
-    voci = [{k: m[k] for k in CHIAVI} for m in medici]
+    # Lettera tipo e regole di forma (dalla wiki, 2026-09-12): la piattaforma
+    # le mette nel prompt di «Impagina come lettera».
+    voci = [{**{k: m[k] for k in CHIAVI}, "lettera_tipo": str(m.get("lettera_tipo") or ""), "regole_forma": list(m.get("regole_forma") or [])} for m in medici]
     impronta = json.dumps(voci, sort_keys=True, ensure_ascii=False)
     if impronta == _MEDICI_PUBBLICATI or time.monotonic() < _MEDICI_RIPROVA_DOPO:
         return

@@ -11,6 +11,7 @@
     "test:audit": "tsx --test src/lib/audit/prove.test.ts src/lib/audit/prove-dizionario.test.ts src/lib/audit/prove-attribuzione.test.ts src/lib/audit/prove-frasi.test.ts",
     "audit-backfill": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/audit-backfill.ts",
     "consolida": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/consolida.ts",
+    "banco-forma": "NODE_OPTIONS=--conditions=react-server tsx --env-file=.env scripts/banco-forma.ts",
     "test:app": "NODE_OPTIONS=--conditions=react-server tsx --test src/lib/audit/prove.test.ts src/lib/prove-verifica.test.ts src/lib/prove-terapia.test.ts src/lib/audit/prove-dizionario.test.ts src/lib/audit/prove-attribuzione.test.ts src/lib/audit/prove-frasi.test.ts"
   },
   "dependencies": {
