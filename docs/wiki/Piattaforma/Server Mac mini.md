@@ -17,7 +17,8 @@ Aggiornamento: `bash mac/aggiorna-server.sh` (pull + kickstart). Livello 2 (domi
 | `ch.referralflow.agenda-robot` | robot MediOnline ai minuti 1,16,31,46 |
 | `ch.referralflow.referti-servizio` | la catena dei referti (`~/referti-pipeline/pipeline.py --servizio`), log in `~/referti/log/servizio.log` |
 | `ch.referralflow.referti-pannello` | pannello locale di caricamento dettati |
-| `ch.referralflow.silverbullet` | questa wiki nel browser, LAN (vedi [[Wiki/Come si usa]]) |
+| `ch.referralflow.silverbullet` | questa wiki, solo `localhost:3400` (vedi [[Wiki/Come si usa]]) |
+| `ch.referralflow.caddy` | HTTPS davanti alla wiki per la LAN, `https://192.168.1.146:3443`, CA interna |
 
 Le variabili del servizio referti stanno in `~/referti-pipeline/invio.conf` E nel plist (copiate all'installazione): cambiarle in entrambi, poi `launchctl unload/load`.
 

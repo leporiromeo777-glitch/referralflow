@@ -18,7 +18,10 @@ File Markdown in `docs/wiki/` del repo, una pagina per argomento, con un'intesta
 - Una misura senza data e senza comando per ripeterla non vale.
 
 ## SilverBullet (la finestra nel browser)
-- Binario `silverbullet` in `~/silverbullet/`, versione 2.10.0, spazio = `~/referralflow/docs/wiki`, servizio launchd `ch.referralflow.silverbullet`, porta **3400** su tutta la LAN: `http://192.168.1.146:3400` (o `http://Mac-mini-di-Centro.local:3400` dai PC che risolvono il nome). Al primo accesso chiede utente e password.
+- Binario `silverbullet` in `~/silverbullet/`, versione 2.10.0, spazio = `~/referralflow/docs/wiki`, servizio launchd `ch.referralflow.silverbullet`, ascolta SOLO su `127.0.0.1:3400`.
+- SilverBullet richiede HTTPS o `localhost` (service worker e crypto del browser): sul Mac che lo ospita si apre `http://localhost:3400`; dagli altri PC dello studio si passa da Caddy in HTTPS: `https://192.168.1.146:3443` (servizio launchd `ch.referralflow.caddy`, `~/silverbullet/caddy/Caddyfile`, certificati della CA interna di Caddy, log `~/referti/log/caddy.log`).
+- Ogni PC che usa l'indirizzo HTTPS deve fidarsi UNA volta della CA interna: il file è `~/silverbullet/caddy-root.crt` (valido fino al 2036); su Mac: doppio clic → Accesso Portachiavi → «Fidati sempre» (chiede la password del Mac); su Windows: importare tra le «Autorità di certificazione radice attendibili». Senza, il browser avvisa e SilverBullet non parte.
+- Al primo accesso chiede utente e password; lasciare spenta «Enable client encryption».
 - Utente e password stanno in `~/.referralflow-silverbullet.conf` (chmod 600, variabile `SB_USER=utente:password`), generati all'installazione; per cambiarli: modificare il file e `launchctl unload/load` del plist in `~/Library/LaunchAgents/`.
 - I file di servizio di SilverBullet dentro `docs/wiki/` (indice, `_plug/`, `SETTINGS.md`, `CONFIG.md`, `Library/`) sono nel `.gitignore`: nel repo entrano solo le pagine.
 - Se una pagina viene modificata da fuori (dal modello o da git), SilverBullet la rilegge alla riapertura; in caso di dubbio il comando «Space: Reindex».
