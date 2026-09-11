@@ -65,7 +65,7 @@ for f in pipeline.py profilo-cardiologia.json allinea-tempi.py trascrivi-voxtral
          palestra.py suite-cattiva.py banco-audio.py esporta-oro.sh prove-catastrofiche.py \
          distribuisci.sh farmaci-swissmedic.py prepara-dataset.py proposte-glossario.py \
          installa-avvio.sh CLAUDE.md correzioni.json vocabolario.txt medici.json prova-atempo.sh \
-         compila-conoscenza.py conoscenza-agenti.json banco-arbitro.py banco-omissioni.py banco-terapia.py banco-coerenza.py; do
+         compila-conoscenza.py conoscenza-agenti.json banco-arbitro.py banco-omissioni.py banco-terapia.py banco-coerenza.py banco-vad.py; do
   if [ -f "$QUI/$f" ] && ! cmp -s "$QUI/$f" "$DEST/$f" 2>/dev/null; then
     cp "$QUI/$f" "$DEST/$f"
     n=$((n + 1))
