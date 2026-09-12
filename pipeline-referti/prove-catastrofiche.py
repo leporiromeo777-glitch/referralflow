@@ -694,6 +694,24 @@ def _prova_37() -> None:
     assert nuovo == "Caro collega, l'ecocardiogramma da sforzo (assiale) risulta negativo. Fine." and tolti[0]["motivo"] == "parole ripetute di seguito nel dettato", (nuovo, tolti)
 
 
+@caso("38 · glossario fonetico: le parole del medico sono protette e una riparazione non cambia la lettera iniziale («massimale» non diventa «assiale»)")
+def _prova_38() -> None:
+    m._imposta_corsa("moccetti")
+    try:
+        assert "massimale" in m._parole_glossario() and "assiale" in m._parole_glossario()
+        t, n = m.riparazioni_glossario("l'ecocardiogramma da sforzo massimale risulta negativo", "prova-38")
+        assert "massimale" in t and "assiale" not in t, t
+    finally:
+        m._imposta_corsa(None)
+    originale = m._parole_glossario
+    m._parole_glossario = lambda: {"assiale", "serrata"}
+    try:
+        t, n = m.riparazioni_glossario("stenosi serrada del tronco, massimale ma non massimalista", "prova-38b")
+        assert "serrata" in t and "massimale" in t and "assiale" not in t, t
+    finally:
+        m._parole_glossario = originale
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0

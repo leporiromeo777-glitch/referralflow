@@ -2759,8 +2759,16 @@ def _parole_glossario() -> set[str]:
         for w in re.findall(r"[a-zà-ÿ]{6,}", termine.lower()):
             parole.add(w)
 
-    for p in (PERCORSO_CORREZIONI_LOCALI, PERCORSO_CORREZIONI):
-        if not p.is_file():
+    # Il vocabolario e il dizionario del medico della corsa contano come
+    # parole giuste (terzo referto vero, 12.9.2026: «massimale», sentito
+    # bene da entrambi i motori, era stato «riparato» in «assiale» del
+    # vocabolario base perché il glossario non conosceva le parole del
+    # medico).
+    mid = _CORSA.get("medico")
+    diz_medico = _file_medico(mid, "correzioni") if mid else None
+    voc_medico = _file_medico(mid, "vocabolario") if mid else None
+    for p in (diz_medico, PERCORSO_CORREZIONI_LOCALI, PERCORSO_CORREZIONI):
+        if p is None or not p.is_file():
             continue
         try:
             config = json.loads(p.read_text(encoding="utf-8"))
@@ -2770,8 +2778,8 @@ def _parole_glossario() -> set[str]:
             if not chiave.startswith("_") and isinstance(sezione, dict):
                 for v in sezione.values():
                     aggiungi(str(v))
-    for p in (PERCORSO_VOCABOLARIO_LOCALI, PERCORSO_VOCABOLARIO):
-        if not p.is_file():
+    for p in (voc_medico, PERCORSO_VOCABOLARIO_LOCALI, PERCORSO_VOCABOLARIO):
+        if p is None or not p.is_file():
             continue
         try:
             righe = p.read_text(encoding="utf-8").splitlines()
@@ -2809,8 +2817,12 @@ def riparazioni_glossario(testo: str, file_id: str) -> tuple[str, int]:
                      if c != parola}
         if not candidati:
             max_d = 2 if len(parola) >= 9 else 1
+            # Una storpiatura d'ascolto conserva il suono iniziale: un
+            # candidato che comincia con un'altra lettera («massimale» →
+            # «assiale») è un'altra parola, non una riparazione.
             candidati = {c for c in gloss
-                         if abs(len(c) - len(parola)) <= max_d
+                         if c[0] == parola[0]
+                         and abs(len(c) - len(parola)) <= max_d
                          and _distanza_battitura(parola, c) <= max_d}
         # Desinenze, non storpiature: se le due parole coincidono una volta
         # tolte le vocali finali («pressoria»/«pressorio», «pressori»/

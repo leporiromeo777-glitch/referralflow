@@ -1,6 +1,6 @@
 ---
 tipo: tappa
-aggiornata: 2026-09-11
+aggiornata: 2026-09-12
 ---
 # La SPEC della catena, in breve
 
@@ -17,7 +17,7 @@ Ridurre i 20 minuti di riascolto e riscrittura a mano per referto a 3-5 minuti d
 5. **Nessun campo salvato senza conferma umana**: tutto arriva come bozza.
 
 ## Prompt (§6): validati su referti reali, non si riscrivono
-Correzione (6.1) e la variante «a lista di riparazioni» (6.1b, prima scelta dal 21.8.2026), correzione esterna pseudonimizzata (6.1h), aggancio fonetico al glossario (6.1d), frasi fantasma (6.1c), avvocato del diavolo (6.1f), arbitro (6.1e), ispezione (6.2), estrazione campi (6.3), segretaria (6.4). I prompt nati dopo (omissioni, terapia, coerenza, lettera, verifica lettera, contesto del medico) hanno pagine proprie e si misurano coi banchi.
+Correzione (6.1) e la variante «a lista di riparazioni» (6.1b, prima scelta dal 21.8.2026), correzione esterna pseudonimizzata (6.1h), aggancio fonetico al glossario (6.1d), frasi fantasma (6.1c), avvocato del diavolo (6.1f), arbitro (6.1e), ispezione (6.2), estrazione campi (6.3), segretaria (6.4). I prompt nati dopo (omissioni, terapia, coerenza, lettera, verifica lettera, contesto del medico) hanno pagine proprie e si misurano coi banchi. Dal 12.9.2026 (terzo referto vero: «massimale», sentito bene da entrambi i motori, «riparato» in «assiale» del vocabolario base): il vocabolario e il dizionario del medico della corsa contano come parole giuste e non si toccano, e nel ramo per distanza il candidato deve cominciare con la stessa lettera della parola (una storpiatura d'ascolto conserva il suono iniziale). Caso 38.
 
 ## Errori (§7)
 Un file che fallisce non blocca mai la coda: `errori/` + log accanto (solo fase, tipo, tentativi, timestamp). Ollama giù → 3 tentativi con backoff; JSON non parsabile → 1 ritentativo; ReferralFlow irraggiungibile → il JSON resta in `output/` e l'audio NON si cancella; disco pieno → fermo e segnalazione. Timeout Ollama 300 s.
