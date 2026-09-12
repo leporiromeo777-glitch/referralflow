@@ -1,6 +1,6 @@
 ---
 tipo: tappa
-aggiornata: 2026-09-11
+aggiornata: 2026-09-12
 ---
 # Formato lettera, Word in carta intestata, impaginazione AI
 
@@ -20,6 +20,9 @@ Da dodici lettere anonimizzate della segretaria di Moccetti: la pagina [[Agenti/
 
 ## Controllo della lettera (9.9.2026)
 `src/lib/referto-verifica.ts`: `PROMPT_VERIFICA_LETTERA` in due direzioni (frasi della lettera non sostenute dal testo di partenza; passaggi spariti), sul modello esterno dall'APP (`src/lib/esterno.ts`, stessa conf `~/.referralflow-esterno.conf`, solo fornitori autorizzati) con testo pseudonimizzato dal piano di `anonimizza.ts`; guardie pure `filtraSegnalazioni` (le stesse lezioni delle [[Catena/Omissioni]]). Esito in `payload.riorganizzazione.verifica`, card «Controllo della lettera», tappa audit `verifica_lettera`. Solo segnalazioni. Test `npm run test:app`.
+
+## Che cosa resta diverso dalla segretaria (tre referti veri, 12.9.2026)
+Contenuto clinico identico in tutti e tre. Restano fuori dalla portata dei prompt: (a) il blocco **Terapia** con 6-8 righe copiate dalla lettera precedente quando il medico detta «terapia in atto invariata» (la piattaforma ha solo i farmaci del dettato); (b) il blocco **«Allegato:»** con gli esami trasmessi e le loro date, anche quelle non dettate (prese dalla cartella): la pagina mostra le note «da allegare» con i candidati (`referti-allegati.ts`) ma il Word non lo scrive; (c) l'intestazione con specialità FMH e indirizzo, che il Word mette da solo SOLO se il destinatario è in rubrica (`destinatarioInRubrica`), e la sigla dopo la data, che è di chi conferma (`siglaDaEmail`): con la segretaria che conferma in piattaforma escono giuste. Le regole di forma del profilo (date in cifre, «A Te», «In conclusione», etichetta «Duplex carotideo del …:», chiusura) valgono solo se si usa «Impagina come lettera» prima di scaricare il Word.
 
 ## Forma della segretaria (dai cinque confronti catena vs segretaria, 7-8.9.2026)
 Contenuto clinico identico nei confronti; le differenze erano di forma: firma su tre righe, saluto a parte, spazio in più, «Gentile Signora», date in cifre, corpo in minuscolo, «in quanto già presente». Il blocco dell'ecocardiogramma e la terapia della segretaria NON erano nel dettato (referti strumentali). Un Word scaricato prima di «Impagina come lettera» è il testo della revisione, non una lettera.
