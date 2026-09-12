@@ -21,3 +21,6 @@ aggiornata: 2026-09-11
 
 ## Dove si cambiano
 `~/referti-pipeline/invio.conf` E il plist del servizio (`launchctl unload/load`); `.env` dell'app per l'impaginazione. Crash whisper/gemma per contesa GPU: `libera_llm()`, diagnosi nei `.ips` di CrashReporter.
+
+## Provati e scartati (12.9.2026)
+Nemotron 3 Nano 30B-A3B (IQ4_XS) e 4B: correzione 1/17 e 0/17, arbitro 13/15; il 30B a temperatura 0 va in loop e in `chiama_ollama` i modelli «nemotron» ricevono `think=False` e `repeat_penalty` 1.15. Numeri in [[Misure/Banchi]]. I due modelli sono ancora in Ollama (22 GB) e si possono togliere.

@@ -2680,10 +2680,17 @@ def chiama_ollama(prompt: str, file_id: str, fase: str, formato_json: bool = Fal
         richiesta_dati["options"]["num_predict"] = max_gettoni
     if formato_json:
         richiesta_dati["format"] = "json"  # SPEC §6.3: output JSON garantito
-    # Qwen 3.x «pensa» prima di rispondere: col tetto ai gettoni il pensiero
-    # si mangerebbe la risposta. Spento; per gli altri modelli non si manda.
-    if "qwen3" in str(richiesta_dati.get("model", "")).lower():
+    # Qwen 3.x e Nemotron 3 «pensano» prima di rispondere: col tetto ai
+    # gettoni il pensiero si mangerebbe la risposta (banco del 12.9.2026:
+    # Nemotron 30B ha speso tutti i 4000 gettoni a pensare e risposto nulla).
+    # Spento; per gli altri modelli non si manda.
+    if any(k in str(richiesta_dati.get("model", "")).lower() for k in ("qwen3", "nemotron")):
         richiesta_dati["think"] = False
+    # Nemotron 3 Nano a temperatura 0 va in loop (la stessa riga 65 volte,
+    # JSON mai chiuso): una penalità di ripetizione lo tiene in riga (sonda
+    # del 12.9.2026: con 1.15 risponde in 3 s con JSON valido).
+    if "nemotron" in str(richiesta_dati.get("model", "")).lower():
+        richiesta_dati["options"]["repeat_penalty"] = 1.15
     corpo = json.dumps(richiesta_dati).encode("utf-8")
     giri = tentativi or OLLAMA_TENTATIVI
     for tentativo in range(1, giri + 1):
