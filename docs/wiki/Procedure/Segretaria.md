@@ -21,7 +21,7 @@ Segui i passi nell'ordine: ogni passo mostra una cosa sola.
 Prima le parole, poi le frasi: così quando arrivi alle frasi molte sono già a posto.
 1. **I due motori non concordano**: per ogni punto scegli «Ha ragione A», «Ha ragione B» (entra da sola) o «Nessuno dei due: correggo io». Sono in cima i punti che cambiano il senso (diminuito/aumentato, non, destra/sinistra, numeri).
 2. **Correzioni fatte in automatico**: ognuna si può annullare.
-3. **Da controllare subito**: numeri non confermati, passaggi del dettato che mancano nel referto (riascolta e, se la frase va davvero nel referto, «Inserisci nel testo»: entra già pulita), frasi non sostenute dal dettato.
+3. **Da controllare subito**: numeri non confermati, passaggi del dettato che mancano nel referto (riascolta e, se la frase va davvero nel referto, «Inserisci nel testo»: entra già pulita; se sotto c'è «Forse è già nel referto: …», leggi quella frase prima: spesso è la stessa con qualche parola storpiata e NON va rimessa), frasi non sostenute dal dettato.
 4. **Frasi da chiarire** e **frasi spente dall'AI**: riascolta e decidi.
 5. **Doppioni del parlato**: frasi ripetute tolte dalla catena; «Rimetti» se una serviva.
 6. **Note per la segreteria** e **campi estratti** (paziente, data di nascita, medico destinatario…): correggi ciò che è sbagliato; «non indicato» vuol dire che nel dettato non c'è.

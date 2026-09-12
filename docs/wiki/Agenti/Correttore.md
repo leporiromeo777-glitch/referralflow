@@ -1,7 +1,7 @@
 ---
 tipo: agente
 agente: correttore
-aggiornata: 2026-09-11
+aggiornata: 2026-09-12
 ---
 # Agente: correttore della trascrizione
 

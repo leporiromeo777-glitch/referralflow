@@ -1,7 +1,7 @@
 ---
 tipo: agente
 agente: arbitro
-aggiornata: 2026-09-11
+aggiornata: 2026-09-12
 ---
 # Agente: arbitro delle divergenze
 

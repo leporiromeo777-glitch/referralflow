@@ -1,6 +1,6 @@
 ---
 tipo: decisioni
-aggiornata: 2026-09-11
+aggiornata: 2026-09-12
 ---
 # Registro delle decisioni chiuse
 
