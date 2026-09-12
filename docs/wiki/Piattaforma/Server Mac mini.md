@@ -28,3 +28,4 @@ Cron `/etc/cron.d/referralflow` via `cron-hit.sh`; backup off-site su Exoscale S
 
 Dal 13.9.2026 sul Mac girano anche `ch.referralflow.prototipo` (porta 8765) e `ch.referralflow.voce` (127.0.0.1:8787): vedi [[Piattaforma/Prototipo stack]].
 Caddy pubblica anche la piattaforma in HTTPS: https://192.168.1.146:3444 → 127.0.0.1:3000 (per il microfono del dittafono dal telefono).
+Dal 13.9.2026 Caddy pubblica la piattaforma anche sulle porte standard: https://192.168.1.146/ (e imac-2.local, mac-mini-di-centro.local) → 127.0.0.1:3000, con http:// che rimanda a https://. I certificati sono della CA interna di Caddy (`~/silverbullet/caddy-root.crt` da installare sui dispositivi).
