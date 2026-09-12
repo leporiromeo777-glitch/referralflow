@@ -26,6 +26,7 @@ Parla molto veloce, con frasi lunghe e incisi; detta lettere a colleghi che gli 
 - Dal canto mio un prossimo controllo è da prevedersi non prima di
 - rimanendo a disposizione Tua e del paziente qualora la clinica richiedesse un controllo anticipato
 - A Te chiedo di ricontrollare periodicamente il profilo lipidico e l'evoluzione pressoria
+- l'ecocardiogramma da sforzo, massimale, risulta negativo per ridotta riserva coronarica
 - propongo di continuare con la terapia in atto lasciando a Te il compito di rivalutare periodicamente il profilo lipidico e l'evoluzione pressoria
 - che mi legge in copia
 - Cordiali e collegiali saluti

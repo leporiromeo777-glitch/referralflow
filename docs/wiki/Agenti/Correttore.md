@@ -16,8 +16,8 @@ Correggere solo termini medici storpiati, nomi di farmaci e refusi nati dalla tr
 ## A cosa fare attenzione
 - Una parola strana in un contesto cardiologico è quasi sempre un termine medico sentito male: cerca il termine più vicino per suono che abbia senso nella frase (sensuale → sinusale, paradossistica → parossistica).
 - I nomi commerciali svizzeri dei farmaci vanno scritti come nell'elenco del medico; un nome che somiglia a un farmaco ma non esiste è un errore d'ascolto.
-- Le frasi fisse del medico vanno riconosciute anche se storpiate: la forma giusta è quella nel contesto.
-- Una lettera sola incastrata prima di un segno («previsto i:», «esam e,») è la desinenza staccata della parola precedente: si riattacca («previsti:»), non si cancella.
+- Le frasi fisse del medico vanno riconosciute anche se storpiate: la forma giusta è quella nel contesto (un test da sforzo è «massimale» o «submassimale», mai «assiale»).
+- Una lettera sola incastrata prima di un segno («previsto i:») è rumore d'ascolto: si toglie se la parola prima concorda già col resto («dell'esame … previsto:»), si riattacca solo se la concordanza lo richiede («degli esami … previsti:»).
 - Non toccare: numeri e unità, segnaposto come «Persona 1», istruzioni alla segretaria, autocorrezioni a voce (le gestisce un'altra fase).
 
 ## Esempi
@@ -38,8 +38,8 @@ Dato: «la carriota mostra, malgrado numerosi artefatti a movimento, una malatti
 Risposta giusta: da «carriota» a «CardioTAC»; da «artefatti a movimento» a «artefatti da movimento»
 
 ### Desinenza staccata prima di un segno
-Dato: «i risultati degli esami a suo tempo previsto i: il duplex carotideo»
-Risposta giusta: da «previsto i:» a «previsti:»
+Dato: «i risultati dell'esame strumentale a suo tempo previsto i: il duplex carotideo»
+Risposta giusta: da «previsto i:» a «previsto:» (l'esame è singolare: la «i» è rumore)
 
 ### Che cosa NON correggere
 Dato: «Persona 1 presenta una FE del 55 per cento, pressione 135 su 85»
