@@ -14,6 +14,7 @@ export type Candidato = {
   id: string;
   filename: string;
   categoria: string | null;
+  nota?: string | null;
   quando: string;
   punteggio: number;
 };
@@ -108,7 +109,7 @@ export async function agganciaRiferimenti(
       if (p > 0) {
         candidati.push({
           tipo: 'cartella', id: d.id, filename: d.filename,
-          categoria: d.categoria, quando: d.uploaded_at, punteggio: p,
+          categoria: d.categoria, nota: d.nota, quando: d.uploaded_at, punteggio: p,
         });
       }
     }

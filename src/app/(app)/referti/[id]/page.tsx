@@ -300,9 +300,11 @@ export default async function RefertoBozza({
 
   // Aggancio dei riferimenti citati nelle note («allega la vecchia email…»):
   // candidati dalla cartella del paziente e dagli allegati delle sue referral.
+  // Il nome vale anche se confermato a mano nel wizard (12.9.2026: prima
+  // contava solo l'estratto, e il terzo referto vero non ne aveva).
   const noteRif = await agganciaRiferimenti(
     session.studioId,
-    typeof campi.nome_paziente === 'string' ? campi.nome_paziente : null,
+    typeof campiRif.nome_paziente === 'string' ? campiRif.nome_paziente : null,
     Array.isArray(p.note_segreteria) ? p.note_segreteria.filter((n): n is string => typeof n === 'string') : []
   );
   const daProcurare = noteRif.filter((n) => n.riguardaDocumenti && n.candidati.length === 0);

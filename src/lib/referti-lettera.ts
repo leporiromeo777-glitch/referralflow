@@ -1,5 +1,8 @@
 import 'server-only';
+import mammoth from 'mammoth';
 import { query } from './db';
+import { getFile } from './storage';
+import { trovaPaziente } from './referti-allegati';
 
 // Strumenti di CODICE per la forma «lettera» del referto (2026-09-07, dal
 // confronto tra il primo referto della catena e la versione della
@@ -187,7 +190,39 @@ export async function letteraPrecedente(
       limit 1`,
     [studioId, bozzaId, nome, nascita]
   );
-  return prec?.testo_finale ? { id: prec.id, testo: prec.testo_finale } : null;
+  if (prec?.testo_finale) return { id: prec.id, testo: prec.testo_finale };
+  return letteraPrecedenteInCartella(studioId, nome);
+}
+
+// Se in piattaforma non c'è una lettera confermata, vale l'ultima lettera
+// caricata nella CARTELLA del paziente (categoria «lettera», .docx o .txt):
+// la segretaria ci mette la lettera precedente e la terapia si riprende da
+// lì (12.9.2026, dopo tre referti veri con 6-8 righe di terapia copiate dalla
+// lettera precedente che la piattaforma non aveva). Best-effort: un file che
+// non si legge = nessuna lettera.
+async function letteraPrecedenteInCartella(studioId: string, nome: string): Promise<{ id: string; testo: string } | null> {
+  const patientId = await trovaPaziente(studioId, nome);
+  if (!patientId) return null;
+  const docs = await query<{ id: string; filename: string; storage_key: string }>(
+    `select id, filename, storage_key from patient_documents
+      where patient_id = $1 and studio_id = $2 and categoria = 'lettera'
+        and (lower(filename) like '%.docx' or lower(filename) like '%.txt')
+      order by uploaded_at desc limit 3`,
+    [patientId, studioId]
+  );
+  for (const d of docs) {
+    try {
+      const { body } = await getFile(d.storage_key);
+      const testo = d.filename.toLowerCase().endsWith('.txt')
+        ? body.toString('utf-8')
+        : (await mammoth.extractRawText({ buffer: body })).value;
+      const pulito = testo.replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim();
+      if (pulito.length >= 200) return { id: `documento:${d.id}`, testo: pulito };
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }
 
 // Il destinatario in rubrica (medici invianti dello studio), cercato per

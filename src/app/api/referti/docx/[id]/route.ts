@@ -6,6 +6,8 @@ import { profiloMedico } from '@/lib/referti-medici';
 import { appellativo, conTitolo, dataCh, dataVisitaDalTesto, destinatarioAffidabile, destinatarioDalSaluto, destinatarioInRubrica, siglaDaEmail } from '@/lib/referti-lettera';
 import { salvaDalModulo } from '@/lib/referti-salva';
 import { isUuid } from '@/lib/cartella';
+import { agganciaRiferimenti } from '@/lib/referti-allegati';
+import { bloccoAllegato } from '@/lib/referti-allegato-blocco';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -127,7 +129,20 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const dataVisita = formato === 'lettera' ? dataDettato : (dataVisitaDalTesto(testo) || dataDettato);
   const titolo = (profilo?.titolo_rapporto || 'VISITA AMBULATORIALE, RAPPORTO').replace('{data_visita}', dataVisita);
   // Riga «Copia»: dal profilo (Moschovitis la tiene, Moccetti no).
-  const copia = profilo ? profilo.copia : 'Copia: alla paziente';
+  let copia = profilo ? profilo.copia : 'Copia: alla paziente';
+  // Formato lettera: blocco «Allegato:» come lo scrive la segretaria, dai
+  // documenti della cartella agganciati alle note per la segreteria
+  // (12.9.2026). Senza documenti agganciati non compare.
+  if (formato === 'lettera') {
+    const note = Array.isArray(b.payload?.note_segreteria)
+      ? (b.payload.note_segreteria as unknown[]).filter((n): n is string => typeof n === 'string') : [];
+    if (note.length) {
+      try {
+        const blocco = bloccoAllegato(await agganciaRiferimenti(session.studioId, pazienteNome || null, note));
+        if (blocco) copia = [copia, blocco].filter(Boolean).join('\n');
+      } catch { /* best-effort */ }
+    }
+  }
 
   const docx = await generaDocxReferto({
     medico,
