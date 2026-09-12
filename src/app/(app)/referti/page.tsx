@@ -107,7 +107,7 @@ export default async function Referti({
         Nessun referto è definitivo senza una persona.
       </PageHero>
       <p className="muted small" style={{ marginTop: 8 }}>
-        <Link href="/referti/qualita">Qualità della dettatura</Link> · <Link href="/referti/confronto">Confronto cieco</Link> · <a href="/dittafono/index.html">Detta dal telefono</a>
+        <Link href="/referti/qualita">Qualità della dettatura</Link> · <Link href="/referti/confronto">Confronto cieco</Link> · <a href="/dittafono/index.html">Detta dal telefono</a> · <a href="/prototipo/index.html#/reports">Prototipo con i dati veri</a>
         {n_ombre > 0 ? ` (${n_ombre === 1 ? '1 variante da giudicare' : `${n_ombre} varianti da giudicare`})` : ''}
       </p>
 

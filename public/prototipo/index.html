@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ReferralFlow</title>
+<meta name="theme-color" content="#F5F5F7">
+<link rel="stylesheet" href="styles.css?v=16">
+<link rel="icon" type="image/png" sizes="64x64" href="brand/referralflow-icon-64.png">
+<link rel="apple-touch-icon" href="brand/referralflow-icon-512.png">
+</head>
+<body>
+
+<div id="splash">
+  <div class="splash-inner">
+    <img class="brand-mark splash-mark" src="brand/referralflow-icon-128.png" alt="" width="56" height="56">
+    <div style="font-weight:700;font-size:18px;letter-spacing:-.02em">ReferralFlow</div>
+    <p>Inizializzazione area di lavoro sicura…</p>
+  </div>
+</div>
+
+<div id="app">
+  <aside class="sidebar" id="sidebar" aria-label="Navigazione principale"></aside>
+
+  <div class="main">
+    <header class="topbar" id="topbar"></header>
+    <div class="safety-bar" id="safetybar"></div>
+    <main class="content" id="content"></main>
+  </div>
+
+  <aside class="doc-viewer" id="docviewer" aria-label="Documento aperto accanto"></aside>
+  <aside class="ai-panel" id="aipanel" aria-label="ReferralFlow AI"></aside>
+</div>
+
+<!-- Command palette -->
+<div class="overlay" id="palette-overlay">
+  <div class="palette" role="dialog" aria-label="Ricerca e comandi" id="palette"></div>
+</div>
+
+<!-- Side sheet -->
+<div class="sheet-overlay" id="sheet-overlay"></div>
+<div class="sheet" id="sheet" role="dialog"></div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal-overlay"><div class="modal" id="modal" role="dialog"></div></div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<div class="statusbar" id="statusbar"></div>
+<nav class="mobile-nav" id="mobilenav" aria-label="Navigazione mobile"></nav>
+
+<script src="icons.js?v=13"></script>
+<script src="data.js?v=12"></script>
+<script src="pages-core.js?v=14"></script>
+<script src="pages-more.js?v=14"></script>
+<script src="pages-dittafono.js?v=1"></script>
+<script src="data-review.js?v=12"></script>
+<script src="guided-review.js?v=13"></script>
+<script src="knowledge-proposals.js?v=1"></script>
+<script src="patient-summary.js?v=1"></script>
+<script src="voice-assistant.js?v=4"></script>
+<script src="doc-viewer.js?v=2"></script>
+<script src="nav-custom.js?v=1"></script>
+<script src="audio-intake.js?v=1"></script>
+<script src="anonymize.js?v=2"></script>
+<script src="ai-analytics.js?v=13"></script>
+<script src="referralflow-bridge.js?v=1"></script>
+<script src="app.js?v=102"></script>
+</body>
+</html>
