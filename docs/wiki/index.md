@@ -29,6 +29,7 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 ## Catena dei referti (dettato → bozza)
 - [[Catena/SPEC in breve]] — i vincoli della SPEC e dove la pratica se n'è allontanata
 - [[Catena/Panoramica]] — le tappe in ordine, i file, i modelli, dove sta ogni cosa
+- [[Catena/Schema]] — il flusso in un diagramma, da copiare a chi deve capire la catena (anche un'altra AI)
 - [[Catena/Pannello locale]] — lo strumento d'esercizio sul Mac
 - [[Catena/Profili per medico]] — medici.json, modalità, formati, dizionari
 - [[Catena/Sentinelle e recuperi]] — collasso A/B, corsa senza VAD, promozione del testimone, tempi
