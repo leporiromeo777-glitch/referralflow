@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { salvaTesto } from '../actions';
 
 // Revisione guidata della bozza (2026-08-25, su richiesta dell'utente: la
@@ -97,6 +97,8 @@ export function RevisioneGuidata({
   campi,
   valoriNumerici,
   parole = [],
+  centro = null,
+  audio = null,
   riparazioni = [],
   doppioniTolti = [],
   doppioniDubbi = [],
@@ -122,6 +124,10 @@ export function RevisioneGuidata({
   campi: Record<string, string>;
   valoriNumerici: Record<string, unknown> | null;
   parole?: [string, number][];
+  // Tre colonne (13.9.2026, dal prototipo): il testo evidenziato al centro e
+  // l'audio in fondo alla colonna di destra arrivano dalla pagina.
+  centro?: ReactNode;
+  audio?: ReactNode;
   riparazioni?: Riparazione[];
   doppioniTolti?: DoppioneTolto[];
   doppioniDubbi?: DoppioneDubbio[];
@@ -606,39 +612,136 @@ export function RevisioneGuidata({
       </div>
     );
 
+  // Etichetta di gravità per l'elenco a sinistra (13.9.2026, tre colonne
+  // come nel prototipo): dice a colpo d'occhio che genere di lavoro è.
+  const gravita: Record<string, { testo: string; classe: string }> = {
+    divergenze: { testo: 'parole', classe: 'rg3-chip-parole' },
+    ripar: { testo: 'automatico', classe: 'rg3-chip-info' },
+    subito: { testo: 'critico', classe: 'rg3-chip-critico' },
+    arancioni: { testo: 'da chiarire', classe: 'rg3-chip-warn' },
+    spente: { testo: 'spente', classe: 'rg3-chip-info' },
+    doppioni: { testo: 'doppioni', classe: 'rg3-chip-info' },
+    note: { testo: 'segreteria', classe: 'rg3-chip-info' },
+    campi: { testo: 'campi', classe: 'rg3-chip-info' },
+    fine: { testo: 'conferma', classe: 'rg3-chip-ok' },
+  };
+
   return (
-    <div className="rg">
-      <div className="rg-testata">
-        <div className="rg-passi">
+    <div className="rg rg3">
+      <aside className="rg3-sx">
+        <div className="rg3-sx-testata">
+          <strong>Revisione</strong>
+          <span className="muted small">{passo + 1} di {passi.length}</span>
+        </div>
+        <div className="rg-passi rg3-passi" role="tablist" aria-label="Passi della revisione">
           {passi.map((p, i) => (
             <button
               key={p.chiave}
               type="button"
-              className={`rg-tab${i === passo ? ' attivo' : ''}${i < passo ? ' fatto' : ''}`}
+              role="tab"
+              aria-selected={i === passo}
+              className={`rg-tab rg3-tab${i === passo ? ' attivo' : ''}${i < passo ? ' fatto' : ''}`}
               onClick={() => setPasso(i)}
             >
-              <span className="rg-tab-num">{i + 1}</span> {p.titolo}
-              {typeof p.conta === 'number' ? ` (${p.conta})` : ''}
+              <span className="rg3-tab-titolo"><span className="rg-tab-num">{i + 1}</span> {p.titolo}</span>
+              <span className="rg3-tab-meta">
+                {typeof p.conta === 'number' && <span className="rg3-conta">{p.conta}</span>}
+                <span className={`rg3-chip ${gravita[p.chiave]?.classe ?? 'rg3-chip-info'}`}>{gravita[p.chiave]?.testo ?? ''}</span>
+              </span>
             </button>
           ))}
         </div>
-        <p className="muted small">
-          Passo {passo + 1} di {passi.length} — sistemi una cosa alla volta; alla fine
-          rileggi tutto e confermi. Niente si salva finché non confermi. Tasti ← → per
-          cambiare passo.
-          {parole.length > 0 && (
-            <>
-              {' '}
-              <button type="button" className={`rg-tab${veloce ? ' attivo' : ''}`} style={{ marginLeft: 6 }}
-                title="Riascolto più veloce; sui passaggi con numeri resta a 1x"
-                onClick={() => setVeloce(!veloce)}>
-                ⏩ Riascolto 1,5x {veloce ? 'acceso' : 'spento'}
-              </button>
-            </>
-          )}
+        <p className="muted small rg3-sx-nota">
+          Una cosa alla volta; alla fine rileggi tutto e confermi. Niente diventa definitivo finché non confermi. Tasti ← → per cambiare passo.
         </p>
+        {parole.length > 0 && (
+          <button type="button" className={`rg-tab${veloce ? ' attivo' : ''}`}
+            title="Riascolto più veloce; sui passaggi con numeri resta a 1x"
+            onClick={() => setVeloce(!veloce)}>
+            ⏩ Riascolto 1,5x {veloce ? 'acceso' : 'spento'}
+          </button>
+        )}
+      </aside>
+
+      <section className="rg3-centro" aria-label="Testo del referto">
+        {attivo !== 'fine' && centro && (
+          <div className="rg3-testo">
+            <div className="rg3-centro-testata"><strong>Testo</strong><span className="muted small">i punti incerti sono evidenziati; le correzioni dei passi entrano nella rilettura finale</span></div>
+            {centro}
+          </div>
+        )}
+      <div className="rg-corpo" style={{ display: attivo === 'fine' ? undefined : 'none' }}>
+        <p className="muted">
+          Il referto come uscirà, con tutte le correzioni dei passi precedenti.
+          Ultima rilettura: puoi ancora ritoccare a mano qui.
+        </p>
+        {testoStrutturato && (
+          <div className="rg-azioni" style={{ marginBottom: 10 }}>
+            {/* La proposta è pronta dalla catena (fase «struttura») ed è
+                fatta delle STESSE frasi del testo: al clic ci si innestano
+                le correzioni fatte nei passi (frasi modificate e spente),
+                così il lavoro di revisione non va mai perso. */}
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => {
+                ricorda();
+                let s = testoStrutturato;
+                frasiIniziali.forEach((orig, i) => {
+                  if (spente.has(i)) {
+                    s = s.replace(orig, '');
+                  } else if (frasi[i] !== orig) {
+                    s = s.replace(orig, frasi[i]);
+                  }
+                });
+                setTestoLibero(s.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n'));
+              }}
+            >
+              📐 Applica il formato standard (con le tue correzioni)
+            </button>
+            {testoLibero !== null && (
+              <button type="button" className="btn" onClick={() => { ricorda(); setTestoLibero(null); }}>
+                ↩︎ Torna al testo dei passi
+              </button>
+            )}
+          </div>
+        )}
+        <textarea
+          name="testo"
+          rows={18}
+          required
+          value={testoAttuale}
+          onChange={(e) => setTestoLibero(e.target.value)}
+          style={{ width: '100%', fontFamily: 'inherit', lineHeight: 1.5 }}
+        />
+        {testoLibero !== null && (
+          <p className="muted small">
+            Hai ritoccato a mano: da qui in poi i passi precedenti non riscrivono più
+            la casella.
+          </p>
+        )}
+        {/* Salva il testo di questa casella nel referto SENZA confermare
+            (2026-09-07): ciò che si aggiunge o si cambia qui entra subito
+            nel referto — testo in cima, Word, PDF — e la revisione può
+            continuare. formNoValidate: la presa d'atto del gate vale solo
+            per la conferma vera. */}
+        <div className="rg-azioni" style={{ marginTop: 10 }}>
+          <button type="submit" className="btn" formAction={salvaTesto} formNoValidate>
+            💾 Inserisci nel referto (salva senza confermare)
+          </button>
+          <span className="muted small">
+            Le modifiche vengono salvate da sole mentre lavori (anche se esci dal referto); la conferma resta il passo finale.
+          </span>
+        </div>
       </div>
 
+      </section>
+
+      <aside className="rg3-dx">
+        <div className="rg3-dx-testata">
+          <strong>{passi[passo]?.titolo}</strong>
+          <span className="muted small">passo {passo + 1} di {passi.length}</span>
+        </div>
       {attivo === 'ripar' && (
         <div className="rg-corpo">
           <p className="muted">
@@ -1241,71 +1344,6 @@ export function RevisioneGuidata({
       </div>
 
       {/* La casella del testo resta montata sempre: è ciò che viene confermato. */}
-      <div className="rg-corpo" style={{ display: attivo === 'fine' ? undefined : 'none' }}>
-        <p className="muted">
-          Il referto come uscirà, con tutte le correzioni dei passi precedenti.
-          Ultima rilettura: puoi ancora ritoccare a mano qui.
-        </p>
-        {testoStrutturato && (
-          <div className="rg-azioni" style={{ marginBottom: 10 }}>
-            {/* La proposta è pronta dalla catena (fase «struttura») ed è
-                fatta delle STESSE frasi del testo: al clic ci si innestano
-                le correzioni fatte nei passi (frasi modificate e spente),
-                così il lavoro di revisione non va mai perso. */}
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => {
-                ricorda();
-                let s = testoStrutturato;
-                frasiIniziali.forEach((orig, i) => {
-                  if (spente.has(i)) {
-                    s = s.replace(orig, '');
-                  } else if (frasi[i] !== orig) {
-                    s = s.replace(orig, frasi[i]);
-                  }
-                });
-                setTestoLibero(s.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n'));
-              }}
-            >
-              📐 Applica il formato standard (con le tue correzioni)
-            </button>
-            {testoLibero !== null && (
-              <button type="button" className="btn" onClick={() => { ricorda(); setTestoLibero(null); }}>
-                ↩︎ Torna al testo dei passi
-              </button>
-            )}
-          </div>
-        )}
-        <textarea
-          name="testo"
-          rows={18}
-          required
-          value={testoAttuale}
-          onChange={(e) => setTestoLibero(e.target.value)}
-          style={{ width: '100%', fontFamily: 'inherit', lineHeight: 1.5 }}
-        />
-        {testoLibero !== null && (
-          <p className="muted small">
-            Hai ritoccato a mano: da qui in poi i passi precedenti non riscrivono più
-            la casella.
-          </p>
-        )}
-        {/* Salva il testo di questa casella nel referto SENZA confermare
-            (2026-09-07): ciò che si aggiunge o si cambia qui entra subito
-            nel referto — testo in cima, Word, PDF — e la revisione può
-            continuare. formNoValidate: la presa d'atto del gate vale solo
-            per la conferma vera. */}
-        <div className="rg-azioni" style={{ marginTop: 10 }}>
-          <button type="submit" className="btn" formAction={salvaTesto} formNoValidate>
-            💾 Inserisci nel referto (salva senza confermare)
-          </button>
-          <span className="muted small">
-            Le modifiche vengono salvate da sole mentre lavori (anche se esci dal referto); la conferma resta il passo finale.
-          </span>
-        </div>
-      </div>
-
       <div className="rg-nav">
         <button type="button" className="btn" disabled={passo === 0} title="Tasto ←" onClick={() => setPasso(passo - 1)}>
           ← Indietro
@@ -1349,6 +1387,13 @@ export function RevisioneGuidata({
           </label>
         </div>
       )}
+        {audio && (
+          <div className="rg3-audio">
+            <div className="rg3-dx-testata"><strong>Dettato originale</strong><span className="muted small">riascolta il punto che stai controllando</span></div>
+            {audio}
+          </div>
+        )}
+      </aside>
     </div>
   );
 }

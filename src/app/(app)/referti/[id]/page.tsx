@@ -659,7 +659,7 @@ export default async function RefertoBozza({
         </div>
       )}
 
-      {audio && (
+      {audio && !inBozza && (
         <div className="card">
           <h2>Dettato originale</h2>
           <p className="muted">
@@ -920,39 +920,34 @@ export default async function RefertoBozza({
         </div>
       )}
 
-      {inBozza && audio && parole.length > 0 ? (
-        <div className="card">
-          <details open>
-            <summary className="sez-summary">Testo sincronizzato con l&apos;audio</summary>
-            <p className="muted small">
-              La stessa bozza, parola per parola sull&apos;audio: utile per riascoltare
-              un punto preciso. Il testo su cui lavorare resta quello qui sotto.
-            </p>
-            <TestoDettato testo={p.testo_corretto ?? ''} parole={parole} ranges={ranges} />
-          </details>
-        </div>
-      ) : !inBozza ? (
+      {!inBozza && (
         <div className="card">
           <h2>Testo del referto</h2>
           <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
             {row.testo_finale ?? p.testo_corretto}
           </div>
         </div>
-      ) : (
-        <div className="card">
-          <details open>
-            <summary className="sez-summary">Testo con i punti di trascrizione incerta evidenziati</summary>
-            <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{nodi}</div>
-          </details>
-        </div>
       )}
 
       {inBozza ? (
         <form action={confermaBozza} className="card form" id="form-revisione">
           <input type="hidden" name="id" value={row.id} />
-          <h2>Revisione guidata</h2>
+          <h2 className="rg3-titolo">Revisione guidata</h2>
           <RevisioneGuidata
             bozzaId={row.id}
+            centro={
+              <>
+                <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.65 }}>{nodi}</div>
+                {audio && parole.length > 0 && (
+                  <details style={{ marginTop: 14 }}>
+                    <summary className="sez-summary">Testo sincronizzato con l&apos;audio</summary>
+                    <p className="muted small">La stessa bozza parola per parola sull&apos;audio: clic su una parola per riascoltarla.</p>
+                    <TestoDettato testo={p.testo_corretto ?? ''} parole={parole} ranges={ranges} />
+                  </details>
+                )}
+              </>
+            }
+            audio={audio ? <AudioDettato src={`/api/referti/audio/${audio.id}`} /> : null}
             statoIniziale={statoRevisione}
             testo={statoRevisione?.testo_base ?? row.testo_finale ?? p.testo_corretto ?? ''}
             divagazioni={Array.isArray(p.divagazioni) ? p.divagazioni : []}
