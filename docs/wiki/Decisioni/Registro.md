@@ -32,11 +32,10 @@ Una riga per decisione, con la data e il perché. Non si rilitigano senza un dat
 | 2026-09-12 | Revisione guidata: prima le parole (motori discordi, correzioni automatiche), poi le frasi | richiesta utente dopo il primo referto vero: chi sistema le parole prima trova le frasi già a posto e non le tocca due volte |
 | 2026-09-12 | I difetti visti sui referti veri diventano REGOLE DI CODICE con un caso nella suite quando sono meccanici (regia iniziale, segni orfani dopo le note, gruppo di parole ripetuto di seguito, posologie puntate, prefisso privativo), voci di DIZIONARIO quando sono errori d'ascolto ricorrenti, ATTENZIONI nella pagina dell'agente quando servono giudizio | tre referti veri: ogni tappa colpevole è stata individuata con i booleani dell'audit; il codice non regredisce, il prompt sì |
 | 2026-09-12 | «assiale» NON va nel dizionario: è una parola vera delle TAC; il colpevole era il glossario fonetico, non l'ascolto | l'audit ha mostrato «massimale» in entrambi i grezzi e «assiale» dopo il dizionario: il glossario ora protegge le parole del medico e non cambia mai la lettera iniziale (caso 38). Lezione: prima di dare la colpa ai motori, guardare gli artefatti tappa per tappa |
-| 2026-09-12 | Terapia dalla lettera precedente: NON si inventa; resta il divario più grande con la segretaria (6-8 righe in tutti e tre i confronti) finché lo studio non sceglie la fonte | due strade possibili: lettera precedente caricata in piattaforma prima del dettato, oppure robot MediOnline in sola lettura; decisione dello studio |
+| 2026-09-12 | Terapia dalla lettera precedente: NON si inventa; la fonte è la CARTELLA del paziente (documento «lettera» caricato dalla segretaria) quando in piattaforma non c'è ancora una lettera confermata | dopo tre referti veri con 6-8 righe copiate dalla lettera precedente; richiesta utente di provare coi dati del terzo referto; il robot MediOnline resta un'idea per dopo |
+| 2026-09-12 | Il blocco «Allegato:» del Word nasce dai documenti della cartella agganciati alle note per la segreteria, mai dal testo del dettato | la segretaria vi mette anche date non dettate (prese dalla cartella); il codice non inventa: senza documento agganciato niente riga |
 
 ## Aperte
 - Conservare l'audio per un LoRA futuro; togliere il denoise se arriva un oro verificato dal medico.
 - Livello 2 del server (dominio, HTTPS) dopo la parte legale.
-- Fonte della terapia precedente per la modalità lettera (vedi la decisione del 12.9.2026).
-- Blocco «Allegato:» nel Word dai documenti agganciati alle note per la segreteria (oggi solo in pagina).
 - Verificatore su Qwen: sul terzo referto vero 6 frasi «non supportate» su 5 (testo corto): da controllare con «Quale tappa aiuta davvero» se sono falsi allarmi.

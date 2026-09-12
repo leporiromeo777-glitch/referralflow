@@ -13,8 +13,8 @@ aggiornata: 2026-09-12
 7. **Migrazione a Next 16** (advisory residue di `npm audit`, feature non usate).
 
 ## Catena dei referti
-- **Terapia dalla lettera precedente** (dopo tre referti veri è il divario più grande con la segretaria): scegliere la fonte (lettera caricata prima del dettato, o robot MediOnline in sola lettura) e fondere col codice di `fondiTerapia`; vedi [[Decisioni/Registro]].
-- **Blocco «Allegato:» nel Word** dai documenti agganciati alle note per la segreteria (una riga per documento, dopo la firma), come fa la segretaria.
+- **Lettera precedente dalla cartella** FATTA (12.9.2026, [[Catena/Formato lettera e Word]]): resta da provare sul terzo referto vero e da decidere se, più avanti, il robot MediOnline in sola lettura possa caricarla da solo.
+- **Blocco «Allegato:» nel Word** FATTO (12.9.2026): da vedere sul terzo referto vero se le note della segreteria agganciano i documenti giusti.
 - Usare «Impagina come lettera» PRIMA di correggere sul prossimo dettato vero, per misurare se le regole di forma tolgono davvero le correzioni di formato.
 - Passata doppia di whisper FATTA (11.9.2026, vedi [[Catena/Sentinelle e recuperi]]): verificare sui prossimi dettati veri quante volte vince la corsa senza VAD (log `recuperato_senza_vad`) e se i tempi restano accettabili.
 - Terapia: ripulire il tag `qwen3.8:27b` inutilizzabile (17 GB) da Ollama; telefono dello studio in Impostazioni per la riga Tel della carta intestata.
