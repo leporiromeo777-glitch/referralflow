@@ -44,7 +44,7 @@ Regole d'uso in `docs/wiki/Wiki/Come si usa.md` (SilverBullet su :3400 in LAN la
 
 ## Comandi essenziali
 - `npm run dev` · `npm run build` · `npm run test:audit` · `npm run test:app` · `npm run audit-backfill`
-- `python3.14 pipeline-referti/prove-catastrofiche.py` (32 casi; `distribuisci.sh` la esegue prima di copiare)
+- `python3.14 pipeline-referti/prove-catastrofiche.py` (37 casi; `distribuisci.sh` la esegue prima di copiare)
 - Distribuire la catena: `bash pipeline-referti/distribuisci.sh` (mai cp+kickstart a mano; il dizionario vivo
   si modifica in `~/referti-pipeline/`; le variabili del servizio stanno in `invio.conf` E nel plist).
 - Aggiornare l'app sul server: `bash mac/aggiorna-server.sh` (rebuild quando `.build-stamp` ≠ HEAD).

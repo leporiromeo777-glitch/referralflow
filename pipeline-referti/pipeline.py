@@ -6202,6 +6202,25 @@ def _posologie_puntate(testo: str) -> str:
                   lambda m: "-".join(g for g in m.groups() if g is not None), testo)
 
 
+def ricuci_segni(testo: str) -> str:
+    """Ricuce i segni dopo che la regia e le note per la segreteria sono
+    uscite dal testo (terzo referto vero, 12.9.2026: la lettera partiva con
+    «, caro Persona 1», e restavano «previsti:, Il», «poi ,»). Regole fisse:
+    via i segni a inizio testo e a inizio riga, maiuscola alla prima lettera,
+    di due segni attaccati resta il primo (mai il punto decimale «2,5»),
+    niente spazio prima dei segni."""
+    if not testo:
+        return testo
+    t = re.sub(r"^[\s,;:.!?]+", "", testo)
+    t = re.sub(r"\n[ \t]*[,;:]+[ \t]*", "\n", t)
+    t = re.sub(r"(?<=\D)[ \t]+([,;:.!?])", r"\1", t)
+    t = re.sub(r"([,;:])[ \t]*[,;:]+(?!\d)", r"\1", t)
+    t = re.sub(r",[ \t]*\.(?!\d)", ".", t)
+    t = re.sub(r"[ \t]{2,}", " ", t)
+    t = re.sub(r"\n[a-zàèéìíòóùú]", lambda m: m.group(0).upper(), t)
+    return t[:1].upper() + t[1:]
+
+
 def separa_segreteria(testo: str, file_id: str) -> tuple[str, list[str]]:
     """Fase «segretaria» (SPEC §6.4): individua le frasi in cui il medico si
     rivolge alla segreteria e le sposta nelle note. Difensiva come tutto il
@@ -7193,20 +7212,65 @@ def _oggetti_protetti(frase: str) -> set[str]:
     return fuori
 
 
+_RX_PAROLA_DOPPIONE = re.compile(r"[\w'’àèéìíòóùú-]+")
+
+
+def _ripetizioni_immediate(testo: str) -> tuple[str, list[str]]:
+    """Un gruppo di 3-8 parole senza cifre detto due volte di seguito
+    («l'ecocardiogramma da sforzo, l'ecocardiogramma da sforzo (assiale)»:
+    terzo referto vero, 12.9.2026, il medico riparte e l'AI dei doppioni non
+    lo vede perché sta dentro la stessa frase) → resta una volta sola. Fra
+    le due copie sono ammessi solo spazi e una virgola. Torna (testo, gruppi
+    tolti)."""
+    toks = [(m.group().lower(), m.start(), m.end()) for m in _RX_PAROLA_DOPPIONE.finditer(testo)]
+    tagli: list[tuple[int, int]] = []
+    tolti: list[str] = []
+    i = 0
+    while i < len(toks):
+        preso = False
+        for k in range(8, 2, -1):
+            if i + 2 * k > len(toks):
+                continue
+            a = [t[0] for t in toks[i:i + k]]
+            if a != [t[0] for t in toks[i + k:i + 2 * k]] or any(ch.isdigit() for ch in "".join(a)):
+                continue
+            if not re.fullmatch(r"[ \t]*,?[ \t]*", testo[toks[i + k - 1][2]:toks[i + k][1]]):
+                continue
+            if any(re.search(r"[.;:!?\n]", testo[toks[j][2]:toks[j + 1][1]]) for j in range(i, i + 2 * k - 1)):
+                continue
+            tagli.append((toks[i + k - 1][2], toks[i + 2 * k - 1][2]))
+            tolti.append(testo[toks[i + k][1]:toks[i + 2 * k - 1][2]])
+            i += 2 * k
+            preso = True
+            break
+        if not preso:
+            i += 1
+    if not tagli:
+        return testo, []
+    pezzi, pos = [], 0
+    for a, b in tagli:
+        pezzi.append(testo[pos:a])
+        pos = b
+    pezzi.append(testo[pos:])
+    return "".join(pezzi), tolti
+
+
 def togli_doppioni(testo: str, file_id: str, usa_ai: bool = True) -> tuple[str, list[dict], list[dict]]:
     """(testo senza doppioni, tolti, dubbi). Ogni voce: frase tolta/segnalata,
     frase tenuta, motivo. Mai contenuti nei log: solo conteggi."""
     inizio = time.monotonic()
+    testo, ripetute = _ripetizioni_immediate(testo)
+    tolti_subito = [{"tolta": r, "tenuta": r, "motivo": "parole ripetute di seguito nel dettato"} for r in ripetute]
     spans = _frasi_span(testo)
     grezze = [testo[a:b] for a, b in spans]
     pulite = [g.strip() for g in grezze]
     n = len(pulite)
     if n < 2:
-        return testo, [], []
+        return testo, tolti_subito, []
     gettoni = [_gettoni_contenuto(f) for f in pulite]
     protetti = [_oggetti_protetti(f) for f in pulite]
     norme = [_norma_frase(f) for f in pulite]
-    tolti: list[dict] = []
+    tolti: list[dict] = list(tolti_subito)
     dubbi: list[dict] = []
     rimuovi: set[int] = set()
 
@@ -7799,6 +7863,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             if apertura_regia:
                 note_segreteria = [apertura_regia] + list(note_segreteria)
                 log.info("fase=segreteria file=%s esito=apertura_regia_staccata caratteri=%d", file_id, len(apertura_regia))
+            finale = ricuci_segni(finale)
             percorso(".segreteria.json").write_text(
                 json.dumps(note_segreteria, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",

@@ -678,6 +678,22 @@ def _prova_36() -> None:
     assert m._posologie_puntate("versione 1.0.0.1 no") == "versione 1-0-0-1 no" or True
 
 
+@caso("37 · segni ricuciti dopo le note («, caro» → «Caro», «previsti:,», «poi ,»); gruppo di parole ripetuto di seguito tolto una volta")
+def _prova_37() -> None:
+    t = ", caro Persona 1, gli esami a suo tempo previsti:, Il duplex, non mostra stenosi, poi , l'eco, . Pertanto FE 2,5 e 55,5 %.\n, e a capo"
+    r = m.ricuci_segni(t)
+    assert r == "Caro Persona 1, gli esami a suo tempo previsti: Il duplex, non mostra stenosi, poi, l'eco. Pertanto FE 2,5 e 55,5 %.\nE a capo", r
+    assert m.ricuci_segni("") == ""
+    r2, tolti = m._ripetizioni_immediate("l'ecocardiogramma da sforzo, l'ecocardiogramma da sforzo, (assiale), risulta negativo")
+    assert r2 == "l'ecocardiogramma da sforzo, (assiale), risulta negativo" and tolti == ["l'ecocardiogramma da sforzo"], (r2, tolti)
+    # mai con cifre, mai sotto le 3 parole, mai oltre un segno di fine frase
+    assert m._ripetizioni_immediate("FE 55 per cento, FE 55 per cento")[1] == []
+    assert m._ripetizioni_immediate("no no no, sta bene sta bene")[1] == []
+    assert m._ripetizioni_immediate("il paziente sta bene. Il paziente sta bene")[1] == []
+    nuovo, tolti, dubbi = m.togli_doppioni("Caro collega, l'ecocardiogramma da sforzo, l'ecocardiogramma da sforzo (assiale) risulta negativo. Fine.", "x", usa_ai=False)
+    assert nuovo == "Caro collega, l'ecocardiogramma da sforzo (assiale) risulta negativo. Fine." and tolti[0]["motivo"] == "parole ripetute di seguito nel dettato", (nuovo, tolti)
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0

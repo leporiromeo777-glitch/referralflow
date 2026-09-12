@@ -1,6 +1,6 @@
 ---
 tipo: tappa
-aggiornata: 2026-09-11
+aggiornata: 2026-09-12
 ---
 # Doppioni del parlato, note per la segreteria, schede senza testo
 
@@ -10,8 +10,11 @@ aggiornata: 2026-09-11
 ### Apertura di regia (12.9.2026)
 Moccetti apre spesso così: «Detto la lettera della signora X, nata il …, lettera che va al dottor Y e scrive: caro Y, …». Sul secondo referto vero il modello della segreteria non l'ha citata per intero e tutta la regia è rimasta nel referto. Ora è una regola di CODICE, prima del modello: `stacca_apertura_dettatura` prende dall'inizio del testo fino a «e scrive/scrivi:» (max 320 caratteri, resto ≥ 40) e la mette in testa alle note per la segreteria; il testo riparte con la maiuscola. Nello stesso passaggio `_posologie_puntate` trasforma «1.0.0» dettato con i punti in «1-0-0». Caso 36 nella suite.
 
+### Segni ricuciti dopo le note (12.9.2026, terzo referto vero)
+Quando la regia non ha la forma «…e scrive:» (qui: «Lettera al dottor Y, caro Y, …») la toglie il modello della segreteria, e il testo restava con i segni orfani: la lettera partiva con «, caro Persona 1», e dentro c'erano «previsti:, Il», «poi ,», «negativo, . Pertanto». `ricuci_segni` (codice, dopo regia e note): via i segni a inizio testo e a inizio riga, maiuscola alla prima lettera, di due segni attaccati resta il primo (mai il decimale «2,5»), niente spazio prima dei segni. Caso 37.
+
 ## Doppioni (7.9.2026)
-`togli_doppioni()` dopo lo stile, prima della struttura. Tre regole: frase identica o quasi (Jaccard ≥ 0.9, ≥ 3 elementi) → via la seconda; autocorrezione («anzi», «volevo dire», «correggo»…) → vince la frase col marcatore se condivide ≥ metà delle parole; contenimento proposto dall'AI locale (`PROMPT_DOPPIONI`, solo numeri di frase) accettato solo se ≥ 80% delle parole di contenuto stanno nella frase tenuta. Guardia oggetti protetti (numeri, negazioni, lateralità, farmaci Swissmedic): se la frase tolta ne ha uno che la tenuta non ha → NON si toglie, va in `doppioni_dubbi`. Passo «Doppioni del parlato» nel wizard con «Rimetti» (stessi indici) e «Togli». Caso di scuola: «lettera del 1 settembre» e «rapporto operatorio del 1 settembre» restano entrambe.
+`togli_doppioni()` dopo lo stile, prima della struttura. Prima di tutto, dal 12.9.2026 (terzo referto vero: «l'ecocardiogramma da sforzo, l'ecocardiogramma da sforzo (assiale)» dentro la stessa frase, invisibile all'AI che ragiona per frasi): `_ripetizioni_immediate` toglie la seconda copia di un gruppo di 3-8 parole SENZA cifre ripetuto subito dopo (fra le due copie solo spazi e al più una virgola, mai un segno di fine frase); entra in `doppioni_tolti` con motivo «parole ripetute di seguito nel dettato», quindi il wizard lo mostra con «Rimetti». Poi tre regole: frase identica o quasi (Jaccard ≥ 0.9, ≥ 3 elementi) → via la seconda; autocorrezione («anzi», «volevo dire», «correggo»…) → vince la frase col marcatore se condivide ≥ metà delle parole; contenimento proposto dall'AI locale (`PROMPT_DOPPIONI`, solo numeri di frase) accettato solo se ≥ 80% delle parole di contenuto stanno nella frase tenuta. Guardia oggetti protetti (numeri, negazioni, lateralità, farmaci Swissmedic): se la frase tolta ne ha uno che la tenuta non ha → NON si toglie, va in `doppioni_dubbi`. Passo «Doppioni del parlato» nel wizard con «Rimetti» (stessi indici) e «Togli». Caso di scuola: «lettera del 1 settembre» e «rapporto operatorio del 1 settembre» restano entrambe.
 
 ## Schede senza testo (7.9.2026)
 Una riga di sola punteggiatura («,» da un «virgola» dettato a inizio segmento) diventava una «frase» del wizard, ridotta a nulla da `normalizza()` si agganciava a QUALSIASI citazione. Ora `ricuci_punteggiatura_orfana()` nella catena attacca quelle righe alla riga prima (caso 22) e `trovaIndice` non aggancia mai una frase < 8 caratteri; le segnalazioni senza frase citata sono scartate da catena e pagina. La ricucitura NON si fa lato pagina: cambierebbe gli indici delle frasi e butterebbe via le revisioni in corso.
