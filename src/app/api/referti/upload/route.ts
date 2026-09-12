@@ -23,6 +23,17 @@ const TIPI: Record<string, string> = {
 };
 const MAX_BYTES = 200 * 1024 * 1024;
 
+// I medici dello studio per il dittafono dal telefono (13.9.2026): id e nome,
+// con la sessione del browser. Nessun dato clinico.
+export async function GET() {
+  const session = await getSession();
+  if (!session || !session.studioId) {
+    return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  }
+  const medici = (await mediciDelloStudio(session.studioId)).map((m) => ({ id: m.id, nome: m.nome }));
+  return NextResponse.json({ medici });
+}
+
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) {

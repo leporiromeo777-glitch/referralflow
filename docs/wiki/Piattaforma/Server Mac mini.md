@@ -27,3 +27,4 @@ Le variabili del servizio referti stanno in `~/referti-pipeline/invio.conf` E ne
 Cron `/etc/cron.d/referralflow` via `cron-hit.sh`; backup off-site su Exoscale SOS `referralflow-backups` (60 gg); allegati di produzione su SOS `referralflow-uploads`.
 
 Dal 13.9.2026 sul Mac girano anche `ch.referralflow.prototipo` (porta 8765) e `ch.referralflow.voce` (127.0.0.1:8787): vedi [[Piattaforma/Prototipo stack]].
+Caddy pubblica anche la piattaforma in HTTPS: https://192.168.1.146:3444 → 127.0.0.1:3000 (per il microfono del dittafono dal telefono).
