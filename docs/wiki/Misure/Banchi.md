@@ -33,6 +33,6 @@ Ogni banco usa SOLO dati sintetici. Le chiamate al modello esterno costano cente
 
 | 2026-09-12 | NEMOTRON in locale (richiesta utente): Nemotron 3 Nano 30B-A3B (IQ4_XS, 18 GB) e 4B (q8) sul Mac mini M4 24 GB | `~/referti-dataset/banco-locali.py`, `banco-arbitro.py --locale` con `REFERTI_LLM_CORREZIONE` | correzione: 30B a temperatura 0 va in LOOP (stessa riga 65 volte, JSON mai chiuso, 4000 gettoni, 143-156 s) anche col pensiero spento; con `repeat_penalty` 1.15 risponde in 3 s ma propone 2 riparazioni → **1/17** (Qwen 3.8 27B: 11/17); 4B: 0/17 in 13 s. Arbitro (15 divergenze, contesto Moccetti): 30B **13/15** in 32 s (Qwen 3.8: 15/15), sbaglia le due esche in cui B aggiunge una parola che contraddice il contesto. Nel codice restano `think=False` e `repeat_penalty` 1.15 per i modelli Nemotron. Verdetto: non sostituisce Qwen 3.8 in nessuna tappa |
 
-Suite permanente: `python3.14 pipeline-referti/prove-catastrofiche.py` → 38/38 (12.9.2026). Test app: `npm run test:app` → 30 casi.
+Suite permanente: `python3.14 pipeline-referti/prove-catastrofiche.py` → 38/38 (12.9.2026). Test app: `npm run test:app` → 31 casi.
 
 Dati reali osservati (solo numeri): destinatario estratto = confermato in 9 bozze su 11 (11.9.2026); collassi di whisper: 3 in 3 giorni sullo stesso medico (7-9.9.2026).

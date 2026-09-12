@@ -216,7 +216,9 @@ async function letteraPrecedenteInCartella(studioId: string, nome: string): Prom
       const testo = d.filename.toLowerCase().endsWith('.txt')
         ? body.toString('utf-8')
         : (await mammoth.extractRawText({ buffer: body })).value;
-      const pulito = testo.replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim();
+      // mammoth separa i paragrafi con un doppio a capo: per «Terapia:» ogni
+      // paragrafo è una riga del blocco, quindi un paragrafo = una riga.
+      const pulito = testo.replace(/\r/g, '').replace(/\n\s*\n+/g, '\n').trim();
       if (pulito.length >= 200) return { id: `documento:${d.id}`, testo: pulito };
     } catch {
       continue;

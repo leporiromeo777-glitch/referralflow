@@ -6,7 +6,7 @@ import { profiloMedico } from '@/lib/referti-medici';
 import { appellativo, conTitolo, dataCh, dataVisitaDalTesto, destinatarioAffidabile, destinatarioDalSaluto, destinatarioInRubrica, siglaDaEmail } from '@/lib/referti-lettera';
 import { salvaDalModulo } from '@/lib/referti-salva';
 import { isUuid } from '@/lib/cartella';
-import { agganciaRiferimenti } from '@/lib/referti-allegati';
+import { agganciaRiferimenti, documentiDelPaziente } from '@/lib/referti-allegati';
 import { bloccoAllegato } from '@/lib/referti-allegato-blocco';
 
 export const runtime = 'nodejs';
@@ -136,9 +136,11 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   if (formato === 'lettera') {
     const note = Array.isArray(b.payload?.note_segreteria)
       ? (b.payload.note_segreteria as unknown[]).filter((n): n is string => typeof n === 'string') : [];
-    if (note.length) {
+    if (pazienteNome) {
       try {
-        const blocco = bloccoAllegato(await agganciaRiferimenti(session.studioId, pazienteNome || null, note));
+        const rif = note.length ? await agganciaRiferimenti(session.studioId, pazienteNome, note) : [];
+        const cartella = await documentiDelPaziente(session.studioId, pazienteNome);
+        const blocco = bloccoAllegato(rif, testo, cartella);
         if (blocco) copia = [copia, blocco].filter(Boolean).join('\n');
       } catch { /* best-effort */ }
     }

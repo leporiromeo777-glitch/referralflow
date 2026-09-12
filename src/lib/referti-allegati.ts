@@ -69,6 +69,21 @@ export async function trovaPaziente(studioId: string, nomePaziente: string | nul
   return p?.id ?? null;
 }
 
+// I documenti in cartella del paziente (per il blocco «Allegato:» del Word).
+export async function documentiDelPaziente(
+  studioId: string,
+  nomePaziente: string | null
+): Promise<{ filename: string; nota: string | null; categoria: string | null }[]> {
+  const patientId = await trovaPaziente(studioId, nomePaziente);
+  if (!patientId) return [];
+  return query<{ filename: string; nota: string | null; categoria: string | null }>(
+    `select filename, nota, categoria from patient_documents
+      where patient_id = $1 and studio_id = $2
+      order by uploaded_at desc limit 100`,
+    [patientId, studioId]
+  );
+}
+
 export async function agganciaRiferimenti(
   studioId: string,
   nomePaziente: string | null,
