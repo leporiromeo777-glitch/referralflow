@@ -25,3 +25,5 @@ Le variabili del servizio referti stanno in `~/referti-pipeline/invio.conf` E ne
 
 ## Vecchia VM
 Cron `/etc/cron.d/referralflow` via `cron-hit.sh`; backup off-site su Exoscale SOS `referralflow-backups` (60 gg); allegati di produzione su SOS `referralflow-uploads`.
+
+Dal 13.9.2026 sul Mac girano anche `ch.referralflow.prototipo` (porta 8765) e `ch.referralflow.voce` (127.0.0.1:8787): vedi [[Piattaforma/Prototipo stack]].

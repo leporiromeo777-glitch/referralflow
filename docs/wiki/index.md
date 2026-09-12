@@ -21,6 +21,7 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 - [[Piattaforma/Funzioni fatte]] — tutto ciò che esiste già, in ordine inverso
 - [[Piattaforma/Documenti legali]] — che cosa c'è in docs/legale e a che punto è
 - [[Piattaforma/Prossimi lavori]] e [[Piattaforma/Visione]]
+- [[Piattaforma/Prototipo stack]] — l'interfaccia nuova con dati finti, in piedi sulla porta 8765 accanto alla piattaforma vera
 - [[Piattaforma/Convenzioni UI]] — palette, layout delle pagine, regole di stile
 
 ## Per chi usa la piattaforma
