@@ -22,3 +22,6 @@ Pagine con selettore di ruolo (segreteria, aiuto medico, medico, admin org., adm
 - **Dove il prototipo è avanti (estetica e composizione)**: gerarchia visiva, densità, tre pannelli della revisione, overview per ruolo, palette neutra. È il riferimento per ridisegnare le pagine della piattaforma, una alla volta, senza toccare la logica.
 - **Idee da prendere**: il dittafono PWA dal telefono (oggi si detta solo col DS2), la scheda «Prossimo paziente» nella Home della segreteria, la revisione a tre pannelli.
 - **Idee da NON prendere ora**: il modulo Knowledge con RAG (misurato: la conoscenza compilata batte il recupero a blocchi, [[Agenti/Come funziona]]), l'assistente vocale, l'analisi economica in sidebar AI, sei ruoli con due amministratori (troppo per uno studio).
+
+## Ripreso nella piattaforma vera
+- 13.9.2026: revisione guidata a tre colonne ([[Catena/Revisione guidata]]); Home «Oggi» con saluto, schede-numero cliccabili e «Prossimo paziente» in evidenza (`src/app/(app)/page.tsx`, dati invariati).

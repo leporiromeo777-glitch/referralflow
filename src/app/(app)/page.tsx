@@ -245,31 +245,66 @@ export default async function Oggi() {
   ];
 
   const prossimo = oggi.find((a) => !a.completed);
+  const oraDi = (iso: string) => dataOra(iso).slice(-5);
+  const saluto = new Date().getHours() < 13 ? 'Buongiorno' : 'Buonasera';
+  const medici = new Set(oggi.map((a) => a.medico).filter(Boolean)).size;
   const now = new Date();
   const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
   return (
     <div className="oggi">
+      {/* Testata e riepilogo come nella Home del prototipo (13.9.2026): saluto,
+          sottotitolo con la giornata, schede-numero cliccabili, e il prossimo
+          paziente in evidenza. Dati e logica sono gli stessi di prima. */}
       <header className="oggi-head">
         <div>
-          <span className="oggi-eyebrow">La tua giornata</span>
-          <h1>Oggi</h1>
+          <h1 className="oggi-saluto">{saluto}, {session.studioNome}</h1>
           <p className="oggi-lede">
-            {tasks.length === 0
-              ? 'Niente in sospeso: la coda è pulita.'
-              : `${tasks.length} ${tasks.length === 1 ? 'cosa' : 'cose'} da fare, in ordine di priorità. Le più urgenti in cima.`}
+            <span className="oggi-data-inline">{dataEstesa(new Date())}</span>
+            {' · '}{oggi.length} {oggi.length === 1 ? 'appuntamento' : 'appuntamenti'}
+            {medici > 0 ? ` · ${medici} ${medici === 1 ? 'medico' : 'medici'} in studio` : ''}
+            {' · '}{tasks.length === 0 ? 'niente in sospeso' : `${tasks.length} ${tasks.length === 1 ? 'cosa' : 'cose'} da fare`}
           </p>
         </div>
-        <span className="oggi-date">{dataEstesa(new Date())}</span>
+        <div className="oggi-azioni">
+          <Link href="/programma" className="btn">Programma</Link>
+          <Link href="/coda" className="btn">Coda</Link>
+          <Link href="/referti" className="btn btn-primary">Referti</Link>
+        </div>
       </header>
 
-      <div className="oggi-chips">
-        {chips.map((ch) => (
-          <span key={ch.label} className={`ochip${ch.value > 0 ? ` ochip-${ch.tone}` : ''}`}>
-            <b>{ch.value}</b> {ch.label}
-          </span>
-        ))}
+      <div className="oggi-stat">
+        {chips.map((ch) => {
+          const href = ch.label === 'urgenti' ? '/coda' : ch.label === 'da prenotare' ? '/coda?stato=da_prenotare'
+            : ch.label === 'consulti' ? '/consulti' : ch.label === 'bozze referto' ? '/referti'
+            : ch.label === 'disdette' ? '/?vista=disdette' : '/programma';
+          return (
+            <Link key={ch.label} href={href} className={`ostat${ch.value > 0 ? ` ostat-${ch.tone}` : ''}`}>
+              <span className="ostat-val">{ch.value}</span>
+              <span className="ostat-lab">{ch.label}</span>
+            </Link>
+          );
+        })}
       </div>
+
+      {prossimo && (
+        <div className="oggi-hero">
+          <div className="oggi-hero-top">
+            <span className="oggi-eyebrow">Prossimo paziente</span>
+            <span className="muted small">{oggi.filter((a) => a.completed).length} di {oggi.length} visti</span>
+          </div>
+          <div className="oggi-hero-riga">
+            <span className="oggi-hero-ora">{oraDi(prossimo.starts_at)}</span>
+            <div className="oggi-hero-chi">
+              <div className="oggi-hero-nome">{prossimo.paziente_nome ?? 'Paziente non indicato'}</div>
+              <div className="muted">{[prossimo.motivo, prossimo.medico].filter(Boolean).join(' · ') || 'Appuntamento in agenda'}</div>
+            </div>
+            <div className="oggi-hero-azioni">
+              <Link href="/programma" className="btn btn-primary">Apri il programma</Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="oggi-cols">
         <section className="oggi-list">
