@@ -32,7 +32,11 @@ const nextConfig = {
     serverComponentsExternalPackages: ['@node-rs/argon2', 'pg', 'pdf-parse'],
   },
   async headers() {
-    return [{ source: '/:path*', headers: SECURITY_HEADERS }];
+    return [
+      // Interfaccia nuova e dittafono (file statici in public/): mai in cache,
+      // così un aggiornamento arriva al primo ricaricamento (13.9.2026).
+      { source: '/prototipo/:path*', headers: [{ key: 'Cache-Control', value: 'no-cache' }] },
+      { source: '/dittafono/:path*', headers: [{ key: 'Cache-Control', value: 'no-cache' }] },{ source: '/:path*', headers: SECURITY_HEADERS }];
   },
 };
 export default nextConfig;

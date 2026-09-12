@@ -377,7 +377,21 @@ askAI = function (q) {
     });
 };
 
-/* ---------- avvio ---------- */
+/* ---------- avvio: dentro la piattaforma niente demo, mai ---------- */
+function rfPaginaCarico() {
+  const c = document.getElementById('content');
+  if (c) c.innerHTML = `<div class="page"><div class="card" style="max-width:520px;margin:40px auto;text-align:center"><h2 class="page-title">ReferralFlow</h2><p class="meta">Carico i dati della piattaforma…</p></div></div>`;
+  const sb = document.getElementById('sidebar'); if (sb) sb.innerHTML = '';
+}
+if (rfDentro()) {
+  const rfRenderVero = render;
+  render = function () {
+    if (RF.nonAutorizzato) return rfPaginaAccesso();
+    if (!RF.caricato) return rfPaginaCarico();
+    return rfRenderVero();
+  };
+  rfPaginaCarico();
+}
 window.addEventListener('load', () => {
   if (!rfDentro()) return;
   void rfCaricaMedici();
