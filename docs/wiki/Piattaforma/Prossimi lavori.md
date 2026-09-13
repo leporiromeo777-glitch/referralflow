@@ -15,7 +15,8 @@ aggiornata: 2026-09-13
 ## Prototipo, assistente e procedure ([[Piattaforma/Procedure e tracce]])
 - Mostrare il «Perché?» delle scelte umane nel cruscotto Qualità AI accanto alle proposte di dizionario; oggi si salva soltanto.
 - Una pagina «Tracce» nella piattaforma (elenco di `assistente_tracce` per procedura e giorno): oggi la traccia si vede solo sotto la risposta.
-- Grafo dei fatti nel bot FATTO (13.9.2026 notte), registro delle procedure e organizzazione FATTI: restano da completare le responsabilità nella pagina wiki con lo studio, e le frasi del registro con le domande vere lette nelle tracce.
+- Grafo dei fatti nel bot, registro delle procedure, organizzazione e interprete delle domande scritte FATTI (13.9.2026 notte). Restano: rivedere con lo studio le responsabilità nella pagina «Organizzazione dello studio» (oggi una proposta); ogni settimana leggere le tracce `domanda_libera` e `interpretazione` e allargare frasi e parole chiave del registro con un caso di test per ciascuna.
+- Le risposte immediate del ponte (numeri della giornata, ricerca documenti) vivono ancora nel JavaScript del prototipo: portarle nell'interprete lato server, così anche loro hanno una traccia.
 - Leggere ogni settimana le domande libere nelle tracce: le più frequenti diventano procedure.
 - Referti confermati prima del 13.9.2026: «lettere in ritardo» non li giudica (l'evento `word_scaricato` non c'era).
 
