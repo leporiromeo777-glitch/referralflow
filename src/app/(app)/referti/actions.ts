@@ -6,9 +6,9 @@ import { query } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
 import { deleteFile } from '@/lib/storage';
-import { trovaPaziente } from '@/lib/referti-allegati';
 import { registraEvento, impronta } from '@/lib/referti-eventi';
 import { confermaBozzaCore } from '@/lib/referti-conferma';
+import { creaRichiamoDaBozza } from '@/lib/referti-richiamo-crea';
 
 const MAX_SUGGERIMENTI = 30;
 
@@ -319,40 +319,9 @@ export async function creaRichiamoDaReferto(formData: FormData) {
   const id = String(formData.get('id') ?? '');
   if (!isUuid(id)) redirect('/referti');
   const mesi = parseInt(String(formData.get('mesi') ?? ''), 10);
-  if (!Number.isInteger(mesi) || mesi < 1 || mesi > 120) redirect(`/referti/${id}?err=richiamo`);
-  const [b] = await query<{ nome: string | null }>(
-    `select coalesce(campi_confermati->>'nome_paziente', payload->'campi_estratti'->>'nome_paziente') as nome
-       from referti_bozze where id = $1 and studio_id = $2`,
-    [id, session.studioId]
-  );
-  const patientId = await trovaPaziente(session.studioId, b?.nome ?? null);
-  if (!patientId) redirect(`/referti/${id}?err=richiamo_paziente`);
-  const [ref] = await query<{ id: string }>(
-    `select id from referrals where studio_id = $1 and patient_id = $2
-      order by created_at desc limit 1`,
-    [session.studioId, patientId]
-  );
-  if (!ref) redirect(`/referti/${id}?err=richiamo_paziente`);
-  await query(
-    `update referrals
-        set follow_up_months = $2,
-            follow_up_due = (coalesce(
-              (select max(changed_at) from referral_status_history
-                where referral_id = $1 and to_status = 'vista'),
-              appuntamento_at,
-              now()
-            ) + make_interval(months => $2))::date,
-            follow_up_done_at = null
-      where id = $1 and studio_id = $3`,
-    [ref.id, mesi, session.studioId]
-  );
-  await query(
-    `update referti_bozze
-        set payload = jsonb_set(payload, '{richiamo}', $3::jsonb)
-      where id = $1 and studio_id = $2`,
-    [id, session.studioId, JSON.stringify({ mesi, referral_id: ref.id, creato_at: new Date().toISOString(), da: session.id })]
-  );
-  await registraEvento(session.studioId, id, 'richiamo_creato', session.id, { mesi, referral: ref.id });
+  // Il cuore sta in src/lib/referti-richiamo-crea.ts, condiviso con l'interfaccia nuova.
+  const esito = await creaRichiamoDaBozza(session.studioId, session.id, id, mesi);
+  if (!esito.ok) redirect(`/referti/${id}?err=${esito.errore === 'mesi' ? 'richiamo' : 'richiamo_paziente'}`);
   revalidatePath(`/referti/${id}`);
   revalidatePath('/richiami');
   redirect(`/referti/${id}?ok=richiamo`);

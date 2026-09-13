@@ -291,8 +291,11 @@ async function rfCaricaRevisione(id) {
     RF.meta = j; RF.loaded = id; RF.loading = null;
     // Revisione già fatta e salvata nel prototipo: riparte da lì (verifiche
     // chiuse, correzioni per frase, frasi tolte o aggiunte).
+    RF.campi = Object.assign({}, j.campi || {});
+    RF.motivazioni = {};
     if (j.revisione_prototipo && typeof j.revisione_prototipo === 'object') {
       const rp = j.revisione_prototipo;
+      RF.motivazioni = rp.motivazioni && typeof rp.motivazioni === 'object' ? rp.motivazioni : {};
       localStorage.setItem(RV_KEY, JSON.stringify({ issues: rp.issues || [], metrics: rp.metrics || {}, log: rp.log || [], cur: rp.cur || 0, t: 0 }));
     } else localStorage.removeItem(RV_KEY);
     RV.issues = [];
@@ -333,6 +336,7 @@ rvFinish = function () {
   openModal('Termina la revisione', `
     <div class="kv"><b>Verifiche</b><span>${rvDone()} di ${RV.issues.length} controllate</span><b>Correzioni</b><span>${RV.metrics.corrections}</span><b>Audio consultato</b><span>${RV.metrics.plays} volte</span></div>
     ${Object.keys(cats).length ? `<div class="mt-16"><div class="caption">Correzioni per categoria</div><div class="row wrap mt-8" style="gap:6px">${Object.entries(cats).map(([c, n]) => `<span class="badge">${rfEsc(c)} · ${n}</span>`).join('')}</div></div>` : ''}
+    ${m.richiamo ? `<div class="caption mt-16">Richiamo già impostato dal referto: tra ${m.richiamo.mesi} mesi.</div>` : m.richiamo_proposto ? `<label class="row mt-16" style="gap:8px;align-items:flex-start;cursor:pointer"><input type="checkbox" id="rf-richiamo" checked style="margin-top:3px"><span>Alla conferma crea il <b>richiamo a ${m.richiamo_proposto.mesi} mesi</b> sull'ultima referral del paziente <span class="caption">(dal dettato: «${rfEsc(m.richiamo_proposto.frase)}»)</span></span></label>` : ''}
     ${servePresaAtto ? `<div class="rf-manc mt-16"><b>Prima della firma</b>${block.length ? `<div>• ${block.length} verific${block.length === 1 ? 'a critica ancora aperta' : 'he critiche ancora aperte'}.</div>` : ''}${verificaRidotta ? `<div>• La catena ha verificato solo in parte (livello «${rfEsc(m.livello_verifica)}»).</div>` : ''}<label class="row mt-8" style="gap:8px;align-items:flex-start;cursor:pointer"><input type="checkbox" id="rf-presa-atto" style="margin-top:3px"><span>Ne prendo atto e confermo lo stesso: resta registrato come presa d'atto.</span></label></div>` : '<div class="caption mt-16">Nessuna verifica critica aperta.</div>'}
     <p class="caption mt-16">Dove va a finire: <b>Salva</b> mette il testo corretto nella bozza come lavoro in corso (si può riprendere). <b>Conferma</b> chiude il referto: entra nell'audit con il tuo ruolo, alimenta il dizionario proposto, e da lì si scarica il Word con la carta intestata del medico. Prima di confermare puoi impaginare nel formato del medico dal tasto nella barra.</p>`,
     `<button class="btn" data-close>Continua a rivedere</button><button class="btn" id="rf-finish-salva">Salva</button><button class="btn primary" id="rf-finish-conferma">Conferma il referto</button>`);
@@ -352,7 +356,7 @@ rvFinish = function () {
     const b = document.getElementById('rf-finish-conferma'); b.disabled = true; b.textContent = 'Confermo…';
     try {
       const r = await fetch(`/api/prototipo/referti/${RF.loaded}/conferma`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-        testo, presa_atto: !!(presa && presa.checked), flag_totali: RV.issues.length, flag_accettati_senza_riascolto: Math.max(0, rvDone() - RV.metrics.plays),
+        testo, campi: RF.campi || {}, presa_atto: !!(presa && presa.checked), flag_totali: RV.issues.length, flag_accettati_senza_riascolto: Math.max(0, rvDone() - RV.metrics.plays),
         flag_critici_totali: critTot, flag_critici_chiusi: critChiusi, tempo_revisione_s: Math.round((Date.now() - (RV.metrics.started || Date.now())) / 1000),
         revisione_iniziata_at: new Date(RV.metrics.started || Date.now()).toISOString(),
       }) });
@@ -360,8 +364,17 @@ rvFinish = function () {
       rvLog('CONFIRMED', 'referto confermato');
       localStorage.removeItem(RV_KEY);
       const idBozza = RF.loaded;
+      let notaRichiamo = '';
+      const chk = document.getElementById('rf-richiamo');
+      if (chk && chk.checked && m.richiamo_proposto) {
+        try {
+          const rr = await fetch(`/api/prototipo/referti/${idBozza}/richiamo`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mesi: m.richiamo_proposto.mesi }) });
+          const jr = await rr.json().catch(() => ({}));
+          notaRichiamo = rr.ok ? `<p>Richiamo creato a ${jr.mesi} mesi: lo trovi tra le cose da fare alla scadenza.</p>` : `<p class="caption">Richiamo non creato: ${jr.errore === 'paziente' ? 'paziente non trovato in cartella' : jr.errore === 'referral' ? 'il paziente non ha referral' : jr.errore === 'gia_creato' ? 'già impostato' : 'errore'}.</p>`;
+        } catch { notaRichiamo = '<p class="caption">Richiamo non creato: piattaforma non raggiungibile.</p>'; }
+      }
       closeModal();
-      openModal('Referto confermato', `<p>Il referto è confermato ed è nell'audit con il tuo ruolo. Il testo corretto alimenta le proposte di dizionario del medico.</p>`,
+      openModal('Referto confermato', `<p>Il referto è confermato ed è nell'audit con il tuo ruolo. Il testo corretto alimenta le proposte di dizionario del medico.</p>${notaRichiamo}`,
         `<a class="btn" href="/api/referti/docx/${idBozza}" target="_blank" rel="noopener">Scarica il Word</a><button class="btn primary" data-close onclick="RF.loaded=null;go('#/reports');void rfCaricaDati()">Torna ai referti</button>`);
     } catch (e) {
       riarma(e.message === 'critici' ? 'La piattaforma chiede la presa d’atto: spunta la casella' : e.message === 'non_bozza' ? 'La bozza è già confermata' : 'Conferma non riuscita');
@@ -391,7 +404,7 @@ rvSave = function () {
   }, 2000);
 };
 function rfStatoRevisione() {
-  return { issues: RV.issues.map(i => ({ id: i.id, status: i.status, resolution: i.resolution })), metrics: RV.metrics, log: (RV.log || []).slice(-200), cur: RV.cur, t: RV.t };
+  return { issues: RV.issues.map(i => ({ id: i.id, status: i.status, resolution: i.resolution })), metrics: RV.metrics, log: (RV.log || []).slice(-200), cur: RV.cur, t: RV.t, motivazioni: RF.motivazioni || {} };
 }
 
 
@@ -487,6 +500,84 @@ rvChoose = function (k) {
   }
   return rfChooseOrig(k);
 };
+
+
+/* ---------- stessi passi della piattaforma: elenco per passo, campi, perché, richiamo ---------- */
+/* La colonna delle segnalazioni raggruppa per PASSO nello stesso ordine del
+   wizard della piattaforma (prima le parole, poi le frasi); in testa i campi
+   estratti da confermare o correggere (salvati nella bozza); sulle correzioni
+   automatiche decise compare il campo «Perché?»; alla conferma il richiamo
+   proposto dal dettato si crea con una spunta. */
+RF.campi = RF.campi || {}; RF.motivazioni = RF.motivazioni || {};
+const rfRenderNavOrig = rvRenderNav;
+rvRenderNav = function () {
+  if (!RF.live) return rfRenderNavOrig();
+  const el = document.getElementById('rv-nav'); if (!el) return;
+  const done = rvDone(), tot = RV.issues.length;
+  const openIssues = RV.issues.filter(i => i.status === 'open');
+  const closed = RV.issues.filter(i => i.status !== 'open');
+  const card = (i) => {
+    const idx = RV.issues.indexOf(i);
+    const sev = RV_SEV[i.sev];
+    return `<button class="rv-issue ${i.sev} ${idx === RV.cur ? 'active' : ''} ${i.status !== 'open' ? 'closed' : ''}" onclick="rvGo(${idx})">
+      <span class="d"></span>
+      <span class="b"><span class="t">${rfEsc(i.title)}</span>
+      <span class="s">${rfEsc(RV_CAT[i.cat][0])}${i.ev ? ' · ' + fmt(i.ev.focus) : ' · nessuna fonte'}</span></span>
+      ${i.status !== 'open' ? `<span class="badge ${i.status === 'escalated' ? 'warning' : 'success'}">${i.status === 'escalated' ? '↗' : '✓'}</span>` : `<span class="badge ${sev[1]}">${sev[0]}</span>`}
+    </button>`;
+  };
+  const passi = [];
+  for (const i of openIssues) { const k = i.passo || 9; let g = passi.find(x => x.k === k); if (!g) { g = { k, titolo: i.passoTitolo || 'Altro', voci: [] }; passi.push(g); } g.voci.push(i); }
+  passi.sort((a, b) => a.k - b.k);
+  const c = RF.campi || {};
+  const campo = (k, l, ph) => `<label class="rf-campo"><span>${l}</span><input class="input sm" data-campo="${k}" value="${rfEsc(c[k] || '')}" placeholder="${ph}"></label>`;
+  el.innerHTML = `
+    <div class="rv-nav-head">
+      <div class="row between"><b style="font-size:13px">Revisione</b><span class="caption">${done} / ${tot} controllati</span></div>
+      <div class="rv-prog"><i style="width:${tot ? Math.round(done / tot * 100) : 100}%"></i></div>
+      ${rvBlocking().length ? `<div class="rv-block">${ICONS.alert || ''} ${rvBlocking().length} verifica${rvBlocking().length > 1 ? 'e' : ''} obbligatoria${rvBlocking().length > 1 ? 'e' : ''}</div>` : '<div class="rv-ok">Controlli obbligatori completati</div>'}
+    </div>
+    <div class="rv-nav-body">
+      <details class="rf-campi" ${Object.values(c).some(v => !v) ? 'open' : ''}><summary><b>Campi estratti</b> <span class="caption">${['nome_paziente', 'data_nascita', 'medico_destinatario'].filter(k => c[k]).length}/3 · dalla catena, correggibili</span></summary>
+        ${campo('nome_paziente', 'Paziente', 'Cognome Nome')}${campo('data_nascita', 'Nascita', 'gg.mm.aaaa')}${campo('medico_destinatario', 'Destinatario', 'Dr. …')}
+        <div class="caption" style="margin-top:4px">Si salvano nella bozza appena li cambi; valgono per la lettera e per il Word.</div></details>
+      ${passi.length ? passi.map((g, n) => `<div class="rv-group">${n + 1}. ${rfEsc(g.titolo)} <span class="caption">${g.voci.length}</span></div>${g.voci.map(card).join('')}`).join('') : '<div class="rv-group">Nessuna verifica aperta</div>'}
+      ${closed.length ? `<div class="rv-group">Controllati</div>${closed.map(card).join('')}` : ''}
+    </div>
+    <div class="rv-nav-foot">
+      <button class="btn sm ghost grow" onclick="rvStep(-1)" title="⌘K">${ICONS.chevL || ''} Prec.</button>
+      <button class="btn sm grow" onclick="rvStep(1)" title="⌘J">Succ. ${ICONS.chevR}</button>
+    </div>`;
+  el.querySelectorAll('[data-campo]').forEach(inp => {
+    inp.oninput = () => { RF.campi[inp.dataset.campo] = inp.value; clearTimeout(rvRenderNav._c); rvRenderNav._c = setTimeout(() => rfSalvaCampi(), 800); };
+  });
+};
+async function rfSalvaCampi() {
+  const id = RF.loaded; if (!id) return;
+  try { await fetch(`/api/prototipo/referti/${id}/testo`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ campi: RF.campi }) }); } catch { /* al prossimo */ }
+}
+/* «Perché?» sotto la scheda di una correzione automatica già decisa */
+const rfRenderSourceOrig = rvRenderSource;
+rvRenderSource = function () {
+  rfRenderSourceOrig();
+  if (!RF.live) return;
+  const i = typeof rvIssue === 'function' ? rvIssue() : null;
+  if (!i || i.status === 'open' || i.title !== 'Correzione automatica') return;
+  const card = document.querySelector('#rv-src-body .rv-card'); if (!card || card.querySelector('.rf-perche')) return;
+  const box = document.createElement('div'); box.className = 'rf-perche';
+  box.innerHTML = `<input class="input sm" maxlength="200" placeholder="Perché? (facoltativo, aiuta il consolidatore)" value="${rfEsc(RF.motivazioni[i.id] || '')}">`;
+  box.querySelector('input').oninput = (e) => { RF.motivazioni[i.id] = e.target.value; rvSave(); };
+  card.appendChild(box);
+};
+(function () {
+  const st = document.createElement('style');
+  st.textContent = `
+  .rf-campi { margin: 4px 4px 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+  .rf-campi summary { cursor: pointer; font-size: 12.5px; }
+  .rf-campo { display: grid; grid-template-columns: 82px 1fr; gap: 6px; align-items: center; margin-top: 6px; font-size: 12px; color: var(--text-2); }
+  .rf-perche { margin-top: 10px; }`;
+  document.head.appendChild(st);
+})();
 
 /* audio vero al posto dell'orologio simulato: stesse funzioni, stesso stato RV */
 function rfAudioSetup(url) {

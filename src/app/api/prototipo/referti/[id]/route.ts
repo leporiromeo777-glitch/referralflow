@@ -4,6 +4,7 @@ import { query } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
 import { costruisciRevisione } from '@/lib/prototipo-revisione';
 import { formatoPerBozza } from '@/lib/referti-medici';
+import { rilevaRichiamo } from '@/lib/referti-richiami';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,6 +44,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     id: b.id,
     stato: b.stato,
     formato,
+    campi: { nome_paziente: campo('nome_paziente'), data_nascita: campo('data_nascita'), medico_destinatario: campo('medico_destinatario'), medico_inviante: campo('medico_inviante') },
+    richiamo: p.richiamo && typeof p.richiamo === 'object' ? { mesi: Number(p.richiamo.mesi), creato_at: p.richiamo.creato_at ?? null } : null,
+    richiamo_proposto: p.richiamo ? null : rilevaRichiamo([(b.testo_finale ?? p.testo_corretto ?? '') as string, ...(Array.isArray(p.note_segreteria) ? p.note_segreteria.filter((n: unknown) => typeof n === 'string') : [])]),
     revisione_prototipo: p.revisione_prototipo && typeof p.revisione_prototipo === 'object' ? p.revisione_prototipo : null,
     livello_verifica: typeof p.manifesto?.livello_verifica === 'string' ? p.manifesto.livello_verifica : 'pieno',
     medico_id: typeof p.medico?.id === 'string' ? p.medico.id : null,

@@ -25,6 +25,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const stato = corpo?.stato && typeof corpo.stato === 'object' ? corpo.stato : null;
   const statoJson = stato ? JSON.stringify({ ...stato, salvato_il: new Date().toISOString(), utente: session.id }).slice(0, MAX_STATO) : null;
   if (statoJson && statoJson.length >= MAX_STATO) return NextResponse.json({ errore: 'stato_troppo_grande' }, { status: 413 });
+  // Campi estratti confermati o corretti (paziente, nascita, destinatario…).
+  const campi: Record<string, string> = {};
+  if (corpo?.campi && typeof corpo.campi === 'object') for (const [k, v] of Object.entries(corpo.campi as Record<string, unknown>)) if (typeof v === 'string' && /^[a-z_]{1,40}$/.test(k)) campi[k] = v.trim().slice(0, 2000);
+  if (Object.keys(campi).length) {
+    await query(`update referti_bozze set campi_confermati = coalesce(campi_confermati, '{}'::jsonb) || $3::jsonb where id = $1 and studio_id = $2 and stato = 'bozza'`, [params.id, session.studioId, JSON.stringify(campi)]);
+    if (!testo && !statoJson) return NextResponse.json({ ok: true, solo_campi: true });
+  }
   if (!testo && !statoJson) return NextResponse.json({ errore: 'testo_vuoto' }, { status: 400 });
   if (!testo) {
     const [agg] = await query<{ id: string }>(

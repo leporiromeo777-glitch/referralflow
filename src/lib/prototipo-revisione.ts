@@ -25,6 +25,12 @@ export type Issue = {
   conf: 'matched' | 'likely' | 'ambiguous' | 'none';
   why: string;
   tr?: { primary: string; clinical: string };
+  // Passo della revisione guidata, nello stesso ordine della piattaforma
+  // (prima le parole, poi le frasi): 1 motori, 2 correzioni automatiche,
+  // 3 da controllare subito, 4 frasi da chiarire, 5 dati clinici e omissioni,
+  // 6 doppioni, 7 note per la segreteria, 8 terapia.
+  passo: number;
+  passoTitolo: string;
   opts: Opzione[];
   preroll: number;
   audioTx?: string;
@@ -170,7 +176,18 @@ export function costruisciRevisione(ingresso: {
 
   const issues: Issue[] = [];
   let n = 0;
-  const nuovo = (i: Omit<Issue, 'id'>) => { issues.push({ id: `i${++n}`, ...i }); };
+  const PASSI: Record<number, string> = { 1: 'I due motori non concordano', 2: 'Correzioni automatiche', 3: 'Da controllare subito', 4: 'Frasi da chiarire', 5: 'Dati clinici e omissioni', 6: 'Doppioni del parlato', 7: 'Note per la segreteria', 8: 'Terapia' };
+  const passoDi = (i: Omit<Issue, 'id' | 'passo' | 'passoTitolo'>): number => {
+    if (i.cat === 'MEDICATION') return 8;
+    if (i.title.startsWith('Tolta dalla catena')) return 7;
+    if (i.cat === 'STRUCTURE') return 6;
+    if (i.title === 'Correzione automatica') return 2;
+    if (i.title.startsWith('I due motori') || i.title.startsWith('Negazione sentita')) return 1;
+    if (i.cat === 'NO_SOURCE' || (i.cat === 'NUMERIC' && i.sev === 'critical') || (i.cat === 'OMISSION' && i.sev === 'critical')) return 3;
+    if (i.cat === 'TERM' && i.sev === 'uncertain') return 4;
+    return 5;
+  };
+  const nuovo = (i: Omit<Issue, 'id' | 'passo' | 'passoTitolo'>) => { const passo = passoDi(i); issues.push({ id: `i${++n}`, passo, passoTitolo: PASSI[passo], ...i }); };
   const lista = <T,>(k: string): T[] => (Array.isArray(p[k]) ? (p[k] as T[]) : []);
 
   for (const d of lista<{ contesto?: string; versione_a?: string; versione_b?: string; pesanti?: string[] }>('divergenze')) {
@@ -311,6 +328,23 @@ export function costruisciRevisione(ingresso: {
       preroll: 1.5,
     });
   }
+  // Cambiamenti grandi tra una visita e l'altra (dalla fusione con la lettera
+  // precedente): o sono veri o è una cifra sentita male → con riascolto.
+  const fusione = p.fusione && typeof p.fusione === 'object' ? (p.fusione as { stato?: string; variazioni?: { misura: string; prima: string; dopo: string; grande?: boolean }[] }) : null;
+  if (fusione?.stato === 'fatta' && Array.isArray(fusione.variazioni)) {
+    for (const v of fusione.variazioni) {
+      if (!v?.grande) continue;
+      const parte = trovaParte(String(v.dopo ?? ''));
+      nuovo({
+        cat: 'NUMERIC', sev: 'critical', title: `Cambiamento grande dalla visita precedente: ${v.misura}`,
+        span: parte?.id ?? null, now: String(v.dopo ?? ''), ev: evDa(parte), conf: parte?.conf ?? 'none',
+        why: `${v.misura}: nella lettera precedente ${v.prima}, oggi ${v.dopo}. O è un cambiamento vero o è una cifra sentita male: riascolta.`,
+        tr: { primary: String(v.prima ?? ''), clinical: String(v.dopo ?? '') },
+        opts: parte ? [{ l: `Confermo ${v.dopo}`, apply: parte.t, note: 'valore di oggi' }] : [],
+        preroll: 2,
+      });
+    }
+  }
   const terapia = p.terapia && typeof p.terapia === 'object' ? (p.terapia as { dubbi?: { riga: string; motivo: string }[] }) : null;
   for (const d of terapia?.dubbi ?? []) {
     const parte = trovaParte(d.riga);
@@ -321,7 +355,8 @@ export function costruisciRevisione(ingresso: {
     });
   }
 
-  issues.sort((a, b) => RANGO_SEV[a.sev] - RANGO_SEV[b.sev] || RANGO_CAT[a.cat] - RANGO_CAT[b.cat]);
+  // Ordine dei passi come nella piattaforma; dentro il passo, per gravità.
+  issues.sort((a, b) => a.passo - b.passo || RANGO_SEV[a.sev] - RANGO_SEV[b.sev] || RANGO_CAT[a.cat] - RANGO_CAT[b.cat]);
   issues.forEach((i, k) => { i.id = `i${k + 1}`; });
   // Una issue per span (la più grave): il prototipo evidenzia lo span con la sua issue.
   const presi = new Set<string>();
