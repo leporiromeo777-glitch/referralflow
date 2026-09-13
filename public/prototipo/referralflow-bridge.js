@@ -122,7 +122,7 @@ PAGES.home = () => {
         <div class="grow"><div style="font-size:20px;font-weight:650">${rfEsc(fullName(P[next.p]))}${P[next.p].age ? ` <span class="meta">· ${P[next.p].age} anni</span>` : ''}</div><div class="meta">${rfEsc(next.reason)} · ${rfEsc(DOCTORS[next.doc] || '')}${next.room ? ` · ${rfEsc(next.room)}` : ''}</div>
           <div class="row wrap mt-8">${P[next.p].docs && P[next.p].docs.length ? `<span class="badge accent">${P[next.p].docs.length} documenti in cartella</span>` : ''}${P[next.p].referrals && P[next.p].referrals.length ? `<span class="badge">${P[next.p].referrals.length} referral</span>` : ''}</div></div>
       </div>
-      <div class="row mt-24"><button class="btn primary lg" data-go="#/patients/${next.p}">Scheda paziente</button><button class="btn lg" data-go="#/agenda">Agenda di oggi</button></div>
+      <div class="row mt-24"><button class="btn primary lg" data-go="#/patients/${next.p}">Scheda paziente</button>${rfUuid(next.p) ? `<button class="btn lg ai" data-ai="Briefing pre-visita di ${rfEsc(fullName(P[next.p]))}">${ICONS.ai} Briefing pre-visita</button>` : ''}<button class="btn lg" data-go="#/agenda">Agenda di oggi</button></div>
     </div>` : ''}
     <div class="grid grid-main-side mt-16">
       <div class="card"><div class="card-head"><span class="section-title">Da fare adesso</span><button class="btn sm ghost" data-go="#/inbox">Tutte ${ICONS.chevR}</button></div>
@@ -477,11 +477,105 @@ function rfRispostaImmediata(q) {
   return null;
 }
 
+
+/* ---------- procedure con traccia: briefing pre-visita ---------- */
+/* Il briefing lo decide il CODICE della piattaforma (referral, questionario,
+   ultimo referto e terapia, esami con le condizioni ECG 12 mesi / eco 24
+   mesi, agenda, sospesi); il modello locale scrive solo la sintesi. Ogni
+   risposta porta la sua traccia («Da dove viene»): passi, fonti, mancanze. */
+(function () {
+  const st = document.createElement('style');
+  st.textContent = `
+  .rf-brief .rf-sez{margin-top:10px}.rf-brief .rf-sez b{display:block;margin-bottom:2px}
+  .rf-brief .rf-riga{display:flex;gap:6px;align-items:baseline;margin:2px 0}.rf-brief .rf-riga .btn.sm{padding:0 6px;line-height:18px;font-size:11px}
+  .rf-brief .rf-manc{margin-top:10px;padding:8px 10px;border-radius:8px;background:rgba(214,92,42,.10);border:1px solid rgba(214,92,42,.35)}
+  .rf-brief .rf-sint{margin-bottom:6px;padding:8px 10px;border-radius:8px;background:rgba(13,92,72,.08);border:1px solid rgba(13,92,72,.25)}
+  .rf-traccia{margin-top:8px;font-size:12px}.rf-traccia summary{cursor:pointer;opacity:.75}.rf-traccia summary:hover{opacity:1}
+  .rf-traccia ul{margin:6px 0 0 0;padding-left:16px}.rf-traccia li{margin:2px 0}
+  .rf-traccia .ok{color:var(--ok,#0d5c48)}.rf-traccia .mancante{color:#b43c14}.rf-traccia .vuoto{opacity:.6}`;
+  document.head.appendChild(st);
+})();
+const rfUuid = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s || ''));
+function rfDomandaBriefing(q) {
+  return /briefing|prepar(a|ami|are|azione)( la| alla| della| per la)? visita|prima della visita|preparami|cosa (devo|dobbiamo) sapere (su|di|prima)|riassunto (del |della )?(paziente|cartella)|sintesi (del |della )?(paziente|cartella)|prossimo paziente.*(prepar|brief)/.test(q.toLowerCase());
+}
+function rfPazienteDaDomanda(q) {
+  const r = rfCercaDocumenti(q);
+  const trovati = r && r.pazienti ? r.pazienti.filter(p => rfUuid(p.id)) : [];
+  if (trovati.length === 1) return { p: trovati[0] };
+  if (trovati.length > 1) return { ambigui: trovati };
+  const ctx = state.patientCtx && P[state.patientCtx] && rfUuid(state.patientCtx) ? P[state.patientCtx] : null;
+  if (ctx && (state.route === 'patient' || state.route === 'visit')) return { p: ctx };
+  if (/prossimo paziente/.test(q.toLowerCase())) {
+    const appts = [...APPTS].sort((a, b) => a.start.localeCompare(b.start));
+    const now = new Date(); const hm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const next = appts.find(a => a.status !== 'COMPLETED' && a.start >= hm) || appts.find(a => a.status !== 'COMPLETED');
+    if (next && P[next.p] && rfUuid(next.p)) return { p: P[next.p] };
+  }
+  return {};
+}
+function rfBottoneFonte(f) {
+  if (!f) return '';
+  if (f.tipo === 'documento') return `<button class="btn sm" data-doc="${f.id}" title="${rfEsc(f.titolo)}${f.data ? ' · ' + f.data : ''}">Apri</button>`;
+  if (f.tipo === 'referto') return REPORTS.some(r => r.id === f.id) ? `<button class="btn sm" data-go="#/review/${f.id}" title="${rfEsc(f.titolo)}">Apri</button>` : `<a class="btn sm ghost" href="/referti/${f.id}" target="_blank" rel="noopener">Apri</a>`;
+  if (f.tipo === 'referral' || f.tipo === 'questionario') return `<a class="btn sm ghost" href="/referral/${f.id}" target="_blank" rel="noopener" title="${rfEsc(f.titolo)}">Apri</a>`;
+  if (f.tipo === 'appuntamento') return `<button class="btn sm ghost" data-go="#/agenda">Agenda</button>`;
+  return '';
+}
+function rfHtmlTraccia(t) {
+  if (!t) return '';
+  const segno = { ok: '✓', mancante: '✗', vuoto: '–' };
+  const passi = (t.passi || []).map(p => `<li class="${p.esito}">${segno[p.esito] || '·'} ${rfEsc(p.passo)}${p.nota ? ` <span class="caption">· ${rfEsc(p.nota)}</span>` : ''}${p.fonti && p.fonti.length ? ` <span class="caption">· ${p.fonti.length} font${p.fonti.length === 1 ? 'e' : 'i'}</span>` : ''}</li>`).join('');
+  const fonti = (t.fonti || []).map(f => `<li>${rfEsc(f.titolo)}${f.data ? ` · ${f.data}` : ''} ${rfBottoneFonte(f)}</li>`).join('');
+  const nMan = (t.mancanti || []).length;
+  const riass = `${(t.passi || []).length} passi · ${(t.fonti || []).length} fonti${nMan ? ` · ${nMan} mancant${nMan === 1 ? 'e' : 'i'}` : ''}${t.modello ? ` · ${rfEsc(t.modello)}` : ' · solo codice'}${t.durata_ms ? ` · ${(t.durata_ms / 1000).toFixed(1)} s` : ''}${t.id ? ` · traccia #${t.id}` : ''}`;
+  return `<details class="rf-traccia"><summary>Da dove viene · ${riass}</summary><ul>${passi}</ul>${fonti ? `<div class="caption" style="margin-top:6px">Fonti lette</div><ul>${fonti}</ul>` : ''}</details>`;
+}
+function rfHtmlBriefing(b) {
+  const sez = b.sezioni.map(s => `<div class="rf-sez"><b>${rfEsc(s.titolo)}</b>${s.righe.map(r => `<div class="rf-riga"><span>• ${rfEsc(r.testo)}</span>${rfBottoneFonte(r.fonte)}</div>`).join('')}</div>`).join('');
+  const manc = b.mancanti.length ? `<div class="rf-manc"><b>Da segnalare al medico</b>${b.mancanti.map(m => `<div>• ${rfEsc(m.testo)}</div>`).join('')}</div>` : '';
+  const sint = b.sintesi ? `<div class="rf-sint">${rfEsc(b.sintesi).replace(/\n/g, '<br>')}</div>` : '';
+  return `<div class="rf-brief"><b>Briefing pre-visita · ${rfEsc(b.paziente.nome)}${b.paziente.nascita ? ` · ${b.paziente.nascita}` : ''}</b>${sint}${sez}${manc}<div class="row mt-8"><button class="btn sm ghost" data-go="#/patients/${b.paziente.id}">Scheda paziente</button></div>${rfHtmlTraccia({ id: b.traccia.id, passi: b.traccia.passi, fonti: b.fonti, mancanti: b.mancanti, modello: b.traccia.modello, durata_ms: b.traccia.durata_ms })}</div>`;
+}
+function rfBriefing(p) {
+  state.aiState = 'thinking';
+  const id = 'ai' + Date.now();
+  state.aiMessages.push({ id, html: `<div class="ai-msg ai" id="${id}"><span class="caption">Preparo il briefing di ${rfEsc(fullName(p))}: leggo cartella, referti e agenda…</span></div>` });
+  render();
+  const fine = (html, fonte) => {
+    state.aiMessages = state.aiMessages.filter(m => m.id !== id);
+    state.aiMessages.push({ html: `<div class="ai-msg ai">${html}<div class="srcs"><span class="src">${fonte}</span></div></div>` });
+    state.aiState = 'idle'; render();
+  };
+  fetch('/api/prototipo/briefing', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ patient_id: p.id }) })
+    .then(async r => {
+      if (!r.ok) { fine('Non riesco a preparare il briefing in questo momento.', 'Piattaforma'); return; }
+      const b = await r.json();
+      fine(rfHtmlBriefing(b), b.traccia.modello ? 'Procedura della piattaforma · sintesi del modello locale' : 'Procedura della piattaforma · solo codice');
+    })
+    .catch(() => fine('Non riesco a preparare il briefing in questo momento.', 'Piattaforma'));
+}
+const rfQuickOrig = aiQuickActions;
+aiQuickActions = function () {
+  if (!RF.live) return rfQuickOrig();
+  const r = state.route;
+  if ((r === 'patient' || r === 'visit') && rfUuid(state.patientCtx)) return ['Briefing pre-visita', 'Quali esami ha in cartella?', 'Qual è la terapia in corso?', 'Trova l\'ultimo ECG'];
+  if (r === 'home') return ['Briefing del prossimo paziente', 'Quanti appuntamenti oggi?', 'Referti da controllare', 'Richiami scaduti'];
+  return ['Quanti appuntamenti oggi?', 'Referti da controllare', 'Trova un documento di un paziente', 'Richiami scaduti'];
+};
+
 const rfAskOrig = askAI;
 askAI = function (q) {
   if (!RF.live) return rfAskOrig(q);
   if (!state.aiOpen) state.aiOpen = true;
   state.aiMessages.push({ html: `<div class="ai-msg user">${rfEsc(q)}</div>` });
+  if (rfDomandaBriefing(q)) {
+    const chi = rfPazienteDaDomanda(q);
+    if (chi.p) { rfBriefing(chi.p); return; }
+    const testo = chi.ambigui ? `Più pazienti corrispondono: ${chi.ambigui.map(p => `<button class="btn sm" data-ai="Briefing pre-visita di ${rfEsc(fullName(p))}">${rfEsc(fullName(p))}</button>`).join(' ')}` : 'Di quale paziente? Scrivi il cognome, per esempio «briefing di Bernasconi», oppure apri la sua scheda e chiedi «briefing pre-visita».';
+    state.aiMessages.push({ html: `<div class="ai-msg ai">${testo}<div class="srcs"><span class="src">Piattaforma · immediato</span></div></div>` });
+    state.aiState = 'idle'; render(); return;
+  }
   const immediata = rfRispostaImmediata(q);
   if (immediata) {
     state.aiMessages.push({ html: `<div class="ai-msg ai">${immediata}<div class="srcs"><span class="src">Piattaforma · immediato</span></div></div>` });
@@ -508,7 +602,10 @@ askAI = function (q) {
         const el = document.getElementById(id);
         if (el) el.innerHTML = rfEsc(testo).replace(/\n/g, '<br>') + '<span class="caption"> ▍</span>';
       }
-      fine(rfEsc(testo.trim() || 'Nessuna risposta.').replace(/\n/g, '<br>'), fonte);
+      const tid = r.headers.get('X-Traccia');
+      let traccia = '';
+      if (tid) { try { const rt = await fetch(`/api/prototipo/tracce/${tid}`, { credentials: 'include' }); if (rt.ok) traccia = rfHtmlTraccia(await rt.json()); } catch { /* senza traccia */ } }
+      fine(rfEsc(testo.trim() || 'Nessuna risposta.').replace(/\n/g, '<br>') + traccia, fonte);
     })
     .catch(() => fine('L\'assistente non è raggiungibile in questo momento.', 'Piattaforma'));
 };

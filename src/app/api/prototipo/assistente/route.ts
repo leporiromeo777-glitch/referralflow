@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { configurazioneOllama, ollamaAttivo } from '@/lib/ollama';
 import { isUuid } from '@/lib/cartella';
 import { testoDocumento } from '@/lib/documenti-testo';
+import { apriTraccia, chiudiTraccia, type PassoTraccia } from '@/lib/tracce';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +14,9 @@ export const dynamic = 'force-dynamic';
 // parola) e modello tenuto caldo 30 minuti: la lentezza percepita era la
 // risposta tutta insieme alla fine, a modello freddo. Niente memoria, niente
 // dati clinici oltre quelli in pagina; se il modello non c'è risponde il codice.
+// Ogni risposta del modello lascia una TRACCIA (assistente_tracce): passi del
+// codice, documento letto, modello, tempo; l'id viaggia nell'header X-Traccia
+// e il prototipo la mostra come «Da dove viene».
 const MODELLO = process.env.PROTOTIPO_LLM || 'gemma3:12b';
 const MAX_CONTESTO = 3500;
 
@@ -58,14 +62,33 @@ RISPOSTA:`;
     console.error(`[ai-locale] bot del prototipo: Ollama ${r.status} modello=${MODELLO}`);
     return testoSemplice('Il modello locale ha risposto con un errore.', 'codice');
   }
+  const t0 = Date.now();
+  const passi: PassoTraccia[] = [
+    { passo: `Contesto della pagina (numeri e liste già filtrati per il ruolo «${ruolo}»)`, esito: 'ok', fonti: [], nota: `${contesto.length} caratteri` },
+    doc
+      ? { passo: 'Testo del documento aperto, estratto sul Mac dello studio', esito: doc.testo ? 'ok' : 'vuoto', fonti: [doc.id], nota: doc.testo ? `${doc.testo.length} caratteri${doc.troncato ? ', troncato' : ''}` : 'nessun testo estraibile' }
+      : { passo: 'Documento aperto', esito: 'vuoto', fonti: [], nota: 'nessun documento aperto' },
+    { passo: 'Risposta del modello locale, solo sui dati passati', esito: 'ok', fonti: [], nota: MODELLO },
+  ];
+  let tracciaId = 0;
+  try {
+    tracciaId = await apriTraccia({
+      studioId: session.studioId, userId: session.id, procedura: doc ? 'documento' : 'domanda_libera', obiettivo: domanda,
+      passi, fonti: doc ? [{ tipo: 'documento', id: doc.id, titolo: doc.nota || doc.filename }] : [], modello: MODELLO,
+    });
+  } catch (e) {
+    console.error(`[ai-locale] traccia non aperta: ${(e as Error)?.message ?? e}`);
+  }
   const lettore = r.body.getReader();
   const dec = new TextDecoder();
   const enc = new TextEncoder();
   let resto = '';
+  let caratteri = 0;
+  const chiudi = () => { if (tracciaId) void chiudiTraccia(tracciaId, { durataMs: Date.now() - t0, caratteri }).catch(() => undefined); };
   const stream = new ReadableStream<Uint8Array>({
     async pull(controller) {
       const { value, done } = await lettore.read();
-      if (done) { controller.close(); return; }
+      if (done) { controller.close(); chiudi(); return; }
       resto += dec.decode(value, { stream: true });
       const righe = resto.split('\n');
       resto = righe.pop() ?? '';
@@ -73,11 +96,13 @@ RISPOSTA:`;
         if (!riga.trim()) continue;
         try {
           const j = JSON.parse(riga);
-          if (typeof j.response === 'string' && j.response) controller.enqueue(enc.encode(j.response));
+          if (typeof j.response === 'string' && j.response) { caratteri += j.response.length; controller.enqueue(enc.encode(j.response)); }
         } catch { /* riga incompleta */ }
       }
     },
-    cancel() { void lettore.cancel(); },
+    cancel() { void lettore.cancel(); chiudi(); },
   });
-  return new Response(stream, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'X-Fonte': 'modello locale', 'Cache-Control': 'no-store' } });
+  const intestazioni: Record<string, string> = { 'Content-Type': 'text/plain; charset=utf-8', 'X-Fonte': 'modello locale', 'Cache-Control': 'no-store' };
+  if (tracciaId) intestazioni['X-Traccia'] = String(tracciaId);
+  return new Response(stream, { headers: intestazioni });
 }
