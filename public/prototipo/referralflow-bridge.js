@@ -39,6 +39,7 @@ async function rfCaricaDati() {
   rfSvuota(PATIENTS); (d.patients || []).forEach(p => PATIENTS.push(p));
   rfRimpiazzaOggetto(P, Object.fromEntries(PATIENTS.map(p => [p.id, p])));
   rfSvuota(APPTS); (d.appts || []).forEach(a => APPTS.push(a));
+  RF.agenda = d.agenda || [];
   rfSvuota(TASKS); (d.tasks || []).forEach(t => TASKS.push(t));
   rfSvuota(REPORTS); (d.reports || []).forEach(x => REPORTS.push(x));
   rfSvuota(DOCUMENTS); (d.documents || []).forEach(x => DOCUMENTS.push(x));
@@ -1550,6 +1551,47 @@ PAGES.profile = () => {
     </div>`;
 };
 (function () { const st = document.createElement('style'); st.textContent = `.rf-codici{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:10px}.rf-codici code{padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);font-size:13px;letter-spacing:.04em}`; document.head.appendChild(st); })();
+
+
+/* ---------- agenda vera: colonne per medico, giorno per giorno ---------- */
+/* La pagina Agenda del prototipo aveva colonne finte (Dr.ssa Bianchi, Dr.
+   Ferrari, Sala ECG). Qui le colonne sono i medici che hanno appuntamenti nel
+   giorno scelto (nomi dal registro dei medici dell'agenda) più «Senza
+   medico», dove il codice del luogo resta visibile. Giorno cambiabile
+   nella finestra ±30 giorni caricata da /api/prototipo/dati. */
+const rfAgendaOrig = PAGES.agenda;
+PAGES.agenda = () => {
+  if (!RF.live) return rfAgendaOrig();
+  const oggi = (RF.data && RF.data.today) || new Date().toISOString().slice(0, 10);
+  if (!state.agendaGiorno) state.agendaGiorno = oggi;
+  const giorno = state.agendaGiorno;
+  const lista = (RF.agenda || []).filter(a => a.d === giorno).sort((a, b) => a.start.localeCompare(b.start));
+  const nomeDi = (a) => (a.p && P[a.p]) ? fullName(P[a.p]) : (a.nome || 'Paziente');
+  const medici = [...new Set(lista.filter(a => a.doc && a.doc !== 'studio').map(a => a.doc))].sort((x, y) => (DOCTORS[x] || '').localeCompare(DOCTORS[y] || ''));
+  const cols = medici.map(k => [k, DOCTORS[k] || k]);
+  if (lista.some(a => !a.doc || a.doc === 'studio')) cols.push(['studio', 'Senza medico']);
+  const minuti = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const startH = lista.length ? Math.max(6, Math.min(8, Math.floor(Math.min(...lista.map(a => minuti(a.start))) / 60))) : 8;
+  const endH = lista.length ? Math.min(21, Math.max(18, Math.ceil(Math.max(...lista.map(a => minuti(a.start) + a.dur)) / 60))) : 18;
+  const slotH = 44, slots = (endH - startH) * 2;
+  const top = (t) => (minuti(t) - startH * 60) / 30 * slotH;
+  const chip = (a) => `<div class="appt ${a.late ? 'LATE' : a.status}" style="top:${top(a.start) + 2}px;height:${Math.max(24, a.dur / 30 * slotH - 4)}px" ${a.p && rfUuid(a.p) ? `data-go="#/patients/${a.p}"` : ''} title="${rfEsc(nomeDi(a))} · ${a.start} · ${rfEsc(a.reason || '')}${a.room ? ' · ' + rfEsc(a.room) : ''}"><div class="n"><i class="dot ${a.late ? 'warning' : a.status === 'COMPLETED' ? 'success' : 'accent'}"></i>${rfEsc(nomeDi(a))}</div><div class="s">${a.start} · ${rfEsc(a.reason || '')}${a.room ? ` · <b>${rfEsc(a.room)}</b>` : ''}</div></div>`;
+  const colHtml = (key) => `<div class="cal-col" style="height:${slots * slotH}px">${Array.from({ length: slots }, (_, i) => `<div class="cal-line ${i % 2 ? 'half' : ''}" style="top:${i * slotH}px"></div>`).join('')}${lista.filter(a => key === 'studio' ? (!a.doc || a.doc === 'studio') : a.doc === key).map(chip).join('')}</div>`;
+  const times = Array.from({ length: slots }, (_, i) => i % 2 === 0 ? `<div class="cal-time num" style="top:${i * slotH}px">${String(startH + i / 2).padStart(2, '0')}:00</div>` : '').join('');
+  const d = new Date(`${giorno}T12:00:00`);
+  const etichetta = d.toLocaleDateString('it-CH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const sposta = (n) => { const x = new Date(`${giorno}T12:00:00`); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
+  const senza = lista.filter(a => !a.doc || a.doc === 'studio').length;
+  return `
+    <div class="page-head"><div><h2 class="page-title">Agenda</h2><div class="page-sub">${rfEsc(etichetta)} · ${lista.length} appuntamenti${medici.length ? ` · ${medici.length} medici` : ''}${senza ? ` · ${senza} senza medico` : ''}</div></div>
+      <div class="actions"><div class="seg"><button onclick="state.agendaGiorno='${sposta(-1)}';render()">‹</button><button class="${giorno === oggi ? 'active' : ''}" onclick="state.agendaGiorno='${oggi}';render()">Oggi</button><button onclick="state.agendaGiorno='${sposta(1)}';render()">›</button></div><input type="date" class="input sm" value="${giorno}" onchange="state.agendaGiorno=this.value;render()" style="max-width:160px"><button class="btn ai" data-ai="Preparazione della giornata">${ICONS.ai} Prepara la giornata</button></div></div>
+    ${senza ? `<div class="caption mb-16">Gli appuntamenti «senza medico» hanno nel luogo un codice non abbinato (${[...new Set(lista.filter(a => !a.doc || a.doc === 'studio').map(a => a.room).filter(Boolean))].map(rfEsc).join(', ') || 'vuoto'}): si abbinano in Studio → Medici agenda → Codici dell'agenda.</div>` : ''}
+    ${lista.length ? `<div class="cal" style="--cols:${cols.length}">
+      <div class="cal-head"></div>${cols.map(c => `<div class="cal-head">${rfEsc(c[1])}</div>`).join('')}
+      <div class="cal-times" style="--slots:${slots};--slot-h:${slotH}px">${times}</div>${cols.map(c => colHtml(c[0])).join('')}
+    </div>` : `<div class="card"><div class="caption">Nessun appuntamento in agenda per questo giorno${Math.abs((d - new Date(`${oggi}T12:00:00`)) / 86400000) > 30 ? ' (la piattaforma carica ±30 giorni da oggi)' : ''}.</div></div>`}
+    <div class="row mt-16 caption wrap"><span class="status"><i class="dot accent"></i>Programmato</span><span class="status"><i class="dot success"></i>Completato</span><span class="status"><i class="dot warning"></i>In ritardo</span><span class="caption">Dal robot MediOnline, in sola lettura; si aggiorna ogni ora.</span></div>`;
+};
 
 /* ---------- avvio: dentro la piattaforma niente demo, mai ---------- */
 function rfPaginaCarico() {

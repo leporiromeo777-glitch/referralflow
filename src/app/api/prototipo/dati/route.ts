@@ -124,10 +124,13 @@ export async function GET() {
     if (t < adesso - 20 * 60000) return 'SCHEDULED';
     return 'SCHEDULED';
   };
-  const apptsOggi = appts.filter((a) => a.starts_at.slice(0, 10) === today).map((a) => {
+  // Tutta la finestra (±30 giorni) per la pagina Agenda con il cambio di giorno;
+  // le schede leggere dei pazienti noti solo all'agenda si creano solo per oggi.
+  const agenda = appts.map((a) => {
+    const oggi = a.starts_at.slice(0, 10) === today;
     const pid = a.paziente_nome ? pazPerNome.get(slug(a.paziente_nome)) : undefined;
     let p = pid ?? '';
-    if (!p) {
+    if (!p && oggi) {
       // Paziente noto solo all'agenda: entra come scheda leggera, senza cartella.
       const nome = (a.paziente_nome ?? a.titolo ?? 'Paziente').trim();
       const pezzi = nome.split(/\s+/);
@@ -139,12 +142,13 @@ export async function GET() {
     }
     const fine = a.ends_at ? new Date(a.ends_at).getTime() : new Date(a.starts_at).getTime() + 30 * 60000;
     return {
-      id: a.id, p, doc: a.provider_id ? providerToDoc.get(a.provider_id) ?? 'studio' : 'studio', room: a.luogo ?? '',
+      id: a.id, p, nome: (a.paziente_nome ?? a.titolo ?? 'Paziente').trim(), d: a.starts_at.slice(0, 10), doc: a.provider_id ? providerToDoc.get(a.provider_id) ?? 'studio' : 'studio', room: a.luogo ?? '',
       start: ora(a.starts_at), dur: Math.max(5, Math.round((fine - new Date(a.starts_at).getTime()) / 60000)),
       reason: a.motivo || a.titolo || 'Appuntamento', type: a.motivo || 'Visita', status: stato(a),
-      late: !a.completed_at && new Date(a.starts_at).getTime() < adesso - 20 * 60000, referral: a.referral_id,
+      late: oggi && !a.completed_at && new Date(a.starts_at).getTime() < adesso - 20 * 60000, referral: a.referral_id,
     };
   });
+  const apptsOggi = agenda.filter((a) => a.d === today);
 
   // Attività: la stessa lista della Home («Oggi»).
   const tasks: { id: string; title: string; p: string | null; assignee: string; prio: string; status: string; due: string; cat: string; src: string; href: string }[] = [];
@@ -253,6 +257,6 @@ export async function GET() {
   };
   return NextResponse.json({
     utente: { role: RUOLO[session.role] ?? 'secretary', name: nome, initials: iniz, studio: session.studioNome, email: session.email },
-    today, doctors, patients, appts: apptsOggi, tasks, reports, documents, inbox, audioInbox, stats,
+    today, doctors, patients, appts: apptsOggi, agenda, tasks, reports, documents, inbox, audioInbox, stats,
   });
 }
