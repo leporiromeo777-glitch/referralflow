@@ -44,3 +44,6 @@ Richiesta utente: «rendi il prototipo operativo, attaccagli anche il bot, elimi
 Pubblicazione sulla rete: Caddy serve la piattaforma anche su **https://192.168.1.146/** (porte 80→443 standard, certificato della CA interna), quindi il prototipo è a `https://192.168.1.146/prototipo/` e il dittafono a `/dittafono/`, senza numeri di porta ([[Piattaforma/Server Mac mini]]).
 
 Dal 13.9.2026 l'indirizzo da usare, anche per l'icona sul telefono, è **https://cct.referralflow.ch/prototipo/** (certificato Let's Encrypt, nessun avviso, [[Piattaforma/Server Mac mini]]).
+
+## Dati di prova (13.9.2026)
+`npm run dati-prova` crea 6 pazienti inventati (Bernasconi, Pedrazzini, Ortelli, Casanova, Rusconi, Galli) con referral, 3 appuntamenti di oggi e 14 documenti PDF generati dal codice (ECG, Holter, ecocardiogrammi, test ergometrico, MAPA, duplex renale, CoroTAC, laboratorio, lettere, consenso), ognuno con in testa «DOCUMENTO DI PROVA - dati inventati». Servono a provare cartella, bot e ricerca documenti. `npm run dati-prova -- --elimina` toglie tutto (registro degli id in `~/.referralflow-dati-prova.json`). Il medico inviante di prova è «Dr. med. Andrea Prova». Nessuna persona reale.
