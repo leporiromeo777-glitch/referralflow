@@ -13,7 +13,7 @@ aggiornata: 2026-09-14
 7. **Migrazione a Next 16** (advisory residue di `npm audit`, feature non usate).
 
 ## Interfaccia nuova ([[Piattaforma/Prototipo stack]])
-- Una schermata di accesso propria (oggi login e 2FA sono la pagina della piattaforma classica, l'ultima cosa condivisa a schermo).
+- Schermata di accesso propria e pagina «Studio» (personale, medici agenda, sale, apparecchi) FATTE il 14.9.2026; manca ancora il cambio password dal proprio profilo e l'attivazione della 2FA dall'interfaccia nuova (oggi si fanno dalla piattaforma classica).
 - «Frasi a rischio» della catena nella revisione nuova: escluse per scelta dell'utente il 14.9.2026; se cambia idea, è un passo in `costruisciRevisione` come gli altri.
 - Statistiche, amministrazione, comunicazioni, visite: sezioni ancora senza dati propri nell'interfaccia nuova.
 - Anonimizzazione: il .docx torna come testo; la versione classica restituisce un .docx anonimizzato con la formattazione.

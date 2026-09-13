@@ -18,7 +18,7 @@ ReferralFlow è una piattaforma multi-studio per la gestione delle referral tra 
 - `npm run create-studio -- "<Nome>" <slug> [email-notifiche]`
 - `npm run create-user -- <email> <password> [ruolo] [slug-studio]` (ruoli: segretaria, medico, admin; l'admin gestisce gli accessi da `/impostazioni/utenti`)
 - Schema: `psql "$DATABASE_URL" -f db/schema.sql` (+ `db/seed-demo.sql`; il vecchio `db/seed.sql` è pre-migrazione 007 e non funziona più)
-- DB esistente: applicare in ordine le `db/migrations/0XX_*.sql` mancanti (ultima: `035_fatti_e_tracce.sql`)
+- DB esistente: applicare in ordine le `db/migrations/0XX_*.sql` mancanti (ultima: `036_studio_risorse.sql`)
 - Test: `npm run test:audit` (diff, metriche, dizionario dalle correzioni), `npm run test:app` (anche verifica lettera e fusione terapia; gira con `--conditions=react-server`, dipendenza `server-only` installata apposta), `npm run audit-backfill`
 - Catena: `python3.14 pipeline-referti/prove-catastrofiche.py` (suite, 32 casi), banchi in [[Misure/Banchi]]
 - Anteprima locale sul Mac: `bash mac/avvia-anteprima.sh` (si accorge del servizio e rimanda a quello)

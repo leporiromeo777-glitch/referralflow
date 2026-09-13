@@ -10,9 +10,12 @@ Nato il 13.9.2026 come pacchetto consegnato dall'utente (progettato altrove, su 
 Le voci sotto sono **ciò che è vero adesso**; la storia delle modifiche, con i difetti trovati e corretti, sta nelle sezioni in fondo.
 
 **Accesso e dispositivi**
-- Indirizzo `https://cct.referralflow.ch/prototipo/index.html` (Let's Encrypt, [[Piattaforma/Server Mac mini]]); icona sul telefono via manifest. Login e 2FA sono ancora la pagina della piattaforma classica (`/login?next=…`), l'unica cosa condivisa a schermo.
+- Indirizzo `https://cct.referralflow.ch/prototipo/index.html` (Let's Encrypt, [[Piattaforma/Server Mac mini]]); icona sul telefono via manifest. **Schermata di accesso propria** (14.9.2026): e-mail e password, poi il codice se la 2FA è attiva, tramite `POST /api/prototipo/accesso`, `…/accesso/verifica` e `…/accesso/esci`, con la stessa logica della pagina di login della piattaforma (blocchi anti-forza-bruta per e-mail e IP, studio attivo, cookie di verifica di 5 minuti, sessione di 8 ore); «Esci» in fondo alla barra laterale. Gli invianti non entrano. Niente più schermate condivise con la piattaforma classica.
 - Sul telefono: menu a pillola in basso (Oggi, Agenda, Pazienti, Referti, Dittafono, AI) che sparisce scorrendo in giù e ricompare in su o al cambio di pagina, e sparisce con la sezione AI aperta; tasto «indietro» in alto a sinistra con storia interna delle pagine; niente scorrimento laterale (griglie, calendario e tabelle contenuti nel proprio riquadro); revisione con la colonna delle segnalazioni sopra il testo e il dettaglio che scorre da destra.
 - **Nessun rimando alla piattaforma classica** e viceversa ([[Decisioni/Registro]], 13.9.2026 sera): le sezioni senza dati propri (statistiche, amministrazione, sistema, comunicazioni, visite, knowledge) dicono «non ancora disponibile in questa interfaccia». In comune restano la catena, i dati e le API.
+
+**Pagina «Studio»** (14.9.2026, voce «Studio» nella barra; `GET/POST /api/prototipo/studio`)
+- Schede: Dati (nome, telefono, e-mail per gli avvisi, prestazioni), Personale (accessi con ruolo, 2FA, stato; nuovo accesso con password iniziale scelta da chi lo crea, nuova password, cambio ruolo, disattiva/riattiva; mai eliminare, nessuno si disattiva da solo), Medici agenda (providers del robot MediOnline: nome, alias, accesso collegato, attivo), Sale e Apparecchi (tabella `studio_risorse`, migrazione 036: nome, descrizione, in uso / fuori uso). Tutti leggono, solo l'amministratore modifica (verificato dal server).
 
 **Pagine e dati**
 - `GET /api/prototipo/dati`: utente e ruolo, medici, pazienti con cartella (referral, documenti, esami, visite dall'agenda, assicurazione), agenda di oggi dal robot MediOnline, attività, referti della catena, documenti, audio in lavorazione e loro esito, numeri. Nessun dato demo in nessuna pagina raggiungibile.
@@ -36,7 +39,7 @@ Le voci sotto sono **ciò che è vero adesso**; la storia delle modifiche, con i
 
 **Manutenzione**
 - Il ponte è `public/prototipo/referralflow-bridge.js` (copia anche in `~/referralflow-stack/…/ui-prototype/` e in `~/Downloads/…`); a ogni modifica si alza `?v=` in `index.html` e `manifest.webmanifest`, poi `bash mac/aggiorna-server.sh`. Il ponte ridefinisce le funzioni del prototipo in place: quando si sostituisce un blocco, controllare di non cancellare funzioni vicine (è successo con l'impaginazione, v28-v30).
-- Endpoint del prototipo: `dati`, `referti`, `referti/[id]` (+ `testo`, `conferma`, `richiamo`), `documenti/[id]/testo`, `assistente`, `interpreta`, `procedure`, `procedura`, `briefing`, `tracce/[id]`, `anonimizza`. Tutti con sessione; le procedure con permessi per ruolo dal registro.
+- Endpoint del prototipo: `accesso` (+ `verifica`, `esci`), `studio`, `dati`, `referti`, `referti/[id]` (+ `testo`, `conferma`, `richiamo`), `documenti/[id]/testo`, `assistente`, `interpreta`, `procedure`, `procedura`, `briefing`, `tracce/[id]`, `anonimizza`. Tutti con sessione; le procedure con permessi per ruolo dal registro.
 
 Il resto della pagina è la storia della giornata, sezione per sezione.
 

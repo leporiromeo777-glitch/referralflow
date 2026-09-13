@@ -26,7 +26,7 @@ async function rfCaricaDati() {
   if (!rfDentro()) return;
   let r;
   try { r = await fetch('/api/prototipo/dati', { credentials: 'include' }); } catch (e) { return; }
-  if (r.status === 401) { RF.nonAutorizzato = true; rfPaginaAccesso(); return; }
+  if (r.status === 401) { RF.nonAutorizzato = true; rfPaginaAccesso({ passo: 'credenziali', errore: null, lavora: false }); return; }
   if (!r.ok) return;
   const d = await r.json();
   RF.data = d; RF.live = true; RF.caricato = true;
@@ -53,21 +53,73 @@ async function rfCaricaDati() {
   // Niente residui demo nelle pagine raggiungibili: archivio storico della
   // palette, audit e job finti, knowledge, fatture.
   for (const nome of ['ARCHIVE', 'AUDIT', 'AIJOBS', 'KNOWLEDGE', 'INVOICES']) { try { if (Array.isArray(window[nome])) rfSvuota(window[nome]); } catch { /* assente */ } }
-  const nav = ['home', 'agenda', 'patients', 'reports', 'dittafono', 'documents', 'anonymize', 'inbox', 'ai'];
+  const nav = ['home', 'agenda', 'patients', 'reports', 'dittafono', 'documents', 'anonymize', 'inbox', 'ai', 'administration'];
   for (const k of Object.keys(NAV)) NAV[k] = nav.slice();
   render();
 }
 
-function rfPaginaAccesso() {
+function rfPaginaAccesso(stato) {
   const c = document.getElementById('content');
   if (!c) return;
-  c.innerHTML = `<div class="page"><div class="card" style="max-width:520px;margin:40px auto;text-align:center">
-    <h2 class="page-title">Accedi alla piattaforma</h2>
-    <p class="meta" style="line-height:1.55">Questa è l'interfaccia nuova di ReferralFlow con i dati veri dello studio: serve la sessione della piattaforma. Nessun dato dimostrativo viene mostrato.</p>
-    <a class="btn primary" href="/login?next=%2Fprototipo%2Findex.html" style="margin-top:12px;display:inline-flex">Accedi</a>
+  const st = stato || RF.accesso || { passo: 'credenziali', errore: null, lavora: false };
+  RF.accesso = st;
+  c.innerHTML = `<div class="page"><div class="card rf-accesso">
+    <div class="brand" style="justify-content:center;padding-bottom:6px">${typeof BRAND_MARK !== 'undefined' ? BRAND_MARK : ''}<div><div class="brand-name">ReferralFlow</div><div class="brand-sub">interfaccia nuova · dati dello studio</div></div></div>
+    ${st.passo === 'codice' ? `
+      <h2 class="page-title" style="font-size:18px;text-align:center">Codice di verifica</h2>
+      <p class="meta" style="text-align:center">Inserisci il codice dell'app di autenticazione, oppure un codice di recupero.</p>
+      <form id="rf-acc-form" autocomplete="off">
+        <div class="field mt-16"><label>Codice</label><input class="input" id="rf-acc-codice" inputmode="numeric" autocomplete="one-time-code" placeholder="123 456" autofocus></div>
+        ${st.errore ? `<div class="rf-manc mt-8">${rfEsc(st.errore)}</div>` : ''}
+        <div class="row mt-16" style="gap:8px"><button class="btn primary grow" type="submit" ${st.lavora ? 'disabled' : ''}>${st.lavora ? 'Verifico…' : 'Entra'}</button><button class="btn ghost" type="button" id="rf-acc-indietro">Indietro</button></div>
+      </form>` : `
+      <h2 class="page-title" style="font-size:18px;text-align:center">Accedi</h2>
+      <form id="rf-acc-form">
+        <div class="field mt-16"><label>E-mail</label><input class="input" id="rf-acc-email" type="email" autocomplete="username" inputmode="email" required></div>
+        <div class="field mt-8"><label>Password</label><input class="input" id="rf-acc-password" type="password" autocomplete="current-password" required></div>
+        ${st.errore ? `<div class="rf-manc mt-8">${rfEsc(st.errore)}</div>` : ''}
+        <button class="btn primary mt-16" type="submit" style="width:100%" ${st.lavora ? 'disabled' : ''}>${st.lavora ? 'Accedo…' : 'Entra'}</button>
+        <p class="caption mt-16" style="text-align:center">Sessione di 8 ore sul Mac dello studio. Nessun dato dimostrativo.</p>
+      </form>`}
   </div></div>`;
   const sb = document.getElementById('sidebar'); if (sb) sb.innerHTML = '';
+  const mn = document.getElementById('mobilenav'); if (mn) mn.innerHTML = '';
+  const form = document.getElementById('rf-acc-form');
+  if (form) form.onsubmit = (e) => { e.preventDefault(); void rfAccedi(); };
+  const ind = document.getElementById('rf-acc-indietro'); if (ind) ind.onclick = () => rfPaginaAccesso({ passo: 'credenziali', errore: null, lavora: false });
 }
+async function rfAccedi() {
+  const st = RF.accesso || { passo: 'credenziali' };
+  if (st.passo === 'codice') {
+    const codice = (document.getElementById('rf-acc-codice') || {}).value || '';
+    rfPaginaAccesso({ passo: 'codice', errore: null, lavora: true });
+    try {
+      const r = await fetch('/api/prototipo/accesso/verifica', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ codice }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { rfPaginaAccesso({ passo: j.ricomincia ? 'credenziali' : 'codice', errore: j.errore || 'Codice non valido.', lavora: false }); return; }
+    } catch { rfPaginaAccesso({ passo: 'codice', errore: 'Piattaforma non raggiungibile.', lavora: false }); return; }
+  } else {
+    const email = (document.getElementById('rf-acc-email') || {}).value || '';
+    const password = (document.getElementById('rf-acc-password') || {}).value || '';
+    rfPaginaAccesso({ passo: 'credenziali', errore: null, lavora: true });
+    try {
+      const r = await fetch('/api/prototipo/accesso', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { rfPaginaAccesso({ passo: 'credenziali', errore: j.errore || 'Accesso non riuscito.', lavora: false }); return; }
+      if (j.richiede_codice) { rfPaginaAccesso({ passo: 'codice', errore: null, lavora: false }); return; }
+    } catch { rfPaginaAccesso({ passo: 'credenziali', errore: 'Piattaforma non raggiungibile.', lavora: false }); return; }
+  }
+  RF.accesso = null; RF.nonAutorizzato = false; RF.caricato = false;
+  rfPaginaCarico();
+  void rfCaricaMedici(); void rfCaricaProcedure(); void rfCaricaDati();
+}
+async function rfEsci() {
+  try { await fetch('/api/prototipo/accesso/esci', { method: 'POST', credentials: 'include' }); } catch { /* comunque */ }
+  RF.live = false; RF.caricato = false; RF.data = null; RF.nonAutorizzato = true; RF.loaded = null; RF.accesso = null;
+  location.hash = '#/home';
+  rfPaginaAccesso({ passo: 'credenziali', errore: null, lavora: false });
+}
+(function () { const st = document.createElement('style'); st.textContent = `.rf-accesso{max-width:420px;margin:40px auto;padding:22px 24px}@media (max-width:767px){.rf-accesso{margin:16px auto}}`; document.head.appendChild(st); })();
 
 /* ---------- barra laterale: conteggi veri ---------- */
 const rfRenderSidebarOrig = renderSidebar;
@@ -88,10 +140,12 @@ renderSidebar = function () {
       <div class="nav-sep"></div>
       <nav class="nav">
         <button class="nav-item" id="collapse-btn" title="Comprimi barra laterale">${ICONS.panel}<span>Comprimi</span></button>
+        <button class="nav-item" id="rf-esci" title="Esci">${ICONS.lock || ''}<span>Esci · ${rfEsc((RF.data.utente.email || '').split('@')[0])}</span></button>
       </nav>
       <div class="sysbar"><span class="status"><i class="dot success"></i><span>Dati veri</span></span><span class="status"><i class="dot success"></i><span>AI locale</span></span></div>
     </div>`;
   document.getElementById('collapse-btn').onclick = () => { state.sidebarCollapsed = !state.sidebarCollapsed; render(); };
+  const esci = document.getElementById('rf-esci'); if (esci) esci.onclick = () => { void rfEsci(); };
   bindCommon(document.getElementById('sidebar'));
 };
 
@@ -146,7 +200,6 @@ function rfPaginaPiattaforma(titolo, testo) {
 const rfOrig = {};
 for (const [k, titolo, testo, href] of [
   ['statistics', 'Statistiche', 'Tempi, volumi, qualità della catena', '/statistiche'],
-  ['administration', 'Amministrazione', 'Fatture e prestazioni', '/impostazioni'],
   ['system', 'Sistema', 'Utenti, sicurezza, modelli', '/impostazioni/utenti'],
   ['communications', 'Comunicazioni', 'Telefonate, e-mail, consulti', '/consulti'],
   ['visits', 'Visite', 'Visite registrate', '/visite'],
@@ -1349,6 +1402,95 @@ function rfAnonScarica() {
   const a = document.createElement('a'); a.href = url; a.download = 'anonimizzato.txt'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 (function () { const st = document.createElement('style'); st.textContent = `.rf-anon-mark{background:var(--warning-soft,rgba(214,150,42,.25));border-radius:3px;padding:0 2px}`; document.head.appendChild(st); })();
+
+
+/* ---------- pagina Studio: dati, personale, medici dell'agenda, sale, apparecchi ---------- */
+RF.studio = { dati: null, scheda: 'personale', errore: null, ok: null };
+if (typeof NAV_META !== 'undefined') NAV_META.administration = ['Studio', 'settings'];
+async function rfStudioCarica() {
+  try { const r = await fetch('/api/prototipo/studio', { credentials: 'include' }); if (r.ok) { RF.studio.dati = await r.json(); render(); } } catch { /* riprova al prossimo giro */ }
+}
+async function rfStudioAzione(corpo) {
+  RF.studio.errore = null; RF.studio.ok = null;
+  try {
+    const r = await fetch('/api/prototipo/studio', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { RF.studio.errore = j.errore || 'Modifica non riuscita.'; render(); return false; }
+    RF.studio.dati = Object.assign(RF.studio.dati || {}, j); RF.studio.ok = 'Salvato.'; render(); toast('Salvato'); void rfCaricaDati();
+    return true;
+  } catch { RF.studio.errore = 'Piattaforma non raggiungibile.'; render(); return false; }
+}
+function rfStudioCampo(sel) { const e = document.querySelector(sel); return e ? e.value : ''; }
+const rfAdminPageOrig = PAGES.administration;
+PAGES.administration = () => {
+  if (!RF.live) return rfAdminPageOrig ? rfAdminPageOrig() : '';
+  const d = RF.studio.dati;
+  if (!d) { void rfStudioCarica(); return `<div class="page-head"><div><h2 class="page-title">Studio</h2></div></div><div class="card"><div class="caption">Carico…</div></div>`; }
+  const admin = !!d.admin;
+  const scheda = RF.studio.scheda;
+  const tab = (k, l, n) => `<button class="tab ${scheda === k ? 'active' : ''}" onclick="RF.studio.scheda='${k}';render()">${l}${n != null ? ` <span class="badge">${n}</span>` : ''}</button>`;
+  const ruoloIt = { segretaria: 'Segreteria', medico: 'Medico', admin: 'Amministrazione' };
+  const soloAdmin = admin ? '' : `<div class="caption mb-16">Solo l'amministratore dello studio può modificare: tu puoi consultare.</div>`;
+  const avviso = `${RF.studio.errore ? `<div class="rf-manc mb-16">${rfEsc(RF.studio.errore)}</div>` : ''}`;
+  let corpo = '';
+  if (scheda === 'studio') {
+    const st = d.studio || {};
+    corpo = `<div class="card"><div class="section-title">Dati dello studio</div>
+      <div class="grid grid-2 mt-8">
+        <div class="field"><label>Nome</label><input class="input" id="rf-st-nome" value="${rfEsc(st.nome || '')}" ${admin ? '' : 'disabled'}></div>
+        <div class="field"><label>Telefono</label><input class="input" id="rf-st-tel" value="${rfEsc(st.telefono || '')}" ${admin ? '' : 'disabled'}></div>
+        <div class="field"><label>E-mail per gli avvisi</label><input class="input" id="rf-st-email" value="${rfEsc(st.notify_email || '')}" ${admin ? '' : 'disabled'}></div>
+        <div class="field"><label>Prestazioni offerte</label><input class="input" id="rf-st-spec" value="${rfEsc(st.specialita || '')}" ${admin ? '' : 'disabled'}></div>
+      </div>
+      ${admin ? `<div class="row mt-16"><button class="btn primary" onclick="rfStudioAzione({ azione: 'studio_aggiorna', nome: rfStudioCampo('#rf-st-nome'), telefono: rfStudioCampo('#rf-st-tel'), notify_email: rfStudioCampo('#rf-st-email'), specialita: rfStudioCampo('#rf-st-spec') })">Salva</button></div>` : ''}</div>`;
+  } else if (scheda === 'personale') {
+    corpo = `<div class="card"><div class="card-head"><span class="section-title">Accessi del personale</span><span class="caption">${d.personale.filter(u => u.attivo).length} attivi</span></div>
+      <div class="table-wrap" style="box-shadow:none"><table class="dense"><thead><tr><th>E-mail</th><th>Ruolo</th><th>2FA</th><th>Stato</th>${admin ? '<th></th>' : ''}</tr></thead><tbody>
+      ${d.personale.map(u => `<tr>
+        <td><b>${rfEsc(u.email)}</b>${u.id === d.io ? ' <span class="caption">(tu)</span>' : ''}</td>
+        <td>${admin && u.id !== d.io ? `<select class="input sm" onchange="rfStudioAzione({ azione: 'utente_ruolo', id: '${u.id}', ruolo: this.value })">${Object.entries(ruoloIt).map(([k, l]) => `<option value="${k}" ${u.role === k ? 'selected' : ''}>${l}</option>`).join('')}</select>` : rfEsc(ruoloIt[u.role] || u.role)}</td>
+        <td>${u.totp ? '<span class="badge success">attiva</span>' : '<span class="caption">no</span>'}</td>
+        <td>${u.attivo ? '<span class="badge success">attivo</span>' : '<span class="badge">disattivato</span>'}</td>
+        ${admin ? `<td class="row" style="gap:6px;justify-content:flex-end">${u.id !== d.io ? `<button class="btn sm ghost" onclick="rfStudioPassword('${u.id}', '${rfEsc(u.email)}')">Nuova password</button><button class="btn sm ghost" onclick="rfStudioAzione({ azione: 'utente_attivo', id: '${u.id}' })">${u.attivo ? 'Disattiva' : 'Riattiva'}</button>` : ''}</td>` : ''}
+      </tr>`).join('')}</tbody></table></div></div>
+      ${admin ? `<div class="card mt-16"><div class="section-title">Nuovo accesso</div><div class="grid grid-3 mt-8">
+        <div class="field"><label>E-mail</label><input class="input" id="rf-u-email" type="email" autocomplete="off"></div>
+        <div class="field"><label>Password iniziale (min. 8)</label><input class="input" id="rf-u-pw" type="password" autocomplete="new-password"></div>
+        <div class="field"><label>Ruolo</label><select class="input" id="rf-u-ruolo">${Object.entries(ruoloIt).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></div></div>
+        <div class="row mt-16" style="gap:10px;align-items:center"><button class="btn primary" onclick="rfStudioAzione({ azione: 'utente_crea', email: rfStudioCampo('#rf-u-email'), password: rfStudioCampo('#rf-u-pw'), ruolo: rfStudioCampo('#rf-u-ruolo') })">Crea l'accesso</button><span class="caption">La persona cambierà la password e potrà attivare la 2FA dal suo profilo. Gli accessi non si eliminano: si disattivano.</span></div></div>` : ''}`;
+  } else if (scheda === 'medici') {
+    corpo = `<div class="card"><div class="card-head"><span class="section-title">Medici dell'agenda</span><span class="caption">come compaiono nel robot MediOnline</span></div>
+      <div class="list">${d.medici.map(m => `<div class="list-item"><div class="grow"><div class="name">${rfEsc(m.nome)}${m.attivo ? '' : ' <span class="badge">disattivato</span>'}</div><div class="sub">${m.aliases && m.aliases.length ? 'anche: ' + rfEsc(m.aliases.join(', ')) : 'nessun alias'}${m.user_id ? ' · collegato a un accesso' : ''}</div></div>
+        ${admin ? `<button class="btn sm ghost" onclick="rfStudioMedico('${m.id}')">Modifica</button><button class="btn sm ghost" onclick="rfStudioAzione({ azione: 'medico_attivo', id: '${m.id}' })">${m.attivo ? 'Disattiva' : 'Riattiva'}</button>` : ''}</div>`).join('') || '<div class="caption">Nessun medico in agenda.</div>'}</div></div>
+      ${admin ? `<div class="card mt-16"><div class="section-title">Nuovo medico in agenda</div><div class="grid grid-2 mt-8"><div class="field"><label>Nome come in agenda</label><input class="input" id="rf-m-nome" placeholder="Dr. med. …"></div><div class="field"><label>Altri modi in cui compare (virgole)</label><input class="input" id="rf-m-alias"></div></div><div class="row mt-16"><button class="btn primary" onclick="rfStudioAzione({ azione: 'medico_crea', nome: rfStudioCampo('#rf-m-nome'), aliases: rfStudioCampo('#rf-m-alias') })">Aggiungi</button></div></div>` : ''}`;
+  } else {
+    const tipo = scheda === 'sale' ? 'sala' : 'apparecchio';
+    const lista = scheda === 'sale' ? d.sale : d.apparecchi;
+    const titolo = scheda === 'sale' ? 'Sale' : 'Apparecchi';
+    corpo = `<div class="card"><div class="card-head"><span class="section-title">${titolo}</span><span class="caption">${lista.filter(r => r.attivo).length} in uso</span></div>
+      <div class="list">${lista.map(r => `<div class="list-item"><div class="grow"><div class="name">${rfEsc(r.nome)}${r.attivo ? '' : ' <span class="badge">fuori uso</span>'}</div><div class="sub">${rfEsc(r.descrizione || '')}</div></div>
+        ${admin ? `<button class="btn sm ghost" onclick="rfStudioRisorsa('${r.id}')">Modifica</button><button class="btn sm ghost" onclick="rfStudioAzione({ azione: 'risorsa_attivo', id: '${r.id}' })">${r.attivo ? 'Fuori uso' : 'Rimetti in uso'}</button>` : ''}</div>`).join('') || `<div class="caption">Nessun${scheda === 'sale' ? 'a sala' : ' apparecchio'} registrat${scheda === 'sale' ? 'a' : 'o'}.</div>`}</div></div>
+      ${admin ? `<div class="card mt-16"><div class="section-title">${scheda === 'sale' ? 'Nuova sala' : 'Nuovo apparecchio'}</div><div class="grid grid-2 mt-8"><div class="field"><label>Nome</label><input class="input" id="rf-r-nome" placeholder="${scheda === 'sale' ? 'Sala 1, Sala ECG…' : 'Ecografo, Holter 3, ergometro…'}"></div><div class="field"><label>Descrizione</label><input class="input" id="rf-r-desc" placeholder="${scheda === 'sale' ? 'piano, uso' : 'modello, matricola, scadenza manutenzione'}"></div></div><div class="row mt-16"><button class="btn primary" onclick="rfStudioAzione({ azione: 'risorsa_crea', tipo: '${tipo}', nome: rfStudioCampo('#rf-r-nome'), descrizione: rfStudioCampo('#rf-r-desc') })">Aggiungi</button></div></div>` : ''}`;
+  }
+  return `<div class="page-head"><div><h2 class="page-title">Studio</h2><div class="page-sub">${rfEsc((d.studio || {}).nome || '')} · personale, medici dell'agenda, sale e apparecchi</div></div></div>
+    <div class="tabs">${tab('studio', 'Dati')}${tab('personale', 'Personale', d.personale.length)}${tab('medici', 'Medici agenda', d.medici.length)}${tab('sale', 'Sale', d.sale.length)}${tab('apparecchi', 'Apparecchi', d.apparecchi.length)}</div>
+    ${soloAdmin}${avviso}${corpo}`;
+};
+function rfStudioPassword(id, email) {
+  openModal('Nuova password', `<p class="meta">Per <b>${rfEsc(email)}</b>. Comunicagliela a voce; la cambierà al primo accesso dal suo profilo.</p><div class="field mt-16"><label>Password (min. 8)</label><input class="input" id="rf-pw-nuova" type="password" autocomplete="new-password"></div>`, `<button class="btn" data-close>Annulla</button><button class="btn primary" id="rf-pw-ok">Imposta</button>`);
+  document.getElementById('rf-pw-ok').onclick = async () => { const ok = await rfStudioAzione({ azione: 'utente_password', id, password: rfStudioCampo('#rf-pw-nuova') }); if (ok) closeModal(); };
+}
+function rfStudioMedico(id) {
+  const m = (RF.studio.dati.medici || []).find(x => x.id === id); if (!m) return;
+  const accessi = (RF.studio.dati.personale || []).filter(u => u.role === 'medico' || u.role === 'admin');
+  openModal('Medico in agenda', `<div class="field"><label>Nome come in agenda</label><input class="input" id="rf-m-e-nome" value="${rfEsc(m.nome)}"></div><div class="field mt-8"><label>Altri modi in cui compare (virgole)</label><input class="input" id="rf-m-e-alias" value="${rfEsc((m.aliases || []).join(', '))}"></div><div class="field mt-8"><label>Accesso collegato</label><select class="input" id="rf-m-e-user"><option value="">nessuno</option>${accessi.map(u => `<option value="${u.id}" ${m.user_id === u.id ? 'selected' : ''}>${rfEsc(u.email)}</option>`).join('')}</select></div>`, `<button class="btn" data-close>Annulla</button><button class="btn primary" id="rf-m-ok">Salva</button>`);
+  document.getElementById('rf-m-ok').onclick = async () => { const ok = await rfStudioAzione({ azione: 'medico_aggiorna', id, nome: rfStudioCampo('#rf-m-e-nome'), aliases: rfStudioCampo('#rf-m-e-alias'), user_id: rfStudioCampo('#rf-m-e-user') }); if (ok) closeModal(); };
+}
+function rfStudioRisorsa(id) {
+  const r = [...(RF.studio.dati.sale || []), ...(RF.studio.dati.apparecchi || [])].find(x => x.id === id); if (!r) return;
+  openModal(r.tipo === 'sala' ? 'Sala' : 'Apparecchio', `<div class="field"><label>Nome</label><input class="input" id="rf-r-e-nome" value="${rfEsc(r.nome)}"></div><div class="field mt-8"><label>Descrizione</label><input class="input" id="rf-r-e-desc" value="${rfEsc(r.descrizione || '')}"></div>`, `<button class="btn" data-close>Annulla</button><button class="btn primary" id="rf-r-ok">Salva</button>`);
+  document.getElementById('rf-r-ok').onclick = async () => { const ok = await rfStudioAzione({ azione: 'risorsa_aggiorna', id, nome: rfStudioCampo('#rf-r-e-nome'), descrizione: rfStudioCampo('#rf-r-e-desc') }); if (ok) closeModal(); };
+}
 
 /* ---------- avvio: dentro la piattaforma niente demo, mai ---------- */
 function rfPaginaCarico() {
