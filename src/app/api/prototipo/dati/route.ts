@@ -209,9 +209,20 @@ export async function GET() {
     status: 'confirmed', conf: 'In cartella', src: 'Cartella', filename: d.filename,
   }));
 
-  const audio = await query<{ id: string; filename: string; stato: string; fase: string | null; created_at: string; medico: string | null }>(
-    `select id, filename, stato, fase, created_at::text, medico from referti_audio where studio_id = $1 and stato in ('in_coda', 'elaborazione') order by created_at desc limit 20`, [sid]);
-  const audioInbox = audio.map((a) => ({ id: a.id, name: a.filename, state: 'processing', fase: a.fase ?? a.stato, at: ora(a.created_at), medico: a.medico }));
+  // Audio della catena: in coda, in elaborazione e quelli finiti nelle ultime
+  // 24 ore con l'esito: bozza nuova, oppure «già dettato» quando la piattaforma
+  // ha riconosciuto un duplicato (la bozza collegata è più vecchia dell'audio).
+  const audio = await query<{ id: string; filename: string; stato: string; fase: string | null; created_at: string; medico: string | null; bozza_id: string | null; bozza_stato: string | null; bozza_creata: string | null; bozza_paziente: string | null }>(
+    `select a.id, a.filename, a.stato, a.fase, a.created_at::text, a.medico, a.bozza_id, b.stato as bozza_stato, b.created_at::text as bozza_creata,
+            coalesce(nullif(b.campi_confermati->>'nome_paziente', ''), nullif(b.payload->'campi_estratti'->>'nome_paziente', '')) as bozza_paziente
+       from referti_audio a left join referti_bozze b on b.id = a.bozza_id
+      where a.studio_id = $1 and (a.stato in ('in_coda', 'elaborazione') or (a.stato = 'fatto' and a.created_at > now() - interval '24 hours'))
+      order by a.created_at desc limit 20`, [sid]);
+  const audioInbox = audio.map((a) => {
+    const duplicato = !!(a.bozza_id && a.bozza_creata && new Date(a.bozza_creata).getTime() < new Date(a.created_at).getTime() - 60_000);
+    const state = a.stato === 'fatto' ? (a.bozza_id ? (duplicato ? 'duplicate' : 'ready') : 'failed') : 'processing';
+    return { id: a.id, name: a.filename, state, fase: a.fase ?? a.stato, at: ora(a.created_at), medico: a.medico, bozza: a.bozza_id, bozzaStato: a.bozza_stato, bozzaData: dCh(a.bozza_creata), paziente: a.bozza_paziente };
+  });
 
   const inbox = tasks.slice(0, 40).map((t) => ({
     id: t.id, kind: t.cat === 'send' ? 'report' : t.cat === 'call' ? 'call' : t.cat === 'followup' ? 'task' : t.cat === 'clinical_check' ? 'task' : 'alert',

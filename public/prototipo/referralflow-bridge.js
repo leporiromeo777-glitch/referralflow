@@ -50,6 +50,9 @@ async function rfCaricaDati() {
   for (const x of RF.queue) {
     RV_QUEUE.push({ id: x.id, p: x.p, doc: x.doc, type: x.type, at: x.at, audio: x.audio, issues: x.issues, crit: x.crit, est: x.est, state: x.state, note: x.note, blocked: false, status: x.status });
   }
+  // Niente residui demo nelle pagine raggiungibili: archivio storico della
+  // palette, audit e job finti, knowledge, fatture.
+  for (const nome of ['ARCHIVE', 'AUDIT', 'AIJOBS', 'KNOWLEDGE', 'INVOICES']) { try { if (Array.isArray(window[nome])) rfSvuota(window[nome]); } catch { /* assente */ } }
   const nav = ['home', 'agenda', 'patients', 'reports', 'dittafono', 'documents', 'inbox', 'ai'];
   for (const k of Object.keys(NAV)) NAV[k] = nav.slice();
   render();
@@ -159,6 +162,11 @@ PAGES.ai = () => (RF.live ? `<div class="page-head"><div><h2 class="page-title">
   <div class="card"><p class="meta" style="margin:0;line-height:1.55">L'assistente risponde sui numeri e sulle liste della giornata già caricate qui (agenda, attività, referti, documenti) con il modello locale della piattaforma. Non dà consigli clinici e non inventa dati: se una cosa non c'è, lo dice. Le proposte per la wiki e la qualità della catena sono in <a href="/referti/qualita">Qualità AI</a>.</p></div>` : rfAiPageOrig());
 
 /* ---------- Referti: coda vera + caricamento audio ---------- */
+// La pagina «report» del prototipo (#/reports/<id>) è demo: dentro la piattaforma rimanda alla revisione vera.
+if (typeof PAGES !== 'undefined' && PAGES.report) {
+  const rfReportOrig = PAGES.report;
+  PAGES.report = () => { if (!RF.live) return rfReportOrig(); const id = state.params && state.params.id; setTimeout(() => go(id && rfUuid(id) ? `#/review/${id}` : '#/reports'), 0); return '<div class="page"><div class="caption">Apro la revisione…</div></div>'; };
+}
 const rfReportsOrig = PAGES.reports;
 PAGES.reports = () => (RF.live ? reportsQueue() : rfReportsOrig());
 const rfReportsQueueOrig = reportsQueue;
@@ -207,7 +215,13 @@ reportsQueue = function () {
         <button class="btn primary" id="rf-intake-invia">Invia alla catena</button>
         <span class="caption" id="rf-intake-esito"></span>
       </div>
-      ${inCoda.length ? `<div class="list mt-8">${inCoda.map(a => `<div class="list-item"><i class="dot accent"></i><div class="grow"><div class="name" style="font-size:13px">${rfEsc(a.name)}</div><div class="sub">in lavorazione · ${rfEsc(a.fase || '')} · ${a.at}${a.medico ? ` · ${rfEsc(DOCTORS[a.medico] || a.medico)}` : ''}</div></div></div>`).join('')}</div>` : ''}
+      ${inCoda.length ? `<div class="list mt-8">${inCoda.map(a => {
+        const quando = a.at ? ` · ${a.at}` : '';
+        if (a.state === 'ready') return `<div class="list-item"><i class="dot success"></i><div class="grow"><div class="name" style="font-size:13px">Bozza pronta${a.paziente ? ` · ${rfEsc(a.paziente)}` : ''}</div><div class="sub">${rfEsc(a.medico || '')}${quando} · dettato arrivato dalla catena</div></div><button class="btn sm" data-go="#/review/${a.bozza}">${a.bozzaStato === 'confermata' ? 'Rileggi' : 'Apri revisione'}</button></div>`;
+        if (a.state === 'duplicate') return `<div class="list-item"><i class="dot warning"></i><div class="grow"><div class="name" style="font-size:13px">Già dettato: stesso audio di un referto del ${a.bozzaData}${a.paziente ? ` (${rfEsc(a.paziente)})` : ''}</div><div class="sub">${rfEsc(a.medico || '')}${quando} · la catena l'ha elaborato e la piattaforma ha riconosciuto il duplicato: nessuna bozza nuova</div></div><button class="btn sm ghost" data-go="#/review/${a.bozza}">Apri quello</button></div>`;
+        if (a.state === 'failed') return `<div class="list-item"><i class="dot danger"></i><div class="grow"><div class="name" style="font-size:13px">Elaborazione senza bozza</div><div class="sub">${rfEsc(a.medico || '')}${quando} · controlla nella piattaforma (Referti → audio)</div></div><a class="btn sm ghost" href="/referti">Piattaforma</a></div>`;
+        return `<div class="list-item"><i class="dot accent"></i><div class="grow"><div class="name" style="font-size:13px">${a.fase === 'in_coda' ? 'In coda' : 'In elaborazione'}${a.fase && a.fase !== 'in_coda' && a.fase !== 'elaborazione' ? ` · ${rfEsc(a.fase)}` : ''}</div><div class="sub">${rfEsc(a.medico || '')}${quando} · la catena impiega 4-10 minuti; la pagina si aggiorna da sola</div></div><span class="badge">…</span></div>`;
+      }).join('')}</div>` : '<div class="caption mt-8">Nessun audio caricato nelle ultime 24 ore.</div>'}
     </div>
     <div class="stack">${ordina(aperti).map(riga).join('') || '<div class="card"><div class="caption">Nessuna bozza da controllare.</div></div>'}</div>
     ${chiusi.length ? `<div class="caption mt-16" style="margin-bottom:8px">Confermati</div><div class="stack">${ordina(chiusi).slice(0, 10).map(riga).join('')}</div>` : ''}`;
