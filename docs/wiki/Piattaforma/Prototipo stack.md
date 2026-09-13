@@ -51,5 +51,8 @@ Dal 13.9.2026 l'indirizzo da usare, anche per l'icona sul telefono, è **https:/
 ## Briefing pre-visita e «Da dove viene» (13.9.2026)
 Prima procedura con traccia ([[Piattaforma/Procedure e tracce]]): chip «Briefing pre-visita» sulla scheda del paziente, bottone nella Home sul prossimo paziente o a parole nel bot. Il codice della piattaforma legge referral, questionario, ultimo referto e terapia, esami (ECG entro 12 mesi, eco entro 24), agenda e sospesi; il modello locale scrive solo la sintesi. Ogni risposta del bot, anche quella libera, mostra sotto il riquadro «Da dove viene» (passi ✓/✗/–, fonti con «Apri», modello, tempo, numero di traccia) letto da `GET /api/prototipo/tracce/[id]`.
 
+## Altre procedure con traccia (13.9.2026, sera)
+«Cosa è cambiato dall'ultima visita» (misure e terapia tra gli ultimi due referti confermati), «Richiami del mese» (scaduti / 7 giorni / 30 giorni), «Controllo prima della firma» (10 controlli sulla bozza, bottone «✓ Controllo» in coda Referti e chip nella revisione). Tutte in codice, senza modello, con «Da dove viene» ([[Piattaforma/Procedure e tracce]]).
+
 ## Dati di prova (13.9.2026)
 `npm run dati-prova` crea 6 pazienti inventati (Bernasconi, Pedrazzini, Ortelli, Casanova, Rusconi, Galli) con referral, 3 appuntamenti di oggi e 14 documenti PDF generati dal codice (ECG, Holter, ecocardiogrammi, test ergometrico, MAPA, duplex renale, CoroTAC, laboratorio, lettere, consenso), ognuno con in testa «DOCUMENTO DI PROVA - dati inventati». Servono a provare cartella, bot e ricerca documenti. `npm run dati-prova -- --elimina` toglie tutto (registro degli id in `~/.referralflow-dati-prova.json`). Il medico inviante di prova è «Dr. med. Andrea Prova». Nessuna persona reale.

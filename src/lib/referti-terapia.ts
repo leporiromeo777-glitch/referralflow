@@ -21,6 +21,23 @@ export type TerapiaFusa = {
   avvisi: string[];
 };
 
+// Il blocco «Terapia» di una lettera: le righe dopo «Terapia:» fino alla
+// prima riga vuota o al saluto. Vuoto se non c'è.
+export function estraiTerapia(lettera: string): string[] {
+  const righe = lettera.replace(/\r\n/g, '\n').split('\n');
+  const inizio = righe.findIndex((r) => /^\s*terapia(\s+domiciliare)?\s*:?\s*$/i.test(r));
+  if (inizio === -1) return [];
+  const out: string[] = [];
+  for (const r of righe.slice(inizio + 1)) {
+    const t = r.trim();
+    if (!t) { if (out.length) break; else continue; }
+    if (/^(cordiali|con i migliori|distinti|un caro saluto|copia\b)/i.test(t)) break;
+    out.push(t);
+    if (out.length >= 30) break;
+  }
+  return out;
+}
+
 // Il dettato dice che la terapia resta com'era? (Anche «invariata salvo…»:
 // le modifiche arrivano dalle voci estratte.)
 export function terapiaInvariata(testo: string): boolean {

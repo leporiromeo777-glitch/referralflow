@@ -187,7 +187,7 @@ reportsQueue = function () {
         <div class="qm"><span class="v num">${r.issues}</span><span class="l">verifiche</span></div>
         <div class="qm"><span class="v num ${r.crit ? 'crit' : ''}">${r.crit}</span><span class="l">critiche</span></div>
         <div class="qm"><span class="v num">${r.audio}</span><span class="l">audio</span></div>
-        <button class="btn ${r.state === 'priority' ? 'primary' : ''}" data-go="#/review/${r.id}">${r.status === 'APPROVED' ? 'Rileggi' : r.state === 'clean' ? 'Lettura rapida' : 'Apri revisione'}</button>
+        <button class="btn ${r.state === 'priority' ? 'primary' : ''}" data-go="#/review/${r.id}">${r.status === 'APPROVED' ? 'Rileggi' : r.state === 'clean' ? 'Lettura rapida' : 'Apri revisione'}</button>${r.status !== 'APPROVED' ? `<button class="btn ghost" data-prefirma="${r.id}" title="Controllo prima della firma, con traccia">✓ Controllo</button>` : ''}
         <a class="btn ghost" href="/referti/${r.id}" title="Revisione e conferma nella piattaforma">Piattaforma</a>
       </div>
     </div>`;
@@ -531,11 +531,42 @@ function rfHtmlTraccia(t) {
   const riass = `${(t.passi || []).length} passi · ${(t.fonti || []).length} fonti${nMan ? ` · ${nMan} mancant${nMan === 1 ? 'e' : 'i'}` : ''}${t.modello ? ` · ${rfEsc(t.modello)}` : ' · solo codice'}${t.durata_ms ? ` · ${(t.durata_ms / 1000).toFixed(1)} s` : ''}${t.id ? ` · traccia #${t.id}` : ''}`;
   return `<details class="rf-traccia"><summary>Da dove viene · ${riass}</summary><ul>${passi}</ul>${fonti ? `<div class="caption" style="margin-top:6px">Fonti lette</div><ul>${fonti}</ul>` : ''}</details>`;
 }
-function rfHtmlBriefing(b) {
-  const sez = b.sezioni.map(s => `<div class="rf-sez"><b>${rfEsc(s.titolo)}</b>${s.righe.map(r => `<div class="rf-riga"><span>• ${rfEsc(r.testo)}</span>${rfBottoneFonte(r.fonte)}</div>`).join('')}</div>`).join('');
-  const manc = b.mancanti.length ? `<div class="rf-manc"><b>Da segnalare al medico</b>${b.mancanti.map(m => `<div>• ${rfEsc(m.testo)}</div>`).join('')}</div>` : '';
+function rfHtmlProcedura(b) {
+  const sez = (b.sezioni || []).map(s => `<div class="rf-sez"><b>${rfEsc(s.titolo)}</b>${s.righe.map(r => `<div class="rf-riga"><span>• ${rfEsc(r.testo)}</span>${rfBottoneFonte(r.fonte)}</div>`).join('')}</div>`).join('');
+  const manc = (b.mancanti || []).length ? `<div class="rf-manc"><b>${b.procedura === 'briefing_previsita' ? 'Da segnalare al medico' : 'Da fare'}</b>${b.mancanti.map(m => `<div>• ${rfEsc(m.testo)}</div>`).join('')}</div>` : '';
   const sint = b.sintesi ? `<div class="rf-sint">${rfEsc(b.sintesi).replace(/\n/g, '<br>')}</div>` : '';
-  return `<div class="rf-brief"><b>Briefing pre-visita · ${rfEsc(b.paziente.nome)}${b.paziente.nascita ? ` · ${b.paziente.nascita}` : ''}</b>${sint}${sez}${manc}<div class="row mt-8"><button class="btn sm ghost" data-go="#/patients/${b.paziente.id}">Scheda paziente</button></div>${rfHtmlTraccia({ id: b.traccia.id, passi: b.traccia.passi, fonti: b.fonti, mancanti: b.mancanti, modello: b.traccia.modello, durata_ms: b.traccia.durata_ms })}</div>`;
+  const azioni = (b.azioni || []).map(a => a.go ? `<button class="btn sm ghost" data-go="${rfEsc(a.go)}">${rfEsc(a.etichetta)}</button>` : `<a class="btn sm ghost" href="${rfEsc(a.href)}" target="_blank" rel="noopener">${rfEsc(a.etichetta)}</a>`).join(' ');
+  const passi = b.traccia && b.traccia.passi ? b.traccia.passi : b.passi;
+  return `<div class="rf-brief"><b>${rfEsc(b.titolo)}</b>${sint}${sez}${manc}${azioni ? `<div class="row mt-8">${azioni}</div>` : ''}${rfHtmlTraccia({ id: b.traccia && b.traccia.id, passi, fonti: b.fonti, mancanti: b.mancanti, modello: b.traccia && b.traccia.modello, durata_ms: b.traccia && b.traccia.durata_ms })}</div>`;
+}
+const rfHtmlBriefing = rfHtmlProcedura;
+function rfProcedura(corpo, attesa) {
+  state.aiState = 'thinking';
+  const id = 'ai' + Date.now();
+  state.aiMessages.push({ id, html: `<div class="ai-msg ai" id="${id}"><span class="caption">${rfEsc(attesa)}</span></div>` });
+  render();
+  const fine = (html, fonte) => {
+    state.aiMessages = state.aiMessages.filter(m => m.id !== id);
+    state.aiMessages.push({ html: `<div class="ai-msg ai">${html}<div class="srcs"><span class="src">${fonte}</span></div></div>` });
+    state.aiState = 'idle'; render();
+  };
+  fetch('/api/prototipo/procedura', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) })
+    .then(async r => {
+      if (!r.ok) { fine('Non riesco a eseguire la procedura in questo momento.', 'Piattaforma'); return; }
+      fine(rfHtmlProcedura(await r.json()), 'Procedura della piattaforma · solo codice');
+    })
+    .catch(() => fine('Non riesco a eseguire la procedura in questo momento.', 'Piattaforma'));
+}
+function rfDomandaCambiamenti(q) { return /cosa (è|e') cambiat|cos'è cambiat|differenz|confront.*(ultim|preced)|rispetto all.ultima|dall.ultima visita/.test(q.toLowerCase()); }
+function rfDomandaRichiamiMese(q) { return /richiami (del|di questo|in scadenza|prossim|del prossimo)|chi (devo|dobbiamo|va) (ri)?chiam|da richiamare/.test(q.toLowerCase()); }
+function rfDomandaPreFirma(q) { return /prima della firma|pronto per la firma|posso firmar|si può firmar|controllo (pre|prima)|controlla (il|questo) referto|manca (qualcosa|niente) (per|prima)/.test(q.toLowerCase()); }
+function rfBozzaDaContesto(q) {
+  if (state.route === 'review' && state.params && state.params.id && rfUuid(state.params.id)) return state.params.id;
+  const chi = rfPazienteDaDomanda(q);
+  const p = chi.p;
+  const aperte = RF.queue.filter(r => r.status !== 'APPROVED' && (!p || r.p === p.id));
+  if (aperte.length === 1 || (p && aperte.length)) return aperte[0].id;
+  return null;
 }
 function rfBriefing(p) {
   state.aiState = 'thinking';
@@ -559,9 +590,10 @@ const rfQuickOrig = aiQuickActions;
 aiQuickActions = function () {
   if (!RF.live) return rfQuickOrig();
   const r = state.route;
-  if ((r === 'patient' || r === 'visit') && rfUuid(state.patientCtx)) return ['Briefing pre-visita', 'Quali esami ha in cartella?', 'Qual è la terapia in corso?', 'Trova l\'ultimo ECG'];
-  if (r === 'home') return ['Briefing del prossimo paziente', 'Quanti appuntamenti oggi?', 'Referti da controllare', 'Richiami scaduti'];
-  return ['Quanti appuntamenti oggi?', 'Referti da controllare', 'Trova un documento di un paziente', 'Richiami scaduti'];
+  if ((r === 'patient' || r === 'visit') && rfUuid(state.patientCtx)) return ['Briefing pre-visita', 'Cosa è cambiato dall\'ultima visita?', 'Quali esami ha in cartella?', 'Trova l\'ultimo ECG'];
+  if (r === 'review') return ['Controllo prima della firma', 'Cosa è cambiato dall\'ultima visita?', 'Referti da controllare'];
+  if (r === 'home') return ['Briefing del prossimo paziente', 'Richiami del mese', 'Quanti appuntamenti oggi?', 'Referti da controllare'];
+  return ['Richiami del mese', 'Referti da controllare', 'Trova un documento di un paziente', 'Quanti appuntamenti oggi?'];
 };
 
 const rfAskOrig = askAI;
@@ -569,6 +601,19 @@ askAI = function (q) {
   if (!RF.live) return rfAskOrig(q);
   if (!state.aiOpen) state.aiOpen = true;
   state.aiMessages.push({ html: `<div class="ai-msg user">${rfEsc(q)}</div>` });
+  if (rfDomandaPreFirma(q)) {
+    const bid = rfBozzaDaContesto(q);
+    if (bid) { rfProcedura({ nome: 'controllo_prefirma', bozza_id: bid }, 'Controllo la bozza prima della firma…'); return; }
+    state.aiMessages.push({ html: `<div class="ai-msg ai">Quale referto? Apri una revisione e chiedi «controllo prima della firma», oppure scrivi il cognome del paziente.<div class="srcs"><span class="src">Piattaforma · immediato</span></div></div>` });
+    state.aiState = 'idle'; render(); return;
+  }
+  if (rfDomandaRichiamiMese(q)) { rfProcedura({ nome: 'richiami_mese' }, 'Raccolgo i richiami del mese…'); return; }
+  if (rfDomandaCambiamenti(q)) {
+    const chi = rfPazienteDaDomanda(q);
+    if (chi.p) { rfProcedura({ nome: 'cambiamenti_ultima_visita', patient_id: chi.p.id }, `Confronto gli ultimi due referti di ${rfEsc(fullName(chi.p))}…`); return; }
+    state.aiMessages.push({ html: `<div class="ai-msg ai">Di quale paziente? Scrivi il cognome («cosa è cambiato per Bernasconi») o apri la sua scheda.<div class="srcs"><span class="src">Piattaforma · immediato</span></div></div>` });
+    state.aiState = 'idle'; render(); return;
+  }
   if (rfDomandaBriefing(q)) {
     const chi = rfPazienteDaDomanda(q);
     if (chi.p) { rfBriefing(chi.p); return; }
@@ -621,7 +666,9 @@ if (rfDentro()) {
   render = function () {
     if (RF.nonAutorizzato) return rfPaginaAccesso();
     if (!RF.caricato) return rfPaginaCarico();
-    return rfRenderVero();
+    const out = rfRenderVero();
+    document.querySelectorAll('[data-prefirma]').forEach(el => { el.onclick = (e) => { e.stopPropagation(); if (!state.aiOpen) state.aiOpen = true; state.aiMessages.push({ html: `<div class="ai-msg user">Controllo prima della firma</div>` }); rfProcedura({ nome: 'controllo_prefirma', bozza_id: el.dataset.prefirma }, 'Controllo la bozza prima della firma…'); }; });
+    return out;
   };
   rfPaginaCarico();
 }

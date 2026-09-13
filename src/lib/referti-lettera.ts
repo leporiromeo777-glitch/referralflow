@@ -112,25 +112,8 @@ export function siglaDaEmail(email: string | null | undefined): string {
   return parti.length >= 2 ? parti.map((p) => p[0]).join('').slice(0, 3) : locale.slice(0, 2);
 }
 
-// Il blocco «Terapia» di una lettera: le righe dopo «Terapia:» fino alla
-// prima riga vuota o al saluto. Vuoto se non c'è.
-export function estraiTerapia(lettera: string): string[] {
-  const righe = lettera.replace(/\r\n/g, '\n').split('\n');
-  const inizio = righe.findIndex((r) => /^\s*terapia(\s+domiciliare)?\s*:?\s*$/i.test(r));
-  if (inizio === -1) return [];
-  const out: string[] = [];
-  for (const r of righe.slice(inizio + 1)) {
-    const t = r.trim();
-    if (!t) { if (out.length) break; else continue; }
-    if (/^(cordiali|con i migliori|distinti|un caro saluto|copia\b)/i.test(t)) break;
-    out.push(t);
-    if (out.length >= 30) break;
-  }
-  return out;
-}
-
-// terapiaInvariata / dettatoConTerapia: in referti-terapia.ts (pure), riesportate qui.
-export { terapiaInvariata, dettatoConTerapia } from './referti-terapia';
+// estraiTerapia, terapiaInvariata, dettatoConTerapia: in referti-terapia.ts (pure), riesportate qui.
+export { estraiTerapia, terapiaInvariata, dettatoConTerapia } from './referti-terapia';
 
 // Il nome estratto come destinatario è davvero il destinatario? Se compare
 // nel testo solo come chi ha ESEGUITO qualcosa («eseguita dal dottor X»,

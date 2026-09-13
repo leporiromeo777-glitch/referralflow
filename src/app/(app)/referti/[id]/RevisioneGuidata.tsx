@@ -79,6 +79,9 @@ export type StatoRevisione = {
   chiuse_senza_riascolto: number;
   riascolti: number;
   campi: Record<string, string>;
+  // Il «perché» facoltativo delle scelte umane (13.9.2026): per id di
+  // segnalazione, un testo breve; alimenta il consolidatore, mai i prompt.
+  motivazioni?: Record<string, string>;
   salvato_il?: string;
 };
 
@@ -323,6 +326,15 @@ export function RevisioneGuidata({
   };
 
   const [fatte, setFatte] = useState<Set<string>>(new Set(st?.fatte ?? []));
+  const [motivazioni, setMotivazioni] = useState<Record<string, string>>(st?.motivazioni ?? {});
+  const campoPerche = (id: string) => (
+    <input
+      type="text" className="rg-perche" maxLength={200} placeholder="Perché? (facoltativo, aiuta il consolidatore)"
+      value={motivazioni[id] ?? ''}
+      onChange={(e) => setMotivazioni((prev) => ({ ...prev, [id]: e.target.value }))}
+      style={{ marginTop: 6, width: '100%', fontSize: 12.5 }}
+    />
+  );
   // Telemetria della revisione: quando è iniziata, quante segnalazioni sono
   // state chiuse e quante senza aver riascoltato nulla nel frattempo.
   const [inizioRevisione] = useState(() => Date.now());
@@ -493,6 +505,7 @@ export function RevisioneGuidata({
       frasi, spente: [...spente], fatte: [...fatte], modificate: [...modificate],
       testo_libero: testoLibero, passo, chiuse, chiuse_senza_riascolto: chiuseSenzaRiascolto,
       riascolti: riascoltiFatti, campi: campiValori,
+      motivazioni: Object.fromEntries(Object.entries(motivazioni).filter(([, v]) => v.trim() !== '').map(([k, v]) => [k, v.trim().slice(0, 200)])),
     } satisfies StatoRevisione,
     testo: testoLibero ?? componi(frasi, spente),
   });
@@ -520,7 +533,7 @@ export function RevisioneGuidata({
     const t = setTimeout(() => { void invia(corpo); }, 1000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frasi, spente, fatte, modificate, testoLibero, passo, chiuse, chiuseSenzaRiascolto, riascoltiFatti, campiValori]);
+  }, [frasi, spente, fatte, modificate, testoLibero, passo, chiuse, chiuseSenzaRiascolto, riascoltiFatti, campiValori, motivazioni]);
   useEffect(() => {
     const flush = () => { if (sporco.current) void invia(ultimoCorpo.current, true); };
     const nascosta = () => { if (document.visibilityState === 'hidden') flush(); };
@@ -823,6 +836,7 @@ export function RevisioneGuidata({
                     </button>
                   </div>
                 )}
+                {fatte.has(`p${i}`) && campoPerche(`p${i}`)}
               </div>
             );
           })}

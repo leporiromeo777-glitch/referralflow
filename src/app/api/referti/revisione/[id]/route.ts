@@ -56,6 +56,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     chiuse_senza_riascolto: Number.isInteger(st.chiuse_senza_riascolto) ? st.chiuse_senza_riascolto : 0,
     riascolti: Number.isInteger(st.riascolti) ? st.riascolti : 0,
     campi,
+    motivazioni: Object.fromEntries(Object.entries((st.motivazioni && typeof st.motivazioni === 'object' ? st.motivazioni : {}) as Record<string, unknown>)
+      .filter(([k, v]) => typeof v === 'string' && (v as string).trim() !== '' && k.length <= 20).slice(0, 200)
+      .map(([k, v]) => [k, (v as string).trim().slice(0, 200)])),
     salvato_il: new Date().toISOString(),
     utente: session.id,
   };

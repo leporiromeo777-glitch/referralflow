@@ -17,6 +17,9 @@ export const PROCEDURA_BRIEFING = 'briefing_previsita';
 const MODELLO = process.env.PROTOTIPO_LLM || 'gemma3:12b';
 
 export type EsitoBriefing = {
+  procedura: string;
+  titolo: string;
+  azioni: { etichetta: string; go?: string; href?: string }[];
   paziente: { id: string; nome: string; nascita: string };
   sintesi: string | null;
   testo: string;
@@ -145,6 +148,8 @@ SINTESI:`;
   console.log(`[briefing] paziente=${patientId.slice(0, 8)} passi=${passi.length} fonti=${briefing.fonti.length} mancanti=${briefing.mancanti.length} fatti=${fatti.length} modello=${modelloUsato ?? '-'} ${durata}ms traccia=${tracciaId}`);
 
   return {
+    procedura: PROCEDURA_BRIEFING, titolo: `Briefing pre-visita · ${nomeCompleto}${nascitaCh ? ` · ${nascitaCh}` : ''}`,
+    azioni: [{ etichetta: 'Scheda paziente', go: `#/patients/${p.id}` }],
     paziente: { id: p.id, nome: nomeCompleto, nascita: nascitaCh },
     sintesi, testo, sezioni: briefing.sezioni, mancanti: briefing.mancanti, fonti: briefing.fonti,
     traccia: { id: tracciaId, passi, modello: modelloUsato, durata_ms: durata, fatti: fatti.length },
