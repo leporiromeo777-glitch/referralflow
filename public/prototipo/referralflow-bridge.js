@@ -399,19 +399,47 @@ function rfContestoBot() {
    «l'eco da sforzo di Karel Blazek», «documenti di Rossi»): paziente per nome,
    esame per parole del titolo o del nome del file. Deterministico, con link
    di apertura (la piattaforma registra ogni accesso). */
-const RF_GENERICHE = new Set(['trova', 'trovami', 'cerca', 'cercami', 'mostra', 'mostrami', 'apri', 'aprimi', 'dammi', 'documento', 'documenti', 'esame', 'esami', 'referto', 'referti', 'paziente', 'della', 'dello', 'delle', 'degli', 'quale', 'quali', 'ultimo', 'ultima', 'vorrei', 'voglio', 'puoi', 'fammi', 'vedere', 'cartella', 'file', 'signor', 'signora', 'dottor', 'anno', 'mese', 'fatto', 'fatti', 'fatta', 'fatte', 'eseguito', 'eseguiti', 'quando', 'come', 'cosa', 'che', 'sono', 'stato', 'stati', 'tutti', 'tutte', 'suoi', 'sue', 'del', 'dei', 'per', 'con', 'una', 'uno', 'gli', 'nel', 'nella', 'ultimi', 'ultime', 'recenti']);
-const rfNorm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const RF_GENERICHE = new Set(['trova', 'trovami', 'cerca', 'cercami', 'mostra', 'mostrami', 'apri', 'aprimi', 'dammi', 'documento', 'documenti', 'esame', 'esami', 'referto', 'referti', 'paziente', 'pazienti', 'della', 'dello', 'delle', 'degli', 'quale', 'quali', 'ultimo', 'ultima', 'vorrei', 'voglio', 'puoi', 'fammi', 'vedere', 'cartella', 'file', 'signor', 'signora', 'dottor', 'anno', 'mese', 'fatto', 'fatti', 'fatta', 'fatte', 'eseguito', 'eseguiti', 'quando', 'come', 'cosa', 'che', 'sono', 'stato', 'stati', 'tutti', 'tutte', 'suoi', 'sue', 'del', 'dei', 'per', 'con', 'una', 'uno', 'gli', 'nel', 'nella', 'ultimi', 'ultime', 'recenti',
+  'abbiamo', 'avete', 'hanno', 'avevamo', 'oggi', 'ieri', 'domani', 'settimana', 'questa', 'questo', 'questi', 'queste', 'quella', 'quello', 'quelle', 'quelli', 'nostro', 'nostra', 'nostri', 'nostre', 'stamattina', 'pomeriggio', 'mattina', 'ancora', 'anche', 'gia', 'stata', 'state', 'sia', 'siano', 'possiamo', 'posso', 'devo', 'dobbiamo', 'bisogna', 'serve', 'servono', 'elenco', 'lista', 'tipo', 'tipi']);
+const rfNorm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const rfTok = (s) => (rfNorm(s).match(/[a-z0-9]{3,}/g) || []);
+/* Distanza di Levenshtein limitata (stessa regola dell'interprete lato server). */
+function rfDist(a, b, max) {
+  if (a === b) return 0;
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i]; let minRiga = i;
+    for (let j = 1; j <= b.length; j++) { cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); if (cur[j] < minRiga) minRiga = cur[j]; }
+    if (minRiga > max) return max + 1;
+    prev = cur;
+  }
+  return prev[b.length];
+}
+/* Un gettone della domanda corrisponde a una parte del nome se è uguale, se
+   differisce di un refuso (entrambi ≥ 5 lettere) o se è l'inizio del nome
+   (≥ 5 lettere). MAI il contrario: «abbiamo» non è «Abbi…», «della» non è «Dell». */
+function rfNomeCorrisponde(t, n) {
+  if (RF_GENERICHE.has(t)) return false;
+  if (t === n) return true;
+  if (t.length >= 5 && n.length >= 5 && rfDist(t, n, 1) <= 1) return true;
+  return t.length >= 5 && n.length > t.length && n.startsWith(t);
+}
 function rfCercaDocumenti(q) {
   const tok = rfTok(q).filter(t => !RF_GENERICHE.has(t));
   if (!tok.length) return null;
-  // paziente: cognome o nome che compare tra le parole della domanda
-  const pazienti = PATIENTS.filter(p => {
-    const nomi = [...rfTok(p.last), ...rfTok(p.first)];
-    return nomi.some(n => tok.some(t => t === n || (t.length >= 4 && n.startsWith(t)) || (n.length >= 4 && t.startsWith(n))));
-  });
-  const nomiPaz = new Set(pazienti.flatMap(p => [...rfTok(p.last), ...rfTok(p.first)]));
-  const chiavi = tok.filter(t => ![...nomiPaz].some(n => n === t || n.startsWith(t) || t.startsWith(n)));
+  // paziente: cognome o nome tra le parole della domanda; chi ha cognome E nome vince
+  const punteggiati = PATIENTS.map(p => {
+    const cog = rfTok(p.last).some(n => tok.some(t => rfNomeCorrisponde(t, n)));
+    const nom = rfTok(p.first).some(n => tok.some(t => rfNomeCorrisponde(t, n)));
+    return { p, n: (cog ? 2 : 0) + (nom ? 1 : 0) };
+  }).filter(x => x.n > 0);
+  const max = punteggiati.length ? Math.max(...punteggiati.map(x => x.n)) : 0;
+  // il solo nome di battesimo non identifica nessuno se ce ne sono più d'uno
+  const pazienti = max === 1 && punteggiati.filter(x => x.n === 1).length > 1 ? [] : punteggiati.filter(x => x.n === max).map(x => x.p);
+  // le parole che sono nome o cognome dei pazienti trovati (anche con refuso) non sono chiavi di ricerca
+  const nomiPaz = pazienti.flatMap(p => [...rfTok(p.last), ...rfTok(p.first)]);
+  const chiavi = tok.filter(t => !nomiPaz.some(n => rfNomeCorrisponde(t, n)));
   const candidati = pazienti.length ? DOCUMENTS.filter(d => pazienti.some(p => p.id === d.p)) : DOCUMENTS;
   const punteggio = (d) => {
     const testo = rfTok(`${d.t} ${d.filename || ''} ${DOC_TYPE[d.type] || ''}`);
@@ -428,6 +456,14 @@ function rfRispostaDocumento(q) {
   const nominaPaziente = PATIENTS.some(p => [...rfTok(p.last), ...rfTok(p.first)].some(n => n.length >= 4 && rfTok(ql).some(t => t === n || t.startsWith(n) || n.startsWith(t))));
   if (!parlaDiDocumenti && !nominaPaziente) return null;
   if (/referti (da )?(controllare|rivedere|approvare)|bozze/.test(ql)) return null;
+  if (/\b(oggi|stamattina|ieri)\b/.test(ql) && /esam|document|refert|fatt/.test(ql) && !PATIENTS.some(p => [...rfTok(p.last), ...rfTok(p.first)].some(n => rfTok(ql).some(t => rfNomeCorrisponde(t, n))))) {
+    const giorno = /ieri/.test(ql) ? new Date(Date.now() - 86400000) : new Date();
+    const gg = `${String(giorno.getDate()).padStart(2, '0')}.${String(giorno.getMonth() + 1).padStart(2, '0')}.${giorno.getFullYear()}`;
+    const oggiDoc = DOCUMENTS.filter(d => d.date === gg);
+    return oggiDoc.length
+      ? `<b>Documenti caricati ${/ieri/.test(ql) ? 'ieri' : 'oggi'} (${oggiDoc.length})</b><br>` + oggiDoc.slice(0, 8).map(d => `• ${rfEsc(d.t)}${P[d.p] ? ' · ' + rfEsc(fullName(P[d.p])) : ''} · ${DOC_TYPE[d.type] || ''} <button class="btn sm" data-doc="${d.id}">Apri</button>`).join('<br>')
+      : `Nessun documento caricato in cartella ${/ieri/.test(ql) ? 'ieri' : 'oggi'}. Gli esami eseguiti in studio arrivano in cartella quando la segreteria li carica; l'agenda di oggi la vedi con «quanti appuntamenti oggi».`;
+  }
   const r = rfCercaDocumenti(q);
   if (!r) return null;
   const { pazienti, chiavi, trovati } = r;

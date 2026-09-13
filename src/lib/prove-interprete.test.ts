@@ -70,6 +70,8 @@ test('domande scritte in modi diversi: parole chiave senza le frasi del registro
 
 test('domande libere e numeri restano libere; i candidati spiegano il perché', () => {
   assert.equal(I('quanti appuntamenti ci sono oggi?').sicurezza, 'nessuna');
+  assert.equal(I('che esami abbiamo fatto oggi').paziente, null);
+  assert.equal(I('esami di Luca Bernasconi').paziente?.id, 'p1');
   assert.equal(I('trovami il duplex di Ortelli').procedura, null);
   assert.equal(I('qual è la terapia in corso?', { paziente_id: 'p2' }).procedura, null);
   const c = candidatiProcedura(normalizza('briefing di Bernasconi'), PROCEDURE);

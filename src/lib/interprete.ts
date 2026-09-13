@@ -37,7 +37,7 @@ export function gettoni(s: string): string[] {
   return normalizza(s).split(' ').filter((t) => t.length >= 2);
 }
 
-const GENERICHE = new Set(['il', 'lo', 'la', 'le', 'gli', 'un', 'una', 'uno', 'di', 'del', 'della', 'dei', 'delle', 'dello', 'degli', 'da', 'dal', 'dalla', 'in', 'nel', 'nella', 'per', 'con', 'su', 'sul', 'sulla', 'che', 'chi', 'cosa', 'come', 'quando', 'quale', 'quali', 'mi', 'ti', 'ci', 'si', 'ha', 'ho', 'e', 'ed', 'a', 'al', 'alla', 'ai', 'agli', 'o', 'ma', 'se', 'non', 'piu', 'anche', 'fai', 'fammi', 'dammi', 'puoi', 'vorrei', 'voglio', 'per favore', 'grazie', 'signor', 'signora', 'sig', 'dott', 'dottor', 'dr', 'paziente', 'pazienti']);
+const GENERICHE = new Set(['il', 'lo', 'la', 'le', 'gli', 'un', 'una', 'uno', 'di', 'del', 'della', 'dei', 'delle', 'dello', 'degli', 'da', 'dal', 'dalla', 'in', 'nel', 'nella', 'per', 'con', 'su', 'sul', 'sulla', 'che', 'chi', 'cosa', 'come', 'quando', 'quale', 'quali', 'mi', 'ti', 'ci', 'si', 'ha', 'ho', 'e', 'ed', 'a', 'al', 'alla', 'ai', 'agli', 'o', 'ma', 'se', 'non', 'piu', 'anche', 'fai', 'fammi', 'dammi', 'puoi', 'vorrei', 'voglio', 'per favore', 'grazie', 'signor', 'signora', 'sig', 'dott', 'dottor', 'dr', 'paziente', 'pazienti', 'abbiamo', 'avete', 'hanno', 'oggi', 'ieri', 'domani', 'questa', 'questo', 'questi', 'queste', 'fatto', 'fatti', 'esami', 'esame', 'documenti', 'documento']);
 
 // Distanza di Levenshtein limitata: basta sapere se è ≤ max.
 export function distanza(a: string, b: string, max = 2): number {
