@@ -864,7 +864,7 @@ renderMobileNav = function () {
   nav.querySelectorAll('button').forEach(b => b.onclick = () => {
     const k = b.dataset.mnav;
     if (k === 'ai') { state.aiOpen = !state.aiOpen; render(); return; }
-    if (k === 'dittafono') { window.location.href = '/dittafono/'; return; }
+    if (k === 'dittafono') { window.location.href = '/dittafono/index.html'; return; }
     go('#/' + k);
   });
   if (typeof window.rfPillolaMostra === 'function') window.rfPillolaMostra();
