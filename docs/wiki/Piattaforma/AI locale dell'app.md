@@ -15,6 +15,7 @@ Gira su Ollama sul Mac dello studio, nessun cloud, nessun dato fuori dal compute
 | sidebar AI del prototipo (⌘/) | `POST /api/prototipo/assistente` | risponde solo sui dati già in pagina, filtrati per il ruolo |
 | briefing pre-visita nel prototipo | `POST /api/prototipo/briefing` | il codice decide i passi, il modello (`PROTOTIPO_LLM`, default gemma3:12b) scrive solo la sintesi; traccia salvata ([[Piattaforma/Procedure e tracce]]) |
 | le altre sei procedure del prototipo | `POST /api/prototipo/procedura` | solo codice, nessun modello: confronti e conteggi con traccia |
+| anonimizzazione nell'interfaccia nuova | `POST /api/prototipo/anonimizza` | stessa libreria di `/anonimizza`: modello `ANONIMIZZA_LLM`, il codice sostituisce; niente persistenza |
 | interprete delle domande scritte | `POST /api/prototipo/interpreta` | il codice interpreta; il modello (`PROTOTIPO_LLM`) solo nei casi grigi, sì/no sul candidato del codice, con traccia `interpretazione` |
 | riassunto pre-visita, confronto referti, cattura impegnativa | server action | generazione secca, su richiesta |
 

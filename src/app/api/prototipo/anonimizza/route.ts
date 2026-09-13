@@ -1,0 +1,71 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getSession } from '@/lib/auth';
+import { anonimizza, TESTO_MAX } from '@/lib/anonimizza';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+// Anonimizzazione per l'interfaccia nuova (14.9.2026): stessa libreria della
+// piattaforma (`src/lib/anonimizza.ts`: modello LOCALE che individua i dati
+// identificativi, il CODICE li sostituisce con segnaposto, rete di regole per
+// AVS, e-mail e telefoni svizzeri). Testo incollato o file .txt/.md/.pdf/.docx.
+// Niente persistenza, niente contenuti nei log.
+const FILE_MAX = 10 * 1024 * 1024;
+const RUOLI_AMMESSI = new Set(['segretaria', 'medico', 'admin']);
+
+export async function POST(req: NextRequest) {
+  const session = await getSession();
+  if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  if (!RUOLI_AMMESSI.has(session.role)) return NextResponse.json({ errore: 'ruolo_non_ammesso' }, { status: 403 });
+  let testo = '';
+  let origine = 'testo';
+  const tipo = req.headers.get('content-type') ?? '';
+  if (tipo.includes('multipart/form-data')) {
+    const form = await req.formData().catch(() => null);
+    if (!form) return NextResponse.json({ errore: 'modulo_non_valido' }, { status: 400 });
+    testo = String(form.get('testo') ?? '');
+    const file = form.get('file');
+    if (file instanceof File && file.size > 0) {
+      if (file.size > FILE_MAX) return NextResponse.json({ errore: 'Il file supera i 10 MB.' }, { status: 413 });
+      const nome = file.name.toLowerCase();
+      const buffer = Buffer.from(await file.arrayBuffer());
+      origine = nome.endsWith('.pdf') ? 'pdf' : nome.endsWith('.docx') ? 'docx' : 'file';
+      try {
+        if (nome.endsWith('.pdf')) {
+          const { PDFParse } = await import('pdf-parse');
+          const parser = new PDFParse({ data: buffer });
+          const r = await parser.getText();
+          testo = typeof r === 'string' ? r : String((r as { text?: string })?.text ?? '');
+          try { await parser.destroy(); } catch { /* ignora */ }
+          if (!testo.trim()) return NextResponse.json({ errore: 'Questo PDF non contiene testo selezionabile (probabilmente una scansione): posso anonimizzare solo PDF con testo.' }, { status: 422 });
+        } else if (nome.endsWith('.docx')) {
+          const mammoth = (await import('mammoth')).default;
+          testo = (await mammoth.extractRawText({ buffer })).value;
+        } else if (nome.endsWith('.doc')) {
+          return NextResponse.json({ errore: 'Il vecchio formato .doc non è supportato: salva come .docx e riprova.' }, { status: 415 });
+        } else if (/\.(txt|md|csv|json|html?)$/.test(nome) || file.type.startsWith('text/')) {
+          testo = buffer.toString('utf-8');
+        } else {
+          return NextResponse.json({ errore: 'Formato non supportato: incolla il testo oppure carica un .txt, un .docx o un PDF.' }, { status: 415 });
+        }
+      } catch {
+        return NextResponse.json({ errore: 'Non riesco a leggere questo file.' }, { status: 422 });
+      }
+    }
+  } else {
+    const corpo = await req.json().catch(() => null);
+    testo = String(corpo?.testo ?? '');
+  }
+  testo = testo.replace(/\r/g, '').trim();
+  if (!testo) return NextResponse.json({ errore: 'Incolla un testo o carica un file.' }, { status: 400 });
+  if (testo.length > TESTO_MAX) return NextResponse.json({ errore: `Il testo è troppo lungo (massimo ${Math.round(TESTO_MAX / 1000)}mila caratteri).` }, { status: 413 });
+  const t0 = Date.now();
+  try {
+    const esito = await anonimizza(testo);
+    console.log(`[anonimizza] prototipo origine=${origine} caratteri=${testo.length} sostituzioni=${esito.sostituzioni.length} modello=${esito.modello} ${Date.now() - t0}ms`);
+    return NextResponse.json({ ok: true, originale: testo, testo: esito.testo, sostituzioni: esito.sostituzioni, modello: esito.modello, ms: Date.now() - t0 }, { headers: { 'Cache-Control': 'no-store' } });
+  } catch (e) {
+    console.error(`[anonimizza] prototipo fallita: ${(e as Error)?.message ?? e}`);
+    return NextResponse.json({ errore: 'Il modello locale non ha risposto: riprova tra un minuto.' }, { status: 503 });
+  }
+}
