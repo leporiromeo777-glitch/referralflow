@@ -259,7 +259,16 @@ PAGES.review = () => {
     return `<div class="page-head"><div><h2 class="page-title">Revisione guidata</h2><div class="page-sub">Carico la bozza dalla piattaforma…</div></div></div>`;
   }
   const m = RF.meta || {};
-  const html = rfReviewOrig();
+  // La pagina originale disegna il paziente demo «p1» (P.p1), che dentro la
+  // piattaforma non esiste: senza segnaposto fullName() andava in errore e
+  // restava a schermo «Carico la bozza…». Il contesto del bot punta al
+  // paziente vero della bozza, se è in cartella.
+  const q = RF.queue.find(r => r.id === id);
+  if (q && P[q.p]) state.patientCtx = q.p;
+  const segnaposto = !P.p1;
+  if (segnaposto) P.p1 = { id: 'p1', first: '', last: m.paziente || 'Paziente', dob: m.nascita || '', docs: [], exams: [], referrals: [] };
+  let html;
+  try { html = rfReviewOrig(); } finally { if (segnaposto) delete P.p1; }
   const testata = `<div class="rv-pat">${ICONS.shield}<b>${rfEsc(m.paziente || 'Paziente non indicato')}</b><span>${rfEsc(m.nascita || '')}</span><span class="sep">·</span><span>${m.tipo === 'visita' ? 'Visita' : 'Referto'}</span><span class="sep">·</span><span>${rfEsc(m.medico || '')}</span><span class="sep">·</span><span>${RV_AUDIO.label}</span>${m.stato === 'confermata' ? '<span class="sep">·</span><span class="badge success">confermato</span>' : ''}</div>`;
   return html.replace(/<div class="rv-pat">[\s\S]*?<\/div>/, testata);
 };
