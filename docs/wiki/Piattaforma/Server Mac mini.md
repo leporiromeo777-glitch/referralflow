@@ -8,6 +8,14 @@ Livello 1 (fatto 2026-08-13): il Mac mini dello studio è il server interno. `ba
 
 Aggiornamento: `bash mac/aggiorna-server.sh` (pull + kickstart). Livello 2 (dominio, HTTPS, hardening) rimandato ad app assestata + parte legale.
 
+## Caddy: una sola configurazione, e una sentinella (14.9.2026)
+Alle 01:10-01:13 del 14.9.2026 il file `~/silverbullet/caddy/Caddyfile` (quello SENZA il blocco del dominio) è stato modificato tre volte (aggiunti 192.168.1.152, l'indirizzo Tailscale 100.99.102.44 e il nome `…ts.net`) e caricato in Caddy tramite l'API di amministrazione: il blocco `cct.referralflow.ch` è sparito dalla configurazione viva, la stretta di mano TLS falliva («tlsv1 alert internal error») e la piattaforma è stata irraggiungibile per circa un'ora, con l'app e il certificato su disco perfettamente sani. Non è stata questa sessione di Claude; chi ha fatto la modifica non risulta.
+Rimedi messi:
+- `Caddyfile` ora contiene solo `import Caddyfile.dominio`: chiunque ricarichi «il Caddyfile» ottiene la configurazione col dominio. Il vecchio file senza dominio è `Caddyfile.senza-dominio`, usato da `avvia-caddy.sh` solo se manca il modulo DNS Infomaniak.
+- In `Caddyfile.dominio` sono entrati anche 192.168.1.152 (Wi-Fi) e 100.99.102.44 (Tailscale) con la CA interna; il nome `…ts.net` NO: Let's Encrypt non lo risolve e Caddy ci riprova all'infinito.
+- **Sentinella** `mac/sentinella-caddy.sh` (launchd `ch.referralflow.sentinella-caddy`, ogni 5 minuti): prova `https://cct.referralflow.ch/login` sul Mac; dopo due fallimenti di fila riavvia Caddy e lo scrive in `~/referti/log/sentinella-caddy.log`.
+Regola: per riavviare Caddy si usa `launchctl kickstart -k gui/$(id -u)/ch.referralflow.caddy`, mai `caddy reload` con un file a mano.
+
 ## Se «non si raggiunge la piattaforma» (14.9.2026)
 Prima cosa da guardare: **l'indirizzo LAN del Mac**. Il dominio `cct.referralflow.ch` punta a un indirizzo privato della rete dello studio; se il Mac cambia indirizzo, il dominio punta nel vuoto e nessuno entra (né dal telefono né dal PC), mentre sul Mac tutto risponde su `localhost`. Il 14.9.2026 alle 00:40 il cavo Ethernet (`en0`) è risultato staccato: il Mac è passato al Wi-Fi (`en1`) con 192.168.1.152 al posto di 192.168.1.146, e nello stesso momento era caduto anche un push verso GitHub. Rimedio: `bash ~/silverbullet/caddy/attiva-dominio.sh` (copia in `mac/attiva-dominio.sh`) ora rileva da solo l'indirizzo della scheda attiva (o lo prende come argomento) e aggiorna il record A via API Infomaniak (TTL 300 s: qualche minuto di propagazione, di più sui telefoni che tengono la cache). Meglio ancora: ricollegare il cavo Ethernet, che ha l'indirizzo riservato .146, e rilanciare lo script. Da fare: chiedere al router una prenotazione DHCP anche per il Wi-Fi del Mac, così l'indirizzo non cambia più.
 
