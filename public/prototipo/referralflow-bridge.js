@@ -669,6 +669,62 @@ aiQuickActions = function () {
   return ['Richiami del mese', 'Referti da controllare', 'Trova un documento di un paziente', 'Quanti appuntamenti oggi?'];
 };
 
+
+/* ---------- interprete delle domande scritte (server, in codice) ---------- */
+/* La domanda va a /api/prototipo/interpreta: normalizzazione, refusi,
+   procedura dal registro, paziente/mese/giorno, contesto della pagina. Il
+   modello locale fa da giudice solo nei casi probabili, e vale solo se
+   sceglie nel registro. Qui si esegue quello che l'interprete ha capito. */
+function rfContestoInterprete() {
+  return {
+    pagina: state.route,
+    paziente_id: state.patientCtx && rfUuid(state.patientCtx) ? state.patientCtx : null,
+    bozza_id: state.route === 'review' && state.params && rfUuid(state.params.id) ? state.params.id : null,
+    documento_id: DV.open && DV.item && DV.item.live ? DV.item.id : null,
+  };
+}
+function rfPazienteLocale(id, nome) {
+  if (P[id]) return P[id];
+  const pezzi = String(nome || '').split(' ');
+  return { id, last: pezzi[0] || '', first: pezzi.slice(1).join(' ') };
+}
+async function rfInterpretaEAgisci(q) {
+  state.aiState = 'thinking';
+  const id = 'ai' + Date.now();
+  state.aiMessages.push({ id, html: `<div class="ai-msg ai" id="${id}"><span class="caption">Interpreto la domanda…</span></div>` });
+  render();
+  let esito = null;
+  try {
+    const r = await fetch('/api/prototipo/interpreta', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domanda: q, contesto: rfContestoInterprete() }) });
+    if (r.ok) esito = await r.json();
+  } catch { esito = null; }
+  state.aiMessages = state.aiMessages.filter(m => m.id !== id);
+  if (!esito || esito.azione === 'libera') { rfRispondiLibera(q); return; }
+  const def = RF.procedure.find(p => p.nome === esito.procedura.nome) || esito.procedura;
+  const capito = `<span class="caption">Ho capito: ${rfEsc(esito.spiegazione)}</span>`;
+  if (esito.azione === 'chiedi') {
+    let testo;
+    if (esito.pazientiAmbigui && esito.pazientiAmbigui.length) testo = `${capito}<br>Più pazienti corrispondono: ${esito.pazientiAmbigui.map(p => `<button class="btn sm" data-ai="${rfEsc(def.titolo)} di ${rfEsc(p.nome)}">${rfEsc(p.nome)}</button>`).join(' ')}`;
+    else if (esito.mancano.includes('paziente')) testo = `${capito}<br>Mi serve il paziente: scrivi il cognome («${rfEsc(def.titolo.toLowerCase())} di Bernasconi») oppure apri la sua scheda.`;
+    else testo = `${capito}<br>Mi serve la bozza: apri una revisione e richiedila, oppure scrivi il cognome del paziente.`;
+    rfRispondiSubito(testo); return;
+  }
+  const par = esito.parametri || {};
+  state.aiMessages.push({ html: `<div class="ai-msg ai">${capito}</div>` });
+  if (def.nome === 'briefing_previsita') { rfBriefing(rfPazienteLocale(par.patient_id, esito.paziente && esito.paziente.nome)); return; }
+  const corpo = { nome: def.nome };
+  if (def.input === 'paziente') corpo.patient_id = par.patient_id;
+  if (def.input === 'bozza') {
+    let bid = par.bozza_id;
+    if (!bid && par.patient_id) { const aperte = RF.queue.filter(r => r.status !== 'APPROVED' && r.p === par.patient_id); if (aperte.length) bid = aperte[0].id; }
+    if (!bid) { rfRispondiSubito(`${capito}<br>Non trovo una bozza aperta per questo paziente.`); return; }
+    corpo.bozza_id = bid;
+  }
+  if (par.mese) corpo.mese = par.mese;
+  if (par.giorno) corpo.giorno = par.giorno;
+  rfProcedura(corpo, def.attesa || 'Eseguo la procedura…');
+}
+
 const rfAskOrig = askAI;
 askAI = function (q) {
   if (!RF.live) return rfAskOrig(q);
@@ -676,10 +732,7 @@ askAI = function (q) {
   state.aiMessages.push({ html: `<div class="ai-msg user">${rfEsc(q)}</div>` });
   const org = rfRispostaOrganizzazione(q);
   if (org) { rfRispondiSubito(org); return; }
-  if (RF.procedure.length) {
-    const def = rfTrovaProcedura(q);
-    if (def) { rfLanciaProcedura(def, q); return; }
-  } else {
+  if (RF.procedure.length) { void rfInterpretaEAgisci(q); return; } else {
   if (rfDomandaChiusura(q)) { const mese = rfMeseDaDomanda(q); rfProcedura(mese ? { nome: 'chiusura_mensile', mese } : { nome: 'chiusura_mensile' }, 'Raccolgo i numeri del mese…'); return; }
   if (rfDomandaLettere(q)) { rfProcedura({ nome: 'lettere_ritardo' }, 'Cerco le lettere in ritardo…'); return; }
   if (rfDomandaGiornata(q)) { rfProcedura({ nome: 'preparazione_giornata' }, 'Preparo la giornata: un briefing per ogni paziente in agenda…'); return; }
@@ -704,6 +757,9 @@ askAI = function (q) {
     state.aiState = 'idle'; render(); return;
   }
   }
+  rfRispondiLibera(q);
+};
+function rfRispondiLibera(q) {
   const immediata = rfRispostaImmediata(q);
   if (immediata) {
     state.aiMessages.push({ html: `<div class="ai-msg ai">${immediata}<div class="srcs"><span class="src">Piattaforma · immediato</span></div></div>` });

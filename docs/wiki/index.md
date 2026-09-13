@@ -23,7 +23,7 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 - [[Piattaforma/Prossimi lavori]] e [[Piattaforma/Visione]]
 - [[Piattaforma/Prototipo stack]] — l'interfaccia nuova, oggi operativa su cct.referralflow.ch/prototipo (dati veri, bot locale, procedure con traccia); la copia con dati finti resta su :8765
 - [[Piattaforma/Convenzioni UI]] — palette, layout delle pagine, regole di stile
-- [[Piattaforma/Procedure e tracce]] — procedure in codice con traccia «Da dove viene», registro delle procedure come dati, grafo dei fatti in Postgres
+- [[Piattaforma/Procedure e tracce]] — procedure in codice con traccia «Da dove viene», registro delle procedure come dati, interprete delle domande scritte, grafo dei fatti in Postgres
 - [[Piattaforma/Organizzazione dello studio]] — ruoli, responsabilità, servizi: il grafo organizzativo letto dalla piattaforma (solo ruoli, mai nomi)
 - [[Piattaforma/AI locale dell'app]] — l'assistente dentro la piattaforma: modello, configurazione, perché a volte non risponde
 

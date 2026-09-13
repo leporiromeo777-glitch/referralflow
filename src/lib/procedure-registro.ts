@@ -24,6 +24,9 @@ export type ProceduraDef = {
   modello: boolean;
   // Frasi che la attivano (sorgenti di espressioni regolari, senza flag: si usa 'i').
   frasi: string[];
+  // Parole chiave per l'interprete (`interprete.ts`): radici, la PRIMA è la
+  // parola forte che da sola basta a sospettare la procedura.
+  parole: string[];
   // Chip nelle pagine del prototipo: contesto → etichetta (la domanda è l'etichetta).
   chip: { contesto: string; etichetta: string }[];
   attesa: string;
@@ -36,6 +39,7 @@ export const PROCEDURE: ProceduraDef[] = [
     ruoli: ['secretary', 'doctor', 'org_admin'], input: 'paziente', parametri: [],
     dati: ['referrals', 'questionario', 'referti_bozze', 'patient_documents', 'appointments'], produce: 'sezioni con fonte, mancanze, fatti nel grafo, traccia', modello: true,
     frasi: ['briefing', 'prepar(a|ami|are|azione)( la| alla| della| per la)? visita', 'prima della visita', 'cosa (devo|dobbiamo) sapere (su|di|prima)', '(riassunto|sintesi) (del |della )?(paziente|cartella)', 'prossimo paziente.*(prepar|brief)'],
+    parole: ['briefing', 'brief', 'prepar', 'visita', 'sapere', 'riassunt', 'sintesi', 'cartella', 'arriva', 'ricev'],
     chip: [{ contesto: 'patient', etichetta: 'Briefing pre-visita' }, { contesto: 'home', etichetta: 'Briefing del prossimo paziente' }],
     attesa: 'Preparo il briefing: leggo cartella, referti e agenda…',
   },
@@ -45,6 +49,7 @@ export const PROCEDURE: ProceduraDef[] = [
     ruoli: ['secretary', 'doctor', 'org_admin'], input: 'nessuno', parametri: ['giorno'],
     dati: ['appointments', 'patients', 'briefing di ciascuno'], produce: 'da segnalare + un blocco per appuntamento, traccia', modello: false,
     frasi: ['prepar(a|ami|are|azione)( la| della| mia)? giornata', 'briefing (di|per) (tutti|oggi|la giornata)', 'tutti i pazienti di oggi', 'giornata di oggi', 'prepara oggi'],
+    parole: ['giornata', 'oggi', 'tutti', 'agenda', 'prepar', 'mattina', 'pazienti'],
     chip: [{ contesto: 'home', etichetta: 'Preparazione della giornata' }, { contesto: 'agenda', etichetta: 'Preparazione della giornata' }],
     attesa: 'Preparo la giornata: un briefing per ogni paziente in agenda…',
   },
@@ -54,6 +59,7 @@ export const PROCEDURE: ProceduraDef[] = [
     ruoli: ['secretary', 'doctor', 'org_admin'], input: 'paziente', parametri: [],
     dati: ['referti_bozze (confermati)'], produce: 'misure cambiate/invariate, terapia nuova/modificata/tolta, traccia', modello: false,
     frasi: ['cosa (è|e\') cambiat', 'cos\'è cambiat', 'differenz', 'confront.*(ultim|preced)', 'rispetto all.ultima', 'dall.ultima visita'],
+    parole: ['cambiat', 'differenz', 'confront', 'preced', 'ultima', 'evoluz', 'variaz', 'peggior', 'miglior', 'andament', 'rispetto', 'prima', 'terapia'],
     chip: [{ contesto: 'patient', etichetta: 'Cosa è cambiato dall’ultima visita?' }, { contesto: 'review', etichetta: 'Cosa è cambiato dall’ultima visita?' }],
     attesa: 'Confronto gli ultimi due referti confermati…',
   },
@@ -63,6 +69,7 @@ export const PROCEDURE: ProceduraDef[] = [
     ruoli: ['secretary', 'doctor', 'org_admin'], input: 'nessuno', parametri: [],
     dati: ['referrals (follow_up)', 'appointments (follow_up)'], produce: 'tre liste con fonte, traccia', modello: false,
     frasi: ['richiami (del|di questo|in scadenza|prossim|del prossimo)', 'chi (devo|dobbiamo|va) (ri)?chiam', 'da richiamare'],
+    parole: ['richiam', 'scadenz', 'chiamare', 'follow', 'controlli', 'scadut'],
     chip: [{ contesto: 'home', etichetta: 'Richiami del mese' }],
     attesa: 'Raccolgo i richiami del mese…',
   },
@@ -72,6 +79,7 @@ export const PROCEDURE: ProceduraDef[] = [
     ruoli: ['secretary', 'doctor', 'org_admin'], input: 'bozza', parametri: [],
     dati: ['referti_bozze', 'revisione_stato', 'referti_eventi'], produce: 'lista dei controlli con esito, verdetto, traccia', modello: false,
     frasi: ['prima della firma', 'pronto per la firma', 'posso firmar', 'si può firmar', 'controllo (pre|prima)', 'controlla (il|questo) referto', 'manca (qualcosa|niente) (per|prima)'],
+    parole: ['firma', 'firmare', 'pronto', 'controllo', 'conferm', 'bozza', 'manca', 'referto', 'sigla'],
     chip: [{ contesto: 'review', etichetta: 'Controllo prima della firma' }, { contesto: 'reports', etichetta: 'Controllo prima della firma' }],
     attesa: 'Controllo la bozza prima della firma…',
   },
@@ -81,6 +89,7 @@ export const PROCEDURE: ProceduraDef[] = [
     ruoli: ['secretary', 'doctor', 'org_admin'], input: 'nessuno', parametri: [],
     dati: ['referti_bozze', 'referti_eventi (word_scaricato)', 'referrals (vista)'], produce: 'tre liste con fonte, traccia', modello: false,
     frasi: ['letter[ae] in ritardo', 'referti (confermati )?senza word', 'word non (scaricat|prodott)', 'bozze ferme', 'in ritardo con (le lettere|i referti)', 'lettere da (mandare|spedire|inviare)'],
+    parole: ['letter', 'ritardo', 'word', 'spedi', 'manda', 'invia', 'ferme', 'arretrat', 'sospes'],
     chip: [{ contesto: 'home', etichetta: 'Lettere in ritardo' }, { contesto: 'reports', etichetta: 'Lettere in ritardo' }],
     attesa: 'Cerco le lettere in ritardo…',
   },
@@ -90,6 +99,7 @@ export const PROCEDURE: ProceduraDef[] = [
     ruoli: ['secretary', 'doctor', 'org_admin'], input: 'nessuno', parametri: ['mese'],
     dati: ['referti_bozze', 'referrals', 'appointments', 'patient_documents', 'assistente_tracce', 'referti_dizionario'], produce: 'cinque sezioni di numeri, punti aperti, traccia', modello: false,
     frasi: ['chiusura (mensile|del mese|di [a-z]+)', 'chiud(i|ere) il mese', 'bilancio del mese', 'numeri del mese', 'com.è andato il mese', 'resoconto (mensile|del mese)'],
+    parole: ['chiusura', 'mese', 'mensile', 'bilancio', 'numeri', 'resoconto', 'statistic', 'andato', 'riepilog'],
     chip: [{ contesto: 'home', etichetta: 'Chiusura mensile' }, { contesto: 'reports', etichetta: 'Chiusura mensile' }],
     attesa: 'Raccolgo i numeri del mese…',
   },
