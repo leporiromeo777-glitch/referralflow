@@ -8,7 +8,9 @@
 export type Parola = [string, number];
 
 export type Segmento = { id: string; s: number; e: number; tx: string; w: [number, string][] };
-export type Parte = { id: string; t: string; src: string | null; conf: 'matched' | 'likely' | 'ambiguous' | 'none'; issue?: string };
+// nl: la frase iniziava una riga nel testo (a capo dettato o della lettera): la
+// ricomposizione lo rispetta, così le righe restano righe.
+export type Parte = { id: string; t: string; src: string | null; conf: 'matched' | 'likely' | 'ambiguous' | 'none'; issue?: string; nl?: boolean };
 export type Sezione = { code: string; label: string; parts: Parte[] };
 export type Evidenza = { s: number; e: number; focus: number } | null;
 export type Opzione = { l: string; apply: string | null; note: string };
@@ -90,14 +92,15 @@ export function sezioniDaTesto(testo: string): Sezione[] {
     for (const riga of par.split('\n')) {
       if (!riga.trim()) continue;
       let corrente = '';
+      let inizioRiga = true;
       for (const f of riga.split(/(?<=[.!?;])\s+/)) {
         corrente = corrente ? `${corrente} ${f}` : f;
         if (/[.!?;]["»)]?$/.test(f.trim()) && !ABBR.test(f.trim())) {
-          parts.push({ id: `p${++k}`, t: corrente, src: null, conf: 'none' });
-          corrente = '';
+          parts.push({ id: `p${++k}`, t: corrente, src: null, conf: 'none', nl: inizioRiga });
+          corrente = ''; inizioRiga = false;
         }
       }
-      if (corrente.trim()) parts.push({ id: `p${++k}`, t: corrente, src: null, conf: 'none' });
+      if (corrente.trim()) parts.push({ id: `p${++k}`, t: corrente, src: null, conf: 'none', nl: inizioRiga });
     }
     if (parts.length) sezioni.push({ code: `sec${i + 1}`, label: etichetta, parts });
   });

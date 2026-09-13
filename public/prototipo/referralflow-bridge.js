@@ -288,19 +288,30 @@ async function rfCaricaRevisione(id) {
     RF.meta = j; RF.loaded = id; RF.loading = null;
     // Revisione già fatta e salvata nel prototipo: riparte da lì (verifiche
     // chiuse, correzioni per frase, frasi tolte o aggiunte).
-    if (j.revisione_prototipo && typeof j.revisione_prototipo === 'object') localStorage.setItem(RV_KEY, JSON.stringify(j.revisione_prototipo));
-    else localStorage.removeItem(RV_KEY);
+    if (j.revisione_prototipo && typeof j.revisione_prototipo === 'object') {
+      const rp = j.revisione_prototipo;
+      localStorage.setItem(RV_KEY, JSON.stringify({ issues: rp.issues || [], metrics: rp.metrics || {}, log: rp.log || [], cur: rp.cur || 0, t: 0 }));
+    } else localStorage.removeItem(RV_KEY);
     RV.issues = [];
     rfAudioSetup(j.audio.url);
     render();
   } catch (e) { RF.loading = null; toast('Bozza non disponibile'); }
 }
+/* Ricompone il testo dalle frasi: le frasi che iniziavano una riga (nl)
+   restano a capo, le altre seguono sulla stessa riga; le sezioni (paragrafi)
+   restano separate da una riga vuota; le aggiunte vanno in coda alla sezione. */
 function rfTestoRicomposto() {
   const blocchi = [];
   for (const s of RV_REPORT) {
-    const frasi = s.parts.filter(p => !RV.removed[p.id]).map(p => (RV.text[p.id] != null ? RV.text[p.id] : p.t).trim()).filter(Boolean);
-    for (const a of RV.added.filter(x => x.section === s.code)) if (a.text && a.text.trim()) frasi.push(a.text.trim());
-    if (frasi.length) blocchi.push(frasi.join(' '));
+    let testo = '';
+    for (const p of s.parts) {
+      if (RV.removed[p.id]) continue;
+      const t = (RV.text[p.id] != null ? RV.text[p.id] : p.t).trim();
+      if (!t) continue;
+      testo += testo ? (p.nl ? '\n' : ' ') + t : t;
+    }
+    for (const a of RV.added.filter(x => x.section === s.code)) if (a.text && a.text.trim()) testo += (testo ? '\n' : '') + a.text.trim();
+    if (testo.trim()) blocchi.push(testo);
   }
   return blocchi.join('\n\n');
 }
@@ -368,12 +379,17 @@ rvSave = function () {
   const id = RF.loaded;
   rvSave._rf = setTimeout(async () => {
     try {
-      const raw = localStorage.getItem(RV_KEY); if (!raw || RF.loaded !== id) return;
-      await fetch(`/api/prototipo/referti/${id}/testo`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stato: JSON.parse(raw) }), keepalive: true });
+      if (RF.loaded !== id || (RF.meta && RF.meta.stato !== 'bozza')) return;
+      // Il testo corretto viaggia insieme allo stato: così un referto lasciato a
+      // metà ha già le correzioni nella bozza. Le mappe per id di frase non si
+      // salvano (gli id cambiano col testo): si salvano solo gli esiti.
+      await fetch(`/api/prototipo/referti/${id}/testo`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ testo: rfTestoRicomposto(), stato: rfStatoRevisione(), correzioni: RV.metrics.corrections, verifiche: rvDone() }), keepalive: true });
     } catch { /* riprova al prossimo salvataggio */ }
   }, 2000);
 };
-function rfStatoRevisione() { try { const raw = localStorage.getItem(RV_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; } }
+function rfStatoRevisione() {
+  return { issues: RV.issues.map(i => ({ id: i.id, status: i.status, resolution: i.resolution })), metrics: RV.metrics, log: (RV.log || []).slice(-200), cur: RV.cur, t: RV.t };
+}
 
 /* audio vero al posto dell'orologio simulato: stesse funzioni, stesso stato RV */
 function rfAudioSetup(url) {
