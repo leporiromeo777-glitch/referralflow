@@ -384,7 +384,9 @@ function rfCercaDocumenti(q) {
 }
 function rfRispostaDocumento(q) {
   const ql = q.toLowerCase();
-  if (!/trova|cerca|mostra|apri|dammi|document|esame|esami|referto|duplex|eco|ecg|holter|tac|lettera|risonanza|coronar|laborator|ergometr|scintigraf|dimission/.test(ql)) return null;
+  const parlaDiDocumenti = /trov|cerc|mostr|apr|dammi|fammi|document|esam|refert|duplex|eco|ecg|holter|tac|letter|risonanz|coronar|laborator|ergometr|scintigraf|dimission|cartella|allegat|pdf|file/.test(ql);
+  const nominaPaziente = PATIENTS.some(p => [...rfTok(p.last), ...rfTok(p.first)].some(n => n.length >= 4 && rfTok(ql).some(t => t === n || t.startsWith(n) || n.startsWith(t))));
+  if (!parlaDiDocumenti && !nominaPaziente) return null;
   if (/referti (da )?(controllare|rivedere|approvare)|bozze/.test(ql)) return null;
   const r = rfCercaDocumenti(q);
   if (!r) return null;
