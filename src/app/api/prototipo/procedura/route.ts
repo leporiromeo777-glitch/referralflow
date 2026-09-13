@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
 import { cambiamentiUltimaVisita, chiusuraMese, controlloPrimaDellaFirma, lettereRitardo, preparazioneGiornata, richiamiMese } from '@/lib/procedure';
+import { proceduraPerNome } from '@/lib/procedure-registro';
+
+const RUOLO: Record<string, string> = { segretaria: 'secretary', medico: 'doctor', admin: 'org_admin', inviante: 'inviante' };
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +15,10 @@ export async function POST(req: NextRequest) {
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
   const corpo = await req.json().catch(() => null);
   const nome = String(corpo?.nome ?? '');
+  // Permessi dal registro: chi non è tra i ruoli della procedura non la lancia.
+  const def = proceduraPerNome(nome);
+  if (!def) return NextResponse.json({ errore: 'procedura_sconosciuta' }, { status: 400 });
+  if (!(def.ruoli as string[]).includes(RUOLO[session.role] ?? 'secretary')) return NextResponse.json({ errore: 'ruolo_non_ammesso' }, { status: 403 });
   const patientId = typeof corpo?.patient_id === 'string' && isUuid(corpo.patient_id) ? corpo.patient_id : null;
   const bozzaId = typeof corpo?.bozza_id === 'string' && isUuid(corpo.bozza_id) ? corpo.bozza_id : null;
   let esito;

@@ -4,6 +4,9 @@ import { configurazioneOllama, ollamaAttivo } from '@/lib/ollama';
 import { isUuid } from '@/lib/cartella';
 import { testoDocumento } from '@/lib/documenti-testo';
 import { apriTraccia, chiudiTraccia, type PassoTraccia } from '@/lib/tracce';
+import { query } from '@/lib/db';
+import { elencoPerPrompt, trovaProcedura } from '@/lib/procedure-registro';
+import { caricaOrganizzazione, organizzazionePerPrompt } from '@/lib/organizzazione';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +34,22 @@ export async function POST(req: NextRequest) {
   // Documento aperto nel visualizzatore: il suo testo entra nel prompt (modello locale).
   const documentoId = typeof corpo?.documento_id === 'string' && isUuid(corpo.documento_id) ? corpo.documento_id : null;
   const doc = documentoId ? await testoDocumento(session.studioId, documentoId, session.id) : null;
+  // Grafo dei fatti del paziente aperto (pazienti_fatti): se è vuoto, il
+  // briefing grezzo lo riempie (letture di cartella, niente modello).
+  const pazienteId = typeof corpo?.paziente_id === 'string' && isUuid(corpo.paziente_id) ? corpo.paziente_id : null;
+  let fatti: { relazione: string; oggetto: string; data_fatto: string | null; fonte_tipo: string }[] = [];
+  if (pazienteId) {
+    const leggi = () => query<{ relazione: string; oggetto: string; data_fatto: string | null; fonte_tipo: string }>(
+      `select relazione, oggetto, data_fatto::text, fonte_tipo from pazienti_fatti where studio_id = $1 and patient_id = $2 order by relazione, data_fatto desc nulls last limit 60`, [session.studioId, pazienteId]);
+    fatti = await leggi();
+    if (!fatti.length) {
+      try { const { briefingGrezzo } = await import('@/lib/briefing'); if (await briefingGrezzo(session.studioId, pazienteId)) fatti = await leggi(); } catch { fatti = []; }
+    }
+  }
+  const bloccoFatti = fatti.length ? `\n\nFATTI DEL PAZIENTE APERTO (grafo della piattaforma, ogni riga con la sua fonte):\n${fatti.map((f) => `- ${f.relazione.replace(/_/g, ' ')}: ${f.oggetto}${f.data_fatto ? ` (${f.data_fatto})` : ''} [fonte: ${f.fonte_tipo}]`).join('\n')}` : '';
+  const org = caricaOrganizzazione();
+  const bloccoOrg = organizzazionePerPrompt(org);
+  const proceduraSimile = trovaProcedura(domanda, ruolo);
   const blocccoDoc = doc ? `\n\nDOCUMENTO APERTO («${doc.nota || doc.filename}»${doc.troncato ? ', troncato' : ''}):\n${doc.testo || '(nessun testo estraibile: immagine o scansione senza OCR)'}` : '';
 
   const testoSemplice = (t: string, fonte: string) =>
@@ -40,8 +59,11 @@ export async function POST(req: NextRequest) {
   }
   const prompt = `Sei l'assistente di ReferralFlow, la piattaforma di uno studio medico svizzero. Rispondi in italiano, asciutto, al massimo ${doc ? 6 : 3} frasi o un elenco breve. Usa SOLO i dati qui sotto (JSON con i numeri e le liste della giornata, già filtrati per il ruolo «${ruolo}»${doc ? ', e il testo del documento aperto' : ''}). Se il dato non c'è, dillo: non inventare nomi, numeri o date. Riporta i valori esattamente come sono scritti. Niente consigli clinici, niente diagnosi: puoi riassumere, elencare valori e conclusioni scritte dal medico refertante.
 
+PROCEDURE DISPONIBILI (se la domanda corrisponde a una di queste, rispondi in una riga suggerendo di chiederla con quel nome, senza eseguirla):
+${elencoPerPrompt(ruolo)}
+${bloccoOrg ? `\nORGANIZZAZIONE DELLO STUDIO (chi fa che cosa; rispondi con il ruolo, mai con nomi di persone):\n${bloccoOrg}\n` : ''}
 DATI:
-${contesto}${blocccoDoc}
+${contesto}${bloccoFatti}${blocccoDoc}
 
 DOMANDA: ${domanda}
 
@@ -68,12 +90,14 @@ RISPOSTA:`;
     doc
       ? { passo: 'Testo del documento aperto, estratto sul Mac dello studio', esito: doc.testo ? 'ok' : 'vuoto', fonti: [doc.id], nota: doc.testo ? `${doc.testo.length} caratteri${doc.troncato ? ', troncato' : ''}` : 'nessun testo estraibile' }
       : { passo: 'Documento aperto', esito: 'vuoto', fonti: [], nota: 'nessun documento aperto' },
+    { passo: 'Grafo dei fatti del paziente aperto', esito: fatti.length ? 'ok' : 'vuoto', fonti: pazienteId ? [pazienteId] : [], nota: pazienteId ? `${fatti.length} fatti` : 'nessun paziente aperto' },
+    { passo: 'Registro delle procedure e organizzazione dello studio nel prompt', esito: 'ok', fonti: [], nota: proceduraSimile ? `somiglia a «${proceduraSimile.titolo}»` : `${org.responsabilita.length} responsabilità` },
     { passo: 'Risposta del modello locale, solo sui dati passati', esito: 'ok', fonti: [], nota: MODELLO },
   ];
   let tracciaId = 0;
   try {
     tracciaId = await apriTraccia({
-      studioId: session.studioId, userId: session.id, procedura: doc ? 'documento' : 'domanda_libera', obiettivo: domanda,
+      studioId: session.studioId, userId: session.id, procedura: doc ? 'documento' : 'domanda_libera', obiettivo: domanda, patientId: pazienteId,
       passi, fonti: doc ? [{ tipo: 'documento', id: doc.id, titolo: doc.nota || doc.filename }] : [], modello: MODELLO,
     });
   } catch (e) {

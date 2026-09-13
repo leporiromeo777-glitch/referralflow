@@ -14,7 +14,7 @@
    - la Guided Review lavora sulla bozza vera con l'audio vero e «Termina
      revisione» salva il testo nella piattaforma (la conferma resta lì).
    Fuori dalla piattaforma (porta 8765) il ponte è inerte: restano i dati finti. */
-const RF = { live: false, data: null, queue: [], loaded: null, loading: null, meta: null, audioEl: null, medici: [], caricato: false, nonAutorizzato: false };
+const RF = { live: false, data: null, queue: [], loaded: null, loading: null, meta: null, audioEl: null, medici: [], caricato: false, nonAutorizzato: false, procedure: [], org: null };
 function rfDentro() { return /\/prototipo\//.test(location.pathname); }
 const rfEsc = (s) => (typeof esc === 'function' ? esc(String(s ?? '')) : String(s ?? ''));
 
@@ -596,10 +596,71 @@ function rfBriefing(p) {
     })
     .catch(() => fine('Non riesco a preparare il briefing in questo momento.', 'Piattaforma'));
 }
+
+/* ---------- grafo operativo e organizzativo: registro delle procedure ---------- */
+/* Le procedure arrivano dal server COME DATI (src/lib/procedure-registro.ts):
+   frasi che le attivano, input che serve, chip per pagina, chi ne risponde e
+   quando (wiki «Organizzazione dello studio»). Il ponte non decide più con le
+   sue espressioni: legge il registro. */
+async function rfCaricaProcedure() {
+  try {
+    const r = await fetch('/api/prototipo/procedure', { credentials: 'include' });
+    if (!r.ok) return;
+    const j = await r.json();
+    RF.procedure = Array.isArray(j.procedure) ? j.procedure : [];
+    RF.org = j.organizzazione || null;
+  } catch { /* si resta con l'instradamento di riserva */ }
+}
+function rfTrovaProcedura(q) {
+  const ql = q.toLowerCase();
+  for (const p of RF.procedure) if ((p.frasi || []).some(f => { try { return new RegExp(f, 'i').test(ql); } catch { return false; } })) return p;
+  return null;
+}
+function rfRispondiSubito(html) {
+  state.aiMessages.push({ html: `<div class="ai-msg ai">${html}<div class="srcs"><span class="src">Piattaforma · immediato</span></div></div>` });
+  state.aiState = 'idle'; render();
+}
+function rfLanciaProcedura(def, q) {
+  const chi = def.responsabile ? ` <span class="caption">· ${rfEsc(def.responsabile.ruolo)}${def.responsabile.quando ? ', ' + rfEsc(def.responsabile.quando) : ''}</span>` : '';
+  if (def.input === 'paziente') {
+    const r = rfPazienteDaDomanda(q);
+    if (r.p) { if (def.nome === 'briefing_previsita') rfBriefing(r.p); else rfProcedura({ nome: def.nome, patient_id: r.p.id }, def.attesa); return; }
+    const testo = r.ambigui
+      ? `Per questo uso la procedura «${rfEsc(def.titolo)}»${chi}. Più pazienti corrispondono: ${r.ambigui.map(p => `<button class="btn sm" data-ai="${rfEsc(def.titolo)} di ${rfEsc(fullName(p))}">${rfEsc(fullName(p))}</button>`).join(' ')}`
+      : `Per questo uso la procedura «${rfEsc(def.titolo)}»${chi}: mi serve il paziente. Scrivi il cognome («${rfEsc(def.titolo.toLowerCase())} di Bernasconi») oppure apri la sua scheda.`;
+    rfRispondiSubito(testo); return;
+  }
+  if (def.input === 'bozza') {
+    const bid = rfBozzaDaContesto(q);
+    if (bid) { rfProcedura({ nome: def.nome, bozza_id: bid }, def.attesa); return; }
+    rfRispondiSubito(`Per questo uso la procedura «${rfEsc(def.titolo)}»${chi}: mi serve la bozza. Apri una revisione e richiedila, oppure scrivi il cognome del paziente.`); return;
+  }
+  const corpo = { nome: def.nome };
+  if ((def.parametri || []).includes('mese')) { const m = rfMeseDaDomanda(q); if (m) corpo.mese = m; }
+  rfProcedura(corpo, def.attesa);
+}
+/* «Chi si occupa di…», «quando si fa…»: risposta dal grafo organizzativo. */
+function rfRispostaOrganizzazione(q) {
+  if (!RF.org || !RF.org.responsabilita || !RF.org.responsabilita.length) return null;
+  const ql = q.toLowerCase();
+  if (!/chi (si occupa|è responsabile|e' responsabile|fa|deve|segue|controlla|gestisce)|di chi (è|e')|quando si (fa|fanno|controlla|controllano|prepara|chiude)|responsabil|chi risponde/.test(ql)) return null;
+  const tok = rfTok(ql).filter(t => !RF_GENERICHE.has(t) && !['occupa', 'responsabile', 'quando', 'deve', 'segue', 'controlla', 'gestisce', 'risponde'].includes(t));
+  const punteggio = (r) => { const testo = rfTok(`${r.cosa} ${r.quando} ${r.note} ${r.procedura || ''}`); return tok.filter(t => testo.some(w => w === t || (t.length >= 4 && w.startsWith(t.slice(0, 5))) || (w.length >= 4 && t.startsWith(w.slice(0, 5))))).length; };
+  const trovate = RF.org.responsabilita.map(r => ({ r, n: punteggio(r) })).filter(x => x.n > 0).sort((a, b) => b.n - a.n).slice(0, 4);
+  if (!trovate.length) return `Non trovo questa responsabilità nell'organizzazione dello studio. Ruoli: ${RF.org.ruoli.map(r => rfEsc(r.ruolo)).join(', ')}. La pagina wiki «Organizzazione dello studio» si può completare.`;
+  return `<b>Dal grafo organizzativo</b><br>` + trovate.map(({ r }) => `• <b>${rfEsc(r.ruolo)}</b>: ${rfEsc(r.cosa)}${r.quando ? ` · ${rfEsc(r.quando)}` : ''}${r.procedura ? ` <button class="btn sm ghost" data-ai="${rfEsc((RF.procedure.find(p => p.nome === r.procedura) || {}).titolo || r.procedura)}">${rfEsc((RF.procedure.find(p => p.nome === r.procedura) || {}).titolo || r.procedura)}</button>` : ''}${r.note && r.note !== '—' ? `<br><span class="caption">${rfEsc(r.note)}</span>` : ''}`).join('<br>');
+}
+
 const rfQuickOrig = aiQuickActions;
 aiQuickActions = function () {
   if (!RF.live) return rfQuickOrig();
   const r = state.route;
+  if (RF.procedure.length) {
+    const ctx = (r === 'patient' || r === 'visit') ? (rfUuid(state.patientCtx) ? 'patient' : 'nessuno') : r;
+    const dalRegistro = RF.procedure.flatMap(p => (p.chip || []).filter(c => c.contesto === ctx).map(c => c.etichetta));
+    const extra = { patient: ['Quali esami ha in cartella?', 'Qual è la terapia in corso?'], review: ['Referti da controllare'], home: ['Quanti appuntamenti oggi?'], reports: ['Referti da controllare'], agenda: ['Quanti appuntamenti oggi?', 'Chi è in ritardo?'] }[ctx] || ['Quanti appuntamenti oggi?', 'Referti da controllare', 'Trova un documento di un paziente', 'Chi si occupa dei richiami?'];
+    return [...new Set([...dalRegistro, ...extra])].slice(0, 5);
+  }
   if ((r === 'patient' || r === 'visit') && rfUuid(state.patientCtx)) return ['Briefing pre-visita', 'Cosa è cambiato dall\'ultima visita?', 'Quali esami ha in cartella?', 'Trova l\'ultimo ECG'];
   if (r === 'review') return ['Controllo prima della firma', 'Cosa è cambiato dall\'ultima visita?', 'Referti da controllare'];
   if (r === 'home') return ['Preparazione della giornata', 'Briefing del prossimo paziente', 'Lettere in ritardo', 'Chiusura mensile'];
@@ -613,6 +674,12 @@ askAI = function (q) {
   if (!RF.live) return rfAskOrig(q);
   if (!state.aiOpen) state.aiOpen = true;
   state.aiMessages.push({ html: `<div class="ai-msg user">${rfEsc(q)}</div>` });
+  const org = rfRispostaOrganizzazione(q);
+  if (org) { rfRispondiSubito(org); return; }
+  if (RF.procedure.length) {
+    const def = rfTrovaProcedura(q);
+    if (def) { rfLanciaProcedura(def, q); return; }
+  } else {
   if (rfDomandaChiusura(q)) { const mese = rfMeseDaDomanda(q); rfProcedura(mese ? { nome: 'chiusura_mensile', mese } : { nome: 'chiusura_mensile' }, 'Raccolgo i numeri del mese…'); return; }
   if (rfDomandaLettere(q)) { rfProcedura({ nome: 'lettere_ritardo' }, 'Cerco le lettere in ritardo…'); return; }
   if (rfDomandaGiornata(q)) { rfProcedura({ nome: 'preparazione_giornata' }, 'Preparo la giornata: un briefing per ogni paziente in agenda…'); return; }
@@ -636,6 +703,7 @@ askAI = function (q) {
     state.aiMessages.push({ html: `<div class="ai-msg ai">${testo}<div class="srcs"><span class="src">Piattaforma · immediato</span></div></div>` });
     state.aiState = 'idle'; render(); return;
   }
+  }
   const immediata = rfRispostaImmediata(q);
   if (immediata) {
     state.aiMessages.push({ html: `<div class="ai-msg ai">${immediata}<div class="srcs"><span class="src">Piattaforma · immediato</span></div></div>` });
@@ -650,7 +718,7 @@ askAI = function (q) {
     state.aiMessages.push({ html: `<div class="ai-msg ai">${html}<div class="srcs"><span class="src">${fonte}</span></div></div>` });
     state.aiState = 'idle'; render();
   };
-  fetch('/api/prototipo/assistente', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domanda: q, ruolo: state.role, contesto: rfContestoBot(), documento_id: DV.open && DV.item && DV.item.live ? DV.item.id : null }) })
+  fetch('/api/prototipo/assistente', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domanda: q, ruolo: state.role, contesto: rfContestoBot(), documento_id: DV.open && DV.item && DV.item.live ? DV.item.id : null, paziente_id: state.patientCtx && rfUuid(state.patientCtx) ? state.patientCtx : null }) })
     .then(async r => {
       if (!r.ok || !r.body) { fine('L\'assistente non è raggiungibile in questo momento.', 'Piattaforma'); return; }
       const fonte = r.headers.get('X-Fonte') === 'modello locale' ? 'Modello locale · dati della piattaforma' : 'Piattaforma';
@@ -690,6 +758,7 @@ if (rfDentro()) {
 window.addEventListener('load', () => {
   if (!rfDentro()) return;
   void rfCaricaMedici();
+  void rfCaricaProcedure();
   void rfCaricaDati();
   setInterval(() => { if (RF.live && state.route !== 'review') void rfCaricaDati(); }, 120000);
 });

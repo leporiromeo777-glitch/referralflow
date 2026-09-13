@@ -15,7 +15,7 @@ aggiornata: 2026-09-13
 ## Prototipo, assistente e procedure ([[Piattaforma/Procedure e tracce]])
 - Mostrare il «Perché?» delle scelte umane nel cruscotto Qualità AI accanto alle proposte di dizionario; oggi si salva soltanto.
 - Una pagina «Tracce» nella piattaforma (elenco di `assistente_tracce` per procedura e giorno): oggi la traccia si vede solo sotto la risposta.
-- Far leggere al bot il grafo dei fatti (`pazienti_fatti`) per le domande sul paziente aperto («ha una terapia?», «quando l'ultimo ECG?») invece del contesto di pagina: le relazioni ci sono già.
+- Grafo dei fatti nel bot FATTO (13.9.2026 notte), registro delle procedure e organizzazione FATTI: restano da completare le responsabilità nella pagina wiki con lo studio, e le frasi del registro con le domande vere lette nelle tracce.
 - Leggere ogni settimana le domande libere nelle tracce: le più frequenti diventano procedure.
 - Referti confermati prima del 13.9.2026: «lettere in ritardo» non li giudica (l'evento `word_scaricato` non c'era).
 

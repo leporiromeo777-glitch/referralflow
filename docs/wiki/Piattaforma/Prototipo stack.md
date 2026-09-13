@@ -11,7 +11,7 @@ Nato il 13.9.2026 come pacchetto consegnato dall'utente (progettato altrove, su 
 - **Dati veri** da `GET /api/prototipo/dati` (agenda del robot, pazienti con cartella, referti della catena, documenti, attività, numeri); nessun dato finto dentro la piattaforma.
 - **Revisione guidata a tre colonne** con audio vero; «Termina revisione» salva nella piattaforma, la conferma resta nella piattaforma col gate.
 - **Bot** (⌘/): risposte immediate del codice, modello locale in streaming per il resto, ricerca documenti per paziente ed esame, documenti aperti dentro la pagina e domande sul file.
-- **Procedure con traccia** ([[Piattaforma/Procedure e tracce]]): briefing pre-visita, preparazione della giornata, cosa è cambiato dall'ultima visita, richiami del mese, controllo prima della firma, lettere in ritardo, chiusura mensile. Sotto ogni risposta «Da dove viene».
+- **Procedure con traccia** ([[Piattaforma/Procedure e tracce]]): briefing pre-visita, preparazione della giornata, cosa è cambiato dall'ultima visita, richiami del mese, controllo prima della firma, lettere in ritardo, chiusura mensile. Sotto ogni risposta «Da dove viene». Le procedure arrivano al ponte come dati (registro con ruoli, frasi, chip), l'organizzazione dello studio dalla wiki, il grafo dei fatti del paziente aperto nel prompt del bot.
 - **Dati di prova** per le demo: `npm run dati-prova` (6 pazienti inventati, 14 PDF).
 - **Aggiornare il ponte**: si modifica `public/prototipo/referralflow-bridge.js` (copia anche in `~/referralflow-stack/…/ui-prototype/`), si alza `?v=` in `index.html`, `manifest.webmanifest` e nel link della pagina Referti, poi `bash mac/aggiorna-server.sh`.
 
