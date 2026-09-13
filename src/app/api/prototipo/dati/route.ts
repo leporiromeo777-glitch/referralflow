@@ -193,6 +193,16 @@ export async function GET() {
       }
     }
     const rev = costruisciRevisione({ testo: (b.testo_finale ?? p.testo_corretto ?? '') as string, parole: Array.isArray(p.parole) ? p.parole : [], payload: p });
+    // Revisione fatta nel prototipo e salvata: contano solo le verifiche ancora aperte.
+    const rp = p.revisione_prototipo && typeof p.revisione_prototipo === 'object' ? p.revisione_prototipo : null;
+    let rivisto: { quando: string; chiuse: number; correzioni: number } | null = null;
+    if (rp && Array.isArray(rp.issues)) {
+      const statoPer = new Map<string, string>(rp.issues.filter((x: any) => x && typeof x.id === 'string').map((x: any) => [x.id, String(x.status ?? 'open')]));
+      const aperte = rev.issues.filter((i) => (statoPer.get(i.id) ?? 'open') === 'open');
+      const crit = aperte.filter((i) => i.sev === 'critical').length;
+      rivisto = { quando: dCh(rp.salvato_il) + (rp.salvato_il ? ` ${ora(rp.salvato_il)}` : ''), chiuse: rev.issues.length - aperte.length, correzioni: Number(rp.metrics?.corrections ?? 0) };
+      rev.riepilogo = { issues: aperte.length, crit, state: crit > 0 ? 'priority' : aperte.length > 0 ? 'some' : 'clean', note: `Rivisto ${rivisto.quando} · ${rivisto.chiuse} verifiche chiuse${aperte.length ? ` · ${aperte.length} aperte` : ''} · da confermare`, est: `${Math.max(1, Math.round(aperte.length * 0.6))} min` };
+    }
     const docId = typeof p.medico?.id === 'string' ? p.medico.id : 'studio';
     if (!doctors[docId] && typeof p.medico?.nome === 'string') doctors[docId] = p.medico.nome;
     const d = new Date(p.dettato_il ?? b.created_at);
@@ -200,7 +210,7 @@ export async function GET() {
     if (b.stato === 'bozza') tasks.push({ id: `boz-${b.id}`, title: `Bozza di referto da rivedere: ${nomePaz || 'paziente non indicato'}${rev.riepilogo.crit ? ` · ${rev.riepilogo.crit} critiche` : ''}`, p: pid, assignee: 'secretary', prio: rev.riepilogo.crit ? 'high' : 'normal', status: 'TODO', due: dCh(b.created_at), cat: 'send', src: 'automation', href: `/referti/${b.id}` });
     return {
       id: b.id, p: pid, doc: docId, date: dCh(b.created_at), type: b.tipo === 'visita' ? 'Visita registrata' : p.medico?.formato === 'lettera' ? 'Lettera al collega' : 'Rapporto',
-      status: b.stato === 'confermata' ? 'APPROVED' : 'READY_FOR_FORMAL_REVIEW', version: b.stato === 'confermata' ? 'FINAL' : 'v1 AI',
+      status: b.stato === 'confermata' ? 'APPROVED' : 'READY_FOR_FORMAL_REVIEW', version: b.stato === 'confermata' ? 'FINAL' : rivisto ? 'v2 rivisto' : 'v1 AI', rivisto,
       alerts: rev.riepilogo.crit, queue: rev.riepilogo.est,
       at: `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')} · ${ora(d.toISOString())}`,
       audio: rev.audio.label, fiducia: p.fiducia?.punteggio ?? null, ...rev.riepilogo,

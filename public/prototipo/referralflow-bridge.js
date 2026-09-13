@@ -48,7 +48,7 @@ async function rfCaricaDati() {
   RF.queue = (d.reports || []).map(x => ({ ...x }));
   rfSvuota(RV_QUEUE);
   for (const x of RF.queue) {
-    RV_QUEUE.push({ id: x.id, p: x.p, doc: x.doc, type: x.type, at: x.at, audio: x.audio, issues: x.issues, crit: x.crit, est: x.est, state: x.state, note: x.note, blocked: false, status: x.status });
+    RV_QUEUE.push({ id: x.id, p: x.p, doc: x.doc, type: x.type, at: x.at, audio: x.audio, issues: x.issues, crit: x.crit, est: x.est, state: x.state, note: x.note, blocked: false, status: x.status, rivisto: x.rivisto || null });
   }
   // Niente residui demo nelle pagine raggiungibili: archivio storico della
   // palette, audit e job finti, knowledge, fatture.
@@ -187,14 +187,14 @@ reportsQueue = function () {
       <div class="row wrap" style="gap:12px">
         <div class="avatar-sm">${initials(P[r.p])}</div>
         <div class="grow" style="min-width:220px">
-          <div class="row" style="gap:8px"><b>${rfEsc(fullName(P[r.p]))}</b><span class="badge ${st[1]}">${st[0]}</span>${r.status === 'APPROVED' ? '<span class="badge success">confermato</span>' : ''}</div>
+          <div class="row" style="gap:8px"><b>${rfEsc(fullName(P[r.p]))}</b><span class="badge ${st[1]}">${st[0]}</span>${r.status === 'APPROVED' ? '<span class="badge success">confermato</span>' : r.rivisto ? `<span class="badge accent" title="${r.rivisto.correzioni} correzioni · ${r.rivisto.chiuse} verifiche chiuse">rivisto ${rfEsc(r.rivisto.quando)}</span>` : ''}</div>
           <div class="caption">${rfEsc(DOCTORS[r.doc] || '')} · ${rfEsc(r.type)} · ${r.at}</div>
           <div class="sub" style="font-size:12.5px;color:var(--text-2);margin-top:2px">${rfEsc(r.note)}</div>
         </div>
         <div class="qm"><span class="v num">${r.issues}</span><span class="l">verifiche</span></div>
         <div class="qm"><span class="v num ${r.crit ? 'crit' : ''}">${r.crit}</span><span class="l">critiche</span></div>
         <div class="qm"><span class="v num">${r.audio}</span><span class="l">audio</span></div>
-        <button class="btn ${r.state === 'priority' ? 'primary' : ''}" data-go="#/review/${r.id}">${r.status === 'APPROVED' ? 'Rileggi' : r.state === 'clean' ? 'Lettura rapida' : 'Apri revisione'}</button>${r.status !== 'APPROVED' ? `<button class="btn ghost" data-prefirma="${r.id}" title="Controllo prima della firma, con traccia">✓ Controllo</button>` : ''}
+        <button class="btn ${r.state === 'priority' ? 'primary' : ''}" data-go="#/review/${r.id}">${r.status === 'APPROVED' ? 'Rileggi' : r.rivisto ? 'Riprendi e conferma' : r.state === 'clean' ? 'Lettura rapida' : 'Apri revisione'}</button>${r.status !== 'APPROVED' ? `<button class="btn ghost" data-prefirma="${r.id}" title="Controllo prima della firma, con traccia">✓ Controllo</button>` : ''}
       </div>
     </div>`;
   };
@@ -286,7 +286,10 @@ async function rfCaricaRevisione(id) {
     rfSvuota(RV_REPORT); (j.report || []).forEach(s => RV_REPORT.push(s));
     rfSvuota(RV_ISSUES); (j.issues || []).forEach(i => RV_ISSUES.push(i));
     RF.meta = j; RF.loaded = id; RF.loading = null;
-    localStorage.removeItem(RV_KEY);
+    // Revisione già fatta e salvata nel prototipo: riparte da lì (verifiche
+    // chiuse, correzioni per frase, frasi tolte o aggiunte).
+    if (j.revisione_prototipo && typeof j.revisione_prototipo === 'object') localStorage.setItem(RV_KEY, JSON.stringify(j.revisione_prototipo));
+    else localStorage.removeItem(RV_KEY);
     RV.issues = [];
     rfAudioSetup(j.audio.url);
     render();
@@ -323,10 +326,10 @@ rvFinish = function () {
   document.getElementById('rf-finish-salva').onclick = async () => {
     const b = document.getElementById('rf-finish-salva'); b.disabled = true; b.textContent = 'Salvo…';
     try {
-      const r = await fetch(`/api/prototipo/referti/${RF.loaded}/testo`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ testo, correzioni: RV.metrics.corrections, verifiche: rvDone() }) });
+      const r = await fetch(`/api/prototipo/referti/${RF.loaded}/testo`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ testo, correzioni: RV.metrics.corrections, verifiche: rvDone(), stato: rfStatoRevisione() }) });
       if (!r.ok) throw new Error(String(r.status));
       rvLog('SECRETARY_REVIEW_COMPLETED', `${RV.metrics.corrections} correzioni · salvato`);
-      closeModal(); toast('Salvato: la bozza resta da confermare'); go('#/reports');
+      closeModal(); toast('Salvato: il referto è segnato come rivisto, da confermare'); RF.loaded = null; go('#/reports'); void rfCaricaDati();
     } catch (e) { b.disabled = false; b.textContent = 'Salva'; toast(e.message === '409' ? 'La bozza è già confermata' : 'Salvataggio non riuscito'); }
   };
   document.getElementById('rf-finish-conferma').onclick = async () => {
@@ -351,6 +354,26 @@ rvFinish = function () {
     }
   };
 };
+
+
+/* ---------- lo stato della revisione va nella bozza, non solo nel browser ---------- */
+/* Ogni salvataggio locale del prototipo (rvSave, 500 ms) viene seguito da un
+   salvataggio nella piattaforma (2 s dopo l'ultima modifica): così la coda
+   mostra il referto come rivisto e un altro dispositivo riparte da lì. */
+const rfSaveOrig = rvSave;
+rvSave = function () {
+  rfSaveOrig();
+  if (!RF.live || !RF.loaded) return;
+  clearTimeout(rvSave._rf);
+  const id = RF.loaded;
+  rvSave._rf = setTimeout(async () => {
+    try {
+      const raw = localStorage.getItem(RV_KEY); if (!raw || RF.loaded !== id) return;
+      await fetch(`/api/prototipo/referti/${id}/testo`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stato: JSON.parse(raw) }), keepalive: true });
+    } catch { /* riprova al prossimo salvataggio */ }
+  }, 2000);
+};
+function rfStatoRevisione() { try { const raw = localStorage.getItem(RV_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; } }
 
 /* audio vero al posto dell'orologio simulato: stesse funzioni, stesso stato RV */
 function rfAudioSetup(url) {

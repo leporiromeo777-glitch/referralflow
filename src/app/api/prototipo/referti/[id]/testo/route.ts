@@ -11,6 +11,7 @@ export const dynamic = 'force-dynamic';
 // «Inserisci nel referto» del wizard), con un evento; la CONFERMA resta nella
 // piattaforma, col suo gate.
 const MAX_TESTO = 200_000;
+const MAX_STATO = 300_000;
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();
@@ -18,10 +19,24 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!isUuid(params.id)) return NextResponse.json({ errore: 'non_trovato' }, { status: 404 });
   const corpo = await req.json().catch(() => null);
   const testo = String(corpo?.testo ?? '').slice(0, MAX_TESTO).trim();
-  if (!testo) return NextResponse.json({ errore: 'testo_vuoto' }, { status: 400 });
+  // Stato della revisione del prototipo (verifiche chiuse, correzioni per
+  // frase, frasi tolte/aggiunte, metriche): vive in payload.revisione_prototipo
+  // così la coda lo vede come «rivisto» e la riapertura riparte da lì.
+  const stato = corpo?.stato && typeof corpo.stato === 'object' ? corpo.stato : null;
+  const statoJson = stato ? JSON.stringify({ ...stato, salvato_il: new Date().toISOString(), utente: session.id }).slice(0, MAX_STATO) : null;
+  if (statoJson && statoJson.length >= MAX_STATO) return NextResponse.json({ errore: 'stato_troppo_grande' }, { status: 413 });
+  if (!testo && !statoJson) return NextResponse.json({ errore: 'testo_vuoto' }, { status: 400 });
+  if (!testo) {
+    const [agg] = await query<{ id: string }>(
+      `update referti_bozze set payload = jsonb_set(payload, '{revisione_prototipo}', $3::jsonb) where id = $1 and studio_id = $2 and stato = 'bozza' returning id`,
+      [params.id, session.studioId, statoJson]);
+    if (!agg) return NextResponse.json({ errore: 'non_bozza' }, { status: 409 });
+    return NextResponse.json({ ok: true, solo_stato: true });
+  }
   const [agg] = await query<{ id: string }>(
-    `update referti_bozze set testo_finale = $3 where id = $1 and studio_id = $2 and stato = 'bozza' returning id`,
-    [params.id, session.studioId, testo]
+    `update referti_bozze set testo_finale = $3, payload = case when $4::jsonb is null then payload else jsonb_set(payload, '{revisione_prototipo}', $4::jsonb) end
+      where id = $1 and studio_id = $2 and stato = 'bozza' returning id`,
+    [params.id, session.studioId, testo, statoJson]
   );
   if (!agg) return NextResponse.json({ errore: 'non_bozza' }, { status: 409 });
   await registraEvento(session.studioId, params.id, 'testo_salvato', session.id, {

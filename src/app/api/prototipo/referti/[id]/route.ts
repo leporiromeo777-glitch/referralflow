@@ -43,6 +43,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     id: b.id,
     stato: b.stato,
     formato,
+    revisione_prototipo: p.revisione_prototipo && typeof p.revisione_prototipo === 'object' ? p.revisione_prototipo : null,
     livello_verifica: typeof p.manifesto?.livello_verifica === 'string' ? p.manifesto.livello_verifica : 'pieno',
     medico_id: typeof p.medico?.id === 'string' ? p.medico.id : null,
     tipo: b.tipo,
