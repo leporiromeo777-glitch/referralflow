@@ -339,12 +339,52 @@ rvSeek = function (t, play) {
   if (play) rvPlay(RV.t, null); else rvTick();
 };
 
+/* ---------- visualizzatore: i file veri si aprono accanto, dentro la piattaforma ---------- */
+const rfDvOpenOrig = dvOpen, rfRenderDocViewerOrig = renderDocViewer;
+dvOpen = function (idOrItem, source = '') {
+  if (!RF.live) return rfDvOpenOrig(idOrItem, source);
+  const id = typeof idOrItem === 'string' ? idOrItem : idOrItem && idOrItem.id;
+  const d = DOCUMENTS.find(x => x.id === id) || (PATIENTS.flatMap(p => (p.docs || []).map(x => ({ ...x, p: p.id }))).find(x => x.id === id));
+  if (!d) { toast('Documento non trovato'); return; }
+  const nome = String(d.filename || d.t || '').toLowerCase();
+  DV.open = true; DV.source = source;
+  DV.item = { id: d.id, live: true, p: d.p, title: d.t, date: d.date || d.d || '', kind: d.type || d.k || 'exam', filename: d.filename || '', pdf: nome.endsWith('.pdf'), testo: null };
+  if (!DV.item.pdf) {
+    fetch(`/api/prototipo/documenti/${d.id}/testo`, { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(j => { if (DV.item && DV.item.id === d.id) { DV.item.testo = j ? (j.testo || '(nessun testo estraibile)') : 'Testo non disponibile.'; renderDocViewer(); } }).catch(() => {});
+  }
+  render();
+};
+renderDocViewer = function () {
+  if (!RF.live || !DV.item || !DV.item.live) return rfRenderDocViewerOrig();
+  const el = document.getElementById('docviewer');
+  if (!el) return;
+  if (!DV.open) { el.innerHTML = ''; return; }
+  const a = DV.item;
+  const paz = a.p && P[a.p] ? fullName(P[a.p]) : '';
+  const corpo = a.pdf
+    ? `<iframe src="/api/documents/${a.id}#toolbar=1&view=FitH" title="${rfEsc(a.title)}" style="width:100%;height:100%;min-height:70vh;border:0;background:#fff;border-radius:12px"></iframe>`
+    : `<div class="dv-page"><div class="dv-head"><div><div class="dv-title">${rfEsc(a.title)}</div><div class="caption">${rfEsc(paz)}${a.date ? ' · ' + rfEsc(a.date) : ''}</div></div></div><pre style="white-space:pre-wrap;font:inherit;margin:12px 0 0">${a.testo == null ? 'Estraggo il testo…' : rfEsc(a.testo)}</pre></div>`;
+  el.innerHTML = `
+    <div class="dv-bar"><span class="section-title" style="margin:0">Documento</span><span class="badge">${rfEsc(DOC_TYPE[a.kind] || a.kind)}</span><span class="caption">${rfEsc(paz)}${a.date ? ' · ' + a.date : ''}</span>
+      <span class="right row" style="gap:4px">
+        ${a.p ? `<button class="icon-btn" title="Scheda paziente" data-go="#/patients/${a.p}">${ICONS.patients}</button>` : ''}
+        <button class="icon-btn" title="Chiedi all'assistente di riassumerlo" data-ai="Riassumi questo documento in poche righe">${ICONS.ai}</button>
+        <a class="icon-btn" title="Scarica" href="/api/documents/${a.id}" target="_blank" rel="noopener">${ICONS.download || '↓'}</a>
+        <button class="icon-btn" id="dv-close" title="Chiudi">${ICONS.x}</button></span></div>
+    ${DV.source ? `<div class="caption" style="padding:6px 14px 0">${ICONS.ai} ${rfEsc(DV.source)}</div>` : ''}
+    <div class="dv-body" style="display:flex;flex-direction:column">${corpo}</div>
+    <div class="dv-foot caption">${ICONS.shield} Apertura registrata nel registro accessi · chiedi all'assistente: «cosa dice questo documento?», «quali valori riporta?»</div>`;
+  el.querySelector('#dv-close').onclick = dvClose;
+  bindCommon(el);
+};
+
 /* ---------- il bot: sidebar AI sul modello locale della piattaforma ---------- */
 function rfContestoBot() {
   const s = RF.data ? RF.data.stats : {};
   const p = state.patientCtx ? P[state.patientCtx] : null;
   return {
     oggi: new Date().toISOString().slice(0, 10), ruolo: state.role, pagina: state.route,
+    documento_aperto: DV.open && DV.item && DV.item.live ? { titolo: DV.item.title, paziente: DV.item.p && P[DV.item.p] ? fullName(P[DV.item.p]) : null, data: DV.item.date } : null,
     numeri: s,
     agenda_oggi: APPTS.map(a => ({ ora: a.start, paziente: fullName(P[a.p]), medico: DOCTORS[a.doc], motivo: a.reason, stato: STATUS_LABEL[a.status] || a.status, in_ritardo: !!a.late })),
     attivita: TASKS.slice(0, 25).map(t => ({ titolo: t.title, scadenza: t.due, priorita: t.prio })),
@@ -394,7 +434,7 @@ function rfRispostaDocumento(q) {
   if (!pazienti.length && !chiavi.length) return null;
   const chi = pazienti.length ? pazienti.map(p => fullName(p)).join(', ') : null;
   if (trovati.length) {
-    return `<b>${trovati.length === 1 ? 'Trovato' : 'Trovati'}${chi ? ` per ${rfEsc(chi)}` : ''}</b><br>` + trovati.map(({ d }) => `• ${rfEsc(d.t)}${!chi && P[d.p] ? ' · ' + rfEsc(fullName(P[d.p])) : ''} · ${DOC_TYPE[d.type] || ''} · ${d.date} <a class="btn sm" href="/api/documents/${d.id}" target="_blank" rel="noopener">Apri</a></button-placeholder>`.replace('</button-placeholder>', '')).join('<br>') + (pazienti.length === 1 ? `<br><a class="btn sm ghost" data-go="#/patients/${pazienti[0].id}">Scheda di ${rfEsc(fullName(pazienti[0]))}</a>` : '');
+    return `<b>${trovati.length === 1 ? 'Trovato' : 'Trovati'}${chi ? ` per ${rfEsc(chi)}` : ''}</b><br>` + trovati.map(({ d }) => `• ${rfEsc(d.t)}${!chi && P[d.p] ? ' · ' + rfEsc(fullName(P[d.p])) : ''} · ${DOC_TYPE[d.type] || ''} · ${d.date} <button class="btn sm" data-doc="${d.id}">Apri</button> <a class="btn sm ghost" href="/api/documents/${d.id}" target="_blank" rel="noopener" title="Scarica il file">↓</a>`).join('<br>') + (pazienti.length === 1 ? `<br><a class="btn sm ghost" data-go="#/patients/${pazienti[0].id}">Scheda di ${rfEsc(fullName(pazienti[0]))}</a>` : '');
   }
   if (pazienti.length) return `Per ${rfEsc(chi)} non trovo documenti${chiavi.length ? ` che parlino di «${rfEsc(chiavi.join(' '))}»` : ' in cartella'}.${pazienti.length === 1 ? ` <a class="btn sm ghost" data-go="#/patients/${pazienti[0].id}">Apri la scheda</a>` : ''}`;
   if (chiavi.length) {
@@ -406,6 +446,9 @@ function rfRispostaDocumento(q) {
 
 function rfRispostaImmediata(q) {
   const ql = q.toLowerCase();
+  // Con un documento aperto accanto, le domande su «questo documento», i
+  // valori, le conclusioni, un riassunto vanno al modello con il suo testo.
+  if (DV.open && DV.item && DV.item.live && /questo|questa|documento|file|riassum|cosa dice|valor|conclusion|risultat|referto|esame|spieg|significa|anomal|normale|terapia|dosaggi|quando|chi ha|data/.test(ql) && !/trov|cerc|altri documenti|documenti di/.test(ql)) return null;
   const doc = rfRispostaDocumento(q);
   if (doc) return doc;
   const s = (RF.data && RF.data.stats) || {};
@@ -453,7 +496,7 @@ askAI = function (q) {
     state.aiMessages.push({ html: `<div class="ai-msg ai">${html}<div class="srcs"><span class="src">${fonte}</span></div></div>` });
     state.aiState = 'idle'; render();
   };
-  fetch('/api/prototipo/assistente', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domanda: q, ruolo: state.role, contesto: rfContestoBot() }) })
+  fetch('/api/prototipo/assistente', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domanda: q, ruolo: state.role, contesto: rfContestoBot(), documento_id: DV.open && DV.item && DV.item.live ? DV.item.id : null }) })
     .then(async r => {
       if (!r.ok || !r.body) { fine('L\'assistente non è raggiungibile in questo momento.', 'Piattaforma'); return; }
       const fonte = r.headers.get('X-Fonte') === 'modello locale' ? 'Modello locale · dati della piattaforma' : 'Piattaforma';

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { configurazioneOllama, ollamaAttivo } from '@/lib/ollama';
+import { isUuid } from '@/lib/cartella';
+import { testoDocumento } from '@/lib/documenti-testo';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,16 +24,20 @@ export async function POST(req: NextRequest) {
   if (!domanda) return NextResponse.json({ errore: 'domanda_mancante' }, { status: 400 });
   const contesto = JSON.stringify(corpo?.contesto ?? {}).slice(0, MAX_CONTESTO);
   const ruolo = String(corpo?.ruolo ?? 'secretary');
+  // Documento aperto nel visualizzatore: il suo testo entra nel prompt (modello locale).
+  const documentoId = typeof corpo?.documento_id === 'string' && isUuid(corpo.documento_id) ? corpo.documento_id : null;
+  const doc = documentoId ? await testoDocumento(session.studioId, documentoId, session.id) : null;
+  const blocccoDoc = doc ? `\n\nDOCUMENTO APERTO («${doc.nota || doc.filename}»${doc.troncato ? ', troncato' : ''}):\n${doc.testo || '(nessun testo estraibile: immagine o scansione senza OCR)'}` : '';
 
   const testoSemplice = (t: string, fonte: string) =>
     new Response(t, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'X-Fonte': fonte, 'Cache-Control': 'no-store' } });
   if (!(await ollamaAttivo())) {
     return testoSemplice('Il modello locale non è raggiungibile in questo momento: i numeri della giornata sono nelle schede in alto.', 'codice');
   }
-  const prompt = `Sei l'assistente di ReferralFlow, la piattaforma di uno studio medico svizzero. Rispondi in italiano, asciutto, al massimo 3 frasi o un elenco di 5 righe. Usa SOLO i dati qui sotto (JSON con i numeri e le liste della giornata, già filtrati per il ruolo «${ruolo}»). Se il dato non c'è, dillo: non inventare nomi, numeri o date. Niente consigli clinici.
+  const prompt = `Sei l'assistente di ReferralFlow, la piattaforma di uno studio medico svizzero. Rispondi in italiano, asciutto, al massimo ${doc ? 6 : 3} frasi o un elenco breve. Usa SOLO i dati qui sotto (JSON con i numeri e le liste della giornata, già filtrati per il ruolo «${ruolo}»${doc ? ', e il testo del documento aperto' : ''}). Se il dato non c'è, dillo: non inventare nomi, numeri o date. Riporta i valori esattamente come sono scritti. Niente consigli clinici, niente diagnosi: puoi riassumere, elencare valori e conclusioni scritte dal medico refertante.
 
 DATI:
-${contesto}
+${contesto}${blocccoDoc}
 
 DOMANDA: ${domanda}
 
@@ -41,7 +47,7 @@ RISPOSTA:`;
     r = await fetch(`${configurazioneOllama.url}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: MODELLO, prompt, stream: true, keep_alive: '30m', options: { temperature: 0, num_predict: 220 } }),
+      body: JSON.stringify({ model: MODELLO, prompt, stream: true, keep_alive: '30m', options: { temperature: 0, num_predict: doc ? 400 : 220 } }),
       signal: AbortSignal.timeout(240_000),
       cache: 'no-store',
     });
