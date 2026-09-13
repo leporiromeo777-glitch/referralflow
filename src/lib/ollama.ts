@@ -87,8 +87,6 @@ export async function modelliInstallati(): Promise<string[] | null> {
 }
 
 export type OpzioniOllama = {
-  /** modello diverso da OLLAMA_MODEL (es. il bot del prototipo usa il 12b: risponde in secondi) */
-  modello?: string;
   json?: boolean;
   // Immagini in base64 (gemma3 legge anche le foto: serve alla cattura locale).
   immagini?: string[];
