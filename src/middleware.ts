@@ -20,7 +20,9 @@ export async function middleware(req: NextRequest) {
   }
   if (!role) {
     const url = req.nextUrl.clone();
+    const dove = req.nextUrl.pathname + req.nextUrl.search;
     url.pathname = '/login';
+    url.search = dove && dove !== '/' ? `?next=${encodeURIComponent(dove)}` : '';
     return NextResponse.redirect(url);
   }
 

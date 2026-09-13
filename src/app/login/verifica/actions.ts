@@ -25,6 +25,8 @@ export async function verify2fa(_prev: State, formData: FormData): Promise<State
   if (!uid) redirect('/login');
 
   const code = String(formData.get('code') ?? '').trim();
+  const nextRaw = String(formData.get('next') ?? '').trim();
+  const next = nextRaw.startsWith('/') && !nextRaw.startsWith('//') && !nextRaw.includes('://') ? nextRaw : null;
   if (!code) return { error: 'Inserisci il codice.' };
 
   const [user] = await query<{
@@ -76,5 +78,5 @@ export async function verify2fa(_prev: State, formData: FormData): Promise<State
     studioId: user.studio_id ?? '',
     studioNome: user.studio_nome ?? '',
   });
-  redirect(user.role === 'medico' ? '/programma' : user.role === 'inviante' ? '/invii' : '/');
+  redirect(next ?? (user.role === 'medico' ? '/programma' : user.role === 'inviante' ? '/invii' : '/'));
 }

@@ -18,9 +18,17 @@ function clientIp(): string {
   return h.get('x-real-ip') ?? 'dev-locale';
 }
 
+// Dove tornare dopo il login (13.9.2026: il prototipo manda al login e vuole
+// tornare a sé stesso): solo percorsi interni, mai URL esterni.
+function destinazioneSicura(next: unknown): string | null {
+  const s = typeof next === 'string' ? next.trim() : '';
+  return s.startsWith('/') && !s.startsWith('//') && !s.includes('://') && s.length <= 300 ? s : null;
+}
+
 export async function login(_prev: State, formData: FormData): Promise<State> {
   const email = String(formData.get('email') ?? '').trim().toLowerCase();
   const password = String(formData.get('password') ?? '');
+  const next = destinazioneSicura(formData.get('next'));
   if (!email || !password) return { error: 'Inserisci email e password.' };
 
   const ip = clientIp();
@@ -55,7 +63,7 @@ export async function login(_prev: State, formData: FormData): Promise<State> {
   // La sessione vera nasce solo in /login/verifica, a codice confermato.
   if (user.totp_enabled_at) {
     await createPending2fa(user.id);
-    redirect('/login/verifica');
+    redirect(next ? `/login/verifica?next=${encodeURIComponent(next)}` : '/login/verifica');
   }
 
   clearLoginAttempts(email);
@@ -66,5 +74,5 @@ export async function login(_prev: State, formData: FormData): Promise<State> {
     studioId: user.studio_id ?? '',
     studioNome: user.studio_nome ?? '',
   });
-  redirect(user.role === 'medico' ? '/programma' : user.role === 'inviante' ? '/invii' : '/');
+  redirect(next ?? (user.role === 'medico' ? '/programma' : user.role === 'inviante' ? '/invii' : '/'));
 }

@@ -12,10 +12,11 @@ function SubmitButton() {
   );
 }
 
-export function VerifyForm() {
+export function VerifyForm({ next = '' }: { next?: string }) {
   const [state, formAction] = useFormState(verify2fa, {});
   return (
     <form action={formAction} className="card auth-card">
+      {next && <input type="hidden" name="next" value={next} />}
       <div className="brand brand-lg">
         Referral<span>Flow</span>
       </div>

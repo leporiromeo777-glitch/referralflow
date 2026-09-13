@@ -61,7 +61,7 @@ function rfPaginaAccesso() {
   c.innerHTML = `<div class="page"><div class="card" style="max-width:520px;margin:40px auto;text-align:center">
     <h2 class="page-title">Accedi alla piattaforma</h2>
     <p class="meta" style="line-height:1.55">Questa è l'interfaccia nuova di ReferralFlow con i dati veri dello studio: serve la sessione della piattaforma. Nessun dato dimostrativo viene mostrato.</p>
-    <a class="btn primary" href="/login" style="margin-top:12px;display:inline-flex">Vai al login</a>
+    <a class="btn primary" href="/login?next=%2Fprototipo%2Findex.html" style="margin-top:12px;display:inline-flex">Vai al login</a>
   </div></div>`;
   const sb = document.getElementById('sidebar'); if (sb) sb.innerHTML = '';
 }

@@ -12,10 +12,11 @@ function SubmitButton() {
   );
 }
 
-export function LoginForm() {
+export function LoginForm({ next = '' }: { next?: string }) {
   const [state, formAction] = useFormState(login, {});
   return (
     <form action={formAction} className="card auth-card">
+      {next && <input type="hidden" name="next" value={next} />}
       <div className="brand brand-lg">
         Referral<span>Flow</span>
       </div>

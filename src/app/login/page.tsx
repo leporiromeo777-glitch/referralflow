@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 export default function LoginPage({
   searchParams,
 }: {
-  searchParams: { reset?: string };
+  searchParams: { reset?: string; next?: string };
 }) {
   const phone = process.env.SUPPORT_PHONE;
   const email = process.env.SUPPORT_EMAIL;
@@ -18,7 +18,7 @@ export default function LoginPage({
       {searchParams.reset === '1' && (
         <p className="ok-line center">Password aggiornata: ora puoi accedere con la nuova password.</p>
       )}
-      <LoginForm />
+      <LoginForm next={typeof searchParams.next === 'string' && searchParams.next.startsWith('/') && !searchParams.next.startsWith('//') ? searchParams.next : ''} />
       {(phone || email) && (
         <p className="muted small center support-line">
           Assistenza 24/7:{' '}
