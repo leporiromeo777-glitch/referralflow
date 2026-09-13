@@ -29,8 +29,11 @@ export type EsitoBriefing = {
   traccia: { id: number; passi: PassoTraccia[]; modello: string | null; durata_ms: number; fatti: number };
 };
 
-export async function briefingPreVisita(studioId: string, patientId: string, opzioni: { userId?: string | null; conModello?: boolean } = {}): Promise<EsitoBriefing | null> {
-  const t0 = Date.now();
+export type BriefingGrezzo = { paziente: { id: string; nome: string; nascita: string }; briefing: Briefing; testo: string; fatti: number };
+
+// La parte senza modello e senza traccia: letture, regole, fatti nel grafo.
+// La usa anche la «preparazione della giornata», un paziente dopo l'altro.
+export async function briefingGrezzo(studioId: string, patientId: string): Promise<BriefingGrezzo | null> {
   const [p] = await query<{ id: string; cognome: string; nome: string; data_nascita: string | null }>(
     `select id, cognome, nome, data_nascita::text from patients where id = $1 and studio_id = $2`, [patientId, studioId]);
   if (!p) return null;
@@ -114,6 +117,19 @@ export async function briefingPreVisita(studioId: string, patientId: string, opz
   } finally {
     client.release();
   }
+
+  return { paziente: { id: p.id, nome: nomeCompleto, nascita: nascitaCh }, briefing, testo, fatti: fatti.length };
+}
+
+export async function briefingPreVisita(studioId: string, patientId: string, opzioni: { userId?: string | null; conModello?: boolean } = {}): Promise<EsitoBriefing | null> {
+  const t0 = Date.now();
+  const grezzo = await briefingGrezzo(studioId, patientId);
+  if (!grezzo) return null;
+  const { briefing, testo } = grezzo;
+  const fatti = { length: grezzo.fatti };
+  const nomeCompleto = grezzo.paziente.nome;
+  const nascitaCh = grezzo.paziente.nascita;
+  const p = { id: grezzo.paziente.id };
 
   // Sintesi del modello locale, sopra il briefing già deciso dal codice.
   const passi: PassoTraccia[] = [...briefing.passi];

@@ -75,3 +75,21 @@ test('controllo prima della firma: critiche aperte e campi mancanti bloccano; ve
   const senzaTerapia = controlloPreFirma({ ...ok, ...base, fatte: ['a0', 'r1'], campi: { ...base.campi, medico_destinatario: 'X' }, dettatoConTerapia: false });
   assert.ok(senzaTerapia.mancanti.some((m) => m.controllo === 'terapia'));
 });
+
+test('preparazione della giornata: mancanze in cima con ora e paziente, non in cartella segnalati, blocchi in ordine di ora', async () => {
+  const { aggregaGiornata } = await import('./procedure-regole');
+  const f = { tipo: 'documento' as const, id: 'd1', titolo: 'ECG' };
+  const voci = [
+    { ora: '10:30', paziente: 'Verdi Ugo', medico: 'Dr. X', motivo: 'Controllo', patientId: 'p2', briefing: { sezioni: [{ chiave: 'motivo', titolo: 'Motivo', righe: [{ testo: 'Palpitazioni' }] }, { chiave: 'esami', titolo: 'Esami', righe: [{ testo: 'ECG', fonte: f }] }], mancanti: [{ controllo: 'ecg_12_mesi', testo: 'Nessun ECG.' }], fonti: [f] } },
+    { ora: '08:30', paziente: 'Bianchi Anna', medico: null, motivo: null, patientId: null, briefing: null },
+  ];
+  const e = aggregaGiornata(voci, '13.09.2026');
+  assert.equal(e.sezioni[0].chiave, 'mancanze');
+  assert.deepEqual(e.sezioni[0].righe.map((r) => r.testo), ['10:30 Verdi Ugo: Nessun ECG.', '08:30 Bianchi Anna: non in cartella']);
+  assert.equal(e.sezioni[1].titolo, '08:30 · Bianchi Anna');
+  assert.equal(e.sezioni[2].titolo, '10:30 · Verdi Ugo · Dr. X · Controllo');
+  assert.equal(e.sezioni[2].righe[1].fonte?.id, 'd1');
+  assert.deepEqual(e.mancanti.map((m) => m.controllo), ['ecg_12_mesi', 'non_in_cartella']);
+  assert.equal(e.sintesi, '2 appuntamenti il 13.09.2026: 1 con cartella, 1 non in cartella, 1 cosa da segnalare.');
+  assert.equal(e.passi[1].nota, '1 in cartella · 1 no');
+});

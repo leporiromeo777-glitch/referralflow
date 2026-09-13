@@ -194,3 +194,64 @@ export function controlloPreFirma(i: IngressoPreFirma): Omit<EsitoProcedura, 'pr
   }];
   return { sottotitolo: undefined, sintesi, sezioni, mancanti, fonti: [f], passi };
 }
+
+/* ---------- preparazione della giornata ---------- */
+export type VoceGiornata = {
+  ora: string;              // «08:30»
+  paziente: string;         // nome mostrato (dall'agenda)
+  medico: string | null;
+  motivo: string | null;
+  patientId: string | null; // null = non in cartella
+  briefing: { sezioni: Sezione[]; mancanti: Mancante[]; fonti: Fonte[] } | null;
+};
+
+export function aggregaGiornata(voci: VoceGiornata[], dataCh: string): Omit<EsitoProcedura, 'procedura' | 'titolo' | 'azioni'> {
+  const ordinate = [...voci].sort((a, b) => a.ora.localeCompare(b.ora));
+  const sezioni: Sezione[] = [];
+  const fonti: Fonte[] = [];
+  const mancanti: Mancante[] = [];
+  const registra = (f: Fonte) => { if (!fonti.some((x) => x.tipo === f.tipo && x.id === f.id)) fonti.push(f); return f; };
+  // 1. Tutte le mancanze in cima, con ora e paziente.
+  const righeMancanze: Riga[] = [];
+  for (const v of ordinate) {
+    if (!v.briefing) continue;
+    for (const m of v.briefing.mancanti) {
+      righeMancanze.push({ testo: `${v.ora} ${v.paziente}: ${m.testo}` });
+      mancanti.push({ controllo: m.controllo, testo: `${v.ora} ${v.paziente}: ${m.testo}` });
+    }
+  }
+  const nonInCartella = ordinate.filter((v) => !v.patientId);
+  for (const v of nonInCartella) mancanti.push({ controllo: 'non_in_cartella', testo: `${v.ora} ${v.paziente}: non è in cartella (nessuna referral, documento o referto).` });
+  if (righeMancanze.length || nonInCartella.length) {
+    sezioni.push({ chiave: 'mancanze', titolo: `Da segnalare (${righeMancanze.length + nonInCartella.length})`, righe: [...righeMancanze, ...nonInCartella.map((v) => ({ testo: `${v.ora} ${v.paziente}: non in cartella` }))] });
+  }
+  // 2. Un blocco per appuntamento: motivo, terapia, esami, visite (righe più corte del briefing singolo).
+  for (const v of ordinate) {
+    const testa = `${v.ora} · ${v.paziente}${v.medico ? ` · ${v.medico}` : ''}${v.motivo ? ` · ${v.motivo}` : ''}`;
+    if (!v.briefing) { sezioni.push({ chiave: `app-${v.ora}-${v.paziente}`, titolo: testa, righe: [{ testo: 'Non in cartella.' }] }); continue; }
+    const righe: Riga[] = [];
+    const prendi = (chiave: string, max: number) => {
+      const s = v.briefing!.sezioni.find((x) => x.chiave === chiave);
+      if (!s) return;
+      for (const r of s.righe.slice(0, max)) righe.push({ testo: r.testo, fonte: r.fonte ? registra(r.fonte) : undefined });
+      if (s.righe.length > max) righe.push({ testo: `… e altre ${s.righe.length - max} righe di «${s.titolo}»` });
+    };
+    prendi('motivo', 2);
+    prendi('terapia', 6);
+    prendi('esami', 3);
+    prendi('sospeso', 3);
+    sezioni.push({ chiave: `app-${v.ora}-${v.paziente}`, titolo: testa, righe: righe.length ? righe : [{ testo: 'Cartella vuota.' }] });
+  }
+  const conBriefing = ordinate.filter((v) => v.briefing).length;
+  const passi: Passo[] = [
+    { passo: `Appuntamenti del ${dataCh} in agenda`, esito: ordinate.length ? 'ok' : 'vuoto', fonti: [], nota: `${ordinate.length}` },
+    { passo: 'Pazienti trovati in cartella (cognome e nome dell’agenda)', esito: conBriefing ? 'ok' : nonInCartella.length ? 'mancante' : 'vuoto', fonti: ordinate.filter((v) => v.patientId).map((v) => v.patientId as string), nota: `${conBriefing} in cartella · ${nonInCartella.length} no` },
+    { passo: 'Briefing pre-visita eseguito per ciascuno (stesse regole del singolo)', esito: conBriefing ? 'ok' : 'vuoto', fonti: [], nota: `${conBriefing} briefing` },
+    { passo: 'Mancanze raccolte in cima', esito: righeMancanze.length ? 'ok' : 'vuoto', fonti: [], nota: `${righeMancanze.length}` },
+  ];
+  const sintesi = ordinate.length
+    ? `${ordinate.length} appuntament${ordinate.length === 1 ? 'o' : 'i'} il ${dataCh}: ${conBriefing} con cartella, ${nonInCartella.length} non in cartella, ${righeMancanze.length} cos${righeMancanze.length === 1 ? 'a' : 'e'} da segnalare.`
+    : `Nessun appuntamento in agenda il ${dataCh}.`;
+  if (!sezioni.length) sezioni.push({ chiave: 'nessuno', titolo: 'Agenda', righe: [{ testo: 'Nessun appuntamento.' }] });
+  return { sottotitolo: undefined, sintesi, sezioni, mancanti, fonti, passi };
+}

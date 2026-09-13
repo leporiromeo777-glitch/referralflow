@@ -97,3 +97,44 @@ export async function controlloPrimaDellaFirma(studioId: string, bozzaId: string
     azioni: [{ etichetta: 'Revisione', go: `#/review/${b.id}` }, { etichetta: 'Conferma nella piattaforma', href: `/referti/${b.id}` }],
   }, t0);
 }
+
+/* ---------- preparazione della giornata ---------- */
+// Il briefing di tutti i pazienti in agenda oggi (o in una data), uno dopo
+// l'altro con le stesse regole del singolo (`briefingGrezzo`: niente modello,
+// i fatti nel grafo si aggiornano), le mancanze raccolte in cima. L'agenda del
+// robot conosce i pazienti per nome: abbinamento per cognome+nome nei due
+// ordini, come il resto della piattaforma.
+export async function preparazioneGiornata(studioId: string, userId?: string | null, giorno?: string): Promise<Traccia> {
+  const t0 = Date.now();
+  const { briefingGrezzo } = await import('./briefing');
+  const { aggregaGiornata } = await import('./procedure-regole');
+  const data = giorno && /^\d{4}-\d{2}-\d{2}$/.test(giorno) ? giorno : null;
+  const appts = await query<{ id: string; starts_at: string; paziente_nome: string | null; titolo: string | null; motivo: string | null; medico: string | null; completed_at: string | null }>(
+    `select a.id, a.starts_at::text, a.paziente_nome, a.titolo, a.motivo, pr.nome as medico, a.completed_at::text
+       from appointments a left join providers pr on pr.id = a.provider_id
+      where a.studio_id = $1 and a.starts_at >= coalesce($2::date, current_date) and a.starts_at < coalesce($2::date, current_date) + 1
+      order by a.starts_at`,
+    [studioId, data]);
+  const pazienti = await query<{ id: string; cognome: string; nome: string }>(`select id, cognome, nome from patients where studio_id = $1`, [studioId]);
+  const slug = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const perNome = new Map<string, string>();
+  for (const p of pazienti) { perNome.set(slug(`${p.cognome} ${p.nome}`), p.id); perNome.set(slug(`${p.nome} ${p.cognome}`), p.id); }
+  const voci = [];
+  const cache = new Map<string, Awaited<ReturnType<typeof briefingGrezzo>>>();
+  for (const a of appts) {
+    const nome = (a.paziente_nome ?? a.titolo ?? 'Paziente').trim();
+    const pid = perNome.get(slug(nome)) ?? null;
+    let b = pid ? cache.get(pid) : undefined;
+    if (pid && b === undefined) { b = await briefingGrezzo(studioId, pid); cache.set(pid, b); }
+    const d = new Date(a.starts_at);
+    voci.push({
+      ora: `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`,
+      paziente: nome, medico: a.medico, motivo: a.motivo, patientId: pid,
+      briefing: b ? { sezioni: b.briefing.sezioni, mancanti: b.briefing.mancanti, fonti: b.briefing.fonti } : null,
+    });
+  }
+  const dd = data ? new Date(`${data}T12:00:00`) : new Date();
+  const dataCh = `${String(dd.getDate()).padStart(2, '0')}.${String(dd.getMonth() + 1).padStart(2, '0')}.${dd.getFullYear()}`;
+  const e = aggregaGiornata(voci, dataCh);
+  return conTraccia(studioId, userId, null, { ...e, procedura: 'preparazione_giornata', titolo: `Preparazione della giornata · ${dataCh}`, azioni: [{ etichetta: 'Agenda', go: '#/agenda' }] }, t0);
+}
