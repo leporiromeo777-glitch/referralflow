@@ -794,6 +794,67 @@ function rfRispondiLibera(q) {
     .catch(() => fine('L\'assistente non è raggiungibile in questo momento.', 'Piattaforma'));
 };
 
+
+/* ---------- menu a pillola sul telefono: sparisce scorrendo in giù, torna in su ---------- */
+(function () {
+  const st = document.createElement('style');
+  st.textContent = `
+  @media (max-width: 767px) {
+    .mobile-nav.rf-pill { left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); border-radius: 999px; border: 1px solid var(--border-2); box-shadow: var(--shadow-2); padding: 6px 6px; justify-content: space-between; transition: transform .28s var(--ease), opacity .28s var(--ease); will-change: transform; }
+    .mobile-nav.rf-pill button { padding: 4px 6px; min-width: 48px; border-radius: 999px; }
+    .mobile-nav.rf-pill button.active { background: var(--accent-soft); }
+    .mobile-nav.rf-pill svg { width: 20px; height: 20px; }
+    .mobile-nav.rf-pill.rf-nascosta { transform: translateY(calc(100% + 28px)); opacity: 0; pointer-events: none; }
+    .content { padding-bottom: 104px; }
+  }`;
+  document.head.appendChild(st);
+  let ultimo = 0, accumulato = 0;
+  function aggancia() {
+    const c = document.getElementById('content');
+    if (!c || c.dataset.rfPillola) return;
+    c.dataset.rfPillola = '1';
+    c.addEventListener('scroll', () => {
+      const nav = document.getElementById('mobilenav');
+      if (!nav || !nav.classList.contains('rf-pill')) return;
+      const y = c.scrollTop;
+      const delta = y - ultimo;
+      ultimo = y;
+      if (y <= 8) { nav.classList.remove('rf-nascosta'); accumulato = 0; return; }
+      accumulato = (delta > 0) === (accumulato > 0) ? accumulato + delta : delta;
+      if (accumulato > 24) nav.classList.add('rf-nascosta');
+      else if (accumulato < -12) nav.classList.remove('rf-nascosta');
+    }, { passive: true });
+  }
+  window.addEventListener('load', aggancia);
+  if (document.readyState !== 'loading') aggancia();
+  // Si mostra di nuovo solo quando cambia la pagina (non a ogni ri-disegno:
+  // l'orologio ridisegna spesso e azzerare la posizione invertiva il verso).
+  let rottaMostrata = null;
+  window.rfPillolaMostra = function () {
+    if (rottaMostrata === state.route) return;
+    rottaMostrata = state.route;
+    const nav = document.getElementById('mobilenav'); if (nav) nav.classList.remove('rf-nascosta');
+    const c = document.getElementById('content'); ultimo = c ? c.scrollTop : 0; accumulato = 0;
+  };
+})();
+const rfMobileNavOrig = renderMobileNav;
+renderMobileNav = function () {
+  if (!RF.live) return rfMobileNavOrig();
+  const nav = document.getElementById('mobilenav');
+  if (!nav) return;
+  nav.classList.add('rf-pill');
+  const voci = [['home', 'Oggi', 'home'], ['agenda', 'Agenda', 'agenda'], ['patients', 'Pazienti', 'patients'], ['reports', 'Referti', 'reports'], ['dittafono', 'Dittafono', 'mic'], ['ai', 'AI', 'ai']];
+  const attiva = (k) => k === 'ai' ? state.aiOpen : (state.route === k || (k === 'patients' && ['patient', 'visit'].includes(state.route)) || (k === 'reports' && ['report', 'review'].includes(state.route)));
+  nav.innerHTML = voci.map(([k, l, i]) => `<button class="${attiva(k) ? 'active' : ''}" data-mnav="${k}" aria-label="${l}">${ICONS[i] || ''}<span>${l}</span></button>`).join('');
+  nav.querySelectorAll('button').forEach(b => b.onclick = () => {
+    const k = b.dataset.mnav;
+    if (k === 'ai') { state.aiOpen = !state.aiOpen; render(); return; }
+    if (k === 'dittafono') { window.location.href = '/dittafono/'; return; }
+    go('#/' + k);
+  });
+  if (typeof window.rfPillolaMostra === 'function') window.rfPillolaMostra();
+};
+
 /* ---------- avvio: dentro la piattaforma niente demo, mai ---------- */
 function rfPaginaCarico() {
   const c = document.getElementById('content');
