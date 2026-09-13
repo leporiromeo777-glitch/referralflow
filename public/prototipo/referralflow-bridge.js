@@ -355,8 +355,54 @@ function rfContestoBot() {
 }
 /* Risposte immediate, senza modello, per le domande più comuni: numeri,
    prossimo paziente, referti, urgenze, richiami. Il modello resta per il resto. */
+/* Ricerca di un documento in cartella dalla domanda («trovami il duplex di Blazek»,
+   «l'eco da sforzo di Karel Blazek», «documenti di Rossi»): paziente per nome,
+   esame per parole del titolo o del nome del file. Deterministico, con link
+   di apertura (la piattaforma registra ogni accesso). */
+const RF_GENERICHE = new Set(['trova', 'trovami', 'cerca', 'cercami', 'mostra', 'mostrami', 'apri', 'aprimi', 'dammi', 'documento', 'documenti', 'esame', 'esami', 'referto', 'referti', 'paziente', 'della', 'dello', 'delle', 'degli', 'quale', 'quali', 'ultimo', 'ultima', 'vorrei', 'voglio', 'puoi', 'fammi', 'vedere', 'cartella', 'file', 'signor', 'signora', 'dottor', 'anno', 'mese']);
+const rfNorm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const rfTok = (s) => (rfNorm(s).match(/[a-z0-9]{3,}/g) || []);
+function rfCercaDocumenti(q) {
+  const tok = rfTok(q).filter(t => !RF_GENERICHE.has(t));
+  if (!tok.length) return null;
+  // paziente: cognome o nome che compare tra le parole della domanda
+  const pazienti = PATIENTS.filter(p => {
+    const nomi = [...rfTok(p.last), ...rfTok(p.first)];
+    return nomi.some(n => tok.some(t => t === n || (t.length >= 4 && n.startsWith(t)) || (n.length >= 4 && t.startsWith(n))));
+  });
+  const nomiPaz = new Set(pazienti.flatMap(p => [...rfTok(p.last), ...rfTok(p.first)]));
+  const chiavi = tok.filter(t => ![...nomiPaz].some(n => n === t || n.startsWith(t) || t.startsWith(n)));
+  const candidati = pazienti.length ? DOCUMENTS.filter(d => pazienti.some(p => p.id === d.p)) : DOCUMENTS;
+  const punteggio = (d) => {
+    const testo = rfTok(`${d.t} ${d.filename || ''} ${DOC_TYPE[d.type] || ''}`);
+    let n = 0;
+    for (const k of chiavi) if (testo.some(w => w === k || (k.length >= 4 && w.startsWith(k.slice(0, 5))) || (w.length >= 4 && k.startsWith(w.slice(0, 5))))) n++;
+    return n;
+  };
+  const trovati = candidati.map(d => ({ d, n: punteggio(d) })).filter(x => (chiavi.length ? x.n > 0 : true)).sort((a, b) => b.n - a.n || String(b.d.date).localeCompare(String(a.d.date))).slice(0, 6);
+  return { pazienti, chiavi, trovati };
+}
+function rfRispostaDocumento(q) {
+  const ql = q.toLowerCase();
+  if (!/trova|cerca|mostra|apri|dammi|document|esame|esami|referto|duplex|eco|ecg|holter|tac|lettera|risonanza|coronar|laborator|ergometr|scintigraf|dimission/.test(ql)) return null;
+  if (/referti (da )?(controllare|rivedere|approvare)|bozze/.test(ql)) return null;
+  const r = rfCercaDocumenti(q);
+  if (!r) return null;
+  const { pazienti, chiavi, trovati } = r;
+  if (!pazienti.length && !chiavi.length) return null;
+  const chi = pazienti.length ? pazienti.map(p => fullName(p)).join(', ') : null;
+  if (trovati.length) {
+    return `<b>${trovati.length === 1 ? 'Trovato' : 'Trovati'}${chi ? ` per ${rfEsc(chi)}` : ''}</b><br>` + trovati.map(({ d }) => `• ${rfEsc(d.t)}${!chi && P[d.p] ? ' · ' + rfEsc(fullName(P[d.p])) : ''} · ${DOC_TYPE[d.type] || ''} · ${d.date} <a class="btn sm" href="/api/documents/${d.id}" target="_blank" rel="noopener">Apri</a></button-placeholder>`.replace('</button-placeholder>', '')).join('<br>') + (pazienti.length === 1 ? `<br><a class="btn sm ghost" data-go="#/patients/${pazienti[0].id}">Scheda di ${rfEsc(fullName(pazienti[0]))}</a>` : '');
+  }
+  if (pazienti.length) return `Per ${rfEsc(chi)} non trovo documenti${chiavi.length ? ` che parlino di «${rfEsc(chiavi.join(' '))}»` : ' in cartella'}.${pazienti.length === 1 ? ` <a class="btn sm ghost" data-go="#/patients/${pazienti[0].id}">Apri la scheda</a>` : ''}`;
+  if (chiavi.length) return `Non trovo documenti in cartella per «${rfEsc(chiavi.join(' '))}» e non riconosco un paziente nella domanda: scrivi cognome (o nome) del paziente e il tipo di esame, per esempio «duplex di Blazek».`;
+  return null;
+}
+
 function rfRispostaImmediata(q) {
   const ql = q.toLowerCase();
+  const doc = rfRispostaDocumento(q);
+  if (doc) return doc;
   const s = (RF.data && RF.data.stats) || {};
   const appts = [...APPTS].sort((a, b) => a.start.localeCompare(b.start));
   const now = new Date(); const hm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
