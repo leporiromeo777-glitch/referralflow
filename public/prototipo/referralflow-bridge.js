@@ -861,6 +861,19 @@ function rfRispondiLibera(q) {
     .ai-msg { overflow-wrap: anywhere; }
     /* con la sezione AI aperta il menu a pillola sparisce */
     .mobile-nav.rf-pill.rf-ai { display: none; }
+  }
+  /* Revisione guidata su telefono e tablet stretto: il prototipo nascondeva
+     la colonna delle segnalazioni (le correzioni) sotto i 1040 px. Qui la
+     colonna sta SOPRA il testo, alta al massimo il 42% dello schermo e
+     scorrevole; il dettaglio con l'audio resta il pannello che scorre da destra. */
+  @media (max-width: 1040px) {
+    .rv-grid, .rv-grid.no-src { grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: auto minmax(0, 1fr); }
+    .rv-nav { display: flex !important; max-height: 42vh; border-right: 0; border-bottom: 1px solid var(--border); }
+    .rv-nav-body { -webkit-overflow-scrolling: touch; }
+    .rv-src { position: fixed; right: 0; top: 0; bottom: 0; width: min(420px, 92vw); z-index: 40; box-shadow: var(--shadow-2); }
+    .rv-top { flex-wrap: wrap; height: auto; min-height: 51px; padding: 6px 10px; gap: 6px; }
+    .rv-doc { max-width: 100%; }
+    .rv .content, .rv-doc-wrap { overflow-x: hidden; }
   }`;
   document.head.appendChild(st);
   let ultimo = 0, accumulato = 0;
