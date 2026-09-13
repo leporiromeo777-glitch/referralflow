@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { mediciDelloStudio } from '@/lib/referti-medici';
 import { costruisciRevisione } from '@/lib/prototipo-revisione';
+import { tipoEsame } from '@/lib/briefing-regole';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,6 +36,7 @@ function slug(s: string): string {
   return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 const RUOLO: Record<string, string> = { segretaria: 'secretary', medico: 'doctor', admin: 'org_admin', inviante: 'secretary' };
+const ETICHETTA_ESAME: Record<string, string> = { ecg: 'ECG', eco: 'Ecocardiogramma', holter: 'Holter', ergometria: 'Ergometria', duplex: 'Duplex', laboratorio: 'Laboratorio', referto: 'Referto di esame', altro: 'Documento' };
 const DOC_TYPE: Record<string, string> = { referto: 'report', ecg: 'ecg', imaging: 'imaging', lettera: 'letter', consenso: 'consent', altro: 'admin' };
 
 export async function GET() {
@@ -97,7 +99,13 @@ export async function GET() {
       phone: p.telefono ?? '', email: '', doctor: null, gp: rr[0]?.medico ?? '',
       flags: rr.some((r) => r.urgenza === 'urgente' && r.status !== 'chiusa') ? ['Referral urgente aperta'] : [],
       problems: rr.filter((r) => r.quesito).slice(0, 6).map((r) => ({ l: r.quesito as string, s: r.status === 'chiusa' ? 'resolved' : 'eval', since: dCh(r.created_at) })),
-      meds: [], exams: [],
+      meds: [],
+      // Sezione «Esami» della scheda: i documenti della cartella che sono esami
+      // (tutto tranne lettere e consensi), con il tipo riconosciuto e l'id per aprirli.
+      exams: dd.filter((d) => !['lettera', 'consenso'].includes(d.categoria)).map((d) => {
+        const k = tipoEsame(d);
+        return { id: d.id, t: d.nota || d.filename, d: dCh(d.uploaded_at), r: ETICHETTA_ESAME[k] ?? 'Documento', k, filename: d.filename };
+      }),
       docs: dd.map((d) => ({ id: d.id, t: d.nota || d.filename, d: dCh(d.uploaded_at), k: DOC_TYPE[d.categoria] ?? 'admin', new: (adesso - new Date(d.uploaded_at).getTime()) < 7 * 86400000 })),
       lastVisit: passati.length ? dCh(passati[passati.length - 1].starts_at) : '',
       next: futuri.length ? `${dCh(futuri[0].starts_at)} ${ora(futuri[0].starts_at)}` : '',

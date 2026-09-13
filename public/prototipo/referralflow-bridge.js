@@ -469,6 +469,11 @@ function rfRispostaDocumento(q) {
   const { pazienti, chiavi, trovati } = r;
   if (!pazienti.length && !chiavi.length) return null;
   const chi = pazienti.length ? pazienti.map(p => fullName(p)).join(', ') : null;
+  if (trovati.length === 1 && /^(apri|aprimi|mostrami|fammi vedere|vedi|visualizza)/.test(ql.trim()) && typeof dvOpen === 'function') {
+    const d = trovati[0].d;
+    setTimeout(() => dvOpen(d.id), 50);
+    return `Apro «${rfEsc(d.t)}»${P[d.p] ? ` di ${rfEsc(fullName(P[d.p]))}` : ''} (${d.date}). Puoi chiedermi cosa dice.`;
+  }
   if (trovati.length) {
     return `<b>${trovati.length === 1 ? 'Trovato' : 'Trovati'}${chi ? ` per ${rfEsc(chi)}` : ''}</b><br>` + trovati.map(({ d }) => `• ${rfEsc(d.t)}${!chi && P[d.p] ? ' · ' + rfEsc(fullName(P[d.p])) : ''} · ${DOC_TYPE[d.type] || ''} · ${d.date} <button class="btn sm" data-doc="${d.id}">Apri</button> <a class="btn sm ghost" href="/api/documents/${d.id}" target="_blank" rel="noopener" title="Scarica il file">↓</a>`).join('<br>') + (pazienti.length === 1 ? `<br><a class="btn sm ghost" data-go="#/patients/${pazienti[0].id}">Scheda di ${rfEsc(fullName(pazienti[0]))}</a>` : '');
   }
@@ -904,6 +909,16 @@ renderMobileNav = function () {
     go('#/' + k);
   });
   if (typeof window.rfPillolaMostra === 'function') window.rfPillolaMostra();
+};
+
+
+/* ---------- scheda paziente, sezione «Esami»: i file veri della cartella ---------- */
+const rfPatientExamsOrig = patientExams;
+patientExams = function (p) {
+  if (!RF.live) return rfPatientExamsOrig(p);
+  const esami = (p.exams || []);
+  if (!esami.length) return `<div class="card"><div class="caption">Nessun esame in cartella. I documenti si caricano dalla scheda del paziente nella piattaforma; chiedi al bot «trova l'ECG di ${rfEsc(p.last)}» quando ci sono.</div></div>`;
+  return `<div class="grid grid-3">${esami.map(e => `<div class="card"><div class="card-head"><span class="section-title">${rfEsc(e.t)}</span><span class="caption num">${e.d}</span></div><div class="row wrap" style="gap:6px;align-items:center"><span class="badge">${rfEsc(e.r)}</span><span class="caption">${rfEsc(e.filename || '')}</span></div><div class="row mt-8"><button class="btn sm" data-doc="${e.id}">Apri</button><a class="btn sm ghost" href="/api/documents/${e.id}" target="_blank" rel="noopener" title="Scarica il file">↓ Scarica</a><button class="btn sm ghost" data-ai="Riassumi ${rfEsc(e.t)} di ${rfEsc(p.last)}">✦ Chiedi all'AI</button></div></div>`).join('')}</div>`;
 };
 
 /* ---------- avvio: dentro la piattaforma niente demo, mai ---------- */
