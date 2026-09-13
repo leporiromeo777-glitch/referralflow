@@ -62,8 +62,8 @@ export async function GET() {
   if (!Object.keys(doctors).length) doctors.studio = session.studioNome;
 
   // Pazienti con cartella: referral (quesiti, medico inviante), documenti, appuntamenti.
-  const pazienti = await query<{ id: string; cognome: string; nome: string; data_nascita: string | null; telefono: string | null }>(
-    `select id, cognome, nome, data_nascita::text, telefono from patients where studio_id = $1 order by cognome, nome limit 500`, [sid]);
+  const pazienti = await query<{ id: string; cognome: string; nome: string; data_nascita: string | null; telefono: string | null; assicurazione: string | null }>(
+    `select id, cognome, nome, data_nascita::text, telefono, assicurazione from patients where studio_id = $1 order by cognome, nome limit 500`, [sid]);
   const refs = await query<{ id: string; patient_id: string; quesito: string | null; urgenza: string; status: string; created_at: string; medico: string | null; appuntamento_at: string | null; follow_up_due: string | null }>(
     `select r.id, r.patient_id, r.quesito, r.urgenza, r.status, r.created_at::text, d.nome as medico, r.appuntamento_at::text, r.follow_up_due::text
        from referrals r left join referring_doctors d on d.id = r.referring_doctor_id
@@ -107,6 +107,9 @@ export async function GET() {
         return { id: d.id, t: d.nota || d.filename, d: dCh(d.uploaded_at), r: ETICHETTA_ESAME[k] ?? 'Documento', k, filename: d.filename };
       }),
       docs: dd.map((d) => ({ id: d.id, t: d.nota || d.filename, d: dCh(d.uploaded_at), k: DOC_TYPE[d.categoria] ?? 'admin', new: (adesso - new Date(d.uploaded_at).getTime()) < 7 * 86400000 })),
+      assicurazione: p.assicurazione ?? '',
+      // Tutte le visite in agenda del paziente (passate e future), per la scheda.
+      visits: aa.map((a) => ({ id: a.id, d: dCh(a.starts_at), ora: ora(a.starts_at), medico: a.medico ?? '', motivo: a.motivo ?? a.titolo ?? '', fatta: !!a.completed_at || new Date(a.starts_at).getTime() < adesso, futura: new Date(a.starts_at).getTime() >= adesso })),
       lastVisit: passati.length ? dCh(passati[passati.length - 1].starts_at) : '',
       next: futuri.length ? `${dCh(futuri[0].starts_at)} ${ora(futuri[0].starts_at)}` : '',
       referrals: rr.slice(0, 10).map((r) => ({ id: r.id, quesito: r.quesito, urgenza: r.urgenza, status: r.status, at: dCh(r.created_at), medico: r.medico })),
@@ -130,7 +133,7 @@ export async function GET() {
       const pezzi = nome.split(/\s+/);
       p = `ag-${a.id.slice(0, 8)}`;
       if (!P.has(p)) {
-        const sched = { id: p, num: '', first: pezzi.slice(1).join(' ') || '—', last: pezzi[0] || nome, dob: '', age: '' as const, sex: '', phone: '', email: '', doctor: null, gp: '', flags: [], problems: [], meds: [], exams: [], docs: [], lastVisit: '', next: '', referrals: [] };
+        const sched = { id: p, num: '', first: pezzi.slice(1).join(' ') || '—', last: pezzi[0] || nome, dob: '', age: '' as const, sex: '', phone: '', email: '', doctor: null, gp: '', flags: [], problems: [], meds: [], exams: [], docs: [], lastVisit: '', next: '', referrals: [], assicurazione: '', visits: [] };
         patients.push(sched); P.set(p, sched);
       }
     }
@@ -185,7 +188,7 @@ export async function GET() {
       pid = `rf-${b.id.slice(0, 8)}`;
       if (!P.has(pid)) {
         const pezzi = (nomePaz || 'Paziente non indicato').split(/\s+/);
-        const sched = { id: pid, num: '', first: pezzi.slice(1).join(' ') || '—', last: pezzi[0], dob: campo('data_nascita'), age: '' as const, sex: '', phone: '', email: '', doctor: null, gp: '', flags: [], problems: [], meds: [], exams: [], docs: [], lastVisit: '', next: '', referrals: [] };
+        const sched = { id: pid, num: '', first: pezzi.slice(1).join(' ') || '—', last: pezzi[0], dob: campo('data_nascita'), age: '' as const, sex: '', phone: '', email: '', doctor: null, gp: '', flags: [], problems: [], meds: [], exams: [], docs: [], lastVisit: '', next: '', referrals: [], assicurazione: '', visits: [] };
         patients.push(sched); P.set(pid, sched);
       }
     }
