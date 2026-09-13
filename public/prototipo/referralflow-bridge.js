@@ -934,6 +934,40 @@ patientExams = function (p) {
   return `<div class="grid grid-3">${esami.map(e => `<div class="card"><div class="card-head"><span class="section-title">${rfEsc(e.t)}</span><span class="caption num">${e.d}</span></div><div class="row wrap" style="gap:6px;align-items:center"><span class="badge">${rfEsc(e.r)}</span><span class="caption">${rfEsc(e.filename || '')}</span></div><div class="row mt-8"><button class="btn sm" data-doc="${e.id}">Apri</button><a class="btn sm ghost" href="/api/documents/${e.id}" target="_blank" rel="noopener" title="Scarica il file">↓ Scarica</a><button class="btn sm ghost" data-ai="Riassumi ${rfEsc(e.t)} di ${rfEsc(p.last)}">✦ Chiedi all'AI</button></div></div>`).join('')}</div>`;
 };
 
+
+/* ---------- tasto «indietro» sul telefono (topbar e revisione a schermo pieno) ---------- */
+(function () {
+  const st = document.createElement('style');
+  st.textContent = `
+  .rf-indietro { display: none; border: 0; background: transparent; color: var(--text-2); width: 36px; height: 36px; border-radius: 50%; align-items: center; justify-content: center; flex: none; }
+  .rf-indietro svg { width: 22px; height: 22px; }
+  .rf-indietro:active { background: rgba(127,127,127,.12); }
+  @media (max-width: 767px) { .rf-indietro { display: inline-flex; } .topbar .title { min-width: 0; } }`;
+  document.head.appendChild(st);
+})();
+const RF_ICONA_INDIETRO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
+/* Storia delle pagine viste dentro il prototipo: «indietro» torna alla
+   precedente, mai fuori dall'app (login, piattaforma). */
+const RF_STORIA = [];
+function rfRicordaPagina() {
+  const h = location.hash || '#/home';
+  if (RF_STORIA[RF_STORIA.length - 1] !== h) { RF_STORIA.push(h); if (RF_STORIA.length > 50) RF_STORIA.shift(); }
+}
+function rfIndietro() {
+  RF_STORIA.pop();
+  const prec = RF_STORIA.pop();
+  go(prec || '#/home');
+}
+function rfTastoIndietro() {
+  if (state.route === 'home') return;
+  const dove = document.querySelector('.rv-top') || document.querySelector('#topbar');
+  if (!dove || dove.querySelector('.rf-indietro')) return;
+  const b = document.createElement('button');
+  b.className = 'rf-indietro'; b.title = 'Indietro'; b.setAttribute('aria-label', 'Indietro'); b.innerHTML = RF_ICONA_INDIETRO;
+  b.onclick = (e) => { e.stopPropagation(); rfIndietro(); };
+  dove.insertBefore(b, dove.firstChild);
+}
+
 /* ---------- avvio: dentro la piattaforma niente demo, mai ---------- */
 function rfPaginaCarico() {
   const c = document.getElementById('content');
@@ -946,6 +980,8 @@ if (rfDentro()) {
     if (RF.nonAutorizzato) return rfPaginaAccesso();
     if (!RF.caricato) return rfPaginaCarico();
     const out = rfRenderVero();
+    rfRicordaPagina();
+    rfTastoIndietro();
     document.querySelectorAll('[data-prefirma]').forEach(el => { el.onclick = (e) => { e.stopPropagation(); if (!state.aiOpen) state.aiOpen = true; state.aiMessages.push({ html: `<div class="ai-msg user">Controllo prima della firma</div>` }); rfProcedura({ nome: 'controllo_prefirma', bozza_id: el.dataset.prefirma }, 'Controllo la bozza prima della firma…'); }; });
     return out;
   };
