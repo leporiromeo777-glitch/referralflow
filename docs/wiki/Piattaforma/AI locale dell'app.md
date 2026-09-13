@@ -14,6 +14,7 @@ Gira su Ollama sul Mac dello studio, nessun cloud, nessun dato fuori dal compute
 | riquadro «Chiedi ai tuoi dati» in Statistiche | `POST /api/statistiche/chiedi` | una domanda sugli aggregati dello studio; mai dati di singoli pazienti, mai SQL generato dal modello |
 | sidebar AI del prototipo (⌘/) | `POST /api/prototipo/assistente` | risponde solo sui dati già in pagina, filtrati per il ruolo |
 | briefing pre-visita nel prototipo | `POST /api/prototipo/briefing` | il codice decide i passi, il modello (`PROTOTIPO_LLM`, default gemma3:12b) scrive solo la sintesi; traccia salvata ([[Piattaforma/Procedure e tracce]]) |
+| le altre sei procedure del prototipo | `POST /api/prototipo/procedura` | solo codice, nessun modello: confronti e conteggi con traccia |
 | riassunto pre-visita, confronto referti, cattura impegnativa | server action | generazione secca, su richiesta |
 
 Tutte passano da `src/lib/ollama.ts`. Non c'è un assistente globale su tutte le pagine: non è mai stato costruito.

@@ -21,7 +21,7 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 - [[Piattaforma/Funzioni fatte]] — tutto ciò che esiste già, in ordine inverso
 - [[Piattaforma/Documenti legali]] — che cosa c'è in docs/legale e a che punto è
 - [[Piattaforma/Prossimi lavori]] e [[Piattaforma/Visione]]
-- [[Piattaforma/Prototipo stack]] — l'interfaccia nuova con dati finti, in piedi sulla porta 8765 accanto alla piattaforma vera
+- [[Piattaforma/Prototipo stack]] — l'interfaccia nuova, oggi operativa su cct.referralflow.ch/prototipo (dati veri, bot locale, procedure con traccia); la copia con dati finti resta su :8765
 - [[Piattaforma/Convenzioni UI]] — palette, layout delle pagine, regole di stile
 - [[Piattaforma/Procedure e tracce]] — procedure in codice con traccia «Da dove viene», grafo dei fatti in Postgres, briefing pre-visita
 - [[Piattaforma/AI locale dell'app]] — l'assistente dentro la piattaforma: modello, configurazione, perché a volte non risponde

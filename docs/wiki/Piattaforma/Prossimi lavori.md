@@ -1,6 +1,6 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-09-12
+aggiornata: 2026-09-13
 ---
 # Prossimi lavori (in ordine di valore)
 
@@ -11,6 +11,13 @@ aggiornata: 2026-09-12
 5. **Chat AI su «Affida paziente»** (serve chiave API Anthropic e la stessa validazione legale della cattura impegnativa).
 6. **Referto strutturato: invio HIN** (dipende da account HIN).
 7. **Migrazione a Next 16** (advisory residue di `npm audit`, feature non usate).
+
+## Prototipo, assistente e procedure ([[Piattaforma/Procedure e tracce]])
+- Mostrare il «Perché?» delle scelte umane nel cruscotto Qualità AI accanto alle proposte di dizionario; oggi si salva soltanto.
+- Una pagina «Tracce» nella piattaforma (elenco di `assistente_tracce` per procedura e giorno): oggi la traccia si vede solo sotto la risposta.
+- Far leggere al bot il grafo dei fatti (`pazienti_fatti`) per le domande sul paziente aperto («ha una terapia?», «quando l'ultimo ECG?») invece del contesto di pagina: le relazioni ci sono già.
+- Leggere ogni settimana le domande libere nelle tracce: le più frequenti diventano procedure.
+- Referti confermati prima del 13.9.2026: «lettere in ritardo» non li giudica (l'evento `word_scaricato` non c'era).
 
 ## Catena dei referti
 - **Lettera precedente dalla cartella** FATTA (12.9.2026, [[Catena/Formato lettera e Word]]): resta da provare sul terzo referto vero e da decidere se, più avanti, il robot MediOnline in sola lettura possa caricarla da solo.

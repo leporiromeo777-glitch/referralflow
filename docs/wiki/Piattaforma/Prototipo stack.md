@@ -2,9 +2,20 @@
 tipo: piattaforma
 aggiornata: 2026-09-13
 ---
-# Prototipo «referralflow-stack» (interfaccia nuova, dati finti)
+# Prototipo «referralflow-stack» (l'interfaccia nuova, oggi operativa)
 
-Pacchetto consegnato dall'utente il 13.9.2026 (progettato altrove, su Windows, con un'altra AI): un **prototipo cliccabile** dell'interfaccia con dati completamente fittizi, più tre moduli. Tenuto in piedi ACCANTO alla piattaforma vera per confrontarli; non è collegato al DB, alla catena né all'audit.
+Nato il 13.9.2026 come pacchetto consegnato dall'utente (progettato altrove, su Windows, con un'altra AI): un **prototipo cliccabile** con dati fittizi. Nella stessa giornata è diventato un'**interfaccia operativa della piattaforma**: stessi dati, stessa sessione, stesso audit, con il bot sul modello locale e le procedure con traccia. La copia con i dati finti resta in piedi sulla porta 8765 solo per confronto.
+
+## Stato oggi (13.9.2026, sera): che cosa si usa e dove
+- **Indirizzo**: `https://cct.referralflow.ch/prototipo/index.html` (icona sul telefono via manifest; Let's Encrypt, [[Piattaforma/Server Mac mini]]). Se la pagina sembra vecchia, ricaricare con il numero di versione che sta nel link «Prototipo con i dati veri» della pagina Referti.
+- **Dati veri** da `GET /api/prototipo/dati` (agenda del robot, pazienti con cartella, referti della catena, documenti, attività, numeri); nessun dato finto dentro la piattaforma.
+- **Revisione guidata a tre colonne** con audio vero; «Termina revisione» salva nella piattaforma, la conferma resta nella piattaforma col gate.
+- **Bot** (⌘/): risposte immediate del codice, modello locale in streaming per il resto, ricerca documenti per paziente ed esame, documenti aperti dentro la pagina e domande sul file.
+- **Procedure con traccia** ([[Piattaforma/Procedure e tracce]]): briefing pre-visita, preparazione della giornata, cosa è cambiato dall'ultima visita, richiami del mese, controllo prima della firma, lettere in ritardo, chiusura mensile. Sotto ogni risposta «Da dove viene».
+- **Dati di prova** per le demo: `npm run dati-prova` (6 pazienti inventati, 14 PDF).
+- **Aggiornare il ponte**: si modifica `public/prototipo/referralflow-bridge.js` (copia anche in `~/referralflow-stack/…/ui-prototype/`), si alza `?v=` in `index.html`, `manifest.webmanifest` e nel link della pagina Referti, poi `bash mac/aggiorna-server.sh`.
+
+Il resto della pagina è la storia della giornata, sezione per sezione.
 
 ## Dove sta e come gira
 - Copia stabile in `~/referralflow-stack/` (l'originale in `~/Downloads/referralflow-stack/`): `referralflow/` (docs 00-24 + ADR, `ui-prototype/`, `voice-server/`, `tools/serve.py`, `setup/`), `dittafono-clinico/` (PWA React+Vite, build già dentro `ui-prototype/dittafono/`), `refraflow-knowledge/` (wiki + RAG in Python, NON avviato: vorrebbe SilverBullet sulla porta 3000, che è dell'app), `refraflow-wiki/` (note Markdown del progetto, nessun dato clinico).

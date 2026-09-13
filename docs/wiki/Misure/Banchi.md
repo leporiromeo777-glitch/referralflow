@@ -35,6 +35,6 @@ Ogni banco usa SOLO dati sintetici. Le chiamate al modello esterno costano cente
 
 | 2026-09-13 | flag di whisper sui 13 dettati conservati: di serie contro `-nf` (niente risalita di temperatura) e `-et 2.0` (soglia di entropia) | `banco-whisper-flag.py nf=-nf et=-et,2.0` dalla copia viva | pari in 12 dettati su 13; accordo totale col testimone B: serie 1835, `-nf` 1799 (peggio su un dettato lungo: 42 righe in loop e −37 di accordo), `-et 2.0` 1835 (identico); numeri solo in B 38/39/38; tempi 548/588/539 s. Verdetto: la configurazione di serie resta |
 
-Suite permanente: `python3.14 pipeline-referti/prove-catastrofiche.py` → 38/38 (12.9.2026). Test app: `npm run test:app` → 34 casi.
+Suite permanente: `python3.14 pipeline-referti/prove-catastrofiche.py` → 38/38 (12.9.2026). Test app: `npm run test:app` → 45 (13.9.2026: +4 briefing, +7 procedure) casi.
 
 Dati reali osservati (solo numeri): destinatario estratto = confermato in 9 bozze su 11 (11.9.2026); collassi di whisper: 3 in 3 giorni sullo stesso medico (7-9.9.2026).
