@@ -8,6 +8,9 @@ Livello 1 (fatto 2026-08-13): il Mac mini dello studio è il server interno. `ba
 
 Aggiornamento: `bash mac/aggiorna-server.sh` (pull + kickstart). Livello 2 (dominio, HTTPS, hardening) rimandato ad app assestata + parte legale.
 
+## Se «non si raggiunge la piattaforma» (14.9.2026)
+Prima cosa da guardare: **l'indirizzo LAN del Mac**. Il dominio `cct.referralflow.ch` punta a un indirizzo privato della rete dello studio; se il Mac cambia indirizzo, il dominio punta nel vuoto e nessuno entra (né dal telefono né dal PC), mentre sul Mac tutto risponde su `localhost`. Il 14.9.2026 alle 00:40 il cavo Ethernet (`en0`) è risultato staccato: il Mac è passato al Wi-Fi (`en1`) con 192.168.1.152 al posto di 192.168.1.146, e nello stesso momento era caduto anche un push verso GitHub. Rimedio: `bash ~/silverbullet/caddy/attiva-dominio.sh` (copia in `mac/attiva-dominio.sh`) ora rileva da solo l'indirizzo della scheda attiva (o lo prende come argomento) e aggiorna il record A via API Infomaniak (TTL 300 s: qualche minuto di propagazione, di più sui telefoni che tengono la cache). Meglio ancora: ricollegare il cavo Ethernet, che ha l'indirizzo riservato .146, e rilanciare lo script. Da fare: chiedere al router una prenotazione DHCP anche per il Wi-Fi del Mac, così l'indirizzo non cambia più.
+
 ## Servizi launchd sul Mac
 | servizio | cosa fa |
 |---|---|
