@@ -12,7 +12,14 @@ const ESEMPI = [
   'Quanto ci mettiamo in media a prenotare?',
 ];
 
-export function ChiediAiDati() {
+type Props = {
+  // Esito del ping fatto dalla pagina (server). Quando è falso il riquadro
+  // resta VISIBILE e spiega perché: prima spariva in silenzio.
+  attiva?: boolean;
+  motivo?: string | null;
+};
+
+export function ChiediAiDati({ attiva = true, motivo = null }: Props) {
   const [domanda, setDomanda] = useState('');
   const [risposta, setRisposta] = useState('');
   const [errore, setErrore] = useState('');
@@ -31,7 +38,7 @@ export function ChiediAiDati() {
         body: JSON.stringify({ domanda: d }),
       });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok) setErrore(j?.errore ?? 'Qualcosa è andato storto: riprova.');
+      if (!r.ok) setErrore([j?.errore, j?.dettaglio].filter(Boolean).join(' — ') || 'Qualcosa è andato storto: riprova.');
       else setRisposta(j.risposta ?? '');
     } catch {
       setErrore('Rete non raggiungibile: riprova.');
@@ -47,6 +54,12 @@ export function ChiediAiDati() {
         Una domanda in italiano sui numeri dello studio: l&apos;AI risponde solo dagli
         aggregati (mai dati di singoli pazienti), tutto sul Mac dello studio.
       </p>
+      {!attiva && (
+        <p className="error">
+          {motivo ?? 'AI locale non raggiungibile.'}{' '}
+          <a href="/api/ai/diagnostica" target="_blank" rel="noreferrer">Vedi la diagnostica</a>
+        </p>
+      )}
       <form
         className="chiedi-form"
         onSubmit={(e) => { e.preventDefault(); void chiedi(domanda); }}
@@ -56,14 +69,15 @@ export function ChiediAiDati() {
           onChange={(e) => setDomanda(e.target.value)}
           placeholder="Es. quante referral urgenti abbiamo avuto quest'anno?"
           maxLength={400}
+          disabled={!attiva}
         />
-        <button className="btn btn-primary btn-small" type="submit" disabled={inCorso}>
+        <button className="btn btn-primary btn-small" type="submit" disabled={inCorso || !attiva}>
           {inCorso ? 'Ci penso…' : 'Chiedi'}
         </button>
       </form>
       <div className="chiedi-esempi">
         {ESEMPI.map((e) => (
-          <button key={e} type="button" className="chiedi-esempio"
+          <button key={e} type="button" className="chiedi-esempio" disabled={!attiva}
             onClick={() => { setDomanda(e); void chiedi(e); }}>
             {e}
           </button>

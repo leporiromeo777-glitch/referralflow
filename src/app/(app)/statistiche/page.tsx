@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { query } from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { ollamaAttivo } from '@/lib/ollama';
+import { ollamaAttivo, ultimaCausaOllama, SPIEGAZIONE } from '@/lib/ollama';
 import { ChiediAiDati } from './ChiediAiDati';
 
 export const dynamic = 'force-dynamic';
@@ -119,7 +119,10 @@ export default async function Statistiche() {
   const prenN = Number(prenotate?.n ?? 0);
   const conv = totN ? Math.round((prenN / totN) * 100) : 0;
   const volumeVuoto = settimane.every((s) => Number(s.n) === 0);
+  // 13.9.2026: il riquadro non sparisce più quando l'AI locale è giù. Prima
+  // spariva e basta, e dall'esterno sembrava che la funzione non esistesse.
   const aiAttiva = await ollamaAttivo();
+  const aiMotivo = aiAttiva ? null : (ultimaCausaOllama() ?? 'spento');
 
   return (
     <>
@@ -153,7 +156,7 @@ export default async function Statistiche() {
         </div>
       </header>
 
-      {aiAttiva && <ChiediAiDati />}
+      <ChiediAiDati attiva={aiAttiva} motivo={aiMotivo && SPIEGAZIONE[aiMotivo]} />
 
       <div className="card chart-card">
         <h2>Richieste ricevute — ultime 8 settimane</h2>

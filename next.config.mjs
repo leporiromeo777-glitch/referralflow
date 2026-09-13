@@ -31,6 +31,17 @@ const nextConfig = {
     serverActions: { bodySizeLimit: '12mb' },
     serverComponentsExternalPackages: ['@node-rs/argon2', 'pg', 'pdf-parse'],
   },
+  // L'interfaccia nuova è un'app statica in public/prototipo/: Next serve i file
+  // per percorso esatto e non risolve l'indice di cartella, quindi «/prototipo»
+  // da solo dà 404. Il ponte con i dati veri (referralflow-bridge.js) si attiva
+  // solo se il percorso contiene «/prototipo/», perciò serve un redirect — non
+  // un rewrite, che lascerebbe l'URL senza la barra finale.
+  async redirects() {
+    return [
+      { source: '/prototipo', destination: '/prototipo/index.html', permanent: false },
+      { source: '/prototipo/', destination: '/prototipo/index.html', permanent: false },
+    ];
+  },
   async headers() {
     return [
       // Interfaccia nuova e dittafono (file statici in public/): mai in cache,

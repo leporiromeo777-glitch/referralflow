@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { aggregatiStudio } from '@/lib/statistiche-ai';
-import { generaOllama, ollamaAttivo } from '@/lib/ollama';
+import { generaOllamaEsito, ollamaAttivo, ultimaCausaOllama, SPIEGAZIONE } from '@/lib/ollama';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,8 +16,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
   }
   if (!(await ollamaAttivo())) {
+    const causa = ultimaCausaOllama() ?? 'spento';
     return NextResponse.json(
-      { errore: 'AI locale spenta: apri Ollama sul Mac dello studio.' },
+      { errore: SPIEGAZIONE[causa], causa, diagnostica: '/api/ai/diagnostica' },
       { status: 503 }
     );
   }
@@ -41,12 +42,14 @@ export async function POST(req: NextRequest) {
     JSON.stringify(dati),
   ].join('\n');
 
-  const risposta = await generaOllama(prompt, { timeoutMs: 90_000 });
-  if (!risposta) {
+  // Niente più 90 s fissi: il timeout viene da OLLAMA_TIMEOUT_MS (240 s), perché
+  // la prima domanda dopo un dettato trova sempre il modello freddo.
+  const esito = await generaOllamaEsito(prompt);
+  if (!esito.ok) {
     return NextResponse.json(
-      { errore: 'Risposta non riuscita: riprova tra qualche istante.' },
-      { status: 502 }
+      { errore: SPIEGAZIONE[esito.causa], causa: esito.causa, dettaglio: esito.dettaglio, diagnostica: '/api/ai/diagnostica' },
+      { status: esito.causa === 'modello_assente' ? 503 : 502 }
     );
   }
-  return NextResponse.json({ risposta });
+  return NextResponse.json({ risposta: esito.testo, ms: esito.ms });
 }
