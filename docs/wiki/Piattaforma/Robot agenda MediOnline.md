@@ -15,3 +15,5 @@ Collaudato E2E su finta MediOnline e poi dal vivo: 97 appuntamenti veri su 10 gi
 Catalogo colori dello studio: tenere verde #2ecc40 (visite), verde acceso #01ff70 (colloqui tel.), blu #0074d9 (risonanze), azzurro #7fdbff (ICCT emodinamica/CVE), bordeaux #85144b (interventi), rosso solo urgenze; ignorare #ffffff #ffdc00 #000000 #dddddd #111111 #b10dc9 + testi stop/no coro/non occupare/guardia/picchetto.
 
 Da verificare col tempo: qualità dell'estrazione del nome paziente dai riquadri e aggancio alle referral.
+
+Dal 14.9.2026 ogni evento dell'ICS porta anche `X-RF-COLORE:#rrggbb` (il colore del riquadro nell'agenda originale); la piattaforma lo conserva in `appointments.colore` e l'interfaccia nuova lo mostra ([[Piattaforma/Prototipo stack]]).

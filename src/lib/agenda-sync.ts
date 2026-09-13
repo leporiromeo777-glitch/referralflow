@@ -166,8 +166,8 @@ export async function syncFeed(feedId: string): Promise<SyncResult> {
 
     await query(
       `insert into appointments
-         (studio_id, feed_id, provider_id, starts_at, ends_at, titolo, paziente_nome, motivo, luogo, external_uid, referral_id)
-       values ($11,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         (studio_id, feed_id, provider_id, starts_at, ends_at, titolo, paziente_nome, motivo, luogo, external_uid, referral_id, colore)
+       values ($11,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$12)
        on conflict (feed_id, external_uid) do update set
          provider_id   = coalesce(excluded.provider_id, appointments.provider_id),
          starts_at     = excluded.starts_at,
@@ -177,6 +177,7 @@ export async function syncFeed(feedId: string): Promise<SyncResult> {
          motivo        = excluded.motivo,
          luogo         = excluded.luogo,
          referral_id   = coalesce(excluded.referral_id, appointments.referral_id),
+         colore        = coalesce(excluded.colore, appointments.colore),
          imported_at   = now()`,
       [
         feed.id,
@@ -190,6 +191,7 @@ export async function syncFeed(feedId: string): Promise<SyncResult> {
         ev.uid,
         referralId,
         feed.studio_id,
+        ev.colore || null,
       ]
     );
   }

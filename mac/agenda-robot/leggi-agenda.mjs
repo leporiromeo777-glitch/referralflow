@@ -348,6 +348,9 @@ try {
         `DTEND:${icsData(giorno.data, Math.min(a.inizio + a.durata, 24 * 60 - 1))}`,
         `SUMMARY:${icsTesto(a.testo)}`,
         `LOCATION:${icsTesto(a.colonna)}`,
+        // Colore del riquadro nell'agenda originale (14.9.2026): la piattaforma
+        // lo conserva e l'interfaccia nuova lo mostra sull'appuntamento.
+        ...(a.colore ? [`X-RF-COLORE:${a.colore}`] : []),
         'END:VEVENT'
       );
       totale++;

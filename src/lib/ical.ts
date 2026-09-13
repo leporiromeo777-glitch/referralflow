@@ -16,6 +16,8 @@ export type ICalEvent = {
   location: string;
   organizer: string;
   status: string;
+  // Colore dell'appuntamento nell'agenda di origine (X-RF-COLORE del robot), «#rrggbb» o vuoto.
+  colore: string;
 };
 
 type RawProp = { name: string; params: Record<string, string>; value: string };
@@ -134,6 +136,7 @@ function buildEvent(props: RawProp[]): ICalEvent {
     end: end ? end.date : null,
     allDay: start ? start.allDay : false,
     summary: text('SUMMARY'),
+    colore: /^#[0-9a-f]{6}$/i.test(text('X-RF-COLORE')) ? text('X-RF-COLORE').toLowerCase() : '',
     description: text('DESCRIPTION'),
     location: text('LOCATION'),
     organizer: text('ORGANIZER'),

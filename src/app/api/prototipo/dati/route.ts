@@ -70,8 +70,8 @@ export async function GET() {
       where r.studio_id = $1 order by r.created_at desc limit 2000`, [sid]);
   const docs = await query<{ id: string; patient_id: string; filename: string; categoria: string; nota: string | null; uploaded_at: string }>(
     `select id, patient_id, filename, categoria, nota, uploaded_at::text from patient_documents where studio_id = $1 order by uploaded_at desc limit 2000`, [sid]);
-  const appts = await query<{ id: string; provider_id: string | null; medico: string | null; starts_at: string; ends_at: string | null; titolo: string | null; paziente_nome: string | null; motivo: string | null; luogo: string | null; completed_at: string | null; referral_id: string | null }>(
-    `select a.id, a.provider_id, pr.nome as medico, a.starts_at::text, a.ends_at::text, a.titolo, a.paziente_nome, a.motivo, a.luogo, a.completed_at::text, a.referral_id
+  const appts = await query<{ id: string; provider_id: string | null; medico: string | null; starts_at: string; ends_at: string | null; titolo: string | null; paziente_nome: string | null; motivo: string | null; luogo: string | null; completed_at: string | null; referral_id: string | null; colore: string | null }>(
+    `select a.id, a.provider_id, pr.nome as medico, a.starts_at::text, a.ends_at::text, a.titolo, a.paziente_nome, a.motivo, a.luogo, a.completed_at::text, a.referral_id, a.colore
        from appointments a left join providers pr on pr.id = a.provider_id
       where a.studio_id = $1 and a.starts_at >= current_date - interval '30 days' and a.starts_at < current_date + interval '30 days'
       order by a.starts_at`, [sid]);
@@ -142,7 +142,7 @@ export async function GET() {
     }
     const fine = a.ends_at ? new Date(a.ends_at).getTime() : new Date(a.starts_at).getTime() + 30 * 60000;
     return {
-      id: a.id, p, nome: (a.paziente_nome ?? a.titolo ?? 'Paziente').trim(), d: a.starts_at.slice(0, 10), doc: a.provider_id ? providerToDoc.get(a.provider_id) ?? 'studio' : 'studio', room: a.luogo ?? '',
+      id: a.id, p, nome: (a.paziente_nome ?? a.titolo ?? 'Paziente').trim(), d: a.starts_at.slice(0, 10), doc: a.provider_id ? providerToDoc.get(a.provider_id) ?? 'studio' : 'studio', room: a.luogo ?? '', colore: a.colore ?? '',
       start: ora(a.starts_at), dur: Math.max(5, Math.round((fine - new Date(a.starts_at).getTime()) / 60000)),
       reason: a.motivo || a.titolo || 'Appuntamento', type: a.motivo || 'Visita', status: stato(a),
       late: oggi && !a.completed_at && new Date(a.starts_at).getTime() < adesso - 20 * 60000, referral: a.referral_id,

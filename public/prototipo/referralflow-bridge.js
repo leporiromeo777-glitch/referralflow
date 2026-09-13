@@ -1575,7 +1575,7 @@ PAGES.agenda = () => {
   const endH = lista.length ? Math.min(21, Math.max(18, Math.ceil(Math.max(...lista.map(a => minuti(a.start) + a.dur)) / 60))) : 18;
   const slotH = 44, slots = (endH - startH) * 2;
   const top = (t) => (minuti(t) - startH * 60) / 30 * slotH;
-  const chip = (a) => `<div class="appt ${a.late ? 'LATE' : a.status}" style="top:${top(a.start) + 2}px;height:${Math.max(24, a.dur / 30 * slotH - 4)}px" ${a.p && rfUuid(a.p) ? `data-go="#/patients/${a.p}"` : ''} title="${rfEsc(nomeDi(a))} · ${a.start} · ${rfEsc(a.reason || '')}${a.room ? ' · ' + rfEsc(a.room) : ''}"><div class="n"><i class="dot ${a.late ? 'warning' : a.status === 'COMPLETED' ? 'success' : 'accent'}"></i>${rfEsc(nomeDi(a))}</div><div class="s">${a.start} · ${rfEsc(a.reason || '')}${a.room ? ` · <b>${rfEsc(a.room)}</b>` : ''}</div></div>`;
+  const chip = (a) => `<div class="appt ${a.late ? 'LATE' : a.status}" style="top:${top(a.start) + 2}px;height:${Math.max(24, a.dur / 30 * slotH - 4)}px${a.colore ? `;border-left:4px solid ${rfEsc(a.colore)};background:${rfEsc(a.colore)}1a` : ''}" ${a.p && rfUuid(a.p) ? `data-go="#/patients/${a.p}"` : ''} title="${rfEsc(nomeDi(a))} · ${a.start} · ${rfEsc(a.reason || '')}${a.room ? ' · ' + rfEsc(a.room) : ''}"><div class="n"><i class="dot ${a.late ? 'warning' : a.status === 'COMPLETED' ? 'success' : 'accent'}"></i>${rfEsc(nomeDi(a))}</div><div class="s">${a.start} · ${rfEsc(a.reason || '')}${a.room ? ` · <b>${rfEsc(a.room)}</b>` : ''}</div></div>`;
   const colHtml = (key) => `<div class="cal-col" style="height:${slots * slotH}px">${Array.from({ length: slots }, (_, i) => `<div class="cal-line ${i % 2 ? 'half' : ''}" style="top:${i * slotH}px"></div>`).join('')}${lista.filter(a => key === 'studio' ? (!a.doc || a.doc === 'studio') : a.doc === key).map(chip).join('')}</div>`;
   const times = Array.from({ length: slots }, (_, i) => i % 2 === 0 ? `<div class="cal-time num" style="top:${i * slotH}px">${String(startH + i / 2).padStart(2, '0')}:00</div>` : '').join('');
   const d = new Date(`${giorno}T12:00:00`);
@@ -1590,6 +1590,7 @@ PAGES.agenda = () => {
       <div class="cal-head"></div>${cols.map(c => `<div class="cal-head">${rfEsc(c[1])}</div>`).join('')}
       <div class="cal-times" style="--slots:${slots};--slot-h:${slotH}px">${times}</div>${cols.map(c => colHtml(c[0])).join('')}
     </div>` : `<div class="card"><div class="caption">Nessun appuntamento in agenda per questo giorno${Math.abs((d - new Date(`${oggi}T12:00:00`)) / 86400000) > 30 ? ' (la piattaforma carica ±30 giorni da oggi)' : ''}.</div></div>`}
+    ${(() => { const c = {}; for (const a of lista) if (a.colore) c[a.colore] = (c[a.colore] || 0) + 1; const voci = Object.entries(c).sort((x, y) => y[1] - x[1]); return voci.length ? `<div class="row mt-16 caption wrap" style="gap:10px"><span>Colori dell'agenda originale:</span>${voci.map(([col, n]) => `<span class="status"><i class="dot" style="background:${rfEsc(col)}"></i>${n}</span>`).join('')}</div>` : ''; })()}
     <div class="row mt-16 caption wrap"><span class="status"><i class="dot accent"></i>Programmato</span><span class="status"><i class="dot success"></i>Completato</span><span class="status"><i class="dot warning"></i>In ritardo</span><span class="caption">Dal robot MediOnline, in sola lettura; si aggiorna ogni ora.</span></div>`;
 };
 
