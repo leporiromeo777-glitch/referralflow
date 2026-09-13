@@ -23,6 +23,7 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 - [[Piattaforma/Prossimi lavori]] e [[Piattaforma/Visione]]
 - [[Piattaforma/Prototipo stack]] — l'interfaccia nuova con dati finti, in piedi sulla porta 8765 accanto alla piattaforma vera
 - [[Piattaforma/Convenzioni UI]] — palette, layout delle pagine, regole di stile
+- [[Piattaforma/Procedure e tracce]] — procedure in codice con traccia «Da dove viene», grafo dei fatti in Postgres, briefing pre-visita
 - [[Piattaforma/AI locale dell'app]] — l'assistente dentro la piattaforma: modello, configurazione, perché a volte non risponde
 
 ## Per chi usa la piattaforma

@@ -1,11 +1,12 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-09-11
+aggiornata: 2026-09-13
 ---
 # Funzioni fatte (dalla più recente)
 
 Elenco di ciò che esiste. Per la catena dei referti vedi [[Catena/Panoramica]].
 
+- **Briefing pre-visita con traccia** nel prototipo (2026-09-13, migrazione 035 `pazienti_fatti` + `assistente_tracce`): procedura in codice, sintesi del modello locale, riquadro «Da dove viene» sotto ogni risposta del bot; documenti aperti dentro la piattaforma e domande sul file; dati di prova con `npm run dati-prova` ([[Piattaforma/Procedure e tracce]], [[Piattaforma/Prototipo stack]]).
 - **Anonimizza documenti** `/anonimizza` (2026-08-17, menu Studio): incolla testo o carica .txt/PDF → il modello LOCALE (Ollama `ANONIMIZZA_LLM`, default gemma3:12b, non il 27b: non si contende la GPU con whisper) individua i dati identificativi e il CODICE li sostituisce con segnaposto; rete regex (AVS/email/telefoni CH), niente persistenza (`src/lib/anonimizza.ts`). PDF via `pdf-parse` v2.
 - **Consulto rapido tra medici / eConsult** (migrazione 020: `consulti` + `consulto_attachments`): domanda clinica dal portale token, risposta da `/consulti` (badge in nav, notifiche neutre), conversione in referral.
 - **Cattura AI dell'impegnativa** sul modulo `/invia/[token]`: `src/lib/impegnativa.ts` legge foto/PDF con `@anthropic-ai/sdk` (claude-opus-5, json_schema via zod); API `/api/invia/[token]/cattura` (rate-limit per token, file in memoria). SPENTA se manca `ANTHROPIC_API_KEY` (serve la validazione legale come Stripe).
