@@ -391,6 +391,81 @@ function rfStatoRevisione() {
   return { issues: RV.issues.map(i => ({ id: i.id, status: i.status, resolution: i.resolution })), metrics: RV.metrics, log: (RV.log || []).slice(-200), cur: RV.cur, t: RV.t };
 }
 
+
+/* ---------- impaginazione nel formato del medico (lettera o rapporto) ---------- */
+/* POST /api/referti/struttura avvia il lavoro sul modello locale col testo
+   come lo vede chi rivede (correzioni comprese); GET ne dà l'avanzamento
+   (percentuale vera). A fine lavoro la piattaforma ha già scritto il testo
+   impaginato nella bozza: la revisione si ricarica e mostra la lettera.
+   L'avanzamento si vede nella finestra E in una pillola fissa in alto, che
+   resta anche se la finestra viene chiusa, con percentuale e tempo. */
+(function () {
+  const st = document.createElement('style');
+  st.textContent = `
+  #rf-imp-pill { position: fixed; top: calc(8px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 60; min-width: 260px; max-width: 92vw; padding: 8px 12px; border-radius: 12px; background: var(--glass-strong, var(--surface)); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid var(--border-2); box-shadow: var(--shadow-2); font-size: 12.5px; }
+  #rf-imp-pill .rf-imp-testo { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+  .rf-imp-track { height: 6px; border-radius: 6px; background: rgba(127,127,127,.18); overflow: hidden; }
+  .rf-imp-fill { height: 100%; width: 2%; border-radius: 6px; background: var(--accent); transition: width .5s var(--ease); background-image: linear-gradient(45deg, rgba(255,255,255,.28) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.28) 50%, rgba(255,255,255,.28) 75%, transparent 75%, transparent); background-size: 18px 18px; animation: rf-imp-strisce 1s linear infinite; }
+  .rf-imp-fill.ferma { animation: none; }
+  @keyframes rf-imp-strisce { from { background-position: 0 0; } to { background-position: 18px 0; } }`;
+  document.head.appendChild(st);
+})();
+function rfImpPill(testo, pct, fine) {
+  let el = document.getElementById('rf-imp-pill');
+  if (!el) { el = document.createElement('div'); el.id = 'rf-imp-pill'; el.innerHTML = '<div class="rf-imp-testo"><span class="rf-imp-t"></span><span class="rf-imp-p num"></span></div><div class="rf-imp-track"><div class="rf-imp-fill"></div></div>'; document.body.appendChild(el); }
+  el.querySelector('.rf-imp-t').textContent = testo;
+  el.querySelector('.rf-imp-p').textContent = pct != null ? `${Math.round(pct)}%` : '';
+  const f = el.querySelector('.rf-imp-fill'); if (pct != null) f.style.width = `${Math.max(2, Math.min(100, pct))}%`; f.classList.toggle('ferma', !!fine);
+  if (fine) setTimeout(() => { const e = document.getElementById('rf-imp-pill'); if (e) e.remove(); }, fine === 'errore' ? 8000 : 2500);
+}
+async function rfImpagina() {
+  const id = RF.loaded; if (!id) return;
+  if (RF.impaginando === id) { toast('Impaginazione già in corso'); return; }
+  const m = RF.meta || {};
+  const testo = rfTestoRicomposto();
+  const titolo = m.formato === 'lettera' ? 'Impagina come lettera' : 'Riorganizza nel formato del medico';
+  const inizio = Date.now();
+  const mmss = () => { const sec = Math.round((Date.now() - inizio) / 1000); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; };
+  openModal(titolo, `<div id="rf-imp"><p class="caption">${m.formato === 'lettera' ? 'Il modello locale impagina il testo nel formato lettera del medico: apertura, corpo, saluto, terapia ripresa dalla lettera precedente se non ridettata. Le guardie del codice bloccano numeri, unità e relazioni cambiate.' : 'Il modello locale riorganizza il testo nel rapporto a sezioni del medico.'}</p><div class="rf-imp-track mt-16"><div id="rf-imp-bar" class="rf-imp-fill" style="width:2%"></div></div><div class="caption mt-8" id="rf-imp-stato">Avvio…</div><p class="caption mt-8">Puoi chiudere questa finestra: l'avanzamento resta in alto nella pagina.</p></div>`, `<button class="btn" data-close>Chiudi</button>`);
+  let ultimoPct = 2, ultimoTesto = 'Avvio…', finito = false;
+  const stato = (t, pct, fine) => {
+    ultimoTesto = t; if (pct != null) ultimoPct = pct; if (fine) finito = true;
+    const e = document.getElementById('rf-imp-stato'); if (e) e.textContent = `${t}${fine ? '' : ` · ${mmss()}`}`;
+    const b = document.getElementById('rf-imp-bar'); if (b && pct != null) b.style.width = `${Math.max(2, Math.min(100, pct))}%`;
+    rfImpPill(`${titolo}: ${fine === 'errore' ? 'non riuscita' : fine ? 'fatta' : 'in corso'} · ${mmss()}`, pct != null ? pct : ultimoPct, fine);
+  };
+  const orologio = setInterval(() => { if (finito) { clearInterval(orologio); return; } stato(ultimoTesto, ultimoPct); }, 1000);
+  RF.impaginando = id;
+  try {
+    const r = await fetch('/api/referti/struttura', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, testo }) });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); stato(j.errore === 'non_trovata' ? 'La bozza è già confermata: si impagina solo una bozza aperta.' : 'Non riesco ad avviare l’impaginazione.', 100, 'errore'); return; }
+    stato('In lavorazione sul modello locale (1-4 minuti)…', 5);
+    for (let i = 0; i < 200; i++) {
+      await new Promise(x => setTimeout(x, 3000));
+      const g = await fetch(`/api/referti/struttura?id=${id}`, { credentials: 'include', cache: 'no-store' });
+      if (!g.ok) continue;
+      const j = await g.json();
+      if (j.stato === 'lavora') { stato(`In lavorazione… ${j.percento || 0}%`, Math.max(5, j.percento || 0)); continue; }
+      if (j.stato === 'fatto') {
+        stato('Fatto: il testo impaginato è nella bozza. Ricarico la revisione…', 100, 'fatto');
+        if (typeof rvLog === 'function') rvLog('FORMATTED', m.formato === 'lettera' ? 'impaginata come lettera' : 'riorganizzata nel formato');
+        localStorage.removeItem(RV_KEY);
+        RF.loaded = null; RF.loading = null;
+        setTimeout(() => { closeModal(); render(); toast(m.formato === 'lettera' ? 'Lettera impaginata nel formato del medico' : 'Testo riorganizzato nel formato del medico'); }, 800);
+        return;
+      }
+      if (j.stato === 'errore') {
+        const motivi = { ai_non_risponde: 'il modello locale non ha risposto', troppo_corto: 'la proposta perdeva contenuto ed è stata scartata', numeri: 'la proposta cambiava dei numeri ed è stata scartata', unita: 'la proposta cambiava delle unità ed è stata scartata', relazioni: 'la proposta scambiava dei valori tra misure ed è stata scartata' };
+        stato(`Non impaginato: ${motivi[j.motivo] || j.motivo || 'errore'}. Il testo della revisione è rimasto com’era.`, 100, 'errore');
+        return;
+      }
+      if (j.stato === 'assente') { stato('Il lavoro non risulta avviato: riprova.', 0, 'errore'); return; }
+    }
+    stato('Sta impiegando troppo: riprova più tardi, il lavoro continua sul Mac.', 90, 'errore');
+  } catch { stato('Non riesco a raggiungere la piattaforma.', 100, 'errore'); }
+  finally { RF.impaginando = null; }
+}
+
 /* audio vero al posto dell'orologio simulato: stesse funzioni, stesso stato RV */
 function rfAudioSetup(url) {
   if (RF.audioEl) { RF.audioEl.pause(); RF.audioEl = null; }
