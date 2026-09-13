@@ -273,7 +273,10 @@ PAGES.review = () => {
   const bottoni = m.stato === 'bozza'
     ? `<button class="btn sm ghost" onclick="rfImpagina()" title="${m.formato === 'lettera' ? 'Formato del medico: lettera al collega («Caro …,», corpo, saluto, terapia dalla lettera precedente)' : 'Formato del medico: rapporto a sezioni'}">${ICONS.ai || ''} ${m.formato === 'lettera' ? 'Impagina come lettera' : 'Riorganizza nel formato'}</button><a class="btn sm ghost" href="/api/referti/docx/${id}" target="_blank" rel="noopener" title="Word con la carta intestata del medico, dal testo salvato">Word</a>`
     : `<a class="btn sm ghost" href="/api/referti/docx/${id}" target="_blank" rel="noopener">Word</a>`;
-  return html.replace('<div class="rv-top-r">', `<div class="rv-top-r">${bottoni}`);
+  html = html.replace('<div class="rv-top-r">', `<div class="rv-top-r">${bottoni}`);
+  const note = Array.isArray(m.note_segreteria) ? m.note_segreteria.filter(n => typeof n === 'string' && n.trim()) : [];
+  if (note.length) html = html.replace('<div class="rv-grid', `<div class="rf-note-seg">${ICONS.tasks || ''}<b>Note per la segreteria (${note.length})</b>${note.map(n => `<span class="badge">${rfEsc(n)}</span>`).join('')}<span class="caption">Istruzioni dettate dal medico, tolte dal testo del referto.</span></div><div class="rv-grid`);
+  return html;
 };
 async function rfCaricaRevisione(id) {
   try {
@@ -465,6 +468,25 @@ async function rfImpagina() {
   } catch { stato('Non riesco a raggiungere la piattaforma.', 100, 'errore'); }
   finally { RF.impaginando = null; }
 }
+
+
+/* ---------- frasi tolte dalla catena e note per la segreteria ---------- */
+/* «Rimetti nel referto» rimette la frase tolta in coda all'ultima sezione
+   (come un'omissione aggiunta); «Lascia fuori» la lascia fuori. Le note per
+   la segreteria (allega, invia, richiama…) stanno in una striscia sopra il
+   testo: sono istruzioni, non testo del referto. */
+const rfChooseOrig = rvChoose;
+rvChoose = function (k) {
+  const i = typeof rvIssue === 'function' ? rvIssue() : null;
+  if (RF.live && i && i.status === 'open' && i.cat === 'STRUCTURE' && i.add && i.opts && i.opts[k]) {
+    const o = i.opts[k];
+    if (o.l === 'Rimetti nel referto') { RV.added.push({ id: 'add-' + i.id, section: i.add.section, text: i.add.text }); i.status = 'corrected'; i.resolution = 'rimessa nel referto'; RV.metrics.corrections++; rvLog('CORRECTION', i.id + ': frase tolta rimessa'); }
+    else { i.status = 'verified'; i.resolution = 'lasciata fuori'; rvLog('ISSUE_VERIFIED', i.id); }
+    if (typeof rvAfterResolve === 'function') rvAfterResolve(i); else { rvSave(); rvAfterRender(); }
+    return;
+  }
+  return rfChooseOrig(k);
+};
 
 /* audio vero al posto dell'orologio simulato: stesse funzioni, stesso stato RV */
 function rfAudioSetup(url) {
@@ -692,6 +714,8 @@ function rfRispostaImmediata(q) {
   .rf-brief .rf-riga{display:flex;gap:6px;align-items:baseline;margin:2px 0}.rf-brief .rf-riga .btn.sm{padding:0 6px;line-height:18px;font-size:11px}
   .rf-brief .rf-manc{margin-top:10px;padding:8px 10px;border-radius:8px;background:rgba(214,92,42,.10);border:1px solid rgba(214,92,42,.35)}
   .rf-brief .rf-sint{margin-bottom:6px;padding:8px 10px;border-radius:8px;background:rgba(13,92,72,.08);border:1px solid rgba(13,92,72,.25)}
+  .rf-note-seg{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--border);background:var(--warning-soft,rgba(214,150,42,.10));font-size:12.5px}
+  .rf-note-seg svg{width:16px;height:16px}
   .rf-traccia{margin-top:8px;font-size:12px}.rf-traccia summary{cursor:pointer;opacity:.75}.rf-traccia summary:hover{opacity:1}
   .rf-traccia ul{margin:6px 0 0 0;padding-left:16px}.rf-traccia li{margin:2px 0}
   .rf-traccia .ok{color:var(--ok,#0d5c48)}.rf-traccia .mancante{color:#b43c14}.rf-traccia .vuoto{opacity:.6}`;

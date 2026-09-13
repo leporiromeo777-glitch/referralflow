@@ -50,3 +50,15 @@ test('revisione: span agganciati alla trascrizione, issue dalla catena con evide
   assert.ok(r.riepilogo.crit >= 2);
   assert.ok(r.markers.some((m) => m.k === 'num' && m.l === '55 %'));
 });
+
+test('divagazioni: le frasi tolte dalla catena diventano segnalazioni con «Rimetti nel referto» in coda all’ultima sezione', async () => {
+  const { costruisciRevisione } = await import('./prototipo-revisione');
+  const r = costruisciRevisione({ testo: 'Anamnesi:\nIl paziente sta bene.\n\nConclusioni:\nControllo fra un anno.', parole: [], payload: { divagazioni: ['allega il duplex per la segretaria', { frase: 'buongiorno a tutti', motivo: 'saluto' }], note_segreteria: ['allegare il duplex'] } });
+  const tolte = r.issues.filter((i) => i.title.startsWith('Tolta dalla catena'));
+  assert.equal(tolte.length, 2);
+  assert.equal(tolte[0].add?.section, r.report[r.report.length - 1].code);
+  assert.equal(tolte[0].add?.text, 'allega il duplex per la segretaria');
+  assert.match(tolte[1].why, /saluto/);
+  assert.deepEqual(tolte[0].opts.map((o) => o.l), ['Lascia fuori', 'Rimetti nel referto']);
+  assert.equal(tolte[0].sev, 'suggestion');
+});

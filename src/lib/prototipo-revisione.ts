@@ -296,6 +296,21 @@ export function costruisciRevisione(ingresso: {
       preroll: 1.5,
     });
   }
+  // Frasi che la catena ha tolto perché non erano per il referto (istruzioni
+  // alla segreteria, saluti, digressioni): la persona le vede e può rimetterle.
+  for (const d of lista<string | { frase?: string; motivo?: string }>('divagazioni')) {
+    const frase = typeof d === 'string' ? d : String(d?.frase ?? '');
+    if (!frase.trim()) continue;
+    const motivo = typeof d === 'object' && d && typeof d.motivo === 'string' ? d.motivo : 'non riguarda il referto';
+    nuovo({
+      cat: 'STRUCTURE', sev: 'suggestion', title: 'Tolta dalla catena: non era per il referto',
+      span: null, now: frase, ev: aggancia(frase, transcript).ev, conf: 'likely',
+      why: `La catena ha lasciato fuori «${frase}» (${motivo}). Se invece va nel referto, rimettila in coda alla sezione.`,
+      opts: [{ l: 'Lascia fuori', apply: null, note: '' }, { l: 'Rimetti nel referto', apply: null, note: 'in coda all’ultima sezione' }],
+      add: { section: ultimaSezione, text: frase },
+      preroll: 1.5,
+    });
+  }
   const terapia = p.terapia && typeof p.terapia === 'object' ? (p.terapia as { dubbi?: { riga: string; motivo: string }[] }) : null;
   for (const d of terapia?.dubbi ?? []) {
     const parte = trovaParte(d.riga);
