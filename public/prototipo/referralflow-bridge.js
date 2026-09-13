@@ -64,7 +64,7 @@ function rfPaginaAccesso() {
   c.innerHTML = `<div class="page"><div class="card" style="max-width:520px;margin:40px auto;text-align:center">
     <h2 class="page-title">Accedi alla piattaforma</h2>
     <p class="meta" style="line-height:1.55">Questa è l'interfaccia nuova di ReferralFlow con i dati veri dello studio: serve la sessione della piattaforma. Nessun dato dimostrativo viene mostrato.</p>
-    <a class="btn primary" href="/login?next=%2Fprototipo%2Findex.html" style="margin-top:12px;display:inline-flex">Vai al login</a>
+    <a class="btn primary" href="/login?next=%2Fprototipo%2Findex.html" style="margin-top:12px;display:inline-flex">Accedi</a>
   </div></div>`;
   const sb = document.getElementById('sidebar'); if (sb) sb.innerHTML = '';
 }
@@ -87,7 +87,6 @@ renderSidebar = function () {
     <div class="bottom">
       <div class="nav-sep"></div>
       <nav class="nav">
-        <a class="nav-item" href="/" title="Piattaforma classica">${ICONS.home || ''}<span>Piattaforma classica</span></a>
         <button class="nav-item" id="collapse-btn" title="Comprimi barra laterale">${ICONS.panel}<span>Comprimi</span></button>
       </nav>
       <div class="sysbar"><span class="status"><i class="dot success"></i><span>Dati veri</span></span><span class="status"><i class="dot success"></i><span>AI locale</span></span></div>
@@ -140,9 +139,9 @@ PAGES.home = () => {
 };
 
 /* ---------- pagine senza backing vero → alla piattaforma ---------- */
-function rfPaginaPiattaforma(titolo, testo, href) {
+function rfPaginaPiattaforma(titolo, testo) {
   return `<div class="page-head"><div><h2 class="page-title">${titolo}</h2><div class="page-sub">${testo}</div></div></div>
-    <div class="card"><p class="meta" style="margin:0 0 12px;line-height:1.55">Questa sezione non ha ancora dati propri nell'interfaccia nuova: la versione operativa è nella piattaforma classica.</p><a class="btn primary" href="${href}">Apri nella piattaforma</a></div>`;
+    <div class="card"><p class="meta" style="margin:0;line-height:1.55">Questa sezione non è ancora disponibile in questa interfaccia.</p></div>`;
 }
 const rfOrig = {};
 for (const [k, titolo, testo, href] of [
@@ -155,11 +154,11 @@ for (const [k, titolo, testo, href] of [
   ['anonymize', 'Anonimizzazione', 'Documenti anonimizzati in locale', '/anonimizza'],
 ]) {
   rfOrig[k] = PAGES[k];
-  PAGES[k] = () => (RF.live ? rfPaginaPiattaforma(titolo, testo, href) : rfOrig[k] ? rfOrig[k]() : '');
+  PAGES[k] = () => (RF.live ? rfPaginaPiattaforma(titolo, testo) : rfOrig[k] ? rfOrig[k]() : '');
 }
 const rfAiPageOrig = PAGES.ai;
 PAGES.ai = () => (RF.live ? `<div class="page-head"><div><h2 class="page-title">AI</h2><div class="page-sub">Modello locale, nessun cloud: chiedi dalla barra a destra (⌘/)</div></div></div>
-  <div class="card"><p class="meta" style="margin:0;line-height:1.55">L'assistente risponde sui numeri e sulle liste della giornata già caricate qui (agenda, attività, referti, documenti) con il modello locale della piattaforma. Non dà consigli clinici e non inventa dati: se una cosa non c'è, lo dice. Le proposte per la wiki e la qualità della catena sono in <a href="/referti/qualita">Qualità AI</a>.</p></div>` : rfAiPageOrig());
+  <div class="card"><p class="meta" style="margin:0;line-height:1.55">L'assistente risponde sui numeri e sulle liste della giornata già caricate qui (agenda, attività, referti, documenti) con il modello locale della piattaforma. Non dà consigli clinici e non inventa dati: se una cosa non c'è, lo dice. Le proposte per la wiki e la qualità della catena sono in</p></div>` : rfAiPageOrig());
 
 /* ---------- Referti: coda vera + caricamento audio ---------- */
 // La pagina «report» del prototipo (#/reports/<id>) è demo: dentro la piattaforma rimanda alla revisione vera.
@@ -196,7 +195,6 @@ reportsQueue = function () {
         <div class="qm"><span class="v num ${r.crit ? 'crit' : ''}">${r.crit}</span><span class="l">critiche</span></div>
         <div class="qm"><span class="v num">${r.audio}</span><span class="l">audio</span></div>
         <button class="btn ${r.state === 'priority' ? 'primary' : ''}" data-go="#/review/${r.id}">${r.status === 'APPROVED' ? 'Rileggi' : r.state === 'clean' ? 'Lettura rapida' : 'Apri revisione'}</button>${r.status !== 'APPROVED' ? `<button class="btn ghost" data-prefirma="${r.id}" title="Controllo prima della firma, con traccia">✓ Controllo</button>` : ''}
-        <a class="btn ghost" href="/referti/${r.id}" title="Revisione e conferma nella piattaforma">Piattaforma</a>
       </div>
     </div>`;
   };
@@ -219,7 +217,7 @@ reportsQueue = function () {
         const quando = a.at ? ` · ${a.at}` : '';
         if (a.state === 'ready') return `<div class="list-item"><i class="dot success"></i><div class="grow"><div class="name" style="font-size:13px">Bozza pronta${a.paziente ? ` · ${rfEsc(a.paziente)}` : ''}</div><div class="sub">${rfEsc(a.medico || '')}${quando} · dettato arrivato dalla catena</div></div><button class="btn sm" data-go="#/review/${a.bozza}">${a.bozzaStato === 'confermata' ? 'Rileggi' : 'Apri revisione'}</button></div>`;
         if (a.state === 'duplicate') return `<div class="list-item"><i class="dot warning"></i><div class="grow"><div class="name" style="font-size:13px">Già dettato: stesso audio di un referto del ${a.bozzaData}${a.paziente ? ` (${rfEsc(a.paziente)})` : ''}</div><div class="sub">${rfEsc(a.medico || '')}${quando} · la catena l'ha elaborato e la piattaforma ha riconosciuto il duplicato: nessuna bozza nuova</div></div><button class="btn sm ghost" data-go="#/review/${a.bozza}">Apri quello</button></div>`;
-        if (a.state === 'failed') return `<div class="list-item"><i class="dot danger"></i><div class="grow"><div class="name" style="font-size:13px">Elaborazione senza bozza</div><div class="sub">${rfEsc(a.medico || '')}${quando} · controlla nella piattaforma (Referti → audio)</div></div><a class="btn sm ghost" href="/referti">Piattaforma</a></div>`;
+        if (a.state === 'failed') return `<div class="list-item"><i class="dot danger"></i><div class="grow"><div class="name" style="font-size:13px">Elaborazione senza bozza</div><div class="sub">${rfEsc(a.medico || '')}${quando} · la catena non ha consegnato un referto per questo audio</div></div></div>`;
         return `<div class="list-item"><i class="dot accent"></i><div class="grow"><div class="name" style="font-size:13px">${a.fase === 'in_coda' ? 'In coda' : 'In elaborazione'}${a.fase && a.fase !== 'in_coda' && a.fase !== 'elaborazione' ? ` · ${rfEsc(a.fase)}` : ''}</div><div class="sub">${rfEsc(a.medico || '')}${quando} · la catena impiega 4-10 minuti; la pagina si aggiorna da sola</div></div><span class="badge">…</span></div>`;
       }).join('')}</div>` : '<div class="caption mt-8">Nessun audio caricato nelle ultime 24 ore.</div>'}
     </div>
@@ -253,7 +251,7 @@ async function rfCaricaMedici() {
 const rfReviewOrig = PAGES.review;
 PAGES.review = () => {
   const id = state.params && state.params.id;
-  if (!RF.live || !id || !/^[0-9a-f-]{36}$/.test(id)) return RF.live ? rfPaginaPiattaforma('Revisione guidata', 'Scegli un referto dalla coda', '/referti') : rfReviewOrig();
+  if (!RF.live || !id || !/^[0-9a-f-]{36}$/.test(id)) return RF.live ? rfPaginaPiattaforma('Revisione guidata', 'Scegli un referto dalla coda') : rfReviewOrig();
   if (RF.loaded !== id) {
     if (RF.loading !== id) { RF.loading = id; void rfCaricaRevisione(id); }
     return `<div class="page-head"><div><h2 class="page-title">Revisione guidata</h2><div class="page-sub">Carico la bozza dalla piattaforma…</div></div></div>`;
@@ -270,7 +268,12 @@ PAGES.review = () => {
   let html;
   try { html = rfReviewOrig(); } finally { if (segnaposto) delete P.p1; }
   const testata = `<div class="rv-pat">${ICONS.shield}<b>${rfEsc(m.paziente || 'Paziente non indicato')}</b><span>${rfEsc(m.nascita || '')}</span><span class="sep">·</span><span>${m.tipo === 'visita' ? 'Visita' : 'Referto'}</span><span class="sep">·</span><span>${rfEsc(m.medico || '')}</span><span class="sep">·</span><span>${RV_AUDIO.label}</span>${m.stato === 'confermata' ? '<span class="sep">·</span><span class="badge success">confermato</span>' : ''}</div>`;
-  return html.replace(/<div class="rv-pat">[\s\S]*?<\/div>/, testata);
+  html = html.replace(/<div class="rv-pat">[\s\S]*?<\/div>/, testata);
+  // Impaginazione nel formato del medico e Word: stessi motori della piattaforma.
+  const bottoni = m.stato === 'bozza'
+    ? `<button class="btn sm ghost" onclick="rfImpagina()" title="${m.formato === 'lettera' ? 'Formato del medico: lettera al collega («Caro …,», corpo, saluto, terapia dalla lettera precedente)' : 'Formato del medico: rapporto a sezioni'}">${ICONS.ai || ''} ${m.formato === 'lettera' ? 'Impagina come lettera' : 'Riorganizza nel formato'}</button><a class="btn sm ghost" href="/api/referti/docx/${id}" target="_blank" rel="noopener" title="Word con la carta intestata del medico, dal testo salvato">Word</a>`
+    : `<a class="btn sm ghost" href="/api/referti/docx/${id}" target="_blank" rel="noopener">Word</a>`;
+  return html.replace('<div class="rv-top-r">', `<div class="rv-top-r">${bottoni}`);
 };
 async function rfCaricaRevisione(id) {
   try {
@@ -301,29 +304,50 @@ function rfTestoRicomposto() {
 const rfFinishOrig = rvFinish;
 rvFinish = function () {
   if (!RF.live || !RF.loaded) return rfFinishOrig();
-  const block = rvBlocking();
-  if (block.length) return rfFinishOrig();
+  const m = RF.meta || {};
   const testo = rfTestoRicomposto();
+  const block = rvBlocking();
+  const critTot = RV.issues.filter(i => i.sev === 'critical' || i.cat === 'NO_SOURCE').length;
+  const critChiusi = critTot - block.length;
+  const verificaRidotta = m.livello_verifica && m.livello_verifica !== 'pieno';
+  const servePresaAtto = block.length > 0 || verificaRidotta;
   const cats = {};
   RV.issues.filter(i => i.status === 'corrected').forEach(i => { const c = RV_CAT[i.cat][0]; cats[c] = (cats[c] || 0) + 1; });
-  openModal('Salva la revisione nella piattaforma', `
-    <div class="kv"><b>Verifiche</b><span>${rvDone()} di ${RV.issues.length} controllate</span><b>Correzioni</b><span>${RV.metrics.corrections}</span><b>Audio consultato</b><span>${RV.metrics.plays} volte</span><b>Testo</b><span>${testo.length} caratteri</span></div>
-    ${Object.keys(cats).length ? `<div class="mt-16"><div class="caption">Correzioni per categoria</div><div class="row wrap mt-8" style="gap:6px">${Object.entries(cats).map(([c, n]) => `<span class="badge">${c} ×${n}</span>`).join('')}</div></div>` : ''}
-    <p class="caption mt-16">Il testo ricomposto entra nella bozza della piattaforma come lavoro in corso (non conferma). La conferma, con la presa d'atto sui punti critici, resta nella piattaforma.</p>`,
-    `<button class="btn" data-close>Continua a rivedere</button><button class="btn primary" id="rf-finish-ok">Salva nella piattaforma</button>`);
-  document.getElementById('rf-finish-ok').onclick = async () => {
-    const b = document.getElementById('rf-finish-ok'); b.disabled = true; b.textContent = 'Salvo…';
+  openModal('Termina la revisione', `
+    <div class="kv"><b>Verifiche</b><span>${rvDone()} di ${RV.issues.length} controllate</span><b>Correzioni</b><span>${RV.metrics.corrections}</span><b>Audio consultato</b><span>${RV.metrics.plays} volte</span></div>
+    ${Object.keys(cats).length ? `<div class="mt-16"><div class="caption">Correzioni per categoria</div><div class="row wrap mt-8" style="gap:6px">${Object.entries(cats).map(([c, n]) => `<span class="badge">${rfEsc(c)} · ${n}</span>`).join('')}</div></div>` : ''}
+    ${servePresaAtto ? `<div class="rf-manc mt-16"><b>Prima della firma</b>${block.length ? `<div>• ${block.length} verific${block.length === 1 ? 'a critica ancora aperta' : 'he critiche ancora aperte'}.</div>` : ''}${verificaRidotta ? `<div>• La catena ha verificato solo in parte (livello «${rfEsc(m.livello_verifica)}»).</div>` : ''}<label class="row mt-8" style="gap:8px;align-items:flex-start;cursor:pointer"><input type="checkbox" id="rf-presa-atto" style="margin-top:3px"><span>Ne prendo atto e confermo lo stesso: resta registrato come presa d'atto.</span></label></div>` : '<div class="caption mt-16">Nessuna verifica critica aperta.</div>'}
+    <p class="caption mt-16">Dove va a finire: <b>Salva</b> mette il testo corretto nella bozza come lavoro in corso (si può riprendere). <b>Conferma</b> chiude il referto: entra nell'audit con il tuo ruolo, alimenta il dizionario proposto, e da lì si scarica il Word con la carta intestata del medico. Prima di confermare puoi impaginare nel formato del medico dal tasto nella barra.</p>`,
+    `<button class="btn" data-close>Continua a rivedere</button><button class="btn" id="rf-finish-salva">Salva</button><button class="btn primary" id="rf-finish-conferma">Conferma il referto</button>`);
+  const riarma = (t) => { const b = document.getElementById('rf-finish-conferma'); if (b) { b.disabled = false; b.textContent = 'Conferma il referto'; } toast(t); };
+  document.getElementById('rf-finish-salva').onclick = async () => {
+    const b = document.getElementById('rf-finish-salva'); b.disabled = true; b.textContent = 'Salvo…';
     try {
       const r = await fetch(`/api/prototipo/referti/${RF.loaded}/testo`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ testo, correzioni: RV.metrics.corrections, verifiche: rvDone() }) });
       if (!r.ok) throw new Error(String(r.status));
-      rvLog('SECRETARY_REVIEW_COMPLETED', `${RV.metrics.corrections} correzioni · salvato nella piattaforma`);
+      rvLog('SECRETARY_REVIEW_COMPLETED', `${RV.metrics.corrections} correzioni · salvato`);
+      closeModal(); toast('Salvato: la bozza resta da confermare'); go('#/reports');
+    } catch (e) { b.disabled = false; b.textContent = 'Salva'; toast(e.message === '409' ? 'La bozza è già confermata' : 'Salvataggio non riuscito'); }
+  };
+  document.getElementById('rf-finish-conferma').onclick = async () => {
+    const presa = document.getElementById('rf-presa-atto');
+    if (servePresaAtto && !(presa && presa.checked)) { toast('Serve la presa d’atto per confermare con punti aperti'); return; }
+    const b = document.getElementById('rf-finish-conferma'); b.disabled = true; b.textContent = 'Confermo…';
+    try {
+      const r = await fetch(`/api/prototipo/referti/${RF.loaded}/conferma`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        testo, presa_atto: !!(presa && presa.checked), flag_totali: RV.issues.length, flag_accettati_senza_riascolto: Math.max(0, rvDone() - RV.metrics.plays),
+        flag_critici_totali: critTot, flag_critici_chiusi: critChiusi, tempo_revisione_s: Math.round((Date.now() - (RV.metrics.started || Date.now())) / 1000),
+        revisione_iniziata_at: new Date(RV.metrics.started || Date.now()).toISOString(),
+      }) });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.errore || String(r.status)); }
+      rvLog('CONFIRMED', 'referto confermato');
       localStorage.removeItem(RV_KEY);
-      closeModal(); toast('Salvato nella piattaforma: conferma da lì quando sei pronto');
-      window.open(`/referti/${RF.loaded}`, '_blank');
-      go('#/reports');
+      const idBozza = RF.loaded;
+      closeModal();
+      openModal('Referto confermato', `<p>Il referto è confermato ed è nell'audit con il tuo ruolo. Il testo corretto alimenta le proposte di dizionario del medico.</p>`,
+        `<a class="btn" href="/api/referti/docx/${idBozza}" target="_blank" rel="noopener">Scarica il Word</a><button class="btn primary" data-close onclick="RF.loaded=null;go('#/reports');void rfCaricaDati()">Torna ai referti</button>`);
     } catch (e) {
-      b.disabled = false; b.textContent = 'Salva nella piattaforma';
-      toast(e.message === '409' ? 'La bozza è già confermata: non si può più modificare' : 'Salvataggio non riuscito');
+      riarma(e.message === 'critici' ? 'La piattaforma chiede la presa d’atto: spunta la casella' : e.message === 'non_bozza' ? 'La bozza è già confermata' : 'Conferma non riuscita');
     }
   };
 };
@@ -581,8 +605,8 @@ function rfPazienteDaDomanda(q) {
 function rfBottoneFonte(f) {
   if (!f) return '';
   if (f.tipo === 'documento') return `<button class="btn sm" data-doc="${f.id}" title="${rfEsc(f.titolo)}${f.data ? ' · ' + f.data : ''}">Apri</button>`;
-  if (f.tipo === 'referto') return REPORTS.some(r => r.id === f.id) ? `<button class="btn sm" data-go="#/review/${f.id}" title="${rfEsc(f.titolo)}">Apri</button>` : `<a class="btn sm ghost" href="/referti/${f.id}" target="_blank" rel="noopener">Apri</a>`;
-  if (f.tipo === 'referral' || f.tipo === 'questionario') return `<a class="btn sm ghost" href="/referral/${f.id}" target="_blank" rel="noopener" title="${rfEsc(f.titolo)}">Apri</a>`;
+  if (f.tipo === 'referto') return REPORTS.some(r => r.id === f.id) ? `<button class="btn sm" data-go="#/review/${f.id}" title="${rfEsc(f.titolo)}">Apri</button>` : `<button class="btn sm" data-go="#/review/${f.id}" title="${rfEsc(f.titolo)}">Apri</button>`;
+  if (f.tipo === 'referral' || f.tipo === 'questionario') { const paz = PATIENTS.find(p => (p.referrals || []).some(r => r.id === f.id)); return paz ? `<button class="btn sm ghost" data-go="#/patients/${paz.id}" title="${rfEsc(f.titolo)}">Scheda</button>` : ''; }
   if (f.tipo === 'appuntamento') return `<button class="btn sm ghost" data-go="#/agenda">Agenda</button>`;
   return '';
 }
@@ -1020,7 +1044,7 @@ patientTimeline = function (p) {
 };
 patientAdmin = function (p) {
   if (!RF.live) return rfAdminOrig(p);
-  return `<div class="grid grid-2"><div class="card"><div class="card-head"><span class="section-title">Anagrafica</span><a class="btn sm ghost" href="/pazienti/${p.id}" target="_blank" rel="noopener">Modifica nella piattaforma</a></div><div class="kv"><b>Nascita</b><span>${p.dob || '—'}</span><b>Telefono</b><span>${rfEsc(p.phone || '—')}</span><b>Medico inviante</b><span>${rfEsc(p.gp || '—')}</span><b>Assicurazione</b><span>${rfEsc(p.assicurazione || '—')}</span></div></div><div class="card"><div class="card-head"><span class="section-title">Referral</span></div><div class="list">${(p.referrals || []).map(r => `<div class="list-item"><div class="grow"><div class="name" style="font-size:13px">${rfEsc(r.quesito || 'quesito non indicato')}</div><div class="sub">${r.at} · ${rfEsc(r.medico || '')} · ${rfEsc(r.status || '')}${r.urgenza === 'urgente' ? ' · <b>urgente</b>' : ''}</div></div><a class="btn sm ghost" href="/referral/${r.id}" target="_blank" rel="noopener">Apri</a></div>`).join('') || '<div class="caption">Nessuna referral.</div>'}</div></div></div>`;
+  return `<div class="grid grid-2"><div class="card"><div class="card-head"><span class="section-title">Anagrafica</span></div><div class="kv"><b>Nascita</b><span>${p.dob || '—'}</span><b>Telefono</b><span>${rfEsc(p.phone || '—')}</span><b>Medico inviante</b><span>${rfEsc(p.gp || '—')}</span><b>Assicurazione</b><span>${rfEsc(p.assicurazione || '—')}</span></div></div><div class="card"><div class="card-head"><span class="section-title">Referral</span></div><div class="list">${(p.referrals || []).map(r => `<div class="list-item"><div class="grow"><div class="name" style="font-size:13px">${rfEsc(r.quesito || 'quesito non indicato')}</div><div class="sub">${r.at} · ${rfEsc(r.medico || '')} · ${rfEsc(r.status || '')}${r.urgenza === 'urgente' ? ' · <b>urgente</b>' : ''}</div></div></div>`).join('') || '<div class="caption">Nessuna referral.</div>'}</div></div></div>`;
 };
 // La pagina «visita» del prototipo è demo: dentro la piattaforma si apre la scheda del paziente.
 if (typeof PAGES !== 'undefined' && PAGES.visit) {

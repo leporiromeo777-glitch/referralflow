@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
 import { costruisciRevisione } from '@/lib/prototipo-revisione';
+import { formatoPerBozza } from '@/lib/referti-medici';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,9 +35,16 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     payload: p,
     audioUrl: b.audio_id ? `/api/referti/audio/${b.audio_id}` : null,
   });
+  // Formato del medico che ha dettato (lettera o rapporto a sezioni), per il
+  // tasto «Impagina» della revisione.
+  let formato: 'rapporto' | 'lettera' = 'rapporto';
+  try { formato = await formatoPerBozza(session.studioId, p.medico ?? null); } catch { formato = 'rapporto'; }
   return NextResponse.json({
     id: b.id,
     stato: b.stato,
+    formato,
+    livello_verifica: typeof p.manifesto?.livello_verifica === 'string' ? p.manifesto.livello_verifica : 'pieno',
+    medico_id: typeof p.medico?.id === 'string' ? p.medico.id : null,
     tipo: b.tipo,
     paziente: campo('nome_paziente') || null,
     nascita: campo('data_nascita') || null,

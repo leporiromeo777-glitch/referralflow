@@ -33,7 +33,7 @@ Passi, tutti del codice, nell'ordine:
 9. Fatti scritti nel grafo.
 10. **Sintesi del modello locale** (`PROTOTIPO_LLM`, default gemma3:12b, 90 s): 3-4 frasi SOPRA il briefing già scritto dal codice, con divieto di aggiungere; se il modello non c'è la risposta è il testo del codice (`testoBriefing`). Il passo finisce in traccia con esito e tempo.
 
-Uscita: sezioni con righe e fonte per riga (documento → «Apri» nel visualizzatore, bozza → revisione, referral → pagina della referral), riquadro «Da segnalare al medico», traccia. API: `POST /api/prototipo/briefing {patient_id}`; la traccia di qualunque risposta si rilegge con `GET /api/prototipo/tracce/[id]`.
+Uscita: sezioni con righe e fonte per riga (documento → «Apri» nel visualizzatore, bozza → revisione, referral → scheda del paziente; nessun rimando alla piattaforma classica), riquadro «Da segnalare al medico», traccia. API: `POST /api/prototipo/briefing {patient_id}`; la traccia di qualunque risposta si rilegge con `GET /api/prototipo/tracce/[id]`.
 
 Nel prototipo: chip «Briefing pre-visita» sulla scheda del paziente, bottone nella Home sul prossimo paziente, oppure a parole («briefing di Bernasconi», «preparami la visita di …», «briefing del prossimo paziente»). Sotto ogni risposta, anche quelle libere del modello, il riquadro **«Da dove viene»** elenca i passi con ✓/✗/–, le fonti lette con il tasto per aprirle, il modello e il tempo.
 

@@ -40,7 +40,7 @@ export async function cambiamentiUltimaVisita(studioId: string, patientId: strin
   const e = confrontaReferti(prima, dopo, misureCliniche);
   return conTraccia(studioId, userId, patientId, {
     ...e, procedura: 'cambiamenti_ultima_visita', titolo: `Cosa è cambiato · ${nome}`,
-    azioni: [{ etichetta: 'Scheda paziente', go: `#/patients/${p.id}` }, ...(dopo ? [{ etichetta: 'Ultimo referto', href: `/referti/${dopo.id}` }] : [])],
+    azioni: [{ etichetta: 'Scheda paziente', go: `#/patients/${p.id}` }, ...(dopo ? [{ etichetta: 'Ultimo referto', go: `#/review/${dopo.id}` }] : [])],
   }, t0);
 }
 
@@ -64,7 +64,7 @@ export async function richiamiMese(studioId: string, userId?: string | null): Pr
           + (select count(*) from appointments where studio_id = $1 and follow_up_done_at >= now() - interval '30 days')::int as n`,
     [studioId]);
   const e = richiamiDelMese(righe, new Date(), Number(fatti?.n ?? 0));
-  return conTraccia(studioId, userId, null, { ...e, procedura: 'richiami_mese', titolo: 'Richiami del mese', azioni: [{ etichetta: 'Pagina richiami', href: '/richiami' }] }, t0);
+  return conTraccia(studioId, userId, null, { ...e, procedura: 'richiami_mese', titolo: 'Richiami del mese', azioni: [{ etichetta: 'Cose da fare', go: '#/inbox' }] }, t0);
 }
 
 /* ---------- controllo prima della firma ---------- */
@@ -94,7 +94,7 @@ export async function controlloPrimaDellaFirma(studioId: string, bozzaId: string
   const nome = campi.nome_paziente && campi.nome_paziente.toLowerCase() !== 'non indicato' ? campi.nome_paziente : 'paziente non indicato';
   return conTraccia(studioId, userId, null, {
     ...e, procedura: 'controllo_prefirma', titolo: `Controllo prima della firma · ${nome}`,
-    azioni: [{ etichetta: 'Revisione', go: `#/review/${b.id}` }, { etichetta: 'Conferma nella piattaforma', href: `/referti/${b.id}` }],
+    azioni: [{ etichetta: 'Apri la revisione', go: `#/review/${b.id}` }],
   }, t0);
 }
 
@@ -222,5 +222,5 @@ export async function chiusuraMese(studioId: string, userId?: string | null, mes
     lettereInRitardo: lettere.mancanti.reduce((s, x) => s + (parseInt(x.testo, 10) || 0), 0),
     tracce, dizionarioConfermato: diz.n,
   });
-  return conTraccia(studioId, userId, null, { ...e, procedura: 'chiusura_mensile', titolo: `Chiusura mensile · ${nomeMese}`, azioni: [{ etichetta: 'Statistiche', href: '/statistiche' }, { etichetta: 'Richiami', href: '/richiami' }] }, t0);
+  return conTraccia(studioId, userId, null, { ...e, procedura: 'chiusura_mensile', titolo: `Chiusura mensile · ${nomeMese}`, azioni: [{ etichetta: 'Cose da fare', go: '#/inbox' }, { etichetta: 'Referti', go: '#/reports' }] }, t0);
 }

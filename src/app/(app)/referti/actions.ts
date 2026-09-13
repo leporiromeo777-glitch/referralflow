@@ -2,16 +2,13 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { registraRevisione } from '@/lib/audit/revisione';
 import { query } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
-import { estraiSostituzioni } from '@/lib/referti-learn';
 import { deleteFile } from '@/lib/storage';
-import { misuraRevisione } from '@/lib/referti-misura';
-import { tassonomiaModifiche, conLineage } from '@/lib/referti-tassonomia';
 import { trovaPaziente } from '@/lib/referti-allegati';
 import { registraEvento, impronta } from '@/lib/referti-eventi';
+import { confermaBozzaCore } from '@/lib/referti-conferma';
 
 const MAX_SUGGERIMENTI = 30;
 
@@ -56,157 +53,25 @@ export async function confermaBozza(formData: FormData) {
   const testo = String(formData.get('testo') ?? '').slice(0, MAX_TESTO);
   if (!testo.trim()) redirect(`/referti/${id}?err=testo`);
 
-  // Gate pre-firma (Ricerca 18 §16.1): con segnalazioni critiche non ancora
-  // aperte, o con un livello di verifica non pieno, la conferma passa solo
-  // con la presa d'atto esplicita — e resta registrata come override.
-  const numForm = (k: string, max: number) => {
-    const v = Number(formData.get(k));
-    return Number.isFinite(v) && v >= 0 ? Math.min(Math.round(v), max) : null;
-  };
-  const criticiTot = numForm('flag_critici_totali', 1000);
-  const criticiChiusi = numForm('flag_critici_chiusi', 1000);
-  const criticiAperti = criticiTot !== null && criticiChiusi !== null ? Math.max(0, criticiTot - criticiChiusi) : 0;
-  const livelloVerifica = String(formData.get('livello_verifica') ?? '').replace(/[^a-z]/g, '').slice(0, 12);
-  const presaAtto = formData.get('override_critici') === '1';
-  if ((criticiAperti > 0 || (livelloVerifica && livelloVerifica !== 'pieno')) && !presaAtto) {
-    redirect(`/referti/${id}?err=critici`);
-  }
-
   // I campi estratti arrivano come campo__<chiave>: si riconfermano tutti,
   // eventualmente corretti a mano. Solo i campi presenti nel form.
   const campi: Record<string, string> = {};
   formData.forEach((v, k) => {
-    if (k.startsWith('campo__') && typeof v === 'string') {
-      campi[k.slice('campo__'.length).slice(0, 80)] = v.trim().slice(0, 2000);
-    }
+    if (k.startsWith('campo__') && typeof v === 'string') campi[k.slice('campo__'.length)] = v;
   });
-
-  const [row] = await query<{ ai_text: string | null; versioni: Record<string, string> | null; grezzo: string | null }>(
-    `update referti_bozze
-        set stato = 'confermata', testo_finale = $3, campi_confermati = $4,
-            reviewed_by = $5, reviewed_at = now()
-      where id = $1 and studio_id = $2 and stato = 'bozza'
-      returning payload ->> 'testo_corretto' as ai_text, payload -> 'versioni' as versioni, payload ->> 'testo_grezzo' as grezzo,
-                payload -> 'versione_catena' ->> 'pipeline' as pipeline_version, payload -> 'versione_catena' ->> 'prompt' as prompt_version,
-                payload -> 'medico' ->> 'id' as medico`,
-    [id, session.studioId, testo, JSON.stringify(campi), session.id]
-  );
-  // Audit (9.9.2026): la versione confermata diventa un artefatto e il diff
-  // con l'ultimo output AI una riga di human_edits, col ruolo di chi firma.
-  if (row) {
-    try {
-      const sec = Number(formData.get('tempo_revisione_s'));
-      await registraRevisione({
-        studioId: session.studioId, bozzaId: id, userId: session.id, ruoloUtente: session.role, testo,
-        secondi: Number.isFinite(sec) && sec >= 0 ? Math.min(Math.round(sec), 6 * 3600) : null,
-        pipelineVersion: (row as any).pipeline_version ?? null, promptVersion: (row as any).prompt_version ?? null, medico: (row as any).medico ?? null,
-      });
-    } catch (e: any) { console.error('audit revisione:', e?.message || e); }
-  }
-
-  // Misura della revisione: quanto la persona ha corretto la catena.
-  // Best-effort, mai bloccante, solo numeri.
-  if (row?.ai_text) {
-    try {
-      const m: Record<string, unknown> = { ...misuraRevisione(row.ai_text, testo) };
-      // Telemetria della revisione (2026-09-06): tempo alla conferma e
-      // segnalazioni accettate senza riascolto — la misura dell'automatismo.
-      const num = (k: string, max: number) => {
-        const v = Number(formData.get(k));
-        return Number.isFinite(v) && v >= 0 ? Math.min(Math.round(v), max) : null;
-      };
-      const t = num('tempo_revisione_s', 6 * 3600);
-      const ft = num('flag_totali', 1000);
-      const fs = num('flag_accettati_senza_riascolto', 1000);
-      if (t !== null) m.tempo_revisione_s = t;
-      if (ft !== null) m.flag_totali = ft;
-      if (fs !== null) m.flag_accettati_senza_riascolto = fs;
-      // Prova del controllo umano (Ricerca 17 §17.13): avvisi critici presi
-      // visione e momento di inizio della revisione.
-      const fct = num('flag_critici_totali', 1000);
-      const fcc = num('flag_critici_chiusi', 1000);
-      if (fct !== null) m.flag_critici_totali = fct;
-      if (fcc !== null) m.flag_critici_chiusi = fcc;
-      const iniz = String(formData.get('revisione_iniziata_at') ?? '');
-      if (/^\d{4}-\d{2}-\d{2}T/.test(iniz)) m.revisione_iniziata_at = iniz.slice(0, 40);
-      // Override registrato (Ricerca 18 §16.1): quante critiche restavano
-      // aperte alla firma e con quale livello di verifica della catena.
-      if (criticiAperti > 0) m.override_critici = criticiAperti;
-      if (livelloVerifica) m.livello_verifica = livelloVerifica;
-      if (presaAtto) m.presa_atto = true;
-      // Tassonomia automatica di ogni modifica (numero, farmaco, negazione,
-      // lateralità, termine, formato, stile, frase inserita o tolta).
-      try {
-        const tx = tassonomiaModifiche(row.ai_text, testo);
-        m.classi = tx.classi;
-        // Lineage: quale componente ha introdotto ogni errore corretto.
-        const versioni: Record<string, string> = { ...(row.versioni ?? {}), finale: row.ai_text };
-        if (row.grezzo) versioni.grezzo_a = row.grezzo;
-        const lin = conLineage(tx.modifiche, versioni);
-        m.modifiche = lin.modifiche;
-        m.origini = lin.origini;
-        // Memoria di STILE (2026-09-06): una riformulazione senza numeri,
-        // negazioni o lateralità, di 2-6 parole per lato, diventa una regola
-        // PROPOSTA; entra nel dizionario solo quando il medico la conferma
-        // dal pannello (vista almeno 2 volte).
-        for (const md of tx.modifiche) {
-          if (md.classe !== 'STYLE') continue;
-          const np = md.prima.trim(), nd = md.dopo.trim();
-          const wp = np.split(/\s+/).length, wd = nd.split(/\s+/).length;
-          if (wp < 2 || wp > 6 || wd < 2 || wd > 6 || /\d/.test(np + nd)) continue;
-          if (np.toLowerCase() === nd.toLowerCase()) continue;
-          await query(
-            `insert into referti_suggerimenti (studio_id, da, a, tipo)
-             values ($1, $2, $3, 'stile')
-             on conflict (studio_id, da, a) do update
-               set conteggio = referti_suggerimenti.conteggio + 1,
-                   updated_at = now(), ignorato = false`,
-            [session.studioId, np.slice(0, 200), nd.slice(0, 200)]
-          );
-        }
-      } catch (e: any) {
-        console.error('Tassonomia modifiche fallita:', e?.message || e);
-      }
-      await query(
-        `update referti_bozze
-            set payload = jsonb_set(payload, '{revisione}', $3::jsonb)
-          where id = $1 and studio_id = $2`,
-        [id, session.studioId, JSON.stringify(m)]
-      );
-    } catch (e: any) {
-      console.error('Misura revisione fallita:', e?.message || e);
-    }
-  }
-
-  // Impara dalla correzione: se la persona ha cambiato delle parole, le
-  // sostituzioni ricorrenti diventano suggerimenti per il dizionario della
-  // trascrizione. Non deve mai far fallire la conferma, e mai loggare testo.
-  if (row?.ai_text && row.ai_text !== testo) {
-    try {
-      const sost = estraiSostituzioni(row.ai_text, testo).slice(0, MAX_SUGGERIMENTI);
-      for (const s of sost) {
-        await query(
-          `insert into referti_suggerimenti (studio_id, da, a)
-           values ($1, $2, $3)
-           on conflict (studio_id, da, a) do update
-             set conteggio = referti_suggerimenti.conteggio + 1,
-                 updated_at = now(), ignorato = false`,
-          [session.studioId, s.da, s.a]
-        );
-      }
-    } catch (e: any) {
-      console.error('Estrazione suggerimenti referto fallita:', e?.message || e);
-    }
-  }
-
-  await registraEvento(session.studioId, id, 'conferma', session.id, {
-    impronta_testo: impronta(testo),
-    parole_finali: testo.split(/\s+/).filter(Boolean).length,
-    campi: Object.keys(campi).length,
-    override_critici: criticiAperti,
-    livello_verifica: livelloVerifica,
-    presa_atto: presaAtto,
+  const num = (k: string) => { const v = Number(formData.get(k)); return Number.isFinite(v) ? v : null; };
+  // Il cuore (gate, stato, audit, misura, suggerimenti, evento) sta in
+  // src/lib/referti-conferma.ts, condiviso con l'interfaccia nuova.
+  const esito = await confermaBozzaCore({
+    studioId: session.studioId, userId: session.id, ruoloUtente: session.role, id, testo, campi,
+    tele: {
+      tempo_revisione_s: num('tempo_revisione_s'), flag_totali: num('flag_totali'), flag_accettati_senza_riascolto: num('flag_accettati_senza_riascolto'),
+      flag_critici_totali: num('flag_critici_totali'), flag_critici_chiusi: num('flag_critici_chiusi'),
+      revisione_iniziata_at: String(formData.get('revisione_iniziata_at') ?? ''), livello_verifica: String(formData.get('livello_verifica') ?? ''),
+      presa_atto: formData.get('override_critici') === '1', origine: 'piattaforma',
+    },
   });
+  if (!esito.ok) redirect(esito.errore === 'critici' ? `/referti/${id}?err=critici` : esito.errore === 'testo' ? `/referti/${id}?err=testo` : `/referti/${id}`);
   revalidatePath('/referti');
   redirect(`/referti/${id}?ok=confermata`);
 }
