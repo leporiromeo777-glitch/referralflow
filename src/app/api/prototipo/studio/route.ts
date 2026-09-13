@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession, hashPassword } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
+import { syncFeed } from '@/lib/agenda-sync';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,7 +24,15 @@ async function leggi(studioId: string) {
     `select id, nome, aliases, attivo, user_id from providers where studio_id = $1 order by attivo desc, nome`, [studioId]);
   const risorse = await query<{ id: string; tipo: string; nome: string; descrizione: string | null; attivo: boolean }>(
     `select id, tipo, nome, descrizione, attivo from studio_risorse where studio_id = $1 order by tipo, attivo desc, nome`, [studioId]);
-  return { studio, personale, medici, sale: risorse.filter((r) => r.tipo === 'sala'), apparecchi: risorse.filter((r) => r.tipo === 'apparecchio') };
+  // Codici del campo «luogo» dell'agenda che non corrispondono a nessun
+  // medico (ultimi 60 giorni e futuro): l'amministratore li abbina a un
+  // medico (alias) o a una sala/apparecchio.
+  const codici = await query<{ codice: string; n: number; ultimo: string }>(
+    `select coalesce(nullif(trim(luogo), ''), '(vuoto)') as codice, count(*)::int as n, max(starts_at)::date::text as ultimo
+       from appointments where studio_id = $1 and provider_id is null and starts_at >= current_date - 60
+      group by 1 order by 2 desc limit 30`, [studioId]);
+  const nomiRisorse = new Set(risorse.map((r) => r.nome.toLowerCase()));
+  return { studio, personale, medici, sale: risorse.filter((r) => r.tipo === 'sala'), apparecchi: risorse.filter((r) => r.tipo === 'apparecchio'), codici_agenda: codici.map((c) => ({ ...c, risorsa: nomiRisorse.has(c.codice.toLowerCase()) })) };
 }
 
 export async function GET() {
@@ -92,6 +101,23 @@ export async function POST(req: NextRequest) {
     } else if (azione === 'risorsa_attivo') {
       const id = s(c.id); if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 });
       await query('update studio_risorse set attivo = not attivo, updated_at = now() where id = $1 and studio_id = $2', [id, sid]);
+    } else if (azione === 'codice_medico') {
+      // Il codice dell'agenda diventa un alias del medico; poi la sincronizzazione
+      // riabbina subito gli appuntamenti senza medico.
+      const id = s(c.provider_id); const codice = s(c.codice, 80);
+      if (!isUuid(id) || !codice || codice === '(vuoto)') return NextResponse.json({ errore: 'codice' }, { status: 400 });
+      await query(`update providers set aliases = array_append(array_remove(aliases, $3), $3) where id = $1 and studio_id = $2`, [id, sid, codice]);
+      const feeds = await query<{ id: string }>('select id from agenda_feeds where studio_id = $1 and attivo = true', [sid]);
+      let abbinati = 0;
+      for (const f of feeds) { try { const r = await syncFeed(f.id); abbinati += Number((r as any)?.mapped ?? 0); } catch (e) { console.error(`[studio] sync feed fallita: ${(e as Error)?.message ?? e}`); } }
+      // Gli appuntamenti già importati senza medico con quel luogo: abbinati direttamente.
+      const [agg] = await query<{ n: number }>(`with u as (update appointments set provider_id = $2 where studio_id = $1 and provider_id is null and lower(trim(luogo)) = lower($3) returning 1) select count(*)::int as n from u`, [sid, id, codice]);
+      console.log(`[studio] codice agenda → medico: appuntamenti abbinati=${agg?.n ?? 0} sync=${abbinati}`);
+    } else if (azione === 'codice_risorsa') {
+      const tipo = s(c.tipo); const codice = s(c.codice, 80);
+      if (!TIPI.has(tipo) || !codice || codice === '(vuoto)') return NextResponse.json({ errore: 'codice' }, { status: 400 });
+      const [esiste] = await query<{ id: string }>(`select id from studio_risorse where studio_id = $1 and lower(nome) = lower($2)`, [sid, codice]);
+      if (!esiste) await query(`insert into studio_risorse (studio_id, tipo, nome, descrizione) values ($1, $2, $3, $4)`, [sid, tipo, codice, 'codice usato nell’agenda (campo luogo)']);
     } else {
       return NextResponse.json({ errore: 'azione_sconosciuta' }, { status: 400 });
     }
