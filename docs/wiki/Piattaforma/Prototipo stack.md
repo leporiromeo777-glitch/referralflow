@@ -42,3 +42,5 @@ Richiesta utente: «rendi il prototipo operativo, attaccagli anche il bot, elimi
 - **Revisione guidata**: «Termina revisione» → `POST /api/prototipo/referti/[id]/testo` salva il testo ricomposto (frasi corrette, tolte, aggiunte) in `testo_finale` come lavoro in corso, evento `testo_salvato` origine `prototipo`, e apre la bozza nella piattaforma per la conferma col gate.
 - Aggiornamento automatico dei dati ogni 2 minuti (non durante una revisione).
 Pubblicazione sulla rete: Caddy serve la piattaforma anche su **https://192.168.1.146/** (porte 80→443 standard, certificato della CA interna), quindi il prototipo è a `https://192.168.1.146/prototipo/` e il dittafono a `/dittafono/`, senza numeri di porta ([[Piattaforma/Server Mac mini]]).
+
+Dal 13.9.2026 l'indirizzo da usare, anche per l'icona sul telefono, è **https://cct.referralflow.ch/prototipo/** (certificato Let's Encrypt, nessun avviso, [[Piattaforma/Server Mac mini]]).
