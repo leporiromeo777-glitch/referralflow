@@ -805,7 +805,21 @@ function rfRispondiLibera(q) {
     .mobile-nav.rf-pill button.active { background: var(--accent-soft); }
     .mobile-nav.rf-pill svg { width: 20px; height: 20px; }
     .mobile-nav.rf-pill.rf-nascosta { transform: translateY(calc(100% + 28px)); opacity: 0; pointer-events: none; }
-    .content { padding-bottom: 104px; }
+    .content { padding-bottom: 104px; overflow-x: hidden; }
+    /* niente scorrimento laterale della pagina: ciò che è largo scorre dentro il suo riquadro */
+    html, body, #app, .main { overflow-x: hidden; max-width: 100vw; }
+    .content > .page, .content > .page > * { max-width: 100%; min-width: 0; }
+    .card, .row, .grow, .stack, .list-item, .tl-item .b { min-width: 0; max-width: 100%; }
+    .card.hero .row, .page-head .actions, .actions, .toolbar { flex-wrap: wrap; }
+    .card.hero .num { font-size: 32px !important; }
+    .grid-2, .grid-3, .grid-hero, .grid-main-side { grid-template-columns: minmax(0, 1fr); }
+    .grid-4, .grid-5 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .cal, .board, .table-wrap, .tabs, .rf-brief { overflow-x: auto; max-width: 100%; }
+    .cal { overflow: auto; }
+    .btn.lg { white-space: normal; text-align: left; }
+    .ai-msg { overflow-wrap: anywhere; }
+    /* con la sezione AI aperta il menu a pillola sparisce */
+    .mobile-nav.rf-pill.rf-ai { display: none; }
   }`;
   document.head.appendChild(st);
   let ultimo = 0, accumulato = 0;
@@ -843,6 +857,7 @@ renderMobileNav = function () {
   const nav = document.getElementById('mobilenav');
   if (!nav) return;
   nav.classList.add('rf-pill');
+  nav.classList.toggle('rf-ai', !!state.aiOpen);
   const voci = [['home', 'Oggi', 'home'], ['agenda', 'Agenda', 'agenda'], ['patients', 'Pazienti', 'patients'], ['reports', 'Referti', 'reports'], ['dittafono', 'Dittafono', 'mic'], ['ai', 'AI', 'ai']];
   const attiva = (k) => k === 'ai' ? state.aiOpen : (state.route === k || (k === 'patients' && ['patient', 'visit'].includes(state.route)) || (k === 'reports' && ['report', 'review'].includes(state.route)));
   nav.innerHTML = voci.map(([k, l, i]) => `<button class="${attiva(k) ? 'active' : ''}" data-mnav="${k}" aria-label="${l}">${ICONS[i] || ''}<span>${l}</span></button>`).join('');
