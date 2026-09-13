@@ -8,6 +8,7 @@ import { salvaDalModulo } from '@/lib/referti-salva';
 import { isUuid } from '@/lib/cartella';
 import { agganciaRiferimenti, documentiDelPaziente } from '@/lib/referti-allegati';
 import { bloccoAllegato } from '@/lib/referti-allegato-blocco';
+import { registraEvento } from '@/lib/referti-eventi';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -58,6 +59,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   const testo = ((b.testo_finale ?? b.payload?.testo_corretto ?? '') as string).trim();
   if (!testo) return new NextResponse('Referto vuoto', { status: 404 });
+  // Evento «word_scaricato» (13.9.2026): serve alla procedura «lettere in
+  // ritardo» (referto confermato senza Word prodotto). Solo id, mai testo.
+  void registraEvento(session.studioId, params.id, 'word_scaricato', session.id, { stato: b.stato });
 
   // I campi confermati dalla revisione vincono su quelli estratti.
   const campo = (nome: string): string => {

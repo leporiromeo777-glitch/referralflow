@@ -138,3 +138,89 @@ export async function preparazioneGiornata(studioId: string, userId?: string | n
   const e = aggregaGiornata(voci, dataCh);
   return conTraccia(studioId, userId, null, { ...e, procedura: 'preparazione_giornata', titolo: `Preparazione della giornata · ${dataCh}`, azioni: [{ etichetta: 'Agenda', go: '#/agenda' }] }, t0);
 }
+
+/* ---------- lettere in ritardo ---------- */
+// Referti confermati senza l'evento «word_scaricato» dopo 3 giorni, bozze
+// ferme da 7, referral in stato «vista» da 10 giorni senza «referto_inviato».
+// L'evento «word_scaricato» esiste dal 13.9.2026: i referti confermati prima
+// non possono essere giudicati (risulterebbero tutti in ritardo).
+const EVENTO_WORD_DAL = '2026-09-13';
+
+async function lettereRitardoGrezzo(studioId: string) {
+  const { lettereInRitardo } = await import('./procedure-regole');
+  const lettere = await query<{ id: string; paziente: string; medico: string | null; confermata_il: string | null; dettata_il: string; stato: 'confermata' | 'bozza'; word_scaricato: boolean }>(
+    `select b.id,
+            coalesce(nullif(b.campi_confermati->>'nome_paziente', ''), nullif(b.payload->'campi_estratti'->>'nome_paziente', ''), 'paziente non indicato') as paziente,
+            b.payload->'medico'->>'nome' as medico, b.reviewed_at::text as confermata_il, b.created_at::text as dettata_il, b.stato,
+            exists (select 1 from referti_eventi e where e.bozza_id = b.id and e.azione = 'word_scaricato' and e.created_at >= coalesce(b.reviewed_at, b.created_at)) as word_scaricato
+       from referti_bozze b
+      where b.studio_id = $1 and b.stato in ('confermata', 'bozza') and b.tipo = 'referto'
+        and coalesce((b.payload->>'ombra')::boolean, false) = false
+        and coalesce(b.reviewed_at, b.created_at) >= now() - interval '120 days'
+        and (b.stato = 'bozza' or b.reviewed_at >= $2::date)`,
+    [studioId, EVENTO_WORD_DAL]);
+  const viste = await query<{ id: string; paziente: string; vista_il: string; medico: string | null }>(
+    `select r.id, p.cognome || ' ' || p.nome as paziente, coalesce(h.vista_il, r.updated_at)::text as vista_il, d.nome as medico
+       from referrals r join patients p on p.id = r.patient_id left join referring_doctors d on d.id = r.referring_doctor_id
+       left join lateral (select max(changed_at) as vista_il from referral_status_history where referral_id = r.id and to_status = 'vista') h on true
+      where r.studio_id = $1 and r.status = 'vista'`,
+    [studioId]);
+  return lettereInRitardo(lettere, viste, new Date());
+}
+
+export async function lettereRitardo(studioId: string, userId?: string | null): Promise<Traccia> {
+  const t0 = Date.now();
+  const e = await lettereRitardoGrezzo(studioId);
+  return conTraccia(studioId, userId, null, { ...e, procedura: 'lettere_ritardo', titolo: 'Lettere in ritardo', azioni: [{ etichetta: 'Referti', go: '#/reports' }] }, t0);
+}
+
+/* ---------- chiusura mensile ---------- */
+// I numeri del mese (corrente, o «AAAA-MM») e ciò che resta aperto. Solo
+// conteggi e id: nessun testo clinico entra nella traccia.
+export async function chiusuraMese(studioId: string, userId?: string | null, mese?: string): Promise<Traccia> {
+  const t0 = Date.now();
+  const { chiusuraMensile } = await import('./procedure-regole');
+  const m = mese && /^\d{4}-\d{2}$/.test(mese) ? `${mese}-01` : null;
+  const [per] = await query<{ inizio: string; fine: string }>(`select date_trunc('month', coalesce($1::date, current_date))::date::text as inizio, (date_trunc('month', coalesce($1::date, current_date)) + interval '1 month')::date::text as fine`, [m]);
+  const args = [studioId, per.inizio, per.fine];
+  const [ref] = await query<{ dettati: number; confermati: number; scartati: number; aperti: number; mediana: number | null }>(
+    `select count(*) filter (where created_at >= $2 and created_at < $3)::int as dettati,
+            count(*) filter (where stato = 'confermata' and reviewed_at >= $2 and reviewed_at < $3)::int as confermati,
+            count(*) filter (where stato = 'scartata' and reviewed_at >= $2 and reviewed_at < $3)::int as scartati,
+            count(*) filter (where stato = 'bozza' and created_at >= $2 and created_at < $3)::int as aperti,
+            (percentile_cont(0.5) within group (order by extract(epoch from (reviewed_at - created_at)) / 86400) filter (where stato = 'confermata' and reviewed_at >= $2 and reviewed_at < $3))::numeric as mediana
+       from referti_bozze where studio_id = $1 and tipo = 'referto' and coalesce((payload->>'ombra')::boolean, false) = false`, args);
+  const [rr] = await query<{ ricevute: number; chiuse: number }>(
+    `select count(*) filter (where created_at >= $2 and created_at < $3)::int as ricevute,
+            count(*) filter (where status = 'chiusa' and updated_at >= $2 and updated_at < $3)::int as chiuse
+       from referrals where studio_id = $1`, args);
+  const ferme = await query<{ id: string; paziente: string; da: string }>(
+    `select r.id, p.cognome || ' ' || p.nome as paziente, r.created_at::text as da from referrals r join patients p on p.id = r.patient_id
+      where r.studio_id = $1 and r.status in ('ricevuta', 'triage', 'da_prenotare') and r.appuntamento_at is null and r.created_at < now() - interval '30 days' order by r.created_at limit 50`, [studioId]);
+  const [ric] = await query<{ fatti: number }>(
+    `select (select count(*) from referrals where studio_id = $1 and follow_up_done_at >= $2 and follow_up_done_at < $3)::int
+          + (select count(*) from appointments where studio_id = $1 and follow_up_done_at >= $2 and follow_up_done_at < $3)::int as fatti`, args);
+  const scaduti = await query<{ id: string; paziente: string; due: string }>(
+    `select r.id, p.cognome || ' ' || p.nome as paziente, r.follow_up_due::text as due from referrals r join patients p on p.id = r.patient_id
+      where r.studio_id = $1 and r.follow_up_due is not null and r.follow_up_done_at is null and r.follow_up_due < current_date order by r.follow_up_due limit 50`, [studioId]);
+  const [doc] = await query<{ n: number }>(`select count(*)::int as n from patient_documents where studio_id = $1 and uploaded_at >= $2 and uploaded_at < $3`, args);
+  const senzaEcg = await query<{ id: string; paziente: string }>(
+    `select distinct p.id, p.cognome || ' ' || p.nome as paziente from referrals r join patients p on p.id = r.patient_id
+      where r.studio_id = $1 and r.follow_up_due is not null and r.follow_up_done_at is null
+        and not exists (select 1 from patient_documents d where d.patient_id = p.id and d.uploaded_at >= now() - interval '12 months'
+                          and (d.categoria = 'ecg' or lower(coalesce(d.nota, '') || ' ' || d.filename) ~ '(^|[^a-z])ecg([^a-z]|$)|elettrocardiogramm'))
+      order by paziente limit 50`, [studioId]);
+  const tracce = await query<{ procedura: string; n: number }>(`select procedura, count(*)::int as n from assistente_tracce where studio_id = $1 and created_at >= $2 and created_at < $3 group by 1 order by 2 desc`, args);
+  const [diz] = await query<{ n: number }>(`select count(*)::int as n from referti_dizionario where studio_id = $1 and stato = 'confermata' and deciso_at >= $2 and deciso_at < $3`, args);
+  const lettere = await lettereRitardoGrezzo(studioId);
+  const nomeMese = new Date(`${per.inizio}T12:00:00`).toLocaleDateString('it-CH', { month: 'long', year: 'numeric' });
+  const e = chiusuraMensile({
+    mese: nomeMese, dettati: ref.dettati, confermati: ref.confermati, scartati: ref.scartati, ancoraAperti: ref.aperti,
+    giorniMedianiConferma: ref.mediana === null ? null : Math.round(Number(ref.mediana) * 10) / 10,
+    referralRicevute: rr.ricevute, referralChiuse: rr.chiuse, referralAperteSenzaAppuntamento: ferme,
+    richiamiFatti: Number(ric.fatti), richiamiScaduti: scaduti, documentiCaricati: doc.n, senzaEcg,
+    lettereInRitardo: lettere.mancanti.reduce((s, x) => s + (parseInt(x.testo, 10) || 0), 0),
+    tracce, dizionarioConfermato: diz.n,
+  });
+  return conTraccia(studioId, userId, null, { ...e, procedura: 'chiusura_mensile', titolo: `Chiusura mensile · ${nomeMese}`, azioni: [{ etichetta: 'Statistiche', href: '/statistiche' }, { etichetta: 'Richiami', href: '/richiami' }] }, t0);
+}

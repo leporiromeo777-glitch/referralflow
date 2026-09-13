@@ -52,8 +52,11 @@ Tutte senza modello: confronti e conteggi, li fa meglio il codice. API unica `PO
 
 - **`preparazione_giornata`** («preparazione della giornata», bottone «Prepara la giornata» in Home, chip in Home e Agenda; `giorno` facoltativo `AAAA-MM-GG`): per ogni appuntamento del giorno abbina il paziente per cognome+nome (nei due ordini) ed esegue `briefingGrezzo` (le stesse regole del briefing singolo, senza modello; i fatti nel grafo si aggiornano). In cima «Da segnalare»: tutte le mancanze con ora e paziente, più chi non è in cartella; poi un blocco per appuntamento (motivo, terapia fino a 6 righe, 3 esami, sospesi) con le fonti. Test in `prove-procedure.test.ts`.
 
+- **`lettere_ritardo`** («lettere in ritardo», chip in Home e Referti): referti confermati senza l'evento `word_scaricato` (registrato da `GET /api/referti/docx/[id]` dal 13.9.2026) dopo 3 giorni (solo referti confermati dal 13.9.2026 in poi: prima l'evento non c'era), bozze ferme da 7 giorni, referral in stato «vista» da 10 giorni senza referto inviato. Le soglie sono costanti in `procedure-regole.ts`.
+- **`chiusura_mensile`** («chiusura mensile», «numeri del mese», anche «chiusura di agosto 2026»; chip in Home e Referti; `mese` facoltativo `AAAA-MM`): referti dettati/confermati/scartati/ancora in bozza e tempo mediano dettato → conferma; referral ricevute e chiuse, aperte da oltre 30 giorni senza appuntamento; richiami fatti e scaduti; documenti caricati e pazienti con richiamo aperto senza ECG negli ultimi 12 mesi; lettere in ritardo (stessa procedura); tracce dell'assistente per procedura e voci di dizionario confermate. Solo conteggi e id: nessun testo clinico nella traccia. Azioni: Statistiche, Richiami.
+
 ## Il «perché» delle scelte umane (13.9.2026)
 Nella revisione guidata della piattaforma, sotto ogni correzione automatica già decisa (annullata o confermata), un campo facoltativo «Perché?» (max 200 caratteri) salvato in `revisione_stato.motivazioni` per id di segnalazione, con l'autosalvataggio. Non entra in nessun prompt: è segnale per il consolidatore notturno e per chi legge le attribuzioni. Prossimo passo: mostrarlo nel cruscotto Qualità AI accanto alle proposte di dizionario.
 
 ## Prossime procedure candidate
-«Lettera in ritardo» (bozze confermate senza Word inviato), «controllo mensile della cartella» (pazienti con richiamo ma senza ECG recente).
+Nessuna in coda: le prossime nascono dalle domande che segreteria e medico fanno davvero al bot (si leggono nelle tracce, `procedura = domanda_libera`).

@@ -93,3 +93,40 @@ test('preparazione della giornata: mancanze in cima con ora e paziente, non in c
   assert.equal(e.sintesi, '2 appuntamenti il 13.09.2026: 1 con cartella, 1 non in cartella, 1 cosa da segnalare.');
   assert.equal(e.passi[1].nota, '1 in cartella · 1 no');
 });
+
+test('lettere in ritardo: confermata senza Word da 3+ giorni, bozza ferma da 7+, referral vista da 10+; le recenti no', async () => {
+  const { lettereInRitardo } = await import('./procedure-regole');
+  const oggi = new Date('2026-09-13T09:00:00');
+  const lettere = [
+    { id: 'l1', paziente: 'Bianchi Anna', medico: 'Dr. X', confermata_il: '2026-09-05T10:00:00', dettata_il: '2026-09-04T10:00:00', stato: 'confermata' as const, word_scaricato: false },
+    { id: 'l2', paziente: 'Verdi Ugo', medico: null, confermata_il: '2026-09-12T10:00:00', dettata_il: '2026-09-11T10:00:00', stato: 'confermata' as const, word_scaricato: false },
+    { id: 'l3', paziente: 'Neri Ida', medico: null, confermata_il: '2026-09-01T10:00:00', dettata_il: '2026-08-30T10:00:00', stato: 'confermata' as const, word_scaricato: true },
+    { id: 'l4', paziente: 'Rossi Pia', medico: null, confermata_il: null, dettata_il: '2026-09-01T10:00:00', stato: 'bozza' as const, word_scaricato: false },
+    { id: 'l5', paziente: 'Gialli Leo', medico: null, confermata_il: null, dettata_il: '2026-09-11T10:00:00', stato: 'bozza' as const, word_scaricato: false },
+  ];
+  const viste = [{ id: 'v1', paziente: 'Blu Ada', vista_il: '2026-08-20T10:00:00', medico: null }, { id: 'v2', paziente: 'Blu Eva', vista_il: '2026-09-10T10:00:00', medico: null }];
+  const e = lettereInRitardo(lettere, viste, oggi);
+  assert.deepEqual(e.sezioni.map((s) => s.chiave), ['senza_word', 'bozze_ferme', 'viste']);
+  assert.deepEqual(e.sezioni[0].righe.map((r) => r.fonte?.id), ['l1']);
+  assert.deepEqual(e.sezioni[1].righe.map((r) => r.fonte?.id), ['l4']);
+  assert.deepEqual(e.sezioni[2].righe.map((r) => r.fonte?.id), ['v1']);
+  assert.equal(e.sintesi, '3 lettere in ritardo: 1 confermate senza Word, 1 bozze ferme, 1 referral viste senza referto.');
+  assert.equal(lettereInRitardo([], [], oggi).sintesi, 'Nessuna lettera in ritardo.');
+});
+
+test('chiusura mensile: numeri nelle sezioni, mancanze solo per ciò che è aperto', async () => {
+  const { chiusuraMensile } = await import('./procedure-regole');
+  const e = chiusuraMensile({
+    mese: 'settembre 2026', dettati: 12, confermati: 9, scartati: 1, ancoraAperti: 2, giorniMedianiConferma: 2,
+    referralRicevute: 20, referralChiuse: 15, referralAperteSenzaAppuntamento: [{ id: 'r1', paziente: 'Bianchi Anna', da: '2026-08-01' }],
+    richiamiFatti: 4, richiamiScaduti: [], documentiCaricati: 30, senzaEcg: [{ id: 'p1', paziente: 'Verdi Ugo' }], lettereInRitardo: 0,
+    tracce: [{ procedura: 'briefing_previsita', n: 5 }], dizionarioConfermato: 3,
+  });
+  assert.deepEqual(e.mancanti.map((m) => m.controllo), ['bozze_aperte', 'referral_senza_appuntamento', 'ecg_richiami']);
+  assert.match(e.sintesi!, /^settembre 2026: 12 referti dettati, 9 confermati \(mediana 2 giorni\), 20 referral ricevute, 4 richiami fatti\. 3 punti aperti/);
+  assert.equal(e.sezioni.find((s) => s.chiave === 'referral')!.righe[1].fonte?.id, 'r1');
+  assert.equal(e.passi.filter((p) => p.esito === 'mancante').length, 2);
+  const pulito = chiusuraMensile({ mese: 'ottobre 2026', dettati: 0, confermati: 0, scartati: 0, ancoraAperti: 0, giorniMedianiConferma: null, referralRicevute: 0, referralChiuse: 0, referralAperteSenzaAppuntamento: [], richiamiFatti: 0, richiamiScaduti: [], documentiCaricati: 0, senzaEcg: [], lettereInRitardo: 0, tracce: [], dizionarioConfermato: 0 });
+  assert.equal(pulito.mancanti.length, 0);
+  assert.match(pulito.sintesi!, /Nessun punto aperto\.$/);
+});

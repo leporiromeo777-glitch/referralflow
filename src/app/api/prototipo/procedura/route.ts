@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
-import { cambiamentiUltimaVisita, controlloPrimaDellaFirma, preparazioneGiornata, richiamiMese } from '@/lib/procedure';
+import { cambiamentiUltimaVisita, chiusuraMese, controlloPrimaDellaFirma, lettereRitardo, preparazioneGiornata, richiamiMese } from '@/lib/procedure';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +22,10 @@ export async function POST(req: NextRequest) {
     esito = await richiamiMese(session.studioId, session.id);
   } else if (nome === 'preparazione_giornata') {
     esito = await preparazioneGiornata(session.studioId, session.id, typeof corpo?.giorno === 'string' ? corpo.giorno : undefined);
+  } else if (nome === 'lettere_ritardo') {
+    esito = await lettereRitardo(session.studioId, session.id);
+  } else if (nome === 'chiusura_mensile') {
+    esito = await chiusuraMese(session.studioId, session.id, typeof corpo?.mese === 'string' ? corpo.mese : undefined);
   } else if (nome === 'controllo_prefirma') {
     if (!bozzaId) return NextResponse.json({ errore: 'bozza_mancante' }, { status: 400 });
     esito = await controlloPrimaDellaFirma(session.studioId, bozzaId, session.id);
