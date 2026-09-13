@@ -1,6 +1,6 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-09-13
+aggiornata: 2026-09-14
 ---
 # Prossimi lavori (in ordine di valore)
 
@@ -11,6 +11,12 @@ aggiornata: 2026-09-13
 5. **Chat AI su «Affida paziente»** (serve chiave API Anthropic e la stessa validazione legale della cattura impegnativa).
 6. **Referto strutturato: invio HIN** (dipende da account HIN).
 7. **Migrazione a Next 16** (advisory residue di `npm audit`, feature non usate).
+
+## Interfaccia nuova ([[Piattaforma/Prototipo stack]])
+- Una schermata di accesso propria (oggi login e 2FA sono la pagina della piattaforma classica, l'ultima cosa condivisa a schermo).
+- «Frasi a rischio» della catena nella revisione nuova: escluse per scelta dell'utente il 14.9.2026; se cambia idea, è un passo in `costruisciRevisione` come gli altri.
+- Statistiche, amministrazione, comunicazioni, visite: sezioni ancora senza dati propri nell'interfaccia nuova.
+- Anonimizzazione: il .docx torna come testo; la versione classica restituisce un .docx anonimizzato con la formattazione.
 
 ## Prototipo, assistente e procedure ([[Piattaforma/Procedure e tracce]])
 - Mostrare il «Perché?» delle scelte umane nel cruscotto Qualità AI accanto alle proposte di dizionario; oggi si salva soltanto.

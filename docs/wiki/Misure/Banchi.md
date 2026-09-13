@@ -35,7 +35,9 @@ Ogni banco usa SOLO dati sintetici. Le chiamate al modello esterno costano cente
 
 | 2026-09-13 | flag di whisper sui 13 dettati conservati: di serie contro `-nf` (niente risalita di temperatura) e `-et 2.0` (soglia di entropia) | `banco-whisper-flag.py nf=-nf et=-et,2.0` dalla copia viva | pari in 12 dettati su 13; accordo totale col testimone B: serie 1835, `-nf` 1799 (peggio su un dettato lungo: 42 righe in loop e −37 di accordo), `-et 2.0` 1835 (identico); numeri solo in B 38/39/38; tempi 548/588/539 s. Verdetto: la configurazione di serie resta |
 
-Suite permanente: `python3.14 pipeline-referti/prove-catastrofiche.py` → 38/38 (12.9.2026). Test app: `npm run test:app` → 55 (13.9.2026: +4 briefing, +7 procedure, +4 registro e organizzazione, +6 interprete) casi.
+Suite permanente: `python3.14 pipeline-referti/prove-catastrofiche.py` → 38/38 (12.9.2026). Test app: `npm run test:app` → 56 (14.9.2026: +4 briefing, +7 procedure, +4 registro e organizzazione, +6 interprete, +1 divagazioni) casi.
+
+**Anonimizzazione dall'interfaccia nuova** (14.9.2026, testo inventato con nome, nascita, indirizzo, AVS, telefono, e-mail): 8 sostituzioni, nessun nome o luogo rimasto, misure cliniche intatte, 16 s con gemma3:12b.
 
 **Banco dell'interprete delle domande scritte** (13.9.2026, 7 frasi con refusi e parafrasi, pazienti di prova): 4 risolte dal codice in ~1 ms con sicurezza alta («ciusura mensile», «ci sono lettere ferme?»), 2 casi grigi confermati dal modello locale in 2,6-4,1 s, 1 lasciata libera perché davvero ambigua («il referto di Bernasconi si può mandare?»). Prima del banco il modello sceglieva tra candidati e su «controlli in scadenza» preferiva il controllo pre-firma ai richiami: ora conferma o nega solo il candidato del codice ([[Piattaforma/Procedure e tracce]]).
 
