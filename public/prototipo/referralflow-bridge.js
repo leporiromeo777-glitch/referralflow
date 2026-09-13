@@ -353,28 +353,70 @@ function rfContestoBot() {
     paziente_aperto: p ? { nome: fullName(p), nascita: p.dob, referral: p.referrals || [], documenti: (p.docs || []).map(d => ({ titolo: d.t, data: d.d })), prossimo: p.next, ultima_visita: p.lastVisit, medico_inviante: p.gp } : null,
   };
 }
+/* Risposte immediate, senza modello, per le domande più comuni: numeri,
+   prossimo paziente, referti, urgenze, richiami. Il modello resta per il resto. */
+function rfRispostaImmediata(q) {
+  const ql = q.toLowerCase();
+  const s = (RF.data && RF.data.stats) || {};
+  const appts = [...APPTS].sort((a, b) => a.start.localeCompare(b.start));
+  const now = new Date(); const hm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const next = appts.find(a => a.status !== 'COMPLETED' && a.start >= hm) || appts.find(a => a.status !== 'COMPLETED');
+  const riga = (t) => rfEsc(t);
+  if (/prossim[oa] (paziente|appuntamento)|chi (è|e) il prossimo|dopo chi/.test(ql)) {
+    return next ? `<b>Prossimo paziente</b><br>${next.start} · ${riga(fullName(P[next.p]))} · ${riga(next.reason)} · ${riga(DOCTORS[next.doc] || '')}${next.late ? ' · <span class="badge danger">in ritardo</span>' : ''}` : 'Nessun altro appuntamento oggi.';
+  }
+  if (/quanti (appuntamenti|pazienti)|appuntamenti (ci sono )?oggi|agenda di oggi|riassum/.test(ql)) {
+    const primo = appts[0]; const ultimo = appts[appts.length - 1];
+    const medici = [...new Set(appts.map(a => DOCTORS[a.doc]).filter(Boolean))];
+    return `<b>Oggi</b><br>• ${appts.length} appuntamenti${appts.length ? ` dalle ${primo.start} alle ${ultimo.start}` : ''}${medici.length ? ` · ${medici.join(', ')}` : ''}<br>• ${s.visti_oggi || 0} già visti${next ? `, prossimo ${next.start} ${riga(fullName(P[next.p]))}` : ''}<br>• ${s.bozze_da_rivedere || 0} referti da controllare · ${s.urgenti || 0} referral urgenti · ${s.da_prenotare || 0} da prenotare · ${s.richiami_scaduti || 0} richiami scaduti<br>• ${TASKS.length} cose da fare in tutto`;
+  }
+  if (/referti (da )?(controllare|rivedere|approvare)|bozze/.test(ql)) {
+    const aperti = RF.queue.filter(r => r.status !== 'APPROVED');
+    return aperti.length ? `<b>Referti da controllare (${aperti.length})</b><br>${aperti.slice(0, 6).map(r => `• ${riga(fullName(P[r.p]))} · ${riga(r.note)} · ${r.crit} critiche`).join('<br>')}` : 'Nessun referto da controllare.';
+  }
+  if (/urgent/.test(ql)) return `<b>Referral urgenti aperte</b>: ${s.urgenti || 0}${TASKS.filter(t => t.prio === 'urgent').length ? '<br>' + TASKS.filter(t => t.prio === 'urgent').slice(0, 6).map(t => `• ${riga(t.title)}`).join('<br>') : ''}`;
+  if (/richiam|follow.?up/.test(ql)) { const l = TASKS.filter(t => t.cat === 'followup'); return l.length ? `<b>Richiami scaduti (${l.length})</b><br>${l.slice(0, 8).map(t => `• ${riga(t.title)}`).join('<br>')}` : 'Nessun richiamo scaduto.'; }
+  if (/da prenotare|prenotare/.test(ql)) { const l = TASKS.filter(t => t.cat === 'call'); return l.length ? `<b>Da prenotare o richiamare (${l.length})</b><br>${l.slice(0, 8).map(t => `• ${riga(t.title)}`).join('<br>')}` : 'Niente da prenotare.'; }
+  if (/cosa devo fare|da fare|attivit|task/.test(ql)) return TASKS.length ? `<b>Da fare (${TASKS.length})</b><br>${TASKS.slice(0, 8).map(t => `• ${riga(t.title)} · ${riga(t.due)}`).join('<br>')}` : 'Niente in sospeso.';
+  if (/document/.test(ql)) return DOCUMENTS.length ? `<b>Documenti recenti</b><br>${DOCUMENTS.slice(0, 6).map(d => `• ${riga(d.t)}${P[d.p] ? ' · ' + riga(fullName(P[d.p])) : ''} · ${d.date}`).join('<br>')}` : 'Nessun documento in cartella.';
+  if (/in ritardo/.test(ql)) { const l = appts.filter(a => a.late); return l.length ? `<b>In ritardo</b><br>${l.map(a => `• ${a.start} ${riga(fullName(P[a.p]))}`).join('<br>')}` : 'Nessuno in ritardo.'; }
+  return null;
+}
+
 const rfAskOrig = askAI;
 askAI = function (q) {
   if (!RF.live) return rfAskOrig(q);
   if (!state.aiOpen) state.aiOpen = true;
   state.aiMessages.push({ html: `<div class="ai-msg user">${rfEsc(q)}</div>` });
+  const immediata = rfRispostaImmediata(q);
+  if (immediata) {
+    state.aiMessages.push({ html: `<div class="ai-msg ai">${immediata}<div class="srcs"><span class="src">Piattaforma · immediato</span></div></div>` });
+    state.aiState = 'idle'; render(); return;
+  }
   state.aiState = 'thinking';
-  const thinkingId = 'th' + Date.now();
-  state.aiMessages.push({ id: thinkingId, html: `<div class="ai-msg ai" id="${thinkingId}"><div class="ai-steps"><div class="s cur"><span class="dot accent"></span>Leggo i dati della giornata</div><div class="s"><span class="dot"></span>Chiedo al modello locale</div></div></div>` });
+  const id = 'ai' + Date.now();
+  state.aiMessages.push({ id, html: `<div class="ai-msg ai" id="${id}"><span class="caption">Chiedo al modello locale…</span></div>` });
   render();
+  const fine = (html, fonte) => {
+    state.aiMessages = state.aiMessages.filter(m => m.id !== id);
+    state.aiMessages.push({ html: `<div class="ai-msg ai">${html}<div class="srcs"><span class="src">${fonte}</span></div></div>` });
+    state.aiState = 'idle'; render();
+  };
   fetch('/api/prototipo/assistente', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domanda: q, ruolo: state.role, contesto: rfContestoBot() }) })
-    .then(r => r.json())
-    .then(j => {
-      state.aiMessages = state.aiMessages.filter(m => m.id !== thinkingId);
-      const testo = rfEsc(j.risposta || 'Nessuna risposta.').replace(/\n/g, '<br>');
-      state.aiMessages.push({ html: `<div class="ai-msg ai">${testo}<div class="srcs"><span class="src">${j.fonte === 'modello locale' ? 'Modello locale · dati della piattaforma' : 'Piattaforma'}</span></div></div>` });
-      state.aiState = 'idle'; render();
+    .then(async r => {
+      if (!r.ok || !r.body) { fine('L\'assistente non è raggiungibile in questo momento.', 'Piattaforma'); return; }
+      const fonte = r.headers.get('X-Fonte') === 'modello locale' ? 'Modello locale · dati della piattaforma' : 'Piattaforma';
+      const lettore = r.body.getReader(); const dec = new TextDecoder(); let testo = '';
+      for (;;) {
+        const { value, done } = await lettore.read();
+        if (done) break;
+        testo += dec.decode(value, { stream: true });
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = rfEsc(testo).replace(/\n/g, '<br>') + '<span class="caption"> ▍</span>';
+      }
+      fine(rfEsc(testo.trim() || 'Nessuna risposta.').replace(/\n/g, '<br>'), fonte);
     })
-    .catch(() => {
-      state.aiMessages = state.aiMessages.filter(m => m.id !== thinkingId);
-      state.aiMessages.push({ html: `<div class="ai-msg ai">L'assistente non è raggiungibile in questo momento.</div>` });
-      state.aiState = 'idle'; render();
-    });
+    .catch(() => fine('L\'assistente non è raggiungibile in questo momento.', 'Piattaforma'));
 };
 
 /* ---------- avvio: dentro la piattaforma niente demo, mai ---------- */
