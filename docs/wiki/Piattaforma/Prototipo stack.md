@@ -14,6 +14,9 @@ Le voci sotto sono **ciò che è vero adesso**; la storia delle modifiche, con i
 - Sul telefono: menu a pillola in basso (Oggi, Agenda, Pazienti, Referti, Dittafono, AI) che sparisce scorrendo in giù e ricompare in su o al cambio di pagina, e sparisce con la sezione AI aperta; tasto «indietro» in alto a sinistra con storia interna delle pagine; niente scorrimento laterale (griglie, calendario e tabelle contenuti nel proprio riquadro); revisione con la colonna delle segnalazioni sopra il testo e il dettaglio che scorre da destra.
 - **Nessun rimando alla piattaforma classica** e viceversa ([[Decisioni/Registro]], 13.9.2026 sera): le sezioni senza dati propri (statistiche, amministrazione, sistema, comunicazioni, visite, knowledge) dicono «non ancora disponibile in questa interfaccia». In comune restano la catena, i dati e le API.
 
+**Profilo** (14.9.2026, voce «Profilo» in fondo alla barra; `GET/POST /api/prototipo/profilo`)
+- Cambio della propria password (serve quella attuale, minimo 8 caratteri) e 2FA in due tempi come nella piattaforma: segreto e QR (libreria `qrcode`), conferma col primo codice giusto, codici di recupero mostrati una volta sola, attivazione quando la persona dichiara di averli salvati; disattivazione solo con un codice valido. Codici di recupero rimasti in vista.
+
 **Pagina «Studio»** (14.9.2026, voce «Studio» nella barra; `GET/POST /api/prototipo/studio`)
 - Schede: Dati (nome, telefono, e-mail per gli avvisi, prestazioni), Personale (accessi con ruolo, 2FA, stato; nuovo accesso con password iniziale scelta da chi lo crea, nuova password, cambio ruolo, disattiva/riattiva; mai eliminare, nessuno si disattiva da solo), Medici agenda (providers del robot MediOnline: nome, alias, accesso collegato, attivo), Sale e Apparecchi (tabella `studio_risorse`, migrazione 036: nome, descrizione, in uso / fuori uso). Tutti leggono, solo l'amministratore modifica (verificato dal server).
 
@@ -39,7 +42,7 @@ Le voci sotto sono **ciò che è vero adesso**; la storia delle modifiche, con i
 
 **Manutenzione**
 - Il ponte è `public/prototipo/referralflow-bridge.js` (copia anche in `~/referralflow-stack/…/ui-prototype/` e in `~/Downloads/…`); a ogni modifica si alza `?v=` in `index.html` e `manifest.webmanifest`, poi `bash mac/aggiorna-server.sh`. Il ponte ridefinisce le funzioni del prototipo in place: quando si sostituisce un blocco, controllare di non cancellare funzioni vicine (è successo con l'impaginazione, v28-v30).
-- Endpoint del prototipo: `accesso` (+ `verifica`, `esci`), `studio`, `dati`, `referti`, `referti/[id]` (+ `testo`, `conferma`, `richiamo`), `documenti/[id]/testo`, `assistente`, `interpreta`, `procedure`, `procedura`, `briefing`, `tracce/[id]`, `anonimizza`. Tutti con sessione; le procedure con permessi per ruolo dal registro.
+- Endpoint del prototipo: `accesso` (+ `verifica`, `esci`), `profilo`, `studio`, `dati`, `referti`, `referti/[id]` (+ `testo`, `conferma`, `richiamo`), `documenti/[id]/testo`, `assistente`, `interpreta`, `procedure`, `procedura`, `briefing`, `tracce/[id]`, `anonimizza`. Tutti con sessione; le procedure con permessi per ruolo dal registro.
 
 Il resto della pagina è la storia della giornata, sezione per sezione.
 
