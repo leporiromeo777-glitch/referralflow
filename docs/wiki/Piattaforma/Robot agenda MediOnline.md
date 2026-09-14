@@ -60,3 +60,16 @@ Nell'ICS arrivano anche `X-RF-ID` (l'id di MediOnline) e `X-RF-RISORSA`. **L'UID
 Effetto misurato sul passaggio: da 649 a 772 riquadri letti su 17 giorni — la struttura contiene anche quelli che la lettura a pixel non vedeva, fra cui **114 annullati**. Gli annullati e gli scusati escono ora con `STATUS:CANCELLED` e `agenda-sync` li scarta, come prima; i 114 già entrati sono stati cancellati a mano una volta sola.
 
 `sonda-riquadri.mjs` ha tre modi nuovi: `--dati` cerca le strutture di appuntamenti fra le variabili globali (stampa solo i nomi dei campi), `--tag` mostra la FORMA dei valori (lettere→a, cifre→9) senza i contenuti, `--risorse` la mappa risorsa→sigla e lo scheletro dell'html.
+
+## Che cosa sono le 15 colonne (15.9.2026)
+Una colonna di MediOnline non è un luogo: è un'agenda, e lo studio le usa per cose diverse. Ricostruito coi numeri e confermato dall'utente:
+
+| sigla | che cos'è |
+| --- | --- |
+| `M.M.` `T.M.` `frego` `vpaio` `DG` `GMOS` `miped` `bcape` `SF` | **medici** — Marco Moccetti, Tiziano Moccetti, Rego, Paiocchi, Girola, Moschovitis, Pedrotti, Capelli, Franscella |
+| `DC` | **Daniela Cassani, ecografista** — ruolo `collaboratore` ([[Decisioni/Registro]]) |
+| `Labor` `Appar` `RIA` | luoghi: laboratorio, apparecchi, riabilitazione |
+| `ASM` | **amministrativo** — non è un luogo, disattivata dalle sale |
+| `P-E V` | da chiarire: 5 visite da 60 minuti in una sola mattina |
+
+Come si riconosce una colonna senza sapere cosa sia: si guarda **se i suoi appuntamenti arrivano prima o dopo quelli di un medico, per lo stesso paziente nello stesso giorno**. `DC` veniva prima 271 volte su 294 (in media 34 minuti): è il primo tempo della visita, cioè l'ecografia. `Appar` viene dopo 81 volte su 99 (48 minuti): è dove si mette l'Holter finita la visita. È la prova più utile che abbiamo trovato per capire una colonna senza leggere un solo nome di paziente.

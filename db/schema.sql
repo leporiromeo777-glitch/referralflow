@@ -941,3 +941,10 @@ alter table providers add column if not exists ruolo text not null default 'medi
 alter table providers drop constraint if exists providers_ruolo_check;
 alter table providers add constraint providers_ruolo_check
   check (ruolo in ('medico', 'collaboratore'));
+
+-- Una risorsa può essere un posto ESTERNO (la radiologia che collabora con lo
+-- studio): gli appuntamenti sono nella vostra agenda ma la stanza non è vostra
+-- (migrazione 049).
+alter table studio_risorse drop constraint if exists studio_risorse_tipo_check;
+alter table studio_risorse add constraint studio_risorse_tipo_check
+  check (tipo in ('sala', 'apparecchio', 'esterno'));
