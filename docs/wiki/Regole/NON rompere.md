@@ -10,7 +10,7 @@ aggiornata: 2026-09-11
 - `src/lib/auth.ts` e `src/lib/storage.ts` sono lato server (`import 'server-only'`): non importarli in componenti client. Il middleware verifica il JWT da solo.
 - I prompt di `docs/trascrizione/SPEC.md` §6 (`PROMPT_CORREZIONE`, `PROMPT_ESTRAZIONE`, …) sono validati su referti reali e copiati carattere per carattere: non riscriverli. I prompt nuovi (arbitro, omissioni, terapia, coerenza, lettera) hanno le loro pagine in [[Catena/Panoramica]].
 - Il segnaposto `{testo}` nei prompt si riempie con `str.replace`, mai con `format` (il testo può contenere graffe).
-- Le migrazioni sono solo in avanti (`db/migrations/0XX_*.sql`, ultima `041_pazienti_anagrafica.sql`) e vanno appese anche a `db/schema.sql`.
+- Le migrazioni sono solo in avanti (`db/migrations/0XX_*.sql`, ultima `042_prestazioni_catalogo.sql`) e vanno appese anche a `db/schema.sql`.
 - Il pannello e la catena girano con `python3.14` di Homebrew, non con il `python3` di sistema. `timeout` non esiste su macOS.
 - Le tabelle `audit.artifacts` e `audit.human_edits` sono immutabili (trigger): mai UPDATE/DELETE.
 - Il tipo TypeScript `Filtri` delle pagine con querystring va aggiornato quando si aggiunge un parametro: il build del server è bloccato da `tsc`.

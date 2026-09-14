@@ -6,6 +6,7 @@ aggiornata: 2026-09-14
 
 Elenco di ciò che esiste. Per la catena dei referti vedi [[Catena/Panoramica]].
 
+- **Catalogo delle prestazioni e pagina Prestazioni** (2026-09-14, migrazione 042): voci con tipo, durata, sala e parole chiave abbinate al motivo dell'agenda; catalogo in un clic dai percorsi; elenco di tutte le prestazioni con filtri ([[Piattaforma/Prototipo stack]]).
 - **Anagrafica paziente completa, import CSV, scheda con terapia derivata** (2026-09-14, migrazione 041): AVS, cassa, numero assicurato, indirizzo, e-mail, sesso, indicazione, percorso; nuovo/modifica/import nell'interfaccia nuova; terapia in corso dal referto confermato; AVS e numero assicurato nel CSV di fatturazione; indirizzo dello studio ([[Piattaforma/Prototipo stack]]).
 - **Tema minimale dell'interfaccia nuova** (2026-09-14): `minimal.css` sopra `styles.css`, Plex in locale, barra laterale scura a sezioni, carte piatte, verde dello studio ([[Piattaforma/Convenzioni UI]]).
 - **Da fatturare: esportazione delle prestazioni** (2026-09-14, migrazione 040): pagina nell'interfaccia nuova con le prestazioni erogate del mese e il CSV per il gestionale di fatturazione dello studio, con traccia di cosa è già uscito; la piattaforma esporta, non fattura ([[Piattaforma/Prototipo stack]]).

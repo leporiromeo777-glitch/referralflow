@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession, hashPassword } from '@/lib/auth';
 import { query } from '@/lib/db';
+import { catalogoDaPercorsi } from '@/lib/prestazioni';
+import { caricaPercorsi } from '@/lib/percorsi';
 import { isUuid } from '@/lib/cartella';
 import { syncFeed } from '@/lib/agenda-sync';
 
@@ -33,8 +35,10 @@ async function leggi(studioId: string) {
     `select coalesce(nullif(trim(luogo), ''), '(vuoto)') as codice, count(*)::int as n, max(starts_at)::date::text as ultimo
        from appointments where studio_id = $1 and provider_id is null and starts_at >= current_date - 60
       group by 1 order by 2 desc limit 30`, [studioId]);
+  const catalogo = await query<{ id: string; nome: string; tipo: string; durata_min: number; sala: string | null; parole_chiave: string[]; attivo: boolean }>(
+    `select id, nome, tipo, durata_min, sala, parole_chiave, attivo from prestazioni_catalogo where studio_id = $1 order by attivo desc, tipo, nome`, [studioId]);
   const nomiRisorse = new Set(risorse.map((r) => r.nome.toLowerCase()));
-  return { studio, personale, medici, sale: risorse.filter((r) => r.tipo === 'sala'), apparecchi: risorse.filter((r) => r.tipo === 'apparecchio'), codici_agenda: codici.map((c) => ({ ...c, risorsa: nomiRisorse.has(c.codice.toLowerCase()) })) };
+  return { studio, personale, medici, catalogo, sale: risorse.filter((r) => r.tipo === 'sala'), apparecchi: risorse.filter((r) => r.tipo === 'apparecchio'), codici_agenda: codici.map((c) => ({ ...c, risorsa: nomiRisorse.has(c.codice.toLowerCase()) })) };
 }
 
 export async function GET() {
@@ -90,6 +94,25 @@ export async function POST(req: NextRequest) {
     } else if (azione === 'medico_attivo') {
       const id = s(c.id); if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 });
       await query('update providers set attivo = not attivo where id = $1 and studio_id = $2', [id, sid]);
+    } else if (azione === 'prestazione_crea' || azione === 'prestazione_aggiorna') {
+      const nome = s(c.nome, 120); const tipo = ['visita', 'esame', 'procedura'].includes(s(c.tipo)) ? s(c.tipo) : 'esame';
+      const durata = Math.min(480, Math.max(5, Math.round(Number(c.durata_min)) || 30));
+      const parole = String(c.parole_chiave ?? '').split(/[,;]/).map((x) => x.trim().toLowerCase()).filter(Boolean).slice(0, 12);
+      if (!nome) return NextResponse.json({ errore: 'Il nome è obbligatorio.' }, { status: 400 });
+      if (azione === 'prestazione_crea') await query(`insert into prestazioni_catalogo (studio_id, nome, tipo, durata_min, sala, parole_chiave) values ($1, $2, $3, $4, nullif($5, ''), $6)`, [sid, nome, tipo, durata, s(c.sala, 80), parole]);
+      else { const id = s(c.id); if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 }); await query(`update prestazioni_catalogo set nome = $3, tipo = $4, durata_min = $5, sala = nullif($6, ''), parole_chiave = $7, updated_at = now() where id = $1 and studio_id = $2`, [id, sid, nome, tipo, durata, s(c.sala, 80), parole]); }
+    } else if (azione === 'prestazione_attivo') {
+      const id = s(c.id); if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 });
+      await query('update prestazioni_catalogo set attivo = not attivo, updated_at = now() where id = $1 and studio_id = $2', [id, sid]);
+    } else if (azione === 'prestazioni_da_percorsi') {
+      // Le prestazioni dei percorsi della wiki diventano voci del catalogo (solo quelle che mancano).
+      const esistenti = new Set((await query<{ nome: string }>('select nome from prestazioni_catalogo where studio_id = $1', [sid])).map((r) => r.nome.toLowerCase()));
+      let n = 0;
+      for (const v of catalogoDaPercorsi(caricaPercorsi())) {
+        if (esistenti.has(v.nome.toLowerCase())) continue;
+        await query(`insert into prestazioni_catalogo (studio_id, nome, tipo, durata_min, sala, parole_chiave) values ($1, $2, $3, $4, $5, $6)`, [sid, v.nome, v.tipo, v.durata_min, v.sala, v.parole_chiave]); n++;
+      }
+      console.log(`[studio] catalogo dai percorsi: ${n} voci nuove`);
     } else if (azione === 'risorsa_crea') {
       const tipo = s(c.tipo); const nome = s(c.nome, 120);
       if (!TIPI.has(tipo)) return NextResponse.json({ errore: 'tipo' }, { status: 400 });

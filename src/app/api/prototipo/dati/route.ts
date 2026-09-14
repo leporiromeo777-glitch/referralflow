@@ -5,6 +5,7 @@ import { mediciDelloStudio } from '@/lib/referti-medici';
 import { costruisciRevisione } from '@/lib/prototipo-revisione';
 import { tipoEsame } from '@/lib/briefing-regole';
 import { estraiTerapia } from '@/lib/referti-terapia';
+import { abbinaPrestazione, tipoDaTesto, type VoceCatalogo } from '@/lib/prestazioni';
 import { lettereRitardoGrezzo } from '@/lib/procedure';
 
 export const dynamic = 'force-dynamic';
@@ -150,6 +151,9 @@ export async function GET() {
     return 'SCHEDULED';
   };
   // Tutta la finestra (±30 giorni) per la pagina Agenda con il cambio di giorno;
+  // Catalogo delle prestazioni (migrazione 042): ogni appuntamento prova ad
+  // abbinare il motivo a una voce; senza voce il tipo si stima dal testo.
+  const catalogo = await query<VoceCatalogo>(`select id, nome, tipo, durata_min, sala, parole_chiave, attivo from prestazioni_catalogo where studio_id = $1 and attivo order by nome`, [sid]);
   // le schede leggere dei pazienti noti solo all'agenda si creano solo per oggi.
   const agenda = appts.map((a) => {
     const oggi = a.starts_at.slice(0, 10) === today;
@@ -174,6 +178,7 @@ export async function GET() {
       id: a.id, p, nome: (a.paziente_nome ?? a.titolo ?? 'Paziente').trim(), d: a.starts_at.slice(0, 10), doc: a.provider_id ? providerToDoc.get(a.provider_id) ?? 'studio' : 'studio', room: a.luogo ?? '', colore: a.colore ?? '',
       start: ora(a.starts_at), dur: Math.max(5, Math.round((fine - new Date(a.starts_at).getTime()) / 60000)),
       reason: a.motivo || a.titolo || 'Appuntamento', type: a.motivo || 'Visita', status: stato(a),
+      prestazione: abbinaPrestazione(catalogo, `${a.motivo ?? ''} ${a.titolo ?? ''}`)?.nome ?? '', tipoPrest: abbinaPrestazione(catalogo, `${a.motivo ?? ''} ${a.titolo ?? ''}`)?.tipo ?? tipoDaTesto(`${a.motivo ?? ''} ${a.titolo ?? ''}`),
       late: oggi && !a.completed_at && new Date(a.starts_at).getTime() < adesso - 20 * 60000, referral: a.referral_id,
     };
   });
@@ -318,5 +323,6 @@ export async function GET() {
     utente: { role: RUOLO[session.role] ?? 'secretary', name: nome, initials: iniz, studio: session.studioNome, email: session.email },
     today, doctors, patients, appts: apptsOggi, agenda, tasks, reports, documents, inbox, audioInbox, stats, sale,
     risorse: risorse.map((r) => ({ id: r.id, tipo: r.tipo, nome: r.nome, posti: r.posti })),
+    catalogo,
   });
 }

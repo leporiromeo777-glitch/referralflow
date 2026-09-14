@@ -56,7 +56,7 @@ async function rfCaricaDati() {
   for (const nome of ['ARCHIVE', 'AUDIT', 'AIJOBS', 'KNOWLEDGE', 'INVOICES']) { try { if (Array.isArray(window[nome])) rfSvuota(window[nome]); } catch { /* assente */ } }
   // Voci per ruolo (14.9.2026: Percorsi, Moduli, Da fatturare). Questa riga
   // vince su qualunque aggiunta fatta al caricamento dello script.
-  const nav = ['home', 'agenda', 'patients', 'percorsi', 'reports', 'dittafono', 'documents', 'moduli', 'anonymize', 'inbox', 'ai', 'fatturazione', 'administration'];
+  const nav = ['home', 'agenda', 'prestazioni', 'patients', 'percorsi', 'reports', 'dittafono', 'documents', 'moduli', 'anonymize', 'inbox', 'ai', 'fatturazione', 'administration'];
   for (const k of Object.keys(NAV)) NAV[k] = nav.filter(v => v !== 'fatturazione' || ['secretary', 'org_admin'].includes(k));
   render();
 }
@@ -182,7 +182,7 @@ const rfRenderSidebarOrig = renderSidebar;
 // Barra laterale a sezioni (14.9.2026, tema minimale): le voci del ruolo
 // raggruppate con un'etichetta; una voce fuori da ogni gruppo finisce in coda.
 const RF_NAV_GRUPPI = [
-  ['Operatività', ['home', 'agenda', 'inbox']],
+  ['Operatività', ['home', 'agenda', 'prestazioni', 'inbox']],
   ['Clinico', ['patients', 'percorsi', 'visits', 'reports', 'dittafono', 'documents', 'moduli']],
   ['AI', ['ai', 'anonymize']],
   ['Amministrazione', ['fatturazione', 'communications', 'statistics', 'administration', 'system']],
@@ -664,6 +664,34 @@ if (rfOverviewOrig) patientOverview = function (p, clinical) {
         <div class="card"><div class="card-head"><span class="section-title">Anagrafica</span><button class="btn sm ghost" onclick="rfPazienteModifica('${p.id}')">Modifica</button></div><div class="kv"><b>Nascita</b><span>${p.dob || '—'}${p.sex ? ` · ${p.sex}` : ''}</span><b>Telefono</b><span>${rfEsc(p.phone || '—')}</span><b>E-mail</b><span>${rfEsc(p.email || '—')}</span><b>Indirizzo</b><span>${rfEsc([p.via, [p.npa, p.localita].filter(Boolean).join(' ')].filter(Boolean).join(', ') || '—')}</span><b>Medico inviante</b><span>${rfEsc(p.gp || '—')}</span></div></div>
       </div>
     </div>`;
+};
+
+/* ---------- Prestazioni: tutti gli appuntamenti con filtri (14.9.2026) ---------- */
+if (typeof NAV_META !== 'undefined') NAV_META.prestazioni = ['Prestazioni', 'activity'];
+document.addEventListener('change', (e) => { if (e.target && e.target.id && e.target.id.startsWith('rf-pf-')) { state.prestFiltri = state.prestFiltri || {}; state.prestFiltri[e.target.id.slice(6)] = e.target.value; render(); } });
+PAGES.prestazioni = () => {
+  if (!RF.live) return rfPaginaPiattaforma('Prestazioni', 'Tutte le prestazioni a calendario');
+  const f = state.prestFiltri || {};
+  const oggi = (RF.data && RF.data.today) || new Date().toISOString().slice(0, 10);
+  const tutte = (RF.agenda || []).slice().sort((a, b) => (b.d + b.start).localeCompare(a.d + a.start));
+  const settimana = (() => { const d = new Date(`${oggi}T12:00:00`); const a = new Date(d); a.setDate(d.getDate() - ((d.getDay() + 6) % 7)); const b = new Date(a); b.setDate(a.getDate() + 6); return [a.toISOString().slice(0, 10), b.toISOString().slice(0, 10)]; })();
+  const periodo = f.periodo || 'settimana';
+  const inPeriodo = (a) => periodo === 'oggi' ? a.d === oggi : periodo === 'settimana' ? (a.d >= settimana[0] && a.d <= settimana[1]) : periodo === 'mese' ? a.d.slice(0, 7) === oggi.slice(0, 7) : true;
+  const statoDi = (a) => a.status === 'COMPLETED' ? 'completata' : a.status === 'CANCELLED' ? 'annullata' : (a.d < oggi || (a.d === oggi && a.late)) ? 'passata' : 'programmata';
+  const lista = tutte.filter(a => inPeriodo(a) && (!f.tipo || a.tipoPrest === f.tipo) && (!f.stato || statoDi(a) === f.stato) && (!f.sala || (a.room || '') === f.sala) && (!f.medico || a.doc === f.medico));
+  const sale = [...new Set(tutte.map(a => a.room).filter(Boolean))].sort();
+  const medici = [...new Set(tutte.map(a => a.doc).filter(d => d && d !== 'studio'))];
+  const ET = { visita: 'Visita', esame: 'Esame', procedura: 'Procedura' }; const ES = { completata: 'success', annullata: '', passata: 'warning', programmata: 'accent' };
+  const conta = (t) => lista.filter(a => a.tipoPrest === t).length;
+  const sel = (id, val, opts, primo) => `<select class="input sm" id="rf-pf-${id}"><option value="">${primo}</option>${opts.map(o => `<option value="${rfEsc(o[0])}" ${val === o[0] ? 'selected' : ''}>${rfEsc(o[1])}</option>`).join('')}</select>`;
+  const nomeDi = (a) => (a.p && P[a.p]) ? fullName(P[a.p]) : (a.nome || 'Paziente');
+  return `<div class="page-head"><div><div class="eyebrow">Attività clinica</div><h2 class="page-title">Prestazioni</h2><div class="page-sub">${lista.length} nel periodo · ${conta('visita')} visite · ${conta('esame')} esami · ${conta('procedura')} procedure · dall'agenda MediOnline (±30 giorni)</div></div>
+      <div class="actions"><button class="btn" data-go="#/administration">${ICONS.settings} Catalogo</button></div></div>
+    <div class="toolbar">${sel('periodo', periodo, [['oggi', 'Oggi'], ['settimana', 'Questa settimana'], ['mese', 'Questo mese'], ['tutto', 'Tutto (±30 gg)']], 'Periodo')}${sel('tipo', f.tipo || '', [['visita', 'Visite'], ['esame', 'Esami'], ['procedura', 'Procedure']], 'Tutti i tipi')}${sel('stato', f.stato || '', [['programmata', 'Programmate'], ['passata', 'Passate, non segnate'], ['completata', 'Completate'], ['annullata', 'Annullate']], 'Tutti gli stati')}${sale.length ? sel('sala', f.sala || '', sale.map(x => [x, x]), 'Tutte le sale') : ''}${medici.length ? sel('medico', f.medico || '', medici.map(m => [m, DOCTORS[m] || m]), 'Tutti i medici') : ''}</div>
+    <div class="card"><div class="table-wrap" style="box-shadow:none"><table class="dense"><thead><tr><th>Data</th><th>Ora</th><th>Paziente</th><th>Prestazione</th><th>Tipo</th><th>Medico</th><th>Sala</th><th>Durata</th><th>Stato</th></tr></thead><tbody>
+      ${lista.length ? lista.slice(0, 400).map(a => { const st = statoDi(a); return `<tr ${a.p ? `data-go="#/patients/${a.p}"` : ''}><td class="num">${rfEsc(a.d.split('-').reverse().join('.'))}</td><td class="num">${a.start}</td><td><b>${rfEsc(nomeDi(a))}</b></td><td>${rfEsc(a.prestazione || a.reason || '')}${a.prestazione && a.reason && a.prestazione !== a.reason ? `<div class="caption">${rfEsc(a.reason)}</div>` : ''}</td><td><span class="badge">${ET[a.tipoPrest] || '—'}</span></td><td>${rfEsc(DOCTORS[a.doc] || '—')}</td><td>${rfEsc(a.room || '—')}</td><td class="num">${a.dur}'</td><td><span class="badge ${ES[st]}">${st}</span></td></tr>`; }).join('') : '<tr><td colspan="9" class="caption">Nessuna prestazione con questi filtri.</td></tr>'}
+    </tbody></table></div>${lista.length > 400 ? '<div class="caption mt-8">Mostrate le prime 400: restringi il periodo.</div>' : ''}</div>
+    ${!(RF.data && RF.data.catalogo && RF.data.catalogo.length) ? `<div class="card mt-16" style="border-left:3px solid var(--warning)"><p class="meta" style="margin:0;line-height:1.55"><b>Catalogo vuoto</b>: il tipo è stimato dal testo dell'agenda. In Studio → Prestazioni si crea il catalogo (anche in un clic dalle prestazioni dei percorsi) e si scrivono le parole chiave con cui ogni voce compare in agenda.</p></div>` : ''}`;
 };
 
 /* ---------- pagine senza backing vero → alla piattaforma ---------- */
@@ -2240,6 +2268,14 @@ PAGES.administration = () => {
         ${d.codici_agenda.map(c => `<tr><td><b>${rfEsc(c.codice)}</b>${c.risorsa ? ' <span class="badge">sala/apparecchio</span>' : ''}</td><td class="num">${c.n}</td><td class="num">${rfEsc(c.ultimo || '')}</td>
           ${admin ? `<td class="row" style="gap:6px;justify-content:flex-end;flex-wrap:wrap"><select class="input sm" id="rf-cod-${rfEsc(c.codice).replace(/[^a-z0-9]/gi, '_')}"><option value="">è un medico…</option>${d.medici.filter(m => m.attivo).map(m => `<option value="${m.id}">${rfEsc(m.nome)}</option>`).join('')}</select><button class="btn sm" onclick="(function(){ const sel = document.getElementById('rf-cod-${rfEsc(c.codice).replace(/[^a-z0-9]/gi, '_')}'); if (!sel.value) { toast('Scegli il medico'); return; } rfStudioAzione({ azione: 'codice_medico', codice: ${JSON.stringify(c.codice)}, provider_id: sel.value }); })()">Abbina</button>${c.risorsa ? '' : `<button class="btn sm ghost" onclick="rfStudioAzione({ azione: 'codice_risorsa', codice: ${JSON.stringify(c.codice)}, tipo: 'sala' })">È una sala</button><button class="btn sm ghost" onclick="rfStudioAzione({ azione: 'codice_risorsa', codice: ${JSON.stringify(c.codice)}, tipo: 'apparecchio' })">È un apparecchio</button>`}</td>` : ''}</tr>`).join('')}</tbody></table></div></div>` : ''}
       ${admin ? `<div class="card mt-16"><div class="section-title">Nuovo medico in agenda</div><div class="grid grid-2 mt-8"><div class="field"><label>Nome come in agenda</label><input class="input" id="rf-m-nome" placeholder="Dr. med. …"></div><div class="field"><label>Altri modi in cui compare (virgole)</label><input class="input" id="rf-m-alias"></div></div><div class="row mt-16"><button class="btn primary" onclick="rfStudioAzione({ azione: 'medico_crea', nome: rfStudioCampo('#rf-m-nome'), aliases: rfStudioCampo('#rf-m-alias') })">Aggiungi</button></div></div>` : ''}`;
+  } else if (scheda === 'prestazioni') {
+    const cat = d.catalogo || []; const ET = { visita: 'Visita', esame: 'Esame', procedura: 'Procedura' };
+    corpo = `<div class="card"><div class="card-head"><span class="section-title">Catalogo delle prestazioni</span><span class="caption">${cat.filter(x => x.attivo).length} attive</span></div>
+      <p class="meta" style="margin:0 0 10px;line-height:1.5">Ogni voce ha un tipo, una durata standard, una sala predefinita e le <b>parole chiave</b> con cui la piattaforma la riconosce nel motivo degli appuntamenti dell'agenda MediOnline («eco», «ergo», «holter»…). Le prestazioni dei percorsi diventano voci con un clic.</p>
+      <div class="list">${cat.map(x => `<div class="list-item"><div class="grow"><div class="name">${rfEsc(x.nome)} <span class="badge">${ET[x.tipo] || x.tipo}</span>${x.attivo ? '' : ' <span class="badge">disattivata</span>'}</div><div class="sub">${x.durata_min}'${x.sala ? ` · ${rfEsc(x.sala)}` : ''}${x.parole_chiave.length ? ` · parole chiave: ${rfEsc(x.parole_chiave.join(', '))}` : ' · riconosciuta dal nome'}</div></div>
+        ${admin ? `<button class="btn sm ghost" onclick="rfStudioPrestazione('${x.id}')">Modifica</button><button class="btn sm ghost" onclick="rfStudioAzione({ azione: 'prestazione_attivo', id: '${x.id}' })">${x.attivo ? 'Disattiva' : 'Riattiva'}</button>` : ''}</div>`).join('') || '<div class="caption">Nessuna voce: aggiungine una o crea il catalogo dai percorsi.</div>'}</div></div>
+      ${admin ? `<div class="card mt-16"><div class="section-title">Nuova prestazione</div><div class="grid grid-2 mt-8"><div class="field"><label>Nome</label><input class="input" id="rf-pr-nome" placeholder="Ecocardiogramma"></div><div class="field"><label>Tipo</label><select class="input" id="rf-pr-tipo"><option value="visita">Visita</option><option value="esame" selected>Esame</option><option value="procedura">Procedura</option></select></div><div class="field"><label>Durata standard (min)</label><input class="input" id="rf-pr-durata" type="number" min="5" max="480" value="30" style="max-width:120px"></div><div class="field"><label>Sala predefinita</label><input class="input" id="rf-pr-sala" list="rf-pr-sale" placeholder="—"><datalist id="rf-pr-sale">${(d.sale || []).map(r => `<option value="${rfEsc(r.nome)}">`).join('')}</datalist></div><div class="field" style="grid-column:1/-1"><label>Parole chiave (virgole) con cui compare nell'agenda</label><input class="input" id="rf-pr-parole" placeholder="eco, ecocardio, ett"></div></div>
+        <div class="row mt-16" style="gap:8px"><button class="btn primary" onclick="rfStudioAzione({ azione: 'prestazione_crea', nome: rfStudioCampo('#rf-pr-nome'), tipo: rfStudioCampo('#rf-pr-tipo'), durata_min: rfStudioCampo('#rf-pr-durata'), sala: rfStudioCampo('#rf-pr-sala'), parole_chiave: rfStudioCampo('#rf-pr-parole') })">Aggiungi</button><button class="btn" onclick="rfStudioAzione({ azione: 'prestazioni_da_percorsi' })">${ICONS.flow} Crea dalle prestazioni dei percorsi</button></div></div>` : ''}`;
   } else {
     const tipo = scheda === 'sale' ? 'sala' : 'apparecchio';
     const lista = scheda === 'sale' ? d.sale : d.apparecchi;
@@ -2250,7 +2286,7 @@ PAGES.administration = () => {
       ${admin ? `<div class="card mt-16"><div class="section-title">${scheda === 'sale' ? 'Nuova sala' : 'Nuovo apparecchio'}</div><div class="grid grid-2 mt-8"><div class="field"><label>Nome</label><input class="input" id="rf-r-nome" placeholder="${scheda === 'sale' ? 'Sala 1, Sala ECG…' : 'Ecografo, Holter 3, ergometro…'}"></div><div class="field"><label>Descrizione</label><input class="input" id="rf-r-desc" placeholder="${scheda === 'sale' ? 'piano, uso' : 'modello, matricola, scadenza manutenzione'}"></div>${scheda === 'sale' ? `<div class="field"><label>Posti (pazienti nello stesso momento)</label><input class="input" id="rf-r-posti" type="number" min="1" max="99" value="1" style="max-width:120px"></div>` : ''}</div><div class="row mt-16"><button class="btn primary" onclick="rfStudioAzione({ azione: 'risorsa_crea', tipo: '${tipo}', nome: rfStudioCampo('#rf-r-nome'), descrizione: rfStudioCampo('#rf-r-desc'), posti: rfStudioCampo('#rf-r-posti') || 1 })">Aggiungi</button></div></div>` : ''}`;
   }
   return `<div class="page-head"><div><h2 class="page-title">Studio</h2><div class="page-sub">${rfEsc((d.studio || {}).nome || '')} · personale, medici dell'agenda, sale e apparecchi</div></div></div>
-    <div class="tabs">${tab('studio', 'Dati')}${tab('personale', 'Personale', d.personale.length)}${tab('medici', 'Medici agenda', d.medici.length)}${tab('sale', 'Sale', d.sale.length)}${tab('apparecchi', 'Apparecchi', d.apparecchi.length)}</div>
+    <div class="tabs">${tab('studio', 'Dati')}${tab('personale', 'Personale', d.personale.length)}${tab('medici', 'Medici agenda', d.medici.length)}${tab('prestazioni', 'Prestazioni', (d.catalogo || []).length)}${tab('sale', 'Sale', d.sale.length)}${tab('apparecchi', 'Apparecchi', d.apparecchi.length)}</div>
     ${soloAdmin}${avviso}${corpo}`;
 };
 function rfStudioPassword(id, email) {
@@ -2262,6 +2298,11 @@ function rfStudioMedico(id) {
   const accessi = (RF.studio.dati.personale || []).filter(u => u.role === 'medico' || u.role === 'admin');
   openModal('Medico in agenda', `<div class="field"><label>Nome come in agenda</label><input class="input" id="rf-m-e-nome" value="${rfEsc(m.nome)}"></div><div class="field mt-8"><label>Altri modi in cui compare (virgole)</label><input class="input" id="rf-m-e-alias" value="${rfEsc((m.aliases || []).join(', '))}"></div><div class="field mt-8"><label>Accesso collegato</label><select class="input" id="rf-m-e-user"><option value="">nessuno</option>${accessi.map(u => `<option value="${u.id}" ${m.user_id === u.id ? 'selected' : ''}>${rfEsc(u.email)}</option>`).join('')}</select></div>`, `<button class="btn" data-close>Annulla</button><button class="btn primary" id="rf-m-ok">Salva</button>`);
   document.getElementById('rf-m-ok').onclick = async () => { const ok = await rfStudioAzione({ azione: 'medico_aggiorna', id, nome: rfStudioCampo('#rf-m-e-nome'), aliases: rfStudioCampo('#rf-m-e-alias'), user_id: rfStudioCampo('#rf-m-e-user') }); if (ok) closeModal(); };
+}
+function rfStudioPrestazione(id) {
+  const x = ((RF.studio.dati || {}).catalogo || []).find(y => y.id === id); if (!x) return;
+  openModal('Prestazione', `<div class="field"><label>Nome</label><input class="input" id="rf-pr-e-nome" value="${rfEsc(x.nome)}"></div><div class="grid grid-2 mt-8"><div class="field"><label>Tipo</label><select class="input" id="rf-pr-e-tipo">${['visita', 'esame', 'procedura'].map(t => `<option value="${t}" ${x.tipo === t ? 'selected' : ''}>${t[0].toUpperCase() + t.slice(1)}</option>`).join('')}</select></div><div class="field"><label>Durata (min)</label><input class="input" id="rf-pr-e-durata" type="number" min="5" max="480" value="${x.durata_min}"></div></div><div class="field mt-8"><label>Sala predefinita</label><input class="input" id="rf-pr-e-sala" value="${rfEsc(x.sala || '')}"></div><div class="field mt-8"><label>Parole chiave (virgole)</label><input class="input" id="rf-pr-e-parole" value="${rfEsc(x.parole_chiave.join(', '))}"></div>`, `<button class="btn" data-close>Annulla</button><button class="btn primary" id="rf-pr-ok">Salva</button>`);
+  document.getElementById('rf-pr-ok').onclick = async () => { const ok = await rfStudioAzione({ azione: 'prestazione_aggiorna', id, nome: rfStudioCampo('#rf-pr-e-nome'), tipo: rfStudioCampo('#rf-pr-e-tipo'), durata_min: rfStudioCampo('#rf-pr-e-durata'), sala: rfStudioCampo('#rf-pr-e-sala'), parole_chiave: rfStudioCampo('#rf-pr-e-parole') }); if (ok) closeModal(); };
 }
 function rfStudioRisorsa(id) {
   const r = [...(RF.studio.dati.sale || []), ...(RF.studio.dati.apparecchi || [])].find(x => x.id === id); if (!r) return;
