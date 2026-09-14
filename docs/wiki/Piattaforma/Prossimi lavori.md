@@ -10,7 +10,8 @@ aggiornata: 2026-09-14
 4. **Smistamento suggerito per parole chiave** (quesito → servizio/medico).
 5. **Chat AI su «Affida paziente»** (serve chiave API Anthropic e la stessa validazione legale della cattura impegnativa).
 6. **Referto strutturato: invio HIN** (dipende da account HIN).
-7. **Migrazione a Next 16** (advisory residue di `npm audit`, feature non usate).
+7. **Gestionale di fatturazione dello studio**: chiedere allo studio quale usa e in che formato importa; oggi il CSV di «Da fatturare» ha colonne generiche. Se il gestionale ha un'API o un tracciato, adattare l'esportazione (non costruire la fatturazione: [[Decisioni/Registro]] 14.9.2026).
+8. **Migrazione a Next 16** (advisory residue di `npm audit`, feature non usate).
 
 ## Interfaccia nuova ([[Piattaforma/Prototipo stack]])
 - Schermata di accesso propria, pagina «Studio» e Profilo (password propria, 2FA) FATTI il 14.9.2026: l'interfaccia nuova non ha più bisogno della classica per nulla.

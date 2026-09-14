@@ -463,6 +463,54 @@ if (rfPatientDocsOrig) patientDocs = function (p) {
     ${scelta ? `<div class="row mt-16" style="gap:8px"><select class="input sm" id="rf-mod-scelta-${p.id}">${scelta}</select><button class="btn sm" onclick="rfModuloCompila(document.getElementById('rf-mod-scelta-${p.id}').value, '${p.id}')">${ICONS.plus} Compila</button></div>` : ''}</div>`;
 };
 
+/* ---------- Da fatturare (14.9.2026) ---------- */
+// La piattaforma non fattura: mostra le prestazioni erogate del mese e le
+// esporta in CSV per il gestionale di fatturazione dello studio, segnando
+// che cosa è già uscito. Segreteria e amministratore; il medico non la vede.
+if (typeof NAV_META !== 'undefined') NAV_META.fatturazione = ['Da fatturare', 'file'];
+if (typeof NAV !== 'undefined') for (const r of ['secretary', 'org_admin']) { const n = NAV[r]; if (n && !n.includes('fatturazione')) n.splice(n.indexOf('administration'), 0, 'fatturazione'); }
+RF.fatt = null;
+async function rfCaricaFatt(mese) {
+  try {
+    const r = await fetch(`/api/prototipo/fatturazione?mese=${encodeURIComponent(mese)}`, { credentials: 'include' });
+    const j = r.ok ? await r.json() : { righe: [], riepilogo: {}, esportazioni: [] };
+    RF.fatt = { mese, ...j };
+  } catch { RF.fatt = { mese, righe: [], riepilogo: {}, esportazioni: [], errore: true }; }
+  if (state.route === 'fatturazione') render();
+}
+async function rfFattEsporta() {
+  const mese = state.fattMese; const includi = !!(document.getElementById('rf-fatt-incl') || {}).checked;
+  if (RF.fattIn) return; RF.fattIn = true; toast('Preparo il CSV…');
+  try {
+    const r = await fetch('/api/prototipo/fatturazione', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mese, includi_esportate: includi }) });
+    if (r.status === 401) { toast('Sessione scaduta: rientra e riprova'); RF.nonAutorizzato = true; RF.caricato = false; render(); return; }
+    if (!r.ok) { const j = await r.json().catch(() => ({})); toast(j.errore || `Esportazione non riuscita (${r.status})`); return; }
+    const blob = await r.blob();
+    const cd = r.headers.get('Content-Disposition') || ''; const m = cd.match(/filename="?([^";]+)"?/);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = m ? m[1] : `prestazioni_${mese}.csv`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+    toast('CSV scaricato: aprilo nel gestionale di fatturazione'); void rfCaricaFatt(mese);
+  } catch { toast('Piattaforma non raggiungibile'); } finally { RF.fattIn = false; }
+}
+PAGES.fatturazione = () => {
+  if (!RF.live) return rfPaginaPiattaforma('Da fatturare', 'Prestazioni erogate da passare al gestionale di fatturazione');
+  const oggi = (RF.data && RF.data.today) || new Date().toISOString().slice(0, 10);
+  if (!state.fattMese) state.fattMese = oggi.slice(0, 7);
+  const mese = state.fattMese;
+  if (!RF.fatt || RF.fatt.mese !== mese) { void rfCaricaFatt(mese); return `<div class="page-head"><div><h2 class="page-title">Da fatturare</h2><div class="page-sub">Prestazioni erogate da passare al gestionale di fatturazione</div></div></div><div class="card"><p class="meta" style="margin:0">Raccolgo le prestazioni del mese…</p></div>`; }
+  const f = RF.fatt; const s = f.riepilogo || {}; const righe = f.righe || [];
+  const stat = (v, l, warn = false) => `<div class="card tight stat"><span class="value num">${v ?? 0}</span><span class="label">${l}</span>${warn && v ? '<span class="delta warn">da controllare</span>' : ''}</div>`;
+  const etMese = new Date(`${mese}-01T12:00:00`).toLocaleDateString('it-CH', { month: 'long', year: 'numeric' });
+  return `<div class="page-head"><div><h2 class="page-title">Da fatturare</h2><div class="page-sub" style="text-transform:none">${rfEsc(etMese)} · ${righe.length} prestazioni erogate · la piattaforma esporta, non fattura</div></div>
+      <div class="actions"><input type="month" class="input sm" value="${mese}" onchange="state.fattMese=this.value;render()" style="max-width:170px">${f.puo_esportare ? `<label class="caption" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="rf-fatt-incl"> includi già esportate</label><button class="btn primary" onclick="rfFattEsporta()">${ICONS.upload} Esporta CSV</button>` : ''}</div></div>
+    <div class="grid grid-5">${stat(s.totale, 'Prestazioni nel mese')}${stat(s.nuove, 'Nuove da esportare')}${stat(s.esportate, 'Già esportate')}${stat(s.senza_referto, 'Senza referto confermato', true)}${stat(s.non_segnate, 'Visita non segnata fatta', true)}</div>
+    <div class="card mt-16"><div class="table-wrap" style="box-shadow:none"><table class="dense"><thead><tr><th>Data</th><th>Ora</th><th>Paziente</th><th>Nascita</th><th>Medico</th><th>Prestazione</th><th>Luogo</th><th>Fatta</th><th>Referto</th><th>Esportata</th></tr></thead>
+      <tbody>${righe.length ? righe.map(r => `<tr${r.esportato_il ? ' style="opacity:.6"' : ''}><td class="num">${rfEsc(r.data)}</td><td class="num">${rfEsc(r.ora)}</td><td>${rfEsc(`${r.cognome} ${r.nome}`.trim())}${r.in_cartella ? '' : ' <span class="caption">solo agenda</span>'}</td><td class="num">${rfEsc(r.nascita)}</td><td>${rfEsc(r.medico)}</td><td>${rfEsc(r.prestazione)}</td><td>${rfEsc(r.luogo)}</td><td>${r.fatta ? '<i class="dot success"></i>' : '<i class="dot"></i>'}</td><td>${r.referto ? '<i class="dot success"></i>' : '<i class="dot warning"></i>'}</td><td class="num">${rfEsc(r.esportato_il || '—')}</td></tr>`).join('') : `<tr><td colspan="10" class="caption">Nessuna prestazione erogata in ${rfEsc(etMese)}${f.errore ? ' (piattaforma non raggiungibile)' : ''}.</td></tr>`}</tbody></table></div></div>
+    <div class="grid grid-2 mt-16">
+      <div class="card"><div class="section-title">Come funziona</div><p class="meta" style="margin:6px 0 0;line-height:1.55">Le righe sono gli appuntamenti già passati del mese (dall'agenda MediOnline). «Fatta» è la visita segnata dal medico; «Referto» è un referto confermato dalla catena per lo stesso paziente entro 3 giorni. Il CSV (separatore «;», apribile in Excel e nel gestionale) contiene paziente, data, medico, prestazione e luogo: <b>niente testo clinico</b>. La fattura TARDOC la fa il gestionale dello studio, con le sue posizioni e il valore del punto.</p></div>
+      <div class="card"><div class="card-head"><span class="section-title">Esportazioni</span><span class="badge count">${(f.esportazioni || []).length}</span></div><div class="list">${(f.esportazioni || []).length ? f.esportazioni.map(e => `<div class="list-item"><div class="grow"><div class="name" style="font-size:13px">${rfEsc(e.dal)} → ${rfEsc(e.al)} · ${e.righe} righe</div><div class="sub">${rfModQuando(e.at)}${e.da ? ` · ${rfEsc(e.da)}` : ''}</div></div></div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessuna esportazione ancora.</div>'}</div></div>
+    </div>`;
+};
+
 /* ---------- pagine senza backing vero → alla piattaforma ---------- */
 function rfPaginaPiattaforma(titolo, testo) {
   return `<div class="page-head"><div><h2 class="page-title">${titolo}</h2><div class="page-sub">${testo}</div></div></div>

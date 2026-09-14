@@ -6,6 +6,7 @@ aggiornata: 2026-09-14
 
 Elenco di ciò che esiste. Per la catena dei referti vedi [[Catena/Panoramica]].
 
+- **Da fatturare: esportazione delle prestazioni** (2026-09-14, migrazione 040): pagina nell'interfaccia nuova con le prestazioni erogate del mese e il CSV per il gestionale di fatturazione dello studio, con traccia di cosa è già uscito; la piattaforma esporta, non fattura ([[Piattaforma/Prototipo stack]]).
 - **Moduli digitali** (2026-09-14, migrazione 039 `moduli_compilazioni` + `moduli_accessi`): pagina wiki [[Piattaforma/Moduli]] letta a runtime (5 moduli proposti: anamnesi pre-visita, consenso, scheda ergometria, consegna Holter, controllo pre eco-stress), voce «Moduli» nell'interfaccia nuova con compilazione, validazione, stampa e registro degli accessi; moduli del paziente nella scheda ([[Piattaforma/Prototipo stack]]).
 - **Agenda per sala e posti delle sale** (2026-09-14, migrazione 038 `studio_risorse.posti`): vista «Per sala» dell'agenda nuova con le colonne dai luoghi dell'agenda abbinati alle risorse, avviso «più pazienti dei posti della sala»; posti impostabili in Studio → Sale ([[Piattaforma/Prototipo stack]]).
 - **Percorsi diagnostico-terapeutici** (2026-09-14): pagina wiki [[Medici/Percorsi]] letta a runtime (12 percorsi ambulatoriali proposti dalle linee guida ESC, da validare dal medico), pagina «Percorsi» nell'interfaccia nuova con ricerca, percorsi nel prompt del bot quando servono ([[Piattaforma/Prototipo stack]]).
