@@ -43,6 +43,7 @@ const CONCORRENTI: Concorrente[] = [
   // di medicina generale e non contengono dati di nessuno; per usarne uno in
   // produzione serve prima la scheda in docs/legale/fornitori-cloud.md.
   { nome: 'Claude Sonnet 5', dove: 'anthropic', modello: 'claude-sonnet-5' },
+  { nome: 'Claude Haiku 4.5', dove: 'anthropic', modello: 'claude-haiku-4-5-20251001' },
   { nome: 'GPT-5.5', dove: 'openai', modello: 'gpt-5.5' },
   { nome: 'Gemini 3.1 Pro', dove: 'gemini', modello: 'gemini-3.1-pro' },
 ];

@@ -830,6 +830,12 @@ const RF_AI_NOME = 'Cleo';
 .rf-gpt { display:flex; flex-direction:column; height:100%; }
 .rf-gpt-top { flex:none; display:flex; align-items:center; gap:10px; padding:10px 24px; border-bottom:1px solid var(--border); }
 .rf-gpt-top .n { font-weight:650; font-size:14px; }
+/* La lucina di Cleo: la stessa della sysbar in fondo alla barra laterale.
+   Verde ferma quando è in attesa, pulsante mentre lavora — così dice qualcosa
+   invece di essere un ornamento. */
+.rf-lucina { width:7px; height:7px; margin-right:1px; vertical-align:baseline; }
+.rf-lucina.viva { animation: pulse 1.4s infinite; }
+.topbar .title .rf-lucina { margin-right:6px; }
 .rf-gpt-top .m { font-size:12px; color:var(--text-3); }
 .rf-gpt-top .actions { margin-left:auto; }
 .rf-gpt-scroll { flex:1; overflow-y:auto; display:flex; flex-direction:column; }
@@ -1062,12 +1068,20 @@ function rfMedicaRiquadro() {
   </div>`;
 }
 
+// La lucina accanto al nome: verde quando Cleo è ferma, pulsante mentre
+// lavora. Stessa `dot success` della sysbar, così è lo stesso segnale.
+function rfLucinaCleo() {
+  const viva = state.aiState && state.aiState !== 'idle';
+  const spiega = viva ? `${RF_AI_NOME} sta lavorando` : `${RF_AI_NOME} è pronta · modello locale su questo Mac`;
+  return `<i class="dot success rf-lucina${viva ? ' viva' : ''}" title="${rfEsc(spiega)}"></i>`;
+}
+
 const rfAiPageOrig = PAGES.ai;
 PAGES.ai = () => {
   if (!RF.live) return rfAiPageOrig();
   const vuota = !state.aiMessages.length;
   return `<div class="rf-gpt">
-      <div class="rf-gpt-top"><span class="n">${rfEsc(RF_AI_NOME)}</span><span class="m">modello locale, su questo Mac</span>
+      <div class="rf-gpt-top"><span class="n">${rfLucinaCleo()}${rfEsc(RF_AI_NOME)}</span><span class="m">modello locale, su questo Mac</span>
         <span class="actions">${vuota ? '' : `<button class="btn sm" onclick="state.aiMessages=[];render()">${ICONS.x} Nuova conversazione</button>`}</span></div>
       <div class="rf-gpt-scroll ${vuota ? 'vuota' : ''}" id="rf-aip-body">
         <div class="rf-gpt-col">${vuota ? rfAiBenvenuto() : `<div class="rf-gpt-thread">${state.aiMessages.map(m => m.html).join('')}</div>`}</div>
@@ -1075,6 +1089,13 @@ PAGES.ai = () => {
       ${vuota ? '' : `<div class="rf-gpt-foot"><div class="rf-gpt-col">${rfMedicaRiquadro()}${rfAiCampo()}${rfAiNota()}</div></div>`}
     </div>`;
 };
+// Il titolo nella barra in alto: sulla pagina di Cleo porta la stessa lucina.
+const rfPageTitleOrig = pageTitle;
+pageTitle = function () {
+  if (RF.live && state.route === 'ai') return `${rfLucinaCleo()}${rfEsc(RF_AI_NOME)}`;
+  return rfPageTitleOrig.apply(this, arguments);
+};
+
 // A tutto schermo solo sulla pagina di Cleo: il riquadro, la barra di sicurezza
 // e il pannello laterale dell'AI se ne vanno finché si è lì.
 const rfRenderOrigAi = render;
