@@ -85,9 +85,18 @@ export async function radiografiaPagina(page) {
           let r = '  '.repeat(prof) + tag;
           if (el.id) r += '#' + el.id;
           if (el.classList && el.classList.length) r += '.' + [...el.classList].join('.');
-          for (const a of ['name', 'type', 'role', 'colspan', 'rowspan', 'href', 'onclick', 'title', 'style']) {
+          for (const a of ['name', 'type', 'role', 'colspan', 'rowspan', 'href', 'onclick', 'title', 'alt', 'style']) {
             const v = el.getAttribute && el.getAttribute(a);
             if (v) r += `[${a}≈${v.length > 60 ? v.slice(0, 60) + '…' : v.replace(/[0-9]{4,}/g, 'NNNN')}]`;
+          }
+          // Delle immagini interessa QUALE icona è (moneta, visto…): si tiene
+          // solo il nome del file, non l'URL con la sessione dentro.
+          const src = el.getAttribute && el.getAttribute('src');
+          if (src) {
+            const nome = src.startsWith('data:')
+              ? 'data:' + src.length + 'car'
+              : (src.split('?')[0].split('/').pop() || '').slice(0, 40);
+            if (nome) r += `[icona≈${nome}]`;
           }
           const testo = [...el.childNodes]
             .filter((n) => n.nodeType === 3)

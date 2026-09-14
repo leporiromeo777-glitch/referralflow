@@ -10,9 +10,28 @@ export type RigaFattura = {
   medico: string; gln_medico: string; rcc_medico: string; prestazione: string; codice_tariffa: string; luogo: string;
   fatta: boolean; referto: boolean; inviante: string;
   esportato_il: string;
+  // Stato letto nell'agenda di MediOnline (vuoto quando l'agenda non lo dice).
+  stato: string; stato_visto: string;
 };
 
-export const COLONNE = ['Data', 'Ora', 'Durata (min)', 'Cognome', 'Nome', 'Data di nascita', 'Assicurazione', 'AVS', 'N. assicurato', 'Medico', 'GLN medico', 'RCC medico', 'Prestazione', 'Posizione tariffaria', 'Luogo', 'Visita segnata fatta', 'Referto confermato', 'Medico inviante', 'ID appuntamento', 'Esportato il'] as const;
+// Come si chiamano, in italiano, gli stati che l'agenda di MediOnline disegna
+// con l'icona in alto a destra del riquadro.
+export const ETICHETTE_STATO: Record<string, string> = {
+  bloccato: 'Bloccato',
+  fissato: 'Fissato',
+  arrivato: 'Arrivato',
+  in_corso: 'In corso',
+  da_fatturare: 'Da fatturare',
+  trattato: 'Trattato',
+  fatturato: 'Fatturato',
+  scusato: 'Scusato',
+  annullato: 'Annullato',
+};
+
+// Stati che non diventano una fattura: non vanno contati fra i dimenticati.
+const NON_FATTURABILI = new Set(['scusato', 'annullato', 'bloccato']);
+
+export const COLONNE = ['Data', 'Ora', 'Durata (min)', 'Cognome', 'Nome', 'Data di nascita', 'Assicurazione', 'AVS', 'N. assicurato', 'Medico', 'GLN medico', 'RCC medico', 'Prestazione', 'Posizione tariffaria', 'Luogo', 'Visita segnata fatta', 'Referto confermato', 'Medico inviante', 'Stato in agenda', 'ID appuntamento', 'Esportato il'] as const;
 
 function cella(v: string | number | boolean): string {
   const s = typeof v === 'boolean' ? (v ? 'sì' : 'no') : String(v ?? '');
@@ -21,7 +40,7 @@ function cella(v: string | number | boolean): string {
 
 export function csvPrestazioni(righe: RigaFattura[]): string {
   const testa = COLONNE.join(';');
-  const corpo = righe.map((r) => [r.data, r.ora, r.durata, r.cognome, r.nome, r.nascita, r.assicurazione, r.avs, r.n_assicurato, r.medico, r.gln_medico, r.rcc_medico, r.prestazione, r.codice_tariffa, r.luogo, r.fatta, r.referto, r.inviante, r.id, r.esportato_il].map(cella).join(';'));
+  const corpo = righe.map((r) => [r.data, r.ora, r.durata, r.cognome, r.nome, r.nascita, r.assicurazione, r.avs, r.n_assicurato, r.medico, r.gln_medico, r.rcc_medico, r.prestazione, r.codice_tariffa, r.luogo, r.fatta, r.referto, r.inviante, ETICHETTE_STATO[r.stato] ?? '', r.id, r.esportato_il].map(cella).join(';'));
   return '﻿' + [testa, ...corpo].join('\r\n') + '\r\n';
 }
 
@@ -50,5 +69,45 @@ export function riepilogoPrestazioni(righe: RigaFattura[]) {
     senza_referto: righe.filter((r) => !r.referto).length,
     senza_cartella: righe.filter((r) => !r.in_cartella).length,
     non_segnate: righe.filter((r) => !r.fatta).length,
+    fatturate: righe.filter((r) => r.stato === 'fatturato').length,
+    da_fatturare: righe.filter((r) => r.stato === 'da_fatturare').length,
+  };
+}
+
+// «dd.mm.aaaa» → data, o null.
+function dataCh(s: string): Date | null {
+  const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(s ?? '');
+  if (!m) return null;
+  const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+// Il controllo vero: la piattaforma non fattura, verifica che nulla si perda.
+// «In sospeso» = prestazione fatta da più di `giorni` giorni che in agenda
+// porta ancora la moneta. «Senza stato» = l'agenda non dice nulla (di solito
+// appuntamenti importati prima che il robot leggesse lo stato): si segnala
+// piano, non è un allarme. Gli annullati e gli scusati non contano.
+export function controlloFatturazione(
+  righe: RigaFattura[],
+  oggi: Date = new Date(),
+  giorni = 7
+) {
+  const limite = new Date(oggi.getFullYear(), oggi.getMonth(), oggi.getDate() - giorni);
+  const utili = righe.filter((r) => !NON_FATTURABILI.has(r.stato));
+  const vecchia = (r: RigaFattura) => {
+    const d = dataCh(r.data);
+    return d !== null && d < limite;
+  };
+  const per_stato: Record<string, number> = {};
+  for (const r of righe) {
+    const k = r.stato || 'senza_stato';
+    per_stato[k] = (per_stato[k] ?? 0) + 1;
+  }
+  return {
+    giorni,
+    in_sospeso: utili.filter((r) => r.stato === 'da_fatturare' && vecchia(r)),
+    senza_stato: utili.filter((r) => !r.stato && vecchia(r)),
+    non_fatturabili: righe.filter((r) => NON_FATTURABILI.has(r.stato)).length,
+    per_stato,
   };
 }

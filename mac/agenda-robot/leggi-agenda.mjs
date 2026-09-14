@@ -26,6 +26,31 @@ import { accediMediOnline, trovaElemento } from './riparatore.mjs';
 
 const conf = leggiConf();
 const GIORNI = Math.min(30, Math.max(1, Number(conf.AGENDA_GIORNI || 10)));
+// Giorni GIÀ PASSATI da ripassare a ogni giro. Servono alla fatturazione: lo
+// stato di un appuntamento (moneta = da fatturare, visto verde = fatturato)
+// cambia giorni dopo la visita, quindi non basta guardare in avanti.
+//   AGENDA_GIORNI_INDIETRO=7
+const INDIETRO = Math.min(60, Math.max(0, Number(conf.AGENDA_GIORNI_INDIETRO ?? 7)));
+// Stati dell'appuntamento in MediOnline. Il portale li disegna come icona in
+// alto a destra nel riquadro (<i class="stN"> con l'immagine nello sfondo):
+// si riconoscono dal NOME DEL FILE, che è parlante e in francese — più stabile
+// del numero della classe. Rilevati dal portale il 14.9.2026.
+const STATI = {
+  ag_rdv_masque_16: 'bloccato',   // orologio + lucchetto
+  ag_rdv_16: 'fissato',           // orologio
+  ag_arrive_16_inv: 'arrivato',   // sedia (in sala d'attesa)
+  ag_encours_16_inv: 'in_corso',  // stetoscopio
+  ag_atraiter_16: 'da_fatturare', // moneta d'oro («à traiter»)
+  ag_ok_16: 'trattato',           // quadrato verde col visto
+  ag_excuse_16: 'scusato',        // faccia
+  ag_ok_f_16: 'fatturato',        // quadrato verde col visto e la «F» («facturé»)
+};
+// Se un giorno il portale rinomina le icone, si rimedia senza toccare il
+// codice: AGENDA_STATI=ag_nuovo_16:fatturato ag_altro_16:da_fatturare
+for (const coppia of (conf.AGENDA_STATI ?? '').split(/[\s,;]+/)) {
+  const [icona, chiave] = coppia.split(':');
+  if (icona && chiave) STATI[icona.toLowerCase().replace(/\.\w+$/, '')] = chiave;
+}
 // Colori dei riquadri da NON considerare appuntamenti (blocchi, pause,
 // assenze…): in ~/.referralflow-agenda.conf, es.
 //   AGENDA_COLORI_IGNORA=#ffdc00 #01ff70
@@ -146,11 +171,30 @@ async function estraiGiorno(p) {
         if (mc) {
           colore = '#' + [mc[1], mc[2], mc[3]].map((n) => (+n).toString(16).padStart(2, '0')).join('');
         }
+        // Stato dell'appuntamento: MediOnline lo disegna come icona in alto a
+        // destra, con un <i class="stN"> e l'immagine nello sfondo CSS.
+        // Della classe interessa il numero; il nome del file serve da controllo.
+        let stato = '';
+        let iconaStato = '';
+        for (const i of el.querySelectorAll('i')) {
+          const c = [...i.classList].find((x) => /^st\d+$/.test(x));
+          if (!c) continue;
+          stato = c;
+          const u = getComputedStyle(i).backgroundImage.match(/url\(["']?([^"')]+)/);
+          if (u && !u[1].startsWith('data:')) {
+            iconaStato = (u[1].split('?')[0].split('/').pop() ?? '').toLowerCase();
+          }
+          break;
+        }
+        const annullato = el.classList.contains('_Canceled');
         return {
           inizio,
           durata,
           colonna,
           colore,
+          stato,
+          iconaStato,
+          annullato,
           testo: el.textContent.trim().replace(/\s+/g, ' ').slice(0, 200),
         };
       })
@@ -167,6 +211,14 @@ function icsData(dataISO, minuti) {
   const hh = String(Math.floor(minuti / 60)).padStart(2, '0');
   const mm = String(minuti % 60).padStart(2, '0');
   return dataISO.replaceAll('-', '') + 'T' + hh + mm + '00';
+}
+
+// Dallo stato disegnato nel riquadro alla parola nostra. Vuoto quando l'icona
+// non c'è o non è in tabella: «non lo so» non si scrive come «no».
+function statoAppuntamento(a) {
+  if (a.annullato) return 'annullato';
+  const icona = (a.iconaStato ?? '').replace(/\.\w+$/, '');
+  return STATI[icona] ?? '';
 }
 
 function icsTesto(s) {
@@ -277,12 +329,41 @@ try {
     await p.waitForTimeout(2500);
   }
 
-  // Giorno per giorno: oggi + i prossimi.
+  // La freccia del giorno precedente / successivo nella barra dell'agenda.
+  const freccia = async (verso) =>
+    trovaElemento(
+      p,
+      verso > 0 ? 'agenda_avanti' : 'agenda_indietro',
+      verso > 0 ? ['#ctl04_imgNext'] : ['#ctl04_imgPrev', '#ctl04_imgPrevious'],
+      verso > 0
+        ? 'la freccia per passare al giorno successivo nella barra dell\'agenda'
+        : 'la freccia per tornare al giorno precedente nella barra dell\'agenda',
+      async (loc) => (await loc.count()) > 0
+    );
+
+  // Si parte da INDIETRO giorni fa e si cammina in avanti fino a oggi + GIORNI.
+  let dataFallback = new Date();
+  let partenzaOk = true;
+  for (let g = 0; g < INDIETRO; g++) {
+    const dietro = await freccia(-1);
+    if (!dietro) {
+      log(`freccia «giorno precedente» non trovata: si legge solo da oggi in avanti`);
+      partenzaOk = false;
+      break;
+    }
+    await dietro.evaluate((el) => el.click());
+    await p.waitForTimeout(2000);
+    dataFallback.setDate(dataFallback.getDate() - 1);
+  }
+  const ARRETRATI = partenzaOk ? INDIETRO : 0;
+  const TOTALE = ARRETRATI + GIORNI;
+
+  // Giorno per giorno: gli arretrati, oggi e i prossimi.
   const perGiorno = [];
   const censimentoColori = new Map();
+  const censimentoIcone = new Map();
   let scartatiPerColore = 0;
-  let dataFallback = new Date();
-  for (let g = 0; g < GIORNI; g++) {
+  for (let g = 0; g < TOTALE; g++) {
     await p.waitForSelector('.WeekGrid_main', { timeout: 30_000 });
     await p.waitForTimeout(800);
     const giorno = await estraiGiorno(p);
@@ -294,6 +375,8 @@ try {
       if (giorno.data) dataFallback = new Date(giorno.data + 'T12:00:00');
       for (const a of giorno.appuntamenti) {
         censimentoColori.set(a.colore, (censimentoColori.get(a.colore) ?? 0) + 1);
+        const eti = `${a.stato || 'senza-icona'}${a.iconaStato ? '/' + a.iconaStato.replace(/\.\w+$/, '') : ''}`;
+        censimentoIcone.set(eti, (censimentoIcone.get(eti) ?? 0) + 1);
       }
       const tenuti = giorno.appuntamenti.filter((a) => {
         if (COLORI_IGNORA.has(a.colore)) {
@@ -308,17 +391,11 @@ try {
         return true;
       });
       perGiorno.push({ data: dataISO, appuntamenti: tenuti });
-      log(`giorno ${g + 1}: ${dataISO} → ${tenuti.length} appuntamenti` +
+      log(`giorno ${g + 1}/${TOTALE}${g < ARRETRATI ? ' (arretrato)' : ''}: ${dataISO} → ${tenuti.length} appuntamenti` +
         (giorno.appuntamenti.length !== tenuti.length ? ` (+${giorno.appuntamenti.length - tenuti.length} scartati per colore)` : ''));
     }
-    if (g < GIORNI - 1) {
-      const avanti = await trovaElemento(
-        p,
-        'agenda_avanti',
-        ['#ctl04_imgNext'],
-        'la freccia per passare al giorno successivo nella barra dell\'agenda',
-        async (loc) => (await loc.count()) > 0
-      );
+    if (g < TOTALE - 1) {
+      const avanti = await freccia(1);
       if (!avanti) break;
       await avanti.evaluate((el) => el.click());
       await p.waitForTimeout(2000);
@@ -351,6 +428,9 @@ try {
         // Colore del riquadro nell'agenda originale (14.9.2026): la piattaforma
         // lo conserva e l'interfaccia nuova lo mostra sull'appuntamento.
         ...(a.colore ? [`X-RF-COLORE:${a.colore}`] : []),
+        // Stato letto dall'icona in alto a destra del riquadro (moneta = da
+        // fatturare, visto con la «F» = fatturato, sedia = arrivato…).
+        ...(statoAppuntamento(a) ? [`X-RF-STATO:${statoAppuntamento(a)}`] : []),
         'END:VEVENT'
       );
       totale++;
@@ -370,6 +450,25 @@ try {
     .map(([c, n]) => `${c || 'senza-colore'}×${n}`)
     .join('  ');
   if (riepilogo) log(`colori visti: ${riepilogo}`);
+  // Censimento degli stati visti (classe/icona): solo nomi e conteggi.
+  const riepilogoIcone = [...censimentoIcone.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([i, n]) => `${i}×${n}`)
+    .join('  ');
+  if (riepilogoIcone) log(`stati visti: ${riepilogoIcone}`);
+  const perStato = new Map();
+  for (const g of perGiorno) {
+    for (const a of g.appuntamenti) {
+      const st = statoAppuntamento(a);
+      if (st) perStato.set(st, (perStato.get(st) ?? 0) + 1);
+    }
+  }
+  if (perStato.size) {
+    log('stati riconosciuti: ' + [...perStato.entries()].sort((a, b) => b[1] - a[1])
+      .map(([k, n]) => `${k}×${n}`).join('  '));
+  } else if (riepilogoIcone) {
+    log('nessuna icona riconosciuta: aggiorna la tabella STATI o AGENDA_STATI nel conf');
+  }
 
   // Sveglia subito la sincronizzazione dell'app (se il server è acceso).
   try {

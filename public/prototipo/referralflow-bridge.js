@@ -518,24 +518,54 @@ async function rfFattEsporta() {
   } catch { toast('Piattaforma non raggiungibile'); } finally { RF.fattIn = false; }
 }
 PAGES.fatturazione = () => {
-  if (!RF.live) return rfPaginaPiattaforma('Da fatturare', 'Prestazioni erogate da passare al gestionale di fatturazione');
+  if (!RF.live) return rfPaginaPiattaforma('Da fatturare', 'Prestazioni erogate e loro stato nella Cassa dei Medici');
   const oggi = (RF.data && RF.data.today) || new Date().toISOString().slice(0, 10);
   if (!state.fattMese) state.fattMese = oggi.slice(0, 7);
   const mese = state.fattMese;
-  if (!RF.fatt || RF.fatt.mese !== mese) { void rfCaricaFatt(mese); return `<div class="page-head"><div><h2 class="page-title">Da fatturare</h2><div class="page-sub">Prestazioni erogate da passare al gestionale di fatturazione</div></div></div><div class="card"><p class="meta" style="margin:0">Raccolgo le prestazioni del mese…</p></div>`; }
-  const f = RF.fatt; const s = f.riepilogo || {}; const righe = f.righe || [];
+  if (!RF.fatt || RF.fatt.mese !== mese) { void rfCaricaFatt(mese); return `<div class="page-head"><div><h2 class="page-title">Da fatturare</h2><div class="page-sub">Prestazioni erogate e loro stato nella Cassa dei Medici</div></div></div><div class="card"><p class="meta" style="margin:0">Raccolgo le prestazioni del mese…</p></div>`; }
+  const f = RF.fatt; const s = f.riepilogo || {}; const righe = f.righe || []; const c = f.controllo || { in_sospeso: [], senza_stato: [], giorni: 7 };
+  const sospese = c.in_sospeso || []; const mute = c.senza_stato || [];
   const stat = (v, l, warn = false) => `<div class="card tight stat"><span class="value num">${v ?? 0}</span><span class="label">${l}</span>${warn && v ? '<span class="delta warn">da controllare</span>' : ''}</div>`;
   const etMese = new Date(`${mese}-01T12:00:00`).toLocaleDateString('it-CH', { month: 'long', year: 'numeric' });
-  return `<div class="page-head"><div><h2 class="page-title">Da fatturare</h2><div class="page-sub" style="text-transform:none">${rfEsc(etMese)} · ${righe.length} prestazioni erogate · controllo per la Cassa dei Medici: la fattura la fa MediOnline</div></div>
+  const nomeDi = (r) => `${r.cognome} ${r.nome}`.trim() || '—';
+  return `<div class="page-head"><div><h2 class="page-title">Da fatturare</h2><div class="page-sub" style="text-transform:none">${rfEsc(etMese)} · ${righe.length} prestazioni erogate · lo stato arriva dall'agenda della Cassa dei Medici: la fattura la fa MediOnline</div></div>
       <div class="actions"><input type="month" class="input sm" value="${mese}" onchange="state.fattMese=this.value;render()" style="max-width:170px">${f.puo_esportare ? `<label class="caption" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="rf-fatt-incl"> includi già esportate</label><button class="btn primary" onclick="rfFattEsporta()">${ICONS.upload} Esporta CSV</button>` : ''}</div></div>
-    <div class="grid grid-5">${stat(s.totale, 'Prestazioni nel mese')}${stat(s.nuove, 'Nuove da esportare')}${stat(s.esportate, 'Già esportate')}${stat(s.senza_referto, 'Senza referto confermato', true)}${stat(s.non_segnate, 'Visita non segnata fatta', true)}</div>
-    <div class="card mt-16"><div class="table-wrap" style="box-shadow:none"><table class="dense"><thead><tr><th>Data</th><th>Ora</th><th>Paziente</th><th>Nascita</th><th>Medico</th><th>Prestazione</th><th>Luogo</th><th>Fatta</th><th>Referto</th><th>Esportata</th></tr></thead>
-      <tbody>${righe.length ? righe.map(r => `<tr${r.esportato_il ? ' style="opacity:.6"' : ''}><td class="num">${rfEsc(r.data)}</td><td class="num">${rfEsc(r.ora)}</td><td>${rfEsc(`${r.cognome} ${r.nome}`.trim())}${r.in_cartella ? '' : ' <span class="caption">solo agenda</span>'}</td><td class="num">${rfEsc(r.nascita)}</td><td>${rfEsc(r.medico)}</td><td>${rfEsc(r.prestazione)}</td><td>${rfEsc(r.luogo)}</td><td>${r.fatta ? '<i class="dot success"></i>' : '<i class="dot"></i>'}</td><td>${r.referto ? '<i class="dot success"></i>' : '<i class="dot warning"></i>'}</td><td class="num">${rfEsc(r.esportato_il || '—')}</td></tr>`).join('') : `<tr><td colspan="10" class="caption">Nessuna prestazione erogata in ${rfEsc(etMese)}${f.errore ? ' (piattaforma non raggiungibile)' : ''}.</td></tr>`}</tbody></table></div></div>
+    ${sospese.length ? `<div class="card mt-16" style="border-left:3px solid var(--warning, #b8860b)"><div class="card-head"><span class="section-title">Rimaste indietro</span><span class="badge count">${sospese.length}</span></div>
+      <p class="meta" style="margin:2px 0 10px;line-height:1.5">Fatte da più di ${c.giorni} giorni e in agenda portano ancora la <b>moneta</b>: in MediOnline non sono state ancora passate alla fatturazione.</p>
+      <div class="list">${sospese.slice(0, 12).map(r => `<div class="list-item"><div class="grow"><div class="name" style="font-size:13px">${rfEsc(nomeDi(r))} · ${rfEsc(r.prestazione)}</div><div class="sub">${rfEsc(r.data)} ${rfEsc(r.ora)}${r.medico ? ` · ${rfEsc(r.medico)}` : ''}${r.luogo ? ` · ${rfEsc(r.luogo)}` : ''}</div></div></div>`).join('')}${sospese.length > 12 ? `<div class="caption" style="padding:8px 6px">…e altre ${sospese.length - 12}, nella tabella qui sotto.</div>` : ''}</div></div>` : ''}
+    <div class="grid grid-5 mt-16">${stat(s.totale, 'Prestazioni nel mese')}${stat(s.fatturate, 'Fatturate')}${stat(s.da_fatturare, 'Ancora da fatturare')}${stat(sospese.length, `Indietro di oltre ${c.giorni} giorni`, true)}${stat(s.senza_referto, 'Senza referto confermato', true)}</div>
+    <div class="card mt-16"><div class="table-wrap" style="box-shadow:none"><table class="dense"><thead><tr><th>Data</th><th>Ora</th><th>Paziente</th><th>Nascita</th><th>Medico</th><th>Prestazione</th><th>Luogo</th><th>Stato in agenda</th><th>Fatta</th><th>Referto</th><th>Esportata</th></tr></thead>
+      <tbody>${righe.length ? righe.map(r => `<tr${r.esportato_il ? ' style="opacity:.6"' : ''}><td class="num">${rfEsc(r.data)}</td><td class="num">${rfEsc(r.ora)}</td><td>${rfEsc(nomeDi(r))}${r.in_cartella ? '' : ' <span class="caption">solo agenda</span>'}</td><td class="num">${rfEsc(r.nascita)}</td><td>${rfEsc(r.medico)}</td><td>${rfEsc(r.prestazione)}</td><td>${rfEsc(r.luogo)}</td><td>${rfStatoPill(r.stato)}</td><td>${r.fatta ? '<i class="dot success"></i>' : '<i class="dot"></i>'}</td><td>${r.referto ? '<i class="dot success"></i>' : '<i class="dot warning"></i>'}</td><td class="num">${rfEsc(r.esportato_il || '—')}</td></tr>`).join('') : `<tr><td colspan="11" class="caption">Nessuna prestazione erogata in ${rfEsc(etMese)}${f.errore ? ' (piattaforma non raggiungibile)' : ''}.</td></tr>`}</tbody></table></div></div>
     <div class="grid grid-2 mt-16">
-      <div class="card"><div class="section-title">Come funziona</div><p class="meta" style="margin:6px 0 0;line-height:1.55">Lo studio fattura con la <b>Cassa dei Medici</b> (MediOnline), dove gli appuntamenti esistono già: questa pagina serve a controllare, mese per mese, che ogni prestazione fatta sia stata registrata e fatturata là, e quali hanno già il referto confermato. «Fatta» è la visita segnata dal medico; «Referto» è un referto confermato dalla catena per lo stesso paziente entro 3 giorni. Il CSV (separatore «;», apribile in Excel) porta paziente con AVS e numero assicurato, medico con GLN e RCC, prestazione con la posizione tariffaria del catalogo: <b>niente testo clinico</b>. La piattaforma non scrive mai in MediOnline.</p></div>
-      <div class="card"><div class="card-head"><span class="section-title">Esportazioni</span><span class="badge count">${(f.esportazioni || []).length}</span></div><div class="list">${(f.esportazioni || []).length ? f.esportazioni.map(e => `<div class="list-item"><div class="grow"><div class="name" style="font-size:13px">${rfEsc(e.dal)} → ${rfEsc(e.al)} · ${e.righe} righe</div><div class="sub">${rfModQuando(e.at)}${e.da ? ` · ${rfEsc(e.da)}` : ''}</div></div></div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessuna esportazione ancora.</div>'}</div></div>
+      <div class="card"><div class="section-title">Come funziona</div><p class="meta" style="margin:6px 0 0;line-height:1.55">Lo studio fattura con la <b>Cassa dei Medici</b> (MediOnline). Nell'agenda ogni appuntamento porta in alto a destra un'icona che ne dice lo stato: la <b>moneta</b> = ancora da fatturare, il <b>visto con la «F»</b> = fatturato, la sedia = arrivato, lo stetoscopio = in corso. Il robot dell'agenda la legge, <b>in sola lettura</b>, insieme al resto: questa pagina confronta ciò che avete fatto con ciò che là risulta fatturato, e segnala le prestazioni rimaste indietro. La piattaforma non scrive mai in MediOnline e non emette fatture. Il CSV (separatore «;», apribile in Excel) porta paziente con AVS e numero assicurato, medico con GLN e RCC, prestazione con la posizione tariffaria: <b>niente testo clinico</b>.${mute.length ? ` <span class="caption">(${mute.length} prestazioni del mese sono più vecchie della lettura dello stato: per quelle l'agenda non dice nulla.)</span>` : ''}</p></div>
+      <div class="card"><div class="card-head"><span class="section-title">Esportazioni</span><span class="badge count">${(f.esportazioni || []).length}</span></div><p class="caption" style="margin:0 0 8px">${s.nuove ?? 0} nuove · ${s.esportate ?? 0} già esportate</p><div class="list">${(f.esportazioni || []).length ? f.esportazioni.map(e => `<div class="list-item"><div class="grow"><div class="name" style="font-size:13px">${rfEsc(e.dal)} → ${rfEsc(e.al)} · ${e.righe} righe</div><div class="sub">${rfModQuando(e.at)}${e.da ? ` · ${rfEsc(e.da)}` : ''}</div></div></div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessuna esportazione ancora.</div>'}</div></div>
     </div>`;
 };
+
+/* Stato dell'appuntamento come lo segna l'agenda della Cassa dei Medici. */
+const RF_STATI = {
+  bloccato: ['Bloccato', 'muto'],
+  fissato: ['Fissato', 'muto'],
+  arrivato: ['Arrivato', 'attesa'],
+  in_corso: ['In corso', 'attesa'],
+  da_fatturare: ['Da fatturare', 'moneta'],
+  trattato: ['Trattato', 'fatto'],
+  fatturato: ['Fatturato', 'fatto'],
+  scusato: ['Scusato', 'muto'],
+  annullato: ['Annullato', 'muto'],
+};
+function rfStatoPill(stato) {
+  const v = RF_STATI[stato];
+  if (!v) return '<span class="caption">—</span>';
+  return `<span class="rf-stato ${v[1]}">${rfEsc(v[0])}</span>`;
+}
+(function () { const st = document.createElement('style'); st.textContent = `
+.rf-stato { display:inline-block; padding:1px 7px; border-radius:999px; font-size:11.5px; font-weight:600; white-space:nowrap; border:1px solid var(--border); color:var(--text-2); }
+.rf-stato.moneta { border-color:#c9a227; background:rgba(201,162,39,.12); color:#8a6d0b; }
+.rf-stato.fatto { border-color:var(--cta, #0d5c48); background:rgba(13,92,72,.10); color:var(--cta, #0d5c48); }
+.rf-stato.attesa { border-color:#2b6cb0; background:rgba(43,108,176,.10); color:#2b6cb0; }
+.rf-stato.muto { color:var(--text-3); }
+`; document.head.appendChild(st); })();
 
 /* ---------- Pazienti: anagrafica completa, nuovo, import CSV, scheda (14.9.2026) ---------- */
 (function () { const st = document.createElement('style'); st.textContent = `

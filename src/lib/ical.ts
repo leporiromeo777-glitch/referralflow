@@ -18,7 +18,25 @@ export type ICalEvent = {
   status: string;
   // Colore dell'appuntamento nell'agenda di origine (X-RF-COLORE del robot), «#rrggbb» o vuoto.
   colore: string;
+  // Stato nell'agenda di origine (X-RF-STATO del robot): 'fissato', 'arrivato',
+  // 'in_corso', 'da_fatturare', 'trattato', 'fatturato', 'scusato', 'annullato',
+  // 'bloccato'. Vuoto quando l'agenda non lo dice: «non lo so» non è «no».
+  stato: string;
 };
+
+// Stati che l'agenda di origine può dichiarare (X-RF-STATO). Fuori da questa
+// lista il valore si scarta: meglio vuoto che una parola che nessuno capisce.
+export const STATI_AGENDA = new Set([
+  'bloccato',
+  'fissato',
+  'arrivato',
+  'in_corso',
+  'da_fatturare',
+  'trattato',
+  'fatturato',
+  'scusato',
+  'annullato',
+]);
 
 type RawProp = { name: string; params: Record<string, string>; value: string };
 
@@ -137,6 +155,7 @@ function buildEvent(props: RawProp[]): ICalEvent {
     allDay: start ? start.allDay : false,
     summary: text('SUMMARY'),
     colore: /^#[0-9a-f]{6}$/i.test(text('X-RF-COLORE')) ? text('X-RF-COLORE').toLowerCase() : '',
+    stato: STATI_AGENDA.has(text('X-RF-STATO').toLowerCase()) ? text('X-RF-STATO').toLowerCase() : '',
     description: text('DESCRIPTION'),
     location: text('LOCATION'),
     organizer: text('ORGANIZER'),

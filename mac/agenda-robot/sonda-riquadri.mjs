@@ -1,0 +1,165 @@
+// Sonda: com'è fatto DENTRO un riquadro dell'agenda MediOnline.
+//
+//   node mac/agenda-robot/sonda-riquadri.mjs [giorni-indietro]
+//
+// Serve quando si deve riconoscere un segno grafico nel riquadro (p.es.
+// l'icona di stato della fatturazione: moneta = da fatturare, quadrato col
+// visto verde = fatturato) e non si sa in che forma il portale lo scriva.
+// Stampa la STRUTTURA dei primi riquadri — tag, classi, attributi, immagini
+// di sfondo — con TUTTI I TESTI TOLTI: nessun dato di paziente esce di qui.
+// Sola lettura come il resto del robot.
+
+import { lanciaBrowser, leggiConf, modalitaSolaLettura } from './comune.mjs';
+import { accediMediOnline, trovaElemento } from './riparatore.mjs';
+
+const conf = leggiConf();
+const INDIETRO = Math.min(30, Math.max(0, Number(process.argv[2] ?? 5)));
+
+const browser = await lanciaBrowser({ fuoriSchermo: true });
+try {
+  const context = await browser.newContext({ viewport: { width: 1600, height: 1200 }, deviceScaleFactor: 8 });
+  const page = await context.newPage();
+  await modalitaSolaLettura(page);
+  await page.goto(conf.MEDIONLINE_URL, { waitUntil: 'domcontentloaded' });
+  const { pagina: p, ok } = await accediMediOnline(context, page, conf);
+  if (!ok) { console.log('login non riuscito'); process.exit(1); }
+  console.log('login ok');
+
+  const SELETTORI_VOCE = ['li#b2 a', 'a[onclick*="AGND_Affiche"]'];
+  let voce = null;
+  for (let giro = 0; giro < 15 && !voce; giro++) {
+    if (giro > 0) await p.waitForTimeout(2500);
+    for (const pg of context.pages()) {
+      if (pg.isClosed()) continue;
+      for (const sel of SELETTORI_VOCE) {
+        const l = pg.locator(sel).first();
+        if ((await l.count()) > 0) { voce = l; break; }
+      }
+      if (voce) break;
+    }
+  }
+  if (!voce) { console.log('menu Agenda non trovato'); process.exit(1); }
+  await voce.evaluate((el) => el.click());
+  await p.waitForSelector('.WeekGrid_main', { timeout: 30_000 });
+
+  const multi = p.locator('#ctl04_lkMulti');
+  if ((await multi.count()) > 0 && !/\bon\b/.test((await multi.getAttribute('class')) ?? '')) {
+    await multi.evaluate((el) => el.click());
+    await p.waitForTimeout(2500);
+  }
+  const oggi = await trovaElemento(p, 'agenda_oggi', ['#ctl04_imbtnToday'], 'il bottone «oggi»',
+    async (loc) => (await loc.count()) > 0);
+  if (oggi) { await oggi.evaluate((el) => el.click()); await p.waitForTimeout(2500); }
+
+  for (let g = 0; g < INDIETRO; g++) {
+    const dietro = await trovaElemento(p, 'agenda_indietro', ['#ctl04_imgPrev', '#ctl04_imgPrevious'],
+      'la freccia del giorno precedente', async (loc) => (await loc.count()) > 0);
+    if (!dietro) break;
+    await dietro.evaluate((el) => el.click());
+    await p.waitForTimeout(1800);
+  }
+  await p.waitForSelector('.WeekGrid_main', { timeout: 30_000 });
+  await p.waitForTimeout(1200);
+
+  const esito = await p.evaluate(() => {
+    // Struttura di un elemento, SENZA nessun nodo di testo.
+    const struttura = (el, prof) => {
+      if (prof > 8) return [];
+      let r = '  '.repeat(prof) + el.tagName.toLowerCase();
+      if (el.id) r += '#' + String(el.id).replace(/\d{3,}/g, 'N');
+      if (el.classList.length) r += '.' + [...el.classList].join('.');
+      for (const a of ['title', 'alt', 'src', 'role', 'onclick']) {
+        const v = el.getAttribute(a);
+        if (v) r += ` [${a}=${v.split('?')[0].split('/').pop().slice(0, 50)}]`;
+      }
+      const st = getComputedStyle(el);
+      if (st.backgroundImage && st.backgroundImage !== 'none') {
+        const m = st.backgroundImage.match(/url\(["']?([^"')]+)/);
+        const nome = m ? (m[1].startsWith('data:') ? 'data:' + m[1].length + 'car' : m[1].split('?')[0].split('/').pop()) : st.backgroundImage.slice(0, 40);
+        r += ` [sfondo=${nome}` + (st.backgroundPosition !== '0% 0%' ? ` pos:${st.backgroundPosition}` : '') + ']';
+      }
+      const inline = el.getAttribute('style');
+      if (inline && /background|url\(/i.test(inline)) r += ` [style≈${inline.slice(0, 90)}]`;
+      const testo = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent.trim()).join('');
+      if (testo) r += ` {testo:${testo.length}car}`;
+      const righe = [r];
+      for (const f of el.children) righe.push(...struttura(f, prof + 1));
+      return righe;
+    };
+    const box = [...document.querySelectorAll('.WeekGrid_event')].filter((el) => {
+      const r = el.getBoundingClientRect();
+      return r.height > 4 && r.width > 4;
+    });
+    const data = (document.querySelector('#ctl04_UPHeader')?.innerText ?? '').match(/(\d{2})\.(\d{2})\.(\d{4})/);
+    // Si prendono riquadri DIVERSI fra loro: struttura uguale = uno solo.
+    const viste = new Map();
+    for (const el of box) {
+      const s = struttura(el, 0).join('\n');
+      const chiave = s.replace(/\{testo:\d+car\}/g, '{testo}');
+      if (!viste.has(chiave)) viste.set(chiave, { s, n: 1 });
+      else viste.get(chiave).n++;
+    }
+    return {
+      data: data ? `${data[1]}.${data[2]}.${data[3]}` : '?',
+      totale: box.length,
+      varianti: [...viste.values()].sort((a, b) => b.n - a.n).slice(0, 12),
+    };
+  });
+
+  console.log(`\nGiorno mostrato: ${esito.data} — ${esito.totale} riquadri, ${esito.varianti.length} strutture diverse\n`);
+  esito.varianti.forEach((v, i) => {
+    console.log(`───── VARIANTE ${i + 1} (×${v.n}) ─────`);
+    console.log(v.s);
+    console.log('');
+  });
+  // Con --ritagli: il catalogo COMPLETO delle icone di stato, preso dal
+  // foglio di stile (non dai riquadri a schermo, che ne mostrano solo alcuni)
+  // e scaricato dal portale. Sono pittogrammi dell'interfaccia, non dati.
+  if (process.argv.includes('--ritagli')) {
+    const dir = process.env.SONDA_DIR || '/tmp';
+    const catalogo = await p.evaluate(async () => {
+      const trovate = new Map();
+      for (const foglio of document.styleSheets) {
+        let regole;
+        try { regole = foglio.cssRules; } catch { continue; }
+        for (const r of regole ?? []) {
+          const sel = r.selectorText ?? '';
+          const m = sel.match(/^\s*(?:[\w.#>\s]*\s)?i?\.(st\d+)\s*$/);
+          if (!m) continue;
+          const url = (r.style?.backgroundImage ?? '').match(/url\(["']?([^"')]+)/);
+          if (url) trovate.set(m[1], url[1]);
+        }
+      }
+      // In più: gli stati DAVVERO presenti nei riquadri a schermo, letti dallo
+      // stile calcolato (alcune regole stanno in fogli non leggibili).
+      for (const i of document.querySelectorAll('.WeekGrid_event_inner i, .WeekGrid_event i')) {
+        const classe = [...i.classList].find((c) => /^st\d+$/.test(c));
+        if (!classe || trovate.has(classe)) continue;
+        const u = getComputedStyle(i).backgroundImage.match(/url\(["']?([^"')]+)/);
+        if (u) trovate.set(classe, u[1]);
+      }
+      const fuori = [];
+      for (const [classe, url] of trovate) {
+        try {
+          const risposta = await fetch(url);
+          const buf = new Uint8Array(await risposta.arrayBuffer());
+          let bin = '';
+          for (const b of buf) bin += String.fromCharCode(b);
+          fuori.push({ classe, nome: url.split('?')[0].split('/').pop(), b64: btoa(bin) });
+        } catch (e) {
+          fuori.push({ classe, nome: url.split('?')[0].split('/').pop(), errore: String(e).slice(0, 60) });
+        }
+      }
+      return fuori.sort((a, b) => a.classe.localeCompare(b.classe, 'en', { numeric: true }));
+    });
+    const { writeFileSync } = await import('node:fs');
+    for (const i of catalogo) {
+      if (!i.b64) { console.log(`icona ${i.classe} (${i.nome}): ${i.errore}`); continue; }
+      const dest = `${dir}/icona-${i.classe}-${i.nome}`;
+      writeFileSync(dest, Buffer.from(i.b64, 'base64'));
+      console.log(`icona: ${dest}`);
+    }
+  }
+} finally {
+  await browser.close();
+}

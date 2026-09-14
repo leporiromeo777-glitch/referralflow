@@ -916,3 +916,12 @@ create index if not exists suggerimenti_studio on suggerimenti (studio_id, stato
 -- di controllo la propone accanto alla prestazione. Testo libero: la
 -- piattaforma non ha il catalogo TARDOC e non fattura.
 alter table prestazioni_catalogo add column if not exists codice_tariffa text;
+
+-- Stato dell'appuntamento come lo segna MediOnline con l'icona in alto a destra
+-- del riquadro (fissato, arrivato, in_corso, da_fatturare, trattato, fatturato,
+-- scusato, annullato, bloccato). Lo legge il robot dell'agenda in sola lettura e
+-- arriva nell'ICS come X-RF-STATO (migrazione 046).
+alter table appointments add column if not exists stato_medionline text;
+alter table appointments add column if not exists stato_visto_at timestamptz;
+create index if not exists appointments_stato_idx
+  on appointments (studio_id, stato_medionline, starts_at desc);

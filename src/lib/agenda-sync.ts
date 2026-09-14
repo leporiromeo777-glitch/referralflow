@@ -166,8 +166,8 @@ export async function syncFeed(feedId: string): Promise<SyncResult> {
 
     await query(
       `insert into appointments
-         (studio_id, feed_id, provider_id, starts_at, ends_at, titolo, paziente_nome, motivo, luogo, external_uid, referral_id, colore)
-       values ($11,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$12)
+         (studio_id, feed_id, provider_id, starts_at, ends_at, titolo, paziente_nome, motivo, luogo, external_uid, referral_id, colore, stato_medionline, stato_visto_at)
+       values ($11,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$12,$13, case when $13::text is null then null else now() end)
        on conflict (feed_id, external_uid) do update set
          provider_id   = coalesce(excluded.provider_id, appointments.provider_id),
          starts_at     = excluded.starts_at,
@@ -178,6 +178,14 @@ export async function syncFeed(feedId: string): Promise<SyncResult> {
          luogo         = excluded.luogo,
          referral_id   = coalesce(excluded.referral_id, appointments.referral_id),
          colore        = coalesce(excluded.colore, appointments.colore),
+         -- Lo stato cambia giorni dopo la visita (da_fatturare → fatturato):
+         -- vince sempre l'ultimo letto, e si annota quando l'abbiamo visto.
+         stato_medionline = coalesce(excluded.stato_medionline, appointments.stato_medionline),
+         stato_visto_at   = case
+                              when excluded.stato_medionline is null then appointments.stato_visto_at
+                              when appointments.stato_medionline is distinct from excluded.stato_medionline then now()
+                              else appointments.stato_visto_at
+                            end,
          imported_at   = now()`,
       [
         feed.id,
@@ -192,6 +200,7 @@ export async function syncFeed(feedId: string): Promise<SyncResult> {
         referralId,
         feed.studio_id,
         ev.colore || null,
+        ev.stato || null,
       ]
     );
   }

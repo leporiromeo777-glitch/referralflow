@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createHash } from 'crypto';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
-import { csvPrestazioni, nomeFileCsv, periodoMese, riepilogoPrestazioni, type RigaFattura } from '@/lib/fatturazione';
+import { controlloFatturazione, csvPrestazioni, nomeFileCsv, periodoMese, riepilogoPrestazioni, type RigaFattura } from '@/lib/fatturazione';
 import { abbinaPrestazione, type VoceCatalogo } from '@/lib/prestazioni';
 
 export const dynamic = 'force-dynamic';
@@ -25,8 +25,8 @@ function ora(iso: string): string { const d = new Date(iso); return `${String(d.
 function slug(s: string): string { return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
 
 async function righeDelMese(studioId: string, dal: string, al: string): Promise<RigaFattura[]> {
-  const appts = await query<{ id: string; starts_at: string; ends_at: string | null; paziente_nome: string | null; titolo: string | null; motivo: string | null; luogo: string | null; completed_at: string | null; esportato: string | null; medico: string | null; gln: string | null; rcc: string | null; patient_id: string | null; inviante: string | null; referto: boolean }>(
-    `select a.id, a.starts_at::text, a.ends_at::text, a.paziente_nome, a.titolo, a.motivo, a.luogo, a.completed_at::text, a.fatturazione_esportato_at::text as esportato,
+  const appts = await query<{ id: string; starts_at: string; ends_at: string | null; paziente_nome: string | null; titolo: string | null; motivo: string | null; luogo: string | null; completed_at: string | null; esportato: string | null; stato: string | null; stato_visto: string | null; medico: string | null; gln: string | null; rcc: string | null; patient_id: string | null; inviante: string | null; referto: boolean }>(
+    `select a.id, a.starts_at::text, a.ends_at::text, a.paziente_nome, a.titolo, a.motivo, a.luogo, a.completed_at::text, a.fatturazione_esportato_at::text as esportato, a.stato_medionline as stato, a.stato_visto_at::text as stato_visto,
             pr.nome as medico, pr.gln, pr.rcc, r.patient_id, rd.nome as inviante,
             exists (select 1 from referti_bozze b where b.studio_id = a.studio_id and b.stato = 'confermata' and b.tipo = 'referto'
                       and b.created_at >= a.starts_at::date and b.created_at < a.starts_at::date + 4
@@ -52,6 +52,7 @@ async function righeDelMese(studioId: string, dal: string, al: string): Promise<
       cognome: p ? p.cognome : pezzi[0] ?? '', nome: p ? p.nome : pezzi.slice(1).join(' '), nascita: p ? dCh(p.data_nascita) : '', assicurazione: p?.assicurazione ?? '', avs: p?.avs ?? '', n_assicurato: p?.n_assicurato ?? '', in_cartella: !!p,
       medico: a.medico ?? '', gln_medico: a.gln ?? '', rcc_medico: a.rcc ?? '', prestazione: abbinaPrestazione(catalogo, `${a.motivo ?? ''} ${a.titolo ?? ''}`)?.nome ?? (a.motivo || a.titolo || 'Appuntamento'), codice_tariffa: abbinaPrestazione(catalogo, `${a.motivo ?? ''} ${a.titolo ?? ''}`)?.codice_tariffa ?? '', luogo: a.luogo ?? '',
       fatta: !!a.completed_at, referto: a.referto, inviante: a.inviante ?? '', esportato_il: dCh(a.esportato),
+      stato: a.stato ?? '', stato_visto: dCh(a.stato_visto),
     };
   });
 }
@@ -64,7 +65,11 @@ export async function GET(req: NextRequest) {
   const esportazioni = await query<{ dal: string; al: string; righe: number; da: string | null; at: string }>(
     `select e.dal::text, e.al::text, e.righe, split_part(u.email, '@', 1) as da, e.created_at::text as at from fatturazione_esportazioni e left join users u on u.id = e.user_id
       where e.studio_id = $1 order by e.created_at desc limit 12`, [session.studioId]);
-  return NextResponse.json({ periodo: per, righe, riepilogo: riepilogoPrestazioni(righe), esportazioni, puo_esportare: session.role !== 'medico' }, { headers: { 'Cache-Control': 'no-store' } });
+  const controllo = controlloFatturazione(righe);
+  return NextResponse.json(
+    { periodo: per, righe, riepilogo: riepilogoPrestazioni(righe), controllo, esportazioni, puo_esportare: session.role !== 'medico' },
+    { headers: { 'Cache-Control': 'no-store' } }
+  );
 }
 
 export async function POST(req: NextRequest) {

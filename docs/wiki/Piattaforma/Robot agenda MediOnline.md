@@ -1,6 +1,6 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-09-11
+aggiornata: 2026-09-14
 ---
 # Robot agenda MediOnline (operativo dal 2026-08-14)
 
@@ -17,3 +17,25 @@ Catalogo colori dello studio: tenere verde #2ecc40 (visite), verde acceso #01ff7
 Da verificare col tempo: qualità dell'estrazione del nome paziente dai riquadri e aggancio alle referral.
 
 Dal 14.9.2026 ogni evento dell'ICS porta anche `X-RF-COLORE:#rrggbb` (il colore del riquadro nell'agenda originale); la piattaforma lo conserva in `appointments.colore` e l'interfaccia nuova lo mostra ([[Piattaforma/Prototipo stack]]).
+
+## Stato dell'appuntamento (dal 14.9.2026)
+MediOnline segna lo stato con un'icona in alto a destra del riquadro: non è un `<img>` ma un `<i class="stN">` con l'immagine nello **sfondo CSS**. I nomi dei file sono in francese e parlanti, quindi il riconoscimento è sul nome del file (più stabile del numero della classe); tabella `STATI` in `leggi-agenda.mjs`, rimediabile senza toccare il codice con `AGENDA_STATI=ag_nuovo_16:fatturato` nel conf.
+
+| classe | file | stato |
+| --- | --- | --- |
+| `st0` | `ag_RDV_masque_16` | bloccato (orologio + lucchetto) |
+| `st1` | `ag_rdv_16` | fissato (orologio) |
+| `st2` | `ag_arrive_16_inv` | arrivato (sedia) |
+| `st3` | `ag_encours_16_inv` | in corso (stetoscopio) |
+| `st4` | `ag_atraiter_16` | **da fatturare** (moneta d'oro, «à traiter») |
+| `st5` | `ag_ok_16` | trattato (visto verde) |
+| `st6` | `ag_excuse_16` | scusato (faccia); il riquadro ha anche la classe `_Canceled` → `annullato` |
+| `st8` | `ag_ok_f_16` | **fatturato** (visto verde con la «F», «facturé») |
+
+Esce nell'ICS come `X-RF-STATO:<parola>`; `src/lib/ical.ts` accetta solo le parole della lista `STATI_AGENDA` e `agenda-sync` lo scrive in `appointments.stato_medionline` (+ `stato_visto_at` quando cambia, migrazione 046). Se l'icona manca o non è in tabella il campo resta **vuoto**: «non lo so» non si scrive come «no».
+
+Per leggerlo serve guardare **indietro**, non solo avanti: lo stato cambia giorni dopo la visita. `AGENDA_GIORNI_INDIETRO` (default 7) fa ripassare i giorni già passati prima di camminare in avanti; un giro completo è quindi 7 + `AGENDA_GIORNI`.
+
+`sonda-riquadri.mjs` è lo strumento con cui si è capito tutto questo: apre l'agenda, stampa la **struttura** dei riquadri (tag, classi, sfondi) con **tutti i testi tolti**, e con `--ritagli` scarica il catalogo delle icone. Da usare ogni volta che serve riconoscere un segno grafico nell'agenda.
+
+Misura del 14.9.2026 su 17 giorni (7 indietro + 10 avanti), 649 appuntamenti: `fissato×344`, `da_fatturare×147`, `fatturato×98`, `trattato×60`. Distribuzione coerente — i giorni futuri tutti «fissato», i giorni lavorati quasi tutti «fatturato»/«trattato», e **3 prestazioni del 7.9 e 1 del 9.9 rimaste con la moneta**: esattamente il segnale che serve.
