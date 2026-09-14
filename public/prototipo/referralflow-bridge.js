@@ -64,30 +64,48 @@ function rfPaginaAccesso(stato) {
   if (!c) return;
   const st = stato || RF.accesso || { passo: 'credenziali', errore: null, lavora: false };
   RF.accesso = st;
-  c.innerHTML = `<div class="page"><div class="card rf-accesso">
-    <div class="brand" style="justify-content:center;padding-bottom:6px">${typeof BRAND_MARK !== 'undefined' ? BRAND_MARK : ''}<div><div class="brand-name">ReferralFlow</div><div class="brand-sub">interfaccia nuova · dati dello studio</div></div></div>
+  // Stesso disegno della pagina di accesso della piattaforma: carta centrata,
+  // marchio grande, campi impilati, bottone pieno, righe di assistenza e
+  // pastiglie di fiducia. Nessun rimando all'altra interfaccia.
+  const app = document.getElementById('app'); if (app) app.classList.add('rf-modo-accesso');
+  const marchio = `<div class="rf-auth-brand">Referral<span>Flow</span></div>`;
+  const errore = st.errore ? `<p class="rf-auth-error">${rfEsc(st.errore)}</p>` : '';
+  c.innerHTML = `<div class="rf-auth">
     ${st.passo === 'codice' ? `
-      <h2 class="page-title" style="font-size:18px;text-align:center">Codice di verifica</h2>
-      <p class="meta" style="text-align:center">Inserisci il codice dell'app di autenticazione, oppure un codice di recupero.</p>
-      <form id="rf-acc-form" autocomplete="off">
-        <div class="field mt-16"><label>Codice</label><input class="input" id="rf-acc-codice" inputmode="numeric" autocomplete="one-time-code" placeholder="123 456" autofocus></div>
-        ${st.errore ? `<div class="rf-manc mt-8">${rfEsc(st.errore)}</div>` : ''}
-        <div class="row mt-16" style="gap:8px"><button class="btn primary grow" type="submit" ${st.lavora ? 'disabled' : ''}>${st.lavora ? 'Verifico…' : 'Entra'}</button><button class="btn ghost" type="button" id="rf-acc-indietro">Indietro</button></div>
-      </form>` : `
-      <h2 class="page-title" style="font-size:18px;text-align:center">Accedi</h2>
-      <form id="rf-acc-form">
-        <div class="field mt-16"><label>E-mail</label><input class="input" id="rf-acc-email" type="email" autocomplete="username" inputmode="email" required></div>
-        <div class="field mt-8"><label>Password</label><input class="input" id="rf-acc-password" type="password" autocomplete="current-password" required></div>
-        ${st.errore ? `<div class="rf-manc mt-8">${rfEsc(st.errore)}</div>` : ''}
-        <button class="btn primary mt-16" type="submit" style="width:100%" ${st.lavora ? 'disabled' : ''}>${st.lavora ? 'Accedo…' : 'Entra'}</button>
-        <p class="caption mt-16" style="text-align:center">Sessione di 8 ore sul Mac dello studio. Nessun dato dimostrativo.</p>
-      </form>`}
-  </div></div>`;
+    <form id="rf-acc-form" class="rf-auth-card" autocomplete="off">
+      ${marchio}
+      <p class="rf-auth-sub">Verifica in due passaggi</p>
+      <label>Codice a 6 cifre dall’app di autenticazione
+        <input id="rf-acc-codice" inputmode="numeric" autocomplete="one-time-code" placeholder="000000" required autofocus></label>
+      <p class="rf-auth-small">Ha perso l’accesso all’app? Inserisca qui sopra uno dei codici di recupero salvati all’attivazione (es. <code>abcd-efgh</code>).</p>
+      ${errore}
+      <button class="rf-auth-btn" type="submit" ${st.lavora ? 'disabled' : ''}>${st.lavora ? 'Verifica…' : 'Conferma'}</button>
+      <button class="rf-auth-link" type="button" id="rf-acc-indietro">Torna all’accesso</button>
+    </form>
+    <p class="rf-auth-line">Il codice cambia ogni 30 secondi: se non funziona, attenda il successivo.</p>` : `
+    <form id="rf-acc-form" class="rf-auth-card">
+      ${marchio}
+      <p class="rf-auth-sub">La piattaforma delle referral tra studi medici</p>
+      <label>Email<input id="rf-acc-email" type="email" required autocomplete="username" inputmode="email"></label>
+      <label>Password<input id="rf-acc-password" type="password" required autocomplete="current-password"></label>
+      <p class="rf-auth-forgot">Password dimenticata? La reimposta l’amministratore dello studio.</p>
+      ${errore}
+      <button class="rf-auth-btn" type="submit" ${st.lavora ? 'disabled' : ''}>${st.lavora ? 'Accesso…' : 'Accedi'}</button>
+    </form>
+    <p class="rf-auth-line">Accesso riservato al personale dello studio · sessione di 8 ore</p>
+    <ul class="rf-trust" aria-label="Garanzie di sicurezza e conformità">
+      <li><span aria-hidden="true">🇨🇭</span> Dati in Svizzera</li>
+      <li><span aria-hidden="true">🔒</span> Conforme nLPD</li>
+      <li><span aria-hidden="true">📋</span> Accessi tracciati</li>
+      <li><span aria-hidden="true">💾</span> Backup cifrati</li>
+    </ul>`}
+  </div>`;
   const sb = document.getElementById('sidebar'); if (sb) sb.innerHTML = '';
   const mn = document.getElementById('mobilenav'); if (mn) mn.innerHTML = '';
   const form = document.getElementById('rf-acc-form');
   if (form) form.onsubmit = (e) => { e.preventDefault(); void rfAccedi(); };
   const ind = document.getElementById('rf-acc-indietro'); if (ind) ind.onclick = () => rfPaginaAccesso({ passo: 'credenziali', errore: null, lavora: false });
+  const primo = document.getElementById(st.passo === 'codice' ? 'rf-acc-codice' : 'rf-acc-email'); if (primo && !st.lavora) primo.focus();
 }
 async function rfAccedi() {
   const st = RF.accesso || { passo: 'credenziali' };
@@ -111,6 +129,7 @@ async function rfAccedi() {
     } catch { rfPaginaAccesso({ passo: 'credenziali', errore: 'Piattaforma non raggiungibile.', lavora: false }); return; }
   }
   RF.accesso = null; RF.nonAutorizzato = false; RF.caricato = false;
+  { const app = document.getElementById('app'); if (app) app.classList.remove('rf-modo-accesso'); }
   rfPaginaCarico();
   void rfCaricaMedici(); void rfCaricaProcedure(); void rfCaricaDati();
 }
@@ -120,7 +139,39 @@ async function rfEsci() {
   location.hash = '#/home';
   rfPaginaAccesso({ passo: 'credenziali', errore: null, lavora: false });
 }
-(function () { const st = document.createElement('style'); st.textContent = `.rf-accesso{max-width:420px;margin:40px auto;padding:22px 24px}@media (max-width:767px){.rf-accesso{margin:16px auto}}`; document.head.appendChild(st); })();
+(function () { const st = document.createElement('style'); st.textContent = `
+#app.rf-modo-accesso{grid-template-columns:1fr !important}
+#app.rf-modo-accesso .sidebar,#app.rf-modo-accesso .topbar{display:none !important}
+#app.rf-modo-accesso .content{padding:0;background:#eef2f7}
+#app.rf-modo-accesso ~ #mobilenav,body:has(#app.rf-modo-accesso) .mobile-nav{display:none !important}
+.rf-auth{--a-bg:#eef2f7;--a-surface:#fff;--a-ink:#0f1722;--a-muted:#5a6675;--a-line:#dde4ec;--a-line-strong:#c6d1dd;--a-cta:#1789d6;--a-cta-hover:#0e6db0;--a-danger:#b3564c;--a-danger-bg:#f6e9e7;
+  min-height:100%;min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:24px;background:var(--a-bg);color:var(--a-ink);
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.45}
+:root[data-theme="dark"] .rf-auth{--a-bg:#0c1117;--a-surface:#151c24;--a-ink:#eef3f8;--a-muted:#9fb0c1;--a-line:#26303c;--a-line-strong:#33404e;--a-cta:#2c93df;--a-cta-hover:#3fa4ea;--a-danger-bg:#3a2320}
+:root[data-theme="dark"] #app.rf-modo-accesso .content{background:#0c1117}
+.rf-auth-card{width:100%;max-width:390px;background:var(--a-surface);border:1px solid var(--a-line);border-radius:16px;padding:28px;box-shadow:0 2px 4px rgba(15,35,60,.06),0 24px 60px -28px rgba(13,45,80,.30);margin:0}
+.rf-auth-brand{font-size:32px;font-weight:700;letter-spacing:-.03em;line-height:1.25;text-align:center}
+.rf-auth-brand span{color:var(--a-cta)}
+.rf-auth-sub{text-align:center;color:var(--a-muted);margin:6px 0 12px}
+.rf-auth-card label{display:block;font-size:13px;font-weight:500;color:var(--a-muted);margin:14px 0 12px}
+.rf-auth-card input{display:block;width:100%;margin-top:5px;padding:9px 11px;font:inherit;font-size:14px;color:var(--a-ink);background:var(--a-surface);border:1px solid var(--a-line-strong);border-radius:14px;min-width:0;height:auto;box-sizing:border-box;transition:border-color .12s,box-shadow .12s}
+.rf-auth-card input:hover{border-color:#b9c5c1}
+.rf-auth-card input:focus{outline:none;border-color:var(--a-cta);box-shadow:0 0 0 3px rgba(23,137,214,.18)}
+.rf-auth-forgot{text-align:right;margin:8px 0 0;font-size:13px;color:var(--a-muted)}
+.rf-auth-small{color:var(--a-muted);font-size:12px;margin:12px 0 0}
+.rf-auth-small code{font-size:12px}
+.rf-auth-error{color:var(--a-danger);background:var(--a-danger-bg);border:1px solid #f0d4d4;font-size:13.5px;padding:10px 14px;border-radius:14px;margin:14px 0 0}
+.rf-auth-btn{display:inline-flex;align-items:center;justify-content:center;width:100%;margin-top:22px;padding:11px 14px;font:inherit;font-size:15px;font-weight:550;border-radius:999px;border:1.5px solid var(--a-cta);background:var(--a-cta);color:#fff;cursor:pointer;box-shadow:0 1px 2px rgba(15,35,60,.06);transition:background .12s,transform .06s}
+.rf-auth-btn:hover{background:var(--a-cta-hover);border-color:var(--a-cta-hover)}
+.rf-auth-btn:active{transform:scale(.98)}
+.rf-auth-btn:disabled{opacity:.6;cursor:default}
+.rf-auth-link{display:block;width:100%;margin-top:10px;padding:8px;font:inherit;font-size:13px;color:var(--a-muted);background:none;border:none;cursor:pointer}
+.rf-auth-link:hover{color:var(--a-ink)}
+.rf-auth-line{max-width:390px;width:100%;text-align:center;color:var(--a-muted);font-size:12px;margin:14px 0 0}
+.rf-trust{list-style:none;margin:16px 0;padding:0;display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.rf-trust li{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--a-ink);background:var(--a-surface);border:1px solid var(--a-line-strong);border-radius:999px;padding:6px 12px}
+.rf-trust li span{font-size:15px;line-height:1}
+`; document.head.appendChild(st); })();
 
 /* ---------- barra laterale: conteggi veri ---------- */
 const rfRenderSidebarOrig = renderSidebar;
