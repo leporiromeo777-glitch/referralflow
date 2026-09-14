@@ -4,6 +4,7 @@ import { query } from '@/lib/db';
 import { mediciDelloStudio } from '@/lib/referti-medici';
 import { costruisciRevisione } from '@/lib/prototipo-revisione';
 import { tipoEsame } from '@/lib/briefing-regole';
+import { estraiTerapia } from '@/lib/referti-terapia';
 import { lettereRitardoGrezzo } from '@/lib/procedure';
 
 export const dynamic = 'force-dynamic';
@@ -63,8 +64,27 @@ export async function GET() {
   if (!Object.keys(doctors).length) doctors.studio = session.studioNome;
 
   // Pazienti con cartella: referral (quesiti, medico inviante), documenti, appuntamenti.
-  const pazienti = await query<{ id: string; cognome: string; nome: string; data_nascita: string | null; telefono: string | null; assicurazione: string | null }>(
-    `select id, cognome, nome, data_nascita::text, telefono, assicurazione from patients where studio_id = $1 order by cognome, nome limit 500`, [sid]);
+  const pazienti = await query<{ id: string; cognome: string; nome: string; data_nascita: string | null; telefono: string | null; assicurazione: string | null; sesso: string | null; via: string | null; npa: string | null; localita: string | null; email: string | null; avs: string | null; n_assicurato: string | null; indicazione: string | null; percorso_id: string | null }>(
+    `select id, cognome, nome, data_nascita::text, telefono, assicurazione, sesso, via, npa, localita, email, avs, n_assicurato, indicazione, percorso_id from patients where studio_id = $1 order by cognome, nome limit 500`, [sid]);
+  // Terapia in corso DERIVATA: le righe di terapia dell'ultimo referto
+  // confermato del paziente (per nome), mai ridigitate (14.9.2026).
+  const confermati = await query<{ nome: string | null; testo: string | null; quando: string | null }>(
+    `select coalesce(nullif(campi_confermati->>'nome_paziente', ''), nullif(payload->'campi_estratti'->>'nome_paziente', '')) as nome, testo_finale as testo, reviewed_at::text as quando
+       from referti_bozze where studio_id = $1 and stato = 'confermata' and tipo = 'referto' and coalesce((payload->>'ombra')::boolean, false) = false
+      order by reviewed_at desc nulls last limit 400`, [sid]);
+  const terapiaPer = new Map<string, { righe: string[]; quando: string }>();
+  for (const c of confermati) {
+    if (!c.nome || !c.testo) continue;
+    const k = slug(c.nome);
+    if (terapiaPer.has(k)) continue;
+    const righe = estraiTerapia(c.testo);
+    if (righe.length) terapiaPer.set(k, { righe, quando: dCh(c.quando) });
+  }
+  // Fatti del grafo (migrazione 035): gli ultimi per paziente, solo relazione, oggetto e data.
+  const fatti = await query<{ patient_id: string; relazione: string; oggetto: string; data_fatto: string | null; fonte_tipo: string }>(
+    `select patient_id, relazione, oggetto, data_fatto::text, fonte_tipo from pazienti_fatti where studio_id = $1 order by coalesce(data_fatto, created_at::date) desc limit 1500`, [sid]);
+  const fattiPer = new Map<string, typeof fatti>();
+  for (const f of fatti) { const l = fattiPer.get(f.patient_id) ?? []; if (l.length < 8) l.push(f); fattiPer.set(f.patient_id, l); }
   const refs = await query<{ id: string; patient_id: string; quesito: string | null; urgenza: string; status: string; created_at: string; medico: string | null; appuntamento_at: string | null; follow_up_due: string | null }>(
     `select r.id, r.patient_id, r.quesito, r.urgenza, r.status, r.created_at::text, d.nome as medico, r.appuntamento_at::text, r.follow_up_due::text
        from referrals r left join referring_doctors d on d.id = r.referring_doctor_id
@@ -96,8 +116,12 @@ export async function GET() {
     const passati = aa.filter((a) => new Date(a.starts_at).getTime() < adesso);
     const futuri = aa.filter((a) => new Date(a.starts_at).getTime() >= adesso);
     return {
-      id: p.id, num: '', first: p.nome, last: p.cognome, dob: dCh(p.data_nascita), age: eta(p.data_nascita), sex: '',
-      phone: p.telefono ?? '', email: '', doctor: null, gp: rr[0]?.medico ?? '',
+      id: p.id, num: '', first: p.nome, last: p.cognome, dob: dCh(p.data_nascita), dobIso: p.data_nascita ?? '', age: eta(p.data_nascita), sex: p.sesso ?? '',
+      phone: p.telefono ?? '', email: p.email ?? '', doctor: null, gp: rr[0]?.medico ?? '',
+      via: p.via ?? '', npa: p.npa ?? '', localita: p.localita ?? '', avs: p.avs ?? '', n_assicurato: p.n_assicurato ?? '', indicazione: p.indicazione ?? '', percorso: p.percorso_id ?? '',
+      terapia: terapiaPer.get(slug(`${p.cognome} ${p.nome}`))?.righe ?? terapiaPer.get(slug(`${p.nome} ${p.cognome}`))?.righe ?? [],
+      terapiaDa: terapiaPer.get(slug(`${p.cognome} ${p.nome}`))?.quando ?? terapiaPer.get(slug(`${p.nome} ${p.cognome}`))?.quando ?? '',
+      fatti: (fattiPer.get(p.id) ?? []).map((f) => ({ relazione: f.relazione, oggetto: f.oggetto, data: dCh(f.data_fatto), fonte: f.fonte_tipo })),
       flags: rr.some((r) => r.urgenza === 'urgente' && r.status !== 'chiusa') ? ['Referral urgente aperta'] : [],
       problems: rr.filter((r) => r.quesito).slice(0, 6).map((r) => ({ l: r.quesito as string, s: r.status === 'chiusa' ? 'resolved' : 'eval', since: dCh(r.created_at) })),
       meds: [],
@@ -141,7 +165,7 @@ export async function GET() {
       const pezzi = nome.split(/\s+/);
       p = `ag-${slug(nome).slice(0, 48)}`;
       if (!P.has(p)) {
-        const sched = { id: p, num: '', first: pezzi.slice(1).join(' ') || '—', last: pezzi[0] || nome, dob: '', age: '' as const, sex: '', phone: '', email: '', doctor: null, gp: '', flags: [], problems: [], meds: [], exams: [], docs: [], lastVisit: '', next: '', referrals: [], assicurazione: '', visits: [] };
+        const sched = { id: p, num: '', first: pezzi.slice(1).join(' ') || '—', last: pezzi[0] || nome, dob: '', dobIso: '', age: '' as const, sex: '', phone: '', email: '', doctor: null, gp: '', via: '', npa: '', localita: '', avs: '', n_assicurato: '', indicazione: '', percorso: '', terapia: [] as string[], terapiaDa: '', fatti: [] as { relazione: string; oggetto: string; data: string; fonte: string }[], flags: [], problems: [], meds: [], exams: [], docs: [], lastVisit: '', next: '', referrals: [], assicurazione: '', visits: [] };
         patients.push(sched); P.set(p, sched);
       }
     }
@@ -197,7 +221,7 @@ export async function GET() {
       pid = `rf-${b.id.slice(0, 8)}`;
       if (!P.has(pid)) {
         const pezzi = (nomePaz || 'Paziente non indicato').split(/\s+/);
-        const sched = { id: pid, num: '', first: pezzi.slice(1).join(' ') || '—', last: pezzi[0], dob: campo('data_nascita'), age: '' as const, sex: '', phone: '', email: '', doctor: null, gp: '', flags: [], problems: [], meds: [], exams: [], docs: [], lastVisit: '', next: '', referrals: [], assicurazione: '', visits: [] };
+        const sched = { id: pid, num: '', first: pezzi.slice(1).join(' ') || '—', last: pezzi[0], dob: campo('data_nascita'), dobIso: '', age: '' as const, sex: '', phone: '', email: '', doctor: null, gp: '', via: '', npa: '', localita: '', avs: '', n_assicurato: '', indicazione: '', percorso: '', terapia: [] as string[], terapiaDa: '', fatti: [] as { relazione: string; oggetto: string; data: string; fonte: string }[], flags: [], problems: [], meds: [], exams: [], docs: [], lastVisit: '', next: '', referrals: [], assicurazione: '', visits: [] };
         patients.push(sched); P.set(pid, sched);
       }
     }

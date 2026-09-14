@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { COLONNE, csvPrestazioni, nomeFileCsv, periodoMese, riepilogoPrestazioni, type RigaFattura } from './fatturazione';
 
 const riga = (x: Partial<RigaFattura> = {}): RigaFattura => ({
-  id: 'a1', data: '03.09.2026', ora: '09:30', durata: 30, cognome: 'Rossi', nome: 'Mario', nascita: '01.02.1950', assicurazione: 'LAMal', in_cartella: true,
+  id: 'a1', data: '03.09.2026', ora: '09:30', durata: 30, cognome: 'Rossi', nome: 'Mario', nascita: '01.02.1950', assicurazione: 'LAMal', avs: '756.1234.5678.97', n_assicurato: '', in_cartella: true,
   medico: 'Dr. med. X', prestazione: 'Visita; controllo', luogo: 'Sala 1', fatta: true, referto: false, inviante: 'Dr. "Y"', esportato_il: '', ...x,
 });
 

@@ -531,6 +531,141 @@ PAGES.fatturazione = () => {
     </div>`;
 };
 
+/* ---------- Pazienti: anagrafica completa, nuovo, import CSV, scheda (14.9.2026) ---------- */
+(function () { const st = document.createElement('style'); st.textContent = `
+.rf-paz-form { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px 14px; }
+.rf-paz-form .field label { display:block; font-size:12px; font-weight:600; color:var(--text-2); margin-bottom:5px; }
+.rf-paz-form .input { width:100%; min-width:0; }
+.rf-paz-form .err { font-size:12px; color:var(--danger); margin-top:3px; }
+.rf-paz-form .full { grid-column: 1 / -1; }
+.rf-imp-area { width:100%; min-height:120px; padding:10px 12px; border-radius:var(--r-input); border:1px solid var(--border); background:var(--surface); font:12.5px/1.45 var(--font-mono, monospace); resize:vertical; }
+.rf-imp-tab td { font-size:12.5px; }
+.rf-imp-tab tr.errore td { color: var(--danger); }
+.rf-imp-tab tr.esiste td, .rf-imp-tab tr.doppione td { color: var(--text-3); }
+.rf-terapia li { padding:5px 0; border-top:1px solid var(--border); font-size:13px; }
+.rf-terapia li:first-child { border-top:0; }
+@media (max-width: 767px) { .rf-paz-form { grid-template-columns: 1fr; } }
+`; document.head.appendChild(st); })();
+const RF_SESSO = { F: 'F', M: 'M' };
+function rfPazCampo(id, label, val, opts = {}) {
+  const inp = opts.select ? `<select class="input" id="${id}">${opts.select.map(o => `<option value="${rfEsc(o[0])}" ${String(val) === o[0] ? 'selected' : ''}>${rfEsc(o[1])}</option>`).join('')}</select>`
+    : `<input class="input" id="${id}" type="${opts.type || 'text'}" value="${rfEsc(val || '')}" ${opts.list ? `list="${opts.list}"` : ''} ${opts.ph ? `placeholder="${rfEsc(opts.ph)}"` : ''} autocomplete="off">`;
+  return `<div class="field ${opts.full ? 'full' : ''}"><label for="${id}">${label}${opts.obbl ? ' <b style="color:var(--danger)">*</b>' : ''}</label>${inp}<div class="err" id="${id}-err"></div></div>`;
+}
+function rfPazForm(p) {
+  const perc = (RF.percorsi || []);
+  if (RF.percorsi === null) void rfCaricaPercorsi();
+  const nomePerc = perc.find(x => x.id === (p && p.percorso))?.nome || (p && p.percorso) || '';
+  return `<div class="rf-paz-form">
+    ${rfPazCampo('rf-pz-cognome', 'Cognome', p && p.last, { obbl: true })}${rfPazCampo('rf-pz-nome', 'Nome', p && p.first, { obbl: true })}
+    ${rfPazCampo('rf-pz-nascita', 'Data di nascita', p && p.dobIso, { type: 'date' })}${rfPazCampo('rf-pz-sesso', 'Sesso', p && p.sex, { select: [['', '—'], ['F', 'F'], ['M', 'M']] })}
+    ${rfPazCampo('rf-pz-telefono', 'Telefono', p && p.phone, { type: 'tel' })}${rfPazCampo('rf-pz-email', 'E-mail', p && p.email, { type: 'email' })}
+    ${rfPazCampo('rf-pz-via', 'Via', p && p.via, { full: true })}${rfPazCampo('rf-pz-npa', 'NPA', p && p.npa, { ph: '6900' })}${rfPazCampo('rf-pz-localita', 'Località', p && p.localita)}
+    ${rfPazCampo('rf-pz-avs', 'Numero AVS', p && p.avs, { ph: '756.1234.5678.97' })}${rfPazCampo('rf-pz-cassa', 'Cassa malati', p && p.assicurazione)}${rfPazCampo('rf-pz-assicurato', 'Numero assicurato (tessera)', p && p.n_assicurato)}
+    ${rfPazCampo('rf-pz-indicazione', 'Indicazione clinica', p && p.indicazione, { ph: 'es. fibrillazione atriale' })}${rfPazCampo('rf-pz-percorso', 'Percorso', nomePerc, { list: 'rf-pz-perc-list', ph: 'dalla pagina Percorsi' })}
+    <datalist id="rf-pz-perc-list">${perc.map(x => `<option value="${rfEsc(x.nome)}">`).join('')}</datalist>
+  </div>`;
+}
+function rfPazRaccogli() {
+  const v = (id) => (document.getElementById(id) || {}).value || '';
+  const perc = (RF.percorsi || []).find(x => x.nome === v('rf-pz-percorso'));
+  return { cognome: v('rf-pz-cognome'), nome: v('rf-pz-nome'), data_nascita: v('rf-pz-nascita'), sesso: v('rf-pz-sesso'), telefono: v('rf-pz-telefono'), email: v('rf-pz-email'), via: v('rf-pz-via'), npa: v('rf-pz-npa'), localita: v('rf-pz-localita'), avs: v('rf-pz-avs'), assicurazione: v('rf-pz-cassa'), n_assicurato: v('rf-pz-assicurato'), indicazione: v('rf-pz-indicazione'), percorso_id: perc ? perc.id : v('rf-pz-percorso') };
+}
+function rfPazErrori(errori) {
+  const mappa = { cognome: 'rf-pz-cognome', nome: 'rf-pz-nome', data_nascita: 'rf-pz-nascita', sesso: 'rf-pz-sesso', email: 'rf-pz-email', npa: 'rf-pz-npa', avs: 'rf-pz-avs' };
+  document.querySelectorAll('#modal .rf-paz-form .err').forEach(e => e.textContent = '');
+  for (const [k, m] of Object.entries(errori || {})) { const e = document.getElementById(`${mappa[k] || ''}-err`); if (e) e.textContent = m; }
+}
+async function rfPazienteSalva(id) {
+  const corpo = Object.assign({ azione: id ? 'aggiorna' : 'crea', id }, rfPazRaccogli());
+  try {
+    const r = await fetch('/api/prototipo/pazienti', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+    const j = await r.json().catch(() => ({}));
+    if (r.status === 400 && j.errori) { rfPazErrori(j.errori); toast('Controlla i campi segnati'); return; }
+    if (!r.ok) { toast(j.errore || 'Salvataggio non riuscito'); return; }
+    closeModal(); toast(id ? 'Anagrafica salvata' : 'Paziente creato');
+    await rfCaricaDati();
+    if (!id && j.id) go(`#/patients/${j.id}`);
+  } catch { toast('Piattaforma non raggiungibile'); }
+}
+function rfPazienteModifica(id) {
+  const p = id ? P[id] : null;
+  openModal(p ? 'Anagrafica' : 'Nuovo paziente', rfPazForm(p), `<button class="btn" data-close>Annulla</button><button class="btn primary" id="rf-pz-ok">Salva</button>`);
+  document.getElementById('rf-pz-ok').onclick = () => rfPazienteSalva(p ? p.id : null);
+}
+function rfPazientiImporta() {
+  openModal('Importa pazienti da CSV', `<p class="meta" style="margin:0 0 10px;line-height:1.5">Prima riga = intestazione: <code>cognome; nome; data di nascita; telefono; e-mail; via; npa; località; avs; cassa; n. assicurato; sesso</code> (bastano cognome e nome; l'ordine non conta; separatore ; , o tabulazione; date 31.12.1950). Le righe già in cartella (stesso cognome, nome e nascita) non si duplicano.</p>
+    <input type="file" id="rf-imp-file" accept=".csv,.txt,text/csv" class="mb-16"><textarea class="rf-imp-area" id="rf-imp-testo" placeholder="oppure incolla qui il CSV…"></textarea>
+    <div id="rf-imp-esito" class="mt-16"></div>`, `<button class="btn" data-close>Chiudi</button><button class="btn" id="rf-imp-anteprima">Anteprima</button><button class="btn primary" id="rf-imp-conferma" disabled>Importa</button>`);
+  const file = document.getElementById('rf-imp-file'); file.onchange = () => { const f = file.files && file.files[0]; if (!f) return; const rd = new FileReader(); rd.onload = () => { document.getElementById('rf-imp-testo').value = String(rd.result || ''); }; rd.readAsText(f); };
+  const manda = async (azione) => {
+    const csv = document.getElementById('rf-imp-testo').value; if (!csv.trim()) { toast('Incolla o carica un CSV'); return null; }
+    const r = await fetch('/api/prototipo/pazienti', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione, csv }) });
+    const j = await r.json().catch(() => ({})); if (!r.ok) { toast(j.errore || 'Lettura non riuscita'); return null; } return j;
+  };
+  document.getElementById('rf-imp-anteprima').onclick = async () => {
+    const j = await manda('importa'); if (!j) return;
+    const et = { nuovo: 'nuovo', esiste: 'già in cartella', errore: 'errore', doppione: 'doppione nel file' };
+    document.getElementById('rf-imp-esito').innerHTML = `<div class="row wrap" style="gap:6px"><span class="badge success">${j.riepilogo.nuovi} nuovi</span><span class="badge">${j.riepilogo.esistenti} già in cartella</span>${j.riepilogo.errori ? `<span class="badge danger">${j.riepilogo.errori} con errori</span>` : ''}${j.riepilogo.doppioni ? `<span class="badge warning">${j.riepilogo.doppioni} doppioni</span>` : ''}${j.ignorate.length ? `<span class="caption">colonne ignorate: ${rfEsc(j.ignorate.join(', '))}</span>` : ''}</div>
+      <div class="table-wrap mt-8" style="max-height:260px;box-shadow:none"><table class="dense rf-imp-tab"><thead><tr><th>#</th><th>Cognome</th><th>Nome</th><th>Nascita</th><th>AVS</th><th>Esito</th></tr></thead><tbody>${j.righe.map(r => `<tr class="${r.stato}"><td class="num">${r.n}</td><td>${rfEsc(r.dati.cognome)}</td><td>${rfEsc(r.dati.nome)}</td><td class="num">${rfEsc(r.dati.data_nascita || '')}</td><td class="num">${rfEsc(r.dati.avs || '')}</td><td>${et[r.stato]}${r.stato === 'errore' ? ': ' + rfEsc(Object.values(r.errori).join(' ')) : ''}</td></tr>`).join('')}</tbody></table></div>`;
+    const b = document.getElementById('rf-imp-conferma'); b.disabled = !j.riepilogo.nuovi; b.textContent = `Importa ${j.riepilogo.nuovi} nuovi`;
+  };
+  document.getElementById('rf-imp-conferma').onclick = async () => { const j = await manda('importa_conferma'); if (!j) return; toast(`${j.inseriti} pazienti importati`); closeModal(); void rfCaricaDati(); };
+}
+document.addEventListener('input', (e) => {
+  if (!e.target || e.target.id !== 'rf-paz-q') return;
+  const q = e.target.value.trim().toLowerCase(); let n = 0;
+  document.querySelectorAll('tr[data-paz]').forEach((tr) => { const ok = !q || tr.getAttribute('data-paz').includes(q); tr.hidden = !ok; if (ok) n++; });
+  const c = document.getElementById('rf-paz-n'); if (c) c.textContent = `${n} ${n === 1 ? 'paziente' : 'pazienti'}`;
+});
+const rfPatientsOrig = PAGES.patients;
+PAGES.patients = () => {
+  if (!RF.live) return rfPatientsOrig();
+  const inCartella = PATIENTS.filter(p => rfUuid(p.id));
+  const soloAgenda = PATIENTS.length - inCartella.length;
+  const riga = (p) => `<tr data-go="#/patients/${p.id}" data-paz="${rfEsc(`${p.last} ${p.first} ${p.avs || ''} ${p.phone || ''} ${p.email || ''} ${p.indicazione || ''}`.toLowerCase())}"><td><div class="row"><div class="avatar-sm">${initials(p)}</div><b>${rfEsc(fullName(p))}</b>${rfUuid(p.id) ? '' : ' <span class="caption">solo agenda</span>'}</div></td><td class="num">${p.dob ? `${p.dob} <span class="caption">(${p.age})</span>` : '—'}</td><td class="num">${rfEsc(p.avs || '—')}</td><td class="num">${rfEsc(p.phone || '—')}</td><td>${rfEsc(p.assicurazione || '—')}</td><td>${rfEsc(p.indicazione || '—')}</td><td class="num">${p.lastVisit || '—'}</td><td class="num">${p.next || '—'}</td><td><div class="row">${p.docs.some(d => d.new) ? '<span class="badge accent">Doc. nuovi</span>' : ''}${TASKS.some(t => t.p === p.id && t.status !== 'DONE') ? '<span class="badge">Task</span>' : ''}${p.flags.length ? `<span class="badge warning">${rfEsc(p.flags[0])}</span>` : ''}</div></td></tr>`;
+  return `
+    <div class="page-head"><div><h2 class="page-title">Pazienti</h2><div class="page-sub"><span id="rf-paz-n">${inCartella.length} in cartella</span>${soloAgenda ? ` · ${soloAgenda} solo in agenda` : ''}</div></div>
+      <div class="actions"><button class="btn" onclick="rfPazientiImporta()">${ICONS.upload} Importa CSV</button><button class="btn primary" onclick="rfPazienteModifica(null)">${ICONS.plus} Nuovo paziente</button></div></div>
+    <div class="toolbar"><input class="input" id="rf-paz-q" placeholder="Cerca cognome, nome, AVS, telefono, e-mail, indicazione…" autocomplete="off" style="min-width:320px"><button class="btn ai" data-ai="Pazienti con richiamo scaduto">${ICONS.ai} Chiedi al bot</button></div>
+    <div class="table-wrap"><table><thead><tr><th>Paziente</th><th>Nascita</th><th>AVS</th><th>Telefono</th><th>Cassa</th><th>Indicazione</th><th>Ultima visita</th><th>Prossimo</th><th>Indicatori</th></tr></thead><tbody>
+      ${PATIENTS.length ? [...inCartella, ...PATIENTS.filter(p => !rfUuid(p.id))].map(riga).join('') : '<tr><td colspan="9" class="caption">Nessun paziente in cartella: «Nuovo paziente» o «Importa CSV».</td></tr>'}
+    </tbody></table></div>`;
+};
+// Scheda paziente → Overview: tessere, terapia derivata dai referti, fatti del grafo.
+const rfOverviewOrig = typeof patientOverview === 'function' ? patientOverview : null;
+if (rfOverviewOrig) patientOverview = function (p, clinical) {
+  if (!RF.live || !rfUuid(p.id)) return rfOverviewOrig(p, clinical);
+  const perc = (RF.percorsi || []).find(x => x.id === p.percorso);
+  if (RF.percorsi === null) void rfCaricaPercorsi();
+  const visiteFatte = (p.visits || []).filter(v => v.fatta).length;
+  const referti = RF.queue.filter(r => r.p === p.id);
+  const confermati = referti.filter(r => r.status === 'APPROVED').length;
+  const fcMax = p.age ? 220 - Number(p.age) : null;
+  const tile = (l, v, s, go) => `<div class="card tight stat ${go ? 'clickable' : ''}" ${go ? `data-go="${go}"` : ''}><span class="label">${l}</span><span class="value" style="font-size:${String(v).length > 12 ? 15 : 24}px;line-height:1.2">${v}</span>${s ? `<span class="delta">${s}</span>` : ''}</div>`;
+  return `<div class="grid grid-4">
+      ${tile('Indicazione', rfEsc(p.indicazione || '—'), perc ? `percorso: ${rfEsc(perc.nome)}` : (p.percorso ? rfEsc(p.percorso) : ''), '#/percorsi')}
+      ${tile('Visite fatte', visiteFatte, p.lastVisit ? `ultima ${p.lastVisit}` : 'dall\'agenda')}
+      ${tile('Referti confermati', confermati, referti.length - confermati ? `${referti.length - confermati} in lavorazione` : '', '#/reports')}
+      ${tile('Cassa malati', rfEsc(p.assicurazione || '—'), p.n_assicurato ? `n. ${rfEsc(p.n_assicurato)}` : (p.avs ? `AVS ${rfEsc(p.avs)}` : ''))}
+    </div>
+    <div class="grid grid-main-side mt-16">
+      <div class="stack">
+        ${clinical ? `<div class="card"><div class="card-head"><span class="section-title">Terapia in corso</span><span class="caption">${p.terapia.length ? `dall'ultimo referto confermato${p.terapiaDa ? ` del ${p.terapiaDa}` : ''}` : 'nessun referto confermato con terapia'}</span></div>
+          ${p.terapia.length ? `<ul class="rf-terapia" style="list-style:none;margin:0;padding:0">${p.terapia.map(r => `<li>${rfEsc(r)}</li>`).join('')}</ul>` : '<div class="caption">La terapia si ricava dal blocco «Terapia» del referto confermato: niente da ridigitare.</div>'}</div>` : ''}
+        <div class="card"><div class="card-head"><span class="section-title">Quesiti e referral</span><span class="badge count">${p.problems.length}</span></div><div class="list">${p.problems.map(x => `<div class="list-item"><i class="dot ${x.s === 'resolved' ? '' : 'accent'}"></i><div class="grow"><div class="name" style="font-size:13px">${rfEsc(x.l)}</div><div class="sub">${x.s === 'resolved' ? 'chiusa' : 'aperta'} · ${x.since}</div></div></div>`).join('') || '<div class="caption">Nessuna referral</div>'}</div></div>
+        <div class="card"><div class="card-head"><span class="section-title">Esami recenti</span><button class="btn sm ghost" data-go="#/patients/${p.id}/exams">Tutti ${ICONS.chevR}</button></div><div class="list">${p.exams.slice(0, 6).map(e => `<div class="list-item"><div class="grow"><div class="name" style="font-size:13px">${rfEsc(e.t)}</div><div class="sub">${e.d} · ${rfEsc(e.r)}</div></div></div>`).join('') || '<div class="caption">Nessun esame in cartella</div>'}</div></div>
+        ${p.fatti && p.fatti.length ? `<div class="card"><div class="card-head"><span class="section-title">Fatti registrati</span><span class="caption">dal grafo della piattaforma</span></div><div class="list">${p.fatti.map(f => `<div class="list-item"><div class="grow"><div class="name" style="font-size:13px">${rfEsc(f.oggetto)}</div><div class="sub">${rfEsc(f.relazione.replace(/_/g, ' '))}${f.data ? ` · ${f.data}` : ''} · ${rfEsc(f.fonte)}</div></div></div>`).join('')}</div></div>` : ''}
+      </div>
+      <div class="stack">
+        <div class="card"><div class="card-head"><span class="section-title">Prossimo appuntamento</span></div><div style="font-size:18px;font-weight:600">${p.next || '—'}</div><div class="meta">${(p.visits || []).filter(v => v.futura)[0] ? rfEsc((p.visits || []).filter(v => v.futura)[0].motivo || '') : 'nessuno in agenda'}</div></div>
+        ${fcMax ? `<div class="card"><div class="card-head"><span class="section-title">FC massimale teorica</span></div><div class="num" style="font-size:18px;font-weight:600">${fcMax} bpm</div><div class="meta">220 − età · 85 % = ${Math.round(fcMax * 0.85)} bpm</div></div>` : ''}
+        <div class="card"><div class="card-head"><span class="section-title">Attività aperte</span></div><div class="list">${TASKS.filter(t => t.p === p.id && t.status !== 'DONE').map(t => `<div class="list-item"><div class="grow"><div class="name" style="font-size:13px">${rfEsc(t.title)}</div><div class="sub">${rfEsc(t.due)}</div></div><a class="btn sm" href="${t.href}">Apri</a></div>`).join('') || '<div class="caption">Nessuna</div>'}</div></div>
+        <div class="card"><div class="card-head"><span class="section-title">Anagrafica</span><button class="btn sm ghost" onclick="rfPazienteModifica('${p.id}')">Modifica</button></div><div class="kv"><b>Nascita</b><span>${p.dob || '—'}${p.sex ? ` · ${p.sex}` : ''}</span><b>Telefono</b><span>${rfEsc(p.phone || '—')}</span><b>E-mail</b><span>${rfEsc(p.email || '—')}</span><b>Indirizzo</b><span>${rfEsc([p.via, [p.npa, p.localita].filter(Boolean).join(' ')].filter(Boolean).join(', ') || '—')}</span><b>Medico inviante</b><span>${rfEsc(p.gp || '—')}</span></div></div>
+      </div>
+    </div>`;
+};
+
 /* ---------- pagine senza backing vero → alla piattaforma ---------- */
 function rfPaginaPiattaforma(titolo, testo) {
   return `<div class="page-head"><div><h2 class="page-title">${titolo}</h2><div class="page-sub">${testo}</div></div></div>
@@ -1961,7 +2096,7 @@ patientTimeline = function (p) {
 };
 patientAdmin = function (p) {
   if (!RF.live) return rfAdminOrig(p);
-  return `<div class="grid grid-2"><div class="card"><div class="card-head"><span class="section-title">Anagrafica</span></div><div class="kv"><b>Nascita</b><span>${p.dob || '—'}</span><b>Telefono</b><span>${rfEsc(p.phone || '—')}</span><b>Medico inviante</b><span>${rfEsc(p.gp || '—')}</span><b>Assicurazione</b><span>${rfEsc(p.assicurazione || '—')}</span></div></div><div class="card"><div class="card-head"><span class="section-title">Referral</span></div><div class="list">${(p.referrals || []).map(r => `<div class="list-item"><div class="grow"><div class="name" style="font-size:13px">${rfEsc(r.quesito || 'quesito non indicato')}</div><div class="sub">${r.at} · ${rfEsc(r.medico || '')} · ${rfEsc(r.status || '')}${r.urgenza === 'urgente' ? ' · <b>urgente</b>' : ''}</div></div></div>`).join('') || '<div class="caption">Nessuna referral.</div>'}</div></div></div>`;
+  return `<div class="grid grid-2"><div class="card"><div class="card-head"><span class="section-title">Anagrafica</span>${rfUuid(p.id) ? `<button class="btn sm ghost" onclick="rfPazienteModifica('${p.id}')">Modifica</button>` : ''}</div><div class="kv"><b>Nascita</b><span>${p.dob || '—'}${p.sex ? ` · ${p.sex}` : ''}</span><b>Telefono</b><span>${rfEsc(p.phone || '—')}</span><b>E-mail</b><span>${rfEsc(p.email || '—')}</span><b>Indirizzo</b><span>${rfEsc([p.via, [p.npa, p.localita].filter(Boolean).join(' ')].filter(Boolean).join(', ') || '—')}</span><b>AVS</b><span class="num">${rfEsc(p.avs || '—')}</span><b>Cassa malati</b><span>${rfEsc(p.assicurazione || '—')}</span><b>N. assicurato</b><span class="num">${rfEsc(p.n_assicurato || '—')}</span><b>Indicazione</b><span>${rfEsc(p.indicazione || '—')}</span><b>Medico inviante</b><span>${rfEsc(p.gp || '—')}</span></div></div><div class="card"><div class="card-head"><span class="section-title">Referral</span></div><div class="list">${(p.referrals || []).map(r => `<div class="list-item"><div class="grow"><div class="name" style="font-size:13px">${rfEsc(r.quesito || 'quesito non indicato')}</div><div class="sub">${r.at} · ${rfEsc(r.medico || '')} · ${rfEsc(r.status || '')}${r.urgenza === 'urgente' ? ' · <b>urgente</b>' : ''}</div></div></div>`).join('') || '<div class="caption">Nessuna referral.</div>'}</div></div></div>`;
 };
 // La pagina «visita» del prototipo è demo: dentro la piattaforma si apre la scheda del paziente.
 if (typeof PAGES !== 'undefined' && PAGES.visit) {
@@ -2075,10 +2210,11 @@ PAGES.administration = () => {
       <div class="grid grid-2 mt-8">
         <div class="field"><label>Nome</label><input class="input" id="rf-st-nome" value="${rfEsc(st.nome || '')}" ${admin ? '' : 'disabled'}></div>
         <div class="field"><label>Telefono</label><input class="input" id="rf-st-tel" value="${rfEsc(st.telefono || '')}" ${admin ? '' : 'disabled'}></div>
+        <div class="field"><label>Indirizzo (via, NPA e località)</label><input class="input" id="rf-st-indirizzo" value="${rfEsc(st.indirizzo || '')}" ${admin ? '' : 'disabled'} placeholder="Via …, 6900 Lugano"></div>
         <div class="field"><label>E-mail per gli avvisi</label><input class="input" id="rf-st-email" value="${rfEsc(st.notify_email || '')}" ${admin ? '' : 'disabled'}></div>
         <div class="field"><label>Prestazioni offerte</label><input class="input" id="rf-st-spec" value="${rfEsc(st.specialita || '')}" ${admin ? '' : 'disabled'}></div>
       </div>
-      ${admin ? `<div class="row mt-16"><button class="btn primary" onclick="rfStudioAzione({ azione: 'studio_aggiorna', nome: rfStudioCampo('#rf-st-nome'), telefono: rfStudioCampo('#rf-st-tel'), notify_email: rfStudioCampo('#rf-st-email'), specialita: rfStudioCampo('#rf-st-spec') })">Salva</button></div>` : ''}</div>`;
+      ${admin ? `<div class="row mt-16"><button class="btn primary" onclick="rfStudioAzione({ azione: 'studio_aggiorna', nome: rfStudioCampo('#rf-st-nome'), telefono: rfStudioCampo('#rf-st-tel'), notify_email: rfStudioCampo('#rf-st-email'), specialita: rfStudioCampo('#rf-st-spec'), indirizzo: rfStudioCampo('#rf-st-indirizzo') })">Salva</button></div>` : ''}</div>`;
   } else if (scheda === 'personale') {
     corpo = `<div class="card"><div class="card-head"><span class="section-title">Accessi del personale</span><span class="caption">${d.personale.filter(u => u.attivo).length} attivi</span></div>
       <div class="table-wrap" style="box-shadow:none"><table class="dense"><thead><tr><th>E-mail</th><th>Ruolo</th><th>2FA</th><th>Stato</th>${admin ? '<th></th>' : ''}</tr></thead><tbody>

@@ -18,8 +18,8 @@ const TIPI = new Set(['sala', 'apparecchio']);
 const posti = (v: unknown) => { const n = Math.round(Number(v)); return Number.isFinite(n) && n >= 1 ? Math.min(99, n) : 1; };
 
 async function leggi(studioId: string) {
-  const [studio] = await query<{ nome: string; telefono: string | null; notify_email: string | null; specialita: string | null }>(
-    `select nome, telefono, notify_email, specialita from studios where id = $1`, [studioId]);
+  const [studio] = await query<{ nome: string; telefono: string | null; notify_email: string | null; specialita: string | null; indirizzo: string | null; moduli_nascosti: string[] }>(
+    `select nome, telefono, notify_email, specialita, indirizzo, moduli_nascosti from studios where id = $1`, [studioId]);
   const personale = await query<{ id: string; email: string; role: string; attivo: boolean; totp: boolean; created_at: string }>(
     `select id, email, role::text, attivo, totp_enabled_at is not null as totp, created_at::text from users where studio_id = $1 order by attivo desc, role, email`, [studioId]);
   const medici = await query<{ id: string; nome: string; aliases: string[]; attivo: boolean; user_id: string | null }>(
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
   try {
     if (azione === 'studio_aggiorna') {
       const nome = s(c.nome, 120); if (!nome) return NextResponse.json({ errore: 'Il nome dello studio è obbligatorio.' }, { status: 400 });
-      await query(`update studios set nome = $2, telefono = nullif($3, ''), notify_email = nullif($4, ''), specialita = nullif($5, '') where id = $1`, [sid, nome, s(c.telefono, 40), s(c.notify_email, 160).toLowerCase(), s(c.specialita, 500)]);
+      await query(`update studios set nome = $2, telefono = nullif($3, ''), notify_email = nullif($4, ''), specialita = nullif($5, ''), indirizzo = nullif($6, '') where id = $1`, [sid, nome, s(c.telefono, 40), s(c.notify_email, 160).toLowerCase(), s(c.specialita, 500), s(c.indirizzo, 200)]);
     } else if (azione === 'utente_crea') {
       const email = s(c.email, 160).toLowerCase(); const password = String(c.password ?? ''); const ruolo = RUOLI_VALIDI.has(s(c.ruolo)) ? s(c.ruolo) : 'segretaria';
       if (!email.includes('@')) return NextResponse.json({ errore: 'E-mail non valida.' }, { status: 400 });
