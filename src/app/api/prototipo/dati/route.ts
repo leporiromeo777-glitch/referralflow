@@ -51,7 +51,8 @@ export async function GET() {
 
   // Medici: profili della catena + providers dell'agenda, senza doppioni per nome.
   const medici = await mediciDelloStudio(sid);
-  const providers = await query<{ id: string; nome: string }>(`select id, nome from providers where studio_id = $1 and attivo order by nome`, [sid]);
+  const providers = await query<{ id: string; nome: string; colore: string | null }>(`select id, nome, colore from providers where studio_id = $1 and attivo order by nome`, [sid]);
+  const coloriMedici: Record<string, string> = {};
   const doctors: Record<string, string> = {};
   const idPerNome = new Map<string, string>();
   for (const m of medici) { doctors[m.id] = m.nome; idPerNome.set(slug(m.nome), m.id); }
@@ -60,6 +61,7 @@ export async function GET() {
     const trovato = [...idPerNome.entries()].find(([s]) => slug(p.nome).includes(s) || s.includes(slug(p.nome)));
     const id = trovato ? trovato[1] : `pr-${p.id.slice(0, 8)}`;
     if (!doctors[id]) doctors[id] = p.nome;
+    if (p.colore) coloriMedici[id] = p.colore;
     providerToDoc.set(p.id, id);
   }
   if (!Object.keys(doctors).length) doctors.studio = session.studioNome;
@@ -183,6 +185,27 @@ export async function GET() {
     };
   });
   const apptsOggi = agenda.filter((a) => a.d === today);
+
+  // Da chiamare per la preparazione (migrazione 043): appuntamenti dei
+  // prossimi 7 giorni di pazienti in cartella senza una chiamata registrata;
+  // con i motivi (questionario mancante, preparazione da inviare) dalla referral.
+  const chiamate = await query<{ appointment_id: string | null; patient_id: string | null; esito: string; at: string; da: string | null }>(
+    `select c.appointment_id, c.patient_id, c.esito, c.created_at::text as at, split_part(u.email, '@', 1) as da from preparazione_chiamate c left join users u on u.id = c.user_id
+      where c.studio_id = $1 and c.created_at >= now() - interval '21 days' order by c.created_at desc`, [sid]);
+  const refPerId = new Map(refs.map((r) => [r.id, r]));
+  const refApp = await query<{ id: string; preparazione_id: string | null; preparazione_sent_at: string | null; questionario_at: string | null }>(
+    `select id, preparazione_id, preparazione_sent_at::text, questionario_at::text from referrals where studio_id = $1 and appuntamento_at >= now() - interval '1 day'`, [sid]);
+  const refAppPer = new Map(refApp.map((r) => [r.id, r]));
+  const fra7 = new Date(oggiIso.getTime() + 7 * 86400000).toISOString().slice(0, 10);
+  const daChiamare = agenda.filter((a) => a.d >= today && a.d <= fra7 && a.p && /^[0-9a-f-]{36}$/i.test(a.p)).map((a) => {
+    const c = chiamate.find((x) => x.appointment_id === a.id) ?? chiamate.find((x) => x.patient_id === a.p && x.at.slice(0, 10) >= new Date(new Date(`${a.d}T12:00:00`).getTime() - 7 * 86400000).toISOString().slice(0, 10));
+    const r = a.referral ? refAppPer.get(a.referral) : undefined;
+    const motivi: string[] = [];
+    if (r && r.preparazione_id && !r.preparazione_sent_at) motivi.push('preparazione da inviare');
+    if (r && !r.questionario_at) motivi.push('questionario mancante');
+    if (a.referral && refPerId.get(a.referral)?.urgenza === 'urgente') motivi.push('urgente');
+    return { id: a.id, p: a.p, d: a.d, start: a.start, reason: a.reason, doc: a.doc, room: a.room, motivi, chiamata: c ? { esito: c.esito, quando: dCh(c.at), da: c.da } : null };
+  }).filter((x) => !x.chiamata).slice(0, 40);
 
   // Attività: la stessa lista della Home («Oggi»).
   const tasks: { id: string; title: string; p: string | null; assignee: string; prio: string; status: string; due: string; cat: string; src: string; href: string }[] = [];
@@ -323,6 +346,6 @@ export async function GET() {
     utente: { role: RUOLO[session.role] ?? 'secretary', name: nome, initials: iniz, studio: session.studioNome, email: session.email },
     today, doctors, patients, appts: apptsOggi, agenda, tasks, reports, documents, inbox, audioInbox, stats, sale,
     risorse: risorse.map((r) => ({ id: r.id, tipo: r.tipo, nome: r.nome, posti: r.posti })),
-    catalogo,
+    catalogo, coloriMedici, daChiamare,
   });
 }

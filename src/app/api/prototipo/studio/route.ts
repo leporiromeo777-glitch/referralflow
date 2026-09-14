@@ -24,8 +24,10 @@ async function leggi(studioId: string) {
     `select nome, telefono, notify_email, specialita, indirizzo, moduli_nascosti from studios where id = $1`, [studioId]);
   const personale = await query<{ id: string; email: string; role: string; attivo: boolean; totp: boolean; created_at: string }>(
     `select id, email, role::text, attivo, totp_enabled_at is not null as totp, created_at::text from users where studio_id = $1 order by attivo desc, role, email`, [studioId]);
-  const medici = await query<{ id: string; nome: string; aliases: string[]; attivo: boolean; user_id: string | null }>(
-    `select id, nome, aliases, attivo, user_id from providers where studio_id = $1 order by attivo desc, nome`, [studioId]);
+  const medici = await query<{ id: string; nome: string; aliases: string[]; attivo: boolean; user_id: string | null; gln: string | null; rcc: string | null; colore: string | null }>(
+    `select id, nome, aliases, attivo, user_id, gln, rcc, colore from providers where studio_id = $1 order by attivo desc, nome`, [studioId]);
+  const personaleSenzaAccesso = await query<{ id: string; nome: string; ruolo: string; percentuale: number | null; colore: string | null; attivo: boolean }>(
+    `select id, nome, ruolo, percentuale, colore, attivo from studio_personale where studio_id = $1 order by attivo desc, nome`, [studioId]);
   const risorse = await query<{ id: string; tipo: string; nome: string; descrizione: string | null; attivo: boolean; posti: number }>(
     `select id, tipo, nome, descrizione, attivo, posti from studio_risorse where studio_id = $1 order by tipo, attivo desc, nome`, [studioId]);
   // Codici del campo «luogo» dell'agenda che non corrispondono a nessun
@@ -38,7 +40,7 @@ async function leggi(studioId: string) {
   const catalogo = await query<{ id: string; nome: string; tipo: string; durata_min: number; sala: string | null; parole_chiave: string[]; attivo: boolean }>(
     `select id, nome, tipo, durata_min, sala, parole_chiave, attivo from prestazioni_catalogo where studio_id = $1 order by attivo desc, tipo, nome`, [studioId]);
   const nomiRisorse = new Set(risorse.map((r) => r.nome.toLowerCase()));
-  return { studio, personale, medici, catalogo, sale: risorse.filter((r) => r.tipo === 'sala'), apparecchi: risorse.filter((r) => r.tipo === 'apparecchio'), codici_agenda: codici.map((c) => ({ ...c, risorsa: nomiRisorse.has(c.codice.toLowerCase()) })) };
+  return { studio, personale, personale_senza_accesso: personaleSenzaAccesso, medici, catalogo, sale: risorse.filter((r) => r.tipo === 'sala'), apparecchi: risorse.filter((r) => r.tipo === 'apparecchio'), codici_agenda: codici.map((c) => ({ ...c, risorsa: nomiRisorse.has(c.codice.toLowerCase()) })) };
 }
 
 export async function GET() {
@@ -90,7 +92,8 @@ export async function POST(req: NextRequest) {
       const nome = s(c.nome, 120); if (!nome) return NextResponse.json({ errore: 'Il nome è obbligatorio.' }, { status: 400 });
       const aliases = String(c.aliases ?? '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 10);
       const userId = isUuid(s(c.user_id)) ? s(c.user_id) : null;
-      await query(`update providers set nome = $3, aliases = $4, user_id = $5 where id = $1 and studio_id = $2`, [id, sid, nome, aliases, userId]);
+      const colore = /^#[0-9a-f]{6}$/i.test(s(c.colore, 7)) ? s(c.colore, 7) : null;
+      await query(`update providers set nome = $3, aliases = $4, user_id = $5, gln = nullif($6, ''), rcc = nullif($7, ''), colore = $8 where id = $1 and studio_id = $2`, [id, sid, nome, aliases, userId, s(c.gln, 20).replace(/\D/g, ''), s(c.rcc, 20).toUpperCase(), colore]);
     } else if (azione === 'medico_attivo') {
       const id = s(c.id); if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 });
       await query('update providers set attivo = not attivo where id = $1 and studio_id = $2', [id, sid]);
@@ -113,6 +116,16 @@ export async function POST(req: NextRequest) {
         await query(`insert into prestazioni_catalogo (studio_id, nome, tipo, durata_min, sala, parole_chiave) values ($1, $2, $3, $4, $5, $6)`, [sid, v.nome, v.tipo, v.durata_min, v.sala, v.parole_chiave]); n++;
       }
       console.log(`[studio] catalogo dai percorsi: ${n} voci nuove`);
+    } else if (azione === 'personale_crea' || azione === 'personale_aggiorna') {
+      const nome = s(c.nome, 120); if (!nome) return NextResponse.json({ errore: 'Il nome è obbligatorio.' }, { status: 400 });
+      const ruolo = s(c.ruolo, 60) || 'aiuto medico';
+      const perc = Number.isFinite(Number(c.percentuale)) && c.percentuale !== '' ? Math.min(100, Math.max(0, Math.round(Number(c.percentuale)))) : null;
+      const colore = /^#[0-9a-f]{6}$/i.test(s(c.colore, 7)) ? s(c.colore, 7) : null;
+      if (azione === 'personale_crea') await query(`insert into studio_personale (studio_id, nome, ruolo, percentuale, colore) values ($1, $2, $3, $4, $5)`, [sid, nome, ruolo, perc, colore]);
+      else { const id = s(c.id); if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 }); await query(`update studio_personale set nome = $3, ruolo = $4, percentuale = $5, colore = $6, updated_at = now() where id = $1 and studio_id = $2`, [id, sid, nome, ruolo, perc, colore]); }
+    } else if (azione === 'personale_attivo') {
+      const id = s(c.id); if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 });
+      await query('update studio_personale set attivo = not attivo, updated_at = now() where id = $1 and studio_id = $2', [id, sid]);
     } else if (azione === 'risorsa_crea') {
       const tipo = s(c.tipo); const nome = s(c.nome, 120);
       if (!TIPI.has(tipo)) return NextResponse.json({ errore: 'tipo' }, { status: 400 });

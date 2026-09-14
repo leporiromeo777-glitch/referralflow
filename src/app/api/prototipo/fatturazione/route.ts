@@ -25,9 +25,9 @@ function ora(iso: string): string { const d = new Date(iso); return `${String(d.
 function slug(s: string): string { return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
 
 async function righeDelMese(studioId: string, dal: string, al: string): Promise<RigaFattura[]> {
-  const appts = await query<{ id: string; starts_at: string; ends_at: string | null; paziente_nome: string | null; titolo: string | null; motivo: string | null; luogo: string | null; completed_at: string | null; esportato: string | null; medico: string | null; patient_id: string | null; inviante: string | null; referto: boolean }>(
+  const appts = await query<{ id: string; starts_at: string; ends_at: string | null; paziente_nome: string | null; titolo: string | null; motivo: string | null; luogo: string | null; completed_at: string | null; esportato: string | null; medico: string | null; gln: string | null; rcc: string | null; patient_id: string | null; inviante: string | null; referto: boolean }>(
     `select a.id, a.starts_at::text, a.ends_at::text, a.paziente_nome, a.titolo, a.motivo, a.luogo, a.completed_at::text, a.fatturazione_esportato_at::text as esportato,
-            pr.nome as medico, r.patient_id, rd.nome as inviante,
+            pr.nome as medico, pr.gln, pr.rcc, r.patient_id, rd.nome as inviante,
             exists (select 1 from referti_bozze b where b.studio_id = a.studio_id and b.stato = 'confermata' and b.tipo = 'referto'
                       and b.created_at >= a.starts_at::date and b.created_at < a.starts_at::date + 4
                       and lower(regexp_replace(coalesce(nullif(b.campi_confermati->>'nome_paziente', ''), b.payload->'campi_estratti'->>'nome_paziente', ''), '\\s+', ' ', 'g')) = lower(regexp_replace(coalesce(a.paziente_nome, ''), '\\s+', ' ', 'g'))) as referto
@@ -50,7 +50,7 @@ async function righeDelMese(studioId: string, dal: string, al: string): Promise<
     return {
       id: a.id, data: dCh(a.starts_at), ora: ora(a.starts_at), durata: Math.max(5, Math.round((fine - new Date(a.starts_at).getTime()) / 60000)),
       cognome: p ? p.cognome : pezzi[0] ?? '', nome: p ? p.nome : pezzi.slice(1).join(' '), nascita: p ? dCh(p.data_nascita) : '', assicurazione: p?.assicurazione ?? '', avs: p?.avs ?? '', n_assicurato: p?.n_assicurato ?? '', in_cartella: !!p,
-      medico: a.medico ?? '', prestazione: abbinaPrestazione(catalogo, `${a.motivo ?? ''} ${a.titolo ?? ''}`)?.nome ?? (a.motivo || a.titolo || 'Appuntamento'), luogo: a.luogo ?? '',
+      medico: a.medico ?? '', gln_medico: a.gln ?? '', rcc_medico: a.rcc ?? '', prestazione: abbinaPrestazione(catalogo, `${a.motivo ?? ''} ${a.titolo ?? ''}`)?.nome ?? (a.motivo || a.titolo || 'Appuntamento'), luogo: a.luogo ?? '',
       fatta: !!a.completed_at, referto: a.referto, inviante: a.inviante ?? '', esportato_il: dCh(a.esportato),
     };
   });

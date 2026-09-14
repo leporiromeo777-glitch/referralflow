@@ -7,12 +7,12 @@
 export type RigaFattura = {
   id: string; data: string; ora: string; durata: number;
   cognome: string; nome: string; nascita: string; assicurazione: string; avs: string; n_assicurato: string; in_cartella: boolean;
-  medico: string; prestazione: string; luogo: string;
+  medico: string; gln_medico: string; rcc_medico: string; prestazione: string; luogo: string;
   fatta: boolean; referto: boolean; inviante: string;
   esportato_il: string;
 };
 
-export const COLONNE = ['Data', 'Ora', 'Durata (min)', 'Cognome', 'Nome', 'Data di nascita', 'Assicurazione', 'AVS', 'N. assicurato', 'Medico', 'Prestazione', 'Luogo', 'Visita segnata fatta', 'Referto confermato', 'Medico inviante', 'ID appuntamento', 'Esportato il'] as const;
+export const COLONNE = ['Data', 'Ora', 'Durata (min)', 'Cognome', 'Nome', 'Data di nascita', 'Assicurazione', 'AVS', 'N. assicurato', 'Medico', 'GLN medico', 'RCC medico', 'Prestazione', 'Luogo', 'Visita segnata fatta', 'Referto confermato', 'Medico inviante', 'ID appuntamento', 'Esportato il'] as const;
 
 function cella(v: string | number | boolean): string {
   const s = typeof v === 'boolean' ? (v ? 'sì' : 'no') : String(v ?? '');
@@ -21,7 +21,7 @@ function cella(v: string | number | boolean): string {
 
 export function csvPrestazioni(righe: RigaFattura[]): string {
   const testa = COLONNE.join(';');
-  const corpo = righe.map((r) => [r.data, r.ora, r.durata, r.cognome, r.nome, r.nascita, r.assicurazione, r.avs, r.n_assicurato, r.medico, r.prestazione, r.luogo, r.fatta, r.referto, r.inviante, r.id, r.esportato_il].map(cella).join(';'));
+  const corpo = righe.map((r) => [r.data, r.ora, r.durata, r.cognome, r.nome, r.nascita, r.assicurazione, r.avs, r.n_assicurato, r.medico, r.gln_medico, r.rcc_medico, r.prestazione, r.luogo, r.fatta, r.referto, r.inviante, r.id, r.esportato_il].map(cella).join(';'));
   return '﻿' + [testa, ...corpo].join('\r\n') + '\r\n';
 }
 
