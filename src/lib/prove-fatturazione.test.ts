@@ -44,6 +44,8 @@ test('controllo: in sospeso solo la prestazione vecchia ancora con la moneta; an
   const c = controlloFatturazione(
     [
       riga({ id: 'vecchia-moneta', data: '07.09.2026', stato: 'da_fatturare' }),
+      riga({ id: 'giusto-7-giorni', data: '13.09.2026', stato: 'da_fatturare' }),
+      riga({ id: 'sei-giorni', data: '14.09.2026', stato: 'da_fatturare' }),
       riga({ id: 'ieri-moneta', data: '19.09.2026', stato: 'da_fatturare' }),
       riga({ id: 'fatturata', data: '07.09.2026', stato: 'fatturato' }),
       riga({ id: 'annullata', data: '07.09.2026', stato: 'annullato' }),
@@ -53,10 +55,11 @@ test('controllo: in sospeso solo la prestazione vecchia ancora con la moneta; an
     oggi,
     7
   );
-  assert.deepEqual(c.in_sospeso.map((r) => r.id), ['vecchia-moneta']);
+  // la soglia è «7 giorni o più»: il 13.09 (esattamente 7) conta, il 14.09 no
+  assert.deepEqual(c.in_sospeso.map((r) => r.id), ['vecchia-moneta', 'giusto-7-giorni']);
   assert.deepEqual(c.senza_stato.map((r) => r.id), ['muta']);
   assert.equal(c.non_fatturabili, 2);
-  assert.equal(c.per_stato.da_fatturare, 2);
+  assert.equal(c.per_stato.da_fatturare, 4);
   assert.equal(c.per_stato.senza_stato, 1);
 });
 

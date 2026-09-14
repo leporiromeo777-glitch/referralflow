@@ -83,7 +83,7 @@ function dataCh(s: string): Date | null {
 }
 
 // Il controllo vero: la piattaforma non fattura, verifica che nulla si perda.
-// «In sospeso» = prestazione fatta da più di `giorni` giorni che in agenda
+// «In sospeso» = prestazione fatta da `giorni` giorni o più che in agenda
 // porta ancora la moneta. «Senza stato» = l'agenda non dice nulla (di solito
 // appuntamenti importati prima che il robot leggesse lo stato): si segnala
 // piano, non è un allarme. Gli annullati e gli scusati non contano.
@@ -96,7 +96,7 @@ export function controlloFatturazione(
   const utili = righe.filter((r) => !NON_FATTURABILI.has(r.stato));
   const vecchia = (r: RigaFattura) => {
     const d = dataCh(r.data);
-    return d !== null && d < limite;
+    return d !== null && d <= limite;
   };
   const per_stato: Record<string, number> = {};
   for (const r of righe) {
