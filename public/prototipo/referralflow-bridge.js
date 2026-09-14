@@ -672,7 +672,14 @@ rvRenderReport = function () {
     const lettura = Array.from(top.querySelectorAll('button')).find(x => /Lettura pulita|Torna alle verifiche/.test(x.textContent || ''));
     top.insertBefore(b, lettura || null);
   }
+  if (top && !document.getElementById('rf-pennello-btn')) {
+    const b = document.createElement('button'); b.id = 'rf-pennello-btn'; b.className = 'btn sm'; b.type = 'button'; b.title = 'Pennello: evidenzia il testo da togliere dal referto';
+    b.innerHTML = `${RF_PENNELLO_ICONA} Nascondi`; b.onclick = () => rfPennello(!RF.pennello);
+    top.insertBefore(b, document.getElementById('rf-edita-btn') || null);
+  }
   const eb = document.getElementById('rf-edita-btn'); if (eb) eb.hidden = RV.mode === 'read';
+  const pb = document.getElementById('rf-pennello-btn'); if (pb) { pb.hidden = RV.mode === 'read'; pb.classList.toggle('primary', !!RF.pennello); }
+  rfPennelloApplicaStato();
   const leg = document.querySelector('#rv-main .rv-legend');
   if (leg && !leg.querySelector('.lg.tolta')) { const sp = document.createElement('span'); sp.className = 'lg tolta'; sp.textContent = 'Tolta dal referto'; leg.appendChild(sp); }
 };
@@ -705,6 +712,116 @@ function rfEdita() {
     toast('Testo salvato · revisione ricalcolata');
   };
 }
+
+
+/* ---------- pennello «Nascondi» (14.9.2026) ---------- */
+/* Tasto nella barra: acceso, il testo centrale non si scrive più ma si
+   evidenzia; ciò che viene evidenziato (anche un pezzo di frase, anche più
+   frasi) diventa una frase tolta: barrata a tratteggio, fuori dal testo
+   salvato e dal Word, clic per rimetterla. Sul computer la riga si tira al
+   rilascio del mouse; sul telefono, dopo la selezione, compare il tasto
+   «Tira una riga» (le maniglie della selezione si spostano ancora). Esc lo
+   spegne. Le frasi spezzate a metà: il pezzo evidenziato diventa una parte
+   a sé, i resti restano parti normali (la segnalazione, se c'era, resta sul
+   pezzo che rimane). */
+const RF_PENNELLO_ICONA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l3.5-1 11-11-2.5-2.5-11 11L3 21z"/><path d="M14 4l2-2 4 4-2 2"/><path d="M3 12h4M17 21h4" opacity=".5"/></svg>';
+(function () { const st = document.createElement('style'); st.textContent = `
+  .rv-doc.rf-pennello { cursor: text; }
+  .rv-doc.rf-pennello ::selection { background: rgba(229,72,77,.28); }
+  .rv-doc.rf-pennello .rv-span { cursor: text; }
+  .rf-pennello-avviso { max-width: 760px; margin: 0 auto 12px; padding: 8px 12px; border-radius: 10px; background: var(--danger-soft); border: 1px solid rgba(229,72,77,.35); font-size: 12.5px; display: flex; gap: 10px; align-items: center; }
+  .rf-pennello-avviso svg { width: 16px; height: 16px; flex: none; }
+  #rf-pennello-pill { position: fixed; z-index: 70; left: 50%; transform: translateX(-50%); bottom: calc(84px + env(safe-area-inset-bottom)); padding: 10px 16px; border-radius: 999px; background: var(--danger); color: #fff; font-weight: 600; box-shadow: var(--shadow-2); border: none; font-size: 14px; }
+  @media (max-width: 767px) { .rv-top-r .btn.sm { padding: 4px 8px; } }
+`; document.head.appendChild(st); })();
+function rfPennello(on) {
+  RF.pennello = !!on;
+  const pb = document.getElementById('rf-pennello-btn'); if (pb) pb.classList.toggle('primary', RF.pennello);
+  rfPennelloApplicaStato();
+  if (RF.pennello) toast('Pennello acceso: evidenzia il testo da togliere'); else { rfPennelloPill(false); }
+}
+function rfPennelloApplicaStato() {
+  const doc = document.querySelector('#rv-main .rv-doc'); if (!doc) return;
+  doc.classList.toggle('rf-pennello', !!RF.pennello);
+  doc.querySelectorAll('[data-sec-body]').forEach(p => p.setAttribute('contenteditable', RF.pennello || RV.mode === 'read' ? 'false' : 'true'));
+  let av = document.getElementById('rf-pennello-avviso');
+  if (RF.pennello && RV.mode !== 'read') {
+    if (!av) { av = document.createElement('div'); av.id = 'rf-pennello-avviso'; av.className = 'rf-pennello-avviso'; av.innerHTML = `${RF_PENNELLO_ICONA}<span>Pennello acceso: evidenzia le parole o le frasi da togliere dal referto. Vengono barrate; un clic sulla parte barrata le rimette. Esc per spegnere.</span>`; doc.parentNode.insertBefore(av, doc); }
+  } else if (av) av.remove();
+}
+function rfPennelloPill(mostra) {
+  let p = document.getElementById('rf-pennello-pill');
+  if (!mostra) { if (p) p.remove(); return; }
+  if (!p) { p = document.createElement('button'); p.id = 'rf-pennello-pill'; p.type = 'button'; p.textContent = 'Tira una riga'; p.onclick = () => { rfPennelloApplica(); rfPennelloPill(false); }; document.body.appendChild(p); }
+}
+// Offset di testo di un punto della selezione dentro una frase (span con un solo nodo di testo).
+function rfOffsetIn(span, nodo, off) {
+  if (nodo === span) return off === 0 ? 0 : span.textContent.length;
+  if (span.contains(nodo)) { let n = 0; for (const c of span.childNodes) { if (c === nodo || c.contains(nodo)) return n + off; n += c.textContent.length; } return span.textContent.length; }
+  const pos = span.compareDocumentPosition(nodo);
+  return (pos & Node.DOCUMENT_POSITION_PRECEDING) ? 0 : span.textContent.length;
+}
+function rfPennelloApplica() {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return 0;
+  const doc = document.querySelector('#rv-main .rv-doc'); if (!doc) return 0;
+  const range = sel.getRangeAt(0);
+  if (!doc.contains(range.commonAncestorContainer)) return 0;
+  let n = 0;
+  const spans = Array.from(doc.querySelectorAll('.rv-span')).filter(sp => range.intersectsNode(sp) && !sp.classList.contains('rf-tolta') && sp.dataset.span);
+  for (const sp of spans) {
+    const id = sp.dataset.span;
+    const t = sp.textContent;
+    let a = rfOffsetIn(sp, range.startContainer, range.startOffset);
+    let b = rfOffsetIn(sp, range.endContainer, range.endOffset);
+    if (b <= a) continue;
+    // parole intere
+    while (a > 0 && /\S/.test(t[a - 1])) a--;
+    while (b < t.length && /\S/.test(t[b])) b++;
+    const prima = t.slice(0, a).trim(), mezzo = t.slice(a, b).trim(), dopo = t.slice(b).trim();
+    if (!mezzo) continue;
+    if (id.startsWith('add-')) {
+      const k = RV.added.findIndex(x => x.id === id); if (k < 0) continue;
+      if (!prima && !dopo) RV.added.splice(k, 1); else RV.added[k].text = [prima, dopo].filter(Boolean).join(' ');
+      n++; continue;
+    }
+    let sez = null, idx = -1;
+    for (const s of RV_REPORT) { const i = s.parts.findIndex(p => p.id === id); if (i >= 0) { sez = s; idx = i; break; } }
+    if (!sez) continue;
+    const p = sez.parts[idx];
+    if (!prima && !dopo) { RV.removed[id] = true; n++; continue; }
+    // frase spezzata: il pezzo evidenziato diventa una parte a sé, tolta
+    const nuove = [];
+    const base = { src: p.src || null, conf: p.conf || 'none' };
+    let seq = 0; const nid = () => `${id}-${++seq}${Date.now().toString(36).slice(-3)}`;
+    // il pezzo che resta tiene l'id (e la segnalazione) della frase; se la
+    // frase iniziava una riga, la riga la inizia il primo pezzo che resta
+    if (prima) nuove.push({ ...p, t: prima, nl: !!p.nl });
+    const tolta = { ...base, id: nid(), t: mezzo, nl: false };
+    nuove.push(tolta);
+    if (dopo) nuove.push({ ...base, id: prima ? nid() : p.id, t: dopo, nl: !prima && !!p.nl });
+    sez.parts.splice(idx, 1, ...nuove);
+    for (const q of nuove) { RV.text[q.id] = q.t; if (q.id === p.id) { if (RV.text[p.id] !== q.t) RV.edited[p.id] = true; } }
+    RV.removed[tolta.id] = true;
+    n++;
+  }
+  sel.removeAllRanges();
+  if (n) { rvLog('HIDDEN', `${n} part${n === 1 ? 'e tolta' : 'i tolte'} col pennello`); rvSave(); rvAfterRender(); toast(`${n === 1 ? 'Parte tolta' : n + ' parti tolte'} dal referto · clic sul barrato per rimetterla`); }
+  return n;
+}
+(function () {
+  let tocco = false;
+  document.addEventListener('pointerdown', e => { tocco = e.pointerType === 'touch'; }, true);
+  document.addEventListener('mouseup', () => { if (!RF.pennello || RV.mode === 'read' || tocco) return; setTimeout(rfPennelloApplica, 10); });
+  document.addEventListener('selectionchange', () => {
+    if (!RF.pennello || !tocco) { if (!RF.pennello) rfPennelloPill(false); return; }
+    const sel = window.getSelection(); const doc = document.querySelector('#rv-main .rv-doc');
+    const ok = sel && sel.rangeCount && !sel.isCollapsed && doc && doc.contains(sel.getRangeAt(0).commonAncestorContainer);
+    rfPennelloPill(!!ok);
+  });
+  window.addEventListener('keydown', e => { if (e.key === 'Escape' && RF.pennello) { rfPennello(false); } }, true);
+  window.addEventListener('hashchange', () => { if (RF.pennello) { RF.pennello = false; rfPennelloPill(false); } });
+})();
 
 
 /* ---------- frasi tolte dalla catena e note per la segreteria ---------- */
