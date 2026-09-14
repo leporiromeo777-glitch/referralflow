@@ -29,7 +29,8 @@ const DOMANDE = [
   'In quali casi va cercata un’amiloidosi cardiaca in chi ha ipertrofia ventricolare sinistra?',
 ];
 
-type Concorrente = { nome: string; dove: 'infomaniak' | 'locale'; modello: string };
+type Dove = 'infomaniak' | 'locale' | 'anthropic' | 'openai' | 'gemini';
+type Concorrente = { nome: string; dove: Dove; modello: string };
 const CONCORRENTI: Concorrente[] = [
   { nome: 'Qwen 3.5 397B', dove: 'infomaniak', modello: 'Qwen/Qwen3.5-397B-A17B-FP8' },
   { nome: 'Kimi K2.6', dove: 'infomaniak', modello: 'moonshotai/Kimi-K2.6' },
@@ -37,7 +38,31 @@ const CONCORRENTI: Concorrente[] = [
   { nome: 'Apertus 70B (svizzero)', dove: 'infomaniak', modello: 'swiss-ai/Apertus-v1.5-70B' },
   { nome: 'gemma 4 31B (quello di oggi)', dove: 'infomaniak', modello: 'google/gemma-4-31B-it' },
   { nome: 'modello locale sul Mac', dove: 'locale', modello: process.env.PROTOTIPO_LLM || 'gemma3:12b' },
+  // Fuori dalla lista autorizzata: partecipano SOLO se la chiave è in
+  // ~/.referralflow-banco.conf. Ammessi qui perché le domande del banco sono
+  // di medicina generale e non contengono dati di nessuno; per usarne uno in
+  // produzione serve prima la scheda in docs/legale/fornitori-cloud.md.
+  { nome: 'Claude Sonnet 5', dove: 'anthropic', modello: 'claude-sonnet-5' },
+  { nome: 'GPT-5.5', dove: 'openai', modello: 'gpt-5.5' },
+  { nome: 'Gemini 3.1 Pro', dove: 'gemini', modello: 'gemini-3.1-pro' },
 ];
+
+// Chiavi dei concorrenti fuori lista: file a parte, permessi 600, mai nel repo.
+function chiaviBanco(): Record<string, string> {
+  try {
+    const t = readFileSync(path.join(os.homedir(), '.referralflow-banco.conf'), 'utf-8');
+    const fuori: Record<string, string> = {};
+    for (const r of t.split('\n')) {
+      if (r.trim().startsWith('#') || !r.includes('=')) continue;
+      const [k, ...v] = r.split('=');
+      const valore = v.join('=').trim();
+      if (valore) fuori[k.trim()] = valore;
+    }
+    return fuori;
+  } catch {
+    return {};
+  }
+}
 
 function conf(): { url: string; chiave: string } {
   const testo = readFileSync(path.join(os.homedir(), '.referralflow-esterno.conf'), 'utf-8');
@@ -103,6 +128,49 @@ async function chiediLocale(modello: string, domanda: string): Promise<Esito> {
   return { testo: String(j?.response ?? '').trim(), ms, tokenIn: Number(j?.prompt_eval_count ?? 0), tokenOut: Number(j?.eval_count ?? 0), pensiero: 0 };
 }
 
+async function chiediAnthropic(modello: string, domanda: string, chiave: string): Promise<Esito> {
+  const t0 = Date.now();
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': chiave, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: modello, max_tokens: TETTO_TOKEN, messages: [{ role: 'user', content: RISPOSTA_PROMPT.replace('{testo}', domanda) }] }),
+  });
+  const ms = Date.now() - t0;
+  const j: any = await r.json().catch(() => ({}));
+  if (!r.ok) return { testo: '', ms, tokenIn: 0, tokenOut: 0, pensiero: 0, errore: `HTTP ${r.status} ${String(j?.error?.message ?? '').slice(0, 80)}` };
+  const testo = (j?.content ?? []).filter((b: any) => b?.type === 'text').map((b: any) => b.text).join('\n').trim();
+  return { testo, ms, tokenIn: Number(j?.usage?.input_tokens ?? 0), tokenOut: Number(j?.usage?.output_tokens ?? 0), pensiero: 0 };
+}
+
+async function chiediOpenai(modello: string, domanda: string, chiave: string): Promise<Esito> {
+  const t0 = Date.now();
+  const r = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${chiave}` },
+    body: JSON.stringify({ model: modello, messages: [{ role: 'user', content: RISPOSTA_PROMPT.replace('{testo}', domanda) }], max_completion_tokens: TETTO_TOKEN }),
+  });
+  const ms = Date.now() - t0;
+  const j: any = await r.json().catch(() => ({}));
+  if (!r.ok) return { testo: '', ms, tokenIn: 0, tokenOut: 0, pensiero: 0, errore: `HTTP ${r.status} ${String(j?.error?.message ?? '').slice(0, 80)}` };
+  const { testo, pensiero } = rispostaDa(j?.choices?.[0]?.message);
+  return { testo, ms, tokenIn: Number(j?.usage?.prompt_tokens ?? 0), tokenOut: Number(j?.usage?.completion_tokens ?? 0), pensiero };
+}
+
+async function chiediGemini(modello: string, domanda: string, chiave: string): Promise<Esito> {
+  const t0 = Date.now();
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modello}:generateContent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': chiave },
+    body: JSON.stringify({ contents: [{ parts: [{ text: RISPOSTA_PROMPT.replace('{testo}', domanda) }] }] }),
+  });
+  const ms = Date.now() - t0;
+  const j: any = await r.json().catch(() => ({}));
+  if (!r.ok) return { testo: '', ms, tokenIn: 0, tokenOut: 0, pensiero: 0, errore: `HTTP ${r.status} ${String(j?.error?.message ?? '').slice(0, 80)}` };
+  const testo = (j?.candidates?.[0]?.content?.parts ?? []).map((x: any) => x?.text ?? '').join('').trim();
+  const u = j?.usageMetadata ?? {};
+  return { testo, ms, tokenIn: Number(u.promptTokenCount ?? 0), tokenOut: Number(u.candidatesTokenCount ?? 0), pensiero: Number(u.thoughtsTokenCount ?? 0) };
+}
+
 // Mescolata stabile ma diversa per ogni domanda: la lettera non tradisce il modello.
 function mescola<T>(v: T[], seme: number): T[] {
   const a = [...v];
@@ -125,12 +193,21 @@ function senzaTitoli(t: string): string {
 }
 
 async function main() {
+  const chiavi = chiaviBanco();
+  const inGara = CONCORRENTI.filter((c) => ['infomaniak', 'locale'].includes(c.dove) || chiavi[c.dove]);
+  const fuori = CONCORRENTI.filter((c) => !inGara.includes(c));
+  if (fuori.length) console.log(`Senza chiave, non partecipano: ${fuori.map((c) => c.nome).join(', ')}\n`);
   const risultati: { domanda: string; risposte: { c: Concorrente; e: Esito }[] }[] = [];
   const somma = new Map<string, { ms: number; tin: number; tout: number; pens: number; errori: number }>();
   for (const [i, domanda] of DOMANDE.entries()) {
     const risposte: { c: Concorrente; e: Esito }[] = [];
-    for (const c of CONCORRENTI) {
-      const e = c.dove === 'locale' ? await chiediLocale(c.modello, domanda) : await chiediInfomaniak(c.modello, domanda);
+    for (const c of inGara) {
+      const e =
+        c.dove === 'locale' ? await chiediLocale(c.modello, domanda)
+        : c.dove === 'infomaniak' ? await chiediInfomaniak(c.modello, domanda)
+        : c.dove === 'anthropic' ? await chiediAnthropic(c.modello, domanda, chiavi.anthropic)
+        : c.dove === 'openai' ? await chiediOpenai(c.modello, domanda, chiavi.openai)
+        : await chiediGemini(c.modello, domanda, chiavi.gemini);
       risposte.push({ c, e });
       const s = somma.get(c.nome) ?? { ms: 0, tin: 0, tout: 0, pens: 0, errori: 0 };
       s.ms += e.ms; s.tin += e.tokenIn; s.tout += e.tokenOut; s.pens += e.pensiero; if (e.errore) s.errori++;
@@ -143,7 +220,7 @@ async function main() {
   const righe: string[] = [
     '# Banco: quale modello risponde meglio alle domande di medicina',
     '',
-    `Dieci domande di medicina **generale** (nessun paziente, nessun dato): ${CONCORRENTI.length} modelli, ${DOMANDE.length * CONCORRENTI.length} risposte.`,
+    `Dieci domande di medicina **generale** (nessun paziente, nessun dato): ${inGara.length} modelli, ${DOMANDE.length * inGara.length} risposte.`,
     '',
     '**Come si legge.** Per ogni domanda le risposte sono mescolate e senza nome — e l\'ordine cambia a ogni domanda, quindi «A» non è sempre lo stesso modello. Dai un voto da 1 a 5 a ognuna (1 = sbagliata o inutile, 3 = corretta ma generica, 5 = quello che diresti tu a un collega). La chiave dei nomi è **in fondo**: guardala solo dopo aver votato tutto.',
     '',
@@ -161,7 +238,7 @@ async function main() {
     righe.push('---', '');
   }
   righe.push('', '## Consumo e tempi', '', '| modello | tempo medio | token in | token out | di cui ragionamento (car.) | errori |', '|---|---|---|---|---|---|');
-  for (const c of CONCORRENTI) {
+  for (const c of inGara) {
     const s = somma.get(c.nome)!;
     righe.push(`| ${c.nome} | ${(s.ms / DOMANDE.length / 1000).toFixed(1)} s | ${s.tin} | ${s.tout} | ${s.pens || '—'} | ${s.errori} |`);
   }
