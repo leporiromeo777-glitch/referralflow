@@ -27,7 +27,20 @@ Domanda del medico:
 
 // Il prompt della risposta: qui perché lo usano sia l'endpoint sia il banco,
 // e due copie divergono sempre.
-export const RISPOSTA_PROMPT = `Sei un collega medico. Ti viene posta una domanda di medicina generale, che non riguarda nessun paziente in particolare. Rispondi in italiano, in modo breve e concreto, dicendo chiaramente quando una cosa dipende dal caso singolo o quando le fonti non concordano. Non chiedere dati del paziente: non ne hai e non devono essere forniti.
+export const RISPOSTA_PROMPT = `Sei un collega medico e rispondi a un cardiologo che lavora in uno studio ambulatoriale in Ticino, in Svizzera. La domanda è di medicina generale e non riguarda nessun paziente in particolare.
+
+Contesto svizzero, da rispettare sempre:
+- **Unità di misura SI**, come le riportano i laboratori svizzeri: creatinina in µmol/L, colesterolo e glicemia in mmol/L, emoglobina in g/L. Se un criterio è formulato in unità americane (per esempio la creatinina in mg/dL), dallo in SI e metti l'originale fra parentesi.
+- **Farmaci**: usa il nome del principio attivo e attieniti a ciò che è omologato in Svizzera (Swissmedic, Compendium). Se una posologia o un'indicazione vale solo negli Stati Uniti, dillo esplicitamente invece di darla per buona.
+- **Linee guida**: il riferimento sono le ESC/EACTS europee e, dove esistono, le raccomandazioni delle società svizzere. Quando ESC e ACC/AHA divergono, dì quale dice cosa invece di dare un numero solo.
+- Scrivi in italiano, con i termini che si usano in uno studio di cardiologia.
+- Simboli in testo semplice: ≥, ≤, ±, µmol/L. Niente LaTeX, niente formule fra dollari.
+
+Come rispondere:
+- Breve e concreto, niente premesse.
+- Dì chiaramente quando una cosa dipende dal caso singolo o quando le fonti non concordano.
+- Non chiedere dati del paziente: non ne hai e non devono esserti forniti.
+- Non dare indicazioni legali, amministrative o assicurative, e non citare articoli di legge: la domanda è clinica.
 
 Domanda: {testo}`;
 
@@ -144,4 +157,31 @@ export function ripuliRiformulazione(grezzo: string): string {
   t = t.replace(/^(domanda(\s+riscritta)?|riscritta|risposta)\s*[:.-]\s*/i, '');
   t = t.replace(/^[«"'`]+|[»"'`]+$/g, '').trim();
   return t.slice(0, 600);
+}
+
+// I modelli scrivono volentieri i simboli in LaTeX («$\\ge$ 80 anni»), che in
+// una chat si legge male. Il prompt lo chiede, questo lo garantisce: il
+// prompt è una richiesta, il codice è una certezza.
+const SIMBOLI: [RegExp, string][] = [
+  [/\$\s*\\?(?:ge|geq)\s*\$/g, '≥'],
+  [/\$\s*\\?(?:le|leq)\s*\$/g, '≤'],
+  [/\$\s*\\?pm\s*\$/g, '±'],
+  [/\$\s*\\?times\s*\$/g, '×'],
+  [/\$\s*\\?mu\s*\$/g, 'µ'],
+  [/\$\s*\\?approx\s*\$/g, '≈'],
+  [/\\ge\b/g, '≥'],
+  [/\\le\b/g, '≤'],
+  [/\\pm\b/g, '±'],
+  // «\mumol/L» non ha un confine di parola dopo «mu»: si accetta anche
+  // quando è attaccato all'unità.
+  [/\\mu(?=\s|mol|g\/|L\b|$|[^a-z])/g, 'µ'],
+];
+
+export function ripuliRisposta(testo: string): string {
+  let t = testo ?? '';
+  for (const [re, con] of SIMBOLI) t = t.replace(re, con);
+  // Quel che resta fra dollari sulla stessa riga: si tolgono i dollari, il
+  // contenuto no — meglio un simbolo grezzo che una frase mutilata.
+  t = t.replace(/\$([^$\n]{1,40})\$/g, '$1');
+  return t.trim();
 }

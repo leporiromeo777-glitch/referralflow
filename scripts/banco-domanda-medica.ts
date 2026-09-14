@@ -14,7 +14,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { RISPOSTA_PROMPT } from '../src/lib/domanda-medica';
+import { RISPOSTA_PROMPT, ripuliRisposta } from '../src/lib/domanda-medica';
 
 const DOMANDE = [
   'Come si aggiusta la dose di apixaban nell’insufficienza renale moderata in fibrillazione atriale?',
@@ -104,7 +104,8 @@ async function chiediInfomaniak(modello: string, domanda: string): Promise<Esito
   const ms = Date.now() - t0;
   if (!r.ok) return { testo: '', ms, tokenIn: 0, tokenOut: 0, pensiero: 0, errore: `HTTP ${r.status}` };
   const j: any = await r.json();
-  const { testo, pensiero } = rispostaDa(j?.choices?.[0]?.message);
+  const { testo: grezzo, pensiero } = rispostaDa(j?.choices?.[0]?.message);
+  const testo = ripuliRisposta(grezzo);
   const troncata = j?.choices?.[0]?.finish_reason === 'length' && !testo;
   return {
     testo,

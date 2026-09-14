@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { EPONIMI, nomiPropri, nonMedica, ripuliRiformulazione, validaGenerale } from './domanda-medica';
+import { EPONIMI, nomiPropri, nonMedica, ripuliRiformulazione, ripuliRisposta, validaGenerale } from './domanda-medica';
 
 const ORIGINALE = 'Per Bernasconi Luca, 62 anni, nato il 03.04.1964, con fibrillazione atriale e clearance 38, che dose di apixaban?';
 
@@ -79,4 +79,11 @@ test('avviso «paziente preciso»: scatta sul determinativo e sul possessivo', (
   assert.ok(validaGenerale('x', 'Che dose per questo paziente con insufficienza renale moderata?').avvisi.some((a) => a.tipo === 'persona'));
   assert.ok(validaGenerale('x', 'Che dose nel mio paziente con insufficienza renale moderata?').avvisi.some((a) => a.tipo === 'persona'));
   assert.ok(!validaGenerale('x', 'Che dose in un paziente con insufficienza renale moderata?').avvisi.some((a) => a.tipo === 'persona'));
+});
+
+test('risposta: i simboli in LaTeX diventano testo semplice', () => {
+  assert.equal(ripuliRisposta('Età $\\ge$ 80 anni, peso $\\le$ 60 kg'), 'Età ≥ 80 anni, peso ≤ 60 kg');
+  assert.equal(ripuliRisposta('creatinina \\ge 133 \\mumol/L'), 'creatinina ≥ 133 µmol/L');
+  assert.equal(ripuliRisposta('dose $5$ mg'), 'dose 5 mg');
+  assert.equal(ripuliRisposta('costa 30 $ al mese'), 'costa 30 $ al mese', 'un dollaro solo resta un dollaro');
 });

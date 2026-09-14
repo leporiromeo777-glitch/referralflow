@@ -1,9 +1,16 @@
+import { readFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
+import { fornitoreAutorizzato, leggiConf } from '@/lib/fornitori';
+// La RIFORMULAZIONE resta locale: la domanda col paziente dentro non esce da
+// questo Mac nemmeno per essere ripulita. Esce solo ciò che è già generale.
 import { generaOllamaEsito } from '@/lib/ollama';
 import {
   RIFORMULA_PROMPT,
   RISPOSTA_PROMPT,
+  ripuliRisposta,
   nonMedica,
   ripuliRiformulazione,
   validaGenerale,
@@ -25,8 +32,29 @@ export const dynamic = 'force-dynamic';
 // cartella. L'uscita verso un modello esterno resta SPENTA finché non c'è
 // l'ok legale e l'ok di spesa: senza DOMANDA_MEDICA_FORNITORE risponde il
 // modello locale e la pagina lo dice.
-const MODELLO = process.env.PROTOTIPO_LLM || 'gemma3:12b';
-const FORNITORE = (process.env.DOMANDA_MEDICA_FORNITORE || '').trim();
+// Il modello che risponde: gemma 4 31B su Infomaniak (Ginevra), scelto col
+// banco del 15.9.2026 — il più veloce degli otto, zero risposte mancate e
+// corretto su entrambe le domande a risposta secca ([[Misure/Banchi]]).
+// Indirizzo e chiave sono quelli che la catena usa già: una chiave sola, in
+// un file solo, con i permessi giusti.
+const MODELLO = process.env.DOMANDA_MEDICA_MODELLO || 'google/gemma-4-31B-it';
+const CONF = path.join(os.homedir(), '.referralflow-esterno.conf');
+
+function fornitore(): { url: string; chiave: string } | null {
+  try {
+    const c = leggiConf(readFileSync(CONF, 'utf-8'));
+    if (!c.url || !c.chiave) return null;
+    // La guardia: un indirizzo fuori lista non si chiama, anche se è scritto
+    // nel file. Stessa regola della catena.
+    if (!fornitoreAutorizzato(c.url)) {
+      log(`indirizzo NON autorizzato nella configurazione: rifiutato`);
+      return null;
+    }
+    return { url: c.url, chiave: c.chiave };
+  } catch {
+    return null;
+  }
+}
 
 
 function log(m: string) {
@@ -46,7 +74,7 @@ export async function POST(req: NextRequest) {
 
   if (azione === 'riformula') {
     const esito = await generaOllamaEsito(RIFORMULA_PROMPT.replace('{testo}', domanda), {
-      modello: MODELLO,
+      modello: process.env.PROTOTIPO_LLM || 'gemma3:12b',
       timeoutMs: 120_000,
     });
     if (!esito.ok) {
@@ -72,39 +100,54 @@ export async function POST(req: NextRequest) {
       log(`invio rifiutato: ${v.blocchi.map((b) => b.tipo).join(',')}`);
       return NextResponse.json({ errore: 'La domanda riscritta contiene ancora un dato personale: non è partita.', ...v }, { status: 400 });
     }
-    // NON si risponde col modello locale. Nel banco del 14.9.2026 il modello
-    // sul Mac (12B) ha dato una posologia SBAGLIATA di apixaban e ha invertito
-    // ipertensione da camice bianco e mascherata: su una domanda di medicina
-    // una risposta plausibile e sbagliata è peggio di nessuna risposta. Finché
-    // non è collegato un modello misurato, questa via resta chiusa
-    // ([[Misure/Banchi]], banco della domanda medica).
-    if (!FORNITORE) {
-      log('nessun modello adatto collegato: non rispondo');
+    // La domanda che esce è SOLO `generale`: quella originale non lascia mai
+    // questo processo. Il modello locale non risponde qui — nel banco del
+    // 14.9.2026 ha dato una posologia sbagliata, e su una domanda di medicina
+    // una risposta plausibile e sbagliata è peggio di nessuna risposta.
+    const f = fornitore();
+    if (!f) {
+      log('nessun fornitore autorizzato configurato: non rispondo');
       return NextResponse.json(
         {
           errore:
-            'Non è ancora collegato un modello adatto alle domande di medicina. Il modello locale è troppo piccolo: nel banco del 14.9.2026 ha sbagliato un dosaggio, quindi qui non risponde. La domanda riscritta è pronta e non è uscita da qui.',
+            'Non è collegato un modello per le domande di medicina. La domanda riscritta è pronta e non è uscita da qui.',
           non_collegato: true,
         },
         { status: 503 }
       );
     }
-    // Uscita verso un modello esterno: l'adattatore non è ancora scritto.
-    // Quando lo sarà, qui ci vanno il fornitore autorizzato (guardia sugli
-    // indirizzi, come `FORNITORI_AUTORIZZATI` nella catena) e la stima di
-    // spesa; ciò che parte è SOLO `generale`, mai `domanda`.
-    log(`fornitore «${FORNITORE}» configurato ma l'adattatore non è ancora scritto`);
-    const esito = await generaOllamaEsito(RISPOSTA_PROMPT.replace('{testo}', generale), {
-      modello: MODELLO,
-      timeoutMs: 180_000,
-    });
-    if (!esito.ok) {
-      log(`risposta non riuscita: ${esito.causa}`);
-      return NextResponse.json({ errore: 'Il modello non ha risposto.', causa: esito.causa }, { status: 503 });
+    const t0 = Date.now();
+    let risposta = '';
+    try {
+      const r = await fetch(f.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${f.chiave}` },
+        body: JSON.stringify({
+          model: MODELLO,
+          messages: [{ role: 'user', content: RISPOSTA_PROMPT.replace('{testo}', generale) }],
+          temperature: 0,
+          max_tokens: 900,
+        }),
+        signal: AbortSignal.timeout(90_000),
+      });
+      if (!r.ok) {
+        log(`fornitore: HTTP ${r.status}`);
+        return NextResponse.json({ errore: 'Il modello non ha risposto in questo momento.' }, { status: 503 });
+      }
+      const j = await r.json();
+      risposta = ripuliRisposta(String(j?.choices?.[0]?.message?.content ?? ''));
+    } catch (e) {
+      log(`fornitore non raggiungibile: ${String((e as Error)?.name ?? e).slice(0, 40)}`);
+      return NextResponse.json({ errore: 'Il modello non è raggiungibile in questo momento.' }, { status: 503 });
     }
-    log(`risposta data dal modello locale (${esito.ms} ms)`);
+    const ms = Date.now() - t0;
+    if (!risposta) {
+      log(`risposta vuota (${ms} ms)`);
+      return NextResponse.json({ errore: 'Il modello ha risposto a vuoto.' }, { status: 503 });
+    }
+    log(`risposta data (${ms} ms, ${MODELLO})`);
     return NextResponse.json(
-      { risposta: esito.testo.trim(), dove: 'locale', modello: MODELLO, ms: esito.ms },
+      { risposta, dove: 'Infomaniak · server in Svizzera', modello: MODELLO, ms },
       { headers: { 'Cache-Control': 'no-store' } }
     );
   }

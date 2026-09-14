@@ -17,7 +17,7 @@ solo dopo aver aggiornato questo registro).
 | Sub-fornitori | da chiedere |
 | Conservazione di prompt e risposte | pagine pubbliche: «non registrate»; CGU «LLM API» ambigue → DA CONFERMARE |
 | Uso per addestramento | pagine pubbliche: no; una sintesi terza dice il contrario → DA CONFERMARE |
-| Classi di dati ammesse | solo testo pseudonimizzato; mai audio, mai identificativi, mai documento intero quando bastano gli span |
+| Classi di dati ammesse | solo testo pseudonimizzato; mai audio, mai identificativi, mai documento intero quando bastano gli span. Dal 15.9.2026 anche la classe **«domanda medica generale»**: testo che NON contiene dati personali (una domanda di medicina riscritta e approvata da una persona), usata dalla funzione «Domanda medica» della piattaforma con `google/gemma-4-31B-it` |
 | Chiavi | `~/.referralflow-esterno.conf` (chmod 600), scadenza da annotare |
 | Data di revisione | da fissare: alla risposta di Infomaniak, poi annuale |
 | Alternativa | Safe Swiss Cloud (Zurigo, ISO 27001/17/18: Apertus 70B, DeepSeek, Qwen3, Gemma) |
