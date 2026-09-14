@@ -112,3 +112,8 @@ Prima procedura con traccia ([[Piattaforma/Procedure e tracce]]): chip «Briefin
 
 ## Dati di prova (13.9.2026)
 `npm run dati-prova` crea 6 pazienti inventati (Bernasconi, Pedrazzini, Ortelli, Casanova, Rusconi, Galli) con referral, 3 appuntamenti di oggi e 14 documenti PDF generati dal codice (ECG, Holter, ecocardiogrammi, test ergometrico, MAPA, duplex renale, CoroTAC, laboratorio, lettere, consenso), ognuno con in testa «DOCUMENTO DI PROVA - dati inventati». Servono a provare cartella, bot e ricerca documenti. `npm run dati-prova -- --elimina` toglie tutto (registro degli id in `~/.referralflow-dati-prova.json`). Il medico inviante di prova è «Dr. med. Andrea Prova». Nessuna persona reale.
+
+## Schermata d'apertura di Cleo (14.9.2026)
+La pagina AI a conversazione vuota non è un campo di testo nudo: mostra quattro gruppi di domande che sappiamo rispondere — *La giornata*, *Rimasto indietro*, *Come si fa*, *Un paziente* — e sotto ognuna **da dove arriverà la risposta** («dal codice, subito», «dallo stato in agenda», «dalla procedura scritta»). Le domande che finiscono con un nome non si mandano: precompilano il campo (`rfAiPrecompila`), il nome lo scrive la persona.
+
+La forma richiama quella del concorrente (CardioOS, «Otto»: chat con quattro esempi e un disclaimer), la sostanza è l'opposto e deve restare tale: i suoi esempi sono clinici con dosaggi e il disclaimer dice «non sostituisce il giudizio clinico»; i nostri sono domande di lavoro sui dati dello studio, e la riga di chiusura dice che Cleo **non dà consigli clinici e non fa diagnosi**, mostra le fonti e non fa uscire nulla dal Mac ([[Proposte/CardioOS confronto per funzione]], [[Decisioni/Registro]]).

@@ -824,19 +824,82 @@ const RF_AI_NOME = 'Cleo';
 .rf-aip .ai-input { padding: 12px 18px; }
 .rf-aip .ai-input input { height: 42px; font-size: 14px; }
 .rf-aip-chips { display:flex; flex-wrap:wrap; gap:6px; padding: 0 22px 12px; }
-@media (max-width: 767px) { .rf-aip { height: calc(100vh - var(--topbar-h) - 190px); } .rf-aip .ai-body { padding: 12px; } .rf-aip .ai-msg.user { max-width: 88%; } }
+/* Schermata d'apertura: la domanda si sceglie, non si inventa. */
+.rf-aiw { width: 100%; max-width: 760px; margin: auto; padding: 8px 0 4px; }
+.rf-aiw-mark { width: 34px; height: 34px; border-radius: 9px; display:flex; align-items:center; justify-content:center; background: var(--cta, #0d5c48); color:#fff; margin-bottom: 14px; }
+.rf-aiw-mark svg { width: 19px; height: 19px; }
+.rf-aiw h3 { margin: 0 0 6px; font-size: 19px; font-weight: 650; letter-spacing: -0.01em; }
+.rf-aiw > p { margin: 0 0 20px; font-size: 13.5px; line-height: 1.55; color: var(--text-2); }
+.rf-aiw-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px 14px; }
+.rf-aiw-g { border: 1px solid var(--border); border-radius: var(--r-card, 10px); padding: 12px 13px 9px; background: var(--surface); }
+.rf-aiw-g > .t { display:flex; align-items:center; gap:7px; font-size: 12px; font-weight: 650; letter-spacing: .02em; text-transform: uppercase; color: var(--text-3); margin-bottom: 8px; }
+.rf-aiw-g > .t svg { width: 14px; height: 14px; }
+.rf-aiw-g button { display:block; width:100%; text-align:left; border:0; background:none; padding: 5px 0; font: inherit; font-size: 13.5px; color: var(--text-1); cursor: pointer; border-top: 1px solid var(--border); }
+.rf-aiw-g button:first-of-type { border-top: 0; }
+.rf-aiw-g button:hover { color: var(--cta, #0d5c48); }
+.rf-aiw-g .da { display:block; font-size: 11.5px; color: var(--text-3); margin-top: 1px; }
+.rf-aiw-nota { margin: 18px 0 0; padding-top: 14px; border-top: 1px solid var(--border); font-size: 12.5px; line-height: 1.55; color: var(--text-3); }
+@media (max-width: 767px) { .rf-aip { height: calc(100vh - var(--topbar-h) - 190px); } .rf-aip .ai-body { padding: 12px; } .rf-aip .ai-msg.user { max-width: 88%; } .rf-aiw-grid { grid-template-columns: 1fr; } }
 `; document.head.appendChild(st); })();
 function rfAiPaginaInvia() { const el = document.getElementById('rf-aip-in'); const v = el ? el.value.trim() : ''; if (!v) return; el.value = ''; askAI(v); }
+// Domanda avviata ma non mandata: quelle che finiscono con un nome le scrive
+// la persona, non le indoviniamo noi.
+function rfAiPrecompila(inizio) {
+  const el = document.getElementById('rf-aip-in');
+  if (!el) return;
+  el.value = inizio;
+  el.focus();
+  el.setSelectionRange(inizio.length, inizio.length);
+}
+// Schermata d'apertura di Cleo: quattro gruppi di domande che sappiamo
+// rispondere, ognuna con scritto DA DOVE arriverà la risposta. Non è un
+// assistente clinico: è l'indice parlante del lavoro dello studio.
+function rfAiBenvenuto() {
+  const paz = state.patientCtx && P[state.patientCtx] ? P[state.patientCtx] : null;
+  const nomePaz = paz ? `${paz.last} ${paz.first}`.trim() : '';
+  const gruppi = [
+    { t: 'La giornata', icona: ICONS.clock, voci: [
+      ['prepara la giornata', 'dal codice, subito'],
+      ['chi arriva domani', 'dall\'agenda della Cassa dei Medici'],
+      ['come sono messe le sale oggi', 'dall\'agenda, per luogo'],
+    ] },
+    { t: 'Rimasto indietro', icona: ICONS.alert, voci: [
+      ['lettere in ritardo', 'dalle referral e dai referti'],
+      ['prestazioni ancora da fatturare', 'dallo stato in agenda'],
+      ['referti da confermare', 'dalle bozze della catena'],
+    ] },
+    { t: 'Come si fa', icona: ICONS.book, voci: [
+      ['come si fa la chiusura mensile', 'dalla procedura scritta'],
+      ['chi si occupa dei richiami', 'dall\'organizzazione dello studio'],
+      ['quale percorso per le palpitazioni', 'dai percorsi validati'],
+    ] },
+    { t: 'Un paziente', icona: ICONS.patients, voci: [
+      [nomePaz ? `cosa è cambiato per ${nomePaz}` : 'cosa è cambiato per ', 'dai referti confermati', !nomePaz],
+      [nomePaz ? `che esami ha fatto ${nomePaz}` : 'che esami ha fatto ', 'dai documenti della cartella', !nomePaz],
+      [nomePaz ? `documenti di ${nomePaz}` : 'documenti di ', 'dalla cartella', !nomePaz],
+    ] },
+  ];
+  const voce = ([testo, da, precompila]) => precompila
+    ? `<button type="button" onclick="rfAiPrecompila(${JSON.stringify(testo).replace(/"/g, '&quot;')})">${rfEsc(testo)}…<span class="da">${rfEsc(da)}</span></button>`
+    : `<button type="button" data-ai="${rfEsc(testo)}">${rfEsc(testo)}<span class="da">${rfEsc(da)}</span></button>`;
+  return `<div class="rf-aiw">
+    <div class="rf-aiw-mark">${ICONS.ai}</div>
+    <h3>Che cosa ti serve sapere?</h3>
+    <p>${rfEsc(RF_AI_NOME)} legge quello che c'è qui dentro — agenda, attività, referti, documenti, cartelle, procedure dello studio — e niente altro. Le risposte immediate le calcola il codice; quelle di sintesi il modello che gira su questo Mac, in pochi secondi.</p>
+    <div class="rf-aiw-grid">${gruppi.map(g => `<div class="rf-aiw-g"><div class="t">${g.icona}${rfEsc(g.t)}</div>${g.voci.map(voce).join('')}</div>`).join('')}</div>
+    <p class="rf-aiw-nota">${rfEsc(RF_AI_NOME)} <b>non dà consigli clinici e non fa diagnosi</b>: quello resta al medico. Sotto ogni risposta c'è «Da dove viene», con le fonti che ha guardato; se un dato non c'è lo dice, non lo inventa. Nessuna domanda e nessun dato esce da questo Mac.</p>
+  </div>`;
+}
 const rfAiPageOrig = PAGES.ai;
 PAGES.ai = () => {
   if (!RF.live) return rfAiPageOrig();
   const chips = (RF.procedure || []).flatMap(p => (Array.isArray(p.chip) ? p.chip : []).filter(c => typeof c === 'string')).slice(0, 8);
   const vuota = !state.aiMessages.length;
-  return `<div class="page-head"><div><div class="eyebrow">Modello locale, nessun cloud</div><h2 class="page-title">${rfEsc(RF_AI_NOME)}</h2><div class="page-sub">Risponde sui dati della giornata (agenda, attività, referti, documenti, pazienti); le domande che contano seguono procedure con traccia; sotto ogni risposta «Da dove viene». Niente consigli clinici, niente dati inventati.</div></div>
-      <div class="actions">${state.aiMessages.length ? `<button class="btn" onclick="state.aiMessages=[];render()">${ICONS.x} Nuova conversazione</button>` : ''}</div></div>
+  return `<div class="page-head"><div><div class="eyebrow">Modello locale sul Mac dello studio</div><h2 class="page-title">${rfEsc(RF_AI_NOME)}</h2><div class="page-sub">Risponde su quello che è scritto nei vostri dati e mostra sempre da dove l'ha preso.</div></div>
+      <div class="actions">${vuota ? '' : `<button class="btn" onclick="state.aiMessages=[];render()">${ICONS.x} Nuova conversazione</button>`}</div></div>
     <div class="card rf-aip" style="padding:0">
-      <div class="ai-body" id="rf-aip-body">${vuota ? `<div class="caption" style="padding:8px 4px">Chiedi per esempio: «prepara la giornata», «lettere in ritardo», «cosa è cambiato per Bernasconi», «richiami del mese», «quale percorso per le palpitazioni», «chi si occupa dei richiami». Le risposte immediate arrivano dal codice; quelle di sintesi dal modello locale, in pochi secondi.</div>` : state.aiMessages.map(m => m.html).join('')}</div>
-      ${chips.length ? `<div class="rf-aip-chips">${chips.map(c => `<button class="chip" data-ai="${rfEsc(c)}">${rfEsc(c)}</button>`).join('')}</div>` : ''}
+      <div class="ai-body" id="rf-aip-body">${vuota ? rfAiBenvenuto() : state.aiMessages.map(m => m.html).join('')}</div>
+      ${!vuota && chips.length ? `<div class="rf-aip-chips">${chips.map(c => `<button class="chip" data-ai="${rfEsc(c)}">${rfEsc(c)}</button>`).join('')}</div>` : ''}
       <div class="ai-input"><input id="rf-aip-in" placeholder="${state.patientCtx && P[state.patientCtx] ? 'Chiedi qualcosa su ' + rfEsc(P[state.patientCtx].first) + '…' : 'Scrivi una domanda…'}" autocomplete="off" onkeydown="if(event.key==='Enter'){rfAiPaginaInvia();}"><button class="btn primary" onclick="rfAiPaginaInvia()">${ICONS.send} Invia</button></div>
     </div>`;
 };
