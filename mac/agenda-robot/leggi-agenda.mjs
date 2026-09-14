@@ -80,6 +80,50 @@ function log(m) {
 // Estrae gli appuntamenti della giornata visibile. Gira DENTRO la pagina:
 // geometria e testi restano sul Mac, fuori escono solo strutture.
 async function estraiGiorno(p) {
+  // Prima strada: DayPilot tiene gli appuntamenti in `dpc.events.list`, con
+  // orari esatti, un id vero di MediOnline e la risorsa. È molto meglio che
+  // misurare i rettangoli: niente scala oraria da dedurre, niente colonna da
+  // indovinare dalla geometria, niente arrotondamenti ai 5 minuti. Se un
+  // giorno la struttura non c'è più, si torna alla lettura per geometria.
+  const dalla = await p.evaluate(() => {
+    const dpc = window.dpc;
+    const lista = dpc && dpc.events && dpc.events.list;
+    if (!Array.isArray(lista) || !lista.length) return null;
+    const sigle = new Map();
+    for (const c of (dpc.columns && dpc.columns[0] && dpc.columns[0].children) || []) {
+      if (c && c.id != null && c.name) sigle.set(String(c.id), String(c.name).trim());
+    }
+    const quando = (v) => (v && typeof v === 'object' && v.value ? String(v.value) : String(v ?? ''));
+    const min = (iso) => {
+      const m = /T(\d{2}):(\d{2})/.exec(iso);
+      return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+    };
+    const fuori = [];
+    for (const e of lista) {
+      const i = quando(e.start), f = quando(e.end);
+      const inizio = min(i), fine = min(f);
+      if (inizio === null) continue;
+      const html = String(e.html ?? '');
+      const stato = (html.match(/class=['"](st\d+)['"]/) || [])[1] ?? '';
+      const testo = html.replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+      fuori.push({
+        idMol: String(e.id ?? ''),
+        inizio,
+        durata: fine !== null && fine > inizio ? fine - inizio : 30,
+        colonna: sigle.get(String(e.resource)) ?? '',
+        risorsa: String(e.resource ?? ''),
+        colore: String(e.backColor ?? '').toLowerCase(),
+        stato,
+        iconaStato: '',
+        annullato: stato === 'st6',
+        testo: testo.slice(0, 200),
+        data: i.slice(0, 10),
+      });
+    }
+    const date = [...new Set(fuori.map((x) => x.data))];
+    return { data: date.length === 1 ? date[0] : null, appuntamenti: fuori, via: 'struttura' };
+  });
+  if (dalla && dalla.appuntamenti.length) return dalla;
   return p.evaluate(() => {
     const q = (s) => [...document.querySelectorAll(s)];
 
@@ -215,9 +259,16 @@ function icsData(dataISO, minuti) {
 
 // Dallo stato disegnato nel riquadro alla parola nostra. Vuoto quando l'icona
 // non c'è o non è in tabella: «non lo so» non si scrive come «no».
+// Corrispondenza fra la classe del riquadro e l'icona: serve quando lo stato
+// arriva dalla struttura di DayPilot, dove c'è la classe ma non il file.
+const CLASSI = {
+  st0: 'ag_rdv_masque_16', st1: 'ag_rdv_16', st2: 'ag_arrive_16_inv', st3: 'ag_encours_16_inv',
+  st4: 'ag_atraiter_16', st5: 'ag_ok_16', st6: 'ag_excuse_16', st8: 'ag_ok_f_16',
+};
+
 function statoAppuntamento(a) {
   if (a.annullato) return 'annullato';
-  const icona = (a.iconaStato ?? '').replace(/\.\w+$/, '');
+  const icona = (a.iconaStato ?? '').replace(/\.\w+$/, '') || CLASSI[a.stato] || '';
   return STATI[icona] ?? '';
 }
 
@@ -391,7 +442,7 @@ try {
         return true;
       });
       perGiorno.push({ data: dataISO, appuntamenti: tenuti });
-      log(`giorno ${g + 1}/${TOTALE}${g < ARRETRATI ? ' (arretrato)' : ''}: ${dataISO} → ${tenuti.length} appuntamenti` +
+      log(`giorno ${g + 1}/${TOTALE}${g < ARRETRATI ? ' (arretrato)' : ''}${giorno.via === 'struttura' ? '' : ' [geometria]'}: ${dataISO} → ${tenuti.length} appuntamenti` +
         (giorno.appuntamenti.length !== tenuti.length ? ` (+${giorno.appuntamenti.length - tenuti.length} scartati per colore)` : ''));
     }
     if (g < TOTALE - 1) {
@@ -431,6 +482,18 @@ try {
         // Stato letto dall'icona in alto a destra del riquadro (moneta = da
         // fatturare, visto con la «F» = fatturato, sedia = arrivato…).
         ...(statoAppuntamento(a) ? [`X-RF-STATO:${statoAppuntamento(a)}`] : []),
+        // Gli annullati esistono nella struttura di DayPilot ma non devono
+        // affollare l'agenda: si marcano come cancellati e la piattaforma li
+        // scarta da sola (`agenda-sync` filtra STATUS:CANCELLED). Prima, con
+        // la lettura a pixel, non arrivavano proprio.
+        ...(['annullato', 'scusato'].includes(statoAppuntamento(a)) ? ['STATUS:CANCELLED'] : []),
+        // Identificativo dell'appuntamento in MediOnline (15.9.2026): viene
+        // dalla struttura di DayPilot, è stabile quando il testo cambia, e
+        // permette alla piattaforma di riconoscere lo stesso appuntamento da
+        // un giro all'altro. NON si usa ancora come UID: cambiarlo ora
+        // duplicherebbe gli appuntamenti già in archivio.
+        ...(a.idMol ? [`X-RF-ID:${icsTesto(a.idMol)}`] : []),
+        ...(a.risorsa ? [`X-RF-RISORSA:${icsTesto(a.risorsa)}`] : []),
         'END:VEVENT'
       );
       totale++;

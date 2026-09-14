@@ -112,6 +112,115 @@ try {
     console.log(v.s);
     console.log('');
   });
+  // Con --dati: cerca nella pagina le strutture JavaScript di DayPilot (e
+  // simili) che contengono gli appuntamenti. Stampa SOLO i nomi dei campi e il
+  // tipo del valore, con la lunghezza per le stringhe: mai il contenuto.
+  if (process.argv.includes('--dati')) {
+    const trovato = await p.evaluate(() => {
+      const fuori = [];
+      const visti = new Set();
+      const tipo = (v) => {
+        if (v === null) return 'null';
+        if (Array.isArray(v)) return `array[${v.length}]`;
+        if (v instanceof Date) return 'data';
+        if (typeof v === 'string') return `testo(${v.length})`;
+        return typeof v;
+      };
+      // Un oggetto «appuntamento» ha un inizio e una fine o una durata.
+      const sembraAppuntamento = (o) => {
+        if (!o || typeof o !== 'object') return false;
+        const k = Object.keys(o).map((x) => x.toLowerCase());
+        return k.some((x) => /^(start|begin|debut|inizio|from)/.test(x)) &&
+               k.some((x) => /^(end|fin|durée|duration|durata|to)/.test(x));
+      };
+      const guarda = (valore, percorso, prof) => {
+        if (prof > 4 || fuori.length > 12) return;
+        if (!valore || typeof valore !== 'object') return;
+        if (visti.has(valore)) return;
+        visti.add(valore);
+        if (Array.isArray(valore)) {
+          if (valore.length && sembraAppuntamento(valore[0])) {
+            fuori.push({
+              dove: percorso,
+              quanti: valore.length,
+              campi: Object.entries(valore[0]).map(([k, v]) => `${k}: ${tipo(v)}`).sort(),
+            });
+            return;
+          }
+          for (let i = 0; i < Math.min(3, valore.length); i++) guarda(valore[i], `${percorso}[${i}]`, prof + 1);
+          return;
+        }
+        for (const k of Object.keys(valore)) {
+          let v;
+          try { v = valore[k]; } catch { continue; }
+          guarda(v, `${percorso}.${k}`, prof + 1);
+        }
+      };
+      for (const k of Object.keys(window)) {
+        if (/^(document|location|navigator|history|external|frames|top|parent|self|window)$/.test(k)) continue;
+        let v;
+        try { v = window[k]; } catch { continue; }
+        guarda(v, k, 0);
+      }
+      return fuori;
+    });
+    if (!trovato.length) console.log('\nNessuna struttura di appuntamenti trovata fra le variabili globali.');
+    for (const t of trovato) {
+      console.log(`\n═══ ${t.dove} — ${t.quanti} elementi, campi del primo:`);
+      for (const c of t.campi) console.log('   ' + c);
+    }
+  }
+
+  // Con --tag: guarda dentro dpc.events.list — struttura, non contenuti.
+  // Delle stringhe esce la FORMA (lettere→a, cifre→9) e la lunghezza, mai il
+  // testo: così si capisce se un campo è un id, una data o un nome, senza
+  // leggere il nome.
+  if (process.argv.includes('--tag')) {
+    const fuori = await p.evaluate(() => {
+      const forma = (s) => String(s).replace(/[A-ZÀ-Ý]/g, 'A').replace(/[a-zà-ÿ]/g, 'a').replace(/\d/g, '9').slice(0, 40);
+      const descrivi = (v, prof = 0) => {
+        if (v === null || v === undefined) return String(v);
+        if (typeof v === 'string') return `testo(${v.length}) forma «${forma(v)}»`;
+        if (typeof v === 'number' || typeof v === 'boolean') return `${typeof v}: ${v}`;
+        if (Array.isArray(v)) return prof > 2 ? `array[${v.length}]` : `array[${v.length}] → ${v.map((x) => descrivi(x, prof + 1)).join(' | ')}`;
+        if (typeof v === 'object') {
+          const k = Object.keys(v);
+          if (v.value !== undefined && k.length < 6) return `oggetto{${k.join(',')}} value=${descrivi(v.value, prof + 1)}`;
+          return prof > 2 ? `oggetto{${k.join(',')}}` : `oggetto{${k.map((x) => `${x}=${descrivi(v[x], prof + 1)}`).join(', ')}}`;
+        }
+        return typeof v;
+      };
+      const lista = (window.dpc && window.dpc.events && window.dpc.events.list) || [];
+      return {
+        quanti: lista.length,
+        esempi: lista.slice(0, 3).map((e) => Object.fromEntries(Object.entries(e).map(([k, v]) => [k, descrivi(v)]))),
+      };
+    });
+    console.log(`\n═══ dpc.events.list: ${fuori.quanti} appuntamenti. Forma dei primi ${fuori.esempi.length} (mai i contenuti):`);
+    fuori.esempi.forEach((e, i) => {
+      console.log(`\n  — appuntamento ${i + 1}`);
+      for (const [k, v] of Object.entries(e)) console.log(`    ${k}: ${v}`);
+    });
+  }
+
+  // Con --risorse: la mappa risorsa → colonna, e la forma dell'html.
+  if (process.argv.includes('--risorse')) {
+    const r = await p.evaluate(() => {
+      const col = (window.dpc && window.dpc.columns) || [];
+      const figli = (col[0] && col[0].children) || [];
+      const lista = (window.dpc && window.dpc.events && window.dpc.events.list) || [];
+      return {
+        colonne: figli.map((c) => ({ id: c.id ?? null, nome: c.name ?? null, campi: Object.keys(c) })),
+        // dell'html esce solo lo SCHELETRO: i tag restano, il testo diventa «…»
+        scheletri: [...new Set(lista.slice(0, 40).map((e) => String(e.html).replace(/>[^<]+/g, '>…')))].slice(0, 6),
+      };
+    });
+    console.log('\n═══ colonne (risorse):');
+    for (const c of r.colonne) console.log(`   id=${c.id} nome=${c.nome}`);
+    console.log('\n═══ forma dell\'html dei riquadri (testo tolto):');
+    for (const x of r.scheletri) console.log('   ' + x);
+  }
+
   // Con --ritagli: il catalogo COMPLETO delle icone di stato, preso dal
   // foglio di stile (non dai riquadri a schermo, che ne mostrano solo alcuni)
   // e scaricato dal portale. Sono pittogrammi dell'interfaccia, non dati.

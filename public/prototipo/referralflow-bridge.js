@@ -720,7 +720,10 @@ PAGES.prestazioni = () => {
   const ET = { visita: 'Visita', esame: 'Esame', procedura: 'Procedura' }; const ES = { completata: 'success', annullata: '', passata: 'warning', programmata: 'accent' };
   const conta = (t) => lista.filter(a => a.tipoPrest === t).length;
   const sel = (id, val, opts, primo) => `<select class="input sm" id="rf-pf-${id}"><option value="">${primo}</option>${opts.map(o => `<option value="${rfEsc(o[0])}" ${val === o[0] ? 'selected' : ''}>${rfEsc(o[1])}</option>`).join('')}</select>`;
-  const nomeDi = (a) => (a.p && P[a.p]) ? fullName(P[a.p]) : (a.nome || 'Paziente');
+  // Nel riquadro solo il nome: data di nascita, numero paziente e sigla
+  // dell'agenda stanno nella scheda che si apre cliccando, non addosso al
+  // riquadro dove non ci stanno e coprono tutto.
+  const nomeDi = (a) => (a.p && P[a.p]) ? fullName(P[a.p]) : (a.nomeBreve || a.nome || 'Paziente');
   return `<div class="page-head"><div><div class="eyebrow">Attività clinica</div><h2 class="page-title">Prestazioni</h2><div class="page-sub">${lista.length} nel periodo · ${conta('visita')} visite · ${conta('esame')} esami · ${conta('procedura')} procedure · dall'agenda MediOnline (±30 giorni)</div></div>
       <div class="actions"><button class="btn" data-go="#/administration">${ICONS.settings} Catalogo</button></div></div>
     <div class="toolbar">${sel('periodo', periodo, [['oggi', 'Oggi'], ['settimana', 'Questa settimana'], ['mese', 'Questo mese'], ['tutto', 'Tutto (±30 gg)']], 'Periodo')}${sel('tipo', f.tipo || '', [['visita', 'Visite'], ['esame', 'Esami'], ['procedura', 'Procedure']], 'Tutti i tipi')}${sel('stato', f.stato || '', [['programmata', 'Programmate'], ['passata', 'Passate, non segnate'], ['completata', 'Completate'], ['annullata', 'Annullate']], 'Tutti gli stati')}${sale.length ? sel('sala', f.sala || '', sale.map(x => [x, x]), 'Tutte le sale') : ''}${medici.length ? sel('medico', f.medico || '', medici.map(m => [m, DOCTORS[m] || m]), 'Tutti i medici') : ''}</div>
@@ -2850,6 +2853,49 @@ function rfTipoColore(colore) {
   return RF_COLORI_TIPO[c] || `Altro · ${c}`;
 }
 
+// Scheda dell'appuntamento: si apre cliccando il riquadro in agenda. Mostra
+// quel che il riquadro non ha spazio di dire — data di nascita, numero di
+// paziente di MediOnline, stato della fatturazione, sigla dell'agenda — e
+// porta alla cartella quando il paziente è abbinato. Sola lettura: qui non si
+// modifica niente, l'agenda resta della Cassa dei Medici.
+function rfApptScheda(id) {
+  const a = (RF.agenda || []).find(x => x.id === id);
+  if (!a) return;
+  const inCartella = a.p && rfUuid(a.p);
+  const paz = a.p && P[a.p] ? P[a.p] : null;
+  const riga = (et, val) => val ? `<div class="rf-ap-riga"><span class="e">${et}</span><span class="v">${val}</span></div>` : '';
+  const fine = (() => { const [h, m] = a.start.split(':').map(Number); const t = h * 60 + m + a.dur; return `${String(Math.floor(t / 60) % 24).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`; })();
+  const et = new Date(`${a.d}T12:00:00`).toLocaleDateString('it-CH', { weekday: 'long', day: 'numeric', month: 'long' });
+  const corpo = `
+    <div class="rf-ap">
+      ${riga('Quando', `${rfEsc(et)} · <b>${a.start} – ${fine}</b> <span class="caption">(${a.dur} min)</span>`)}
+      ${riga('Paziente', rfEsc(a.nomeBreve || a.nome))}
+      ${riga('Nato il', rfEsc(a.nascita))}
+      ${riga('N° paziente', a.nPaziente ? `<code>${rfEsc(a.nPaziente)}</code> <span class="caption">in MediOnline</span>` : '')}
+      ${riga('Medico', a.doc && a.doc !== 'studio' ? rfEsc(DOCTORS[a.doc] || a.doc) : `<span class="caption">non abbinato</span>`)}
+      ${riga('Agenda', a.sigla ? `<code>${rfEsc(a.sigla)}</code>` : (a.room ? `<code>${rfEsc(a.room)}</code>` : ''))}
+      ${riga('Tipo', a.colore ? `<span class="status"><i class="dot" style="background:${rfEsc(a.colore)}"></i>${rfEsc(rfTipoColore(a.colore))}</span>` : '')}
+      ${riga('Prestazione', rfEsc(a.prestazione || a.reason || ''))}
+      ${riga('In MediOnline', a.statoMol ? rfStatoPill(a.statoMol) : '<span class="caption">non ancora letto</span>')}
+      ${riga('Nella piattaforma', inCartella ? '<span class="status"><i class="dot success"></i>paziente in cartella</span>' : '<span class="status"><i class="dot warning"></i>solo in agenda, non in cartella</span>')}
+      <div class="rf-ap-grezzo"><span class="caption">Come sta scritto nell'agenda</span><div>${rfEsc(a.nome)}</div></div>
+    </div>`;
+  const azioni = `<button class="btn" data-close>Chiudi</button>` +
+    (inCartella ? `<button class="btn primary" onclick="closeModal();go('#/patients/${rfEsc(a.p)}')">Apri la cartella</button>` : '') +
+    `<button class="btn ai" onclick="closeModal();askAI('Briefing pre-visita di ${rfEsc((a.nomeBreve || a.nome).replace(/'/g, ' '))}')">${ICONS.ai} Briefing</button>`;
+  openModal('Appuntamento', corpo, azioni);
+}
+(function () { const st = document.createElement('style'); st.textContent = `
+.rf-ap { display:flex; flex-direction:column; gap:1px; }
+.rf-ap-riga { display:grid; grid-template-columns: 130px minmax(0,1fr); gap:10px; padding:7px 0; border-top:1px solid var(--border); font-size:13.5px; align-items:baseline; }
+.rf-ap-riga:first-child { border-top:0; }
+.rf-ap-riga .e { color:var(--text-3); font-size:12.5px; }
+.rf-ap-riga .v code { font-family:var(--font-mono, ui-monospace, monospace); font-size:12.5px; background:var(--surface-2); padding:1px 5px; border-radius:4px; }
+.rf-ap-grezzo { margin-top:10px; padding-top:9px; border-top:1px solid var(--border); }
+.rf-ap-grezzo div { font-size:12.5px; color:var(--text-2); margin-top:3px; }
+@media (max-width: 600px) { .rf-ap-riga { grid-template-columns: 1fr; gap:2px; } }
+`; document.head.appendChild(st); })();
+
 const rfAgendaOrig = PAGES.agenda;
 PAGES.agenda = () => {
   if (!RF.live) return rfAgendaOrig();
@@ -2944,7 +2990,7 @@ PAGES.agenda = () => {
     const geo = n > 1
       ? `left:calc(${(c * larg).toFixed(3)}% + 3px);width:calc(${larg.toFixed(3)}% - 6px);right:auto`
       : 'left:6px;right:6px';
-    return `<div class="appt ${a.late ? 'LATE' : a.status}${sovra.has(a.id) ? ' rf-over' : ''}${n > 2 ? ' rf-stretta' : ''}" style="${geo};top:${top(a.start) + 2}px;height:${Math.max(24, a.dur / 30 * slotH - 4)}px${a.colore ? `;border-left:4px solid ${rfEsc(a.colore)};background:${rfEsc(a.colore)}1a` : (RF.data && RF.data.coloriMedici && RF.data.coloriMedici[a.doc] ? `;border-left:4px solid ${rfEsc(RF.data.coloriMedici[a.doc])}` : '')}" ${a.p && rfUuid(a.p) ? `data-go="#/patients/${a.p}"` : ''} title="${rfEsc(nomeDi(a))} · ${a.start} · ${rfEsc(a.reason || '')}${a.room ? ' · ' + rfEsc(a.room) : ''}"><div class="n"><i class="dot ${a.late ? 'warning' : a.status === 'COMPLETED' ? 'success' : 'accent'}"></i>${rfEsc(nomeDi(a))}</div><div class="s">${a.start}${n > 2 ? '' : ` · ${rfEsc(a.reason || '')}${a.room ? ` · <b>${rfEsc(a.room)}</b>` : ''}`}</div></div>`;
+    return `<div class="appt ${a.late ? 'LATE' : a.status}${sovra.has(a.id) ? ' rf-over' : ''}${n > 2 ? ' rf-stretta' : ''}" style="${geo};top:${top(a.start) + 2}px;height:${Math.max(24, a.dur / 30 * slotH - 4)}px${a.colore ? `;border-left:4px solid ${rfEsc(a.colore)};background:${rfEsc(a.colore)}1a` : (RF.data && RF.data.coloriMedici && RF.data.coloriMedici[a.doc] ? `;border-left:4px solid ${rfEsc(RF.data.coloriMedici[a.doc])}` : '')}" onclick="rfApptScheda('${rfEsc(a.id)}')" title="${rfEsc(nomeDi(a))} · ${a.start} · ${rfEsc(a.reason || '')}${a.room ? ' · ' + rfEsc(a.room) : ''} — clicca per la scheda"><div class="n"><i class="dot ${a.late ? 'warning' : a.status === 'COMPLETED' ? 'success' : 'accent'}"></i>${rfEsc(nomeDi(a))}</div><div class="s">${a.start}${n > 2 ? '' : ` · ${rfEsc(a.reason || '')}${a.room ? ` · <b>${rfEsc(a.room)}</b>` : ''}`}</div></div>`;
   };
   const colHtml = (col) => {
     const dentro = lista.filter(col.test);

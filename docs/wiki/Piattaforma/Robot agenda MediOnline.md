@@ -39,3 +39,22 @@ Per leggerlo serve guardare **indietro**, non solo avanti: lo stato cambia giorn
 `sonda-riquadri.mjs` è lo strumento con cui si è capito tutto questo: apre l'agenda, stampa la **struttura** dei riquadri (tag, classi, sfondi) con **tutti i testi tolti**, e con `--ritagli` scarica il catalogo delle icone. Da usare ogni volta che serve riconoscere un segno grafico nell'agenda.
 
 Misura del 14.9.2026 su 17 giorni (7 indietro + 10 avanti), 649 appuntamenti: `fissato×344`, `da_fatturare×147`, `fatturato×98`, `trattato×60`. Distribuzione coerente — i giorni futuri tutti «fissato», i giorni lavorati quasi tutti «fatturato»/«trattato», e **3 prestazioni del 7.9 e 1 del 9.9 rimaste con la moneta**: esattamente il segnale che serve.
+
+## Lettura dalla struttura, non dai pixel (dal 15.9.2026)
+DayPilot tiene gli appuntamenti in **`dpc.events.list`**, e lì c'è molto più di quello che si ricava misurando i rettangoli:
+
+| campo | cosa è |
+| --- | --- |
+| `id` | identificativo dell'appuntamento in MediOnline (10 cifre), **stabile** |
+| `start.value` / `end.value` | orari esatti (`2026-09-10T09:30:00`) |
+| `resource` | id dell'agenda (5 cifre); la mappa id→sigla è in `dpc.columns[0].children` (15 agende: ASM, Appar, DC, P-E V, DG, bcape, frego, GMOS, M.M., miped, vpaio, Labor, T.M., RIA, SF) |
+| `backColor` | il colore esatto del riquadro |
+| `html` | `<i class='stN'></i>` con lo stato, poi il testo del riquadro |
+
+`estraiGiorno` legge prima di qui e **ricade sulla geometria** solo se la struttura non c'è: niente scala oraria dedotta dalle etichette, niente colonna indovinata dal punto medio, niente arrotondamento ai 5 minuti. Nei log il giorno è marcato `[geometria]` quando si è usata la via vecchia.
+
+Nell'ICS arrivano anche `X-RF-ID` (l'id di MediOnline) e `X-RF-RISORSA`. **L'UID resta la firma di prima**: cambiarlo ora sdoppierebbe gli appuntamenti già in archivio.
+
+Effetto misurato sul passaggio: da 649 a 772 riquadri letti su 17 giorni — la struttura contiene anche quelli che la lettura a pixel non vedeva, fra cui **114 annullati**. Gli annullati e gli scusati escono ora con `STATUS:CANCELLED` e `agenda-sync` li scarta, come prima; i 114 già entrati sono stati cancellati a mano una volta sola.
+
+`sonda-riquadri.mjs` ha tre modi nuovi: `--dati` cerca le strutture di appuntamenti fra le variabili globali (stampa solo i nomi dei campi), `--tag` mostra la FORMA dei valori (lettere→a, cifre→9) senza i contenuti, `--risorse` la mappa risorsa→sigla e lo scheletro dell'html.

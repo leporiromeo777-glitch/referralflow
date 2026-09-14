@@ -5,6 +5,7 @@ import { mediciDelloStudio } from '@/lib/referti-medici';
 import { costruisciRevisione } from '@/lib/prototipo-revisione';
 import { tipoEsame } from '@/lib/briefing-regole';
 import { estraiTerapia } from '@/lib/referti-terapia';
+import { leggiTitolo, nomePulito } from '@/lib/agenda-titolo';
 import { abbinaPrestazione, tipoDaTesto, type VoceCatalogo } from '@/lib/prestazioni';
 import { lettereRitardoGrezzo } from '@/lib/procedure';
 
@@ -94,8 +95,8 @@ export async function GET() {
       where r.studio_id = $1 order by r.created_at desc limit 2000`, [sid]);
   const docs = await query<{ id: string; patient_id: string; filename: string; categoria: string; nota: string | null; uploaded_at: string }>(
     `select id, patient_id, filename, categoria, nota, uploaded_at::text from patient_documents where studio_id = $1 order by uploaded_at desc limit 2000`, [sid]);
-  const appts = await query<{ id: string; provider_id: string | null; medico: string | null; starts_at: string; ends_at: string | null; titolo: string | null; paziente_nome: string | null; motivo: string | null; luogo: string | null; completed_at: string | null; referral_id: string | null; colore: string | null }>(
-    `select a.id, a.provider_id, pr.nome as medico, a.starts_at::text, a.ends_at::text, a.titolo, a.paziente_nome, a.motivo, a.luogo, a.completed_at::text, a.referral_id, a.colore
+  const appts = await query<{ id: string; provider_id: string | null; medico: string | null; starts_at: string; ends_at: string | null; titolo: string | null; paziente_nome: string | null; motivo: string | null; luogo: string | null; completed_at: string | null; referral_id: string | null; colore: string | null; stato_medionline: string | null }>(
+    `select a.id, a.provider_id, pr.nome as medico, a.starts_at::text, a.ends_at::text, a.titolo, a.paziente_nome, a.motivo, a.luogo, a.completed_at::text, a.referral_id, a.colore, a.stato_medionline
        from appointments a left join providers pr on pr.id = a.provider_id
       where a.studio_id = $1 and a.starts_at >= current_date - interval '30 days' and a.starts_at < current_date + interval '30 days'
       order by a.starts_at`, [sid]);
@@ -182,6 +183,14 @@ export async function GET() {
       reason: a.motivo || a.titolo || 'Appuntamento', type: a.motivo || 'Visita', status: stato(a),
       prestazione: abbinaPrestazione(catalogo, `${a.motivo ?? ''} ${a.titolo ?? ''}`)?.nome ?? '', tipoPrest: abbinaPrestazione(catalogo, `${a.motivo ?? ''} ${a.titolo ?? ''}`)?.tipo ?? tipoDaTesto(`${a.motivo ?? ''} ${a.titolo ?? ''}`),
       late: oggi && !a.completed_at && new Date(a.starts_at).getTime() < adesso - 20 * 60000, referral: a.referral_id,
+      // Il riquadro dell'agenda porta più del nome: data di nascita, numero di
+      // paziente di MediOnline e sigla dell'agenda. Si leggono qui, dove la
+      // funzione è testata, invece che nel browser ([[src/lib/agenda-titolo]]).
+      ...(() => {
+        const t = leggiTitolo((a.paziente_nome ?? a.titolo ?? '').trim());
+        return { nomeBreve: nomePulito(t.nome), nascita: t.nascita, nPaziente: t.nPaziente, sigla: t.sigla };
+      })(),
+      statoMol: a.stato_medionline ?? '',
     };
   });
   const apptsOggi = agenda.filter((a) => a.d === today);
