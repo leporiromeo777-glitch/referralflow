@@ -913,6 +913,19 @@ const RF_AI_NOME = 'Cleo';
 #app.ai-mode .content > .page { max-width:none; height:100%; animation:none; }
 #app.ai-mode.with-ai { grid-template-columns: var(--sidebar-w) 1fr; }
 #app.ai-mode.with-ai.sidebar-collapsed { grid-template-columns: var(--sidebar-c) 1fr; }
+/* Agenda a tutta larghezza: le colonne sono tante e nessuno vuole scorrere di
+   lato per vedere la propria. Si toglie il limite di 1440 px e si stringono i
+   margini; le colonne si restringono fino a --cal-min, calcolato su quante
+   sono, e solo se proprio non ci stanno la griglia scorre. */
+#app.agenda-larga .content > .page { max-width: none; }
+#app.agenda-larga .content { padding-left: 14px; padding-right: 14px; }
+.cal { grid-template-columns: 52px repeat(var(--cols, 3), minmax(var(--cal-min, 180px), 1fr)); }
+.cal-head { padding: 9px 10px; }
+.cal.rf-fitta .cal-head { padding: 8px 7px; font-size: 12px; }
+.cal.rf-fitta .appt { padding: 4px 6px; font-size: 11.5px; border-radius: 8px; }
+.cal.rf-fitta .appt .n { font-size: 11.5px; gap: 5px; }
+.cal.rf-fitta .appt .s { font-size: 10.5px; }
+.cal.rf-fitta .appt .dot { width: 6px; height: 6px; }
 @media (max-width: 767px) { .rf-aip { height: calc(100vh - var(--topbar-h) - 190px); } .rf-aip .ai-body { padding: 12px; } .rf-aip .ai-msg.user { max-width: 88%; }
   .rf-gpt-col { padding:0 16px; } .rf-gpt-top { padding:8px 16px; } .rf-gpt-w h3 { font-size:21px; } .rf-aiw-grid { grid-template-columns:1fr; gap:14px; } .rf-gpt-foot { padding-bottom:78px; } }
 `; document.head.appendChild(st); })();
@@ -1114,11 +1127,25 @@ pageTitle = function () {
 
 // A tutto schermo solo sulla pagina di Cleo: il riquadro, la barra di sicurezza
 // e il pannello laterale dell'AI se ne vanno finché si è lì.
+// La larghezza delle colonne si calcola al disegno: se la finestra cambia,
+// l'agenda va ridisegnata, altrimenti resta con le misure di prima.
+(function () {
+  let attesa = null;
+  window.addEventListener('resize', () => {
+    if (state.route !== 'agenda') return;
+    clearTimeout(attesa);
+    attesa = setTimeout(() => { if (state.route === 'agenda') render(); }, 180);
+  });
+})();
+
 const rfRenderOrigAi = render;
 render = function () {
   rfRenderOrigAi.apply(this, arguments);
   const app = document.getElementById('app');
-  if (app) app.classList.toggle('ai-mode', state.route === 'ai');
+  if (app) {
+    app.classList.toggle('ai-mode', state.route === 'ai');
+    app.classList.toggle('agenda-larga', state.route === 'agenda');
+  }
 };
 
 /* ---------- Referti: coda vera + caricamento audio ---------- */
@@ -2950,7 +2977,14 @@ PAGES.agenda = () => {
     ${avvisi.length ? `<div class="card mb-16" style="border-left:3px solid var(--danger)"><b>Più pazienti dei posti della sala</b>: ${avvisi.map(rfEsc).join(' · ')}. I posti si impostano in Studio → Sale.</div>` : ''}
     ${vista === 'sale' && cols.length && !risorse.some(r => r.tipo === 'sala') ? `<div class="caption mb-16">Nessuna sala registrata: le colonne sono i codici del campo «luogo» dell'agenda. In Studio → Sale si registrano le sale con i posti; in Medici agenda → Codici dell'agenda un codice diventa una sala.</div>` : ''}
     ${senza && vista === 'medici' ? `<div class="caption mb-16">Le colonne a destra della linea sono gli appuntamenti <b>non abbinati a un medico</b>, divisi per colore dell'agenda originale, cioè per tipo. I codici del luogo non abbinati sono ${[...new Set(lista.filter(a => !a.doc || a.doc === 'studio').map(a => a.room).filter(Boolean))].map(rfEsc).join(', ') || 'vuoti'}: si abbinano in Studio → Medici agenda → Codici dell'agenda, e allora tornano nella colonna del medico.</div>` : ''}
-    ${lista.length ? `<div class="rf-cal-scorre"><div class="cal" style="--cols:${cols.length}">
+    ${lista.length ? (() => {
+      // Larghezza disponibile stimata: finestra meno barra laterale, margini e
+      // colonna delle ore. Le colonne si dividono quello che resta, con un
+      // minimo sotto il quale diventano illeggibili.
+      const disponibile = Math.max(520, (typeof window !== 'undefined' ? window.innerWidth : 1440) - (state.sidebarCollapsed ? 72 : 240) - 28 - 52 - 24);
+      const min = Math.max(104, Math.min(190, Math.floor(disponibile / Math.max(1, cols.length))));
+      return `<div class="rf-cal-scorre"><div class="cal${min < 150 ? ' rf-fitta' : ''}" style="--cols:${cols.length};--cal-min:${min}px">`;
+    })() + `
       <div class="cal-head"></div>${cols.map(c => `<div class="cal-head${String(c.k).startsWith('col:') ? ' rf-tipo' : ''}">${c.colore ? `<i class="dot" style="background:${rfEsc(c.colore)};margin-right:6px"></i>` : ''}${rfEsc(c.et)}</div>`).join('')}
       <div class="cal-times" style="--slots:${slots};--slot-h:${slotH}px">${times}</div>${cols.map(colHtml).join('')}
     </div></div>` : `<div class="card"><div class="caption">Nessun appuntamento in agenda per questo giorno${Math.abs((d - new Date(`${oggi}T12:00:00`)) / 86400000) > 30 ? ' (la piattaforma carica ±30 giorni da oggi)' : ''}.</div></div>`}
