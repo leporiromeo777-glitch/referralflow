@@ -195,7 +195,26 @@ function senzaTitoli(t: string): string {
 
 async function main() {
   const chiavi = chiaviBanco();
-  const inGara = CONCORRENTI.filter((c) => ['infomaniak', 'locale'].includes(c.dove) || chiavi[c.dove]);
+  // --solo "Nome, Altro nome": rigira SOLO quei concorrenti e fonde il
+  // risultato con le risposte già in archivio. Serve quando uno solo fallisce
+  // (chiave scaduta, fornitore giù): rifare tutto il banco vuol dire
+  // ripagare — e rimisurare — anche chi aveva già risposto bene.
+  const iSolo = process.argv.indexOf('--solo');
+  const solo = iSolo > -1 ? (process.argv[iSolo + 1] ?? '').split(',').map((x) => x.trim()).filter(Boolean) : [];
+  let archivio: { domanda: string; risposte: { c: Concorrente; e: Esito }[] }[] = [];
+  if (solo.length) {
+    try {
+      archivio = JSON.parse(readFileSync(path.join(os.homedir(), 'banco-domanda-medica-grezzo.json'), 'utf-8'));
+      console.log(`Rigiro solo: ${solo.join(', ')} — il resto viene dall'archivio.\n`);
+    } catch {
+      console.log('Archivio non trovato: --solo ha bisogno di un giro completo precedente.');
+      process.exit(1);
+    }
+  }
+  const inGara = CONCORRENTI.filter(
+    (c) => (solo.length ? solo.includes(c.nome) : true) && (['infomaniak', 'locale'].includes(c.dove) || chiavi[c.dove])
+  );
+  if (solo.length && !inGara.length) { console.log('Nessuno dei nomi dati è in gara (chiave mancante?).'); process.exit(1); }
   const fuori = CONCORRENTI.filter((c) => !inGara.includes(c));
   if (fuori.length) console.log(`Senza chiave, non partecipano: ${fuori.map((c) => c.nome).join(', ')}\n`);
   const risultati: { domanda: string; risposte: { c: Concorrente; e: Esito }[] }[] = [];
@@ -215,13 +234,20 @@ async function main() {
       somma.set(c.nome, s);
       console.log(`  ${i + 1}/${DOMANDE.length} ${c.nome}: ${e.errore ? 'ERRORE ' + e.errore : `${e.testo.length} caratteri, ${(e.ms / 1000).toFixed(1)} s, ${e.tokenIn}+${e.tokenOut} token`}`);
     }
-    risultati.push({ domanda, risposte });
+    // Con --solo: le risposte nuove sostituiscono le vecchie dello stesso
+    // concorrente, le altre restano come sono.
+    if (solo.length) {
+      const vecchie = (archivio[i]?.risposte ?? []).filter((x) => !solo.includes(x.c.nome));
+      risultati.push({ domanda, risposte: [...vecchie, ...risposte] });
+    } else {
+      risultati.push({ domanda, risposte });
+    }
   }
 
   const righe: string[] = [
     '# Banco: quale modello risponde meglio alle domande di medicina',
     '',
-    `Dieci domande di medicina **generale** (nessun paziente, nessun dato): ${inGara.length} modelli, ${DOMANDE.length * inGara.length} risposte.`,
+    `Dieci domande di medicina **generale** (nessun paziente, nessun dato): ${risultati[0]?.risposte.length ?? 0} modelli, ${DOMANDE.length * (risultati[0]?.risposte.length ?? 0)} risposte.`,
     '',
     '**Come si legge.** Per ogni domanda le risposte sono mescolate e senza nome — e l\'ordine cambia a ogni domanda, quindi «A» non è sempre lo stesso modello. Dai un voto da 1 a 5 a ognuna (1 = sbagliata o inutile, 3 = corretta ma generica, 5 = quello che diresti tu a un collega). La chiave dei nomi è **in fondo**: guardala solo dopo aver votato tutto.',
     '',
@@ -239,7 +265,19 @@ async function main() {
     righe.push('---', '');
   }
   righe.push('', '## Consumo e tempi', '', '| modello | tempo medio | token in | token out | di cui ragionamento (car.) | errori |', '|---|---|---|---|---|---|');
-  for (const c of inGara) {
+  const presenti = CONCORRENTI.filter((c) => risultati[0]?.risposte.some((x) => x.c.nome === c.nome));
+  for (const c of presenti) {
+    if (!somma.has(c.nome)) {
+      // viene dall'archivio: i tempi si ricalcolano dalle risposte salvate
+      const tutte = risultati.flatMap((r) => r.risposte.filter((x) => x.c.nome === c.nome).map((x) => x.e));
+      somma.set(c.nome, {
+        ms: tutte.reduce((t, e) => t + e.ms, 0),
+        tin: tutte.reduce((t, e) => t + e.tokenIn, 0),
+        tout: tutte.reduce((t, e) => t + e.tokenOut, 0),
+        pens: tutte.reduce((t, e) => t + (e.pensiero ?? 0), 0),
+        errori: tutte.filter((e) => e.errore).length,
+      });
+    }
     const s = somma.get(c.nome)!;
     righe.push(`| ${c.nome} | ${(s.ms / DOMANDE.length / 1000).toFixed(1)} s | ${s.tin} | ${s.tout} | ${s.pens || '—'} | ${s.errori} |`);
   }
