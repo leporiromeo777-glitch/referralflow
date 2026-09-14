@@ -1885,7 +1885,14 @@ function rfLanciaProcedura(def, q) {
   rfProcedura(corpo, def.attesa);
 }
 /* «Chi si occupa di…», «quando si fa…»: risposta dal grafo organizzativo. */
+// «Come ti chiami?», «chi sei?»: risponde il codice, subito (14.9.2026).
+function rfRispostaNome(q) {
+  const t = q.toLowerCase();
+  if (/come ti chiami|chi sei|qual ?[eè] il tuo nome|sei cleo|ti chiami/.test(t)) return `Mi chiamo <b>${rfEsc(RF_AI_NOME)}</b>: l'assistente di ReferralFlow. Rispondo sui dati dello studio caricati qui, seguo le procedure con traccia e uso il modello locale per le sintesi. Non do consigli clinici e sotto ogni risposta dico da dove viene.`;
+  return null;
+}
 function rfRispostaOrganizzazione(q) {
+  const nome = rfRispostaNome(q); if (nome) return nome;
   if (!RF.org || !RF.org.responsabilita || !RF.org.responsabilita.length) return null;
   const ql = q.toLowerCase();
   if (!/chi (si occupa|è responsabile|e' responsabile|fa|deve|segue|controlla|gestisce)|di chi (è|e')|quando si (fa|fanno|controlla|controllano|prepara|chiude)|responsabil|chi risponde/.test(ql)) return null;

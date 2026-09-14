@@ -55,3 +55,6 @@ Le trappole note, in ordine di frequenza attesa:
 ## Cosa NON fa
 
 Non scrive nei log il prompt, la risposta o qualsiasi contenuto clinico: solo nomi di modello, stati HTTP e millisecondi.
+
+## Nome (14.9.2026)
+L'assistente dell'interfaccia nuova si chiama **Cleo**: il prompt di `api/prototipo/assistente` e del briefing glielo dice («Ti chiami Cleo…»), e a «come ti chiami?» / «chi sei?» risponde il codice del ponte (`rfRispostaNome`) senza chiamare il modello.

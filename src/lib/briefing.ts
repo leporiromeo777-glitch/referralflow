@@ -136,7 +136,7 @@ export async function briefingPreVisita(studioId: string, patientId: string, opz
   let sintesi: string | null = null;
   let modelloUsato: string | null = null;
   if (opzioni.conModello !== false && (await ollamaAttivo())) {
-    const prompt = `Sei l'assistente di uno studio medico svizzero. Qui sotto c'è un briefing pre-visita già compilato dal sistema. Scrivi in italiano, in 3 o 4 frasi asciutte, la sintesi per chi riceve il paziente: prima le cose da segnalare al medico, poi motivo della visita e terapia. Usa SOLO i dati del briefing, non aggiungere nulla, non dare consigli clinici, non ripetere l'elenco degli esami.
+    const prompt = `Ti chiami Cleo e sei l'assistente di uno studio medico svizzero. Qui sotto c'è un briefing pre-visita già compilato dal sistema. Scrivi in italiano, in 3 o 4 frasi asciutte, la sintesi per chi riceve il paziente: prima le cose da segnalare al medico, poi motivo della visita e terapia. Usa SOLO i dati del briefing, non aggiungere nulla, non dare consigli clinici, non ripetere l'elenco degli esami.
 
 BRIEFING:
 ${testo}

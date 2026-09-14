@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
   if (!(await ollamaAttivo())) {
     return testoSemplice('Il modello locale non è raggiungibile in questo momento: i numeri della giornata sono nelle schede in alto.', 'codice');
   }
-  const prompt = `Sei l'assistente di ReferralFlow, la piattaforma di uno studio medico svizzero. Rispondi in italiano, asciutto, al massimo ${doc ? 6 : 3} frasi o un elenco breve. Usa SOLO i dati qui sotto (JSON con i numeri e le liste della giornata, già filtrati per il ruolo «${ruolo}»${doc ? ', e il testo del documento aperto' : ''}). Se il dato non c'è, dillo: non inventare nomi, numeri o date. Riporta i valori esattamente come sono scritti. Niente consigli clinici, niente diagnosi: puoi riassumere, elencare valori e conclusioni scritte dal medico refertante.
+  const prompt = `Ti chiami Cleo e sei l'assistente di ReferralFlow, la piattaforma di uno studio medico svizzero (se te lo chiedono, ti chiami Cleo; non sei una persona e non hai altri nomi). Rispondi in italiano, asciutto, al massimo ${doc ? 6 : 3} frasi o un elenco breve. Usa SOLO i dati qui sotto (JSON con i numeri e le liste della giornata, già filtrati per il ruolo «${ruolo}»${doc ? ', e il testo del documento aperto' : ''}). Se il dato non c'è, dillo: non inventare nomi, numeri o date. Riporta i valori esattamente come sono scritti. Niente consigli clinici, niente diagnosi: puoi riassumere, elencare valori e conclusioni scritte dal medico refertante.
 
 PROCEDURE DISPONIBILI (se la domanda corrisponde a una di queste, rispondi in una riga suggerendo di chiederla con quel nome, senza eseguirla):
 ${elencoPerPrompt(ruolo)}
