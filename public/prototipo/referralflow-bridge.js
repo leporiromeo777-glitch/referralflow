@@ -781,9 +781,35 @@ for (const [k, titolo, testo, href] of [
   rfOrig[k] = PAGES[k];
   PAGES[k] = () => (RF.live ? rfPaginaPiattaforma(titolo, testo) : rfOrig[k] ? rfOrig[k]() : '');
 }
+// Pagina AI (14.9.2026, richiesta utente): la STESSA conversazione del pannello
+// laterale, a tutto schermo. Stesso `state.aiMessages`, stesso `askAI` (codice
+// che decide, procedure con traccia, modello locale per la sintesi): non è una
+// seconda chat. Quando si è su questa pagina il pannello laterale resta chiuso.
+const RF_AI_NOME = 'ReferralFlow AI';
+(function () { const st = document.createElement('style'); st.textContent = `
+.rf-aip { display:flex; flex-direction:column; height: calc(100vh - var(--topbar-h) - 150px); min-height: 420px; }
+.rf-aip .ai-body { flex:1; overflow:auto; padding: 18px 22px; gap: 14px; }
+.rf-aip .ai-msg { font-size: 14px; line-height: 1.55; max-width: 780px; }
+.rf-aip .ai-msg.user { max-width: 70%; }
+.rf-aip .ai-input { padding: 12px 18px; }
+.rf-aip .ai-input input { height: 42px; font-size: 14px; }
+.rf-aip-chips { display:flex; flex-wrap:wrap; gap:6px; padding: 0 22px 12px; }
+@media (max-width: 767px) { .rf-aip { height: calc(100vh - var(--topbar-h) - 190px); } .rf-aip .ai-body { padding: 12px; } .rf-aip .ai-msg.user { max-width: 88%; } }
+`; document.head.appendChild(st); })();
+function rfAiPaginaInvia() { const el = document.getElementById('rf-aip-in'); const v = el ? el.value.trim() : ''; if (!v) return; el.value = ''; askAI(v); }
 const rfAiPageOrig = PAGES.ai;
-PAGES.ai = () => (RF.live ? `<div class="page-head"><div><h2 class="page-title">AI</h2><div class="page-sub">Modello locale, nessun cloud: chiedi dalla barra a destra (⌘/)</div></div></div>
-  <div class="card"><p class="meta" style="margin:0;line-height:1.55">L'assistente risponde sui numeri e sulle liste della giornata già caricate qui (agenda, attività, referti, documenti) con il modello locale della piattaforma. Non dà consigli clinici e non inventa dati: se una cosa non c'è, lo dice. Le proposte per la wiki e la qualità della catena sono in</p></div>` : rfAiPageOrig());
+PAGES.ai = () => {
+  if (!RF.live) return rfAiPageOrig();
+  const chips = (RF.procedure || []).flatMap(p => (Array.isArray(p.chip) ? p.chip : []).filter(c => typeof c === 'string')).slice(0, 8);
+  const vuota = !state.aiMessages.length;
+  return `<div class="page-head"><div><div class="eyebrow">Modello locale, nessun cloud</div><h2 class="page-title">${rfEsc(RF_AI_NOME)}</h2><div class="page-sub">Risponde sui dati della giornata (agenda, attività, referti, documenti, pazienti); le domande che contano seguono procedure con traccia; sotto ogni risposta «Da dove viene». Niente consigli clinici, niente dati inventati.</div></div>
+      <div class="actions">${state.aiMessages.length ? `<button class="btn" onclick="state.aiMessages=[];render()">${ICONS.x} Nuova conversazione</button>` : ''}</div></div>
+    <div class="card rf-aip" style="padding:0">
+      <div class="ai-body" id="rf-aip-body">${vuota ? `<div class="caption" style="padding:8px 4px">Chiedi per esempio: «prepara la giornata», «lettere in ritardo», «cosa è cambiato per Bernasconi», «richiami del mese», «quale percorso per le palpitazioni», «chi si occupa dei richiami». Le risposte immediate arrivano dal codice; quelle di sintesi dal modello locale, in pochi secondi.</div>` : state.aiMessages.map(m => m.html).join('')}</div>
+      ${chips.length ? `<div class="rf-aip-chips">${chips.map(c => `<button class="chip" data-ai="${rfEsc(c)}">${rfEsc(c)}</button>`).join('')}</div>` : ''}
+      <div class="ai-input"><input id="rf-aip-in" placeholder="${state.patientCtx && P[state.patientCtx] ? 'Chiedi qualcosa su ' + rfEsc(P[state.patientCtx].first) + '…' : 'Scrivi una domanda…'}" autocomplete="off" onkeydown="if(event.key==='Enter'){rfAiPaginaInvia();}"><button class="btn primary" onclick="rfAiPaginaInvia()">${ICONS.send} Invia</button></div>
+    </div>`;
+};
 
 /* ---------- Referti: coda vera + caricamento audio ---------- */
 // La pagina «report» del prototipo (#/reports/<id>) è demo: dentro la piattaforma rimanda alla revisione vera.
@@ -2553,7 +2579,9 @@ if (rfDentro()) {
   render = function () {
     if (RF.nonAutorizzato) return rfPaginaAccesso();
     if (!RF.caricato) return rfPaginaCarico();
+    if (state.route === 'ai') state.aiOpen = false;
     const out = rfRenderVero();
+    const aip = document.getElementById('rf-aip-body'); if (aip) { aip.scrollTop = 1e6; const inp = document.getElementById('rf-aip-in'); if (inp && !document.activeElement?.closest('#modal')) setTimeout(() => inp.focus({ preventScroll: true }), 0); }
     rfRicordaPagina();
     rfTastoIndietro();
     document.querySelectorAll('[data-prefirma]').forEach(el => { el.onclick = (e) => { e.stopPropagation(); if (!state.aiOpen) state.aiOpen = true; state.aiMessages.push({ html: `<div class="ai-msg user">Controllo prima della firma</div>` }); rfProcedura({ nome: 'controllo_prefirma', bozza_id: el.dataset.prefirma }, 'Controllo la bozza prima della firma…'); }; });
