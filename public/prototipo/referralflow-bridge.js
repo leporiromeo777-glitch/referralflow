@@ -403,7 +403,22 @@ async function rfCaricaRevisione(id) {
     if (j.revisione_prototipo && typeof j.revisione_prototipo === 'object') {
       const rp = j.revisione_prototipo;
       RF.motivazioni = rp.motivazioni && typeof rp.motivazioni === 'object' ? rp.motivazioni : {};
-      localStorage.setItem(RV_KEY, JSON.stringify({ issues: rp.issues || [], metrics: rp.metrics || {}, log: rp.log || [], cur: rp.cur || 0, t: 0 }));
+      const testoDi = (sp) => { const p = RV_REPORT.flatMap(x => x.parts).find(x => x.id === sp); return p ? p.t : ''; };
+      const esiti = (rp.issues || []).filter(x => {
+        const i = RV_ISSUES.find(y => y.id === x.id); if (!i) return false;
+        if (x.cat && x.cat !== i.cat) return false;
+        if (x.testo) { const ora = String((i.span && testoDi(i.span)) || i.now || '').slice(0, 60); if (ora !== x.testo) return false; }
+        return true;
+      });
+      const removed = {};
+      (Array.isArray(rp.tolte) ? rp.tolte : []).forEach((t, n) => {
+        const sez = RV_REPORT.find(x => x.code === t.sec); if (!sez || !t.testo) return;
+        if (sez.parts.some(p => p.t === t.testo)) return; // la frase è di nuovo nel testo: non è più tolta
+        const id = 'tolta' + n;
+        sez.parts.splice(Math.min(Math.max(0, t.pos | 0), sez.parts.length), 0, { id, t: t.testo, src: null, conf: 'none', nl: true });
+        removed[id] = true;
+      });
+      localStorage.setItem(RV_KEY, JSON.stringify({ issues: esiti, metrics: rp.metrics || {}, log: rp.log || [], cur: Math.min(rp.cur || 0, Math.max(0, RV_ISSUES.length - 1)), t: 0, removed }));
     } else localStorage.removeItem(RV_KEY);
     RV.issues = [];
     rfAudioSetup(j.audio.url);
@@ -511,7 +526,14 @@ rvSave = function () {
   }, 2000);
 };
 function rfStatoRevisione() {
-  return { issues: RV.issues.map(i => ({ id: i.id, status: i.status, resolution: i.resolution })), metrics: RV.metrics, log: (RV.log || []).slice(-200), cur: RV.cur, t: RV.t, motivazioni: RF.motivazioni || {} };
+  // Le frasi tolte si salvano con sezione, posizione e testo: alla riapertura
+  // tornano nel testo centrale barrate (non nel testo salvato né nel Word).
+  const tolte = [];
+  RV_REPORT.forEach(s => s.parts.forEach((p, k) => { if (RV.removed[p.id]) tolte.push({ sec: s.code, pos: k, testo: RV.text[p.id] != null ? RV.text[p.id] : p.t }); }));
+  // Ogni esito porta anche categoria e inizio della frase: se il testo cambia
+  // (Edita, impaginazione) gli id delle segnalazioni si rinumerano, e un esito
+  // si riapplica solo alla stessa segnalazione, non a un'altra con lo stesso numero.
+  return { issues: RV.issues.map(i => ({ id: i.id, status: i.status, resolution: i.resolution, cat: i.cat, testo: String((i.span && RV.text[i.span]) || i.now || '').slice(0, 60) })), metrics: RV.metrics, log: (RV.log || []).slice(-200), cur: RV.cur, t: RV.t, motivazioni: RF.motivazioni || {}, tolte };
 }
 
 
@@ -573,6 +595,7 @@ async function rfImpagina() {
         stato('Fatto: il testo impaginato è nella bozza. Ricarico la revisione…', 100, 'fatto');
         if (typeof rvLog === 'function') rvLog('FORMATTED', m.formato === 'lettera' ? 'impaginata come lettera' : 'riorganizzata nel formato');
         localStorage.removeItem(RV_KEY);
+        try { clearTimeout(rvSave._rf); await fetch(`/api/prototipo/referti/${id}/testo`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stato: Object.assign(rfStatoRevisione(), { tolte: [] }) }) }); } catch { /* lo stato si risalva al prossimo giro */ }
         RF.loaded = null; RF.loading = null;
         setTimeout(() => { closeModal(); render(); toast(m.formato === 'lettera' ? 'Lettera impaginata nel formato del medico' : 'Testo riorganizzato nel formato del medico'); }, 800);
         return;
@@ -593,6 +616,94 @@ async function rfImpagina() {
     stato('Sta impiegando troppo: riprova più tardi, il lavoro continua sul Mac.', 90, 'errore');
   } catch { stato('Non riesco a raggiungere la piattaforma.', 100, 'errore'); }
   finally { RF.impaginando = null; }
+}
+
+
+/* ---------- frasi tolte barrate e tasto «Edita» (14.9.2026) ---------- */
+/* Durante la correzione una frase tolta resta nel testo centrale, barrata a
+   tratteggio (clic: rimettila o lasciala tolta); nella lettura pulita, nel
+   testo salvato e nel Word non c'è. «Edita» apre tutto il testo pulito in una
+   finestra per correggerlo a mano: si salva nella piattaforma e la revisione
+   si ricalcola sul nuovo testo, riapplicando gli esiti alle segnalazioni che
+   coincidono. */
+(function () { const st = document.createElement('style'); st.textContent = `
+  .rv-span.rf-tolta { text-decoration: line-through; text-decoration-style: dashed; text-decoration-thickness: 1.5px; text-decoration-color: var(--danger); color: var(--text-3); cursor: pointer; }
+  .rv-span.rf-tolta:hover { background: var(--danger-soft); border-radius: 4px; }
+  .rv.read .rv-span.rf-tolta { display: none; }
+  .rv-legend .lg.tolta { border-bottom: none; text-decoration: line-through dashed var(--danger); color: var(--text-3); }
+  .rf-edita { width: 100%; min-height: 55vh; height: auto; padding: 10px 12px; border-radius: var(--r-input); border: 1px solid var(--border); background: var(--surface-2); resize: vertical; line-height: 1.55; font: inherit; font-size: 14px; }
+  .rf-edita:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); background: var(--surface); }
+  @media (max-width: 767px) { .rf-edita { min-height: 50vh; } }
+`; document.head.appendChild(st); })();
+const rfPartHtmlOrig = rvPartHtml;
+rvPartHtml = function (p, secCode) {
+  if (RF.live && RV.removed[p.id] && RV.mode !== 'read') {
+    const t = RV.text[p.id] != null ? RV.text[p.id] : p.t;
+    return `<span class="rv-span rf-tolta" data-span="${p.id}" data-src="${p.src || ''}" data-conf="tolta" contenteditable="false" title="Frase tolta dal referto · clic per rimetterla">${esc(t)}</span>`;
+  }
+  return rfPartHtmlOrig(p, secCode);
+};
+const rfSpanClickOrig = rvSpanClick;
+rvSpanClick = function (id) {
+  if (RF.live && RV.removed[id]) { rfFraseTolta(id); return; }
+  return rfSpanClickOrig(id);
+};
+function rfFraseTolta(id) {
+  const t = RV.text[id] || '';
+  openModal('Frase tolta dal referto', `<p style="text-decoration:line-through dashed var(--danger);color:var(--text-3)">${esc(t)}</p><p class="caption mt-8">Resta barrata nel testo finché la revisione è aperta; nella lettura pulita, nel testo salvato e nel Word non c'è.</p>`,
+    `<button class="btn" data-close>Lascia tolta</button><button class="btn primary" id="rf-rimetti">Rimetti nel referto</button>`);
+  document.getElementById('rf-rimetti').onclick = () => {
+    delete RV.removed[id];
+    const i = RV.issues.find(x => x.span === id);
+    if (i && i.status !== 'open' && /rimoss|fuori|tolt/i.test(i.resolution || '')) { i.status = 'open'; i.resolution = null; }
+    rvLog('RESTORED', id);
+    closeModal(); rvSave(); rvAfterRender(); if (typeof rvCount === 'function') rvCount();
+    toast('Frase rimessa nel referto');
+  };
+}
+const rfRenderReportOrig = rvRenderReport;
+rvRenderReport = function () {
+  rfRenderReportOrig();
+  if (!RF.live) return;
+  const top = document.querySelector('.rv-top-r');
+  if (top && !document.getElementById('rf-edita-btn')) {
+    const b = document.createElement('button'); b.id = 'rf-edita-btn'; b.className = 'btn sm'; b.type = 'button'; b.title = 'Correggi a mano tutto il testo';
+    b.innerHTML = `${(typeof ICONS !== 'undefined' && ICONS.edit) || ''} Edita`; b.onclick = rfEdita;
+    const lettura = Array.from(top.querySelectorAll('button')).find(x => /Lettura pulita|Torna alle verifiche/.test(x.textContent || ''));
+    top.insertBefore(b, lettura || null);
+  }
+  const eb = document.getElementById('rf-edita-btn'); if (eb) eb.hidden = RV.mode === 'read';
+  const leg = document.querySelector('#rv-main .rv-legend');
+  if (leg && !leg.querySelector('.lg.tolta')) { const sp = document.createElement('span'); sp.className = 'lg tolta'; sp.textContent = 'Tolta dal referto'; leg.appendChild(sp); }
+};
+function rfEdita() {
+  const id = RF.loaded; if (!id) return;
+  if (RF.meta && RF.meta.stato !== 'bozza') { toast('Il referto è già confermato: non si modifica più'); return; }
+  const testo = rfTestoRicomposto();
+  const n = Object.keys(RV.removed).filter(k => RV.removed[k]).length;
+  openModal('Edita il testo completo', `<textarea class="rf-edita" id="rf-edita-testo" spellcheck="true">${esc(testo)}</textarea>
+    <p class="caption mt-8">È il testo pulito${n ? `, senza ${n === 1 ? 'la frase tolta' : `le ${n} frasi tolte`}` : ''}. Salvando, la revisione si ricalcola sul nuovo testo: le verifiche già chiuse restano chiuse dove le frasi coincidono, le altre si riaprono. La modifica a mano resta registrata.</p>`,
+    `<button class="btn" data-close>Annulla</button><button class="btn primary" id="rf-edita-ok">Salva</button>`);
+  setTimeout(() => { const t = document.getElementById('rf-edita-testo'); if (t) t.focus(); }, 60);
+  document.getElementById('rf-edita-ok').onclick = async () => {
+    const box = document.getElementById('rf-edita-testo');
+    const nuovo = (box ? box.value : '').replace(/\r\n/g, '\n').trim();
+    if (!nuovo) { toast('Il testo non può essere vuoto'); return; }
+    if (nuovo === testo.trim()) { closeModal(); return; }
+    const btn = document.getElementById('rf-edita-ok'); btn.disabled = true; btn.textContent = 'Salvo…';
+    clearTimeout(rvSave._rf);
+    rvLog('CORRECTION', 'testo completo modificato a mano (Edita)');
+    RV.metrics.corrections = (RV.metrics.corrections || 0) + 1;
+    try {
+      const r = await fetch(`/api/prototipo/referti/${id}/testo`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ testo: nuovo, stato: rfStatoRevisione(), correzioni: RV.metrics.corrections, verifiche: rvDone() }) });
+      if (!r.ok) throw new Error('salvataggio');
+    } catch { btn.disabled = false; btn.textContent = 'Salva'; toast('Non riesco a salvare nella piattaforma'); return; }
+    closeModal();
+    localStorage.removeItem(RV_KEY);
+    RF.loaded = null; RF.loading = null;
+    render();
+    toast('Testo salvato · revisione ricalcolata');
+  };
 }
 
 
