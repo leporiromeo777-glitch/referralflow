@@ -145,3 +145,10 @@ Da fare quando serve: portare `RF_COLORI_TIPO` in una scheda di Studio, così i 
 Il riquadro dell'agenda si clicca e si apre una scheda in sola lettura: quando, paziente, **data di nascita**, **numero di paziente di MediOnline**, medico, sigla dell'agenda, tipo dal colore, prestazione, **stato in MediOnline** (la moneta o il visto con la «F») e se il paziente è in cartella. In fondo il testo grezzo com'è scritto nell'agenda, così non si nasconde nulla. Due tasti: «Apri la cartella» quando il paziente è abbinato, e «Briefing».
 
 Data di nascita, numero e sigla si ricavano dal testo del riquadro con `src/lib/agenda-titolo.ts` (7 test) — **sul server**, non nel browser: la funzione è una sola e testata. Da lì il riquadro in agenda mostra **solo il nome**: prima portava addosso anche «(12.03.1945 / N° 202847) · vpaio», ed era metà del disordine.
+
+### «Sale oggi» non mostra le agende dei medici (15.9.2026)
+In MediOnline **una colonna è un'agenda, non un luogo**. Lo studio ne usa 15 e sono un misto: medici (frego = Rego, T.M. = Tiziano Moccetti, DG = Girola, vpaio = Paiocchi, M.M. = Marco Moccetti, GMOS = Moschovitis), apparecchi (Labor, Appar) e codici che sanno solo loro (DC, RIA, ASM, P-E V, SF, bcape, miped). Il campo `luogo` porta la sigla della colonna, e il riquadro «Sale oggi» mostrava così l'agenda del dottor Rego come se fosse una stanza.
+
+Ora una colonna esce dall'elenco se è **abbinata a un medico** e non è anche registrata come sala o apparecchio; sotto il riquadro si dice quante sono state escluse e perché. Il numero è in `agendeMedico`.
+
+Resta vero, e va detto: **dove avvenga la visita MediOnline non lo scrive da nessuna parte**. Finché lo studio non registra le sale in Studio → Sale e apparecchi e non abbina i codici, l'occupazione per sala è un'approssimazione basata sulle colonne dell'agenda.

@@ -300,8 +300,9 @@ PAGES.home = () => {
       </div>
       <div class="stack">
         <div class="card"><div class="card-head"><span class="section-title">Sale oggi</span><button class="btn sm ghost" data-go="#/administration">Studio ${ICONS.chevR}</button></div>
-          ${sale.length ? sale.slice(0, 10).map(rigaSala).join('') : '<div class="caption" style="padding:8px 6px">Nessuna sala definita e nessun luogo nell\'agenda di oggi. Le sale si registrano in Studio → Sale e apparecchi.</div>'}
-          ${sale.length ? '<div class="caption mt-8" style="padding:0 6px">Barra piena = 8 ore. Il luogo viene dal campo «luogo» dell\'agenda.</div>' : ''}</div>
+          ${sale.length ? sale.slice(0, 10).map(rigaSala).join('') : `<div class="caption" style="padding:8px 6px">Nessuna sala registrata.${RF.data.agendeMedico ? ` Le ${RF.data.agendeMedico} colonne dell'agenda di oggi sono <b>agende di medici</b>, non luoghi: in MediOnline una colonna è un'agenda, e dove avviene la visita non è scritto da nessuna parte.` : ''} Le sale si registrano in Studio → Sale e apparecchi.</div>`}
+          ${sale.length ? '<div class="caption mt-8" style="padding:0 6px">Barra piena = 8 ore. Il luogo viene dal campo «luogo» dell\'agenda.</div>' : ''}
+          ${RF.data.agendeMedico ? `<div class="caption mt-8" style="padding:0 6px">Fuori da questo elenco: <b>${RF.data.agendeMedico} agende di medici</b> — in MediOnline la colonna è l'agenda del medico, non la stanza.</div>` : ''}</div>
         <div class="card"><div class="card-head"><span class="section-title">In studio oggi</span><span class="badge count">${nMed}</span></div>
           <div class="list">${nMed ? mediciOggi.map(d => `<div class="rf-persona"><i class="dot success"></i><span>${rfEsc(DOCTORS[d] || d)}</span><span class="caption" style="margin-left:auto">${appts.filter(a => a.doc === d).length} app.</span></div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessun medico con agenda oggi.</div>'}</div>
           <div class="caption mt-8" style="padding:0 6px">${s.accessi_attivi ?? 0} accessi attivi alla piattaforma</div></div>

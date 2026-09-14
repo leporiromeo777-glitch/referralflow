@@ -326,23 +326,33 @@ export async function GET() {
     `select id, tipo, nome, attivo, posti from studio_risorse where studio_id = $1 and attivo order by tipo, nome`, [sid]);
   const [acc] = await query<{ attivi: number }>(`select count(*)::int as attivi from users where studio_id = $1 and attivo`, [sid]);
   const nomeRisorsa = new Map(risorse.map((r) => [r.nome.toLowerCase(), r]));
-  const perSala = new Map<string, { nome: string; tipo: string; posti: number | null; n: number; minuti: number; prima: string; occupataOra: boolean; prossima: string }>();
+  // In MediOnline una colonna è un'AGENDA, non un luogo: lo studio ne usa 15
+  // e sono un misto di medici (frego, T.M., DG, vpaio, M.M., GMOS), apparecchi
+  // (Labor, Appar) e codici che sanno solo loro. Il campo «luogo» porta la
+  // sigla della colonna, quindi senza distinguere l'agenda di un medico
+  // finirebbe fra le sale — e infatti ci finiva (visto il 15.9.2026).
+  const perSala = new Map<string, { nome: string; tipo: string; posti: number | null; n: number; minuti: number; prima: string; occupataOra: boolean; prossima: string; conMedico: number }>();
   const hm = ora(oggiIso.toISOString());
   for (const a of apptsOggi) {
     const codice = (a.room || '').trim();
     if (!codice) continue;
     const r = nomeRisorsa.get(codice.toLowerCase());
     const k = codice.toLowerCase();
-    const e = perSala.get(k) ?? { nome: r?.nome ?? codice, tipo: r?.tipo ?? 'codice', posti: r ? r.posti : null, n: 0, minuti: 0, prima: '', occupataOra: false, prossima: '' };
+    const e = perSala.get(k) ?? { nome: r?.nome ?? codice, tipo: r?.tipo ?? 'codice', posti: r ? r.posti : null, n: 0, minuti: 0, prima: '', occupataOra: false, prossima: '', conMedico: 0 };
     e.n++; e.minuti += a.dur;
+    if (a.doc && a.doc !== 'studio') e.conMedico++;
     if (!e.prima || a.start < e.prima) e.prima = a.start;
     const fineA = (() => { const [h, m] = a.start.split(':').map(Number); const t = h * 60 + m + a.dur; return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`; })();
     if (a.start <= hm && hm < fineA && a.status !== 'CANCELLED') e.occupataOra = true;
     if (a.start > hm && a.status !== 'CANCELLED' && (!e.prossima || a.start < e.prossima)) e.prossima = a.start;
     perSala.set(k, e);
   }
-  for (const r of risorse) if (r.tipo === 'sala' && !perSala.has(r.nome.toLowerCase())) perSala.set(r.nome.toLowerCase(), { nome: r.nome, tipo: 'sala', posti: r.posti, n: 0, minuti: 0, prima: '', occupataOra: false, prossima: '' });
-  const sale = [...perSala.values()].sort((a, b) => b.minuti - a.minuti || a.nome.localeCompare(b.nome));
+  for (const r of risorse) if (r.tipo === 'sala' && !perSala.has(r.nome.toLowerCase())) perSala.set(r.nome.toLowerCase(), { nome: r.nome, tipo: 'sala', posti: r.posti, n: 0, minuti: 0, prima: '', conMedico: 0, occupataOra: false, prossima: '' });
+  // Un'agenda di medico NON è una sala: esce dall'elenco, a meno che quella
+  // sigla sia anche registrata come sala o apparecchio in Studio → Sale.
+  const tutteLeColonne = [...perSala.values()].sort((a, b) => b.minuti - a.minuti || a.nome.localeCompare(b.nome));
+  const sale = tutteLeColonne.filter((x) => x.tipo !== 'codice' || x.conMedico === 0);
+  const agendeMedico = tutteLeColonne.filter((x) => x.tipo === 'codice' && x.conMedico > 0).length;
   const refertiOggiPer = new Set(reports.filter((r) => r.date === dCh(oggiIso.toISOString())).map((r) => r.p));
   const vistiSenzaReferto = apptsOggi.filter((a) => a.status === 'COMPLETED' && a.p && !refertiOggiPer.has(a.p)).length;
   let lettereInRitardo = 0;
@@ -358,7 +368,7 @@ export async function GET() {
   };
   return NextResponse.json({
     utente: { role: RUOLO[session.role] ?? 'secretary', name: nome, initials: iniz, studio: session.studioNome, email: session.email },
-    today, doctors, patients, appts: apptsOggi, agenda, tasks, reports, documents, inbox, audioInbox, stats, sale,
+    today, doctors, patients, appts: apptsOggi, agenda, tasks, reports, documents, inbox, audioInbox, stats, sale, agendeMedico,
     risorse: risorse.map((r) => ({ id: r.id, tipo: r.tipo, nome: r.nome, posti: r.posti })),
     catalogo, coloriMedici, daChiamare, moduli_nascosti: stud?.moduli_nascosti ?? [],
   });
