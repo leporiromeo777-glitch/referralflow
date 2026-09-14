@@ -61,3 +61,16 @@ Banco della riformulazione (14.9.2026, gemma3:12b, 6 domande **inventate**): 6/6
 Conclusione **prima** del giudizio clinico: i due modelli di ragionamento sono della forma sbagliata per una chat. Consumano **sette volte** i token in uscita, impiegano 6-10 volte il tempo, e **due volte su dieci il ragionamento esaurisce il tetto e non arriva alla risposta** — con i token pagati lo stesso. Al primo giro (tetto 900) sbagliavano 10 volte su 10 e restituivano il vuoto: senza banco si sarebbe concluso «non funzionano».
 
 Lezione per la catena: se un giorno si alza il modello di generazione su un modello di ragionamento, **il tetto dei token va alzato** e il codice deve leggere `message.reasoning` / `<think>`, altrimenti la catena torna a mani vuote pagando.
+
+**Controllo dei fatti su due domande a risposta secca** (il voto clinico resta di Moccetti; qui solo ciò che è verificabile):
+
+| | apixaban in insufficienza renale moderata | soglia domiciliare dell'ipertensione |
+| --- | --- | --- |
+| gemma 4 31B | **corretta** (≥2 criteri fra età ≥80, peso ≤60 kg, creatinina ≥1,5; la sola IR non riduce) | **corretta** (135/85 vs 140/90) |
+| Kimi K2.6 | assente | **corretta**, la più precisa delle sei |
+| Qwen 3.5 397B | assente | corretta |
+| Apertus 70B | vaga, e confonde clearance 15-29 con eGFR 30-50 | corretta |
+| Mistral Small 4 119B | quasi giusta, ma «controindicato sotto 30» è **falso** (EMA: 2,5 mg × 2 fino a CrCl 15) | **sbagliata**: dà 130/80, la soglia americana, come se fosse l'unica |
+| modello locale sul Mac (12B) | **sbagliata e pericolosa**: «2,5 mg × 2 se ≥60 kg, 2,5 mg × 1 se <60 kg» — posologia inesistente | numero giusto, ma **inverte** camice bianco e ipertensione mascherata |
+
+Conseguenza sul codice, il 14.9.2026: la «domanda medica» **non risponde più col modello locale**. Senza un modello misurato collegato restituisce la domanda riscritta e dice che non parte. Una risposta plausibile e sbagliata su un dosaggio è peggio di nessuna risposta.

@@ -1028,6 +1028,13 @@ async function rfMedicaInvia() {
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) {
+      // «Non c'è ancora un modello adatto» non è un errore della domanda: la
+      // riformulazione è buona, manca il destinatario. Si dice e si chiude.
+      if (j.non_collegato) {
+        state.medica = null;
+        state.aiMessages.push({ html: `<div class="ai-msg ai"><b>La domanda è pronta, ma non parte.</b><br>${rfEsc(j.errore || '')}<div class="caption" style="margin-top:6px">Domanda riscritta: «${rfEsc(generale)}» — puoi copiarla e porla dove vuoi.</div></div>` });
+        render(); return;
+      }
       state.medica = { ...m, generale, stato: 'attesa', blocchi: j.blocchi || [{ tipo: 'errore', spiega: j.errore || 'non riuscita' }], avvisi: j.avvisi || [] };
       render(); return;
     }

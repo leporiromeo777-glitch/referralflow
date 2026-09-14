@@ -72,12 +72,28 @@ export async function POST(req: NextRequest) {
       log(`invio rifiutato: ${v.blocchi.map((b) => b.tipo).join(',')}`);
       return NextResponse.json({ errore: 'La domanda riscritta contiene ancora un dato personale: non è partita.', ...v }, { status: 400 });
     }
-    if (FORNITORE) {
-      // Uscita verso un modello esterno: non attiva. Quando lo sarà, qui ci
-      // vanno il fornitore autorizzato e la stima di spesa, e la domanda che
-      // parte è SOLO `generale`, mai `domanda`.
-      log(`fornitore esterno «${FORNITORE}» configurato ma non implementato: rispondo in locale`);
+    // NON si risponde col modello locale. Nel banco del 14.9.2026 il modello
+    // sul Mac (12B) ha dato una posologia SBAGLIATA di apixaban e ha invertito
+    // ipertensione da camice bianco e mascherata: su una domanda di medicina
+    // una risposta plausibile e sbagliata è peggio di nessuna risposta. Finché
+    // non è collegato un modello misurato, questa via resta chiusa
+    // ([[Misure/Banchi]], banco della domanda medica).
+    if (!FORNITORE) {
+      log('nessun modello adatto collegato: non rispondo');
+      return NextResponse.json(
+        {
+          errore:
+            'Non è ancora collegato un modello adatto alle domande di medicina. Il modello locale è troppo piccolo: nel banco del 14.9.2026 ha sbagliato un dosaggio, quindi qui non risponde. La domanda riscritta è pronta e non è uscita da qui.',
+          non_collegato: true,
+        },
+        { status: 503 }
+      );
     }
+    // Uscita verso un modello esterno: l'adattatore non è ancora scritto.
+    // Quando lo sarà, qui ci vanno il fornitore autorizzato (guardia sugli
+    // indirizzi, come `FORNITORI_AUTORIZZATI` nella catena) e la stima di
+    // spesa; ciò che parte è SOLO `generale`, mai `domanda`.
+    log(`fornitore «${FORNITORE}» configurato ma l'adattatore non è ancora scritto`);
     const esito = await generaOllamaEsito(RISPOSTA_PROMPT.replace('{testo}', generale), {
       modello: MODELLO,
       timeoutMs: 180_000,
