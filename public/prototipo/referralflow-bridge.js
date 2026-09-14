@@ -829,15 +829,17 @@ const RF_AI_NOME = 'Cleo';
    pastiglia in basso); la sostanza no — vedi la riga di chiusura. */
 .rf-gpt { display:flex; flex-direction:column; height:100%; }
 .rf-gpt-top { flex:none; display:flex; align-items:center; gap:10px; padding:10px 24px; border-bottom:1px solid var(--border); }
-.rf-gpt-top .n { font-weight:650; font-size:14px; }
 /* Il segno di Cleo: la stella di ICONS.ai, la stessa della voce nel menu.
    Ferma quando è in attesa, pulsante mentre lavora — così dice qualcosa
    invece di essere un ornamento. */
 .rf-segno { display:inline-flex; vertical-align:-2px; margin-right:6px; color:var(--accent); }
 .rf-segno svg { width:15px; height:15px; }
 .rf-segno.viva { animation: pulse 1.4s infinite; }
-.rf-gpt-top .m { font-size:12px; color:var(--text-3); }
 .rf-gpt-top .actions { margin-left:auto; }
+/* «modello locale, su questo Mac» sta accanto al nome nella barra in alto:
+   è la stessa informazione, detta una volta sola e nel posto più visibile. */
+.topbar .title .rf-sotto { font-weight:400; font-size:12px; color:var(--text-3); }
+@media (max-width: 900px) { .topbar .title .rf-sotto { display:none; } }
 .rf-gpt-scroll { flex:1; overflow-y:auto; display:flex; flex-direction:column; }
 .rf-gpt-scroll.vuota { justify-content:center; }
 .rf-gpt-col { width:100%; max-width:760px; margin:0 auto; padding:0 24px; }
@@ -1081,8 +1083,7 @@ PAGES.ai = () => {
   if (!RF.live) return rfAiPageOrig();
   const vuota = !state.aiMessages.length;
   return `<div class="rf-gpt">
-      <div class="rf-gpt-top"><span class="n">${rfSegnoCleo()}${rfEsc(RF_AI_NOME)}</span><span class="m">modello locale, su questo Mac</span>
-        <span class="actions">${vuota ? '' : `<button class="btn sm" onclick="state.aiMessages=[];render()">${ICONS.x} Nuova conversazione</button>`}</span></div>
+      ${vuota ? '' : `<div class="rf-gpt-top"><span class="actions"><button class="btn sm" onclick="state.aiMessages=[];render()">${ICONS.x} Nuova conversazione</button></span></div>`}
       <div class="rf-gpt-scroll ${vuota ? 'vuota' : ''}" id="rf-aip-body">
         <div class="rf-gpt-col">${vuota ? rfAiBenvenuto() : `<div class="rf-gpt-thread">${state.aiMessages.map(m => m.html).join('')}</div>`}</div>
       </div>
@@ -1092,7 +1093,9 @@ PAGES.ai = () => {
 // Il titolo nella barra in alto: sulla pagina di Cleo porta la stessa lucina.
 const rfPageTitleOrig = pageTitle;
 pageTitle = function () {
-  if (RF.live && state.route === 'ai') return `${rfSegnoCleo()}${rfEsc(RF_AI_NOME)}`;
+  if (RF.live && state.route === 'ai') {
+    return `${rfSegnoCleo()}${rfEsc(RF_AI_NOME)}<span class="rf-sotto">modello locale, su questo Mac</span>`;
+  }
   return rfPageTitleOrig.apply(this, arguments);
 };
 
