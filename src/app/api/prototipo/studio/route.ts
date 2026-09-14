@@ -14,6 +14,8 @@ export const dynamic = 'force-dynamic';
 // eliminare (si disattiva), nessuno si disattiva da solo. Mai password nei log.
 const RUOLI_VALIDI = new Set(['segretaria', 'medico', 'admin']);
 const TIPI = new Set(['sala', 'apparecchio']);
+// Posti di una sala: intero 1-99, 1 se manca o non è un numero.
+const posti = (v: unknown) => { const n = Math.round(Number(v)); return Number.isFinite(n) && n >= 1 ? Math.min(99, n) : 1; };
 
 async function leggi(studioId: string) {
   const [studio] = await query<{ nome: string; telefono: string | null; notify_email: string | null; specialita: string | null }>(
@@ -22,8 +24,8 @@ async function leggi(studioId: string) {
     `select id, email, role::text, attivo, totp_enabled_at is not null as totp, created_at::text from users where studio_id = $1 order by attivo desc, role, email`, [studioId]);
   const medici = await query<{ id: string; nome: string; aliases: string[]; attivo: boolean; user_id: string | null }>(
     `select id, nome, aliases, attivo, user_id from providers where studio_id = $1 order by attivo desc, nome`, [studioId]);
-  const risorse = await query<{ id: string; tipo: string; nome: string; descrizione: string | null; attivo: boolean }>(
-    `select id, tipo, nome, descrizione, attivo from studio_risorse where studio_id = $1 order by tipo, attivo desc, nome`, [studioId]);
+  const risorse = await query<{ id: string; tipo: string; nome: string; descrizione: string | null; attivo: boolean; posti: number }>(
+    `select id, tipo, nome, descrizione, attivo, posti from studio_risorse where studio_id = $1 order by tipo, attivo desc, nome`, [studioId]);
   // Codici del campo «luogo» dell'agenda che non corrispondono a nessun
   // medico (ultimi 60 giorni e futuro): l'amministratore li abbina a un
   // medico (alias) o a una sala/apparecchio.
@@ -92,12 +94,12 @@ export async function POST(req: NextRequest) {
       const tipo = s(c.tipo); const nome = s(c.nome, 120);
       if (!TIPI.has(tipo)) return NextResponse.json({ errore: 'tipo' }, { status: 400 });
       if (!nome) return NextResponse.json({ errore: 'Il nome è obbligatorio.' }, { status: 400 });
-      await query(`insert into studio_risorse (studio_id, tipo, nome, descrizione) values ($1, $2, $3, nullif($4, ''))`, [sid, tipo, nome, s(c.descrizione, 500)]);
+      await query(`insert into studio_risorse (studio_id, tipo, nome, descrizione, posti) values ($1, $2, $3, nullif($4, ''), $5)`, [sid, tipo, nome, s(c.descrizione, 500), posti(c.posti)]);
     } else if (azione === 'risorsa_aggiorna') {
       const id = s(c.id); const nome = s(c.nome, 120);
       if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 });
       if (!nome) return NextResponse.json({ errore: 'Il nome è obbligatorio.' }, { status: 400 });
-      await query(`update studio_risorse set nome = $3, descrizione = nullif($4, ''), updated_at = now() where id = $1 and studio_id = $2`, [id, sid, nome, s(c.descrizione, 500)]);
+      await query(`update studio_risorse set nome = $3, descrizione = nullif($4, ''), posti = $5, updated_at = now() where id = $1 and studio_id = $2`, [id, sid, nome, s(c.descrizione, 500), posti(c.posti)]);
     } else if (azione === 'risorsa_attivo') {
       const id = s(c.id); if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 });
       await query('update studio_risorse set attivo = not attivo, updated_at = now() where id = $1 and studio_id = $2', [id, sid]);

@@ -246,7 +246,7 @@ PAGES.home = () => {
   const rigaSala = (x) => {
     const pct = Math.min(100, Math.round(x.minuti / 480 * 100));
     const cap = x.occupataOra ? 'occupata adesso' : x.prossima ? `prossima alle ${x.prossima}` : x.n ? (x.prima ? `finita · prima era alle ${x.prima}` : 'finita per oggi') : 'libera oggi';
-    return `<div class="rf-sala"><div class="rf-sala-top"><span class="name">${rfEsc(x.nome)}${x.tipo === 'apparecchio' ? ' <span class="caption">apparecchio</span>' : x.tipo === 'codice' ? ' <span class="caption">codice agenda</span>' : ''}</span><span class="n num">${x.n ? `${x.n} · ${oreSala(x.minuti)}` : '—'}</span></div><div class="meter${x.occupataOra ? ' now' : ''}"><i style="width:${pct}%"></i></div><div class="cap${x.occupataOra ? ' now' : ''}">${cap}</div></div>`;
+    return `<div class="rf-sala"><div class="rf-sala-top"><span class="name">${rfEsc(x.nome)}${x.tipo === 'apparecchio' ? ' <span class="caption">apparecchio</span>' : x.tipo === 'codice' ? ' <span class="caption">codice agenda</span>' : ''}</span><span class="n num">${x.n ? `${x.n} · ${oreSala(x.minuti)}` : '—'}${x.posti > 1 ? ` <span class="caption">· ${x.posti} posti</span>` : ''}</span></div><div class="meter${x.occupataOra ? ' now' : ''}"><i style="width:${pct}%"></i></div><div class="cap${x.occupataOra ? ' now' : ''}">${cap}</div></div>`;
   };
   return `
     <div class="page-head"><div><div class="display">${rfEsc(ROLES[state.role].greet)}</div><div class="page-sub" style="text-transform:none">${data} · ${appts.length} ${appts.length === 1 ? 'appuntamento' : 'appuntamenti'}${nMed ? ` · ${nMed} ${nMed === 1 ? 'medico' : 'medici'} in agenda` : ''} · ${TASKS.length ? `${TASKS.length} cose da fare` : 'niente in sospeso'}</div></div>
@@ -1891,9 +1891,9 @@ PAGES.administration = () => {
     const lista = scheda === 'sale' ? d.sale : d.apparecchi;
     const titolo = scheda === 'sale' ? 'Sale' : 'Apparecchi';
     corpo = `<div class="card"><div class="card-head"><span class="section-title">${titolo}</span><span class="caption">${lista.filter(r => r.attivo).length} in uso</span></div>
-      <div class="list">${lista.map(r => `<div class="list-item"><div class="grow"><div class="name">${rfEsc(r.nome)}${r.attivo ? '' : ' <span class="badge">fuori uso</span>'}</div><div class="sub">${rfEsc(r.descrizione || '')}</div></div>
+      <div class="list">${lista.map(r => `<div class="list-item"><div class="grow"><div class="name">${rfEsc(r.nome)}${r.tipo === 'sala' ? ` <span class="badge">${r.posti || 1} ${(r.posti || 1) === 1 ? 'posto' : 'posti'}</span>` : ''}${r.attivo ? '' : ' <span class="badge">fuori uso</span>'}</div><div class="sub">${rfEsc(r.descrizione || '')}</div></div>
         ${admin ? `<button class="btn sm ghost" onclick="rfStudioRisorsa('${r.id}')">Modifica</button><button class="btn sm ghost" onclick="rfStudioAzione({ azione: 'risorsa_attivo', id: '${r.id}' })">${r.attivo ? 'Fuori uso' : 'Rimetti in uso'}</button>` : ''}</div>`).join('') || `<div class="caption">Nessun${scheda === 'sale' ? 'a sala' : ' apparecchio'} registrat${scheda === 'sale' ? 'a' : 'o'}.</div>`}</div></div>
-      ${admin ? `<div class="card mt-16"><div class="section-title">${scheda === 'sale' ? 'Nuova sala' : 'Nuovo apparecchio'}</div><div class="grid grid-2 mt-8"><div class="field"><label>Nome</label><input class="input" id="rf-r-nome" placeholder="${scheda === 'sale' ? 'Sala 1, Sala ECG…' : 'Ecografo, Holter 3, ergometro…'}"></div><div class="field"><label>Descrizione</label><input class="input" id="rf-r-desc" placeholder="${scheda === 'sale' ? 'piano, uso' : 'modello, matricola, scadenza manutenzione'}"></div></div><div class="row mt-16"><button class="btn primary" onclick="rfStudioAzione({ azione: 'risorsa_crea', tipo: '${tipo}', nome: rfStudioCampo('#rf-r-nome'), descrizione: rfStudioCampo('#rf-r-desc') })">Aggiungi</button></div></div>` : ''}`;
+      ${admin ? `<div class="card mt-16"><div class="section-title">${scheda === 'sale' ? 'Nuova sala' : 'Nuovo apparecchio'}</div><div class="grid grid-2 mt-8"><div class="field"><label>Nome</label><input class="input" id="rf-r-nome" placeholder="${scheda === 'sale' ? 'Sala 1, Sala ECG…' : 'Ecografo, Holter 3, ergometro…'}"></div><div class="field"><label>Descrizione</label><input class="input" id="rf-r-desc" placeholder="${scheda === 'sale' ? 'piano, uso' : 'modello, matricola, scadenza manutenzione'}"></div>${scheda === 'sale' ? `<div class="field"><label>Posti (pazienti nello stesso momento)</label><input class="input" id="rf-r-posti" type="number" min="1" max="99" value="1" style="max-width:120px"></div>` : ''}</div><div class="row mt-16"><button class="btn primary" onclick="rfStudioAzione({ azione: 'risorsa_crea', tipo: '${tipo}', nome: rfStudioCampo('#rf-r-nome'), descrizione: rfStudioCampo('#rf-r-desc'), posti: rfStudioCampo('#rf-r-posti') || 1 })">Aggiungi</button></div></div>` : ''}`;
   }
   return `<div class="page-head"><div><h2 class="page-title">Studio</h2><div class="page-sub">${rfEsc((d.studio || {}).nome || '')} · personale, medici dell'agenda, sale e apparecchi</div></div></div>
     <div class="tabs">${tab('studio', 'Dati')}${tab('personale', 'Personale', d.personale.length)}${tab('medici', 'Medici agenda', d.medici.length)}${tab('sale', 'Sale', d.sale.length)}${tab('apparecchi', 'Apparecchi', d.apparecchi.length)}</div>
@@ -1911,8 +1911,8 @@ function rfStudioMedico(id) {
 }
 function rfStudioRisorsa(id) {
   const r = [...(RF.studio.dati.sale || []), ...(RF.studio.dati.apparecchi || [])].find(x => x.id === id); if (!r) return;
-  openModal(r.tipo === 'sala' ? 'Sala' : 'Apparecchio', `<div class="field"><label>Nome</label><input class="input" id="rf-r-e-nome" value="${rfEsc(r.nome)}"></div><div class="field mt-8"><label>Descrizione</label><input class="input" id="rf-r-e-desc" value="${rfEsc(r.descrizione || '')}"></div>`, `<button class="btn" data-close>Annulla</button><button class="btn primary" id="rf-r-ok">Salva</button>`);
-  document.getElementById('rf-r-ok').onclick = async () => { const ok = await rfStudioAzione({ azione: 'risorsa_aggiorna', id, nome: rfStudioCampo('#rf-r-e-nome'), descrizione: rfStudioCampo('#rf-r-e-desc') }); if (ok) closeModal(); };
+  openModal(r.tipo === 'sala' ? 'Sala' : 'Apparecchio', `<div class="field"><label>Nome</label><input class="input" id="rf-r-e-nome" value="${rfEsc(r.nome)}"></div><div class="field mt-8"><label>Descrizione</label><input class="input" id="rf-r-e-desc" value="${rfEsc(r.descrizione || '')}"></div>${r.tipo === 'sala' ? `<div class="field mt-8"><label>Posti (pazienti nello stesso momento)</label><input class="input" id="rf-r-e-posti" type="number" min="1" max="99" value="${r.posti || 1}" style="max-width:120px"></div>` : ''}`, `<button class="btn" data-close>Annulla</button><button class="btn primary" id="rf-r-ok">Salva</button>`);
+  document.getElementById('rf-r-ok').onclick = async () => { const ok = await rfStudioAzione({ azione: 'risorsa_aggiorna', id, nome: rfStudioCampo('#rf-r-e-nome'), descrizione: rfStudioCampo('#rf-r-e-desc'), posti: r.tipo === 'sala' ? (rfStudioCampo('#rf-r-e-posti') || 1) : 1 }); if (ok) closeModal(); };
 }
 
 
@@ -1966,7 +1966,7 @@ PAGES.profile = () => {
       ${due}
     </div>`;
 };
-(function () { const st = document.createElement('style'); st.textContent = `.rf-codici{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:10px}.rf-codici code{padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);font-size:13px;letter-spacing:.04em}`; document.head.appendChild(st); })();
+(function () { const st = document.createElement('style'); st.textContent = `.appt.rf-over{border-left-color:var(--danger);background:var(--danger-soft)}.rf-codici{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:10px}.rf-codici code{padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);font-size:13px;letter-spacing:.04em}`; document.head.appendChild(st); })();
 
 
 /* ---------- agenda vera: colonne per medico, giorno per giorno ---------- */
@@ -1984,15 +1984,42 @@ PAGES.agenda = () => {
   const lista = (RF.agenda || []).filter(a => a.d === giorno).sort((a, b) => a.start.localeCompare(b.start));
   const nomeDi = (a) => (a.p && P[a.p]) ? fullName(P[a.p]) : (a.nome || 'Paziente');
   const medici = [...new Set(lista.filter(a => a.doc && a.doc !== 'studio').map(a => a.doc))].sort((x, y) => (DOCTORS[x] || '').localeCompare(DOCTORS[y] || ''));
-  const cols = medici.map(k => [k, DOCTORS[k] || k]);
-  if (lista.some(a => !a.doc || a.doc === 'studio')) cols.push(['studio', 'Senza medico']);
   const minuti = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  // Vista per sala (14.9.2026): colonne = luoghi dell'agenda del giorno
+  // abbinati alle risorse dello studio (più le sale registrate senza
+  // appuntamenti); sovrapposizioni oltre i posti della sala segnalate.
+  const vista = state.agendaVista === 'sale' ? 'sale' : 'medici';
+  const risorse = (RF.data && Array.isArray(RF.data.risorse)) ? RF.data.risorse : [];
+  const risorsaDi = (codice) => risorse.find(r => r.nome.toLowerCase() === String(codice || '').trim().toLowerCase()) || null;
+  const chiaveSala = (a) => String(a.room || '').trim().toLowerCase();
+  const sovra = new Set(); const avvisi = [];
+  let cols;
+  if (vista === 'sale') {
+    const viste = new Map();
+    for (const a of lista) { const k = chiaveSala(a); if (!k) continue; if (!viste.has(k)) { const r = risorsaDi(a.room); viste.set(k, { k, nome: r ? r.nome : a.room.trim(), posti: r ? (r.posti || 1) : null, tipo: r ? r.tipo : 'codice' }); } }
+    for (const r of risorse) if (r.tipo === 'sala' && !viste.has(r.nome.toLowerCase())) viste.set(r.nome.toLowerCase(), { k: r.nome.toLowerCase(), nome: r.nome, posti: r.posti || 1, tipo: 'sala' });
+    const ordinate = [...viste.values()].sort((x, y) => x.nome.localeCompare(y.nome));
+    cols = ordinate.map(c => [c.k, `${c.nome}${c.posti ? ` · ${c.posti} ${c.posti === 1 ? 'posto' : 'posti'}` : ''}${c.tipo === 'apparecchio' ? ' · apparecchio' : c.tipo === 'codice' ? ' · codice' : ''}`]);
+    if (lista.some(a => !chiaveSala(a))) cols.push(['', 'Senza luogo']);
+    for (const c of ordinate) {
+      if (!c.posti) continue;
+      const inSala = lista.filter(a => chiaveSala(a) === c.k && a.status !== 'CANCELLED');
+      for (const a of inSala) {
+        const ini = minuti(a.start), fine = ini + a.dur;
+        const conc = inSala.filter(b => minuti(b.start) < fine && minuti(b.start) + b.dur > ini).length;
+        if (conc > c.posti) { sovra.add(a.id); const t = `${c.nome} alle ${a.start} (${conc} su ${c.posti})`; if (!avvisi.includes(t)) avvisi.push(t); }
+      }
+    }
+  } else {
+    cols = medici.map(k => [k, DOCTORS[k] || k]);
+    if (lista.some(a => !a.doc || a.doc === 'studio')) cols.push(['studio', 'Senza medico']);
+  }
   const startH = lista.length ? Math.max(6, Math.min(8, Math.floor(Math.min(...lista.map(a => minuti(a.start))) / 60))) : 8;
   const endH = lista.length ? Math.min(21, Math.max(18, Math.ceil(Math.max(...lista.map(a => minuti(a.start) + a.dur)) / 60))) : 18;
   const slotH = 44, slots = (endH - startH) * 2;
   const top = (t) => (minuti(t) - startH * 60) / 30 * slotH;
-  const chip = (a) => `<div class="appt ${a.late ? 'LATE' : a.status}" style="top:${top(a.start) + 2}px;height:${Math.max(24, a.dur / 30 * slotH - 4)}px${a.colore ? `;border-left:4px solid ${rfEsc(a.colore)};background:${rfEsc(a.colore)}1a` : ''}" ${a.p && rfUuid(a.p) ? `data-go="#/patients/${a.p}"` : ''} title="${rfEsc(nomeDi(a))} · ${a.start} · ${rfEsc(a.reason || '')}${a.room ? ' · ' + rfEsc(a.room) : ''}"><div class="n"><i class="dot ${a.late ? 'warning' : a.status === 'COMPLETED' ? 'success' : 'accent'}"></i>${rfEsc(nomeDi(a))}</div><div class="s">${a.start} · ${rfEsc(a.reason || '')}${a.room ? ` · <b>${rfEsc(a.room)}</b>` : ''}</div></div>`;
-  const colHtml = (key) => `<div class="cal-col" style="height:${slots * slotH}px">${Array.from({ length: slots }, (_, i) => `<div class="cal-line ${i % 2 ? 'half' : ''}" style="top:${i * slotH}px"></div>`).join('')}${lista.filter(a => key === 'studio' ? (!a.doc || a.doc === 'studio') : a.doc === key).map(chip).join('')}</div>`;
+  const chip = (a) => `<div class="appt ${a.late ? 'LATE' : a.status}${sovra.has(a.id) ? ' rf-over' : ''}" style="top:${top(a.start) + 2}px;height:${Math.max(24, a.dur / 30 * slotH - 4)}px${a.colore ? `;border-left:4px solid ${rfEsc(a.colore)};background:${rfEsc(a.colore)}1a` : ''}" ${a.p && rfUuid(a.p) ? `data-go="#/patients/${a.p}"` : ''} title="${rfEsc(nomeDi(a))} · ${a.start} · ${rfEsc(a.reason || '')}${a.room ? ' · ' + rfEsc(a.room) : ''}"><div class="n"><i class="dot ${a.late ? 'warning' : a.status === 'COMPLETED' ? 'success' : 'accent'}"></i>${rfEsc(nomeDi(a))}</div><div class="s">${a.start} · ${rfEsc(a.reason || '')}${a.room ? ` · <b>${rfEsc(a.room)}</b>` : ''}</div></div>`;
+  const colHtml = (key) => `<div class="cal-col" style="height:${slots * slotH}px">${Array.from({ length: slots }, (_, i) => `<div class="cal-line ${i % 2 ? 'half' : ''}" style="top:${i * slotH}px"></div>`).join('')}${lista.filter(a => vista === 'sale' ? chiaveSala(a) === key : (key === 'studio' ? (!a.doc || a.doc === 'studio') : a.doc === key)).map(chip).join('')}</div>`;
   const times = Array.from({ length: slots }, (_, i) => i % 2 === 0 ? `<div class="cal-time num" style="top:${i * slotH}px">${String(startH + i / 2).padStart(2, '0')}:00</div>` : '').join('');
   const d = new Date(`${giorno}T12:00:00`);
   const etichetta = d.toLocaleDateString('it-CH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -2000,8 +2027,10 @@ PAGES.agenda = () => {
   const senza = lista.filter(a => !a.doc || a.doc === 'studio').length;
   return `
     <div class="page-head"><div><h2 class="page-title">Agenda</h2><div class="page-sub">${rfEsc(etichetta)} · ${lista.length} appuntamenti${medici.length ? ` · ${medici.length} medici` : ''}${senza ? ` · ${senza} senza medico` : ''}</div></div>
-      <div class="actions"><div class="seg"><button onclick="state.agendaGiorno='${sposta(-1)}';render()">‹</button><button class="${giorno === oggi ? 'active' : ''}" onclick="state.agendaGiorno='${oggi}';render()">Oggi</button><button onclick="state.agendaGiorno='${sposta(1)}';render()">›</button></div><input type="date" class="input sm" value="${giorno}" onchange="state.agendaGiorno=this.value;render()" style="max-width:160px"><button class="btn ai" data-ai="Preparazione della giornata">${ICONS.ai} Prepara la giornata</button></div></div>
-    ${senza ? `<div class="caption mb-16">Gli appuntamenti «senza medico» hanno nel luogo un codice non abbinato (${[...new Set(lista.filter(a => !a.doc || a.doc === 'studio').map(a => a.room).filter(Boolean))].map(rfEsc).join(', ') || 'vuoto'}): si abbinano in Studio → Medici agenda → Codici dell'agenda.</div>` : ''}
+      <div class="actions"><div class="seg"><button class="${vista === 'medici' ? 'active' : ''}" onclick="state.agendaVista='medici';render()">Per medico</button><button class="${vista === 'sale' ? 'active' : ''}" onclick="state.agendaVista='sale';render()">Per sala</button></div><div class="seg"><button onclick="state.agendaGiorno='${sposta(-1)}';render()">‹</button><button class="${giorno === oggi ? 'active' : ''}" onclick="state.agendaGiorno='${oggi}';render()">Oggi</button><button onclick="state.agendaGiorno='${sposta(1)}';render()">›</button></div><input type="date" class="input sm" value="${giorno}" onchange="state.agendaGiorno=this.value;render()" style="max-width:160px"><button class="btn ai" data-ai="Preparazione della giornata">${ICONS.ai} Prepara la giornata</button></div></div>
+    ${avvisi.length ? `<div class="card mb-16" style="border-left:3px solid var(--danger)"><b>Più pazienti dei posti della sala</b>: ${avvisi.map(rfEsc).join(' · ')}. I posti si impostano in Studio → Sale.</div>` : ''}
+    ${vista === 'sale' && cols.length && !risorse.some(r => r.tipo === 'sala') ? `<div class="caption mb-16">Nessuna sala registrata: le colonne sono i codici del campo «luogo» dell'agenda. In Studio → Sale si registrano le sale con i posti; in Medici agenda → Codici dell'agenda un codice diventa una sala.</div>` : ''}
+    ${senza && vista === 'medici' ? `<div class="caption mb-16">Gli appuntamenti «senza medico» hanno nel luogo un codice non abbinato (${[...new Set(lista.filter(a => !a.doc || a.doc === 'studio').map(a => a.room).filter(Boolean))].map(rfEsc).join(', ') || 'vuoto'}): si abbinano in Studio → Medici agenda → Codici dell'agenda.</div>` : ''}
     ${lista.length ? `<div class="cal" style="--cols:${cols.length}">
       <div class="cal-head"></div>${cols.map(c => `<div class="cal-head">${rfEsc(c[1])}</div>`).join('')}
       <div class="cal-times" style="--slots:${slots};--slot-h:${slotH}px">${times}</div>${cols.map(c => colHtml(c[0])).join('')}

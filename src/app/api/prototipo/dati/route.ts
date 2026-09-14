@@ -252,18 +252,18 @@ export async function GET() {
   // Cruscotto (14.9.2026): sale di oggi con l'occupazione, chi ha agenda oggi,
   // accessi attivi, visti senza referto e lettere in ritardo (stessa regola
   // della procedura). Solo conteggi e nomi di sala: nessun testo clinico.
-  const risorse = await query<{ id: string; tipo: string; nome: string; attivo: boolean }>(
-    `select id, tipo, nome, attivo from studio_risorse where studio_id = $1 and attivo order by tipo, nome`, [sid]);
+  const risorse = await query<{ id: string; tipo: string; nome: string; attivo: boolean; posti: number }>(
+    `select id, tipo, nome, attivo, posti from studio_risorse where studio_id = $1 and attivo order by tipo, nome`, [sid]);
   const [acc] = await query<{ attivi: number }>(`select count(*)::int as attivi from users where studio_id = $1 and attivo`, [sid]);
   const nomeRisorsa = new Map(risorse.map((r) => [r.nome.toLowerCase(), r]));
-  const perSala = new Map<string, { nome: string; tipo: string; n: number; minuti: number; prima: string; occupataOra: boolean; prossima: string }>();
+  const perSala = new Map<string, { nome: string; tipo: string; posti: number | null; n: number; minuti: number; prima: string; occupataOra: boolean; prossima: string }>();
   const hm = ora(oggiIso.toISOString());
   for (const a of apptsOggi) {
     const codice = (a.room || '').trim();
     if (!codice) continue;
     const r = nomeRisorsa.get(codice.toLowerCase());
     const k = codice.toLowerCase();
-    const e = perSala.get(k) ?? { nome: r?.nome ?? codice, tipo: r?.tipo ?? 'codice', n: 0, minuti: 0, prima: '', occupataOra: false, prossima: '' };
+    const e = perSala.get(k) ?? { nome: r?.nome ?? codice, tipo: r?.tipo ?? 'codice', posti: r ? r.posti : null, n: 0, minuti: 0, prima: '', occupataOra: false, prossima: '' };
     e.n++; e.minuti += a.dur;
     if (!e.prima || a.start < e.prima) e.prima = a.start;
     const fineA = (() => { const [h, m] = a.start.split(':').map(Number); const t = h * 60 + m + a.dur; return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`; })();
@@ -271,7 +271,7 @@ export async function GET() {
     if (a.start > hm && a.status !== 'CANCELLED' && (!e.prossima || a.start < e.prossima)) e.prossima = a.start;
     perSala.set(k, e);
   }
-  for (const r of risorse) if (r.tipo === 'sala' && !perSala.has(r.nome.toLowerCase())) perSala.set(r.nome.toLowerCase(), { nome: r.nome, tipo: 'sala', n: 0, minuti: 0, prima: '', occupataOra: false, prossima: '' });
+  for (const r of risorse) if (r.tipo === 'sala' && !perSala.has(r.nome.toLowerCase())) perSala.set(r.nome.toLowerCase(), { nome: r.nome, tipo: 'sala', posti: r.posti, n: 0, minuti: 0, prima: '', occupataOra: false, prossima: '' });
   const sale = [...perSala.values()].sort((a, b) => b.minuti - a.minuti || a.nome.localeCompare(b.nome));
   const refertiOggiPer = new Set(reports.filter((r) => r.date === dCh(oggiIso.toISOString())).map((r) => r.p));
   const vistiSenzaReferto = apptsOggi.filter((a) => a.status === 'COMPLETED' && a.p && !refertiOggiPer.has(a.p)).length;
@@ -289,5 +289,6 @@ export async function GET() {
   return NextResponse.json({
     utente: { role: RUOLO[session.role] ?? 'secretary', name: nome, initials: iniz, studio: session.studioNome, email: session.email },
     today, doctors, patients, appts: apptsOggi, agenda, tasks, reports, documents, inbox, audioInbox, stats, sale,
+    risorse: risorse.map((r) => ({ id: r.id, tipo: r.tipo, nome: r.nome, posti: r.posti })),
   });
 }
