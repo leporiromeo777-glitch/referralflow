@@ -1847,6 +1847,21 @@ function rfRispondiLibera(q) {
     const c = document.getElementById('content'); ultimo = c ? c.scrollTop : 0; accumulato = 0;
   };
 })();
+function rfMenuAltro(chiavi) {
+  const voce = (k) => { const m = NAV_META[k] || [k, 'home']; return `<button class="rf-altro-voce ${state.route === k ? 'active' : ''}" data-altro="${k}">${ICONS[m[1]] || ''}<span>${rfEsc(m[0])}</span></button>`; };
+  const corpo = rfNavGruppi(chiavi, voce).replace(/class="nav-group"/g, 'class="rf-altro-gruppo"') + `<div class="rf-altro-gruppo">Profilo</div>${voce('profile')}`;
+  openSheet('Tutte le pagine', `<div class="rf-altro">${corpo}</div>`);
+  document.querySelectorAll('#sheet [data-altro]').forEach(b => b.onclick = () => { closeSheet(); go('#/' + b.dataset.altro); });
+}
+(function () { const st = document.createElement('style'); st.textContent = `
+.rf-altro { display: flex; flex-direction: column; gap: 2px; padding-bottom: 12px; }
+.rf-altro-gruppo { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); padding: 14px 6px 6px; }
+.rf-altro-voce { display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--text); font-size: 15px; font-weight: 500; text-align: left; }
+.rf-altro-voce svg { width: 20px; height: 20px; color: var(--text-2); }
+.rf-altro-voce.active { background: var(--accent-soft); color: var(--accent-text); }
+.rf-altro-voce.active svg { color: var(--accent-text); }
+.mobile-nav.rf-pill button { min-width: 42px; }
+`; document.head.appendChild(st); })();
 const rfMobileNavOrig = renderMobileNav;
 renderMobileNav = function () {
   if (!RF.live) return rfMobileNavOrig();
@@ -1854,13 +1869,18 @@ renderMobileNav = function () {
   if (!nav) return;
   nav.classList.add('rf-pill');
   nav.classList.toggle('rf-ai', !!state.aiOpen);
-  const voci = [['home', 'Oggi', 'home'], ['agenda', 'Agenda', 'agenda'], ['patients', 'Pazienti', 'patients'], ['reports', 'Referti', 'reports'], ['dittafono', 'Dittafono', 'mic'], ['ai', 'AI', 'ai']];
-  const attiva = (k) => k === 'ai' ? state.aiOpen : (state.route === k || (k === 'patients' && ['patient', 'visit'].includes(state.route)) || (k === 'reports' && ['report', 'review'].includes(state.route)));
+  // Pillola: cinque voci fisse, l'AI e «Altro» (14.9.2026), che apre un
+  // foglio con TUTTE le altre pagine del ruolo, a sezioni come la barra laterale.
+  const voci = [['home', 'Oggi', 'home'], ['agenda', 'Agenda', 'agenda'], ['patients', 'Pazienti', 'patients'], ['reports', 'Referti', 'reports'], ['dittafono', 'Dittafono', 'mic'], ['ai', 'AI', 'ai'], ['altro', 'Altro', 'moreV']];
+  const fisse = new Set(voci.map(v => v[0]));
+  const altre = (NAV[state.role] || []).filter(k => !fisse.has(k));
+  const attiva = (k) => k === 'ai' ? state.aiOpen : k === 'altro' ? altre.includes(state.route) : (state.route === k || (k === 'patients' && ['patient', 'visit'].includes(state.route)) || (k === 'reports' && ['report', 'review'].includes(state.route)));
   nav.innerHTML = voci.map(([k, l, i]) => `<button class="${attiva(k) ? 'active' : ''}" data-mnav="${k}" aria-label="${l}">${ICONS[i] || ''}<span>${l}</span></button>`).join('');
   nav.querySelectorAll('button').forEach(b => b.onclick = () => {
     const k = b.dataset.mnav;
     if (k === 'ai') { state.aiOpen = !state.aiOpen; render(); return; }
     if (k === 'dittafono') { window.location.href = '/dittafono/index.html'; return; }
+    if (k === 'altro') { rfMenuAltro(altre); return; }
     go('#/' + k);
   });
   if (typeof window.rfPillolaMostra === 'function') window.rfPillolaMostra();
