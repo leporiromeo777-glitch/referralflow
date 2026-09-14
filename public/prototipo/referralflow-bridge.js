@@ -846,20 +846,22 @@ const RF_AI_NOME = 'Cleo';
 .rf-gpt-comp { display:flex; align-items:center; gap:8px; padding:6px 6px 6px 18px; border:1px solid var(--border); border-radius:26px; background:var(--surface); box-shadow:var(--shadow-1); }
 .rf-gpt-comp:focus-within { border-color:var(--accent); }
 .rf-gpt-comp input { flex:1; min-width:0; height:38px; border:0; background:none; outline:none; font:inherit; font-size:15px; color:var(--text); }
-.rf-gpt-comp button { flex:none; width:34px; height:34px; border:0; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; }
-.rf-gpt-comp button svg { width:16px; height:16px; }
+/* Solo il tondo d'invio: se il selettore prende tutti i bottoni schiaccia
+   anche le pillole dei modi (è più specifico di .rf-modo). */
+.rf-gpt-comp > button.invia { flex:none; width:34px; height:34px; padding:0; border:0; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.rf-gpt-comp > button.invia svg { width:16px; height:16px; }
 .rf-gpt-nota { margin:9px 0 0; text-align:center; font-size:11.5px; line-height:1.5; color:var(--text-3); }
 /* Modi dentro il campo, come i tasti «ricerca approfondita» o «crea immagine». */
 .rf-gpt-comp { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; padding:10px 10px 9px 18px; }
 .rf-gpt-comp input { grid-column:1 / -1; height:30px; }
-.rf-gpt-modi { grid-column:1; display:flex; gap:6px; flex-wrap:wrap; }
+.rf-gpt-modi { grid-column:1; display:flex; gap:6px; flex-wrap:wrap; margin-left:-12px; }
 .rf-gpt-comp > button.invia { grid-column:2; }
 .rf-modo { display:inline-flex; flex:none; align-items:center; gap:6px; height:30px; padding:0 12px; white-space:nowrap; border:1px solid var(--border); border-radius:999px; background:transparent; font:inherit; font-size:12.5px; color:var(--text-2); cursor:pointer; }
 .rf-modo svg { width:14px; height:14px; }
 .rf-modo:hover { border-color:var(--border-2); }
 .rf-modo[aria-pressed="true"] { border-color:var(--accent); background:var(--accent-soft); color:var(--accent-text); font-weight:600; }
 /* Il momento che rende sicura tutta la faccenda: si vede prima di partire. */
-.rf-med { border:1px solid var(--accent); border-radius:var(--r-card,10px); background:var(--surface); padding:14px 16px; margin-bottom:10px; }
+.rf-med { border:1px solid var(--accent); border-radius:var(--r-card,10px); background:var(--surface); padding:14px 18px; margin-bottom:10px; }
 .rf-med .t { display:flex; align-items:center; gap:7px; font-size:12px; font-weight:650; text-transform:uppercase; letter-spacing:.03em; color:var(--text-3); margin-bottom:9px; }
 .rf-med .t svg { width:14px; height:14px; }
 .rf-med textarea { width:100%; min-height:62px; padding:9px 11px; border:1px solid var(--border); border-radius:8px; background:var(--surface-2); font:inherit; font-size:14px; line-height:1.5; color:var(--text); resize:vertical; }
