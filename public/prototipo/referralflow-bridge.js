@@ -304,7 +304,7 @@ PAGES.home = () => {
           ${sale.length ? '<div class="caption mt-8" style="padding:0 6px">Barra piena = 8 ore. Il luogo viene dal campo «luogo» dell\'agenda.</div>' : ''}
           ${RF.data.agendeMedico ? `<div class="caption mt-8" style="padding:0 6px">Fuori da questo elenco: <b>${RF.data.agendeMedico} agende di medici</b> — in MediOnline la colonna è l'agenda del medico, non la stanza.</div>` : ''}</div>
         <div class="card"><div class="card-head"><span class="section-title">In studio oggi</span><span class="badge count">${nMed}</span></div>
-          <div class="list">${nMed ? mediciOggi.map(d => `<div class="rf-persona"><i class="dot success"></i><span>${rfEsc(DOCTORS[d] || d)}</span><span class="caption" style="margin-left:auto">${appts.filter(a => a.doc === d).length} app.</span></div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessun medico con agenda oggi.</div>'}</div>
+          <div class="list">${nMed ? mediciOggi.map(d => `<div class="rf-persona"><i class="dot success"></i><span>${rfEsc(DOCTORS[d] || d)}${rfEtichettaRuolo(d)}</span><span class="caption" style="margin-left:auto">${appts.filter(a => a.doc === d).length} app.</span></div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessun medico con agenda oggi.</div>'}</div>
           <div class="caption mt-8" style="padding:0 6px">${s.accessi_attivi ?? 0} accessi attivi alla piattaforma</div></div>
         ${urgenti.length ? `<div class="card"><div class="card-head"><span class="section-title">Urgenti</span><span class="badge count" style="background:var(--danger);color:#fff">${urgenti.length}</span></div>
           <div class="list">${urgenti.map(t => `<div class="list-item"><i class="dot danger"></i><div class="grow"><div class="name" style="font-size:13px">${rfEsc(t.title)}</div><div class="sub">${rfEsc(t.due)}</div></div><a class="btn sm" href="${t.href}">Apri</a></div>`).join('')}</div></div>` : ''}
@@ -2873,7 +2873,7 @@ function rfApptScheda(id) {
       ${riga('Paziente', rfEsc(a.nomeBreve || a.nome))}
       ${riga('Nato il', rfEsc(a.nascita))}
       ${riga('N° paziente', a.nPaziente ? `<code>${rfEsc(a.nPaziente)}</code> <span class="caption">in MediOnline</span>` : '')}
-      ${riga('Medico', a.doc && a.doc !== 'studio' ? rfEsc(DOCTORS[a.doc] || a.doc) : `<span class="caption">non abbinato</span>`)}
+      ${riga(rfRuoloDi(a.doc) ? 'Eseguito da' : 'Medico', a.doc && a.doc !== 'studio' ? rfEsc(DOCTORS[a.doc] || a.doc) + rfEtichettaRuolo(a.doc) : `<span class="caption">non abbinato</span>`)}
       ${riga('Agenda', a.sigla ? `<code>${rfEsc(a.sigla)}</code>` : (a.room ? `<code>${rfEsc(a.room)}</code>` : ''))}
       ${riga('Tipo', a.colore ? `<span class="status"><i class="dot" style="background:${rfEsc(a.colore)}"></i>${rfEsc(rfTipoColore(a.colore))}</span>` : '')}
       ${riga('Prestazione', a.prestazione || a.motivoVero
@@ -2898,6 +2898,11 @@ function rfApptScheda(id) {
 .rf-ap-grezzo div { font-size:12.5px; color:var(--text-2); margin-top:3px; }
 @media (max-width: 600px) { .rf-ap-riga { grid-template-columns: 1fr; gap:2px; } }
 `; document.head.appendChild(st); })();
+
+// Chi tiene un'agenda senza essere medico (l'ecografista, per esempio): il
+// nome si mostra, ma con scritto che cos'è — non lo si chiama medico.
+function rfRuoloDi(id) { return (RF.data && RF.data.ruoliMedici && RF.data.ruoliMedici[id]) || ''; }
+function rfEtichettaRuolo(id) { const r = rfRuoloDi(id); return r ? ` <span class="caption">${rfEsc(r)}</span>` : ''; }
 
 const rfAgendaOrig = PAGES.agenda;
 PAGES.agenda = () => {
@@ -2938,7 +2943,7 @@ PAGES.agenda = () => {
       }
     }
   } else {
-    cols = medici.map(k => ({ k, et: DOCTORS[k] || k, colore: (RF.data && RF.data.coloriMedici && RF.data.coloriMedici[k]) || '', test: (a) => a.doc === k }));
+    cols = medici.map(k => ({ k, et: (DOCTORS[k] || k) + (rfRuoloDi(k) ? ` · ${rfRuoloDi(k)}` : ''), colore: (RF.data && RF.data.coloriMedici && RF.data.coloriMedici[k]) || '', test: (a) => a.doc === k }));
     // Quel che non è di un medico non finisce più in una colonna sola dove si
     // copre a vicenda: si divide per COLORE del riquadro nell'agenda
     // originale, che nello studio vuol dire il tipo di appuntamento

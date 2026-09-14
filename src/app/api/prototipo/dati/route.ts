@@ -52,8 +52,11 @@ export async function GET() {
 
   // Medici: profili della catena + providers dell'agenda, senza doppioni per nome.
   const medici = await mediciDelloStudio(sid);
-  const providers = await query<{ id: string; nome: string; colore: string | null }>(`select id, nome, colore from providers where studio_id = $1 and attivo order by nome`, [sid]);
+  const providers = await query<{ id: string; nome: string; colore: string | null; ruolo: string }>(`select id, nome, colore, ruolo from providers where studio_id = $1 and attivo order by nome`, [sid]);
   const coloriMedici: Record<string, string> = {};
+  // Chi tiene un'agenda non è sempre un medico: l'ecografista ha una colonna
+  // con più appuntamenti di qualunque medico. L'interfaccia deve poterlo dire.
+  const ruoliMedici: Record<string, string> = {};
   const doctors: Record<string, string> = {};
   const idPerNome = new Map<string, string>();
   for (const m of medici) { doctors[m.id] = m.nome; idPerNome.set(slug(m.nome), m.id); }
@@ -63,6 +66,7 @@ export async function GET() {
     const id = trovato ? trovato[1] : `pr-${p.id.slice(0, 8)}`;
     if (!doctors[id]) doctors[id] = p.nome;
     if (p.colore) coloriMedici[id] = p.colore;
+    if (p.ruolo && p.ruolo !== 'medico') ruoliMedici[id] = p.ruolo;
     providerToDoc.set(p.id, id);
   }
   if (!Object.keys(doctors).length) doctors.studio = session.studioNome;
@@ -368,7 +372,7 @@ export async function GET() {
   };
   return NextResponse.json({
     utente: { role: RUOLO[session.role] ?? 'secretary', name: nome, initials: iniz, studio: session.studioNome, email: session.email },
-    today, doctors, patients, appts: apptsOggi, agenda, tasks, reports, documents, inbox, audioInbox, stats, sale, agendeMedico,
+    today, doctors, patients, appts: apptsOggi, agenda, tasks, reports, documents, inbox, audioInbox, stats, sale, agendeMedico, ruoliMedici,
     risorse: risorse.map((r) => ({ id: r.id, tipo: r.tipo, nome: r.nome, posti: r.posti })),
     catalogo, coloriMedici, daChiamare, moduli_nascosti: stud?.moduli_nascosti ?? [],
   });

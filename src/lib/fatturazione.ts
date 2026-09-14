@@ -7,7 +7,7 @@
 export type RigaFattura = {
   id: string; data: string; ora: string; durata: number;
   cognome: string; nome: string; nascita: string; assicurazione: string; avs: string; n_assicurato: string; in_cartella: boolean;
-  medico: string; gln_medico: string; rcc_medico: string; prestazione: string; codice_tariffa: string; luogo: string;
+  medico: string; gln_medico: string; rcc_medico: string; eseguito_da: string; prestazione: string; codice_tariffa: string; luogo: string;
   fatta: boolean; referto: boolean; inviante: string;
   esportato_il: string;
   // Stato letto nell'agenda di MediOnline (vuoto quando l'agenda non lo dice).
@@ -31,7 +31,7 @@ export const ETICHETTE_STATO: Record<string, string> = {
 // Stati che non diventano una fattura: non vanno contati fra i dimenticati.
 const NON_FATTURABILI = new Set(['scusato', 'annullato', 'bloccato']);
 
-export const COLONNE = ['Data', 'Ora', 'Durata (min)', 'Cognome', 'Nome', 'Data di nascita', 'Assicurazione', 'AVS', 'N. assicurato', 'Medico', 'GLN medico', 'RCC medico', 'Prestazione', 'Posizione tariffaria', 'Luogo', 'Visita segnata fatta', 'Referto confermato', 'Medico inviante', 'Stato in agenda', 'ID appuntamento', 'Esportato il'] as const;
+export const COLONNE = ['Data', 'Ora', 'Durata (min)', 'Cognome', 'Nome', 'Data di nascita', 'Assicurazione', 'AVS', 'N. assicurato', 'Medico', 'GLN medico', 'RCC medico', 'Eseguito da', 'Prestazione', 'Posizione tariffaria', 'Luogo', 'Visita segnata fatta', 'Referto confermato', 'Medico inviante', 'Stato in agenda', 'ID appuntamento', 'Esportato il'] as const;
 
 function cella(v: string | number | boolean): string {
   const s = typeof v === 'boolean' ? (v ? 'sì' : 'no') : String(v ?? '');
@@ -40,7 +40,7 @@ function cella(v: string | number | boolean): string {
 
 export function csvPrestazioni(righe: RigaFattura[]): string {
   const testa = COLONNE.join(';');
-  const corpo = righe.map((r) => [r.data, r.ora, r.durata, r.cognome, r.nome, r.nascita, r.assicurazione, r.avs, r.n_assicurato, r.medico, r.gln_medico, r.rcc_medico, r.prestazione, r.codice_tariffa, r.luogo, r.fatta, r.referto, r.inviante, ETICHETTE_STATO[r.stato] ?? '', r.id, r.esportato_il].map(cella).join(';'));
+  const corpo = righe.map((r) => [r.data, r.ora, r.durata, r.cognome, r.nome, r.nascita, r.assicurazione, r.avs, r.n_assicurato, r.medico, r.gln_medico, r.rcc_medico, r.eseguito_da, r.prestazione, r.codice_tariffa, r.luogo, r.fatta, r.referto, r.inviante, ETICHETTE_STATO[r.stato] ?? '', r.id, r.esportato_il].map(cella).join(';'));
   return '﻿' + [testa, ...corpo].join('\r\n') + '\r\n';
 }
 
@@ -68,6 +68,9 @@ export function riepilogoPrestazioni(righe: RigaFattura[]) {
     esportate: righe.filter((r) => !!r.esportato_il).length,
     senza_referto: righe.filter((r) => !r.referto).length,
     senza_cartella: righe.filter((r) => !r.in_cartella).length,
+    // Eseguite da un collaboratore: la fattura va sotto il medico che
+    // supervisiona, e il medico qui manca. Da guardare prima di esportare.
+    da_collaboratore: righe.filter((r) => r.eseguito_da && !r.medico).length,
     non_segnate: righe.filter((r) => !r.fatta).length,
     fatturate: righe.filter((r) => r.stato === 'fatturato').length,
     da_fatturare: righe.filter((r) => r.stato === 'da_fatturare').length,

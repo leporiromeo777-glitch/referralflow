@@ -4,7 +4,7 @@ import { COLONNE, controlloFatturazione, csvPrestazioni, nomeFileCsv, periodoMes
 
 const riga = (x: Partial<RigaFattura> = {}): RigaFattura => ({
   id: 'a1', data: '03.09.2026', ora: '09:30', durata: 30, cognome: 'Rossi', nome: 'Mario', nascita: '01.02.1950', assicurazione: 'LAMal', avs: '756.1234.5678.97', n_assicurato: '', in_cartella: true,
-  medico: 'Dr. med. X', gln_medico: '', rcc_medico: '', prestazione: 'Visita; controllo', codice_tariffa: '', luogo: 'Sala 1', fatta: true, referto: false, inviante: 'Dr. "Y"', esportato_il: '', stato: '', stato_visto: '', ...x,
+  medico: 'Dr. med. X', gln_medico: '', rcc_medico: '', eseguito_da: '', prestazione: 'Visita; controllo', codice_tariffa: '', luogo: 'Sala 1', fatta: true, referto: false, inviante: 'Dr. "Y"', esportato_il: '', stato: '', stato_visto: '', ...x,
 });
 
 test('fatturazione: CSV con BOM, separatore ; , intestazione fissa, virgolette dove servono, sì/no per i booleani', () => {
@@ -35,7 +35,7 @@ test('fatturazione: il riepilogo conta nuove, esportate, senza referto, senza ca
   ]);
   assert.deepEqual(r, {
     totale: 3, nuove: 2, esportate: 1, senza_referto: 2, senza_cartella: 1, non_segnate: 1,
-    fatturate: 1, da_fatturare: 1,
+    fatturate: 1, da_fatturare: 1, da_collaboratore: 0,
   });
 });
 
@@ -72,5 +72,13 @@ test('controllo: senza stato nessun allarme se la data non si legge', () => {
 test('fatturazione: il CSV porta lo stato dell\'agenda in italiano', () => {
   const csv = csvPrestazioni([riga({ stato: 'fatturato' })]);
   assert.ok(csv.includes(';Fatturato;'));
+  assert.equal(csv.split('\r\n')[0].split(';').length, COLONNE.length);
+});
+
+test('fatturazione: una prestazione eseguita da un collaboratore non porta un medico', () => {
+  const r = riepilogoPrestazioni([riga({ medico: '', eseguito_da: 'Daniela Cassani' }), riga()]);
+  assert.equal(r.da_collaboratore, 1);
+  const csv = csvPrestazioni([riga({ medico: '', eseguito_da: 'Daniela Cassani' })]);
+  assert.ok(csv.includes(';Daniela Cassani;'));
   assert.equal(csv.split('\r\n')[0].split(';').length, COLONNE.length);
 });

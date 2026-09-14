@@ -203,6 +203,37 @@ try {
     });
   }
 
+  // Con --agende: l'elenco delle agende come lo mostra MediOnline, con tutte
+  // le etichette e i suggerimenti. Sono nomi di colonne, non dati di pazienti.
+  if (process.argv.includes('--agende')) {
+    const el = await p.evaluate(() => {
+      const fuori = [];
+      // la lista con le spunte delle agende
+      for (const inp of document.querySelectorAll('input[type=checkbox]')) {
+        const riga = inp.closest('tr, li, div');
+        if (!riga) continue;
+        const testo = (riga.innerText || '').replace(/\s+/g, ' ').trim();
+        if (!testo || testo.length > 80) continue;
+        fuori.push({
+          spuntata: inp.checked,
+          testo,
+          titolo: inp.getAttribute('title') || riga.getAttribute('title') || '',
+          id: inp.id || '',
+        });
+      }
+      // eventuali tooltip sulle intestazioni di colonna
+      const teste = [...document.querySelectorAll('.WeekGrid_colheader')].map((h) => ({
+        testo: (h.innerText || '').trim(),
+        titolo: h.getAttribute('title') || '',
+      })).filter((x) => x.testo);
+      return { fuori, teste };
+    });
+    console.log('\n═══ elenco delle agende (spunte):');
+    for (const x of el.fuori) console.log(`   [${x.spuntata ? 'x' : ' '}] ${x.testo}${x.titolo ? '   → ' + x.titolo : ''}`);
+    console.log('\n═══ intestazioni di colonna:');
+    for (const t of el.teste) console.log(`   ${t.testo}${t.titolo ? '   → ' + t.titolo : ''}`);
+  }
+
   // Con --risorse: la mappa risorsa → colonna, e la forma dell'html.
   if (process.argv.includes('--risorse')) {
     const r = await p.evaluate(() => {

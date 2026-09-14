@@ -932,3 +932,12 @@ create index if not exists appointments_stato_idx
 alter table prestazioni_catalogo add column if not exists colore text;
 create unique index if not exists prestazioni_catalogo_colore_idx
   on prestazioni_catalogo (studio_id, colore) where colore is not null;
+
+-- Ruolo di chi tiene un'agenda: non è sempre un medico (un'ecografista tiene
+-- una colonna con più appuntamenti di qualunque medico). Il ruolo decide dove
+-- il nome può comparire — per esempio non nella colonna «Medico» del CSV di
+-- fatturazione (migrazione 048).
+alter table providers add column if not exists ruolo text not null default 'medico';
+alter table providers drop constraint if exists providers_ruolo_check;
+alter table providers add constraint providers_ruolo_check
+  check (ruolo in ('medico', 'collaboratore'));
