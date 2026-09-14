@@ -19,6 +19,7 @@ Regole, tutte obbligatorie:
 - NON scrivere «il paziente», «questo paziente», «il mio caso»: la domanda deve riguardare la condizione, non una persona.
 - Trasforma i dati particolari in categorie cliniche: «62 anni» diventa «nell'anziano» solo se l'età conta; «clearance 38» diventa «nell'insufficienza renale moderata»; un valore preciso diventa la classe a cui appartiene.
 - MANTIENI la sostanza clinica: la domanda riscritta deve avere la stessa risposta della domanda originale.
+- NON eliminare i dati che DETERMINANO la risposta (peso, età, valori di laboratorio, terapia in corso): trasformali in categorie e tienili. «54 kg» diventa «peso inferiore a 60 kg», «creatinina 118 µmol/L» diventa «funzione renale lievemente ridotta», «82 anni» diventa «oltre gli 80 anni». Toglierli cambia la risposta, e sarebbe un errore peggiore che lasciare un dettaglio di troppo.
 - Se la domanda non è di medicina (è organizzativa, amministrativa o sui dati dello studio), rispondi esattamente: NON_MEDICA
 - Rispondi con la sola domanda riscritta, su una riga, senza virgolette, senza spiegazioni.
 
