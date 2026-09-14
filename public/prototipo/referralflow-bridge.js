@@ -177,6 +177,24 @@ body:has(#app.rf-modo-accesso){background:#eef2f7}
 
 /* ---------- barra laterale: conteggi veri ---------- */
 const rfRenderSidebarOrig = renderSidebar;
+// Barra laterale a sezioni (14.9.2026, tema minimale): le voci del ruolo
+// raggruppate con un'etichetta; una voce fuori da ogni gruppo finisce in coda.
+const RF_NAV_GRUPPI = [
+  ['Operatività', ['home', 'agenda', 'inbox']],
+  ['Clinico', ['patients', 'percorsi', 'visits', 'reports', 'dittafono', 'documents', 'moduli']],
+  ['AI', ['ai', 'anonymize']],
+  ['Amministrazione', ['fatturazione', 'communications', 'statistics', 'administration', 'system']],
+];
+function rfNavGruppi(chiavi, item) {
+  const viste = new Set(); let out = '';
+  for (const [titolo, voci] of RF_NAV_GRUPPI) {
+    const mie = voci.filter(k => chiavi.includes(k)); if (!mie.length) continue;
+    out += `<div class="nav-group">${titolo}</div>` + mie.map(k => { viste.add(k); return item(k); }).join('');
+  }
+  const resto = chiavi.filter(k => !viste.has(k));
+  if (resto.length) out += `<div class="nav-group">Altro</div>` + resto.map(item).join('');
+  return out;
+}
 renderSidebar = function () {
   if (!RF.live) return rfRenderSidebarOrig();
   const s = RF.data.stats || {};
@@ -189,7 +207,7 @@ renderSidebar = function () {
   };
   document.getElementById('sidebar').innerHTML = `
     <div class="brand">${BRAND_MARK}<div><div class="brand-name">ReferralFlow</div><div class="brand-sub">${rfEsc(RF.data.utente.studio)}</div></div></div>
-    <nav class="nav">${NAV[state.role].map(item).join('')}</nav>
+    <nav class="nav">${rfNavGruppi(NAV[state.role], item)}</nav>
     <div class="bottom">
       <div class="nav-sep"></div>
       <nav class="nav">
@@ -249,7 +267,7 @@ PAGES.home = () => {
     return `<div class="rf-sala"><div class="rf-sala-top"><span class="name">${rfEsc(x.nome)}${x.tipo === 'apparecchio' ? ' <span class="caption">apparecchio</span>' : x.tipo === 'codice' ? ' <span class="caption">codice agenda</span>' : ''}</span><span class="n num">${x.n ? `${x.n} · ${oreSala(x.minuti)}` : '—'}${x.posti > 1 ? ` <span class="caption">· ${x.posti} posti</span>` : ''}</span></div><div class="meter${x.occupataOra ? ' now' : ''}"><i style="width:${pct}%"></i></div><div class="cap${x.occupataOra ? ' now' : ''}">${cap}</div></div>`;
   };
   return `
-    <div class="page-head"><div><div class="display">${rfEsc(ROLES[state.role].greet)}</div><div class="page-sub" style="text-transform:none">${data} · ${appts.length} ${appts.length === 1 ? 'appuntamento' : 'appuntamenti'}${nMed ? ` · ${nMed} ${nMed === 1 ? 'medico' : 'medici'} in agenda` : ''} · ${TASKS.length ? `${TASKS.length} cose da fare` : 'niente in sospeso'}</div></div>
+    <div class="page-head"><div><div class="eyebrow">La giornata dello studio</div><div class="display">${rfEsc(ROLES[state.role].greet)}</div><div class="page-sub" style="text-transform:none">${data} · ${appts.length} ${appts.length === 1 ? 'appuntamento' : 'appuntamenti'}${nMed ? ` · ${nMed} ${nMed === 1 ? 'medico' : 'medici'} in agenda` : ''} · ${TASKS.length ? `${TASKS.length} cose da fare` : 'niente in sospeso'}</div></div>
       <div class="actions"><button class="btn" data-go="#/agenda">${ICONS.agenda} Agenda</button><button class="btn" data-go="#/reports">${ICONS.reports} Referti</button><button class="btn ai" data-ai="Preparazione della giornata">${ICONS.ai} Prepara la giornata</button></div></div>
     <div class="grid grid-6">
       ${stat(s.appuntamenti_oggi ?? appts.length, 'Appuntamenti oggi', '#/agenda', s.visti_oggi ? `${s.visti_oggi} già visti` : (next ? `prossimo alle ${next.start}` : ''))}
