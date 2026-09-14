@@ -27,7 +27,7 @@ solo dopo aver aggiornato questo registro).
 
 **DeepSeek non c'è.** Chi lo volesse deve passare dall'API cinese (dati in Cina, legge sull'intelligence del 2017, servizio bloccato dal Garante italiano nel gennaio 2025) o da Safe Swiss Cloud (Zurigo, ma minimo CHF 95/mese). Sull'account Infomaniak ci sono però **due modelli cinesi a pesi aperti serviti in Svizzera** — Qwen 3.5 397B e Kimi K2.6 — che coprono lo stesso bisogno senza uscire dal fornitore già autorizzato.
 
-Nota per la catena: oggi il passaggio esterno usa `gemma-4-31B`, il più piccolo dei modelli di conversazione disponibili. Sullo stesso account ci sono modelli molto più grandi. Non si cambia senza un banco ([[Misure/Banchi]]).
+Nota per la catena (`~/.referralflow-esterno.conf`): la **generazione** usa `google/gemma-4-31B-it`, la **verifica** già `Qwen/Qwen3.5-397B-A17B-FP8`. Sullo stesso account ci sono altri modelli grandi (Kimi K2.6, Mistral Small 4 119B, Apertus 70B): se si valuta di alzare il modello di generazione, si fa con un banco, non a intuito ([[Misure/Banchi]]).
 
 ## Scaleway (Francia) — SOLO banchi su dati sintetici
 Non autorizzato per dati di pazienti. Chiavi in scadenza il 9.9.2026; da non rinnovare senza motivo.

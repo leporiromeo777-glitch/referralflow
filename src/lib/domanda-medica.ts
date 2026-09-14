@@ -25,6 +25,12 @@ Regole, tutte obbligatorie:
 Domanda del medico:
 {testo}`;
 
+// Il prompt della risposta: qui perché lo usano sia l'endpoint sia il banco,
+// e due copie divergono sempre.
+export const RISPOSTA_PROMPT = `Sei un collega medico. Ti viene posta una domanda di medicina generale, che non riguarda nessun paziente in particolare. Rispondi in italiano, in modo breve e concreto, dicendo chiaramente quando una cosa dipende dal caso singolo o quando le fonti non concordano. Non chiedere dati del paziente: non ne hai e non devono essere forniti.
+
+Domanda: {testo}`;
+
 export type Segnale = { tipo: string; spiega: string };
 export type EsitoValidazione = { ok: boolean; blocchi: Segnale[]; avvisi: Segnale[] };
 

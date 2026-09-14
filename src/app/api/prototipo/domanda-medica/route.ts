@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { generaOllamaEsito } from '@/lib/ollama';
 import {
   RIFORMULA_PROMPT,
+  RISPOSTA_PROMPT,
   nonMedica,
   ripuliRiformulazione,
   validaGenerale,
@@ -27,9 +28,6 @@ export const dynamic = 'force-dynamic';
 const MODELLO = process.env.PROTOTIPO_LLM || 'gemma3:12b';
 const FORNITORE = (process.env.DOMANDA_MEDICA_FORNITORE || '').trim();
 
-const PROMPT_RISPOSTA = `Sei un collega medico. Ti viene posta una domanda di medicina generale, che non riguarda nessun paziente in particolare. Rispondi in italiano, in modo breve e concreto, dicendo chiaramente quando una cosa dipende dal caso singolo o quando le fonti non concordano. Non chiedere dati del paziente: non ne hai e non devono essere forniti.
-
-Domanda: {testo}`;
 
 function log(m: string) {
   console.log(`[domanda-medica] ${m}`);
@@ -80,7 +78,7 @@ export async function POST(req: NextRequest) {
       // parte è SOLO `generale`, mai `domanda`.
       log(`fornitore esterno «${FORNITORE}» configurato ma non implementato: rispondo in locale`);
     }
-    const esito = await generaOllamaEsito(PROMPT_RISPOSTA.replace('{testo}', generale), {
+    const esito = await generaOllamaEsito(RISPOSTA_PROMPT.replace('{testo}', generale), {
       modello: MODELLO,
       timeoutMs: 180_000,
     });
