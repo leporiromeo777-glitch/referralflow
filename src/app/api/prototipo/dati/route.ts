@@ -6,7 +6,7 @@ import { costruisciRevisione } from '@/lib/prototipo-revisione';
 import { tipoEsame } from '@/lib/briefing-regole';
 import { estraiTerapia } from '@/lib/referti-terapia';
 import { leggiTitolo, nomePulito } from '@/lib/agenda-titolo';
-import { abbinaPrestazione, tipoDaTesto, type VoceCatalogo } from '@/lib/prestazioni';
+import { abbinaPrestazioneAgenda, tipoDaTesto, type VoceCatalogo } from '@/lib/prestazioni';
 import { lettereRitardoGrezzo } from '@/lib/procedure';
 
 export const dynamic = 'force-dynamic';
@@ -156,7 +156,7 @@ export async function GET() {
   // Tutta la finestra (±30 giorni) per la pagina Agenda con il cambio di giorno;
   // Catalogo delle prestazioni (migrazione 042): ogni appuntamento prova ad
   // abbinare il motivo a una voce; senza voce il tipo si stima dal testo.
-  const catalogo = await query<VoceCatalogo>(`select id, nome, tipo, durata_min, sala, parole_chiave, attivo from prestazioni_catalogo where studio_id = $1 and attivo order by nome`, [sid]);
+  const catalogo = await query<VoceCatalogo>(`select id, nome, tipo, durata_min, sala, parole_chiave, attivo, colore from prestazioni_catalogo where studio_id = $1 and attivo order by nome`, [sid]);
   // le schede leggere dei pazienti noti solo all'agenda si creano solo per oggi.
   const agenda = appts.map((a) => {
     const oggi = a.starts_at.slice(0, 10) === today;
@@ -181,7 +181,7 @@ export async function GET() {
       id: a.id, p, nome: (a.paziente_nome ?? a.titolo ?? 'Paziente').trim(), d: a.starts_at.slice(0, 10), doc: a.provider_id ? providerToDoc.get(a.provider_id) ?? 'studio' : 'studio', room: a.luogo ?? '', colore: a.colore ?? '',
       start: ora(a.starts_at), dur: Math.max(5, Math.round((fine - new Date(a.starts_at).getTime()) / 60000)),
       reason: a.motivo || a.titolo || 'Appuntamento', type: a.motivo || 'Visita', status: stato(a),
-      prestazione: abbinaPrestazione(catalogo, `${a.motivo ?? ''} ${a.titolo ?? ''}`)?.nome ?? '', tipoPrest: abbinaPrestazione(catalogo, `${a.motivo ?? ''} ${a.titolo ?? ''}`)?.tipo ?? tipoDaTesto(`${a.motivo ?? ''} ${a.titolo ?? ''}`),
+      ...(() => { const v = abbinaPrestazioneAgenda(catalogo, a.colore, `${a.motivo ?? ''} ${a.titolo ?? ''}`); return { prestazione: v?.nome ?? '', tipoPrest: v?.tipo ?? tipoDaTesto(`${a.motivo ?? ''} ${a.titolo ?? ''}`) }; })(),
       late: oggi && !a.completed_at && new Date(a.starts_at).getTime() < adesso - 20 * 60000, referral: a.referral_id,
       // Il riquadro dell'agenda porta più del nome: data di nascita, numero di
       // paziente di MediOnline e sigla dell'agenda. Si leggono qui, dove la

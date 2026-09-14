@@ -925,3 +925,10 @@ alter table appointments add column if not exists stato_medionline text;
 alter table appointments add column if not exists stato_visto_at timestamptz;
 create index if not exists appointments_stato_idx
   on appointments (studio_id, stato_medionline, starts_at desc);
+
+-- Colore dell'agenda di MediOnline legato a una prestazione del catalogo: nel
+-- riquadro non c'è un motivo, il colore è l'unico segnale del tipo
+-- (migrazione 047).
+alter table prestazioni_catalogo add column if not exists colore text;
+create unique index if not exists prestazioni_catalogo_colore_idx
+  on prestazioni_catalogo (studio_id, colore) where colore is not null;

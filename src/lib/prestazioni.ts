@@ -3,7 +3,7 @@
 // tipo stimato dal testo quando il catalogo tace, e proposta di catalogo dalle
 // prestazioni dei percorsi della wiki. Nessuna query.
 export type TipoPrestazione = 'visita' | 'esame' | 'procedura';
-export type VoceCatalogo = { id: string; nome: string; tipo: TipoPrestazione; durata_min: number; sala: string | null; parole_chiave: string[]; attivo: boolean; codice_tariffa?: string | null };
+export type VoceCatalogo = { id: string; nome: string; tipo: TipoPrestazione; durata_min: number; sala: string | null; parole_chiave: string[]; attivo: boolean; codice_tariffa?: string | null; colore?: string | null };
 
 export function normalizza(s: string): string {
   return (s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
@@ -56,4 +56,24 @@ export function catalogoDaPercorsi(percorsi: { prestazioni: { nome: string; este
     out.push({ nome, tipo, durata_min: DURATA[tipo], sala: null, parole_chiave: parola ? [parola] : [] });
   }
   return out;
+}
+
+// Abbinamento per COLORE del riquadro (15.9.2026). Nel riquadro dell'agenda
+// MediOnline scrive solo l'identità del paziente: le parole chiave non hanno
+// niente da agganciare, e l'unico segnale del tipo è il colore. Questo
+// abbinamento è esatto — o c'è o non c'è — e va provato PRIMA delle parole
+// chiave, che sul testo di un'agenda così sono un tiro a indovinare.
+export function abbinaColore(catalogo: VoceCatalogo[], colore: string | null | undefined): VoceCatalogo | null {
+  const c = String(colore ?? '').trim().toLowerCase();
+  if (!/^#[0-9a-f]{6}$/.test(c)) return null;
+  return catalogo.find((v) => v.attivo && String(v.colore ?? '').trim().toLowerCase() === c) ?? null;
+}
+
+// La via completa: prima il colore (esatto), poi le parole chiave sul testo.
+export function abbinaPrestazioneAgenda(
+  catalogo: VoceCatalogo[],
+  colore: string | null | undefined,
+  testo: string
+): VoceCatalogo | null {
+  return abbinaColore(catalogo, colore) ?? abbinaPrestazione(catalogo, testo);
 }

@@ -12,7 +12,9 @@ Componenti: `installa.sh` (credenziali in `~/.referralflow-agenda.conf` chmod 60
 
 Collaudato E2E su finta MediOnline e poi dal vivo: 97 appuntamenti veri su 10 giorni, 133 riquadri scartati dai filtri.
 
-Catalogo colori dello studio: tenere verde #2ecc40 (visite), verde acceso #01ff70 (colloqui tel.), blu #0074d9 (risonanze), azzurro #7fdbff (ICCT emodinamica/CVE), bordeaux #85144b (interventi), rosso solo urgenze; ignorare #ffffff #ffdc00 #000000 #dddddd #111111 #b10dc9 + testi stop/no coro/non occupare/guardia/picchetto.
+Catalogo colori dello studio: tenere verde #2ecc40 (visite), verde acceso #01ff70 (colloqui tel.), blu #0074d9 (risonanze), azzurro #7fdbff (ICCT emodinamica/CVE), arancione #ff851b (ecocardiogrammi), bordeaux #85144b (interventi), rosso #ff4136 solo urgenze; ignorare #ffffff #ffdc00 #000000 #dddddd #111111 #b10dc9 + testi stop/no coro/non occupare/guardia/picchetto.
+
+**Dal 15.9.2026 questo catalogo è anche un DATO**: `prestazioni_catalogo.colore` (migrazione 047) lega ogni colore a una prestazione, e `abbinaPrestazioneAgenda` prova prima il colore (esatto) e solo dopo le parole chiave. È l'unica via che funziona: nel riquadro MediOnline scrive solo l'identità del paziente, quindi le parole chiave non hanno nulla da agganciare — su 1398 appuntamenti in archivio ne hanno un motivo 3. Copertura al 15.9.2026: **1228 appuntamenti su ~1400**; restano 69 su otto colori minori (#ecfc03 ×26, #39cccc ×9, #f012be ×8, #aba354 ×8, #0fcff0 ×7, #bb9fd6 ×4, #9afc03 ×4, #aaaaaa ×3) che lo studio deve battezzare.
 
 Da verificare col tempo: qualità dell'estrazione del nome paziente dai riquadri e aggancio alle referral.
 

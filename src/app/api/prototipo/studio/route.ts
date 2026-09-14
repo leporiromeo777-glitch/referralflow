@@ -38,7 +38,7 @@ async function leggi(studioId: string) {
        from appointments where studio_id = $1 and provider_id is null and starts_at >= current_date - 60
       group by 1 order by 2 desc limit 30`, [studioId]);
   const catalogo = await query<{ id: string; nome: string; tipo: string; durata_min: number; sala: string | null; parole_chiave: string[]; attivo: boolean; codice_tariffa: string | null }>(
-    `select id, nome, tipo, durata_min, sala, parole_chiave, attivo, codice_tariffa from prestazioni_catalogo where studio_id = $1 order by attivo desc, tipo, nome`, [studioId]);
+    `select id, nome, tipo, durata_min, sala, parole_chiave, attivo, codice_tariffa, colore from prestazioni_catalogo where studio_id = $1 order by attivo desc, tipo, nome`, [studioId]);
   const nomiRisorse = new Set(risorse.map((r) => r.nome.toLowerCase()));
   return { studio, personale, personale_senza_accesso: personaleSenzaAccesso, medici, catalogo, sale: risorse.filter((r) => r.tipo === 'sala'), apparecchi: risorse.filter((r) => r.tipo === 'apparecchio'), codici_agenda: codici.map((c) => ({ ...c, risorsa: nomiRisorse.has(c.codice.toLowerCase()) })) };
 }
