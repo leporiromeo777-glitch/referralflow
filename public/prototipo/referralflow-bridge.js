@@ -849,6 +849,28 @@ const RF_AI_NOME = 'Cleo';
 .rf-gpt-comp button { flex:none; width:34px; height:34px; border:0; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; }
 .rf-gpt-comp button svg { width:16px; height:16px; }
 .rf-gpt-nota { margin:9px 0 0; text-align:center; font-size:11.5px; line-height:1.5; color:var(--text-3); }
+/* Modi dentro il campo, come i tasti «ricerca approfondita» o «crea immagine». */
+.rf-gpt-comp { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; padding:10px 10px 9px 18px; }
+.rf-gpt-comp input { grid-column:1 / -1; height:30px; }
+.rf-gpt-modi { grid-column:1; display:flex; gap:6px; flex-wrap:wrap; }
+.rf-gpt-comp > button.invia { grid-column:2; }
+.rf-modo { display:inline-flex; flex:none; align-items:center; gap:6px; height:30px; padding:0 12px; white-space:nowrap; border:1px solid var(--border); border-radius:999px; background:transparent; font:inherit; font-size:12.5px; color:var(--text-2); cursor:pointer; }
+.rf-modo svg { width:14px; height:14px; }
+.rf-modo:hover { border-color:var(--border-2); }
+.rf-modo[aria-pressed="true"] { border-color:var(--accent); background:var(--accent-soft); color:var(--accent-text); font-weight:600; }
+/* Il momento che rende sicura tutta la faccenda: si vede prima di partire. */
+.rf-med { border:1px solid var(--accent); border-radius:var(--r-card,10px); background:var(--surface); padding:14px 16px; margin-bottom:10px; }
+.rf-med .t { display:flex; align-items:center; gap:7px; font-size:12px; font-weight:650; text-transform:uppercase; letter-spacing:.03em; color:var(--text-3); margin-bottom:9px; }
+.rf-med .t svg { width:14px; height:14px; }
+.rf-med textarea { width:100%; min-height:62px; padding:9px 11px; border:1px solid var(--border); border-radius:8px; background:var(--surface-2); font:inherit; font-size:14px; line-height:1.5; color:var(--text); resize:vertical; }
+.rf-med .segnali { margin:9px 0 0; display:flex; flex-direction:column; gap:4px; }
+.rf-med .segnale { font-size:12.5px; display:flex; align-items:flex-start; gap:6px; }
+.rf-med .segnale.blocco { color:var(--danger); }
+.rf-med .segnale.avviso { color:var(--warning); }
+.rf-med .azioni { display:flex; align-items:center; gap:8px; margin-top:12px; }
+.rf-med .dove { margin-left:auto; font-size:11.5px; color:var(--text-3); text-align:right; }
+.rf-gen { border-left:3px solid var(--accent); padding-left:14px; }
+.rf-gen .et { display:inline-block; font-size:11px; font-weight:650; text-transform:uppercase; letter-spacing:.03em; color:var(--text-3); margin-bottom:6px; }
 /* Apertura: saluto, campo al centro, e le domande che sappiamo rispondere. */
 .rf-gpt-w { padding:24px 0; }
 .rf-gpt-w h3 { margin:0 0 18px; font-size:25px; font-weight:650; letter-spacing:-0.015em; text-align:center; }
@@ -871,7 +893,12 @@ const RF_AI_NOME = 'Cleo';
 @media (max-width: 767px) { .rf-aip { height: calc(100vh - var(--topbar-h) - 190px); } .rf-aip .ai-body { padding: 12px; } .rf-aip .ai-msg.user { max-width: 88%; }
   .rf-gpt-col { padding:0 16px; } .rf-gpt-top { padding:8px 16px; } .rf-gpt-w h3 { font-size:21px; } .rf-aiw-grid { grid-template-columns:1fr; gap:14px; } .rf-gpt-foot { padding-bottom:78px; } }
 `; document.head.appendChild(st); })();
-function rfAiPaginaInvia() { const el = document.getElementById('rf-aip-in'); const v = el ? el.value.trim() : ''; if (!v) return; el.value = ''; askAI(v); }
+function rfAiPaginaInvia() {
+  const el = document.getElementById('rf-aip-in'); const v = el ? el.value.trim() : '';
+  if (!v) return; el.value = '';
+  if (state.modoMedico && rfPuoDomandaMedica()) { void rfDomandaMedica(v); return; }
+  askAI(v);
+}
 // Domanda avviata ma non mandata: quelle che finiscono con un nome le scrive
 // la persona, non le indoviniamo noi.
 function rfAiPrecompila(inizio) {
@@ -883,9 +910,20 @@ function rfAiPrecompila(inizio) {
 }
 // Campo della domanda: nella schermata vuota sta al centro sotto il saluto,
 // a conversazione iniziata in fondo. È lo stesso pezzo, spostato.
+// Il modo «domanda medica» lo può accendere chi fa medicina: la segreteria no.
+function rfPuoDomandaMedica() { return ['doctor', 'org_admin'].includes(state.role); }
+function rfModoMedico() { state.modoMedico = !state.modoMedico; render(); const i = document.getElementById('rf-aip-in'); if (i) i.focus(); }
 function rfAiCampo() {
   const paz = state.patientCtx && P[state.patientCtx] ? P[state.patientCtx] : null;
-  return `<div class="rf-gpt-comp"><input id="rf-aip-in" placeholder="${paz ? 'Chiedi qualcosa su ' + rfEsc(paz.first) + '…' : 'Scrivi una domanda…'}" autocomplete="off" onkeydown="if(event.key==='Enter'){rfAiPaginaInvia();}"><button type="button" title="Invia" onclick="rfAiPaginaInvia()">${ICONS.send}</button></div>`;
+  const med = !!state.modoMedico;
+  const ph = med
+    ? 'Scrivi la domanda come ti viene, col paziente dentro: non esce da qui'
+    : (paz ? 'Chiedi qualcosa su ' + rfEsc(paz.first) + '…' : 'Scrivi una domanda…');
+  return `<div class="rf-gpt-comp">
+    <input id="rf-aip-in" placeholder="${ph}" autocomplete="off" onkeydown="if(event.key==='Enter'){rfAiPaginaInvia();}">
+    <div class="rf-gpt-modi">${rfPuoDomandaMedica() ? `<button type="button" class="rf-modo" aria-pressed="${med}" onclick="rfModoMedico()" title="La domanda viene riscritta in forma generale dal modello locale, e la approvi tu prima che parta">${ICONS.activity} Domanda medica</button>` : ''}</div>
+    <button type="button" class="invia" title="Invia" onclick="rfAiPaginaInvia()">${ICONS.send}</button>
+  </div>`;
 }
 function rfAiNota() {
   return `<p class="rf-gpt-nota">${rfEsc(RF_AI_NOME)} non dà consigli clinici e non fa diagnosi. Sotto ogni risposta c'è «Da dove viene»; se un dato non c'è lo dice invece di inventarlo. Nessuna domanda esce da questo Mac.</p>`;
@@ -928,6 +966,93 @@ function rfAiBenvenuto() {
     ${rfAiNota()}
   </div>`;
 }
+/* ---------- Domanda medica in generale (14.9.2026) ----------
+   La domanda del medico resta sul Mac. Il modello LOCALE la riscrive come
+   domanda di medicina generale — non pseudonimizzata: proprio senza nessun
+   paziente — e la persona la approva prima che parta. Il codice della
+   piattaforma la ricontrolla lato server: il modello propone, il codice
+   decide. La risposta arriva staccata e non entra in cartella. */
+async function rfDomandaMedica(q) {
+  state.aiMessages.push({ html: `<div class="ai-msg user">${rfEsc(q)}</div>` });
+  state.medica = { originale: q, generale: '', blocchi: [], avvisi: [], stato: 'riformulo' };
+  render();
+  try {
+    const r = await fetch('/api/prototipo/domanda-medica', {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ azione: 'riformula', domanda: q }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (j && j.non_medica) {
+      state.medica = null; state.modoMedico = false;
+      state.aiMessages.push({ html: `<div class="ai-msg ai">Questa non sembra una domanda di medicina: la giro a ${rfEsc(RF_AI_NOME)} come al solito.</div>` });
+      render(); askAI(q); return;
+    }
+    if (!r.ok) {
+      state.medica = null;
+      state.aiMessages.push({ html: `<div class="ai-msg ai">${rfEsc(j.errore || 'Riformulazione non riuscita.')} <span class="caption">La domanda non è uscita da qui.</span></div>` });
+      render(); return;
+    }
+    state.medica = { originale: q, generale: j.generale || '', blocchi: j.blocchi || [], avvisi: j.avvisi || [], stato: 'attesa' };
+  } catch {
+    state.medica = null;
+    state.aiMessages.push({ html: `<div class="ai-msg ai">Piattaforma non raggiungibile. La domanda non è uscita da qui.</div>` });
+  }
+  render();
+}
+function rfMedicaModifica(t) {
+  const m = state.medica; if (!m) return;
+  m.generale = t;
+  if (!(m.blocchi || []).length) return;
+  // Si riaccende il tasto a mano: un render qui sposterebbe il cursore.
+  m.blocchi = [];
+  const box = document.querySelector('.rf-med');
+  if (!box) return;
+  const ok = box.querySelector('.azioni .btn.primary'); if (ok) ok.disabled = false;
+  box.querySelectorAll('.segnale.blocco').forEach(e => e.remove());
+  const dove = box.querySelector('.dove'); if (dove) dove.textContent = 'La domanda originale resta su questo Mac.';
+}
+function rfMedicaAnnulla() { state.medica = null; render(); }
+async function rfMedicaInvia() {
+  const m = state.medica; if (!m) return;
+  const area = document.getElementById('rf-med-testo');
+  const generale = (area ? area.value : m.generale).trim();
+  if (!generale) return;
+  state.medica = { ...m, generale, stato: 'invio' };
+  render();
+  try {
+    const r = await fetch('/api/prototipo/domanda-medica', {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ azione: 'chiedi', domanda: m.originale, generale }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      state.medica = { ...m, generale, stato: 'attesa', blocchi: j.blocchi || [{ tipo: 'errore', spiega: j.errore || 'non riuscita' }], avvisi: j.avvisi || [] };
+      render(); return;
+    }
+    state.medica = null;
+    state.aiMessages.push({ html: `<div class="ai-msg ai rf-gen"><span class="et">Risposta generale · non riferita a un paziente</span><div>${rfEsc(j.risposta || 'Nessuna risposta.').replace(/\n/g, '<br>')}</div><div class="srcs"><span class="src">domanda riscritta: ${rfEsc(generale)}</span><span class="src">${j.dove === 'locale' ? 'modello locale, su questo Mac' : rfEsc(j.dove || '')}</span></div><div class="caption" style="margin-top:6px">Conoscenza generale, non un parere sul tuo paziente: non viene salvata in cartella.</div></div>` });
+  } catch {
+    state.medica = { ...m, generale, stato: 'attesa', blocchi: [{ tipo: 'errore', spiega: 'piattaforma non raggiungibile' }] };
+  }
+  render();
+}
+function rfMedicaRiquadro() {
+  const m = state.medica; if (!m) return '';
+  if (m.stato === 'riformulo') return `<div class="rf-med"><div class="t">${ICONS.activity} Riscrivo la domanda in forma generale</div><p class="caption" style="margin:0">Lo fa il modello su questo Mac. La tua domanda non è uscita.</p></div>`;
+  const bloccata = (m.blocchi || []).length > 0;
+  const seg = (arr, cls) => (arr || []).map(x => `<div class="segnale ${cls}">${cls === 'blocco' ? ICONS.alert : ICONS.info}<span>${rfEsc(x.spiega)}</span></div>`).join('');
+  return `<div class="rf-med">
+    <div class="t">${ICONS.activity} Parte questa, non la tua — controllala</div>
+    <textarea id="rf-med-testo" oninput="rfMedicaModifica(this.value)" ${m.stato === 'invio' ? 'disabled' : ''}>${rfEsc(m.generale)}</textarea>
+    ${bloccata || (m.avvisi || []).length ? `<div class="segnali">${seg(m.blocchi, 'blocco')}${seg(m.avvisi, 'avviso')}</div>` : ''}
+    <div class="azioni">
+      <button class="btn primary" onclick="rfMedicaInvia()" ${m.stato === 'invio' || bloccata ? 'disabled' : ''}>${m.stato === 'invio' ? 'Chiedo…' : 'Chiedi così'}</button>
+      <button class="btn" onclick="rfMedicaAnnulla()">Annulla</button>
+      <span class="dove">${bloccata ? 'Correggi la riga qui sopra e il tasto si riaccende.' : 'La domanda originale resta su questo Mac.'}</span>
+    </div>
+  </div>`;
+}
+
 const rfAiPageOrig = PAGES.ai;
 PAGES.ai = () => {
   if (!RF.live) return rfAiPageOrig();
@@ -938,7 +1063,7 @@ PAGES.ai = () => {
       <div class="rf-gpt-scroll ${vuota ? 'vuota' : ''}" id="rf-aip-body">
         <div class="rf-gpt-col">${vuota ? rfAiBenvenuto() : `<div class="rf-gpt-thread">${state.aiMessages.map(m => m.html).join('')}</div>`}</div>
       </div>
-      ${vuota ? '' : `<div class="rf-gpt-foot"><div class="rf-gpt-col">${rfAiCampo()}${rfAiNota()}</div></div>`}
+      ${vuota ? '' : `<div class="rf-gpt-foot"><div class="rf-gpt-col">${rfMedicaRiquadro()}${rfAiCampo()}${rfAiNota()}</div></div>`}
     </div>`;
 };
 // A tutto schermo solo sulla pagina di Cleo: il riquadro, la barra di sicurezza
