@@ -22,6 +22,13 @@ solo dopo aver aggiornato questo registro).
 | Data di revisione | da fissare: alla risposta di Infomaniak, poi annuale |
 | Alternativa | Safe Swiss Cloud (Zurigo, ISO 27001/17/18: Apertus 70B, DeepSeek, Qwen3, Gemma) |
 
+### Modelli disponibili sull'account (letti da `/v1/models` il 14.9.2026)
+`swiss-ai/Apertus-v1.5-70B` · `Qwen/Qwen3.5-397B-A17B-FP8` · `Qwen/Qwen3.5-122B-A10B-FP8` · `moonshotai/Kimi-K2.6` · `mistralai/Mistral-Small-4-119B-2603` · `mistralai/Ministral-3-14B-Instruct-2512` · `google/gemma-4-31B-it` (quello che la catena usa oggi) · `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8` (provato e non adottato, [[Decisioni/Registro]]). Incorporamenti: `Qwen/Qwen3-Embedding-8B`, `bge_multilingual_gemma2`, `mini_lm_l12_v2`.
+
+**DeepSeek non c'è.** Chi lo volesse deve passare dall'API cinese (dati in Cina, legge sull'intelligence del 2017, servizio bloccato dal Garante italiano nel gennaio 2025) o da Safe Swiss Cloud (Zurigo, ma minimo CHF 95/mese). Sull'account Infomaniak ci sono però **due modelli cinesi a pesi aperti serviti in Svizzera** — Qwen 3.5 397B e Kimi K2.6 — che coprono lo stesso bisogno senza uscire dal fornitore già autorizzato.
+
+Nota per la catena: oggi il passaggio esterno usa `gemma-4-31B`, il più piccolo dei modelli di conversazione disponibili. Sullo stesso account ci sono modelli molto più grandi. Non si cambia senza un banco ([[Misure/Banchi]]).
+
 ## Scaleway (Francia) — SOLO banchi su dati sintetici
 Non autorizzato per dati di pazienti. Chiavi in scadenza il 9.9.2026; da non rinnovare senza motivo.
 
