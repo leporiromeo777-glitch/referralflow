@@ -4,6 +4,7 @@ import { query } from '@/lib/db';
 import { mediciDelloStudio } from '@/lib/referti-medici';
 import { costruisciRevisione } from '@/lib/prototipo-revisione';
 import { tipoEsame } from '@/lib/briefing-regole';
+import { lettereRitardoGrezzo } from '@/lib/procedure';
 
 export const dynamic = 'force-dynamic';
 
@@ -248,8 +249,38 @@ export async function GET() {
 
   const nome = session.email.split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   const iniz = nome.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase() || 'RF';
+  // Cruscotto (14.9.2026): sale di oggi con l'occupazione, chi ha agenda oggi,
+  // accessi attivi, visti senza referto e lettere in ritardo (stessa regola
+  // della procedura). Solo conteggi e nomi di sala: nessun testo clinico.
+  const risorse = await query<{ id: string; tipo: string; nome: string; attivo: boolean }>(
+    `select id, tipo, nome, attivo from studio_risorse where studio_id = $1 and attivo order by tipo, nome`, [sid]);
+  const [acc] = await query<{ attivi: number }>(`select count(*)::int as attivi from users where studio_id = $1 and attivo`, [sid]);
+  const nomeRisorsa = new Map(risorse.map((r) => [r.nome.toLowerCase(), r]));
+  const perSala = new Map<string, { nome: string; tipo: string; n: number; minuti: number; prima: string; occupataOra: boolean; prossima: string }>();
+  const hm = ora(oggiIso.toISOString());
+  for (const a of apptsOggi) {
+    const codice = (a.room || '').trim();
+    if (!codice) continue;
+    const r = nomeRisorsa.get(codice.toLowerCase());
+    const k = codice.toLowerCase();
+    const e = perSala.get(k) ?? { nome: r?.nome ?? codice, tipo: r?.tipo ?? 'codice', n: 0, minuti: 0, prima: '', occupataOra: false, prossima: '' };
+    e.n++; e.minuti += a.dur;
+    if (!e.prima || a.start < e.prima) e.prima = a.start;
+    const fineA = (() => { const [h, m] = a.start.split(':').map(Number); const t = h * 60 + m + a.dur; return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`; })();
+    if (a.start <= hm && hm < fineA && a.status !== 'CANCELLED') e.occupataOra = true;
+    if (a.start > hm && a.status !== 'CANCELLED' && (!e.prossima || a.start < e.prossima)) e.prossima = a.start;
+    perSala.set(k, e);
+  }
+  for (const r of risorse) if (r.tipo === 'sala' && !perSala.has(r.nome.toLowerCase())) perSala.set(r.nome.toLowerCase(), { nome: r.nome, tipo: 'sala', n: 0, minuti: 0, prima: '', occupataOra: false, prossima: '' });
+  const sale = [...perSala.values()].sort((a, b) => b.minuti - a.minuti || a.nome.localeCompare(b.nome));
+  const refertiOggiPer = new Set(reports.filter((r) => r.date === dCh(oggiIso.toISOString())).map((r) => r.p));
+  const vistiSenzaReferto = apptsOggi.filter((a) => a.status === 'COMPLETED' && a.p && !refertiOggiPer.has(a.p)).length;
+  let lettereInRitardo = 0;
+  try { lettereInRitardo = (await lettereRitardoGrezzo(sid)).fonti.length; } catch (e) { console.warn('[prototipo/dati] lettere in ritardo non calcolate:', (e as Error).message); }
   const stats = {
     appuntamenti_oggi: apptsOggi.length, visti_oggi: apptsOggi.filter((a) => a.status === 'COMPLETED').length,
+    visti_senza_referto: vistiSenzaReferto, lettere_in_ritardo: lettereInRitardo, accessi_attivi: acc?.attivi ?? 0,
+    medici_oggi: [...new Set(apptsOggi.map((a) => a.doc).filter((d) => d && d !== 'studio'))].length,
     bozze_da_rivedere: reports.filter((r) => r.status !== 'APPROVED').length, referti_confermati_30g: reports.filter((r) => r.status === 'APPROVED').length,
     referral_aperte: refs.filter((r) => r.status !== 'chiusa').length, urgenti: refs.filter((r) => r.urgenza === 'urgente' && !['chiusa', 'vista'].includes(r.status)).length,
     da_prenotare: refs.filter((r) => r.status === 'da_prenotare').length, disdette: disd.length, consulti_aperti: cons.length, richiami_scaduti: fups.length,
@@ -257,6 +288,6 @@ export async function GET() {
   };
   return NextResponse.json({
     utente: { role: RUOLO[session.role] ?? 'secretary', name: nome, initials: iniz, studio: session.studioNome, email: session.email },
-    today, doctors, patients, appts: apptsOggi, agenda, tasks, reports, documents, inbox, audioInbox, stats,
+    today, doctors, patients, appts: apptsOggi, agenda, tasks, reports, documents, inbox, audioInbox, stats, sale,
   });
 }

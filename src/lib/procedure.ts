@@ -146,7 +146,7 @@ export async function preparazioneGiornata(studioId: string, userId?: string | n
 // non possono essere giudicati (risulterebbero tutti in ritardo).
 const EVENTO_WORD_DAL = '2026-09-13';
 
-async function lettereRitardoGrezzo(studioId: string) {
+export async function lettereRitardoGrezzo(studioId: string) {
   const { lettereInRitardo } = await import('./procedure-regole');
   const lettere = await query<{ id: string; paziente: string; medico: string | null; confermata_il: string | null; dettata_il: string; stato: 'confermata' | 'bozza'; word_scaricato: boolean }>(
     `select b.id,

@@ -205,6 +205,29 @@ renderSidebar = function () {
 };
 
 /* ---------- Home sui dati veri (tutti i ruoli) ---------- */
+// Cruscotto della giornata (14.9.2026): sei numeri, il prossimo paziente, le
+// cose da fare, la timeline, il monitor delle sale (occupazione di oggi dal
+// campo «luogo» dell'agenda abbinato alle risorse dello studio), chi ha agenda
+// oggi, i referral urgenti e le bozze della catena. Tutto da `dati`.
+(function () {
+  const st = document.createElement('style');
+  st.textContent = `
+.grid-6 { grid-template-columns: repeat(6, minmax(0,1fr)); }
+@media (max-width: 1199px) { .grid-6 { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 767px) { .grid-6 { grid-template-columns: repeat(2, 1fr); } }
+.rf-sala { display:flex; flex-direction:column; gap:6px; padding:8px 6px; }
+.rf-sala + .rf-sala { border-top:1px solid var(--border); }
+.rf-sala .rf-sala-top { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+.rf-sala .rf-sala-top .name { font-size:13px; font-weight:600; }
+.rf-sala .rf-sala-top .n { font-size:12px; color:var(--text-2); white-space:nowrap; }
+.rf-sala .meter { height:6px; }
+.rf-sala .meter.now > i { background: var(--warning); }
+.rf-sala .cap { font-size:12px; color:var(--text-3); }
+.rf-sala .cap.now { color: var(--warning); font-weight:600; }
+.rf-persona { display:flex; align-items:center; gap:8px; padding:6px 6px; font-size:13px; }
+.rf-persona i.dot { flex:none; }
+`; document.head.appendChild(st);
+})();
 const rfHomeOrig = PAGES.home;
 PAGES.home = () => {
   if (!RF.live) return rfHomeOrig();
@@ -212,19 +235,29 @@ PAGES.home = () => {
   const appts = [...APPTS].sort((a, b) => a.start.localeCompare(b.start));
   const now = new Date(); const hm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const next = appts.find(a => a.status !== 'COMPLETED' && a.start >= hm) || appts.find(a => a.status !== 'COMPLETED');
-  const stat = (v, l, go, d = '') => `<div class="card tight clickable stat" data-go="${go}"><span class="value num">${v}</span><span class="label">${l}</span>${d ? `<span class="delta">${d}</span>` : ''}</div>`;
+  const stat = (v, l, go, d = '', warn = false) => `<div class="card tight clickable stat" data-go="${go}"><span class="value num">${v}</span><span class="label">${l}</span>${d ? `<span class="delta${warn ? ' warn' : ''}">${d}</span>` : ''}</div>`;
   const data = now.toLocaleDateString('it-CH', { weekday: 'long', day: 'numeric', month: 'long' });
-  const nMed = new Set(appts.map(a => a.doc)).size;
+  const mediciOggi = [...new Set(appts.map(a => a.doc).filter(d => d && d !== 'studio'))];
+  const nMed = mediciOggi.length;
   const prio = RF.queue.filter(r => r.state === 'priority' && r.status !== 'APPROVED').length;
+  const urgenti = TASKS.filter(t => t.prio === 'urgent').slice(0, 6);
+  const sale = Array.isArray(RF.data.sale) ? RF.data.sale : [];
+  const oreSala = (min) => min >= 60 ? `${(min / 60).toFixed(min % 60 ? 1 : 0).replace('.', ',')} h` : `${min}'`;
+  const rigaSala = (x) => {
+    const pct = Math.min(100, Math.round(x.minuti / 480 * 100));
+    const cap = x.occupataOra ? 'occupata adesso' : x.prossima ? `prossima alle ${x.prossima}` : x.n ? (x.prima ? `finita · prima era alle ${x.prima}` : 'finita per oggi') : 'libera oggi';
+    return `<div class="rf-sala"><div class="rf-sala-top"><span class="name">${rfEsc(x.nome)}${x.tipo === 'apparecchio' ? ' <span class="caption">apparecchio</span>' : x.tipo === 'codice' ? ' <span class="caption">codice agenda</span>' : ''}</span><span class="n num">${x.n ? `${x.n} · ${oreSala(x.minuti)}` : '—'}</span></div><div class="meter${x.occupataOra ? ' now' : ''}"><i style="width:${pct}%"></i></div><div class="cap${x.occupataOra ? ' now' : ''}">${cap}</div></div>`;
+  };
   return `
-    <div class="page-head"><div><div class="display">${rfEsc(ROLES[state.role].greet)}</div><div class="page-sub" style="text-transform:none">${data} · ${appts.length} ${appts.length === 1 ? 'appuntamento' : 'appuntamenti'}${nMed ? ` · ${nMed} ${nMed === 1 ? 'medico' : 'medici'} in studio` : ''} · ${TASKS.length ? `${TASKS.length} cose da fare` : 'niente in sospeso'}</div></div>
+    <div class="page-head"><div><div class="display">${rfEsc(ROLES[state.role].greet)}</div><div class="page-sub" style="text-transform:none">${data} · ${appts.length} ${appts.length === 1 ? 'appuntamento' : 'appuntamenti'}${nMed ? ` · ${nMed} ${nMed === 1 ? 'medico' : 'medici'} in agenda` : ''} · ${TASKS.length ? `${TASKS.length} cose da fare` : 'niente in sospeso'}</div></div>
       <div class="actions"><button class="btn" data-go="#/agenda">${ICONS.agenda} Agenda</button><button class="btn" data-go="#/reports">${ICONS.reports} Referti</button><button class="btn ai" data-ai="Preparazione della giornata">${ICONS.ai} Prepara la giornata</button></div></div>
-    <div class="grid grid-5">
-      ${stat(s.appuntamenti_oggi ?? appts.length, 'Appuntamenti oggi', '#/agenda', s.visti_oggi ? `${s.visti_oggi} già visti` : '')}
-      ${stat(s.bozze_da_rivedere ?? 0, 'Referti da controllare', '#/reports', prio ? `${prio} prioritari` : '')}
-      ${stat(s.urgenti ?? 0, 'Referral urgenti', '#/inbox')}
-      ${stat(s.da_prenotare ?? 0, 'Da prenotare', '#/inbox')}
+    <div class="grid grid-6">
+      ${stat(s.appuntamenti_oggi ?? appts.length, 'Appuntamenti oggi', '#/agenda', s.visti_oggi ? `${s.visti_oggi} già visti` : (next ? `prossimo alle ${next.start}` : ''))}
+      ${stat(s.bozze_da_rivedere ?? 0, 'Referti da controllare', '#/reports', prio ? `${prio} prioritari` : '', prio > 0)}
+      ${stat(s.visti_senza_referto ?? 0, 'Visti senza referto', '#/agenda', 'oggi, ancora da dettare')}
+      ${stat(s.urgenti ?? 0, 'Referral urgenti', '#/inbox', s.da_prenotare ? `${s.da_prenotare} da prenotare` : '')}
       ${stat(s.richiami_scaduti ?? 0, 'Richiami scaduti', '#/inbox')}
+      ${stat(s.lettere_in_ritardo ?? 0, 'Lettere in ritardo', '#/reports', (s.lettere_in_ritardo ?? 0) > 0 ? 'da sbloccare' : 'nessuna', (s.lettere_in_ritardo ?? 0) > 0)}
     </div>
     ${next ? `<div class="card hero mt-16">
       <div class="row between"><span class="section-title">Prossimo paziente</span><span class="status"><i class="dot ${next.late ? 'danger' : 'success'}"></i>${next.late ? 'In ritardo' : STATUS_LABEL[next.status] || ''}</span></div>
@@ -236,11 +269,21 @@ PAGES.home = () => {
       <div class="row mt-24"><button class="btn primary lg" data-go="#/patients/${next.p}">Scheda paziente</button>${rfUuid(next.p) ? `<button class="btn lg ai" data-ai="Briefing pre-visita di ${rfEsc(fullName(P[next.p]))}">${ICONS.ai} Briefing pre-visita</button>` : ''}<button class="btn lg" data-go="#/agenda">Agenda di oggi</button></div>
     </div>` : ''}
     <div class="grid grid-main-side mt-16">
-      <div class="card"><div class="card-head"><span class="section-title">Da fare adesso</span><button class="btn sm ghost" data-go="#/inbox">Tutte ${ICONS.chevR}</button></div>
-        <div class="list">${TASKS.length ? TASKS.slice(0, 12).map(t => `<div class="list-item"><i class="dot ${t.prio === 'urgent' || t.prio === 'high' ? 'danger' : 'accent'}"></i><div class="grow"><div class="name">${rfEsc(t.title)}</div><div class="sub">${rfEsc(t.due)}</div></div><a class="btn sm" href="${t.href}">Apri</a></div>`).join('') : '<div class="caption" style="padding:8px 6px">Tutto gestito. Buon lavoro.</div>'}</div></div>
       <div class="stack">
-        <div class="card"><div class="card-head"><span class="section-title">Timeline di oggi</span><button class="btn sm ghost" data-go="#/agenda">Agenda ${ICONS.chevR}</button></div>
-          <div class="tl">${appts.length ? appts.map(a => `<div class="tl-item ${a.status === 'COMPLETED' ? 'done' : a === next ? 'now' : a.late ? 'warn' : ''} clickable" data-go="#/patients/${a.p}" style="cursor:pointer"><span class="time num">${a.start}</span><div class="b"><div class="n">${rfEsc(fullName(P[a.p]))}</div><div class="s">${rfEsc(a.reason)} · ${rfEsc(DOCTORS[a.doc] || '')}</div></div></div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessun appuntamento oggi in agenda.</div>'}</div></div>
+        <div class="card"><div class="card-head"><span class="section-title">Da fare adesso</span><button class="btn sm ghost" data-go="#/inbox">Tutte ${ICONS.chevR}</button></div>
+          <div class="list">${TASKS.length ? TASKS.slice(0, 12).map(t => `<div class="list-item"><i class="dot ${t.prio === 'urgent' || t.prio === 'high' ? 'danger' : 'accent'}"></i><div class="grow"><div class="name">${rfEsc(t.title)}</div><div class="sub">${rfEsc(t.due)}</div></div><a class="btn sm" href="${t.href}">Apri</a></div>`).join('') : '<div class="caption" style="padding:8px 6px">Tutto gestito. Buon lavoro.</div>'}</div></div>
+        <div class="card"><div class="card-head"><span class="section-title">Programma di oggi</span><button class="btn sm ghost" data-go="#/agenda">Agenda completa ${ICONS.chevR}</button></div>
+          <div class="tl">${appts.length ? appts.map(a => `<div class="tl-item ${a.status === 'COMPLETED' ? 'done' : a === next ? 'now' : a.late ? 'warn' : ''} clickable" data-go="#/patients/${a.p}" style="cursor:pointer"><span class="time num">${a.start}<span class="caption" style="display:block;font-weight:400">${a.dur ? `${a.dur}'` : ''}</span></span><div class="b"><div class="n">${rfEsc(fullName(P[a.p]))}</div><div class="s">${rfEsc(a.reason)} · ${rfEsc(DOCTORS[a.doc] || '')}${a.room ? ` · ${rfEsc(a.room)}` : ''}</div></div>${a.status === 'CANCELLED' ? '' : (typeof statusBadge === 'function' ? statusBadge(a.status) : '')}</div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessun appuntamento oggi in agenda.</div>'}</div></div>
+      </div>
+      <div class="stack">
+        <div class="card"><div class="card-head"><span class="section-title">Sale oggi</span><button class="btn sm ghost" data-go="#/administration">Studio ${ICONS.chevR}</button></div>
+          ${sale.length ? sale.slice(0, 10).map(rigaSala).join('') : '<div class="caption" style="padding:8px 6px">Nessuna sala definita e nessun luogo nell\'agenda di oggi. Le sale si registrano in Studio → Sale e apparecchi.</div>'}
+          ${sale.length ? '<div class="caption mt-8" style="padding:0 6px">Barra piena = 8 ore. Il luogo viene dal campo «luogo» dell\'agenda.</div>' : ''}</div>
+        <div class="card"><div class="card-head"><span class="section-title">In studio oggi</span><span class="badge count">${nMed}</span></div>
+          <div class="list">${nMed ? mediciOggi.map(d => `<div class="rf-persona"><i class="dot success"></i><span>${rfEsc(DOCTORS[d] || d)}</span><span class="caption" style="margin-left:auto">${appts.filter(a => a.doc === d).length} app.</span></div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessun medico con agenda oggi.</div>'}</div>
+          <div class="caption mt-8" style="padding:0 6px">${s.accessi_attivi ?? 0} accessi attivi alla piattaforma</div></div>
+        ${urgenti.length ? `<div class="card"><div class="card-head"><span class="section-title">Urgenti</span><span class="badge count" style="background:var(--danger);color:#fff">${urgenti.length}</span></div>
+          <div class="list">${urgenti.map(t => `<div class="list-item"><i class="dot danger"></i><div class="grow"><div class="name" style="font-size:13px">${rfEsc(t.title)}</div><div class="sub">${rfEsc(t.due)}</div></div><a class="btn sm" href="${t.href}">Apri</a></div>`).join('')}</div></div>` : ''}
         <div class="card"><div class="card-head"><span class="section-title">Referti dalla catena</span><span class="badge count">${RF.queue.filter(r => r.status !== 'APPROVED').length}</span></div>
           <div class="list">${RF.queue.filter(r => r.status !== 'APPROVED').slice(0, 5).map(r => `<div class="list-item"><div class="grow"><div class="name">${rfEsc(fullName(P[r.p]))}</div><div class="sub">${rfEsc(r.note)} · ${r.at}</div></div><button class="btn sm" data-go="#/review/${r.id}">Rivedi</button></div>`).join('') || '<div class="caption" style="padding:8px 6px">Nessuna bozza da controllare.</div>'}</div></div>
       </div>
