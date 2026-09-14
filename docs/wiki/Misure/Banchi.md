@@ -74,3 +74,20 @@ Lezione per la catena: se un giorno si alza il modello di generazione su un mode
 | modello locale sul Mac (12B) | **sbagliata e pericolosa**: «2,5 mg × 2 se ≥60 kg, 2,5 mg × 1 se <60 kg» — posologia inesistente | numero giusto, ma **inverte** camice bianco e ipertensione mascherata |
 
 Conseguenza sul codice, il 14.9.2026: la «domanda medica» **non risponde più col modello locale**. Senza un modello misurato collegato restituisce la domanda riscritta e dice che non parte. Una risposta plausibile e sbagliata su un dosaggio è peggio di nessuna risposta.
+
+### Giro completo con Claude (15.9.2026, 8 modelli, 80 risposte)
+
+| modello | tempo medio | token out | mancate |
+| --- | --- | --- | --- |
+| gemma 4 31B | **3,7 s** | 2 990 | 0 |
+| Claude Haiku 4.5 | 4,5 s | 3 679 | 0 |
+| Apertus 70B | 4,8 s | 3 384 | 0 |
+| Mistral Small 4 119B | 5,3 s | 5 779 | 0 |
+| **Claude Sonnet 5** | 11,0 s | 8 158 | 0 |
+| Kimi K2.6 | 16,9 s | 22 084 | 2 |
+| Qwen 3.5 397B | 17,9 s | 19 854 | 1 |
+| modello locale sul Mac | 22,1 s | 2 636 | 0 (gratis) |
+
+Controllo dei fatti sulle stesse due domande: **Claude Sonnet 5 corretto su entrambe e il più preciso degli otto** — è l'unico che nomina esplicitamente la confusione su cui inciampano gli altri («la sola insufficienza renale moderata NON impone la riduzione, a differenza di dabigatran ed edoxaban») e l'unico che dà la tabella completa delle soglie pressorie (ambulatorio, domiciliare, ABPM 24 h/diurno/notturno). **Claude Haiku 4.5 sbaglia un criterio di dosaggio**: scrive «età ≥60 anni» dove sono ≥80, e dà l'apixaban per controindicato sotto 30 mL/min. Resta confermato **gemma 4 31B**: corretto su entrambe, il più veloce di tutti, zero risposte mancate.
+
+Nota di metodo: la chiave Anthropic del primo tentativo è stata invalidata fra la verifica e il banco (401 su dieci chiamate su dieci) — una chiave scritta in un canale scansionato viene disattivata da sola. Da lì `--solo`, che rigira un concorrente e fonde con l'archivio invece di ripagare tutti.

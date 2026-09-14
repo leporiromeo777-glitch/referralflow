@@ -216,7 +216,8 @@ async function main() {
   );
   if (solo.length && !inGara.length) { console.log('Nessuno dei nomi dati è in gara (chiave mancante?).'); process.exit(1); }
   const fuori = CONCORRENTI.filter((c) => !inGara.includes(c));
-  if (fuori.length) console.log(`Senza chiave, non partecipano: ${fuori.map((c) => c.nome).join(', ')}\n`);
+  const senzaChiave = fuori.filter((c) => !solo.length || solo.includes(c.nome));
+  if (senzaChiave.length) console.log(`Senza chiave, non partecipano: ${senzaChiave.map((c) => c.nome).join(', ')}\n`);
   const risultati: { domanda: string; risposte: { c: Concorrente; e: Esito }[] }[] = [];
   const somma = new Map<string, { ms: number; tin: number; tout: number; pens: number; errori: number }>();
   for (const [i, domanda] of DOMANDE.entries()) {
