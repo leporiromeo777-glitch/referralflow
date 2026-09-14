@@ -303,6 +303,7 @@ export async function GET() {
     t: t.title, s: `${t.due} · ${t.src === 'automation' ? 'dalla piattaforma' : ''}`, p: t.p, tags: [t.prio === 'urgent' || t.prio === 'high' ? 'urgent' : 'today', 'mine'], acts: ['Apri'], href: t.href,
   }));
 
+  const [stud] = await query<{ moduli_nascosti: string[] }>(`select moduli_nascosti from studios where id = $1`, [sid]);
   const nome = session.email.split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   const iniz = nome.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase() || 'RF';
   // Cruscotto (14.9.2026): sale di oggi con l'occupazione, chi ha agenda oggi,
@@ -346,6 +347,6 @@ export async function GET() {
     utente: { role: RUOLO[session.role] ?? 'secretary', name: nome, initials: iniz, studio: session.studioNome, email: session.email },
     today, doctors, patients, appts: apptsOggi, agenda, tasks, reports, documents, inbox, audioInbox, stats, sale,
     risorse: risorse.map((r) => ({ id: r.id, tipo: r.tipo, nome: r.nome, posti: r.posti })),
-    catalogo, coloriMedici, daChiamare,
+    catalogo, coloriMedici, daChiamare, moduli_nascosti: stud?.moduli_nascosti ?? [],
   });
 }

@@ -38,7 +38,7 @@ Regole d'uso in `docs/wiki/Wiki/Come si usa.md` (SilverBullet su :3400 in LAN la
 - Pagine che leggono dal DB: `export const dynamic = 'force-dynamic'`.
 - `src/lib/auth.ts` e `src/lib/storage.ts` sono `server-only`.
 - I prompt di `docs/trascrizione/SPEC.md` §6 non si riscrivono; `{testo}` con `str.replace`, mai `format`.
-- Migrazioni solo in avanti in `db/migrations/` (ultima: `043_chiamate_personale.sql`), appese anche a `db/schema.sql`.
+- Migrazioni solo in avanti in `db/migrations/` (ultima: `044_suggerimenti.sql`), appese anche a `db/schema.sql`.
 - `audit.artifacts` e `audit.human_edits` sono immutabili.
 - Una tappa nuova della catena va aggiunta alla lista dell'endpoint `api/referti/bozza` o non arriva in tabella.
 

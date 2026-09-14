@@ -57,7 +57,8 @@ async function rfCaricaDati() {
   // Voci per ruolo (14.9.2026: Percorsi, Moduli, Da fatturare). Questa riga
   // vince su qualunque aggiunta fatta al caricamento dello script.
   const nav = ['home', 'agenda', 'prestazioni', 'patients', 'invianti', 'percorsi', 'reports', 'dittafono', 'documents', 'moduli', 'anonymize', 'inbox', 'ai', 'fatturazione', 'administration'];
-  for (const k of Object.keys(NAV)) NAV[k] = nav.filter(v => v !== 'fatturazione' || ['secretary', 'org_admin'].includes(k));
+  const nascosti = new Set(Array.isArray(RF.data.moduli_nascosti) ? RF.data.moduli_nascosti : []);
+  for (const k of Object.keys(NAV)) NAV[k] = nav.filter(v => (v !== 'fatturazione' || ['secretary', 'org_admin'].includes(k)) && (!nascosti.has(v) || v === 'home' || v === 'administration'));
   render();
 }
 
@@ -214,6 +215,7 @@ renderSidebar = function () {
       <div class="nav-sep"></div>
       <nav class="nav">
         <button class="nav-item" id="collapse-btn" title="Comprimi barra laterale">${ICONS.panel}<span>Comprimi</span></button>
+        <button class="nav-item" id="rf-suggerisci" title="Suggerisci una modifica">${ICONS.why || ''}<span>Suggerisci</span></button>
         <button class="nav-item ${state.route === 'profile' ? 'active' : ''}" data-go="#/profile" title="Profilo">${ICONS.profile || ''}<span>Profilo</span></button>
         <button class="nav-item" id="rf-esci" title="Esci">${ICONS.lock || ''}<span>Esci · ${rfEsc((RF.data.utente.email || '').split('@')[0])}</span></button>
       </nav>
@@ -221,6 +223,7 @@ renderSidebar = function () {
     </div>`;
   document.getElementById('collapse-btn').onclick = () => { state.sidebarCollapsed = !state.sidebarCollapsed; render(); };
   const esci = document.getElementById('rf-esci'); if (esci) esci.onclick = () => { void rfEsci(); };
+  const sug = document.getElementById('rf-suggerisci'); if (sug) sug.onclick = () => rfSuggerisci();
   bindCommon(document.getElementById('sidebar'));
 };
 
@@ -742,6 +745,25 @@ PAGES.invianti = () => {
       ${lista.length ? lista.map(d => `<tr data-inv="${rfEsc(`${d.nome} ${d.studio || ''} ${d.email || ''}`.toLowerCase())}" onclick="rfInvianteApri('${d.id}')" style="cursor:pointer"><td><b>${rfEsc(d.nome)}</b></td><td>${rfEsc(d.studio || '—')}</td><td class="num">${rfEsc(d.telefono || '—')}</td><td>${rfEsc(d.email || '—')}</td><td class="num"><b>${d.n_12m}</b></td><td class="num">${d.n_tot}</td><td class="num">${d.ultimo || '—'}</td></tr>`).join('') : '<tr><td colspan="7" class="caption">Nessun medico inviante: si aggiungono qui o arrivano da soli con la prima referral.</td></tr>'}
     </tbody></table></div></div>`;
 };
+
+/* ---------- Suggerisci una modifica (14.9.2026) ---------- */
+RF.sugg = null;
+async function rfCaricaSuggerimenti() {
+  try { const r = await fetch('/api/prototipo/suggerimenti', { credentials: 'include' }); const j = r.ok ? await r.json() : {}; RF.sugg = Array.isArray(j.suggerimenti) ? j.suggerimenti : []; } catch { RF.sugg = []; }
+  if (state.route === 'administration') render();
+}
+function rfSuggerisci() {
+  const pagina = (NAV_META[state.route] || [state.route])[0];
+  openModal('Suggerisci una modifica', `<p class="meta" style="margin:0 0 10px;line-height:1.5">Un campo che manca, una schermata da semplificare, una parola che da voi si dice in un altro modo. La richiesta resta nella piattaforma (Studio → Suggerimenti); lo sviluppatore riceve un avviso e la vede lì. <b>Non scrivere nomi di pazienti né dati clinici.</b></p><div class="caption">Pagina: ${rfEsc(pagina)}</div><textarea class="rf-imp-area mt-8" id="rf-sug-testo" placeholder="Vorrei che…" style="font-family:var(--font);min-height:110px"></textarea>`, `<button class="btn" data-close>Annulla</button><button class="btn primary" id="rf-sug-ok">Invia</button>`);
+  document.getElementById('rf-sug-ok').onclick = async () => {
+    const testo = (document.getElementById('rf-sug-testo').value || '').trim();
+    try { const r = await fetch('/api/prototipo/suggerimenti', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'crea', pagina, testo }) }); const j = await r.json().catch(() => ({})); if (!r.ok) { toast(j.errore || 'Non inviato'); return; } closeModal(); toast('Grazie: suggerimento registrato'); RF.sugg = null; } catch { toast('Piattaforma non raggiungibile'); }
+  };
+}
+async function rfSuggStato(id, stato) {
+  const risposta = stato === 'no' ? (prompt('Una riga di risposta (facoltativa):') || '') : '';
+  try { const r = await fetch('/api/prototipo/suggerimenti', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'stato', id, stato, risposta }) }); if (!r.ok) { toast('Non aggiornato'); return; } toast('Aggiornato'); RF.sugg = null; render(); } catch { toast('Piattaforma non raggiungibile'); }
+}
 
 /* ---------- pagine senza backing vero → alla piattaforma ---------- */
 function rfPaginaPiattaforma(titolo, testo) {
@@ -2291,7 +2313,10 @@ PAGES.administration = () => {
         <div class="field"><label>E-mail per gli avvisi</label><input class="input" id="rf-st-email" value="${rfEsc(st.notify_email || '')}" ${admin ? '' : 'disabled'}></div>
         <div class="field"><label>Prestazioni offerte</label><input class="input" id="rf-st-spec" value="${rfEsc(st.specialita || '')}" ${admin ? '' : 'disabled'}></div>
       </div>
-      ${admin ? `<div class="row mt-16"><button class="btn primary" onclick="rfStudioAzione({ azione: 'studio_aggiorna', nome: rfStudioCampo('#rf-st-nome'), telefono: rfStudioCampo('#rf-st-tel'), notify_email: rfStudioCampo('#rf-st-email'), specialita: rfStudioCampo('#rf-st-spec'), indirizzo: rfStudioCampo('#rf-st-indirizzo') })">Salva</button></div>` : ''}</div>`;
+      <div class="section-title mt-16">Voci del menu che questo studio non usa</div>
+      <div class="row wrap mt-8" style="gap:8px">${['prestazioni', 'invianti', 'percorsi', 'moduli', 'documents', 'dittafono', 'anonymize', 'inbox', 'ai', 'fatturazione', 'statistics', 'communications', 'visits'].map(k => `<label class="chip" style="cursor:pointer"><input type="checkbox" class="rf-mn" value="${k}" ${(RF.data.moduli_nascosti || []).includes(k) ? 'checked' : ''} ${admin ? '' : 'disabled'} style="margin:0 6px 0 0"> nascondi ${rfEsc((NAV_META[k] || [k])[0])}</label>`).join('')}</div>
+      <div class="caption mt-8">Le voci nascoste spariscono dalla barra e dal menu del telefono per tutti i ruoli; Home e Studio restano sempre.</div>
+      ${admin ? `<div class="row mt-16"><button class="btn primary" onclick="rfStudioAzione({ azione: 'studio_aggiorna', nome: rfStudioCampo('#rf-st-nome'), telefono: rfStudioCampo('#rf-st-tel'), notify_email: rfStudioCampo('#rf-st-email'), specialita: rfStudioCampo('#rf-st-spec'), indirizzo: rfStudioCampo('#rf-st-indirizzo') }).then(() => rfStudioAzione({ azione: 'moduli_nascosti', voci: [...document.querySelectorAll('.rf-mn:checked')].map(e => e.value) }))">Salva</button></div>` : ''}</div>`;
   } else if (scheda === 'personale') {
     corpo = `<div class="card"><div class="card-head"><span class="section-title">Accessi del personale</span><span class="caption">${d.personale.filter(u => u.attivo).length} attivi</span></div>
       <div class="table-wrap" style="box-shadow:none"><table class="dense"><thead><tr><th>E-mail</th><th>Ruolo</th><th>2FA</th><th>Stato</th>${admin ? '<th></th>' : ''}</tr></thead><tbody>
@@ -2320,6 +2345,14 @@ PAGES.administration = () => {
         ${d.codici_agenda.map(c => `<tr><td><b>${rfEsc(c.codice)}</b>${c.risorsa ? ' <span class="badge">sala/apparecchio</span>' : ''}</td><td class="num">${c.n}</td><td class="num">${rfEsc(c.ultimo || '')}</td>
           ${admin ? `<td class="row" style="gap:6px;justify-content:flex-end;flex-wrap:wrap"><select class="input sm" id="rf-cod-${rfEsc(c.codice).replace(/[^a-z0-9]/gi, '_')}"><option value="">è un medico…</option>${d.medici.filter(m => m.attivo).map(m => `<option value="${m.id}">${rfEsc(m.nome)}</option>`).join('')}</select><button class="btn sm" onclick="(function(){ const sel = document.getElementById('rf-cod-${rfEsc(c.codice).replace(/[^a-z0-9]/gi, '_')}'); if (!sel.value) { toast('Scegli il medico'); return; } rfStudioAzione({ azione: 'codice_medico', codice: ${JSON.stringify(c.codice)}, provider_id: sel.value }); })()">Abbina</button>${c.risorsa ? '' : `<button class="btn sm ghost" onclick="rfStudioAzione({ azione: 'codice_risorsa', codice: ${JSON.stringify(c.codice)}, tipo: 'sala' })">È una sala</button><button class="btn sm ghost" onclick="rfStudioAzione({ azione: 'codice_risorsa', codice: ${JSON.stringify(c.codice)}, tipo: 'apparecchio' })">È un apparecchio</button>`}</td>` : ''}</tr>`).join('')}</tbody></table></div></div>` : ''}
       ${admin ? `<div class="card mt-16"><div class="section-title">Nuovo medico in agenda</div><div class="grid grid-2 mt-8"><div class="field"><label>Nome come in agenda</label><input class="input" id="rf-m-nome" placeholder="Dr. med. …"></div><div class="field"><label>Altri modi in cui compare (virgole)</label><input class="input" id="rf-m-alias"></div></div><div class="row mt-16"><button class="btn primary" onclick="rfStudioAzione({ azione: 'medico_crea', nome: rfStudioCampo('#rf-m-nome'), aliases: rfStudioCampo('#rf-m-alias') })">Aggiungi</button></div></div>` : ''}`;
+  } else if (scheda === 'suggerimenti') {
+    if (RF.sugg === null) { void rfCaricaSuggerimenti(); corpo = '<div class="card"><p class="meta" style="margin:0">Carico…</p></div>'; }
+    else {
+      const ST = { aperto: ['warning', 'aperto'], fatto: ['success', 'fatto'], no: ['', 'non previsto'] };
+      corpo = `<div class="card"><div class="card-head"><span class="section-title">Suggerimenti di modifica</span><span class="caption">${RF.sugg.filter(x => x.stato === 'aperto').length} aperti</span></div>
+        <p class="meta" style="margin:0 0 10px;line-height:1.5">Ciò che il personale chiede dal tasto «Suggerisci» nella barra. Lo sviluppatore riceve un avviso e legge qui; l'amministratore segna «fatto» o «non previsto» con una riga di risposta.</p>
+        <div class="list">${RF.sugg.map(x => `<div class="list-item" style="align-items:flex-start"><i class="dot ${ST[x.stato][0]}"></i><div class="grow"><div class="name" style="font-size:13px;white-space:pre-wrap">${rfEsc(x.testo)}</div><div class="sub">${rfModQuando(x.created_at)}${x.da ? ` · ${rfEsc(x.da)}` : ''}${x.pagina ? ` · pagina ${rfEsc(x.pagina)}` : ''} · <span class="badge ${ST[x.stato][0]}">${ST[x.stato][1]}</span>${x.risposta ? ` · ${rfEsc(x.risposta)}` : ''}</div></div>${admin && x.stato === 'aperto' ? `<button class="btn sm" onclick="rfSuggStato('${x.id}', 'fatto')">Fatto</button><button class="btn sm ghost" onclick="rfSuggStato('${x.id}', 'no')">Non previsto</button>` : ''}</div>`).join('') || '<div class="caption">Nessun suggerimento.</div>'}</div></div>`;
+    }
   } else if (scheda === 'prestazioni') {
     const cat = d.catalogo || []; const ET = { visita: 'Visita', esame: 'Esame', procedura: 'Procedura' };
     corpo = `<div class="card"><div class="card-head"><span class="section-title">Catalogo delle prestazioni</span><span class="caption">${cat.filter(x => x.attivo).length} attive</span></div>
@@ -2338,7 +2371,7 @@ PAGES.administration = () => {
       ${admin ? `<div class="card mt-16"><div class="section-title">${scheda === 'sale' ? 'Nuova sala' : 'Nuovo apparecchio'}</div><div class="grid grid-2 mt-8"><div class="field"><label>Nome</label><input class="input" id="rf-r-nome" placeholder="${scheda === 'sale' ? 'Sala 1, Sala ECG…' : 'Ecografo, Holter 3, ergometro…'}"></div><div class="field"><label>Descrizione</label><input class="input" id="rf-r-desc" placeholder="${scheda === 'sale' ? 'piano, uso' : 'modello, matricola, scadenza manutenzione'}"></div>${scheda === 'sale' ? `<div class="field"><label>Posti (pazienti nello stesso momento)</label><input class="input" id="rf-r-posti" type="number" min="1" max="99" value="1" style="max-width:120px"></div>` : ''}</div><div class="row mt-16"><button class="btn primary" onclick="rfStudioAzione({ azione: 'risorsa_crea', tipo: '${tipo}', nome: rfStudioCampo('#rf-r-nome'), descrizione: rfStudioCampo('#rf-r-desc'), posti: rfStudioCampo('#rf-r-posti') || 1 })">Aggiungi</button></div></div>` : ''}`;
   }
   return `<div class="page-head"><div><h2 class="page-title">Studio</h2><div class="page-sub">${rfEsc((d.studio || {}).nome || '')} · personale, medici dell'agenda, sale e apparecchi</div></div></div>
-    <div class="tabs">${tab('studio', 'Dati')}${tab('personale', 'Personale', d.personale.length)}${tab('medici', 'Medici agenda', d.medici.length)}${tab('prestazioni', 'Prestazioni', (d.catalogo || []).length)}${tab('sale', 'Sale', d.sale.length)}${tab('apparecchi', 'Apparecchi', d.apparecchi.length)}</div>
+    <div class="tabs">${tab('studio', 'Dati')}${tab('personale', 'Personale', d.personale.length)}${tab('medici', 'Medici agenda', d.medici.length)}${tab('prestazioni', 'Prestazioni', (d.catalogo || []).length)}${tab('sale', 'Sale', d.sale.length)}${tab('suggerimenti', 'Suggerimenti', (RF.sugg && RF.sugg.filter(x => x.stato === 'aperto').length) || 0)}${tab('apparecchi', 'Apparecchi', d.apparecchi.length)}</div>
     ${soloAdmin}${avviso}${corpo}`;
 };
 function rfStudioPassword(id, email) {
@@ -2418,7 +2451,7 @@ PAGES.profile = () => {
       ${due}
     </div>`;
 };
-(function () { const st = document.createElement('style'); st.textContent = `.appt.rf-over{border-left-color:var(--danger);background:var(--danger-soft)}.rf-codici{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:10px}.rf-codici code{padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);font-size:13px;letter-spacing:.04em}`; document.head.appendChild(st); })();
+(function () { const st = document.createElement('style'); st.textContent = `.rf-week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}.rf-week-col{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);min-height:200px;padding:6px}.rf-week-col.oggi{border-color:var(--accent)}.rf-week-head{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text-2);padding:4px 6px 8px;border-bottom:1px solid var(--border);margin-bottom:6px}.rf-week-item{border-left:3px solid var(--border-2);padding:5px 8px;margin:4px 0;border-radius:4px;background:var(--surface-2);font-size:12.5px;cursor:pointer;line-height:1.3}.rf-week-item.done{opacity:.6}.rf-week-item:hover{background:var(--accent-soft)}@media (max-width:1199px){.rf-week{grid-template-columns:repeat(4,1fr)}}@media (max-width:767px){.rf-week{grid-template-columns:1fr}.rf-week-col{min-height:0}}.appt.rf-over{border-left-color:var(--danger);background:var(--danger-soft)}.rf-codici{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:10px}.rf-codici code{padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);font-size:13px;letter-spacing:.04em}`; document.head.appendChild(st); })();
 
 
 /* ---------- agenda vera: colonne per medico, giorno per giorno ---------- */
@@ -2433,7 +2466,10 @@ PAGES.agenda = () => {
   const oggi = (RF.data && RF.data.today) || new Date().toISOString().slice(0, 10);
   if (!state.agendaGiorno) state.agendaGiorno = oggi;
   const giorno = state.agendaGiorno;
-  const lista = (RF.agenda || []).filter(a => a.d === giorno).sort((a, b) => a.start.localeCompare(b.start));
+  const filtroTipo = state.agendaTipo || '';
+  const periodo = state.agendaPeriodo === 'settimana' ? 'settimana' : 'giorno';
+  const passaTipo = (a) => !filtroTipo || a.tipoPrest === filtroTipo;
+  const lista = (RF.agenda || []).filter(a => a.d === giorno && passaTipo(a)).sort((a, b) => a.start.localeCompare(b.start));
   const nomeDi = (a) => (a.p && P[a.p]) ? fullName(P[a.p]) : (a.nome || 'Paziente');
   const medici = [...new Set(lista.filter(a => a.doc && a.doc !== 'studio').map(a => a.doc))].sort((x, y) => (DOCTORS[x] || '').localeCompare(DOCTORS[y] || ''));
   const minuti = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
@@ -2477,9 +2513,24 @@ PAGES.agenda = () => {
   const etichetta = d.toLocaleDateString('it-CH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const sposta = (n) => { const x = new Date(`${giorno}T12:00:00`); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
   const senza = lista.filter(a => !a.doc || a.doc === 'studio').length;
+  if (periodo === 'settimana') {
+    // Settimana (14.9.2026, punto 6): sette colonne, ogni appuntamento in una
+    // riga compatta; per sala mostra la sala, per medico il medico col colore.
+    const lun = new Date(`${giorno}T12:00:00`); lun.setDate(lun.getDate() - ((lun.getDay() + 6) % 7));
+    const giorni = Array.from({ length: 7 }, (_, i) => { const x = new Date(lun); x.setDate(lun.getDate() + i); return x.toISOString().slice(0, 10); });
+    const sett = (RF.agenda || []).filter(a => a.d >= giorni[0] && a.d <= giorni[6] && passaTipo(a)).sort((a, b) => (a.d + a.start).localeCompare(b.d + b.start));
+    const col = (a) => a.colore || (RF.data && RF.data.coloriMedici && RF.data.coloriMedici[a.doc]) || '';
+    const et = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('it-CH', { weekday: 'short', day: 'numeric' });
+    const etSett = `${new Date(`${giorni[0]}T12:00:00`).toLocaleDateString('it-CH', { day: 'numeric', month: 'short' })} – ${new Date(`${giorni[6]}T12:00:00`).toLocaleDateString('it-CH', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    return `
+    <div class="page-head"><div><h2 class="page-title">Agenda</h2><div class="page-sub">Settimana ${rfEsc(etSett)} · ${sett.length} appuntamenti${filtroTipo ? ` · solo ${filtroTipo === 'visita' ? 'visite' : filtroTipo === 'esame' ? 'esami' : 'procedure'}` : ''}</div></div>
+      <div class="actions"><div class="seg"><button onclick="state.agendaPeriodo='giorno';render()">Giorno</button><button class="active">Settimana</button></div><div class="seg"><button class="${!filtroTipo ? 'active' : ''}" onclick="state.agendaTipo='';render()">Tutto</button><button class="${filtroTipo === 'visita' ? 'active' : ''}" onclick="state.agendaTipo='visita';render()">Visite</button><button class="${filtroTipo === 'esame' ? 'active' : ''}" onclick="state.agendaTipo='esame';render()">Esami</button><button class="${filtroTipo === 'procedura' ? 'active' : ''}" onclick="state.agendaTipo='procedura';render()">Procedure</button></div><div class="seg"><button class="${vista === 'medici' ? 'active' : ''}" onclick="state.agendaVista='medici';render()">Per medico</button><button class="${vista === 'sale' ? 'active' : ''}" onclick="state.agendaVista='sale';render()">Per sala</button></div><div class="seg"><button onclick="state.agendaGiorno='${sposta(-7)}';render()">‹</button><button class="${giorni.includes(oggi) ? 'active' : ''}" onclick="state.agendaGiorno='${oggi}';render()">Oggi</button><button onclick="state.agendaGiorno='${sposta(7)}';render()">›</button></div></div></div>
+    <div class="rf-week">${giorni.map(g => { const del = sett.filter(a => a.d === g); return `<div class="rf-week-col ${g === oggi ? 'oggi' : ''}"><div class="rf-week-head"><span>${rfEsc(et(g))}</span><span class="caption">${del.length || ''}</span></div>${del.map(a => `<div class="rf-week-item ${a.status === 'COMPLETED' ? 'done' : ''}" ${a.p && rfUuid(a.p) ? `data-go="#/patients/${a.p}"` : ''} style="${col(a) ? `border-left-color:${rfEsc(col(a))}` : ''}" title="${rfEsc(nomeDi(a))} · ${rfEsc(a.reason || '')}"><span class="num">${a.start}</span> <b>${rfEsc(nomeDi(a))}</b><div class="caption">${rfEsc(a.prestazione || a.reason || '')}${vista === 'sale' ? (a.room ? ` · ${rfEsc(a.room)}` : '') : (DOCTORS[a.doc] ? ` · ${rfEsc(DOCTORS[a.doc])}` : '')}</div></div>`).join('') || '<div class="caption" style="padding:8px">—</div>'}</div>`; }).join('')}</div>
+    <div class="row mt-16 caption wrap"><span class="caption">Dal robot MediOnline, in sola lettura; clic su un appuntamento apre la scheda del paziente in cartella.</span></div>`;
+  }
   return `
     <div class="page-head"><div><h2 class="page-title">Agenda</h2><div class="page-sub">${rfEsc(etichetta)} · ${lista.length} appuntamenti${medici.length ? ` · ${medici.length} medici` : ''}${senza ? ` · ${senza} senza medico` : ''}</div></div>
-      <div class="actions"><div class="seg"><button class="${vista === 'medici' ? 'active' : ''}" onclick="state.agendaVista='medici';render()">Per medico</button><button class="${vista === 'sale' ? 'active' : ''}" onclick="state.agendaVista='sale';render()">Per sala</button></div><div class="seg"><button onclick="state.agendaGiorno='${sposta(-1)}';render()">‹</button><button class="${giorno === oggi ? 'active' : ''}" onclick="state.agendaGiorno='${oggi}';render()">Oggi</button><button onclick="state.agendaGiorno='${sposta(1)}';render()">›</button></div><input type="date" class="input sm" value="${giorno}" onchange="state.agendaGiorno=this.value;render()" style="max-width:160px"><button class="btn ai" data-ai="Preparazione della giornata">${ICONS.ai} Prepara la giornata</button></div></div>
+      <div class="actions"><div class="seg"><button class="${periodo === 'giorno' ? 'active' : ''}" onclick="state.agendaPeriodo='giorno';render()">Giorno</button><button class="${periodo === 'settimana' ? 'active' : ''}" onclick="state.agendaPeriodo='settimana';render()">Settimana</button></div><div class="seg"><button class="${!filtroTipo ? 'active' : ''}" onclick="state.agendaTipo='';render()">Tutto</button><button class="${filtroTipo === 'visita' ? 'active' : ''}" onclick="state.agendaTipo='visita';render()">Visite</button><button class="${filtroTipo === 'esame' ? 'active' : ''}" onclick="state.agendaTipo='esame';render()">Esami</button><button class="${filtroTipo === 'procedura' ? 'active' : ''}" onclick="state.agendaTipo='procedura';render()">Procedure</button></div><div class="seg"><button class="${vista === 'medici' ? 'active' : ''}" onclick="state.agendaVista='medici';render()">Per medico</button><button class="${vista === 'sale' ? 'active' : ''}" onclick="state.agendaVista='sale';render()">Per sala</button></div><div class="seg"><button onclick="state.agendaGiorno='${sposta(periodo === 'settimana' ? -7 : -1)}';render()">‹</button><button class="${giorno === oggi ? 'active' : ''}" onclick="state.agendaGiorno='${oggi}';render()">Oggi</button><button onclick="state.agendaGiorno='${sposta(periodo === 'settimana' ? 7 : 1)}';render()">›</button></div><input type="date" class="input sm" value="${giorno}" onchange="state.agendaGiorno=this.value;render()" style="max-width:160px"><button class="btn ai" data-ai="Preparazione della giornata">${ICONS.ai} Prepara la giornata</button></div></div>
     ${avvisi.length ? `<div class="card mb-16" style="border-left:3px solid var(--danger)"><b>Più pazienti dei posti della sala</b>: ${avvisi.map(rfEsc).join(' · ')}. I posti si impostano in Studio → Sale.</div>` : ''}
     ${vista === 'sale' && cols.length && !risorse.some(r => r.tipo === 'sala') ? `<div class="caption mb-16">Nessuna sala registrata: le colonne sono i codici del campo «luogo» dell'agenda. In Studio → Sale si registrano le sale con i posti; in Medici agenda → Codici dell'agenda un codice diventa una sala.</div>` : ''}
     ${senza && vista === 'medici' ? `<div class="caption mb-16">Gli appuntamenti «senza medico» hanno nel luogo un codice non abbinato (${[...new Set(lista.filter(a => !a.doc || a.doc === 'studio').map(a => a.room).filter(Boolean))].map(rfEsc).join(', ') || 'vuoto'}): si abbinano in Studio → Medici agenda → Codici dell'agenda.</div>` : ''}

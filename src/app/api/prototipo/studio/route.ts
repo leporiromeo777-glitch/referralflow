@@ -61,6 +61,9 @@ export async function POST(req: NextRequest) {
     if (azione === 'studio_aggiorna') {
       const nome = s(c.nome, 120); if (!nome) return NextResponse.json({ errore: 'Il nome dello studio è obbligatorio.' }, { status: 400 });
       await query(`update studios set nome = $2, telefono = nullif($3, ''), notify_email = nullif($4, ''), specialita = nullif($5, ''), indirizzo = nullif($6, '') where id = $1`, [sid, nome, s(c.telefono, 40), s(c.notify_email, 160).toLowerCase(), s(c.specialita, 500), s(c.indirizzo, 200)]);
+    } else if (azione === 'moduli_nascosti') {
+      const voci = Array.isArray(c.voci) ? c.voci.map((v: unknown) => s(v, 30)).filter((v: string) => /^[a-z]+$/.test(v)).slice(0, 30) : [];
+      await query(`update studios set moduli_nascosti = $2 where id = $1`, [sid, voci]);
     } else if (azione === 'utente_crea') {
       const email = s(c.email, 160).toLowerCase(); const password = String(c.password ?? ''); const ruolo = RUOLI_VALIDI.has(s(c.ruolo)) ? s(c.ruolo) : 'segretaria';
       if (!email.includes('@')) return NextResponse.json({ errore: 'E-mail non valida.' }, { status: 400 });

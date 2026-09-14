@@ -102,7 +102,7 @@ L'entità centrale è la **prestazione** (`cardioos_prestazioni`, 362 righe): `p
 - **Come funziona**: prestazione completata → bozza di fattura con le posizioni del catalogo.
 - **Verdetto**: non serve; da noi la prestazione completata finisce nel CSV.
 
-## Piano di lavoro proposto (solo ciò che vale), in ordine
+## Piano di lavoro proposto (solo ciò che vale), in ordine — FATTO la sera del 14.9.2026, vedi [[Piattaforma/Prototipo stack]]
 1. **Anagrafica paziente completa e scheda** (punto 5, 2 gg) — anche perché senza AVS e numero assicurato il CSV di fatturazione è monco.
 2. **Catalogo prestazioni + pagina Prestazioni** (punto 3, 1 g) — aggancia percorsi, sale ed esportazione.
 3. **Medici invianti nell'interfaccia nuova** (punto 8, ½ g).

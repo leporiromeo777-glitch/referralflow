@@ -14,7 +14,7 @@ aggiornata: 2026-09-14
 8. **Migrazione a Next 16** (advisory residue di `npm audit`, feature non usate).
 
 ## Dal confronto con CardioOS ([[Proposte/CardioOS confronto per funzione]], 14.9.2026)
-Otto punti in ordine, ~6-7 giorni: anagrafica paziente completa (AVS, cassa, numero assicurato, indirizzo, e-mail, sesso, indicazione, percorso) e scheda con terapia derivata dai referti; catalogo prestazioni + pagina Prestazioni; medici invianti nell'interfaccia nuova; chiamate di preparazione; personale con GLN/RCC/colore; calendario a settimana; moduli nascosti per studio e «Suggerisci una modifica»; import CSV pazienti. Non si portano turni/ferie/presenze/ore/rimborsi, magazzino, chatbot clinico, fatturazione TARDOC.
+**Gli otto punti sono FATTI la sera del 14.9.2026** (migrazioni 041-044, ponte v54-v57). Restano da fare con lo studio: popolare il catalogo (Studio → Prestazioni, anche dai percorsi) e le parole chiave, i posti delle sale, GLN/RCC dei medici, importare i pazienti dal gestionale via CSV, validare percorsi e moduli. Il piano era: anagrafica paziente completa (AVS, cassa, numero assicurato, indirizzo, e-mail, sesso, indicazione, percorso) e scheda con terapia derivata dai referti; catalogo prestazioni + pagina Prestazioni; medici invianti nell'interfaccia nuova; chiamate di preparazione; personale con GLN/RCC/colore; calendario a settimana; moduli nascosti per studio e «Suggerisci una modifica»; import CSV pazienti. Non si portano turni/ferie/presenze/ore/rimborsi, magazzino, chatbot clinico, fatturazione TARDOC.
 
 ## Interfaccia nuova ([[Piattaforma/Prototipo stack]])
 - Schermata di accesso propria, pagina «Studio» e Profilo (password propria, 2FA) FATTI il 14.9.2026: l'interfaccia nuova non ha più bisogno della classica per nulla.
