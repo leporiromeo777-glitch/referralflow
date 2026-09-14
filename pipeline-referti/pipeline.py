@@ -164,6 +164,9 @@ def carica_medici() -> list[dict]:
             # per il prompt dell'impaginazione nella piattaforma.
             "lettera_tipo": str(v.get("lettera_tipo") or "").strip()[:3000],
             "regole_forma": [str(f).strip()[:200] for f in (v.get("regole_forma") or []) if str(f).strip()][:12],
+            # Forma del corpo della lettera (2026-09-14): «unico» = tutto in
+            # un solo paragrafo (Moccetti), «paragrafi» = blocchi separati.
+            "corpo_lettera": "unico" if v.get("corpo_lettera") == "unico" else "paragrafi",
             # Note di contesto per i prompt (come detta, a chi scrive…).
             "contesto": str(v.get("contesto") or "").strip()[:700],
             "farmaci_frequenti": [str(f).strip()[:60] for f in (v.get("farmaci_frequenti") or []) if str(f).strip()][:80],
