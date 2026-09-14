@@ -105,7 +105,13 @@ async function estraiGiorno(p) {
       if (inizio === null) continue;
       const html = String(e.html ?? '');
       const stato = (html.match(/class=['"](st\d+)['"]/) || [])[1] ?? '';
-      const testo = html.replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+      // Il testo si ricava facendolo leggere al DOM, non con un'espressione
+      // regolare: MediOnline scrive «N&#176;» e togliere i tag a mano lascia
+      // l'entità codificata (visto il 15.9.2026 — il numero di paziente
+      // arrivava come «N&#176; 202847»).
+      const culla = document.createElement('div');
+      culla.innerHTML = html.replace(/<br\s*\/?>/gi, ' ');
+      const testo = (culla.textContent || '').replace(/\s+/g, ' ').trim();
       fuori.push({
         idMol: String(e.id ?? ''),
         inizio,
