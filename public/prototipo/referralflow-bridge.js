@@ -2875,7 +2875,9 @@ function rfApptScheda(id) {
       ${riga('Medico', a.doc && a.doc !== 'studio' ? rfEsc(DOCTORS[a.doc] || a.doc) : `<span class="caption">non abbinato</span>`)}
       ${riga('Agenda', a.sigla ? `<code>${rfEsc(a.sigla)}</code>` : (a.room ? `<code>${rfEsc(a.room)}</code>` : ''))}
       ${riga('Tipo', a.colore ? `<span class="status"><i class="dot" style="background:${rfEsc(a.colore)}"></i>${rfEsc(rfTipoColore(a.colore))}</span>` : '')}
-      ${riga('Prestazione', rfEsc(a.prestazione || a.reason || ''))}
+      ${riga('Prestazione', a.prestazione || a.motivoVero
+        ? rfEsc(a.prestazione || a.motivoVero)
+        : `<span class="caption">MediOnline nel riquadro non scrive la prestazione. Il tipo qui sopra viene dal colore; per avere il nome della prestazione si riempie il catalogo in Studio → Prestazioni.</span>`)}
       ${riga('In MediOnline', a.statoMol ? rfStatoPill(a.statoMol) : '<span class="caption">non ancora letto</span>')}
       ${riga('Nella piattaforma', inCartella ? '<span class="status"><i class="dot success"></i>paziente in cartella</span>' : '<span class="status"><i class="dot warning"></i>solo in agenda, non in cartella</span>')}
       <div class="rf-ap-grezzo"><span class="caption">Come sta scritto nell'agenda</span><div>${rfEsc(a.nome)}</div></div>
@@ -2990,7 +2992,7 @@ PAGES.agenda = () => {
     const geo = n > 1
       ? `left:calc(${(c * larg).toFixed(3)}% + 3px);width:calc(${larg.toFixed(3)}% - 6px);right:auto`
       : 'left:6px;right:6px';
-    return `<div class="appt ${a.late ? 'LATE' : a.status}${sovra.has(a.id) ? ' rf-over' : ''}${n > 2 ? ' rf-stretta' : ''}" style="${geo};top:${top(a.start) + 2}px;height:${Math.max(24, a.dur / 30 * slotH - 4)}px${a.colore ? `;border-left:4px solid ${rfEsc(a.colore)};background:${rfEsc(a.colore)}1a` : (RF.data && RF.data.coloriMedici && RF.data.coloriMedici[a.doc] ? `;border-left:4px solid ${rfEsc(RF.data.coloriMedici[a.doc])}` : '')}" onclick="rfApptScheda('${rfEsc(a.id)}')" title="${rfEsc(nomeDi(a))} · ${a.start} · ${rfEsc(a.reason || '')}${a.room ? ' · ' + rfEsc(a.room) : ''} — clicca per la scheda"><div class="n"><i class="dot ${a.late ? 'warning' : a.status === 'COMPLETED' ? 'success' : 'accent'}"></i>${rfEsc(nomeDi(a))}</div><div class="s">${a.start}${n > 2 ? '' : ` · ${rfEsc(a.reason || '')}${a.room ? ` · <b>${rfEsc(a.room)}</b>` : ''}`}</div></div>`;
+    return `<div class="appt ${a.late ? 'LATE' : a.status}${sovra.has(a.id) ? ' rf-over' : ''}${n > 2 ? ' rf-stretta' : ''}" style="${geo};top:${top(a.start) + 2}px;height:${Math.max(24, a.dur / 30 * slotH - 4)}px${a.colore ? `;border-left:4px solid ${rfEsc(a.colore)};background:${rfEsc(a.colore)}1a` : (RF.data && RF.data.coloriMedici && RF.data.coloriMedici[a.doc] ? `;border-left:4px solid ${rfEsc(RF.data.coloriMedici[a.doc])}` : '')}" onclick="rfApptScheda('${rfEsc(a.id)}')" title="${rfEsc(nomeDi(a))} · ${a.start}${a.prestazione || a.motivoVero ? ' · ' + rfEsc(a.prestazione || a.motivoVero) : (a.colore ? ' · ' + rfEsc(rfTipoColore(a.colore)) : '')}${a.room ? ' · ' + rfEsc(a.room) : ''} — clicca per la scheda"><div class="n"><i class="dot ${a.late ? 'warning' : a.status === 'COMPLETED' ? 'success' : 'accent'}"></i>${rfEsc(nomeDi(a))}</div><div class="s">${a.start}${n > 2 ? '' : `${(() => { const d = a.prestazione || a.motivoVero || (a.colore ? rfTipoColore(a.colore) : ''); return d && !String(d).startsWith('Altro · ') ? ` · ${rfEsc(d)}` : ''; })()}${a.room ? ` · <b>${rfEsc(a.room)}</b>` : ''}`}</div></div>`;
   };
   const colHtml = (col) => {
     const dentro = lista.filter(col.test);

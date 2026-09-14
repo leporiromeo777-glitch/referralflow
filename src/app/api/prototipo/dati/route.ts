@@ -191,6 +191,10 @@ export async function GET() {
         return { nomeBreve: nomePulito(t.nome), nascita: t.nascita, nPaziente: t.nPaziente, sigla: t.sigla };
       })(),
       statoMol: a.stato_medionline ?? '',
+      // Il motivo VERO, senza ripiegare sul titolo: dal robot non arriva mai
+      // (MediOnline nel riquadro scrive solo l'identità del paziente), quindi
+      // qui è quasi sempre vuoto — e va mostrato vuoto, non riempito col nome.
+      motivoVero: (a.motivo ?? '').trim(),
     };
   });
   const apptsOggi = agenda.filter((a) => a.d === today);
