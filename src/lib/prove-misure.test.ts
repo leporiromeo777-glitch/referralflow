@@ -1,7 +1,7 @@
 // Lucchetto delle relazioni (misure cliniche del profilo). Uso: npm run test:app
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { relazioniIntatte, misureCliniche } from './referti-misure-cliniche';
+import { relazioniIntatte, misureCliniche, misureDivergenti } from './referti-misure-cliniche';
 import { unitaInSigle } from './referti-terapia';
 
 test('unità dettate a parole → sigle della lettera, numeri intatti', () => {
@@ -27,4 +27,16 @@ test('misura riconosciuta solo nella lettera (dettato a parole): passa', () => {
 
 test('stessa misura con valore cambiato: bloccato', () => {
   assert.equal(relazioniIntatte('frazione di eiezione del 60 per cento', 'FE 50%'), false);
+});
+
+test('frase riformulata: un valore non più agganciato dall’espressione non è uno scambio (14.9.2026)', () => {
+  // Dati INVENTATI. La firma numerica garantisce che 50 bpm c'è ancora.
+  const dettato = 'frequenza cardiaca 50 bpm al mattino e frequenza cardiaca 99 bpm sotto sforzo';
+  const lettera = 'bradicardia sinusale a 50 bpm al mattino; sotto sforzo la frequenza cardiaca sale a 99 bpm';
+  assert.deepEqual(misureCliniche(dettato)['Frequenza cardiaca'], ['50', '99']);
+  assert.equal(relazioniIntatte(dettato, lettera), true);
+  assert.deepEqual(misureDivergenti(dettato, lettera), []);
+  // ma un valore NUOVO attribuito alla misura resta bloccato
+  assert.equal(relazioniIntatte(dettato, 'frequenza cardiaca 60 bpm e frequenza cardiaca 99 bpm'), false);
+  assert.match(misureDivergenti(dettato, 'frequenza cardiaca 60 bpm e frequenza cardiaca 99 bpm')[0], /Frequenza cardiaca: 50, 99 → 60, 99/);
 });

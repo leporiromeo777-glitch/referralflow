@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 type Stato =
   | { fase: 'fermo' }
   | { fase: 'lavora'; percento: number }
-  | { fase: 'errore'; messaggio: string; aggiunte?: string[] };
+  | { fase: 'errore'; messaggio: string; aggiunte?: string[]; dettaglio?: string };
 
 const MESSAGGI: Record<string, string> = {
   numeri: 'Proposta scartata: la riorganizzazione avrebbe cambiato dei numeri.',
@@ -43,10 +43,17 @@ export default function RiorganizzaAI({ bozzaId, formato = 'rapporto' }: { bozza
           window.location.assign(`/referti/${bozzaId}?ok=strutturato${agg}`);
         } else if (s.stato === 'errore') {
           if (timer.current) clearInterval(timer.current);
+          // Per «numeri» la guardia dice QUALI valori cambiavano (numero+unità).
+          const d = s.dettaglio ?? {};
+          const pezzi: string[] = [];
+          if (Array.isArray(d.mancanti) && d.mancanti.length) pezzi.push(`mancavano ${d.mancanti.join(', ')}`);
+          if (Array.isArray(d.in_piu) && d.in_piu.length) pezzi.push(`comparivano ${d.in_piu.join(', ')}`);
+          if (Array.isArray(d.misure) && d.misure.length) pezzi.push(`valori scambiati: ${d.misure.join('; ')}`);
           setStato({
             fase: 'errore',
             messaggio: MESSAGGI[s.motivo ?? ''] ?? MESSAGGI.ai_non_risponde,
             aggiunte: Array.isArray(s.aggiunte) ? s.aggiunte.slice(0, 12) : undefined,
+            dettaglio: pezzi.length ? pezzi.join(' · ') : undefined,
           });
         }
       } catch { /* rete assente per un attimo: si riprova al giro dopo */ }
@@ -98,7 +105,7 @@ export default function RiorganizzaAI({ bozzaId, formato = 'rapporto' }: { bozza
         {formato === 'lettera' ? 'Impagina come lettera (AI)' : 'Riorganizza nel formato standard (AI)'}
       </button>
       {stato.fase === 'errore' && (
-        <span className="muted small" role="alert">{stato.messaggio}</span>
+        <span className="muted small" role="alert">{stato.messaggio}{stato.dettaglio ? ` (${stato.dettaglio})` : ''}</span>
       )}
     </span>
   );

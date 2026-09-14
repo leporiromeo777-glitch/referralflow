@@ -1,5 +1,5 @@
 import 'server-only';
-import { relazioniIntatte } from './referti-misure-cliniche';
+import { relazioniIntatte, misureDivergenti } from './referti-misure-cliniche';
 import { normalizzaDate, numeriDiTempoInCifre, paroleAggiunte } from './referti-lettera';
 import { unitaInSigle } from './referti-terapia';
 
@@ -196,9 +196,13 @@ function firmaNumerica(testo: string): string {
   // numeri devono restare identici — E ANCHE L'UNITÀ che li segue (2026-09-05):
   // «5 mg» → «5 mcg» lasciava il numero intatto e passava la guardia.
   // La firma ora è «numero+unità» (mg, mcg, g, ml, mmHg, bpm, %, cm, kg, ms…).
+  return vociNumeriche(testo).sort().join('|');
+}
+
+function vociNumeriche(testo: string): string[] {
   const senzaElenchi = testo.replace(/^\s*\d{1,2}\.\s+/gm, '');
   const voci = senzaElenchi.match(/\d+(?:[.,]\d+)?(?:\s?(?:mcg|µg|mg|g|kg|ml|l|mmHg|bpm|%|cm|mm|m|ms|s|min|h|mmol\/l|ng\/l|u\/l|kg\/m²|kg\/m2)(?![\p{L}]))?/giu) ?? [];
-  return voci.map((v) => v.toLowerCase().replace(/\s+/g, '')).sort().join('|');
+  return voci.map((v) => v.toLowerCase().replace(/\s+/g, ''));
 }
 
 // Parole aggiunte che cambierebbero il senso clinico: se il modello le
@@ -215,7 +219,23 @@ const MAX_PAROLE_AGGIUNTE = 6;
 
 export type EsitoStruttura =
   | { ok: true; testo: string; aggiunte: string[] }
-  | { ok: false; motivo: 'numeri' | 'troppo_corto' | 'ai_non_risponde' | 'parole_aggiunte'; aggiunte?: string[] };
+  | { ok: false; motivo: 'numeri' | 'troppo_corto' | 'ai_non_risponde' | 'parole_aggiunte'; aggiunte?: string[]; dettaglio?: DettaglioNumeri };
+
+// Che cosa cambiava nei numeri (14.9.2026): quando la guardia scarta la
+// proposta, chi rivede vede QUALI valori mancavano o comparivano (solo
+// numero+unità, mai testo) e quali misure avevano valori scambiati. Prima
+// il rifiuto era muto e sembrava un modello diverso da quello della
+// piattaforma: è lo stesso modello e lo stesso prompt, è la guardia che parla.
+export type DettaglioNumeri = { mancanti: string[]; in_piu: string[]; misure: string[] };
+
+export function differenzeNumeriche(originale: string, risposta: string): DettaglioNumeri {
+  const conta = (t: string) => { const m = new Map<string, number>(); for (const v of vociNumeriche(t)) m.set(v, (m.get(v) ?? 0) + 1); return m; };
+  const a = conta(originale), b = conta(risposta);
+  const mancanti: string[] = [], in_piu: string[] = [];
+  for (const [v, n] of a) for (let i = (b.get(v) ?? 0); i < n; i++) mancanti.push(v);
+  for (const [v, n] of b) for (let i = (a.get(v) ?? 0); i < n; i++) in_piu.push(v);
+  return { mancanti: mancanti.slice(0, 12), in_piu: in_piu.slice(0, 12), misure: misureDivergenti(originale, risposta) };
+}
 
 export async function riorganizzaReferto(
   testo: string,
@@ -280,13 +300,17 @@ export async function riorganizzaReferto(
 
   // Rete di sicurezza §2.4: la riorganizzazione non deve toccare i numeri.
   if (firmaNumerica(risposta) !== firmaNumerica(originale)) {
-    return { ok: false, motivo: 'numeri' };
+    const dettaglio = differenzeNumeriche(originale, risposta);
+    console.warn(`[struttura] proposta scartata: numeri (mancanti=${dettaglio.mancanti.length} in_piu=${dettaglio.in_piu.length})`);
+    return { ok: false, motivo: 'numeri', dettaglio };
   }
   // Lucchetto delle relazioni (Ricerca 18 §7): la firma è un multinsieme e
   // lascia passare due valori scambiati tra due concetti (FE 55 e FEVD 45 →
   // FE 45 e FEVD 55). Ogni misura del profilo deve avere gli stessi valori.
   if (!relazioniIntatte(originale, risposta)) {
-    return { ok: false, motivo: 'numeri' };
+    const dettaglio = differenzeNumeriche(originale, risposta);
+    console.warn(`[struttura] proposta scartata: valori scambiati tra misure (${dettaglio.misure.length})`);
+    return { ok: false, motivo: 'numeri', dettaglio };
   }
   // Un risultato molto più corto dell'originale = contenuto perso.
   if (risposta.length < originale.length * 0.6) {
@@ -318,6 +342,8 @@ export type StatoLavoro = {
   // Parole che il modello ha aggiunto e che nel dettato non c'erano: chi
   // rivede le vede sotto il bottone, con o senza scarto della proposta.
   aggiunte?: string[];
+  // Per «numeri»: quali valori mancavano o comparivano, quali misure differivano.
+  dettaglio?: DettaglioNumeri;
 };
 
 const lavori = new Map<string, StatoLavoro>();
@@ -356,7 +382,7 @@ export function avviaRiorganizzazione(
         lavori.set(bozzaId, { stato: 'errore', percento: 100, motivo: 'ai_non_risponde' });
       }
     } else {
-      lavori.set(bozzaId, { stato: 'errore', percento: 100, motivo: esito.motivo, aggiunte: esito.aggiunte });
+      lavori.set(bozzaId, { stato: 'errore', percento: 100, motivo: esito.motivo, aggiunte: esito.aggiunte, dettaglio: esito.dettaglio });
     }
     // Il registro si ripulisce da solo: l'esito resta leggibile 10 minuti.
     setTimeout(() => lavori.delete(bozzaId), 600_000).unref?.();

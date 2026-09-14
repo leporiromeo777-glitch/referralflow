@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
       promptNome: formato === 'lettera' ? 'impaginazione_lettera' : 'riorganizzazione_rapporto', promptTesto: prompt,
       ingresso: testo, uscita: esito.ok ? esito.testo : null, inizio, stato: esito.ok ? 'SUCCESS' : 'FAILED',
       errore: esito.ok ? undefined : esito.motivo, producerIngresso: ruoloRevisore(session.role),
-      metadata: esito.ok ? { parole_aggiunte: esito.aggiunte } : { motivo: esito.motivo, aggiunte: esito.aggiunte ?? [] },
+      metadata: esito.ok ? { parole_aggiunte: esito.aggiunte } : { motivo: esito.motivo, aggiunte: esito.aggiunte ?? [], ...(esito.dettaglio ? { numeri_mancanti: esito.dettaglio.mancanti, numeri_in_piu: esito.dettaglio.in_piu, misure_divergenti: esito.dettaglio.misure } : {}) },
     });
   });
   // Già in corso = va bene lo stesso: la pagina si aggancia al lavoro vivo.
