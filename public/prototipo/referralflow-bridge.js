@@ -54,8 +54,10 @@ async function rfCaricaDati() {
   // Niente residui demo nelle pagine raggiungibili: archivio storico della
   // palette, audit e job finti, knowledge, fatture.
   for (const nome of ['ARCHIVE', 'AUDIT', 'AIJOBS', 'KNOWLEDGE', 'INVOICES']) { try { if (Array.isArray(window[nome])) rfSvuota(window[nome]); } catch { /* assente */ } }
-  const nav = ['home', 'agenda', 'patients', 'reports', 'dittafono', 'documents', 'anonymize', 'inbox', 'ai', 'administration'];
-  for (const k of Object.keys(NAV)) NAV[k] = nav.slice();
+  // Voci per ruolo (14.9.2026: Percorsi, Moduli, Da fatturare). Questa riga
+  // vince su qualunque aggiunta fatta al caricamento dello script.
+  const nav = ['home', 'agenda', 'patients', 'percorsi', 'reports', 'dittafono', 'documents', 'moduli', 'anonymize', 'inbox', 'ai', 'fatturazione', 'administration'];
+  for (const k of Object.keys(NAV)) NAV[k] = nav.filter(v => v !== 'fatturazione' || ['secretary', 'org_admin'].includes(k));
   render();
 }
 

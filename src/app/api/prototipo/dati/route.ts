@@ -131,11 +131,15 @@ export async function GET() {
     const oggi = a.starts_at.slice(0, 10) === today;
     const pid = a.paziente_nome ? pazPerNome.get(slug(a.paziente_nome)) : undefined;
     let p = pid ?? '';
-    if (!p && oggi) {
+    const nomeGrezzo = (a.paziente_nome ?? a.titolo ?? '').trim();
+    // Una scheda leggera per NOME (non per appuntamento: la stessa persona con
+    // due visite era due righe) e solo se il titolo somiglia a un nome
+    // («in vacanza» o note in minuscolo restano appuntamenti senza scheda).
+    if (!p && oggi && nomeGrezzo && /^[A-ZÀ-Ý]/.test(nomeGrezzo)) {
       // Paziente noto solo all'agenda: entra come scheda leggera, senza cartella.
-      const nome = (a.paziente_nome ?? a.titolo ?? 'Paziente').trim();
+      const nome = nomeGrezzo;
       const pezzi = nome.split(/\s+/);
-      p = `ag-${a.id.slice(0, 8)}`;
+      p = `ag-${slug(nome).slice(0, 48)}`;
       if (!P.has(p)) {
         const sched = { id: p, num: '', first: pezzi.slice(1).join(' ') || '—', last: pezzi[0] || nome, dob: '', age: '' as const, sex: '', phone: '', email: '', doctor: null, gp: '', flags: [], problems: [], meds: [], exams: [], docs: [], lastVisit: '', next: '', referrals: [], assicurazione: '', visits: [] };
         patients.push(sched); P.set(p, sched);
