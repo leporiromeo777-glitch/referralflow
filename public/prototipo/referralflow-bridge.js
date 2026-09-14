@@ -143,6 +143,8 @@ async function rfEsci() {
 #app.rf-modo-accesso{grid-template-columns:1fr !important}
 #app.rf-modo-accesso .sidebar,#app.rf-modo-accesso .topbar{display:none !important}
 #app.rf-modo-accesso .content{padding:0;background:#eef2f7}
+body:has(#app.rf-modo-accesso){background:#eef2f7}
+:root[data-theme="dark"] body:has(#app.rf-modo-accesso){background:#0c1117}
 #app.rf-modo-accesso ~ #mobilenav,body:has(#app.rf-modo-accesso) .mobile-nav{display:none !important}
 .rf-auth{--a-bg:#eef2f7;--a-surface:#fff;--a-ink:#0f1722;--a-muted:#5a6675;--a-line:#dde4ec;--a-line-strong:#c6d1dd;--a-cta:#1789d6;--a-cta-hover:#0e6db0;--a-danger:#b3564c;--a-danger-bg:#f6e9e7;
   min-height:100%;min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:24px;background:var(--a-bg);color:var(--a-ink);
