@@ -6,6 +6,7 @@ aggiornata: 2026-09-14
 
 Elenco di ciò che esiste. Per la catena dei referti vedi [[Catena/Panoramica]].
 
+- **Percorsi diagnostico-terapeutici** (2026-09-14): pagina wiki [[Medici/Percorsi]] letta a runtime (12 percorsi ambulatoriali proposti dalle linee guida ESC, da validare dal medico), pagina «Percorsi» nell'interfaccia nuova con ricerca, percorsi nel prompt del bot quando servono ([[Piattaforma/Prototipo stack]]).
 - **Cruscotto della giornata nell'interfaccia nuova** (2026-09-14): sei numeri, monitor delle sale con l'occupazione di oggi (dal campo «luogo» dell'agenda abbinato a `studio_risorse`), chi ha agenda oggi, urgenti, lettere in ritardo ([[Piattaforma/Prototipo stack]]).
 
 - **Interfaccia nuova indipendente** (2026-09-14): schermata di accesso propria con 2FA, pagina «Studio» (personale, medici agenda, sale, apparecchi, migrazione 036 `studio_risorse`); nessun rimando alla piattaforma classica; revisione con gli stessi passi del wizard, campi correggibili, «Perché?», frasi tolte e note per la segreteria, salvataggio continuo di testo ed esiti nella bozza, impaginazione nel formato del medico con avanzamento, conferma con presa d'atto e richiamo proposto (cuori condivisi `referti-conferma.ts`, `referti-richiamo-crea.ts`), Word; esito di ogni audio caricato (duplicati riconosciuti); scheda paziente senza demo; anonimizzazione; menu a pillola, tasto indietro e niente scorrimento laterale sul telefono ([[Piattaforma/Prototipo stack]]).

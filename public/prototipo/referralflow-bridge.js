@@ -290,6 +290,49 @@ PAGES.home = () => {
     </div>`;
 };
 
+/* ---------- Percorsi diagnostico-terapeutici (14.9.2026) ---------- */
+// Sequenze standard per indicazione dalla pagina wiki «Medici/Percorsi»,
+// via GET /api/prototipo/percorsi. Ricerca in pagina senza ricaricare; stato
+// «proposta» finché il medico non valida la pagina.
+if (typeof NAV_META !== 'undefined') NAV_META.percorsi = ['Percorsi', 'flow'];
+if (typeof NAV !== 'undefined') for (const r of ['secretary', 'assistant', 'doctor', 'org_admin']) { const n = NAV[r]; if (n && !n.includes('percorsi')) n.splice(n.indexOf('patients') + 1, 0, 'percorsi'); }
+RF.percorsi = null;
+async function rfCaricaPercorsi() {
+  try {
+    const r = await fetch('/api/prototipo/percorsi', { credentials: 'include' });
+    const j = r.ok ? await r.json() : {};
+    RF.percorsi = Array.isArray(j.percorsi) ? j.percorsi : [];
+  } catch { RF.percorsi = []; }
+  if (state.route === 'percorsi') render();
+}
+document.addEventListener('input', (e) => {
+  if (!e.target || e.target.id !== 'rf-perc-q') return;
+  const q = e.target.value.trim().toLowerCase();
+  let n = 0;
+  document.querySelectorAll('[data-percorso]').forEach((el) => { const ok = !q || el.getAttribute('data-percorso').includes(q); el.hidden = !ok; if (ok) n++; });
+  const c = document.getElementById('rf-perc-n'); if (c) c.textContent = `${n} ${n === 1 ? 'percorso' : 'percorsi'}`;
+});
+PAGES.percorsi = () => {
+  if (!RF.live) return rfPaginaPiattaforma('Percorsi', 'Sequenze standard di prestazioni per indicazione');
+  if (RF.percorsi === null) { void rfCaricaPercorsi(); return `<div class="page-head"><div><h2 class="page-title">Percorsi diagnostico-terapeutici</h2><div class="page-sub">Sequenze standard di prestazioni per indicazione</div></div></div><div class="card"><p class="meta" style="margin:0">Leggo la pagina wiki…</p></div>`; }
+  const lista = RF.percorsi;
+  const proposte = lista.filter(p => p.stato !== 'validato').length;
+  const card = (p) => `<div class="card" data-percorso="${rfEsc(`${p.nome} ${p.indicazione} ${p.prestazioni.map(x => x.nome).join(' ')}`.toLowerCase())}">
+      <div class="card-head" style="align-items:flex-start"><div><div class="caption" style="letter-spacing:.04em;text-transform:uppercase">${rfEsc(p.indicazione)}</div><div class="section-title" style="font-size:16px;margin-top:2px">${rfEsc(p.nome)}</div></div>
+        <div class="row wrap" style="justify-content:flex-end;gap:6px">${p.urgente ? '<span class="badge danger">Urgenza</span>' : ''}<span class="badge ${p.stato === 'validato' ? 'success' : 'warning'}">${p.stato === 'validato' ? 'Validato' : 'Proposta'}</span></div></div>
+      <div class="row wrap mt-8" style="gap:6px">${p.durata ? `<span class="badge">${ICONS.clock} ${rfEsc(p.durata)}</span>` : ''}${p.dove ? `<span class="badge">${ICONS.door} ${rfEsc(p.dove)}</span>` : ''}<span class="badge accent">${p.prestazioni.length} prestazioni</span></div>
+      <div class="list mt-8">${p.prestazioni.map(x => `<div class="list-item" style="padding:6px 6px"><span class="num" style="width:22px;color:var(--text-3);font-size:12px">${x.n}</span><div class="grow"><div class="name" style="font-size:13px">${rfEsc(x.nome)}${x.esterna ? ' <span class="badge" style="font-size:10px">fuori studio</span>' : ''}</div>${x.condizione ? `<div class="sub">${rfEsc(x.condizione)}</div>` : ''}</div></div>`).join('')}</div>
+      ${p.tempi ? `<div class="kv mt-8"><b>Tempi</b><span>${rfEsc(p.tempi)}</span></div>` : ''}
+      ${p.urgente && p.urgenza ? `<div class="kv"><b>Urgenza</b><span>${rfEsc(p.urgenza)}</span></div>` : ''}
+      ${p.nota ? `<p class="meta mt-8" style="margin:0;line-height:1.5;font-style:italic">${rfEsc(p.nota)}</p>` : ''}
+      ${p.fonti ? `<div class="caption mt-8">Fonti: ${rfEsc(p.fonti)}</div>` : ''}
+    </div>`;
+  return `<div class="page-head"><div><h2 class="page-title">Percorsi diagnostico-terapeutici</h2><div class="page-sub">Sequenze standard di prestazioni per indicazione · <span id="rf-perc-n">${lista.length} ${lista.length === 1 ? 'percorso' : 'percorsi'}</span></div></div>
+      <div class="actions"><input class="input" id="rf-perc-q" placeholder="Cerca indicazione o prestazione…" autocomplete="off"><button class="btn ai" data-ai="Quale percorso per un paziente con palpitazioni?">${ICONS.ai} Chiedi al bot</button></div></div>
+    ${proposte ? `<div class="card" style="border-left:3px solid var(--warning)"><p class="meta" style="margin:0;line-height:1.55"><b>${proposte} ${proposte === 1 ? 'percorso è una proposta' : 'percorsi sono proposte'}</b> scritte dalle linee guida per uno studio ambulatoriale: durate, tempi e criteri li valida il cardiologo. Si correggono nella pagina wiki <code>Medici/Percorsi</code> (SilverBullet sulla rete dello studio, porta 3400); alla riga «Stato» si scrive <code>validato</code>. La piattaforma rilegge la pagina entro 5 minuti.</p></div>` : ''}
+    <div class="grid grid-2 mt-16">${lista.length ? lista.map(card).join('') : '<div class="card"><p class="meta" style="margin:0">Nessun percorso nella pagina wiki.</p></div>'}</div>`;
+};
+
 /* ---------- pagine senza backing vero → alla piattaforma ---------- */
 function rfPaginaPiattaforma(titolo, testo) {
   return `<div class="page-head"><div><h2 class="page-title">${titolo}</h2><div class="page-sub">${testo}</div></div></div>

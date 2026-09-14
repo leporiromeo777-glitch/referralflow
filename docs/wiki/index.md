@@ -59,6 +59,7 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 ## Medici
 - [[Medici/Moccetti]]
 - [[Medici/Moschovitis]]
+- [[Medici/Percorsi]] — sequenze standard per indicazione, lette dalla piattaforma (voce «Percorsi» dell'interfaccia nuova); stato «proposta» finché il medico non valida
 
 ## Decisioni chiuse (con il perché)
 - [[Decisioni/Registro]]

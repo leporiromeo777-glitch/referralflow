@@ -7,6 +7,7 @@ import { apriTraccia, chiudiTraccia, type PassoTraccia } from '@/lib/tracce';
 import { query } from '@/lib/db';
 import { elencoPerPrompt, trovaProcedura } from '@/lib/procedure-registro';
 import { caricaOrganizzazione, organizzazionePerPrompt } from '@/lib/organizzazione';
+import { caricaPercorsi, percorsiPerPrompt, trovaPercorso } from '@/lib/percorsi';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,6 +50,11 @@ export async function POST(req: NextRequest) {
   const bloccoFatti = fatti.length ? `\n\nFATTI DEL PAZIENTE APERTO (grafo della piattaforma, ogni riga con la sua fonte):\n${fatti.map((f) => `- ${f.relazione.replace(/_/g, ' ')}: ${f.oggetto}${f.data_fatto ? ` (${f.data_fatto})` : ''} [fonte: ${f.fonte_tipo}]`).join('\n')}` : '';
   const org = caricaOrganizzazione();
   const bloccoOrg = organizzazionePerPrompt(org);
+  // Percorsi dalla wiki: entrano nel prompt solo se la domanda parla di
+  // percorsi, sequenze o esami da fare, o nomina un percorso.
+  const percorsi = caricaPercorsi();
+  const percorsoNominato = trovaPercorso(percorsi, domanda);
+  const bloccoPercorsi = percorsoNominato || /percors|sequenz|quali esami|che esami|iter\b/i.test(domanda) ? percorsiPerPrompt(percorsoNominato ? [percorsoNominato] : percorsi) : '';
   const proceduraSimile = trovaProcedura(domanda, ruolo);
   const blocccoDoc = doc ? `\n\nDOCUMENTO APERTO («${doc.nota || doc.filename}»${doc.troncato ? ', troncato' : ''}):\n${doc.testo || '(nessun testo estraibile: immagine o scansione senza OCR)'}` : '';
 
@@ -62,6 +68,7 @@ export async function POST(req: NextRequest) {
 PROCEDURE DISPONIBILI (se la domanda corrisponde a una di queste, rispondi in una riga suggerendo di chiederla con quel nome, senza eseguirla):
 ${elencoPerPrompt(ruolo)}
 ${bloccoOrg ? `\nORGANIZZAZIONE DELLO STUDIO (chi fa che cosa; rispondi con il ruolo, mai con nomi di persone):\n${bloccoOrg}\n` : ''}
+${bloccoPercorsi ? `\nPERCORSI DIAGNOSTICO-TERAPEUTICI DELLO STUDIO (sequenze standard dalla wiki, stato «proposta» finché il medico non le valida; cita il percorso per nome, non aggiungere esami):\n${bloccoPercorsi}\n` : ''}
 DATI:
 ${contesto}${bloccoFatti}${blocccoDoc}
 
