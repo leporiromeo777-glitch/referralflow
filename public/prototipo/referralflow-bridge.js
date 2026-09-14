@@ -824,22 +824,52 @@ const RF_AI_NOME = 'Cleo';
 .rf-aip .ai-input { padding: 12px 18px; }
 .rf-aip .ai-input input { height: 42px; font-size: 14px; }
 .rf-aip-chips { display:flex; flex-wrap:wrap; gap:6px; padding: 0 22px 12px; }
-/* Schermata d'apertura: la domanda si sceglie, non si inventa. */
-.rf-aiw { width: 100%; max-width: 760px; margin: auto; padding: 8px 0 4px; }
-.rf-aiw-mark { width: 34px; height: 34px; border-radius: 9px; display:flex; align-items:center; justify-content:center; background: var(--cta, #0d5c48); color:#fff; margin-bottom: 14px; }
-.rf-aiw-mark svg { width: 19px; height: 19px; }
-.rf-aiw h3 { margin: 0 0 6px; font-size: 19px; font-weight: 650; letter-spacing: -0.01em; }
-.rf-aiw > p { margin: 0 0 20px; font-size: 13.5px; line-height: 1.55; color: var(--text-2); }
-.rf-aiw-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px 14px; }
-.rf-aiw-g { border: 1px solid var(--border); border-radius: var(--r-card, 10px); padding: 12px 13px 9px; background: var(--surface); }
-.rf-aiw-g > .t { display:flex; align-items:center; gap:7px; font-size: 12px; font-weight: 650; letter-spacing: .02em; text-transform: uppercase; color: var(--text-3); margin-bottom: 8px; }
-.rf-aiw-g > .t svg { width: 14px; height: 14px; }
-.rf-aiw-g button { display:block; width:100%; text-align:left; border:0; background:none; padding: 5px 0; font: inherit; font-size: 13.5px; color: var(--text-1); cursor: pointer; border-top: 1px solid var(--border); }
-.rf-aiw-g button:first-of-type { border-top: 0; }
-.rf-aiw-g button:hover { color: var(--cta, #0d5c48); }
-.rf-aiw-g .da { display:block; font-size: 11.5px; color: var(--text-3); margin-top: 1px; }
-.rf-aiw-nota { margin: 18px 0 0; padding-top: 14px; border-top: 1px solid var(--border); font-size: 12.5px; line-height: 1.55; color: var(--text-3); }
-@media (max-width: 767px) { .rf-aip { height: calc(100vh - var(--topbar-h) - 190px); } .rf-aip .ai-body { padding: 12px; } .rf-aip .ai-msg.user { max-width: 88%; } .rf-aiw-grid { grid-template-columns: 1fr; } }
+/* Cleo a tutto schermo: la pagina esce dal riquadro e diventa una chat.
+   La forma è quella che tutti conoscono (colonna stretta al centro, campo a
+   pastiglia in basso); la sostanza no — vedi la riga di chiusura. */
+.rf-gpt { display:flex; flex-direction:column; height:100%; }
+.rf-gpt-top { flex:none; display:flex; align-items:center; gap:10px; padding:10px 24px; border-bottom:1px solid var(--border); }
+.rf-gpt-top .n { font-weight:650; font-size:14px; }
+.rf-gpt-top .m { font-size:12px; color:var(--text-3); }
+.rf-gpt-top .actions { margin-left:auto; }
+.rf-gpt-scroll { flex:1; overflow-y:auto; display:flex; flex-direction:column; }
+.rf-gpt-scroll.vuota { justify-content:center; }
+.rf-gpt-col { width:100%; max-width:760px; margin:0 auto; padding:0 24px; }
+.rf-gpt-thread { display:flex; flex-direction:column; gap:24px; padding:30px 0 10px; }
+.rf-gpt-foot { flex:none; padding:10px 0 34px; }
+/* I messaggi li scrive askAI: qui si rivestono, non si riscrivono. */
+.rf-gpt .ai-msg { max-width:none; padding:0; border:0; border-radius:0; background:none; font-size:15px; line-height:1.65; color:var(--text); }
+.rf-gpt .ai-msg.user { align-self:flex-end; max-width:78%; padding:10px 16px; border-radius:20px; background:var(--surface-3); color:var(--text); }
+.rf-gpt .ai-msg .srcs { margin-top:10px; }
+.rf-gpt .ai-thinking, .rf-gpt .ai-steps { font-size:13.5px; }
+/* Campo a pastiglia. */
+.rf-gpt-comp { display:flex; align-items:center; gap:8px; padding:6px 6px 6px 18px; border:1px solid var(--border); border-radius:26px; background:var(--surface); box-shadow:var(--shadow-1); }
+.rf-gpt-comp:focus-within { border-color:var(--accent); }
+.rf-gpt-comp input { flex:1; min-width:0; height:38px; border:0; background:none; outline:none; font:inherit; font-size:15px; color:var(--text); }
+.rf-gpt-comp button { flex:none; width:34px; height:34px; border:0; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.rf-gpt-comp button svg { width:16px; height:16px; }
+.rf-gpt-nota { margin:9px 0 0; text-align:center; font-size:11.5px; line-height:1.5; color:var(--text-3); }
+/* Apertura: saluto, campo al centro, e le domande che sappiamo rispondere. */
+.rf-gpt-w { padding:24px 0; }
+.rf-gpt-w h3 { margin:0 0 18px; font-size:25px; font-weight:650; letter-spacing:-0.015em; text-align:center; }
+.rf-gpt-w .sotto { margin:14px 0 22px; font-size:13px; line-height:1.55; color:var(--text-2); text-align:center; }
+.rf-aiw-grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:8px 20px; }
+.rf-aiw-g > .t { display:flex; align-items:center; gap:7px; font-size:11.5px; font-weight:650; letter-spacing:.03em; text-transform:uppercase; color:var(--text-3); margin:0 0 4px; }
+.rf-aiw-g > .t svg { width:13px; height:13px; }
+.rf-aiw-g button { display:block; width:100%; text-align:left; border:0; background:none; padding:6px 10px; margin:0 -10px; border-radius:8px; font:inherit; font-size:13.5px; color:var(--text); cursor:pointer; }
+.rf-aiw-g button:hover { background:var(--surface-2); }
+.rf-aiw-g .da { display:block; font-size:11.5px; color:var(--text-3); margin-top:1px; }
+/* Fuori dal riquadro: niente margini del contenuto, niente pannello laterale
+   dell'AI (sarebbe la stessa chat due volte). La barra di sicurezza RESTA:
+   quando c'è un contesto paziente dice che l'AI è isolata su quel paziente,
+   ed è qui che conta. */
+#app.ai-mode .ai-panel { display:none; }
+#app.ai-mode .content { padding:0; overflow:hidden; }
+#app.ai-mode .content > .page { max-width:none; height:100%; animation:none; }
+#app.ai-mode.with-ai { grid-template-columns: var(--sidebar-w) 1fr; }
+#app.ai-mode.with-ai.sidebar-collapsed { grid-template-columns: var(--sidebar-c) 1fr; }
+@media (max-width: 767px) { .rf-aip { height: calc(100vh - var(--topbar-h) - 190px); } .rf-aip .ai-body { padding: 12px; } .rf-aip .ai-msg.user { max-width: 88%; }
+  .rf-gpt-col { padding:0 16px; } .rf-gpt-top { padding:8px 16px; } .rf-gpt-w h3 { font-size:21px; } .rf-aiw-grid { grid-template-columns:1fr; gap:14px; } .rf-gpt-foot { padding-bottom:78px; } }
 `; document.head.appendChild(st); })();
 function rfAiPaginaInvia() { const el = document.getElementById('rf-aip-in'); const v = el ? el.value.trim() : ''; if (!v) return; el.value = ''; askAI(v); }
 // Domanda avviata ma non mandata: quelle che finiscono con un nome le scrive
@@ -851,9 +881,17 @@ function rfAiPrecompila(inizio) {
   el.focus();
   el.setSelectionRange(inizio.length, inizio.length);
 }
-// Schermata d'apertura di Cleo: quattro gruppi di domande che sappiamo
-// rispondere, ognuna con scritto DA DOVE arriverà la risposta. Non è un
-// assistente clinico: è l'indice parlante del lavoro dello studio.
+// Campo della domanda: nella schermata vuota sta al centro sotto il saluto,
+// a conversazione iniziata in fondo. È lo stesso pezzo, spostato.
+function rfAiCampo() {
+  const paz = state.patientCtx && P[state.patientCtx] ? P[state.patientCtx] : null;
+  return `<div class="rf-gpt-comp"><input id="rf-aip-in" placeholder="${paz ? 'Chiedi qualcosa su ' + rfEsc(paz.first) + '…' : 'Scrivi una domanda…'}" autocomplete="off" onkeydown="if(event.key==='Enter'){rfAiPaginaInvia();}"><button type="button" title="Invia" onclick="rfAiPaginaInvia()">${ICONS.send}</button></div>`;
+}
+function rfAiNota() {
+  return `<p class="rf-gpt-nota">${rfEsc(RF_AI_NOME)} non dà consigli clinici e non fa diagnosi. Sotto ogni risposta c'è «Da dove viene»; se un dato non c'è lo dice invece di inventarlo. Nessuna domanda esce da questo Mac.</p>`;
+}
+// Schermata d'apertura: quattro gruppi di domande che sappiamo rispondere,
+// ognuna con scritto DA DOVE arriverà la risposta.
 function rfAiBenvenuto() {
   const paz = state.patientCtx && P[state.patientCtx] ? P[state.patientCtx] : null;
   const nomePaz = paz ? `${paz.last} ${paz.first}`.trim() : '';
@@ -882,26 +920,34 @@ function rfAiBenvenuto() {
   const voce = ([testo, da, precompila]) => precompila
     ? `<button type="button" onclick="rfAiPrecompila(${JSON.stringify(testo).replace(/"/g, '&quot;')})">${rfEsc(testo)}…<span class="da">${rfEsc(da)}</span></button>`
     : `<button type="button" data-ai="${rfEsc(testo)}">${rfEsc(testo)}<span class="da">${rfEsc(da)}</span></button>`;
-  return `<div class="rf-aiw">
-    <div class="rf-aiw-mark">${ICONS.ai}</div>
+  return `<div class="rf-gpt-w">
     <h3>Che cosa ti serve sapere?</h3>
-    <p>${rfEsc(RF_AI_NOME)} legge quello che c'è qui dentro — agenda, attività, referti, documenti, cartelle, procedure dello studio — e niente altro. Le risposte immediate le calcola il codice; quelle di sintesi il modello che gira su questo Mac, in pochi secondi.</p>
+    ${rfAiCampo()}
+    <p class="sotto">${rfEsc(RF_AI_NOME)} legge quello che c'è qui dentro — agenda, attività, referti, documenti, cartelle, procedure dello studio — e niente altro. Le risposte immediate le calcola il codice; quelle di sintesi il modello che gira su questo Mac.</p>
     <div class="rf-aiw-grid">${gruppi.map(g => `<div class="rf-aiw-g"><div class="t">${g.icona}${rfEsc(g.t)}</div>${g.voci.map(voce).join('')}</div>`).join('')}</div>
-    <p class="rf-aiw-nota">${rfEsc(RF_AI_NOME)} <b>non dà consigli clinici e non fa diagnosi</b>: quello resta al medico. Sotto ogni risposta c'è «Da dove viene», con le fonti che ha guardato; se un dato non c'è lo dice, non lo inventa. Nessuna domanda e nessun dato esce da questo Mac.</p>
+    ${rfAiNota()}
   </div>`;
 }
 const rfAiPageOrig = PAGES.ai;
 PAGES.ai = () => {
   if (!RF.live) return rfAiPageOrig();
-  const chips = (RF.procedure || []).flatMap(p => (Array.isArray(p.chip) ? p.chip : []).filter(c => typeof c === 'string')).slice(0, 8);
   const vuota = !state.aiMessages.length;
-  return `<div class="page-head"><div><div class="eyebrow">Modello locale sul Mac dello studio</div><h2 class="page-title">${rfEsc(RF_AI_NOME)}</h2><div class="page-sub">Risponde su quello che è scritto nei vostri dati e mostra sempre da dove l'ha preso.</div></div>
-      <div class="actions">${vuota ? '' : `<button class="btn" onclick="state.aiMessages=[];render()">${ICONS.x} Nuova conversazione</button>`}</div></div>
-    <div class="card rf-aip" style="padding:0">
-      <div class="ai-body" id="rf-aip-body">${vuota ? rfAiBenvenuto() : state.aiMessages.map(m => m.html).join('')}</div>
-      ${!vuota && chips.length ? `<div class="rf-aip-chips">${chips.map(c => `<button class="chip" data-ai="${rfEsc(c)}">${rfEsc(c)}</button>`).join('')}</div>` : ''}
-      <div class="ai-input"><input id="rf-aip-in" placeholder="${state.patientCtx && P[state.patientCtx] ? 'Chiedi qualcosa su ' + rfEsc(P[state.patientCtx].first) + '…' : 'Scrivi una domanda…'}" autocomplete="off" onkeydown="if(event.key==='Enter'){rfAiPaginaInvia();}"><button class="btn primary" onclick="rfAiPaginaInvia()">${ICONS.send} Invia</button></div>
+  return `<div class="rf-gpt">
+      <div class="rf-gpt-top"><span class="n">${rfEsc(RF_AI_NOME)}</span><span class="m">modello locale, su questo Mac</span>
+        <span class="actions">${vuota ? '' : `<button class="btn sm" onclick="state.aiMessages=[];render()">${ICONS.x} Nuova conversazione</button>`}</span></div>
+      <div class="rf-gpt-scroll ${vuota ? 'vuota' : ''}" id="rf-aip-body">
+        <div class="rf-gpt-col">${vuota ? rfAiBenvenuto() : `<div class="rf-gpt-thread">${state.aiMessages.map(m => m.html).join('')}</div>`}</div>
+      </div>
+      ${vuota ? '' : `<div class="rf-gpt-foot"><div class="rf-gpt-col">${rfAiCampo()}${rfAiNota()}</div></div>`}
     </div>`;
+};
+// A tutto schermo solo sulla pagina di Cleo: il riquadro, la barra di sicurezza
+// e il pannello laterale dell'AI se ne vanno finché si è lì.
+const rfRenderOrigAi = render;
+render = function () {
+  rfRenderOrigAi.apply(this, arguments);
+  const app = document.getElementById('app');
+  if (app) app.classList.toggle('ai-mode', state.route === 'ai');
 };
 
 /* ---------- Referti: coda vera + caricamento audio ---------- */
