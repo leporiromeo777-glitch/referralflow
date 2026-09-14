@@ -66,6 +66,7 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 - [[Decisioni/Registro]]
 
 ## Proposte del consolidatore notturno (da approvare a mano)
+- [[Proposte/CardioOS confronto per funzione]] — la demo concorrente (14.9.2026): come ha strutturato ogni funzione, cosa abbiamo, cosa portare e cosa no, piano in 8 punti
 - [[Proposte/Ultime]] — andamento, tappe da guardare, dizionario, frasi fisse; una pagina per data nella stessa cartella
 
 ## Misure

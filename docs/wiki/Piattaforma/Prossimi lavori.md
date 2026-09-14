@@ -13,6 +13,9 @@ aggiornata: 2026-09-14
 7. **Gestionale di fatturazione dello studio**: chiedere allo studio quale usa e in che formato importa; oggi il CSV di «Da fatturare» ha colonne generiche. Se il gestionale ha un'API o un tracciato, adattare l'esportazione (non costruire la fatturazione: [[Decisioni/Registro]] 14.9.2026).
 8. **Migrazione a Next 16** (advisory residue di `npm audit`, feature non usate).
 
+## Dal confronto con CardioOS ([[Proposte/CardioOS confronto per funzione]], 14.9.2026)
+Otto punti in ordine, ~6-7 giorni: anagrafica paziente completa (AVS, cassa, numero assicurato, indirizzo, e-mail, sesso, indicazione, percorso) e scheda con terapia derivata dai referti; catalogo prestazioni + pagina Prestazioni; medici invianti nell'interfaccia nuova; chiamate di preparazione; personale con GLN/RCC/colore; calendario a settimana; moduli nascosti per studio e «Suggerisci una modifica»; import CSV pazienti. Non si portano turni/ferie/presenze/ore/rimborsi, magazzino, chatbot clinico, fatturazione TARDOC.
+
 ## Interfaccia nuova ([[Piattaforma/Prototipo stack]])
 - Schermata di accesso propria, pagina «Studio» e Profilo (password propria, 2FA) FATTI il 14.9.2026: l'interfaccia nuova non ha più bisogno della classica per nulla.
 - «Frasi a rischio» della catena nella revisione nuova: escluse per scelta dell'utente il 14.9.2026; se cambia idea, è un passo in `costruisciRevisione` come gli altri.
