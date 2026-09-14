@@ -68,8 +68,8 @@ Una colonna di MediOnline non è un luogo: è un'agenda, e lo studio le usa per 
 | --- | --- |
 | `M.M.` `T.M.` `frego` `vpaio` `DG` `GMOS` `miped` `bcape` `SF` | **medici** — Marco Moccetti, Tiziano Moccetti, Rego, Paiocchi, Girola, Moschovitis, Pedrotti, Capelli, Franscella |
 | `DC` | **Daniela Cassani, ecografista** — ruolo `collaboratore` ([[Decisioni/Registro]]) |
-| `Labor` `Appar` `RIA` | luoghi: laboratorio, apparecchi, riabilitazione |
+| `Labor` `Appar` `RIA` | **gli unici tre luoghi veri**: laboratorio, apparecchi, riabilitazione |
+| `P-E V` | **Vanja Paveri, dietista** — ruolo `collaboratore`, un'ora a paziente |
 | `ASM` | **amministrativo** — non è un luogo, disattivata dalle sale |
-| `P-E V` | da chiarire: 5 visite da 60 minuti in una sola mattina |
 
 Come si riconosce una colonna senza sapere cosa sia: si guarda **se i suoi appuntamenti arrivano prima o dopo quelli di un medico, per lo stesso paziente nello stesso giorno**. `DC` veniva prima 271 volte su 294 (in media 34 minuti): è il primo tempo della visita, cioè l'ecografia. `Appar` viene dopo 81 volte su 99 (48 minuti): è dove si mette l'Holter finita la visita. È la prova più utile che abbiamo trovato per capire una colonna senza leggere un solo nome di paziente.

@@ -948,3 +948,8 @@ alter table providers add constraint providers_ruolo_check
 alter table studio_risorse drop constraint if exists studio_risorse_tipo_check;
 alter table studio_risorse add constraint studio_risorse_tipo_check
   check (tipo in ('sala', 'apparecchio', 'esterno'));
+
+-- Mestiere di chi tiene un'agenda senza essere medico (ecografista, dietista):
+-- `ruolo` dice se può comparire come medico in fattura, `professione` dice cosa
+-- fa, che è quello che serve leggere in agenda (migrazione 050).
+alter table providers add column if not exists professione text;

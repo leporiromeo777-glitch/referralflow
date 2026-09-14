@@ -52,7 +52,7 @@ export async function GET() {
 
   // Medici: profili della catena + providers dell'agenda, senza doppioni per nome.
   const medici = await mediciDelloStudio(sid);
-  const providers = await query<{ id: string; nome: string; colore: string | null; ruolo: string }>(`select id, nome, colore, ruolo from providers where studio_id = $1 and attivo order by nome`, [sid]);
+  const providers = await query<{ id: string; nome: string; colore: string | null; ruolo: string; professione: string | null }>(`select id, nome, colore, ruolo, professione from providers where studio_id = $1 and attivo order by nome`, [sid]);
   const coloriMedici: Record<string, string> = {};
   // Chi tiene un'agenda non è sempre un medico: l'ecografista ha una colonna
   // con più appuntamenti di qualunque medico. L'interfaccia deve poterlo dire.
@@ -66,7 +66,9 @@ export async function GET() {
     const id = trovato ? trovato[1] : `pr-${p.id.slice(0, 8)}`;
     if (!doctors[id]) doctors[id] = p.nome;
     if (p.colore) coloriMedici[id] = p.colore;
-    if (p.ruolo && p.ruolo !== 'medico') ruoliMedici[id] = p.ruolo;
+    // In agenda si legge il mestiere («ecografista»), non la categoria
+    // amministrativa («collaboratore»): è quello che serve sapere.
+    if (p.ruolo && p.ruolo !== 'medico') ruoliMedici[id] = p.professione || p.ruolo;
     providerToDoc.set(p.id, id);
   }
   if (!Object.keys(doctors).length) doctors.studio = session.studioNome;
