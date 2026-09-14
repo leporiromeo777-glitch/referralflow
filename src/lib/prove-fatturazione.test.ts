@@ -4,7 +4,7 @@ import { COLONNE, csvPrestazioni, nomeFileCsv, periodoMese, riepilogoPrestazioni
 
 const riga = (x: Partial<RigaFattura> = {}): RigaFattura => ({
   id: 'a1', data: '03.09.2026', ora: '09:30', durata: 30, cognome: 'Rossi', nome: 'Mario', nascita: '01.02.1950', assicurazione: 'LAMal', avs: '756.1234.5678.97', n_assicurato: '', in_cartella: true,
-  medico: 'Dr. med. X', gln_medico: '', rcc_medico: '', prestazione: 'Visita; controllo', luogo: 'Sala 1', fatta: true, referto: false, inviante: 'Dr. "Y"', esportato_il: '', ...x,
+  medico: 'Dr. med. X', gln_medico: '', rcc_medico: '', prestazione: 'Visita; controllo', codice_tariffa: '', luogo: 'Sala 1', fatta: true, referto: false, inviante: 'Dr. "Y"', esportato_il: '', ...x,
 });
 
 test('fatturazione: CSV con BOM, separatore ; , intestazione fissa, virgolette dove servono, sì/no per i booleani', () => {

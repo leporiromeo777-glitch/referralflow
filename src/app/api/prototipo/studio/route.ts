@@ -37,8 +37,8 @@ async function leggi(studioId: string) {
     `select coalesce(nullif(trim(luogo), ''), '(vuoto)') as codice, count(*)::int as n, max(starts_at)::date::text as ultimo
        from appointments where studio_id = $1 and provider_id is null and starts_at >= current_date - 60
       group by 1 order by 2 desc limit 30`, [studioId]);
-  const catalogo = await query<{ id: string; nome: string; tipo: string; durata_min: number; sala: string | null; parole_chiave: string[]; attivo: boolean }>(
-    `select id, nome, tipo, durata_min, sala, parole_chiave, attivo from prestazioni_catalogo where studio_id = $1 order by attivo desc, tipo, nome`, [studioId]);
+  const catalogo = await query<{ id: string; nome: string; tipo: string; durata_min: number; sala: string | null; parole_chiave: string[]; attivo: boolean; codice_tariffa: string | null }>(
+    `select id, nome, tipo, durata_min, sala, parole_chiave, attivo, codice_tariffa from prestazioni_catalogo where studio_id = $1 order by attivo desc, tipo, nome`, [studioId]);
   const nomiRisorse = new Set(risorse.map((r) => r.nome.toLowerCase()));
   return { studio, personale, personale_senza_accesso: personaleSenzaAccesso, medici, catalogo, sale: risorse.filter((r) => r.tipo === 'sala'), apparecchi: risorse.filter((r) => r.tipo === 'apparecchio'), codici_agenda: codici.map((c) => ({ ...c, risorsa: nomiRisorse.has(c.codice.toLowerCase()) })) };
 }
@@ -105,8 +105,9 @@ export async function POST(req: NextRequest) {
       const durata = Math.min(480, Math.max(5, Math.round(Number(c.durata_min)) || 30));
       const parole = String(c.parole_chiave ?? '').split(/[,;]/).map((x) => x.trim().toLowerCase()).filter(Boolean).slice(0, 12);
       if (!nome) return NextResponse.json({ errore: 'Il nome è obbligatorio.' }, { status: 400 });
-      if (azione === 'prestazione_crea') await query(`insert into prestazioni_catalogo (studio_id, nome, tipo, durata_min, sala, parole_chiave) values ($1, $2, $3, $4, nullif($5, ''), $6)`, [sid, nome, tipo, durata, s(c.sala, 80), parole]);
-      else { const id = s(c.id); if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 }); await query(`update prestazioni_catalogo set nome = $3, tipo = $4, durata_min = $5, sala = nullif($6, ''), parole_chiave = $7, updated_at = now() where id = $1 and studio_id = $2`, [id, sid, nome, tipo, durata, s(c.sala, 80), parole]); }
+      const codice = s(c.codice_tariffa, 60);
+      if (azione === 'prestazione_crea') await query(`insert into prestazioni_catalogo (studio_id, nome, tipo, durata_min, sala, parole_chiave, codice_tariffa) values ($1, $2, $3, $4, nullif($5, ''), $6, nullif($7, ''))`, [sid, nome, tipo, durata, s(c.sala, 80), parole, codice]);
+      else { const id = s(c.id); if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 }); await query(`update prestazioni_catalogo set nome = $3, tipo = $4, durata_min = $5, sala = nullif($6, ''), parole_chiave = $7, codice_tariffa = nullif($8, ''), updated_at = now() where id = $1 and studio_id = $2`, [id, sid, nome, tipo, durata, s(c.sala, 80), parole, codice]); }
     } else if (azione === 'prestazione_attivo') {
       const id = s(c.id); if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 });
       await query('update prestazioni_catalogo set attivo = not attivo, updated_at = now() where id = $1 and studio_id = $2', [id, sid]);

@@ -3,7 +3,7 @@
 // tipo stimato dal testo quando il catalogo tace, e proposta di catalogo dalle
 // prestazioni dei percorsi della wiki. Nessuna query.
 export type TipoPrestazione = 'visita' | 'esame' | 'procedura';
-export type VoceCatalogo = { id: string; nome: string; tipo: TipoPrestazione; durata_min: number; sala: string | null; parole_chiave: string[]; attivo: boolean };
+export type VoceCatalogo = { id: string; nome: string; tipo: TipoPrestazione; durata_min: number; sala: string | null; parole_chiave: string[]; attivo: boolean; codice_tariffa?: string | null };
 
 export function normalizza(s: string): string {
   return (s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();

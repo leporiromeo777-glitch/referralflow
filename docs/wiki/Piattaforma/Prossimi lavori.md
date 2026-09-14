@@ -10,7 +10,7 @@ aggiornata: 2026-09-14
 4. **Smistamento suggerito per parole chiave** (quesito → servizio/medico).
 5. **Chat AI su «Affida paziente»** (serve chiave API Anthropic e la stessa validazione legale della cattura impegnativa).
 6. **Referto strutturato: invio HIN** (dipende da account HIN).
-7. **Gestionale di fatturazione dello studio**: chiedere allo studio quale usa e in che formato importa; oggi il CSV di «Da fatturare» ha colonne generiche. Se il gestionale ha un'API o un tracciato, adattare l'esportazione (non costruire la fatturazione: [[Decisioni/Registro]] 14.9.2026).
+7. **Cassa dei Medici / MediOnline** (lo studio fattura così, saputo il 14.9.2026): chiedere alla Cassa se MediOnline accetta un'importazione delle prestazioni da sistemi terzi e con quale tracciato; finché non c'è, «Da fatturare» resta un **controllo** (prestazioni fatte contro registrate, referto confermato) e il CSV porta la posizione tariffaria dal catalogo. La piattaforma non scrive mai in MediOnline (robot in sola lettura: [[Decisioni/Registro]]).
 8. **Migrazione a Next 16** (advisory residue di `npm audit`, feature non usate).
 
 ## Dal confronto con CardioOS ([[Proposte/CardioOS confronto per funzione]], 14.9.2026)

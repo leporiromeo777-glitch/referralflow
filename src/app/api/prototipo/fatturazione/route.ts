@@ -39,7 +39,7 @@ async function righeDelMese(studioId: string, dal: string, al: string): Promise<
       order by a.starts_at`, [studioId, dal, al]);
   const pazienti = await query<{ id: string; cognome: string; nome: string; data_nascita: string | null; assicurazione: string | null; avs: string | null; n_assicurato: string | null }>(
     `select id, cognome, nome, data_nascita::text, assicurazione, avs, n_assicurato from patients where studio_id = $1`, [studioId]);
-  const catalogo = await query<VoceCatalogo>(`select id, nome, tipo, durata_min, sala, parole_chiave, attivo from prestazioni_catalogo where studio_id = $1 and attivo`, [studioId]);
+  const catalogo = await query<VoceCatalogo>(`select id, nome, tipo, durata_min, sala, parole_chiave, attivo, codice_tariffa from prestazioni_catalogo where studio_id = $1 and attivo`, [studioId]);
   const perId = new Map(pazienti.map((p) => [p.id, p]));
   const perNome = new Map(pazienti.map((p) => [slug(`${p.cognome} ${p.nome}`), p]));
   return appts.map((a) => {
@@ -50,7 +50,7 @@ async function righeDelMese(studioId: string, dal: string, al: string): Promise<
     return {
       id: a.id, data: dCh(a.starts_at), ora: ora(a.starts_at), durata: Math.max(5, Math.round((fine - new Date(a.starts_at).getTime()) / 60000)),
       cognome: p ? p.cognome : pezzi[0] ?? '', nome: p ? p.nome : pezzi.slice(1).join(' '), nascita: p ? dCh(p.data_nascita) : '', assicurazione: p?.assicurazione ?? '', avs: p?.avs ?? '', n_assicurato: p?.n_assicurato ?? '', in_cartella: !!p,
-      medico: a.medico ?? '', gln_medico: a.gln ?? '', rcc_medico: a.rcc ?? '', prestazione: abbinaPrestazione(catalogo, `${a.motivo ?? ''} ${a.titolo ?? ''}`)?.nome ?? (a.motivo || a.titolo || 'Appuntamento'), luogo: a.luogo ?? '',
+      medico: a.medico ?? '', gln_medico: a.gln ?? '', rcc_medico: a.rcc ?? '', prestazione: abbinaPrestazione(catalogo, `${a.motivo ?? ''} ${a.titolo ?? ''}`)?.nome ?? (a.motivo || a.titolo || 'Appuntamento'), codice_tariffa: abbinaPrestazione(catalogo, `${a.motivo ?? ''} ${a.titolo ?? ''}`)?.codice_tariffa ?? '', luogo: a.luogo ?? '',
       fatta: !!a.completed_at, referto: a.referto, inviante: a.inviante ?? '', esportato_il: dCh(a.esportato),
     };
   });
