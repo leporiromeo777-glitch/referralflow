@@ -378,8 +378,8 @@ PAGES.review = () => {
   html = html.replace(/<div class="rv-pat">[\s\S]*?<\/div>/, testata);
   // Impaginazione nel formato del medico e Word: stessi motori della piattaforma.
   const bottoni = m.stato === 'bozza'
-    ? `<button class="btn sm ghost" onclick="rfImpagina()" title="${m.formato === 'lettera' ? 'Formato del medico: lettera al collega («Caro …,», corpo, saluto, terapia dalla lettera precedente)' : 'Formato del medico: rapporto a sezioni'}">${ICONS.ai || ''} ${m.formato === 'lettera' ? 'Impagina come lettera' : 'Riorganizza nel formato'}</button><a class="btn sm ghost" href="/api/referti/docx/${id}" target="_blank" rel="noopener" title="Word con la carta intestata del medico, dal testo salvato">Word</a>`
-    : `<a class="btn sm ghost" href="/api/referti/docx/${id}" target="_blank" rel="noopener">Word</a>`;
+    ? `<button class="btn sm ghost" onclick="rfImpagina()" title="${m.formato === 'lettera' ? 'Formato del medico: lettera al collega («Caro …,», corpo, saluto, terapia dalla lettera precedente)' : 'Formato del medico: rapporto a sezioni'}">${ICONS.ai || ''} ${m.formato === 'lettera' ? 'Impagina come lettera' : 'Riorganizza nel formato'}</button><button class="btn sm ghost" onclick="rfWord('${id}')" title="Word con la carta intestata del medico, dal testo salvato">Word</button>`
+    : `<button class="btn sm ghost" onclick="rfWord('${id}')">Word</button>`;
   html = html.replace('<div class="rv-top-r">', `<div class="rv-top-r">${bottoni}`);
   const note = Array.isArray(m.note_segreteria) ? m.note_segreteria.filter(n => typeof n === 'string' && n.trim()) : [];
   if (note.length) html = html.replace('<div class="rv-grid', `<div class="rf-note-seg">${ICONS.tasks || ''}<b>Note per la segreteria (${note.length})</b>${note.map(n => `<span class="badge">${rfEsc(n)}</span>`).join('')}<span class="caption">Istruzioni dettate dal medico, tolte dal testo del referto.</span></div><div class="rv-grid`);
@@ -497,7 +497,7 @@ rvFinish = function () {
       }
       closeModal();
       openModal('Referto confermato', `<p>Il referto è confermato ed è nell'audit con il tuo ruolo. Il testo corretto alimenta le proposte di dizionario del medico.</p>${notaRichiamo}`,
-        `<a class="btn" href="/api/referti/docx/${idBozza}" target="_blank" rel="noopener">Scarica il Word</a><button class="btn primary" data-close onclick="RF.loaded=null;go('#/reports');void rfCaricaDati()">Torna ai referti</button>`);
+        `<button class="btn" onclick="rfWord('${idBozza}')">Scarica il Word</button><button class="btn primary" data-close onclick="RF.loaded=null;go('#/reports');void rfCaricaDati()">Torna ai referti</button>`);
     } catch (e) {
       riarma(e.message === 'critici' ? 'La piattaforma chiede la presa d’atto: spunta la casella' : e.message === 'non_bozza' ? 'La bozza è già confermata' : 'Conferma non riuscita');
     }
@@ -711,6 +711,49 @@ function rfEdita() {
     render();
     toast('Testo salvato · revisione ricalcolata');
   };
+}
+
+
+/* ---------- scaricare il Word (14.9.2026) ---------- */
+/* Prima era un link con target="_blank": nell'app installata sul telefono
+   (manifest «standalone») la scheda nuova non si apre e non succede NULLA,
+   senza un messaggio. Ora il file si scarica con una richiesta vera: gli
+   errori del server (sessione scaduta, referto vuoto) si vedono, e il file
+   arriva dal blob, che funziona anche dentro l'app installata. */
+async function rfWord(id) {
+  if (!id) return;
+  if (RF.word === id) { toast('Word già in preparazione'); return; }
+  RF.word = id;
+  toast('Preparo il Word…');
+  try {
+    const r = await fetch(`/api/referti/docx/${id}`, { credentials: 'include', cache: 'no-store' });
+    if (r.status === 401) { toast('Sessione scaduta: rientra e riprova'); RF.nonAutorizzato = true; RF.caricato = false; render(); return; }
+    if (!r.ok) {
+      const t = (await r.text().catch(() => '')).slice(0, 120);
+      toast(`Word non riuscito: ${t || 'errore ' + r.status}`);
+      return;
+    }
+    const blob = await r.blob();
+    if (!blob || blob.size < 1000) { toast('Il Word è arrivato vuoto: riprova'); return; }
+    const cd = r.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename="?([^";]+)"?/);
+    const nome = (m && m[1]) || 'referto.docx';
+    const href = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    if ('download' in a) {
+      a.href = href; a.download = nome; a.rel = 'noopener';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(href), 60000);
+      toast(`Word pronto: ${nome}`);
+    } else {
+      // Browser senza «download» (vecchi iOS): si apre, poi si salva a mano.
+      location.href = href;
+    }
+  } catch {
+    toast('Non riesco a raggiungere la piattaforma');
+  } finally {
+    RF.word = null;
+  }
 }
 
 
