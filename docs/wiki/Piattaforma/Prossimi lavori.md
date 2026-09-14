@@ -16,6 +16,8 @@ aggiornata: 2026-09-14
 - Schermata di accesso propria, pagina «Studio» e Profilo (password propria, 2FA) FATTI il 14.9.2026: l'interfaccia nuova non ha più bisogno della classica per nulla.
 - «Frasi a rischio» della catena nella revisione nuova: escluse per scelta dell'utente il 14.9.2026; se cambia idea, è un passo in `costruisciRevisione` come gli altri.
 - Statistiche, amministrazione, comunicazioni, visite: sezioni ancora senza dati propri nell'interfaccia nuova.
+- **Moduli compilati dal paziente** da `/appuntamento/[token]` (oggi il paziente compila solo il questionario pre-visita sulla referral): i moduli con «Chi compila: il paziente» della pagina [[Piattaforma/Moduli]] potrebbero essere offerti lì e finire in `moduli_compilazioni`.
+- **Percorsi e moduli da validare con i medici**: le pagine [[Medici/Percorsi]] e [[Piattaforma/Moduli]] sono proposte del 14.9.2026; rileggerle con Moccetti e portare «Stato» a `validato`.
 - Anonimizzazione: il .docx torna come testo; la versione classica restituisce un .docx anonimizzato con la formattazione.
 
 ## Prototipo, assistente e procedure ([[Piattaforma/Procedure e tracce]])

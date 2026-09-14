@@ -6,6 +6,7 @@ aggiornata: 2026-09-14
 
 Elenco di ciò che esiste. Per la catena dei referti vedi [[Catena/Panoramica]].
 
+- **Moduli digitali** (2026-09-14, migrazione 039 `moduli_compilazioni` + `moduli_accessi`): pagina wiki [[Piattaforma/Moduli]] letta a runtime (5 moduli proposti: anamnesi pre-visita, consenso, scheda ergometria, consegna Holter, controllo pre eco-stress), voce «Moduli» nell'interfaccia nuova con compilazione, validazione, stampa e registro degli accessi; moduli del paziente nella scheda ([[Piattaforma/Prototipo stack]]).
 - **Agenda per sala e posti delle sale** (2026-09-14, migrazione 038 `studio_risorse.posti`): vista «Per sala» dell'agenda nuova con le colonne dai luoghi dell'agenda abbinati alle risorse, avviso «più pazienti dei posti della sala»; posti impostabili in Studio → Sale ([[Piattaforma/Prototipo stack]]).
 - **Percorsi diagnostico-terapeutici** (2026-09-14): pagina wiki [[Medici/Percorsi]] letta a runtime (12 percorsi ambulatoriali proposti dalle linee guida ESC, da validare dal medico), pagina «Percorsi» nell'interfaccia nuova con ricerca, percorsi nel prompt del bot quando servono ([[Piattaforma/Prototipo stack]]).
 - **Cruscotto della giornata nell'interfaccia nuova** (2026-09-14): sei numeri, monitor delle sale con l'occupazione di oggi (dal campo «luogo» dell'agenda abbinato a `studio_risorse`), chi ha agenda oggi, urgenti, lettere in ritardo ([[Piattaforma/Prototipo stack]]).

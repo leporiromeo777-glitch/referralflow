@@ -333,6 +333,136 @@ PAGES.percorsi = () => {
     <div class="grid grid-2 mt-16">${lista.length ? lista.map(card).join('') : '<div class="card"><p class="meta" style="margin:0">Nessun percorso nella pagina wiki.</p></div>'}</div>`;
 };
 
+/* ---------- Moduli dello studio (14.9.2026) ---------- */
+// Definizioni dalla pagina wiki «Piattaforma/Moduli» via GET /api/prototipo/moduli;
+// compilazioni salvate nel dossier (POST), aperte e stampate dal dettaglio.
+// Le risposte viaggiano solo dentro la sessione; qui non finiscono in log.
+if (typeof NAV_META !== 'undefined') NAV_META.moduli = ['Moduli', 'file'];
+if (typeof NAV !== 'undefined') for (const r of ['secretary', 'assistant', 'doctor', 'org_admin']) { const n = NAV[r]; if (n && !n.includes('moduli')) n.splice(n.indexOf('documents') + 1, 0, 'moduli'); }
+(function () { const st = document.createElement('style'); st.textContent = `
+.rf-mod-campo { display:flex; flex-direction:column; gap:4px; margin-top:10px; }
+.rf-mod-campo label { font-size:12.5px; color:var(--text-2); }
+.rf-mod-campo label b { color:var(--danger); font-weight:600; }
+.rf-mod-campo .input, .rf-mod-campo textarea, .rf-mod-campo select { width:100%; min-width:0; }
+.rf-mod-campo textarea { min-height:72px; padding:8px 12px; border-radius:var(--r-input); border:1px solid var(--border); background:var(--surface); font:inherit; resize:vertical; }
+.rf-mod-campo .err { font-size:12px; color:var(--danger); }
+.rf-mod-sino { display:flex; gap:6px; }
+.rf-mod-sino button.active { background:var(--accent-soft); border-color:var(--accent); color:var(--accent-text); }
+#rf-print { display:none; }
+@media print { body > *:not(#rf-print) { display:none !important; } #rf-print { display:block; font:12pt/1.45 -apple-system, "Helvetica Neue", Arial, sans-serif; color:#000; padding:0; } #rf-print h1 { font-size:16pt; margin:0 0 2pt; } #rf-print .meta { color:#333; font-size:10.5pt; margin-bottom:12pt; } #rf-print table { width:100%; border-collapse:collapse; } #rf-print td { border-bottom:1px solid #999; padding:6pt 4pt; vertical-align:top; } #rf-print td:first-child { width:38%; color:#333; } #rf-print .firma { margin-top:28pt; display:flex; justify-content:space-between; } #rf-print .firma span { border-top:1px solid #000; padding-top:4pt; width:40%; font-size:10pt; } }
+`; document.head.appendChild(st); })();
+RF.moduli = null;
+async function rfCaricaModuli(rendi = true) {
+  try {
+    const r = await fetch('/api/prototipo/moduli', { credentials: 'include' });
+    const j = r.ok ? await r.json() : {};
+    RF.moduli = { moduli: Array.isArray(j.moduli) ? j.moduli : [], compilazioni: Array.isArray(j.compilazioni) ? j.compilazioni : [] };
+  } catch { RF.moduli = { moduli: [], compilazioni: [] }; }
+  if (rendi && ['moduli', 'patient'].includes(state.route)) render();
+}
+function rfModQuando(iso) { if (!iso) return ''; const d = new Date(iso); return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
+function rfModRigaComp(c, conPaziente = true) {
+  return `<div class="list-item"><i class="dot ${c.completo ? 'success' : 'warning'}"></i><div class="grow"><div class="name" style="font-size:13px">${conPaziente ? `${rfEsc(c.paziente || 'senza paziente')} · ` : ''}${rfEsc(c.codice)} ${rfEsc(c.titolo)}</div><div class="sub">${rfModQuando(c.updated_at)}${c.da ? ` · ${rfEsc(c.da)}` : ''}${c.completo ? '' : ' · incompleto'}</div></div><button class="btn sm" onclick="rfModuloApri('${c.id}')">Apri</button></div>`;
+}
+PAGES.moduli = () => {
+  if (!RF.live) return rfPaginaPiattaforma('Moduli', 'I moduli dello studio in versione digitale');
+  if (RF.moduli === null) { void rfCaricaModuli(); return `<div class="page-head"><div><h2 class="page-title">Moduli</h2><div class="page-sub">I moduli dello studio in versione digitale</div></div></div><div class="card"><p class="meta" style="margin:0">Leggo la pagina wiki…</p></div>`; }
+  const { moduli, compilazioni } = RF.moduli;
+  return `<div class="page-head"><div><h2 class="page-title">Moduli</h2><div class="page-sub">I moduli dello studio in versione digitale: compilabili, stampabili, nel dossier del paziente · ${compilazioni.length} compilazioni</div></div></div>
+    <div class="grid grid-main-side">
+      <div class="card"><div class="card-head"><span class="section-title">Moduli</span><span class="caption">dalla pagina wiki Piattaforma/Moduli</span></div>
+        <div class="list">${moduli.length ? moduli.map(m => `<div class="list-item" style="align-items:flex-start"><div class="grow"><div class="name">${rfEsc(m.codice)} — ${rfEsc(m.titolo)}</div><div class="sub">${rfEsc(m.chi)}${m.quando ? ` · ${rfEsc(m.quando)}` : ''} · ${m.campi.length} campi</div>${m.nota ? `<div class="caption mt-8" style="line-height:1.45">${rfEsc(m.nota)}</div>` : ''}</div><button class="btn sm primary" onclick="rfModuloCompila('${m.id}')">${ICONS.plus} Compila</button></div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessun modulo nella pagina wiki.</div>'}</div></div>
+      <div class="card"><div class="card-head"><span class="section-title">Compilazioni</span><span class="badge count">${compilazioni.length}</span></div>
+        <div class="list">${compilazioni.length ? compilazioni.slice(0, 60).map(c => rfModRigaComp(c)).join('') : '<div class="caption" style="padding:8px 6px">Nessuna compilazione: inizia da un modulo a sinistra.</div>'}</div></div>
+    </div>`;
+};
+function rfModCampoHtml(c, v, err) {
+  const id = `rf-mod-${c.chiave}`; const val = v == null ? '' : String(v);
+  let inp;
+  if (c.tipo === 'testo_lungo') inp = `<textarea id="${id}" data-chiave="${c.chiave}">${rfEsc(val)}</textarea>`;
+  else if (c.tipo === 'numero') inp = `<input class="input" id="${id}" data-chiave="${c.chiave}" inputmode="decimal" value="${rfEsc(val)}" style="max-width:160px">`;
+  else if (c.tipo === 'data') inp = `<input class="input" id="${id}" data-chiave="${c.chiave}" type="date" value="${rfEsc(val)}" style="max-width:180px">`;
+  else if (c.tipo === 'si_no') inp = `<div class="rf-mod-sino"><input type="hidden" id="${id}" data-chiave="${c.chiave}" value="${rfEsc(val)}"><button type="button" class="btn sm ${val === 'sì' ? 'active' : ''}" onclick="rfModSiNo('${id}','sì',this)">Sì</button><button type="button" class="btn sm ${val === 'no' ? 'active' : ''}" onclick="rfModSiNo('${id}','no',this)">No</button></div>`;
+  else if (c.tipo === 'scelta') inp = `<select class="input" id="${id}" data-chiave="${c.chiave}"><option value="">—</option>${c.opzioni.map(o => `<option ${o === val ? 'selected' : ''}>${rfEsc(o)}</option>`).join('')}</select>`;
+  else if (/^apparecchio/i.test(c.etichetta) && RF.data && Array.isArray(RF.data.risorse) && RF.data.risorse.some(r => r.tipo === 'apparecchio')) inp = `<input class="input" id="${id}" data-chiave="${c.chiave}" list="rf-mod-app" value="${rfEsc(val)}"><datalist id="rf-mod-app">${RF.data.risorse.filter(r => r.tipo === 'apparecchio').map(r => `<option value="${rfEsc(r.nome)}">`).join('')}</datalist>`;
+  else inp = `<input class="input" id="${id}" data-chiave="${c.chiave}" value="${rfEsc(val)}">`;
+  return `<div class="rf-mod-campo"><label for="${id}">${c.n}. ${rfEsc(c.etichetta)}${c.obbligatorio ? ' <b>*</b>' : ''}</label>${inp}${err ? `<div class="err">${rfEsc(err)}</div>` : ''}</div>`;
+}
+function rfModSiNo(id, v, btn) { const h = document.getElementById(id); if (h) h.value = v; btn.parentElement.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn)); }
+function rfModRaccogli() { const dati = {}; document.querySelectorAll('#modal [data-chiave]').forEach(el => { dati[el.dataset.chiave] = el.value; }); return dati; }
+function rfModPazienti() {
+  const lista = ((RF.data && RF.data.patients) || []).filter(p => rfUuid(p.id));
+  const mappa = new Map(); const opts = [];
+  for (const p of lista) { const et = `${p.last} ${p.first}${p.dob ? ` · ${p.dob}` : ''}`; mappa.set(et, p.id); opts.push(`<option value="${rfEsc(et)}">`); }
+  return { mappa, html: `<datalist id="rf-mod-paz-list">${opts.join('')}</datalist>` };
+}
+function rfModuloCompila(moduloId, pazienteId = null) {
+  const m = RF.moduli && RF.moduli.moduli.find(x => x.id === moduloId); if (!m) return;
+  const paz = rfModPazienti();
+  const pre = pazienteId && P[pazienteId] ? `${P[pazienteId].last} ${P[pazienteId].first}${P[pazienteId].dob ? ` · ${P[pazienteId].dob}` : ''}` : '';
+  const corpo = `<div class="caption">${rfEsc(m.chi)}${m.quando ? ` · ${rfEsc(m.quando)}` : ''}</div>
+    <div class="rf-mod-campo"><label for="rf-mod-paz">Paziente (dalla cartella; vuoto se il modulo non riguarda un paziente)</label><input class="input" id="rf-mod-paz" list="rf-mod-paz-list" placeholder="Cognome Nome…" value="${rfEsc(pre)}" autocomplete="off">${paz.html}</div>
+    <div id="rf-mod-campi">${m.campi.map(c => rfModCampoHtml(c, '', '')).join('')}</div><div class="caption mt-8">* obbligatorio. Si può salvare anche incompleto e finire dopo.</div>`;
+  openModal(`${m.codice} — ${m.titolo}`, corpo, `<button class="btn" data-close>Annulla</button><button class="btn primary" id="rf-mod-salva">Salva</button>`);
+  document.getElementById('rf-mod-salva').onclick = async () => {
+    const et = (document.getElementById('rf-mod-paz').value || '').trim();
+    const pid = et ? (paz.mappa.get(et) || null) : null;
+    if (et && !pid) { toast('Scegli il paziente dall’elenco della cartella'); return; }
+    try {
+      const r = await fetch('/api/prototipo/moduli', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modulo: m.id, patient_id: pid, dati: rfModRaccogli() }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { toast(j.errore || 'Salvataggio non riuscito'); return; }
+      const dati = rfModRaccogli();
+      if (j.errori && Object.keys(j.errori).length) { document.getElementById('rf-mod-campi').innerHTML = m.campi.map(c => rfModCampoHtml(c, dati[c.chiave], j.errori[c.chiave])).join(''); toast('Salvato incompleto: mancano alcuni campi'); }
+      else toast('Modulo salvato');
+      closeModal(); void rfCaricaModuli();
+    } catch { toast('Piattaforma non raggiungibile'); }
+  };
+}
+async function rfModuloApri(id) {
+  let j;
+  try { const r = await fetch(`/api/prototipo/moduli/${id}`, { credentials: 'include' }); if (!r.ok) throw 0; j = await r.json(); } catch { toast('Compilazione non trovata'); return; }
+  const c = j.compilazione, m = j.modulo;
+  const campi = m ? m.campi : Object.keys(c.dati || {}).map((k, i) => ({ chiave: k, n: i + 1, etichetta: k, tipo: 'testo', opzioni: [], obbligatorio: false }));
+  const corpo = `<div class="caption">${rfEsc(c.paziente || 'senza paziente')}${c.nascita ? ` · nato/a ${rfEsc(c.nascita)}` : ''} · creato ${rfModQuando(c.created_at)}${c.da ? ` da ${rfEsc(c.da)}` : ''}${c.updated_at !== c.created_at ? ` · modificato ${rfModQuando(c.updated_at)}` : ''}</div>
+    ${m ? '' : '<div class="caption mt-8">Il modulo non è più nella pagina wiki: si legge e si stampa, non si modifica.</div>'}
+    <div id="rf-mod-campi">${campi.map(x => rfModCampoHtml(x, (c.dati || {})[x.chiave], '')).join('')}</div>
+    <details class="mt-16"><summary class="caption">Chi l'ha aperto (${(j.accessi || []).length})</summary><div class="caption" style="line-height:1.6">${(j.accessi || []).map(a => `${rfModQuando(a.at)} · ${rfEsc(a.azione)}${a.da ? ` · ${rfEsc(a.da)}` : ''}`).join('<br>')}</div></details>`;
+  openModal(`${c.codice} — ${c.titolo}`, corpo, `<button class="btn" data-close>Chiudi</button><button class="btn" id="rf-mod-stampa">${ICONS.print} Stampa</button>${m ? '<button class="btn primary" id="rf-mod-salva">Salva</button>' : ''}`);
+  document.getElementById('rf-mod-stampa').onclick = () => rfModuloStampa(c, campi, rfModRaccogli());
+  const salva = document.getElementById('rf-mod-salva');
+  if (salva) salva.onclick = async () => {
+    try {
+      const r = await fetch(`/api/prototipo/moduli/${c.id}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dati: rfModRaccogli() }) });
+      const k = await r.json().catch(() => ({}));
+      if (!r.ok) { toast(k.errore || 'Salvataggio non riuscito'); return; }
+      if (k.errori && Object.keys(k.errori).length) { const dati = rfModRaccogli(); document.getElementById('rf-mod-campi').innerHTML = campi.map(x => rfModCampoHtml(x, dati[x.chiave], k.errori[x.chiave])).join(''); toast('Salvato incompleto: mancano alcuni campi'); return; }
+      toast('Modulo salvato'); closeModal(); void rfCaricaModuli();
+    } catch { toast('Piattaforma non raggiungibile'); }
+  };
+}
+function rfModuloStampa(c, campi, dati) {
+  let box = document.getElementById('rf-print'); if (!box) { box = document.createElement('div'); box.id = 'rf-print'; document.body.appendChild(box); }
+  const studio = (RF.data && RF.data.utente && RF.data.utente.studio) || 'ReferralFlow';
+  box.innerHTML = `<h1>${rfEsc(c.codice)} — ${rfEsc(c.titolo)}</h1><div class="meta">${rfEsc(studio)} · ${rfEsc(c.paziente || 'senza paziente')}${c.nascita ? ` · nato/a ${rfEsc(c.nascita)}` : ''} · ${rfModQuando(c.updated_at || c.created_at)}</div>
+    <table>${campi.map(x => `<tr><td>${x.n}. ${rfEsc(x.etichetta)}</td><td>${rfEsc(dati[x.chiave] || '')}</td></tr>`).join('')}</table>
+    <div class="firma"><span>Data</span><span>Firma</span></div>`;
+  fetch(`/api/prototipo/moduli/${c.id}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'stampa' }) }).catch(() => {});
+  setTimeout(() => window.print(), 50);
+}
+// Scheda paziente → Documenti: i moduli compilati per questo paziente.
+const rfPatientDocsOrig = typeof patientDocs === 'function' ? patientDocs : null;
+if (rfPatientDocsOrig) patientDocs = function (p) {
+  const base = rfPatientDocsOrig(p);
+  if (!RF.live || !rfUuid(p.id)) return base;
+  if (RF.moduli === null) { void rfCaricaModuli(); return base; }
+  const mie = RF.moduli.compilazioni.filter(c => c.patient_id === p.id);
+  const scelta = RF.moduli.moduli.map(m => `<option value="${m.id}">${rfEsc(m.codice)} — ${rfEsc(m.titolo)}</option>`).join('');
+  return base + `<div class="card mt-16"><div class="card-head"><span class="section-title">Moduli compilati</span><span class="badge count">${mie.length}</span></div>
+    <div class="list">${mie.length ? mie.map(c => rfModRigaComp(c, false)).join('') : '<div class="caption" style="padding:8px 6px">Nessun modulo per questo paziente.</div>'}</div>
+    ${scelta ? `<div class="row mt-16" style="gap:8px"><select class="input sm" id="rf-mod-scelta-${p.id}">${scelta}</select><button class="btn sm" onclick="rfModuloCompila(document.getElementById('rf-mod-scelta-${p.id}').value, '${p.id}')">${ICONS.plus} Compila</button></div>` : ''}</div>`;
+};
+
 /* ---------- pagine senza backing vero → alla piattaforma ---------- */
 function rfPaginaPiattaforma(titolo, testo) {
   return `<div class="page-head"><div><h2 class="page-title">${titolo}</h2><div class="page-sub">${testo}</div></div></div>
