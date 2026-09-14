@@ -4,7 +4,7 @@ const statusBadge = s => `<span class="status"><i class="dot ${STATUS_DOT[s]}"><
 const initials = p => (p.first[0] + p.last[0]).toUpperCase();
 const emptyState = (icon, t, s, action = '') => `<div class="empty">${ICONS[icon]}<div class="t">${t}</div><div>${s}</div>${action}</div>`;
 const provChip = (k) => ({ confirmed: '<span class="prov confirmed">Confermato</span>', document: '<span class="prov document">Nel documento</span>', inferred: '<span class="prov inferred">Dedotto dall\'AI</span>', verify: '<span class="prov verify">Da verificare</span>', conflict: '<span class="prov conflict">Conflitto</span>' })[k];
-const aiTag = () => `<span class="ai-tag">${ICONS.ai} Generato da ReferralFlow AI</span>`;
+const aiTag = () => `<span class="ai-tag">${ICONS.ai} Generato da ${typeof RF_AI_NOME !== 'undefined' ? RF_AI_NOME : 'ReferralFlow AI'}</span>`;
 
 /* ---------- HOME ---------- */
 PAGES.home = () => ({ secretary: homeSecretary, assistant: homeAssistant, doctor: homeDoctor, org_admin: homeOrgAdmin, tech_admin: () => systemOverview(true) })[state.role]();

@@ -26,3 +26,4 @@ aggiornata: 2026-09-11
 - **Verifier / verificatori**: avvocato, omissioni, coerenza, verificatore selettivo; girano su un'altra famiglia di modelli rispetto al correttore.
 - **Versione della catena**: impronta di codice, prompt (+ contesto medico), dizionario, vocabolario, profilo, modelli (`versione_catena()`).
 - **Zero-touch**: referto confermato senza correzioni (REVIEWED_NO_CHANGES).
+- **Cleo** — l'assistente dell'interfaccia nuova (pannello laterale e pagina AI): codice che decide, procedure con traccia, modello locale per la sintesi. Nome scelto il 14.9.2026.

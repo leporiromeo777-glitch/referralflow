@@ -17,6 +17,8 @@ function applyTheme() {
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
 function setTheme(t) { state.theme = t; localStorage.setItem('rf-theme', t); applyTheme(); renderTopbar(); }
 
+// Nome dell'assistente: la costante RF_AI_NOME del ponte, se caricato (14.9.2026: «Cleo»).
+const AI_NOME = () => (typeof RF_AI_NOME !== 'undefined' ? RF_AI_NOME : 'ReferralFlow AI');
 /* ---------- Navigation ---------- */
 const NAV = {
   secretary: ['home', 'agenda', 'patients', 'reports', 'dittafono', 'documents', 'anonymize', 'communications', 'inbox', 'ai', 'statistics', 'administration'],
@@ -27,7 +29,7 @@ const NAV = {
 };
 const NAV_META = {
   home: ['Home', 'home'], agenda: ['Agenda', 'agenda'], patients: ['Pazienti', 'patients'], visits: ['Visite', 'visits'], reports: ['Referti', 'reports'],
-  documents: ['Documenti', 'documents'], communications: ['Comunicazioni', 'comms'], inbox: ['Attività', 'tasks'], ai: ['AI', 'ai'], statistics: ['Statistiche', 'stats'],
+  documents: ['Documenti', 'documents'], communications: ['Comunicazioni', 'comms'], inbox: ['Attività', 'tasks'], ai: ['Cleo', 'ai'], statistics: ['Statistiche', 'stats'],
   administration: ['Amministrazione', 'admin'], system: ['Sistema', 'system'], profile: ['Profilo', 'profile'], settings: ['Impostazioni', 'settings'],
   patient: ['Paziente', 'patients'], visit: ['Visita', 'visits'], report: ['Referto', 'reports'], review: ['Revisione guidata', 'reports'], knowledge: ['Knowledge', 'book'], tasks: ['Task', 'tasks'],
   dittafono: ['Dittafono', 'mic'], anonymize: ['Anonimizzazione', 'shield'],
@@ -120,7 +122,7 @@ function renderTopbar() {
     <div class="title">${pageTitle()}</div>
     <div class="spacer"></div>
     <div class="search-pill" id="open-palette" role="button" tabindex="0">${ICONS.search}<span>Cerca o digita un comando</span><kbd>⌘K</kbd></div>
-    <button class="ai-btn" id="toggle-ai" title="ReferralFlow AI (⌘/)"><span class="orb ${state.aiState}"></span>AI</button>
+    <button class="ai-btn" id="toggle-ai" title="${AI_NOME()} (⌘/)"><span class="orb ${state.aiState}"></span>AI</button>
     <button class="icon-btn" id="va-top" title="Assistente vocale (Ctrl+Shift+V)">${ICONS.mic}</button>
     <button class="icon-btn" id="notif-btn" title="Notifiche">${ICONS.bell}<span class="notif-dot"></span></button>
     <button class="icon-btn" id="theme-btn" title="Tema: ${state.theme}">${themeIcon}</button>
@@ -146,7 +148,7 @@ function renderSafetyBar() {
 }
 function renderStatusbar() {
   $('#statusbar').innerHTML = `<span class="status"><i class="dot success"></i>Server</span><span class="status"><i class="dot success"></i>AI · Mac mini + DGX #1</span><span class="status"><i class="dot success"></i>Backup verificato 02:10</span><span class="status">Salvato automaticamente</span>
-    <span class="ai-act"><span class="orb ${state.aiRunning ? 'working' : ''}"></span>ReferralFlow AI · ${state.aiRunning} attività in corso</span>`;
+    <span class="ai-act"><span class="orb ${state.aiRunning ? 'working' : ''}"></span>${AI_NOME()} · ${state.aiRunning} attività in corso</span>`;
 }
 function renderMobileNav() {
   const items = [['home', 'Today', 'home'], ['patients', 'Pazienti', 'patients'], ['dittafono', 'Dittafono', 'mic'], ['inbox', 'Task', 'tasks'], ['search', 'Cerca', 'search']];
@@ -237,7 +239,7 @@ function renderPalResults(q) {
     if (/richiam/.test(ql)) cmds.push(palItem('ai', 'Chi devo richiamare oggi?', 'Comando · 2 richiami', () => go('#/inbox')));
     if (/fattur|insolut|bilanc|incass|profittevol|redditiz|margin|costi|economic/.test(ql)) cmds.push(palItem('ai', q, 'Domanda economica · risposta con metrica e fonte', () => { toggleAI(true); askAI(q); }));
     if (/vecch|archivio|storic|anni fa|prima del/.test(ql)) cmds.push(palItem('ai', q, 'Ricerca nell\'archivio storico', () => { toggleAI(true); askAI(q); }));
-    if (cmds.length) groups.push(['ReferralFlow AI', cmds]);
+    if (cmds.length) groups.push([AI_NOME(), cmds]);
     if (!groups.length) groups.push(['', [palItem('ai', `Chiedi all'AI: "${q}"`, 'Interpreta come domanda contestuale', () => { toggleAI(true); askAI(q); })]]);
   }
   let idx = 0;
@@ -282,7 +284,7 @@ function renderAIPanel() {
   const el = $('#aipanel');
   if (!state.aiOpen) { el.innerHTML = ''; return; }
   el.innerHTML = `
-    <div class="ai-head"><div class="ai-sphere ${state.aiState}" id="ai-sphere"><span class="w"></span></div><div class="t">ReferralFlow AI</div><span class="caption">contestuale</span><button class="icon-btn right" id="ai-close">${ICONS.x}</button></div>
+    <div class="ai-head"><div class="ai-sphere ${state.aiState}" id="ai-sphere"><span class="w"></span></div><div class="t">${AI_NOME()}</div><span class="caption">contestuale</span><button class="icon-btn right" id="ai-close">${ICONS.x}</button></div>
     <div class="ai-ctx">${aiContextChips()}</div>
     <div class="ai-body" id="ai-body">
       ${typeof vaStage === 'function' ? vaStage() : ''}

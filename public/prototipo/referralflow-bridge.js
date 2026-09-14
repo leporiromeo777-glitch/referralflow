@@ -219,7 +219,7 @@ renderSidebar = function () {
         <button class="nav-item ${state.route === 'profile' ? 'active' : ''}" data-go="#/profile" title="Profilo">${ICONS.profile || ''}<span>Profilo</span></button>
         <button class="nav-item" id="rf-esci" title="Esci">${ICONS.lock || ''}<span>Esci · ${rfEsc((RF.data.utente.email || '').split('@')[0])}</span></button>
       </nav>
-      <div class="sysbar"><span class="status"><i class="dot success"></i><span>Dati veri</span></span><span class="status"><i class="dot success"></i><span>AI locale</span></span></div>
+      <div class="sysbar"><span class="status"><i class="dot success"></i><span>Dati veri</span></span><span class="status"><i class="dot success"></i><span>Cleo · locale</span></span></div>
     </div>`;
   document.getElementById('collapse-btn').onclick = () => { state.sidebarCollapsed = !state.sidebarCollapsed; render(); };
   const esci = document.getElementById('rf-esci'); if (esci) esci.onclick = () => { void rfEsci(); };
@@ -354,7 +354,7 @@ PAGES.percorsi = () => {
       ${p.fonti ? `<div class="caption mt-8">Fonti: ${rfEsc(p.fonti)}</div>` : ''}
     </div>`;
   return `<div class="page-head"><div><h2 class="page-title">Percorsi diagnostico-terapeutici</h2><div class="page-sub">Sequenze standard di prestazioni per indicazione · <span id="rf-perc-n">${lista.length} ${lista.length === 1 ? 'percorso' : 'percorsi'}</span></div></div>
-      <div class="actions"><input class="input" id="rf-perc-q" placeholder="Cerca indicazione o prestazione…" autocomplete="off"><button class="btn ai" data-ai="Quale percorso per un paziente con palpitazioni?">${ICONS.ai} Chiedi al bot</button></div></div>
+      <div class="actions"><input class="input" id="rf-perc-q" placeholder="Cerca indicazione o prestazione…" autocomplete="off"><button class="btn ai" data-ai="Quale percorso per un paziente con palpitazioni?">${ICONS.ai} Chiedi a Cleo</button></div></div>
     ${proposte ? `<div class="card" style="border-left:3px solid var(--warning)"><p class="meta" style="margin:0;line-height:1.55"><b>${proposte} ${proposte === 1 ? 'percorso è una proposta' : 'percorsi sono proposte'}</b> scritte dalle linee guida per uno studio ambulatoriale: durate, tempi e criteri li valida il cardiologo. Si correggono nella pagina wiki <code>Medici/Percorsi</code> (SilverBullet sulla rete dello studio, porta 3400); alla riga «Stato» si scrive <code>validato</code>. La piattaforma rilegge la pagina entro 5 minuti.</p></div>` : ''}
     <div class="grid grid-2 mt-16">${lista.length ? lista.map(card).join('') : '<div class="card"><p class="meta" style="margin:0">Nessun percorso nella pagina wiki.</p></div>'}</div>`;
 };
@@ -633,7 +633,7 @@ PAGES.patients = () => {
   return `
     <div class="page-head"><div><h2 class="page-title">Pazienti</h2><div class="page-sub"><span id="rf-paz-n">${inCartella.length} in cartella</span>${soloAgenda ? ` · ${soloAgenda} solo in agenda` : ''}</div></div>
       <div class="actions"><button class="btn" onclick="rfPazientiImporta()">${ICONS.upload} Importa CSV</button><button class="btn primary" onclick="rfPazienteModifica(null)">${ICONS.plus} Nuovo paziente</button></div></div>
-    <div class="toolbar"><input class="input" id="rf-paz-q" placeholder="Cerca cognome, nome, AVS, telefono, e-mail, indicazione…" autocomplete="off" style="min-width:320px"><button class="btn ai" data-ai="Pazienti con richiamo scaduto">${ICONS.ai} Chiedi al bot</button></div>
+    <div class="toolbar"><input class="input" id="rf-paz-q" placeholder="Cerca cognome, nome, AVS, telefono, e-mail, indicazione…" autocomplete="off" style="min-width:320px"><button class="btn ai" data-ai="Pazienti con richiamo scaduto">${ICONS.ai} Chiedi a Cleo</button></div>
     <div class="table-wrap"><table><thead><tr><th>Paziente</th><th>Nascita</th><th>AVS</th><th>Telefono</th><th>Cassa</th><th>Indicazione</th><th>Ultima visita</th><th>Prossimo</th><th>Indicatori</th></tr></thead><tbody>
       ${PATIENTS.length ? [...inCartella, ...PATIENTS.filter(p => !rfUuid(p.id))].map(riga).join('') : '<tr><td colspan="9" class="caption">Nessun paziente in cartella: «Nuovo paziente» o «Importa CSV».</td></tr>'}
     </tbody></table></div>`;
@@ -785,7 +785,7 @@ for (const [k, titolo, testo, href] of [
 // laterale, a tutto schermo. Stesso `state.aiMessages`, stesso `askAI` (codice
 // che decide, procedure con traccia, modello locale per la sintesi): non è una
 // seconda chat. Quando si è su questa pagina il pannello laterale resta chiuso.
-const RF_AI_NOME = 'ReferralFlow AI';
+const RF_AI_NOME = 'Cleo';
 (function () { const st = document.createElement('style'); st.textContent = `
 .rf-aip { display:flex; flex-direction:column; height: calc(100vh - var(--topbar-h) - 150px); min-height: 420px; }
 .rf-aip .ai-body { flex:1; overflow:auto; padding: 18px 22px; gap: 14px; }
@@ -2133,7 +2133,7 @@ renderMobileNav = function () {
   nav.classList.toggle('rf-ai', !!state.aiOpen);
   // Pillola: cinque voci fisse, l'AI e «Altro» (14.9.2026), che apre un
   // foglio con TUTTE le altre pagine del ruolo, a sezioni come la barra laterale.
-  const voci = [['home', 'Oggi', 'home'], ['agenda', 'Agenda', 'agenda'], ['patients', 'Pazienti', 'patients'], ['reports', 'Referti', 'reports'], ['dittafono', 'Dittafono', 'mic'], ['ai', 'AI', 'ai'], ['altro', 'Altro', 'moreV']];
+  const voci = [['home', 'Oggi', 'home'], ['agenda', 'Agenda', 'agenda'], ['patients', 'Pazienti', 'patients'], ['reports', 'Referti', 'reports'], ['dittafono', 'Dittafono', 'mic'], ['ai', 'Cleo', 'ai'], ['altro', 'Altro', 'moreV']];
   const fisse = new Set(voci.map(v => v[0]));
   const altre = (NAV[state.role] || []).filter(k => !fisse.has(k));
   const attiva = (k) => k === 'ai' ? state.aiOpen : k === 'altro' ? altre.includes(state.route) : (state.route === k || (k === 'patients' && ['patient', 'visit'].includes(state.route)) || (k === 'reports' && ['report', 'review'].includes(state.route)));
