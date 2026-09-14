@@ -8536,7 +8536,11 @@ def pubblica_medici() -> None:
     CHIAVI = ("id", "nome", "breve", "modalita", "formato", "intestazione", "titolo_rapporto", "chiusura", "firma", "copia")
     # Lettera tipo e regole di forma (dalla wiki, 2026-09-12): la piattaforma
     # le mette nel prompt di «Impagina come lettera».
-    voci = [{**{k: m[k] for k in CHIAVI}, "lettera_tipo": str(m.get("lettera_tipo") or ""), "regole_forma": list(m.get("regole_forma") or [])} for m in medici]
+    voci = [{**{k: m[k] for k in CHIAVI}, "lettera_tipo": str(m.get("lettera_tipo") or ""),
+             "regole_forma": list(m.get("regole_forma") or []),
+             # Corpo della lettera in un solo paragrafo (2026-09-14): la
+             # piattaforma lo chiede al modello e lo garantisce nel codice.
+             "corpo_lettera": "unico" if m.get("corpo_lettera") == "unico" else "paragrafi"} for m in medici]
     impronta = json.dumps(voci, sort_keys=True, ensure_ascii=False)
     if impronta == _MEDICI_PUBBLICATI or time.monotonic() < _MEDICI_RIPROVA_DOPO:
         return

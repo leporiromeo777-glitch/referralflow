@@ -24,6 +24,8 @@ export async function opzioniRiorganizzazione(
   const profilo = await profiloMedico(studioId, medico?.id);
   const opzioni: OpzioniLettera = {
     chiusura: profilo?.chiusura || undefined,
+    // Corpo in un solo paragrafo se il profilo del medico lo chiede.
+    corpoUnico: profilo?.corpo === 'unico',
     firma: profilo?.firma?.length ? profilo.firma : undefined,
     // Lettera tipo e regole di forma dalla wiki Agenti/<medico> (2026-09-12),
     // pubblicate dal servizio col profilo. REFERTO_STRUTTURA_ESEMPI=0 spegne

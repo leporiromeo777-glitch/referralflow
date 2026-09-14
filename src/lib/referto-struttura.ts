@@ -59,7 +59,7 @@ const PROMPT_LETTERA = `Sei un assistente che mette in bella copia lettere medic
 
 1. PRIMA RIGA: il saluto di apertura «Caro <titolo e nome del medico destinatario>,» (o «Cara …,» se il testo indica una dottoressa). Il destinatario è quello che il testo nomina (per esempio dopo «caro collega», «cara dottoressa Rossi», «al dottor Bianchi»); se il testo non nomina nessuno, scrivi «Caro collega,». Non inventare nomi.
 2. Una riga vuota.
-3. IL CORPO DELLA LETTERA (prima parola in MINUSCOLO: riprende dalla virgola del saluto): tutto il contenuto clinico dettato, in prosa scorrevole divisa in paragrafi sensati (motivo della visita, anamnesi, esami, valutazione, proposta), SEPARATI L'UNO DALL'ALTRO DA UNA RIGA VUOTA. Punteggiatura corretta, maiuscole a inizio frase, frasi complete — SENZA mai cambiare il significato né aggiungere informazioni. Niente titoli di sezione, niente elenchi puntati, niente numerazione.
+3. IL CORPO DELLA LETTERA (prima parola in MINUSCOLO: riprende dalla virgola del saluto): tutto il contenuto clinico dettato, in prosa scorrevole. {corpo} Punteggiatura corretta, maiuscole a inizio frase, frasi complete — SENZA mai cambiare il significato né aggiungere informazioni. Niente titoli di sezione, niente elenchi puntati, niente numerazione.
 4. Una riga vuota.
 5. IL SALUTO FINALE: {chiusura}
 
@@ -90,6 +90,11 @@ export type OpzioniLettera = {
   // Agenti/<medico> (2026-09-12): la lettera tipo è il primo esempio.
   letteraTipo?: string;
   regole?: string[];
+  // Corpo in UN SOLO paragrafo (14.9.2026, dr. Moccetti): niente righe vuote
+  // tra il saluto d'apertura e quello finale. Dal profilo del medico
+  // (`corpo_lettera` in medici.json). Il prompt lo chiede e il codice lo
+  // garantisce comunque in `unParagrafo`, perché il modello a volte spezza.
+  corpoUnico?: boolean;
 };
 
 // Il blocco della forma nel prompt della lettera: regole del medico, la
@@ -119,7 +124,10 @@ export function promptPer(formato: FormatoReferto, opzioni: OpzioniLettera): str
   const chiusura = opzioni.chiusura?.trim()
     ? `scrivi ESATTAMENTE «${opzioni.chiusura.trim()}» e nient'altro (la firma viene aggiunta dopo: non scriverla).`
     : 'quello dettato (per esempio «Cordiali saluti» o «Con i migliori saluti») seguito dalla firma se dettata; se il testo non ha un saluto finale, scrivi «Cordiali saluti,» e basta.';
-  return PROMPT_LETTERA.replace('{chiusura}', chiusura).replace('{esempi}', bloccoEsempi(opzioni.esempi, opzioni.letteraTipo, opzioni.regole));
+  const corpo = opzioni.corpoUnico
+    ? "TUTTO IN UN SOLO PARAGRAFO: motivo della visita, anamnesi, esami, valutazione e proposta uno dopo l'altro nello stesso blocco di testo, senza MAI andare a capo e senza righe vuote (le etichette «FRCV:», «Comorbidità:», «Elettrocardiogramma:», «Ecocardiogramma:» restano, ma dentro il flusso del paragrafo). Se gli esempi qui sotto mostrano più paragrafi, NON imitarli in questo: il corpo è un paragrafo solo."
+    : "Dividilo in paragrafi sensati (motivo della visita, anamnesi, esami, valutazione, proposta), SEPARATI L'UNO DALL'ALTRO DA UNA RIGA VUOTA.";
+  return PROMPT_LETTERA.replace('{chiusura}', chiusura).replace('{corpo}', corpo).replace('{esempi}', bloccoEsempi(opzioni.esempi, opzioni.letteraTipo, opzioni.regole));
 }
 
 // Rifiniture di CODICE dopo il modello, nella forma lettera: il blocco
@@ -140,8 +148,32 @@ function corpoInMinuscolo(righe: string[], iSaluto: number): string[] {
   return copia;
 }
 
+const _APERTURA = /^(car[oa]|gentil[ei]|egregi[oa]|stimat[oa])\b.*,$/i;
+const _SALUTO_FINALE = /^(cordiali|con i migliori|distinti|un caro saluto)/i;
+
+/** Il corpo della lettera in UN SOLO paragrafo: tutto ciò che sta fra il
+ * saluto d'apertura e quello finale diventa una riga sola. Il modello a
+ * volte va a capo lo stesso (gli esempi di forma sono vecchie lettere a
+ * paragrafi): qui il codice lo garantisce. Non tocca né l'apertura né la
+ * chiusura né quello che viene dopo (firma, terapia le mette il codice
+ * dopo). Puro: provato in `prove-lettera.test.ts`. */
+export function unParagrafo(lettera: string, chiusura?: string | null): string {
+  const righe = lettera.replace(/\r\n/g, '\n').trimEnd().split('\n');
+  const iApertura = righe.findIndex((r) => _APERTURA.test(r.trim()));
+  const inizio = iApertura + 1;
+  const chiusa = chiusura?.trim().toLowerCase();
+  const eChiusura = (r: string) => (!!chiusa && r.trim().toLowerCase() === chiusa) || _SALUTO_FINALE.test(r.trim());
+  const iChiusura = righe.findIndex((r, k) => k >= inizio && eChiusura(r));
+  const fine = iChiusura === -1 ? righe.length : iChiusura;
+  const corpo = righe.slice(inizio, fine).map((r) => r.trim()).filter(Boolean).join(' ').replace(/\s{2,}/g, ' ').trim();
+  if (!corpo) return righe.join('\n');
+  const coda = fine < righe.length ? ['', ...righe.slice(fine)] : [];
+  return [...righe.slice(0, inizio), '', corpo, ...coda].join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 function rifinisciLettera(lettera: string, opzioni: OpzioniLettera): string {
-  let righe = lettera.replace(/\r\n/g, '\n').trimEnd().split('\n');
+  const partenza = opzioni.corpoUnico ? unParagrafo(lettera, opzioni.chiusura) : lettera;
+  let righe = partenza.replace(/\r\n/g, '\n').trimEnd().split('\n');
   const iApertura = righe.findIndex((r) => r.trim() !== '');
   if (iApertura !== -1 && /^(car[oa]|gentil[ei]|egregi[oa]|stimat[oa])\b.*,$/i.test(righe[iApertura].trim())) {
     righe = corpoInMinuscolo(righe, iApertura);

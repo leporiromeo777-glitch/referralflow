@@ -28,7 +28,14 @@ export type MedicoDettante = {
   // «Impagina come lettera». Vuoti = nessun esempio fisso.
   lettera_tipo: string;
   regole_forma: string[];
+  // Corpo della lettera (14.9.2026, richiesta del dr. Moccetti): «unico» =
+  // tutto in un solo paragrafo, senza righe vuote tra il saluto d'apertura e
+  // quello finale; «paragrafi» = blocchi separati da una riga vuota (come
+  // prima, e resta il default per chi non lo dichiara).
+  corpo: CorpoLettera;
 };
+
+export type CorpoLettera = 'unico' | 'paragrafi';
 
 export type FormatoReferto = 'rapporto' | 'lettera';
 
@@ -71,6 +78,7 @@ export function puliscoMedici(v: unknown): MedicoDettante[] {
       lettera_tipo: typeof (m as any).lettera_tipo === 'string' ? (m as any).lettera_tipo.trim().slice(0, 3000) : '',
       regole_forma: (Array.isArray((m as any).regole_forma) ? (m as any).regole_forma : [])
         .filter((x: unknown): x is string => typeof x === 'string').map((x: string) => x.trim().slice(0, 200)).filter(Boolean).slice(0, 12),
+      corpo: (m as any).corpo_lettera === 'unico' ? 'unico' : 'paragrafi',
     });
   }
   return out;
