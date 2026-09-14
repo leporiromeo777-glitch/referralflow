@@ -129,3 +129,14 @@ Nel campo di Cleo c'è un tasto-modo, nella forma dei tasti «ricerca approfondi
 4. `azione: 'chiedi'` **rivalida lato server** (il testo approvato passa dal browser) e solo allora risponde. La risposta arriva in un riquadro marcato «risposta generale · non riferita a un paziente», con sotto la domanda riscritta, e **non viene salvata in cartella**.
 
 La domanda originale non esce dal Mac, non va nel database, non finisce nei log (si registrano solo conteggi, booleani e millisecondi). L'uscita verso un modello esterno è predisposta (`DOMANDA_MEDICA_FORNITORE`) ma **non implementata**: senza quella variabile risponde il modello locale e la pagina lo dice. Quando si accenderà, ciò che parte è **solo** il testo riscritto.
+
+### Agenda del giorno: sovrapposti affiancati e colonne per tipo (15.9.2026)
+Due difetti visti sullo schermo dello studio, con l'agenda vera.
+
+**Gli appuntamenti sovrapposti si coprivano a vicenda.** I riquadri sono posizionati in assoluto dentro la colonna: due che si accavallano finivano uno sull'altro e il testo diventava illeggibile. Ora `disponi()` raggruppa quelli legati a catena e dentro il gruppo assegna la prima corsia libera (algoritmo classico da calendario): si dividono la larghezza della colonna. Da tre in su il riquadro passa a `.rf-stretta` e mostra solo nome e ora — meglio poco e leggibile che tutto e illeggibile.
+
+**Quel che non è di un medico stava tutto in una colonna sola.** Adesso gli appuntamenti non abbinati a un medico si dividono per **colore del riquadro nell'agenda originale**, che nello studio vuol dire il tipo: Visite, Colloqui telefonici, Risonanze, ICCT, Interventi, Urgenze, Ecocardiogrammi. La tabella sta in `RF_COLORI_TIPO` nel ponte e viene dal catalogo in [[Piattaforma/Robot agenda MediOnline]]; un colore fuori tabella **non si inventa**, si mostra come «Altro · #rrggbb». Le colonne dei tipi hanno l'intestazione più scura e sono staccate da quelle dei medici. Quando un codice del luogo viene abbinato in Studio → Medici agenda, l'appuntamento torna nella colonna del suo medico.
+
+Con medici più tipi le colonne diventano tante: la griglia scorre dentro il suo riquadro (`.rf-cal-scorre`), perché `.cal` ha `overflow:hidden` per gli angoli arrotondati e altrimenti le taglierebbe.
+
+Da fare quando serve: portare `RF_COLORI_TIPO` in una scheda di Studio, così i nomi dei colori li scrive la segreteria invece che il codice.

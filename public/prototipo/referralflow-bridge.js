@@ -835,6 +835,19 @@ const RF_AI_NOME = 'Cleo';
 .rf-segno { display:inline-flex; vertical-align:-2px; margin-right:6px; color:var(--accent); }
 .rf-segno svg { width:15px; height:15px; }
 .rf-segno.viva { animation: pulse 1.4s infinite; }
+/* Agenda: colonne dei tipi (quel che non è di un medico), staccate dalle
+   colonne dei medici da una linea più marcata. */
+.cal-head.rf-tipo { background: var(--surface-3); color: var(--text-2); }
+.cal-head.rf-tipo:first-of-type { box-shadow: inset 2px 0 0 var(--border-2); }
+/* Sovrapposti: quando si dividono la colonna il testo si stringe. */
+.appt.rf-stretta { padding: 4px 5px; font-size: 11px; border-radius: 7px; }
+.appt.rf-stretta .n { gap: 4px; font-size: 11px; }
+.appt.rf-stretta .s { font-size: 10px; }
+.appt.rf-stretta .dot { width: 6px; height: 6px; }
+/* Con medici + tipi le colonne diventano tante: la griglia scorre dentro il
+   suo riquadro invece di essere tagliata (.cal ha overflow:hidden). */
+.rf-cal-scorre { overflow-x: auto; overflow-y: hidden; padding-bottom: 2px; }
+.rf-cal-scorre .cal { min-width: min-content; }
 .rf-gpt-top .actions { margin-left:auto; }
 /* «modello locale, su questo Mac» sta accanto al nome nella barra in alto:
    è la stessa informazione, detta una volta sola e nel posto più visibile. */
@@ -2790,6 +2803,26 @@ PAGES.profile = () => {
    giorno scelto (nomi dal registro dei medici dell'agenda) più «Senza
    medico», dove il codice del luogo resta visibile. Giorno cambiabile
    nella finestra ±30 giorni caricata da /api/prototipo/dati. */
+/* ---------- Agenda: che cosa vuol dire il colore del riquadro ----------
+   Nell'agenda della Cassa dei Medici il colore è il tipo di appuntamento.
+   Il catalogo è quello dello studio, scritto in [[Piattaforma/Robot agenda
+   MediOnline]]: si cambia qui finché non diventa una scheda in Studio.
+   Un colore che non è in tabella NON si inventa: si mostra com'è. */
+const RF_COLORI_TIPO = {
+  '#2ecc40': 'Visite',
+  '#01ff70': 'Colloqui telefonici',
+  '#0074d9': 'Risonanze',
+  '#7fdbff': 'ICCT · emodinamica e CVE',
+  '#85144b': 'Interventi',
+  '#ff4136': 'Urgenze',
+  '#ff851b': 'Ecocardiogrammi',
+};
+function rfTipoColore(colore) {
+  const c = String(colore || '').toLowerCase();
+  if (!c) return 'Senza colore';
+  return RF_COLORI_TIPO[c] || `Altro · ${c}`;
+}
+
 const rfAgendaOrig = PAGES.agenda;
 PAGES.agenda = () => {
   if (!RF.live) return rfAgendaOrig();
@@ -2817,8 +2850,8 @@ PAGES.agenda = () => {
     for (const a of lista) { const k = chiaveSala(a); if (!k) continue; if (!viste.has(k)) { const r = risorsaDi(a.room); viste.set(k, { k, nome: r ? r.nome : a.room.trim(), posti: r ? (r.posti || 1) : null, tipo: r ? r.tipo : 'codice' }); } }
     for (const r of risorse) if (r.tipo === 'sala' && !viste.has(r.nome.toLowerCase())) viste.set(r.nome.toLowerCase(), { k: r.nome.toLowerCase(), nome: r.nome, posti: r.posti || 1, tipo: 'sala' });
     const ordinate = [...viste.values()].sort((x, y) => x.nome.localeCompare(y.nome));
-    cols = ordinate.map(c => [c.k, `${c.nome}${c.posti ? ` · ${c.posti} ${c.posti === 1 ? 'posto' : 'posti'}` : ''}${c.tipo === 'apparecchio' ? ' · apparecchio' : c.tipo === 'codice' ? ' · codice' : ''}`]);
-    if (lista.some(a => !chiaveSala(a))) cols.push(['', 'Senza luogo']);
+    cols = ordinate.map(c => ({ k: c.k, et: `${c.nome}${c.posti ? ` · ${c.posti} ${c.posti === 1 ? 'posto' : 'posti'}` : ''}${c.tipo === 'apparecchio' ? ' · apparecchio' : c.tipo === 'codice' ? ' · codice' : ''}`, colore: '', test: (a) => chiaveSala(a) === c.k }));
+    if (lista.some(a => !chiaveSala(a))) cols.push({ k: '', et: 'Senza luogo', colore: '', test: (a) => !chiaveSala(a) });
     for (const c of ordinate) {
       if (!c.posti) continue;
       const inSala = lista.filter(a => chiaveSala(a) === c.k && a.status !== 'CANCELLED');
@@ -2829,15 +2862,68 @@ PAGES.agenda = () => {
       }
     }
   } else {
-    cols = medici.map(k => [k, DOCTORS[k] || k]);
-    if (lista.some(a => !a.doc || a.doc === 'studio')) cols.push(['studio', 'Senza medico']);
+    cols = medici.map(k => ({ k, et: DOCTORS[k] || k, colore: (RF.data && RF.data.coloriMedici && RF.data.coloriMedici[k]) || '', test: (a) => a.doc === k }));
+    // Quel che non è di un medico non finisce più in una colonna sola dove si
+    // copre a vicenda: si divide per COLORE del riquadro nell'agenda
+    // originale, che nello studio vuol dire il tipo di appuntamento
+    // (catalogo in [[Piattaforma/Robot agenda MediOnline]]).
+    const orfani = lista.filter(a => !a.doc || a.doc === 'studio');
+    const gruppi = new Map();
+    for (const a of orfani) {
+      const c = String(a.colore || '').toLowerCase();
+      if (!gruppi.has(c)) gruppi.set(c, { c, n: 0 });
+      gruppi.get(c).n++;
+    }
+    for (const g of [...gruppi.values()].sort((x, y) => y.n - x.n)) {
+      cols.push({ k: `col:${g.c}`, et: rfTipoColore(g.c), colore: g.c, test: (a) => (!a.doc || a.doc === 'studio') && String(a.colore || '').toLowerCase() === g.c });
+    }
   }
   const startH = lista.length ? Math.max(6, Math.min(8, Math.floor(Math.min(...lista.map(a => minuti(a.start))) / 60))) : 8;
   const endH = lista.length ? Math.min(21, Math.max(18, Math.ceil(Math.max(...lista.map(a => minuti(a.start) + a.dur)) / 60))) : 18;
   const slotH = 44, slots = (endH - startH) * 2;
   const top = (t) => (minuti(t) - startH * 60) / 30 * slotH;
-  const chip = (a) => `<div class="appt ${a.late ? 'LATE' : a.status}${sovra.has(a.id) ? ' rf-over' : ''}" style="top:${top(a.start) + 2}px;height:${Math.max(24, a.dur / 30 * slotH - 4)}px${a.colore ? `;border-left:4px solid ${rfEsc(a.colore)};background:${rfEsc(a.colore)}1a` : (RF.data && RF.data.coloriMedici && RF.data.coloriMedici[a.doc] ? `;border-left:4px solid ${rfEsc(RF.data.coloriMedici[a.doc])}` : '')}" ${a.p && rfUuid(a.p) ? `data-go="#/patients/${a.p}"` : ''} title="${rfEsc(nomeDi(a))} · ${a.start} · ${rfEsc(a.reason || '')}${a.room ? ' · ' + rfEsc(a.room) : ''}"><div class="n"><i class="dot ${a.late ? 'warning' : a.status === 'COMPLETED' ? 'success' : 'accent'}"></i>${rfEsc(nomeDi(a))}</div><div class="s">${a.start} · ${rfEsc(a.reason || '')}${a.room ? ` · <b>${rfEsc(a.room)}</b>` : ''}</div></div>`;
-  const colHtml = (key) => `<div class="cal-col" style="height:${slots * slotH}px">${Array.from({ length: slots }, (_, i) => `<div class="cal-line ${i % 2 ? 'half' : ''}" style="top:${i * slotH}px"></div>`).join('')}${lista.filter(a => vista === 'sale' ? chiaveSala(a) === key : (key === 'studio' ? (!a.doc || a.doc === 'studio') : a.doc === key)).map(chip).join('')}</div>`;
+  // Sovrapposizioni: gli appuntamenti che si accavallano si dividono la
+  // larghezza della colonna invece di coprirsi a vicenda (era illeggibile).
+  // Algoritmo classico da calendario: si raggruppano quelli legati a catena e
+  // dentro il gruppo si assegna la prima corsia libera.
+  const disponi = (app) => {
+    const ord = [...app].sort((a, b) => minuti(a.start) - minuti(b.start) || b.dur - a.dur);
+    const pos = new Map();
+    let gruppo = [], fine = -1;
+    const chiudi = () => {
+      if (!gruppo.length) return;
+      const corsie = [];
+      for (const a of gruppo) {
+        let i = 0;
+        while (corsie[i] !== undefined && corsie[i] > minuti(a.start)) i++;
+        corsie[i] = minuti(a.start) + a.dur;
+        pos.set(a.id, { c: i, n: 1 });
+      }
+      for (const a of gruppo) pos.get(a.id).n = corsie.length;
+      gruppo = []; fine = -1;
+    };
+    for (const a of ord) {
+      const ini = minuti(a.start);
+      if (gruppo.length && ini >= fine) chiudi();
+      gruppo.push(a);
+      fine = Math.max(fine, ini + a.dur);
+    }
+    chiudi();
+    return pos;
+  };
+  const chip = (a, p) => {
+    const n = Math.max(1, (p && p.n) || 1), c = (p && p.c) || 0;
+    const larg = 100 / n;
+    const geo = n > 1
+      ? `left:calc(${(c * larg).toFixed(3)}% + 3px);width:calc(${larg.toFixed(3)}% - 6px);right:auto`
+      : 'left:6px;right:6px';
+    return `<div class="appt ${a.late ? 'LATE' : a.status}${sovra.has(a.id) ? ' rf-over' : ''}${n > 2 ? ' rf-stretta' : ''}" style="${geo};top:${top(a.start) + 2}px;height:${Math.max(24, a.dur / 30 * slotH - 4)}px${a.colore ? `;border-left:4px solid ${rfEsc(a.colore)};background:${rfEsc(a.colore)}1a` : (RF.data && RF.data.coloriMedici && RF.data.coloriMedici[a.doc] ? `;border-left:4px solid ${rfEsc(RF.data.coloriMedici[a.doc])}` : '')}" ${a.p && rfUuid(a.p) ? `data-go="#/patients/${a.p}"` : ''} title="${rfEsc(nomeDi(a))} · ${a.start} · ${rfEsc(a.reason || '')}${a.room ? ' · ' + rfEsc(a.room) : ''}"><div class="n"><i class="dot ${a.late ? 'warning' : a.status === 'COMPLETED' ? 'success' : 'accent'}"></i>${rfEsc(nomeDi(a))}</div><div class="s">${a.start}${n > 2 ? '' : ` · ${rfEsc(a.reason || '')}${a.room ? ` · <b>${rfEsc(a.room)}</b>` : ''}`}</div></div>`;
+  };
+  const colHtml = (col) => {
+    const dentro = lista.filter(col.test);
+    const pos = disponi(dentro);
+    return `<div class="cal-col" style="height:${slots * slotH}px">${Array.from({ length: slots }, (_, i) => `<div class="cal-line ${i % 2 ? 'half' : ''}" style="top:${i * slotH}px"></div>`).join('')}${dentro.map(a => chip(a, pos.get(a.id))).join('')}</div>`;
+  };
   const times = Array.from({ length: slots }, (_, i) => i % 2 === 0 ? `<div class="cal-time num" style="top:${i * slotH}px">${String(startH + i / 2).padStart(2, '0')}:00</div>` : '').join('');
   const d = new Date(`${giorno}T12:00:00`);
   const etichetta = d.toLocaleDateString('it-CH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -2863,11 +2949,11 @@ PAGES.agenda = () => {
       <div class="actions"><div class="seg"><button class="${periodo === 'giorno' ? 'active' : ''}" onclick="state.agendaPeriodo='giorno';render()">Giorno</button><button class="${periodo === 'settimana' ? 'active' : ''}" onclick="state.agendaPeriodo='settimana';render()">Settimana</button></div><div class="seg"><button class="${!filtroTipo ? 'active' : ''}" onclick="state.agendaTipo='';render()">Tutto</button><button class="${filtroTipo === 'visita' ? 'active' : ''}" onclick="state.agendaTipo='visita';render()">Visite</button><button class="${filtroTipo === 'esame' ? 'active' : ''}" onclick="state.agendaTipo='esame';render()">Esami</button><button class="${filtroTipo === 'procedura' ? 'active' : ''}" onclick="state.agendaTipo='procedura';render()">Procedure</button></div><div class="seg"><button class="${vista === 'medici' ? 'active' : ''}" onclick="state.agendaVista='medici';render()">Per medico</button><button class="${vista === 'sale' ? 'active' : ''}" onclick="state.agendaVista='sale';render()">Per sala</button></div><div class="seg"><button onclick="state.agendaGiorno='${sposta(periodo === 'settimana' ? -7 : -1)}';render()">‹</button><button class="${giorno === oggi ? 'active' : ''}" onclick="state.agendaGiorno='${oggi}';render()">Oggi</button><button onclick="state.agendaGiorno='${sposta(periodo === 'settimana' ? 7 : 1)}';render()">›</button></div><input type="date" class="input sm" value="${giorno}" onchange="state.agendaGiorno=this.value;render()" style="max-width:160px"><button class="btn ai" data-ai="Preparazione della giornata">${ICONS.ai} Prepara la giornata</button></div></div>
     ${avvisi.length ? `<div class="card mb-16" style="border-left:3px solid var(--danger)"><b>Più pazienti dei posti della sala</b>: ${avvisi.map(rfEsc).join(' · ')}. I posti si impostano in Studio → Sale.</div>` : ''}
     ${vista === 'sale' && cols.length && !risorse.some(r => r.tipo === 'sala') ? `<div class="caption mb-16">Nessuna sala registrata: le colonne sono i codici del campo «luogo» dell'agenda. In Studio → Sale si registrano le sale con i posti; in Medici agenda → Codici dell'agenda un codice diventa una sala.</div>` : ''}
-    ${senza && vista === 'medici' ? `<div class="caption mb-16">Gli appuntamenti «senza medico» hanno nel luogo un codice non abbinato (${[...new Set(lista.filter(a => !a.doc || a.doc === 'studio').map(a => a.room).filter(Boolean))].map(rfEsc).join(', ') || 'vuoto'}): si abbinano in Studio → Medici agenda → Codici dell'agenda.</div>` : ''}
-    ${lista.length ? `<div class="cal" style="--cols:${cols.length}">
-      <div class="cal-head"></div>${cols.map(c => `<div class="cal-head">${vista === 'medici' && RF.data && RF.data.coloriMedici && RF.data.coloriMedici[c[0]] ? `<i class="dot" style="background:${rfEsc(RF.data.coloriMedici[c[0]])};margin-right:6px"></i>` : ''}${rfEsc(c[1])}</div>`).join('')}
-      <div class="cal-times" style="--slots:${slots};--slot-h:${slotH}px">${times}</div>${cols.map(c => colHtml(c[0])).join('')}
-    </div>` : `<div class="card"><div class="caption">Nessun appuntamento in agenda per questo giorno${Math.abs((d - new Date(`${oggi}T12:00:00`)) / 86400000) > 30 ? ' (la piattaforma carica ±30 giorni da oggi)' : ''}.</div></div>`}
+    ${senza && vista === 'medici' ? `<div class="caption mb-16">Le colonne a destra della linea sono gli appuntamenti <b>non abbinati a un medico</b>, divisi per colore dell'agenda originale, cioè per tipo. I codici del luogo non abbinati sono ${[...new Set(lista.filter(a => !a.doc || a.doc === 'studio').map(a => a.room).filter(Boolean))].map(rfEsc).join(', ') || 'vuoti'}: si abbinano in Studio → Medici agenda → Codici dell'agenda, e allora tornano nella colonna del medico.</div>` : ''}
+    ${lista.length ? `<div class="rf-cal-scorre"><div class="cal" style="--cols:${cols.length}">
+      <div class="cal-head"></div>${cols.map(c => `<div class="cal-head${String(c.k).startsWith('col:') ? ' rf-tipo' : ''}">${c.colore ? `<i class="dot" style="background:${rfEsc(c.colore)};margin-right:6px"></i>` : ''}${rfEsc(c.et)}</div>`).join('')}
+      <div class="cal-times" style="--slots:${slots};--slot-h:${slotH}px">${times}</div>${cols.map(colHtml).join('')}
+    </div></div>` : `<div class="card"><div class="caption">Nessun appuntamento in agenda per questo giorno${Math.abs((d - new Date(`${oggi}T12:00:00`)) / 86400000) > 30 ? ' (la piattaforma carica ±30 giorni da oggi)' : ''}.</div></div>`}
     ${(() => { const c = {}; for (const a of lista) if (a.colore) c[a.colore] = (c[a.colore] || 0) + 1; const voci = Object.entries(c).sort((x, y) => y[1] - x[1]); return voci.length ? `<div class="row mt-16 caption wrap" style="gap:10px"><span>Colori dell'agenda originale:</span>${voci.map(([col, n]) => `<span class="status"><i class="dot" style="background:${rfEsc(col)}"></i>${n}</span>`).join('')}</div>` : ''; })()}
     <div class="row mt-16 caption wrap"><span class="status"><i class="dot accent"></i>Programmato</span><span class="status"><i class="dot success"></i>Completato</span><span class="status"><i class="dot warning"></i>In ritardo</span><span class="caption">Dal robot MediOnline, in sola lettura; si aggiorna ogni ora.</span></div>`;
 };
