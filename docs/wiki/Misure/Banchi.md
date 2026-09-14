@@ -45,3 +45,19 @@ Suite permanente: `python3.14 pipeline-referti/prove-catastrofiche.py` → 38/38
 Dati reali osservati (solo numeri): destinatario estratto = confermato in 9 bozze su 11 (11.9.2026); collassi di whisper: 3 in 3 giorni sullo stesso medico (7-9.9.2026).
 
 Banco della riformulazione (14.9.2026, gemma3:12b, 6 domande **inventate**): 6/6 riscritte in forma generale senza nomi, date, telefoni né luoghi, con la sostanza clinica intatta; 3,5-6,3 s ciascuna. Due difetti trovati e corretti al primo giro: «Holter» bloccato come se fosse un cognome (lista degli eponimi) e l'avviso «un paziente» che scattava su ogni riformulazione buona (ora avvisa solo il determinativo e il possessivo).
+
+## Banco della domanda medica (14.9.2026)
+`npm run banco-domanda-medica` — 10 domande di medicina generale (già nella forma riscritta: **senza dati di nessuno**) su 5 modelli dell'account Infomaniak più il modello locale. Le risposte finiscono mescolate e anonime in `~/banco-domanda-medica.md`; il voto del medico è da raccogliere.
+
+| modello | tempo medio | token in | token out | ragionamento (car.) | risposte mancate |
+| --- | --- | --- | --- | --- | --- |
+| Qwen 3.5 397B | **24,0 s** | 1 065 | **22 019** | 70 449 | **2/10** |
+| Kimi K2.6 | 15,2 s | 1 439 | **22 243** | 61 954 | **2/10** |
+| Mistral Small 4 119B | **2,4 s** | 1 197 | 5 006 | — | 0 |
+| Apertus 70B (svizzero) | 4,4 s | 1 667 | 3 042 | — | 0 |
+| gemma 4 31B (quello della catena) | 4,4 s | 1 128 | 3 311 | — | 0 |
+| modello locale sul Mac | 20,5 s | 1 098 | 2 636 | — | 0 (gratis) |
+
+Conclusione **prima** del giudizio clinico: i due modelli di ragionamento sono della forma sbagliata per una chat. Consumano **sette volte** i token in uscita, impiegano 6-10 volte il tempo, e **due volte su dieci il ragionamento esaurisce il tetto e non arriva alla risposta** — con i token pagati lo stesso. Al primo giro (tetto 900) sbagliavano 10 volte su 10 e restituivano il vuoto: senza banco si sarebbe concluso «non funzionano».
+
+Lezione per la catena: se un giorno si alza il modello di generazione su un modello di ragionamento, **il tetto dei token va alzato** e il codice deve leggere `message.reasoning` / `<think>`, altrimenti la catena torna a mani vuote pagando.

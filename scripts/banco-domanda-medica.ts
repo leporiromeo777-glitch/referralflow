@@ -117,6 +117,13 @@ function mescola<T>(v: T[], seme: number): T[] {
 
 const LETTERE = 'ABCDEFGH'.split('');
 
+// Le risposte dei modelli contengono titoli markdown: dentro il foglio del
+// banco spezzerebbero le sezioni e «### A» non sarebbe più l'unico confine.
+// Si abbassano a grassetto, il testo resta identico.
+function senzaTitoli(t: string): string {
+  return t.split('\n').map((r) => (/^#{1,6}\s/.test(r) ? `**${r.replace(/^#{1,6}\s*/, '').trim()}**` : r)).join('\n');
+}
+
 async function main() {
   const risultati: { domanda: string; risposte: { c: Concorrente; e: Esito }[] }[] = [];
   const somma = new Map<string, { ms: number; tin: number; tout: number; pens: number; errori: number }>();
@@ -148,7 +155,7 @@ async function main() {
     righe.push(`## Domanda ${i + 1}`, '', `**${r.domanda}**`, '');
     const ordine = mescola(r.risposte, i + 1);
     ordine.forEach((x, k) => {
-      righe.push(`### ${LETTERE[k]}`, '', x.e.errore ? `*(nessuna risposta: ${x.e.errore})*` : x.e.testo, '', '**Voto (1-5):** ____', '');
+      righe.push(`### ${LETTERE[k]}`, '', x.e.errore ? `*(nessuna risposta: ${x.e.errore})*` : senzaTitoli(x.e.testo), '', '**Voto (1-5):** ____', '');
       chiave.push(`| ${i + 1} | ${LETTERE[k]} | ${x.c.nome} |`);
     });
     righe.push('---', '');
@@ -160,6 +167,7 @@ async function main() {
   }
   righe.push('', '', '## Chiave — guardare solo dopo aver votato', '', '| domanda | lettera | modello |', '|---|---|---|', ...chiave);
 
+  writeFileSync(path.join(os.homedir(), 'banco-domanda-medica-grezzo.json'), JSON.stringify(risultati, null, 2), 'utf-8');
   const dest = path.join(os.homedir(), 'banco-domanda-medica.md');
   writeFileSync(dest, righe.join('\n') + '\n', 'utf-8');
   const tin = [...somma.values()].reduce((t, s) => t + s.tin, 0);
