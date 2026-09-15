@@ -2595,10 +2595,74 @@ if (typeof PAGES !== 'undefined' && PAGES.visit) {
 
 /* ---------- anonimizzazione: stessa libreria della piattaforma, modello locale ---------- */
 RF.anon = { stato: 'pronto', esito: null, errore: null, file: null, t0: 0 };
+RF.anonStorico = null;
+
+/* ---------- Anonimizzazione: si trascina, si vede, resta la traccia ---------- */
+// Il documento non si conserva — né il testo né il nome del file: la pagina
+// esiste proprio per non farli uscire. Quel che resta è una riga di registro
+// (chi, quando, da dove, quanti segnaposto per tipo), perché sapere che cosa
+// è stato fatto non richiede tenersi quello su cui è stato fatto.
+(function () { const st = document.createElement('style'); st.textContent = `
+.rf-drop { border:2px dashed var(--border-2); border-radius:var(--r-card,16px); background:var(--surface-2);
+  padding:26px 20px; text-align:center; transition:.16s var(--ease); cursor:pointer; }
+.rf-drop:hover { border-color:var(--accent); background:var(--accent-soft); }
+.rf-drop.su { border-color:var(--accent); background:var(--accent-soft); transform:scale(1.005); }
+.rf-drop .big { font-size:15px; font-weight:650; letter-spacing:-.01em; }
+.rf-drop .sub { font-size:12.5px; color:var(--text-2); margin-top:4px; }
+.rf-drop .tipi { font-size:11px; color:var(--text-3); margin-top:8px; }
+.rf-drop svg { width:26px; height:26px; color:var(--text-3); margin-bottom:6px; }
+.rf-file { display:flex; align-items:center; gap:9px; margin-top:12px; padding:9px 11px; border-radius:11px; background:var(--surface-3); font-size:12.5px; }
+.rf-file b { font-weight:600; }
+.rf-file .x { margin-left:auto; border:0; background:transparent; color:var(--text-3); cursor:pointer; font-size:15px; padding:2px 6px; border-radius:6px; }
+.rf-file .x:hover { background:var(--surface); color:var(--text); }
+.rf-anon-riga { display:grid; grid-template-columns:96px 84px minmax(0,1fr) auto; gap:10px; align-items:center;
+  padding:8px 6px; border-top:1px solid var(--border); font-size:12.5px; }
+.rf-anon-riga:first-child { border-top:0; }
+.rf-anon-riga .q { color:var(--text-2); font-variant-numeric:tabular-nums; font-size:11.5px; }
+.rf-anon-riga .n { font-weight:600; }
+.rf-anon-riga .t { display:flex; flex-wrap:wrap; gap:4px; }
+.rf-anon-riga .dx { color:var(--text-3); font-size:11px; white-space:nowrap; }
+/* La classe «input» è pensata per una riga sola: un'area di testo va vestita a parte. */
+#rf-anon-in, #rf-anon-out { width:100%; min-width:0; min-height:150px; padding:10px 12px; border-radius:var(--r-input);
+  border:1px solid var(--border); background:var(--surface); font:inherit; font-size:13px; line-height:1.6; resize:vertical; }
+#rf-anon-in:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+#rf-anon-out { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12.5px; background:var(--surface-2); }
+`; document.head.appendChild(st); })();
+
+async function rfCaricaAnon(rendi = true) {
+  try {
+    const r = await fetch('/api/prototipo/anonimizza', { credentials: 'include' });
+    const j = r.ok ? await r.json() : {};
+    RF.anonStorico = Array.isArray(j.storico) ? j.storico : [];
+  } catch { RF.anonStorico = []; }
+  if (rendi && state.route === 'anonymize') render();
+}
+function rfAnonDrop(e, el) {
+  e.preventDefault();
+  el.classList.remove('su');
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) { RF.anon = { ...RF.anon, file: f, errore: null }; render(); return; }
+  const t = e.dataTransfer && e.dataTransfer.getData('text');
+  if (t) { const ta = document.getElementById('rf-anon-in'); if (ta) { ta.value = t; ta.focus(); } }
+}
+function rfAnonScegli() { const i = document.getElementById('rf-anon-file'); if (i) i.click(); }
+function rfAnonFile(input) { const f = input.files && input.files[0]; if (f) { RF.anon = { ...RF.anon, file: f, errore: null }; render(); } }
+function rfAnonTogliFile() { RF.anon = { ...RF.anon, file: null }; render(); }
+function rfAnonPeso(n) { return n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} kB`; }
+function rfAnonQuando(iso) {
+  if (!iso) return '';
+  const d = new Date(iso), o = new Date();
+  const oggi = d.toDateString() === o.toDateString();
+  const or = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return oggi ? `oggi ${or}` : `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')} ${or}`;
+}
+const RF_ANON_ORIGINE = { testo: 'incollato', pdf: 'PDF', docx: 'Word', file: 'file' };
+
 const rfAnonOrig = PAGES.anonymize;
 PAGES.anonymize = () => {
   if (!RF.live) return rfAnonOrig();
   const a = RF.anon;
+  if (RF.anonStorico === null) void rfCaricaAnon(false);
   const evidenzia = (testo, sost) => {
     let out = rfEsc(testo);
     for (const s of [...sost].sort((x, y) => y.originale.length - x.originale.length)) {
@@ -2608,52 +2672,95 @@ PAGES.anonymize = () => {
     return out.replace(/\n/g, '<br>');
   };
   const tipi = (sost) => { const m = {}; for (const s of sost) { const k = String(s.segnaposto || '').replace(/[\[\]_\d]/g, '').trim() || 'altro'; m[k] = (m[k] || 0) + 1; } return Object.entries(m).sort((x, y) => y[1] - x[1]); };
-  return `
-    <div class="page-head"><div><h2 class="page-title">Anonimizzazione documenti</h2><div class="page-sub">Toglie i dati identificativi da un testo clinico prima di condividerlo o usarlo come esempio. Modello locale sul Mac dello studio, niente cloud, niente salvataggio.</div></div>
-      <div class="actions">${a.esito ? `<button class="btn" onclick="rfAnonNuovo()">Nuovo</button>` : ''}</div></div>
-    ${!a.esito ? `
-    <div class="grid grid-main-side">
-      <div class="card">
-        <div class="field"><label>Testo da anonimizzare</label><textarea class="input" id="rf-anon-in" rows="14" placeholder="Incolla qui il testo… oppure scegli un file sotto (.txt, .md, .pdf con testo, .docx)"></textarea></div>
-        <div class="row wrap mt-16" style="gap:10px;align-items:center">
-          <input type="file" id="rf-anon-file" class="input sm" accept=".txt,.md,.csv,.json,.html,.htm,.pdf,.docx" style="max-width:320px">
-          <button class="btn primary" id="rf-anon-via" onclick="rfAnonAvvia()" ${a.stato === 'lavora' ? 'disabled' : ''}>${ICONS.shield || ''} ${a.stato === 'lavora' ? 'Anonimizzo…' : 'Anonimizza'}</button>
-        </div>
-        ${a.stato === 'lavora' ? `<div class="rf-imp-track mt-16"><div class="rf-imp-fill" style="width:40%"></div></div><div class="caption mt-8" id="rf-anon-stato">Il modello locale legge il testo e individua i dati identificativi (10-90 secondi)…</div>` : ''}
-        ${a.errore ? `<div class="rf-manc mt-16">${rfEsc(a.errore)}</div>` : ''}
-      </div>
-      <div class="stack">
-        <div class="card"><div class="section-title">Come funziona</div><div class="meta" style="line-height:1.7;font-size:13px;margin-top:6px">Il modello locale individua nomi, date di nascita, indirizzi, numeri AVS, telefoni, e-mail e riferimenti a persone; il <b>codice</b> li sostituisce con segnaposto coerenti (la stessa persona ha sempre lo stesso segnaposto). Una rete di regole copre AVS, e-mail e telefoni svizzeri anche se il modello li perde.</div></div>
-        <div class="card"><div class="section-title">Che cosa NON fa</div><div class="meta" style="line-height:1.7;font-size:13px;margin-top:6px">Non anonimizza le scansioni senza testo. Non toglie i dati clinici (diagnosi, terapie, misure): quelli restano, sono il contenuto. Il testo non viene salvato da nessuna parte.</div></div>
-      </div>
-    </div>` : `
+  const storico = Array.isArray(RF.anonStorico) ? RF.anonStorico : [];
+  const cartaStorico = `<div class="card"><div class="card-head"><span class="section-title">Storico</span><span class="badge count">${storico.length}</span></div>
+    ${storico.length ? storico.slice(0, 25).map(x => `<div class="rf-anon-riga">
+        <span class="q">${rfEsc(rfAnonQuando(x.created_at))}</span>
+        <span class="n">${rfEsc(RF_ANON_ORIGINE[x.origine] || x.origine)}</span>
+        <span class="t">${Object.entries(x.per_tipo || {}).sort((p, q) => q[1] - p[1]).slice(0, 5).map(([k, n]) => `<span class="badge">${rfEsc(k)} · ${n}</span>`).join('') || '<span class="caption">nessun dato trovato</span>'}</span>
+        <span class="dx">${x.caratteri} car.${x.da ? ` · ${rfEsc(x.da)}` : ''}</span>
+      </div>`).join('') : '<div class="caption" style="padding:8px 6px">Ancora nessuna anonimizzazione.</div>'}
+    <div class="caption mt-8" style="padding:0 6px">Del documento non resta niente: né il testo, né il nome del file. Qui ci sono solo quando, da dove, quanto era lungo e quanti segnaposto per tipo — serve a sapere che cosa è stato fatto, non a ritrovarlo.</div></div>`;
+
+  if (a.esito) {
+    return `
+    <div class="page-head"><div><h2 class="page-title">Anonimizzazione documenti</h2><div class="page-sub">Toglie i dati identificativi da un testo clinico prima di mandarlo fuori</div></div>
+      <div class="actions"><button class="btn" onclick="rfAnonNuovo()">Anonimizza un altro</button></div></div>
     <div class="card tight mb-16 row wrap" style="gap:10px">
       <span class="badge success">${ICONS.check || ''} ${a.esito.sostituzioni.length} sostituzioni</span>
       ${tipi(a.esito.sostituzioni).map(([k, n]) => `<span class="badge">${rfEsc(k)} · ${n}</span>`).join('')}
       <span class="caption">${rfEsc(a.esito.modello)} · ${(a.esito.ms / 1000).toFixed(1)} s</span>
-      <span class="right row" style="gap:6px"><button class="btn sm" onclick="rfAnonCopia()">${ICONS.copy || ''} Copia</button><button class="btn sm" onclick="rfAnonScarica()">${ICONS.upload || ''} Scarica .txt</button></span>
+      <span class="right row" style="gap:6px"><button class="btn sm" onclick="rfAnonCopia()">${ICONS.copy || ''} Copia</button><button class="btn sm" onclick="rfAnonScarica()">Scarica</button></span>
     </div>
     <div class="grid grid-2">
-      <div class="card"><div class="card-head"><span class="section-title">Originale con i rilevamenti</span></div><div class="anon-doc" style="white-space:normal;line-height:1.6">${evidenzia(a.esito.originale, a.esito.sostituzioni)}</div></div>
-      <div class="card"><div class="card-head"><span class="section-title">Anonimizzato</span><span class="caption">segnaposto</span></div><textarea class="input" id="rf-anon-out" rows="18" readonly>${rfEsc(a.esito.testo)}</textarea></div>
-    </div>`}`;
+      <div class="card"><div class="card-head"><span class="section-title">Originale con i rilevamenti</span></div><div class="anon-doc" style="white-space:normal;line-height:1.7">${evidenzia(a.esito.originale, a.esito.sostituzioni)}</div></div>
+      <div class="card"><div class="card-head"><span class="section-title">Anonimizzato</span><span class="caption">segnaposto</span></div><textarea class="input" id="rf-anon-out" rows="18" readonly style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.6">${rfEsc(a.esito.testo)}</textarea></div>
+    </div>
+    <div class="mt-16">${cartaStorico}</div>`;
+  }
+
+  return `
+    <div class="page-head"><div><h2 class="page-title">Anonimizzazione documenti</h2><div class="page-sub">Toglie i dati identificativi da un testo clinico prima di mandarlo fuori. Il modello gira sul Mac dello studio: il documento non esce di qui.</div></div></div>
+    <div class="grid grid-main-side">
+      <div class="stack">
+        <div class="card">
+          <div class="rf-drop" id="rf-anon-drop" onclick="rfAnonScegli()"
+            ondragover="event.preventDefault(); this.classList.add('su')"
+            ondragleave="this.classList.remove('su')"
+            ondrop="rfAnonDrop(event, this)">
+            ${ICONS.upload || ICONS.file || ''}
+            <div class="big">Trascina qui il documento</div>
+            <div class="sub">oppure clicca per sceglierlo, o incolla il testo qui sotto</div>
+            <div class="tipi">PDF con testo · Word .docx · .txt .md .csv .json .html — fino a 10 MB</div>
+          </div>
+          <input type="file" id="rf-anon-file" accept=".txt,.md,.csv,.json,.html,.htm,.pdf,.docx" style="display:none" onchange="rfAnonFile(this)">
+          ${a.file ? `<div class="rf-file">${ICONS.file || ''}<b>${rfEsc(a.file.name)}</b><span class="caption">${rfAnonPeso(a.file.size)}</span><button class="x" onclick="rfAnonTogliFile()" title="Togli">✕</button></div>` : ''}
+          <div class="field mt-16"><label>…oppure incolla il testo</label><textarea class="input" id="rf-anon-in" rows="10" placeholder="Incolla qui il referto, la lettera, il documento…" ${a.file ? 'disabled' : ''}></textarea></div>
+          <div class="row mt-16" style="gap:10px;align-items:center">
+            <button class="btn primary" id="rf-anon-via" onclick="rfAnonAvvia()" ${a.stato === 'lavora' ? 'disabled' : ''}>${ICONS.shield || ''} ${a.stato === 'lavora' ? 'Sto anonimizzando…' : 'Anonimizza'}</button>
+            ${a.stato === 'lavora' ? '<span class="caption">il modello locale legge tutto il documento: su un referto lungo ci mette qualche secondo</span>' : ''}
+          </div>
+          ${a.stato === 'lavora' ? '<div class="rf-imp-track mt-16"><div class="rf-imp-fill" style="width:40%"></div></div>' : ''}
+          ${a.errore ? `<div class="rf-manc mt-16">${rfEsc(a.errore)}</div>` : ''}
+        </div>
+        ${cartaStorico}
+      </div>
+      <div class="stack">
+        <div class="card"><div class="section-title">Come funziona</div><div class="meta" style="line-height:1.7;font-size:13px;margin-top:6px">Il modello locale indica i dati identificativi, il <b>codice</b> li sostituisce con segnaposto — <code>[NOME_1]</code>, <code>[DATA_2]</code> — così il modello non può riscrivere il testo. Una rete di regole prende comunque AVS, e-mail e telefoni svizzeri anche se al modello sfuggono.</div></div>
+        <div class="card"><div class="section-title">Che cosa NON fa</div><div class="meta" style="line-height:1.7;font-size:13px;margin-top:6px">Non anonimizza le scansioni: un PDF fotografato non ha testo da leggere. Non rende un documento <b>anonimo</b> a norma di legge — lo rende <b>pseudonimizzato</b>: chi ha la tabella dei segnaposto può tornare indietro, e nel dubbio vale come dato sanitario.</div></div>
+        <div class="card"><div class="section-title">Dove finisce</div><div class="meta" style="line-height:1.7;font-size:13px;margin-top:6px">Da nessuna parte. Il testo entra, esce anonimizzato e viene dimenticato: nel registro qui accanto restano solo la data, l'origine e i conteggi. Se ti serve il risultato, copialo o scaricalo prima di chiudere.</div></div>
+      </div>
+    </div>`;
 };
 async function rfAnonAvvia() {
-  const ta = document.getElementById('rf-anon-in'); const fi = document.getElementById('rf-anon-file');
-  const testo = ta ? ta.value.trim() : ''; const file = fi && fi.files && fi.files[0];
-  if (!testo && !file) { toast('Incolla un testo o scegli un file'); return; }
-  RF.anon = { stato: 'lavora', esito: null, errore: null, t0: Date.now() };
+  const ta = document.getElementById('rf-anon-in');
+  const testo = ta ? ta.value.trim() : '';
+  const file = RF.anon.file || null;            // trascinato o scelto: sta qui
+  if (!testo && !file) { toast('Trascina un documento o incolla un testo'); return; }
+  RF.anon = { stato: 'lavora', esito: null, errore: null, file, t0: Date.now() };
   render();
   try {
-    const fd = new FormData(); if (testo) fd.append('testo', testo); if (file) fd.append('file', file);
+    const fd = new FormData();
+    if (testo && !file) fd.append('testo', testo);
+    if (file) fd.append('file', file);
     const r = await fetch('/api/prototipo/anonimizza', { method: 'POST', credentials: 'include', body: fd });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) { RF.anon = { stato: 'pronto', esito: null, errore: j.errore || 'Anonimizzazione non riuscita.' }; render(); if (ta) ta.value = testo; return; }
-    RF.anon = { stato: 'pronto', esito: j, errore: null };
+    if (!r.ok) {
+      RF.anon = { stato: 'pronto', esito: null, errore: j.errore || 'Anonimizzazione non riuscita.', file };
+      render();
+      const t2 = document.getElementById('rf-anon-in');
+      if (t2 && testo) t2.value = testo;        // quel che aveva incollato non si perde
+      return;
+    }
+    RF.anon = { stato: 'pronto', esito: j, errore: null, file: null };
     render();
-  } catch { RF.anon = { stato: 'pronto', esito: null, errore: 'Piattaforma non raggiungibile.' }; render(); }
+    void rfCaricaAnon();                        // lo storico ha una riga in più
+  } catch {
+    RF.anon = { stato: 'pronto', esito: null, errore: 'Piattaforma non raggiungibile.', file };
+    render();
+  }
 }
-function rfAnonNuovo() { RF.anon = { stato: 'pronto', esito: null, errore: null }; render(); }
+function rfAnonNuovo() { RF.anon = { stato: 'pronto', esito: null, errore: null, file: null }; render(); }
 function rfAnonCopia() { const t = RF.anon.esito ? RF.anon.esito.testo : ''; navigator.clipboard.writeText(t).then(() => toast('Testo anonimizzato copiato')).catch(() => toast('Copia non riuscita')); }
 function rfAnonScarica() {
   const t = RF.anon.esito ? RF.anon.esito.testo : ''; if (!t) return;

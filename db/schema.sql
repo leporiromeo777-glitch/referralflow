@@ -976,3 +976,18 @@ create unique index if not exists piano_sale_giorno_idx on piano_sale (studio_id
 
 -- 052: correzioni a mano al piano delle sale, valide per il solo giorno.
 alter table piano_sale add column if not exists modifiche jsonb not null default '[]'::jsonb;
+
+-- 053: registro delle anonimizzazioni (mai il testo né il nome del file).
+create table if not exists anonimizzazioni (
+  id            uuid primary key default gen_random_uuid(),
+  studio_id     uuid not null references studios(id) on delete cascade,
+  user_id       uuid references users(id),
+  origine       text not null,
+  caratteri     integer not null,
+  sostituzioni  integer not null,
+  per_tipo      jsonb not null default '{}'::jsonb,
+  modello       text,
+  ms            integer,
+  created_at    timestamptz not null default now()
+);
+create index if not exists anonimizzazioni_studio_idx on anonimizzazioni (studio_id, created_at desc);

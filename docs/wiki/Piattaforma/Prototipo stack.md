@@ -189,3 +189,11 @@ Nella Home ogni riga porta a destra il **numero delle visite** e una micro-barra
 Finché il piano del giorno non c'è, la carta ricade sull'occupazione letta dal campo `luogo` dell'agenda, com'era prima. La nota sulla capienza (picco di appuntamenti insieme contro stanze disponibili) resta in tutti e due i casi.
 
 Resta vero, e va detto: **dove avvenga la visita MediOnline non lo scrive da nessuna parte**. Finché lo studio non registra le sale in Studio → Sale e apparecchi e non abbina i codici, l'occupazione per sala è un'approssimazione basata sulle colonne dell'agenda.
+
+### Anonimizzazione: si trascina, e resta la traccia (15.9.2026)
+La pagina è ora in tre parti. In alto una **zona di trascinamento** (si tira dentro il file, o si clicca per sceglierlo, o si incolla il testo: il file trascinato resta in `RF.anon.file` e non tocca il disco). Sotto lo **storico** delle ultime anonimizzazioni. A lato tre schede corte: come funziona, che cosa NON fa, dove finisce.
+
+Del documento **non resta niente**: né il testo, né il nome del file — la pagina esiste per non farli uscire, conservarli sarebbe il contrario. Nella tabella `anonimizzazioni` (migrazione 053) entrano solo quando, chi, da dove (`testo` / `pdf` / `docx` / `file`), quanti caratteri, quanti segnaposto **per tipo**, quale modello e quanto ci ha messo. Serve a sapere che cosa è stato fatto, non a ritrovarlo.
+
+Trappola trovata qui: dentro un blocco di stile scritto in un template literal, **un apice inverso in un commento CSS chiude il template**. `node --check` non se ne accorge — il file resta JS valido — e la pagina smette semplicemente di disegnarsi. Si vede solo aprendola.
+

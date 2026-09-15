@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { anonimizza, TESTO_MAX } from '@/lib/anonimizza';
+import { query } from '@/lib/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -9,7 +10,10 @@ export const dynamic = 'force-dynamic';
 // piattaforma (`src/lib/anonimizza.ts`: modello LOCALE che individua i dati
 // identificativi, il CODICE li sostituisce con segnaposto, rete di regole per
 // AVS, e-mail e telefoni svizzeri). Testo incollato o file .txt/.md/.pdf/.docx.
-// Niente persistenza, niente contenuti nei log.
+// Del documento non resta NULLA: né il testo, né il nome del file. Resta solo
+// una riga di registro — chi, quando, da dove, quanto lungo, quanti segnaposto
+// per tipo — perché sapere che cosa è stato fatto non richiede conservare
+// quello su cui è stato fatto (tabella `anonimizzazioni`, migrazione 053).
 const FILE_MAX = 10 * 1024 * 1024;
 const RUOLI_AMMESSI = new Set(['segretaria', 'medico', 'admin']);
 
@@ -62,10 +66,38 @@ export async function POST(req: NextRequest) {
   const t0 = Date.now();
   try {
     const esito = await anonimizza(testo);
-    console.log(`[anonimizza] prototipo origine=${origine} caratteri=${testo.length} sostituzioni=${esito.sostituzioni.length} modello=${esito.modello} ${Date.now() - t0}ms`);
-    return NextResponse.json({ ok: true, originale: testo, testo: esito.testo, sostituzioni: esito.sostituzioni, modello: esito.modello, ms: Date.now() - t0 }, { headers: { 'Cache-Control': 'no-store' } });
+    const ms = Date.now() - t0;
+    console.log(`[anonimizza] prototipo origine=${origine} caratteri=${testo.length} sostituzioni=${esito.sostituzioni.length} modello=${esito.modello} ${ms}ms`);
+    const perTipo: Record<string, number> = {};
+    for (const x of esito.sostituzioni) {
+      const k = String(x.segnaposto ?? '').replace(/[[\]_\d]/g, '').trim() || 'altro';
+      perTipo[k] = (perTipo[k] ?? 0) + 1;
+    }
+    try {
+      await query(
+        `insert into anonimizzazioni (studio_id, user_id, origine, caratteri, sostituzioni, per_tipo, modello, ms)
+         values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)`,
+        [session.studioId, session.id, origine, testo.length, esito.sostituzioni.length, JSON.stringify(perTipo), esito.modello, ms]
+      );
+    } catch (e) { console.warn(`[anonimizza] registro non scritto: ${(e as Error).message}`); }
+    return NextResponse.json({ ok: true, originale: testo, testo: esito.testo, sostituzioni: esito.sostituzioni, modello: esito.modello, ms }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (e) {
     console.error(`[anonimizza] prototipo fallita: ${(e as Error)?.message ?? e}`);
     return NextResponse.json({ errore: 'Il modello locale non ha risposto: riprova tra un minuto.' }, { status: 503 });
   }
+}
+
+// Lo storico: le ultime anonimizzazioni dello studio. Numeri e nient'altro.
+export async function GET() {
+  const session = await getSession();
+  if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  if (!RUOLI_AMMESSI.has(session.role)) return NextResponse.json({ errore: 'ruolo_non_ammesso' }, { status: 403 });
+  const storico = await query<{ id: string; origine: string; caratteri: number; sostituzioni: number; per_tipo: Record<string, number>; modello: string | null; ms: number | null; created_at: string; da: string | null }>(
+    `select a.id, a.origine, a.caratteri, a.sostituzioni, a.per_tipo, a.modello, a.ms, a.created_at::text,
+            split_part(u.email, '@', 1) as da
+       from anonimizzazioni a left join users u on u.id = a.user_id
+      where a.studio_id = $1 order by a.created_at desc limit 50`,
+    [session.studioId]
+  );
+  return NextResponse.json({ storico }, { headers: { 'Cache-Control': 'no-store' } });
 }
