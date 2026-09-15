@@ -11,7 +11,7 @@
 // Ogni modello viene scaricato dalla memoria appena finito.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { query } from '@/lib/db';
-import { applicaModifiche, assegnaVisite, daSistemarePerPrompt, escluso, fuoriDalPiano, leggiProposta, leggiSale, pianoDelGiorno, prestazioneEsclusa, prestazioniFuoriPiano, type ModificaSala, type RigaPiano } from '@/lib/sale';
+import { applicaModifiche, assegnaVisite, daSistemarePerPrompt, deduciMedici, escluso, fasceLibere, fuoriDalPiano, leggiProposta, leggiSale, pianoDelGiorno, prestazioneEsclusa, prestazioniFuoriPiano, soloIn, type ModificaSala, type RigaPiano } from '@/lib/sale';
 import { PROMPT } from '@/lib/piano-sale';
 
 const OLLAMA = process.env.OLLAMA_URL || 'http://localhost:11434';
@@ -51,25 +51,27 @@ async function via() {
   const giornoArg = process.argv[3] && /^\d{4}-\d{2}-\d{2}$/.test(process.argv[3]) ? process.argv[3] : new Date().toISOString().slice(0, 10);
   const soloConti = modelli.length === 0;
   const md = readFileSync('docs/wiki/Medici/Sale.md', 'utf-8');
-  const regole = leggiSale(md), fuori = fuoriDalPiano(md), fuoriP = prestazioniFuoriPiano(md);
+  const regole = leggiSale(md), fuori = fuoriDalPiano(md), fuoriP = prestazioniFuoriPiano(md), vincoli = soloIn(md);
   const [st] = await query<{ id: string }>('select id from studios');
   const presenti = (await query<{ nome: string }>(
     `select distinct pr.nome from appointments a join providers pr on pr.id = a.provider_id
       where a.studio_id = $1 and a.starts_at::date = $2::date and pr.attivo order by 1`, [st.id, giornoArg])).map((r) => r.nome);
   const piano = pianoDelGiorno(regole, presenti, GG[new Date(`${giornoArg}T12:00:00`).getDay()]);
-  const app = await query<{ id: string; chi: string | null; start: string; dur: number; prestazione: string | null }>(
+  const app = await query<{ id: string; chi: string | null; start: string; dur: number; prestazione: string | null; paziente: string }>(
     `select a.id, pr.nome as chi, to_char(a.starts_at,'HH24:MI') as start,
             greatest(5, round(extract(epoch from (coalesce(a.ends_at, a.starts_at + interval '30 min') - a.starts_at))/60))::int as dur,
-            c.nome as prestazione
+            c.nome as prestazione, coalesce(a.paziente_nome, a.titolo, '') as paziente
        from appointments a left join providers pr on pr.id = a.provider_id
        left join prestazioni_catalogo c on c.studio_id = a.studio_id and c.attivo and lower(c.colore) = lower(a.colore)
       where a.studio_id = $1 and a.starts_at::date = $2::date
         and coalesce(a.stato_medionline,'') not in ('annullato','scusato')`, [st.id, giornoArg]);
   const [vecchio] = await query<{ modifiche: ModificaSala[] }>('select modifiche from piano_sale where studio_id = $1 and giorno = $2::date', [st.id, giornoArg]);
   const righe: RigaPiano[] = applicaModifiche(piano.righe, vecchio?.modifiche ?? []);
-  const utili = app.filter((a) => !escluso(a.chi ?? '', fuori) && !prestazioneEsclusa(a.prestazione ?? '', a.chi ?? '', fuoriP));
-  const visite = assegnaVisite(righe, utili.map((a) => ({ id: a.id, chi: a.chi ?? '', start: a.start, dur: a.dur })));
-  const libere = righe.filter((r) => !(visite[r.stanza] ?? []).length).map((r) => ({ stanza: r.stanza, di: r.segmenti.find((x) => x.chi)?.chi ?? '' }));
+  const dedotti = deduciMedici(app.map((a) => ({ id: a.id, paziente: a.paziente, start: a.start, chi: a.chi ?? '' })));
+  const conMedico = app.map((a) => ({ ...a, chi: a.chi || dedotti[a.id] || '' }));
+  const utili = conMedico.filter((a) => !escluso(a.chi, fuori) && !prestazioneEsclusa(a.prestazione ?? '', a.chi, fuoriP));
+  const visite = assegnaVisite(righe, utili.map((a) => ({ id: a.id, chi: a.chi, start: a.start, dur: a.dur })), vincoli);
+  const libere = fasceLibere(righe, visite);
   const messe = new Set(Object.values(visite).flat().map((v) => v.id));
   const conta = new Map<string, number>();
   for (const a of utili) if (!messe.has(a.id)) conta.set(a.chi || 'appuntamenti senza medico in agenda', (conta.get(a.chi || 'appuntamenti senza medico in agenda') ?? 0) + 1);
@@ -83,7 +85,8 @@ async function via() {
   const GIORNI = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato'];
   console.log(`Banco piano sale · ${GIORNI[new Date(`${giornoArg}T12:00:00`).getDay()]} ${giornoArg} · ${righe.length} stanze, ${libere.length} vuote, ${senzaSala.reduce((t, x) => t + x.n, 0)} visite senza sala, ${piano.daDecidere.length} caselle aperte`);
   if (piano.daDecidere.length) for (const d of piano.daDecidere) console.log(`  casella aperta: ${d.stanza} ${d.dalle}-${d.alle} · ${d.perche}`);
-  console.log(`  in studio: ${presenti.length} · stanze vuote: ${libere.map((x) => x.stanza).join(', ') || 'nessuna'}`);
+  console.log(`  in studio: ${presenti.length}`);
+  for (const l of libere) console.log(`  fascia libera: ${l.stanza} ${l.dalle}-${l.alle}${l.di ? ` (di ${l.di})` : ''}`);
   for (const s of senzaSala) console.log(`  senza sala: ${s.chi} · ${s.n}`);
   console.log('');
   if (soloConti) { console.log('(nessun modello chiesto: solo i conti)'); process.exit(0); }

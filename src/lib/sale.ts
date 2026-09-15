@@ -372,13 +372,13 @@ function corsie(visite: VisitaSala[], min: (t: string) => number): void {
 export function daSistemarePerPrompt(
   piano: Piano,
   presenti: string[],
-  libere: { stanza: string; di: string }[],
+  libere: FasciaLibera[],
   senzaSala: { chi: string; n: number }[]
 ): string {
   const pezzi = [daDeciderePerPrompt(piano, presenti)];
-  pezzi.push(`\nSALE SENZA NESSUNA VISITA OGGI:\n${libere.length
-    ? libere.map((l) => `- ${l.stanza}${l.di ? ` (intestata a ${l.di})` : ''}`).join('\n')
-    : '- nessuna: tutte le stanze hanno almeno una visita'}`);
+  pezzi.push(`\nFASCE SENZA NESSUNA VISITA OGGI:\n${libere.length
+    ? libere.map((l) => `- ${l.stanza} ${l.dalle}-${l.alle}${l.di ? ` (intestata a ${l.di})` : ''}`).join('\n')
+    : '- nessuna: tutte le stanze hanno visite in ogni fascia'}`);
   pezzi.push(`\nCHI LAVORA OGGI SENZA UNA SALA:\n${senzaSala.length
     ? senzaSala.map((s) => `- ${s.chi}: ${s.n} ${s.n === 1 ? 'visita' : 'visite'}`).join('\n')
     : '- nessuno: tutti hanno una stanza'}`);
@@ -480,6 +480,26 @@ function posizioneNome(testo: string, persona: string): number {
 // trenta giorni di agenda vera funziona nel 92 % dei casi per Labor, 87 % per
 // DC, 71 % per Appar. È una DEDUZIONE, e va detta come tale: dove il paziente
 // non vede nessuno, «senza medico» resta la risposta onesta.
+
+// Una fascia senza visite, non una stanza senza visite: la Sala 3 è di Marco
+// fino alle 13 e di Tiziano dopo, e se Marco lavora solo il pomeriggio quella
+// stanza è VUOTA TUTTA LA MATTINA — ma contata per giornata intera non
+// risultava libera mai, e nessuno poteva proporla. Visto il 15.9.2026:
+// Moschovitis lavorava 09:00-10:30 in una sala dello sport mentre la Sala 3
+// era deserta.
+export type FasciaLibera = { stanza: string; di: string; dalle: string; alle: string };
+
+export function fasceLibere(righe: RigaPiano[], visite: Record<string, VisitaSala[]>): FasciaLibera[] {
+  const fuori: FasciaLibera[] = [];
+  for (const r of righe) {
+    const dentro = visite[r.stanza] ?? [];
+    for (const s of r.segmenti) {
+      if (dentro.some((v) => v.inizio >= s.dalle && v.inizio < s.alle)) continue;
+      fuori.push({ stanza: r.stanza, di: s.chi, dalle: s.dalle, alle: s.alle });
+    }
+  }
+  return fuori;
+}
 
 export type VisitaDaDedurre = { id: string; paziente: string; start: string; chi: string };
 

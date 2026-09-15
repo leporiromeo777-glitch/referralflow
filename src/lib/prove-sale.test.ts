@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { applicaModifiche, assegnaVisite, capienza, daSistemarePerPrompt, deduciMedici, escluso, fuoriDalPiano, leggiProposta, prestazioneEsclusa, prestazioniFuoriPiano, soloIn, daDeciderePerPrompt, leggiSale, pianoDelGiorno, salePerPrompt, titolare } from './sale';
+import { applicaModifiche, assegnaVisite, capienza, daSistemarePerPrompt, deduciMedici, escluso, fasceLibere, fuoriDalPiano, leggiProposta, prestazioneEsclusa, prestazioniFuoriPiano, soloIn, daDeciderePerPrompt, leggiSale, pianoDelGiorno, salePerPrompt, titolare } from './sale';
 
 const MD = `
 ## Sala 3
@@ -221,13 +221,13 @@ test('visite: due nella stessa stanza allo stesso momento stanno in corsie diver
 test('quel che si manda al modello dice anche le sale vuote e chi è senza stanza', () => {
   const piano = pianoDelGiorno(leggiSale(MD_VISITE), ['Marco Moccetti'], 'mar');
   const t = daSistemarePerPrompt(piano, ['Marco Moccetti'],
-    [{ stanza: 'Sala 2', di: 'Marco Moccetti' }],
+    [{ stanza: 'Sala 2', di: 'Marco Moccetti', dalle: '07:00', alle: '19:30' }],
     [{ chi: 'Daniela Cassani', n: 10 }]);
-  assert.match(t, /SALE SENZA NESSUNA VISITA OGGI:\n- Sala 2 \(intestata a Marco Moccetti\)/);
+  assert.match(t, /FASCE SENZA NESSUNA VISITA OGGI:\n- Sala 2 07:00-19:30 \(intestata a Marco Moccetti\)/);
   assert.match(t, /CHI LAVORA OGGI SENZA UNA SALA:\n- Daniela Cassani: 10 visite/);
   assert.ok(!t.includes('Paziente'), 'nel testo per il modello non entrano pazienti');
   const vuoto = daSistemarePerPrompt(piano, ['Marco Moccetti'], [], []);
-  assert.match(vuoto, /nessuna: tutte le stanze/);
+  assert.match(vuoto, /nessuna: tutte le stanze hanno visite in ogni fascia/);
   assert.match(vuoto, /nessuno: tutti hanno una stanza/);
 });
 
@@ -408,4 +408,18 @@ test('chi sta «sempre e solo» in una stanza non ne prende altre', () => {
   const l = leggiProposta('ASSEGNA Sala 2 -> Dr.ssa med. Vera Lucia Paiocchi', piano.righe, ['Dr.ssa med. Vera Lucia Paiocchi'], v);
   assert.equal(l.applicabili.length, 0);
   assert.match(l.saltate[0].perche, /sempre e solo in Sala 1/);
+});
+
+test('libera è la fascia, non la stanza: la Sala 3 al mattino conta', () => {
+  const md = `## Sala 3\n- Di: Marco Moccetti\n- Dalle 13:00: Tiziano Moccetti\n- Stato: proposta\n\n## Sala 4\n- Di: François Rego\n- Stato: proposta\n`;
+  const piano = pianoDelGiorno(leggiSale(md), ['Marco Moccetti', 'Tiziano Moccetti', 'François Rego'], 'mar');
+  // Marco lavora solo il pomeriggio, Tiziano riempie la sua fascia
+  const visite = assegnaVisite(piano.righe, [
+    { id: 'a', chi: 'Tiziano Moccetti', start: '13:30', dur: 30 },
+    { id: 'b', chi: 'François Rego', start: '09:00', dur: 30 },
+  ]);
+  const libere = fasceLibere(piano.righe, visite);
+  assert.deepEqual(libere.map((x) => `${x.stanza} ${x.dalle}-${x.alle} ${x.di}`), ['Sala 3 07:00-13:00 Marco Moccetti']);
+  // contata per giornata intera, la Sala 3 non sarebbe mai risultata libera
+  assert.ok((visite['Sala 3'] ?? []).length > 0, 'la stanza ha visite, ma non nella prima fascia');
 });

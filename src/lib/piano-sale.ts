@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { query } from '@/lib/db';
 import { generaOllamaEsito } from '@/lib/ollama';
-import { applicaModifiche, assegnaVisite, daSistemarePerPrompt, deduciMedici, escluso, fuoriDalPiano, leggiSale, pianoDelGiorno, prestazioneEsclusa, prestazioniFuoriPiano, soloIn, type ModificaSala, type PrestazioneFuori, type SoloIn } from '@/lib/sale';
+import { applicaModifiche, assegnaVisite, daSistemarePerPrompt, deduciMedici, fasceLibere, escluso, fuoriDalPiano, leggiSale, pianoDelGiorno, prestazioneEsclusa, prestazioniFuoriPiano, soloIn, type ModificaSala, type PrestazioneFuori, type SoloIn } from '@/lib/sale';
 
 // Preparare il piano delle sale (15.9.2026). Sta qui, e non dentro una rotta,
 // perché lo chiedono in due: il cron di notte e il pulsante «Prepara con
@@ -165,9 +165,7 @@ export async function preparaPianoSale(
       'select modifiche from piano_sale where studio_id = $1 and giorno = $2', [studioId, giornoIso]);
     const righeVere = applicaModifiche(piano.righe, vecchio?.modifiche ?? []);
     const visite = assegnaVisite(righeVere, utili.map((a) => ({ id: a.id, chi: a.chi ?? '', start: a.start, dur: a.dur })), vincoli);
-    const libere = righeVere
-      .filter((r) => !(visite[r.stanza] ?? []).length)
-      .map((r) => ({ stanza: r.stanza, di: r.segmenti.find((x) => x.chi)?.chi ?? '' }));
+    const libere = fasceLibere(righeVere, visite);
     const messe = new Set(Object.values(visite).flat().map((v) => v.id));
     const conta = new Map<string, number>();
     for (const a of utili) if (!messe.has(a.id)) {
