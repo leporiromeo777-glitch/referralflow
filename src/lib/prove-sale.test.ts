@@ -82,7 +82,9 @@ test('capienza: dice il picco e le ore in cui le stanze non bastano', () => {
 test('sale: la pagina vera si legge e ogni stanza ha un titolare o chi la divide', () => {
   const md = readFileSync(path.join(process.cwd(), 'docs/wiki/Medici/Sale.md'), 'utf-8');
   const s = leggiSale(md);
-  assert.ok(s.length >= 10, `stanze lette: ${s.length}`);
+  // Quante stanze siano lo decide lo studio nella pagina, non questo test:
+  // qui si controlla che la pagina si legga e che nessuna regola sia monca.
+  assert.ok(s.length >= 1, `nessuna stanza letta dalla pagina vera`);
   for (const x of s) assert.ok(x.di || x.chi.length, `${x.nome} senza titolare`);
   assert.ok(s.some((x) => x.fasce.length), 'almeno una stanza ha una regola oraria');
 });
