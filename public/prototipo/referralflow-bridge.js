@@ -928,8 +928,13 @@ const RF_AI_NOME = 'Cleo';
    lato per vedere la propria. Si toglie il limite di 1440 px e si stringono i
    margini; le colonne si restringono fino a --cal-min, calcolato su quante
    sono, e solo se proprio non ci stanno la griglia scorre. */
-#app.agenda-larga .content > .page { max-width: none; }   /* agenda e sale: tutta la larghezza */
+#app.agenda-larga .content > .page { max-width: none; }
 #app.agenda-larga .content { padding-left: 14px; padding-right: 14px; }
+/* Le sale stanno in mezzo: più larghe della pagina normale (1440), non senza
+   limite come l'agenda — oltre una certa larghezza le colonne diventano
+   lenzuola e l'occhio deve viaggiare per niente. */
+#app.sale-larga .content > .page { max-width: 1760px; }
+#app.sale-larga .content { padding-left: 20px; padding-right: 20px; }
 .cal { grid-template-columns: 52px repeat(var(--cols, 3), minmax(var(--cal-min, 180px), 1fr)); }
 .cal-head { padding: 9px 10px; }
 .cal.rf-fitta .cal-head { padding: 8px 7px; font-size: 12px; }
@@ -1157,7 +1162,8 @@ render = function () {
   const app = document.getElementById('app');
   if (app) {
     app.classList.toggle('ai-mode', state.route === 'ai');
-    app.classList.toggle('agenda-larga', state.route === 'agenda' || state.route === 'sale');
+    app.classList.toggle('agenda-larga', state.route === 'agenda');
+    app.classList.toggle('sale-larga', state.route === 'sale');
   }
 };
 
@@ -3510,10 +3516,11 @@ PAGES.sale = () => {
   }
   const ora = rfOraRif();
   const inizio = rfMinuti(RF_APERTURA), fine = rfMinuti(RF_CHIUSURA);
-  // Il calendario si prende lo spazio che c'è: l'altezza viene dalla finestra
-  // (meno intestazione, teste delle colonne e didascalie), con un minimo sotto
-  // il quale i riquadri diventerebbero illeggibili.
-  const alto = Math.max(640, (typeof window !== 'undefined' ? window.innerHeight : 1000) - 280);
+  // Il calendario si prende lo spazio che c'è, ma senza esagerare: l'altezza
+  // viene dalla finestra (meno intestazione e teste delle colonne) e non
+  // scende sotto i 780 px — sotto, i riquadri da quindici minuti non si
+  // leggono più.
+  const alto = Math.max(780, (typeof window !== 'undefined' ? window.innerHeight : 1000) - 200);
   const M = alto / (fine - inizio);
   const su = (t) => (rfMinuti(t) - inizio) * M;
   const stati = p.righe.map(r => rfStatoStanza(r, ora));
