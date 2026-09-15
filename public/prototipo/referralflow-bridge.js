@@ -3210,9 +3210,53 @@ window.addEventListener('load', () => {
   font-size:10.5px; line-height:1.25; white-space:nowrap; }
 .rf-cs-v:hover { color:var(--text); box-shadow:0 0 0 1px var(--border-2), inset 2px 0 0 var(--accent); }
 .rf-cs-v.sovra { box-shadow:0 0 0 1px var(--danger-soft), inset 2px 0 0 var(--danger); }
+.rf-sug { position:fixed; z-index:9999; max-width:270px; padding:9px 11px; border-radius:11px; pointer-events:none;
+  background:var(--glass-strong); backdrop-filter:saturate(180%) blur(20px); -webkit-backdrop-filter:saturate(180%) blur(20px);
+  border:1px solid var(--border); box-shadow:var(--shadow-2); font-size:12px; line-height:1.45; color:var(--text); }
+.rf-sug .t { font-weight:650; font-size:13px; letter-spacing:-.01em; }
+.rf-sug .r { color:var(--text-2); margin-top:2px; }
+.rf-sug .r b { color:var(--text); font-weight:600; }
+.rf-sug .c { color:var(--text-3); font-size:11px; margin-top:6px; padding-top:6px; border-top:1px solid var(--border); }
 .rf-cs-adesso { position:absolute; z-index:3; left:52px; right:0; height:2px; background:var(--danger); border-radius:2px; pointer-events:none; }
 .rf-cs-adesso b { position:absolute; left:-44px; top:-8px; font-size:10px; font-weight:700; color:var(--danger); font-variant-numeric:tabular-nums; }
 `; document.head.appendChild(st); })();
+
+/* Un cartellino al passaggio del mouse. Non è il `title` del browser perché
+   quello arriva dopo un secondo e mezzo, non va a capo e non si può leggere
+   in fretta: qui serve capire in un attimo chi è e che cosa è. Il contenuto
+   sta in `data-sug` (già passato da rfEsc), l'ascolto è delegato al documento
+   perché la pagina si ridisegna intera a ogni clic. */
+(function () {
+  let cart = null;
+  const chiudi = () => { if (cart) { cart.remove(); cart = null; } };
+  const dentro = (e) => (e.target && e.target.closest) ? e.target.closest('[data-sug]') : null;
+  let su = null;
+  document.addEventListener('mouseover', (e) => {
+    const t = dentro(e);
+    if (!t || t === su) return;   // passare da un figlio all'altro non lo fa sfarfallare
+    chiudi();
+    su = t;
+    cart = document.createElement('div');
+    cart.className = 'rf-sug';
+    cart.innerHTML = t.getAttribute('data-sug') || '';
+    document.body.appendChild(cart);
+    const r = t.getBoundingClientRect(), c = cart.getBoundingClientRect();
+    let x = r.right + 8, y = r.top - 2;
+    if (x + c.width > window.innerWidth - 8) x = Math.max(8, r.left - c.width - 8);
+    if (y + c.height > window.innerHeight - 8) y = Math.max(8, window.innerHeight - c.height - 8);
+    cart.style.left = `${x}px`; cart.style.top = `${y}px`;
+  });
+  document.addEventListener('mouseout', (e) => {
+    const t = dentro(e);
+    if (!t) return;
+    const verso = e.relatedTarget;
+    if (verso && verso.closest && verso.closest('[data-sug]') === t) return;
+    su = null; chiudi();
+  });
+  document.addEventListener('click', () => { su = null; chiudi(); });
+  document.addEventListener('scroll', () => { su = null; chiudi(); }, true);
+  window.addEventListener('hashchange', () => { su = null; chiudi(); });
+})();
 
 RF.saleQuando = 'ora';   // 'ora' | 'mattina' | 'pomeriggio'
 RF.salaAperta = '';      // la sala con la timeline aperta
@@ -3248,6 +3292,22 @@ function rfTestoVuoto(seg) {
 function rfVisiteSala(stanza) {
   const v = RF.data && RF.data.pianoSale && RF.data.pianoSale.visite;
   return (v && Array.isArray(v[stanza])) ? v[stanza] : [];
+}
+/* Che cosa dice il cartellino di una visita: chi è, che cosa è, di chi è
+   l'agenda, a che punto è — e che la sala è dedotta, perché MediOnline non la
+   scrive. Il testo è già passato da rfEsc: finisce dentro un attributo. */
+function rfSugVisita(v, stanza) {
+  const et = v.motivo || v.etichetta || (v.tipo ? v.tipo : '');
+  const righe = [
+    `<div class="t">${rfEsc(v.paziente || 'Paziente')}</div>`,
+    `<div class="r"><b>${rfEsc(v.inizio)}–${rfEsc(v.fine)}</b>${et ? ` · ${rfEsc(et)}` : ' · appuntamento senza motivo scritto'}</div>`,
+  ];
+  if (v.medico) righe.push(`<div class="r">${rfEsc(rfNomeNudo(v.medico))} · ${rfEsc(stanza)}</div>`);
+  if (v.stato && typeof rfStatoPill === 'function') righe.push(`<div class="r">${rfStatoPill(v.stato)}</div>`);
+  righe.push(`<div class="c">${v.sovra
+    ? 'Sala dedotta: in questo momento il medico ha già tutte le sue stanze occupate. Una fetta in agenda non è sempre una persona dentro una stanza.'
+    : 'Sala dedotta da chi ha la stanza in questa fascia: MediOnline non scrive dove avviene la visita.'}</div>`);
+  return righe.join('');
 }
 function rfVisiteFascia(stanza, seg) {
   return rfVisiteSala(stanza).filter(v => v.inizio >= seg.dalle && v.inizio < seg.alle);
@@ -3460,7 +3520,7 @@ PAGES.sale = () => {
       if (!s.chi && vuoto !== 'da decidere') return '';
       const h = (rfMinuti(s.alle) - rfMinuti(s.dalle)) * M - 3;
       return `<button class="rf-cs-b${s.chi ? '' : ' aperta'}" style="top:${su(s.dalle).toFixed(1)}px;height:${Math.max(20, h).toFixed(1)}px;--h:${rfTinta(s.chi || 'x')}"
-        onclick="rfSalaApri('${rfEsc(r.stanza)}')" title="${rfEsc(r.stanza)} · ${rfEsc(s.dalle)}–${rfEsc(s.alle)} · ${rfEsc(s.chi || s.perche || '')}">
+        onclick="rfSalaApri('${rfEsc(r.stanza)}')" data-sug="${rfEsc(`<div class="t">${rfEsc(r.stanza)}${r.funzione ? ` · ${rfEsc(r.funzione)}` : ''}</div><div class="r"><b>${rfEsc(s.dalle)}–${rfEsc(s.alle)}</b> · ${rfEsc(s.chi ? rfNomeNudo(s.chi) : 'nessuno')}</div><div class="r">${rfEsc(s.perche || '')}${(() => { const q = rfVisiteFascia(r.stanza, s).length; return q ? ` · ${q} ${q === 1 ? 'visita' : 'visite'}` : ''; })()}</div>${r.nota ? `<div class="c">${rfEsc(r.nota)}</div>` : ''}`)}">
         <span class="o">${rfEsc(s.dalle)}–${rfEsc(s.alle)}</span>
         <span class="n">${rfEsc(s.chi ? rfNomeCorto(s.chi) : 'da decidere')}</span>
         ${s.manuale ? '<span class="am">a mano</span>' : ''}</button>`;
@@ -3469,7 +3529,7 @@ PAGES.sale = () => {
       const h = (rfMinuti(v.fine) - rfMinuti(v.inizio)) * M - 1;
       const n = Math.max(1, v.corsie || 1), c = v.corsia || 0;
       return `<button class="rf-cs-v${v.sovra ? ' sovra' : ''}" style="top:${su(v.inizio).toFixed(1)}px;height:${Math.max(7, h).toFixed(1)}px;left:${(c / n * 100).toFixed(2)}%;width:calc(${(100 / n).toFixed(2)}% - 2px)"
-        onclick="event.stopPropagation(); rfApptScheda('${rfEsc(v.id)}')" title="${rfEsc(v.inizio)}–${rfEsc(v.fine)}${v.etichetta ? ` · ${rfEsc(v.etichetta)}` : ''}${n > 1 ? ` · ${n} pazienti insieme in questa sala` : ''} — apri l'appuntamento">${h >= 14 && n === 1 ? `${rfEsc(v.inizio)}${v.etichetta ? ` · ${rfEsc(v.etichetta)}` : ''}` : (h >= 14 ? rfEsc(v.inizio) : '')}</button>`;
+        onclick="event.stopPropagation(); rfApptScheda('${rfEsc(v.id)}')" data-sug="${rfEsc(rfSugVisita(v, r.stanza))}">${h >= 14 && n === 1 ? `${rfEsc(v.inizio)}${v.etichetta ? ` · ${rfEsc(v.etichetta)}` : ''}` : (h >= 14 ? rfEsc(v.inizio) : '')}</button>`;
     }).join('')}</div></div>`;
 
   return `<div class="page-head"><div><h2 class="page-title">Sale e medici</h2>

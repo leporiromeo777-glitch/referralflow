@@ -397,6 +397,23 @@ export async function GET() {
     const vive = apptsOggi.filter((a) => a.status !== 'CANCELLED');
     const visite = assegnaVisite(righe, vive
       .map((a) => ({ id: a.id, chi: doctors[a.doc] ?? '', start: a.start, dur: a.dur, etichetta: a.prestazione || a.tipoPrest || '' })));
+    // Il cartellino che si vede passandoci sopra: chi è il paziente, che cosa
+    // è l'appuntamento, di chi è l'agenda, a che punto è. Sono dati che stanno
+    // già nell'agenda della stessa pagina; qui si attaccano alla visita.
+    const perId = new Map(vive.map((a) => [a.id, a]));
+    for (const lista of Object.values(visite)) {
+      for (const v of lista) {
+        const a = perId.get(v.id);
+        if (!a) continue;
+        Object.assign(v, {
+          paziente: a.nomeBreve || a.nome || '',
+          medico: doctors[a.doc] ?? '',
+          stato: a.statoMol || '',
+          motivo: a.prestazione || a.motivoVero || '',
+          tipo: a.tipoPrest || '',
+        });
+      }
+    }
     // Chi oggi lavora ma non ha una stanza nel piano: le sue visite non si
     // possono mostrare da nessuna parte, e tacerlo sarebbe peggio che dirlo.
     const messe = new Set(Object.values(visite).flat().map((v) => v.id));

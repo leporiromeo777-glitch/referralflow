@@ -17,6 +17,12 @@ async function via() {
       where a.studio_id = $1 and a.starts_at::date = current_date
         and coalesce(a.stato_medionline, '') not in ('annullato', 'scusato')`, [p.studio_id]);
   const visite = assegnaVisite(righe, app.map((a) => ({ id: a.id, chi: a.chi ?? '', start: a.start, dur: a.dur, etichetta: '' })));
+  // Nel banco visivo i pazienti NON servono e non si guardano: nomi finti.
+  let k = 0;
+  for (const lista of Object.values(visite)) for (const v of lista) {
+    const a = app.find((x) => x.id === v.id);
+    Object.assign(v, { paziente: `Paziente ${++k}`, medico: a?.chi ?? '', stato: 'fissato', motivo: 'Visita di controllo', tipo: 'visita' });
+  }
   const presenti = [...new Set(app.map((a) => a.chi).filter(Boolean))];
   const messe = new Set(Object.values(visite).flat().map((v) => v.id));
   const conta = new Map<string, number>();
