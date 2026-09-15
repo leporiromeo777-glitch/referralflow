@@ -56,7 +56,7 @@ async function rfCaricaDati() {
   for (const nome of ['ARCHIVE', 'AUDIT', 'AIJOBS', 'KNOWLEDGE', 'INVOICES']) { try { if (Array.isArray(window[nome])) rfSvuota(window[nome]); } catch { /* assente */ } }
   // Voci per ruolo (14.9.2026: Percorsi, Moduli, Da fatturare). Questa riga
   // vince su qualunque aggiunta fatta al caricamento dello script.
-  const nav = ['home', 'agenda', 'prestazioni', 'patients', 'invianti', 'percorsi', 'reports', 'dittafono', 'documents', 'moduli', 'anonymize', 'inbox', 'ai', 'fatturazione', 'administration'];
+  const nav = ['home', 'agenda', 'sale', 'prestazioni', 'patients', 'invianti', 'percorsi', 'reports', 'dittafono', 'documents', 'moduli', 'anonymize', 'inbox', 'ai', 'fatturazione', 'administration'];
   const nascosti = new Set(Array.isArray(RF.data.moduli_nascosti) ? RF.data.moduli_nascosti : []);
   for (const k of Object.keys(NAV)) NAV[k] = nav.filter(v => (v !== 'fatturazione' || ['secretary', 'org_admin'].includes(k)) && (!nascosti.has(v) || v === 'home' || v === 'administration'));
   render();
@@ -183,7 +183,7 @@ const rfRenderSidebarOrig = renderSidebar;
 // Barra laterale a sezioni (14.9.2026, tema minimale): le voci del ruolo
 // raggruppate con un'etichetta; una voce fuori da ogni gruppo finisce in coda.
 const RF_NAV_GRUPPI = [
-  ['Operatività', ['home', 'agenda', 'prestazioni', 'inbox']],
+  ['Operatività', ['home', 'agenda', 'sale', 'prestazioni', 'inbox']],
   ['Clinico', ['patients', 'invianti', 'percorsi', 'visits', 'reports', 'dittafono', 'documents', 'moduli']],
   ['AI', ['ai', 'anonymize']],
   ['Amministrazione', ['fatturazione', 'communications', 'statistics', 'administration', 'system']],
@@ -300,30 +300,7 @@ PAGES.home = () => {
           <div class="tl">${appts.length ? appts.map(a => `<div class="tl-item ${a.status === 'COMPLETED' ? 'done' : a === next ? 'now' : a.late ? 'warn' : ''} clickable" data-go="#/patients/${a.p}" style="cursor:pointer"><span class="time num">${a.start}<span class="caption" style="display:block;font-weight:400">${a.dur ? `${a.dur}'` : ''}</span></span><div class="b"><div class="n">${rfEsc(fullName(P[a.p]))}</div><div class="s">${rfEsc(a.reason)} · ${rfEsc(DOCTORS[a.doc] || '')}${a.room ? ` · ${rfEsc(a.room)}` : ''}</div></div>${a.status === 'CANCELLED' ? '' : (typeof statusBadge === 'function' ? statusBadge(a.status) : '')}</div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessun appuntamento oggi in agenda.</div>'}</div></div>
       </div>
       <div class="stack">
-        ${(() => {
-          /* Una sola carta per le sale: se il piano del giorno è pronto (lo prepara
-             il cron, nessuno deve chiederlo) si mostra quello; finché non c'è si
-             ricade sull'occupazione letta dal campo «luogo» dell'agenda. */
-          const p = RF.data.pianoSale;
-          const c = RF.data.capienzaSale;
-          const notaCapienza = (() => { if (!c || !c.picco) return ''; const scarso = c.oreOltre && c.oreOltre.length;
-            return `<div class="caption mt-8" style="padding:0 6px">Al massimo oggi <b>${c.picco} appuntamenti insieme</b> su ${c.stanze} stanze.${scarso ? ` Non bastano dalle <b>${rfEsc(c.oreOltre[0])}</b>${c.oreOltre.length > 1 ? ` alle <b>${rfEsc(c.oreOltre[c.oreOltre.length - 1])}</b>` : ''}. Una fetta in agenda non è sempre una persona in stanza: è una capienza da guardare, non un errore.` : ''}</div>`; })();
-          const notaAgende = RF.data.agendeMedico ? `<div class="caption mt-8" style="padding:0 6px">Fuori da questo elenco: <b>${RF.data.agendeMedico} agende di medici</b> — in MediOnline la colonna è l'agenda del medico, non la stanza.</div>` : '';
-          const testa = (destra) => `<div class="card-head"><span class="section-title">Sale oggi</span><span style="display:flex;align-items:center;gap:8px">${destra}<button class="btn sm ghost" data-go="#/administration">Studio ${ICONS.chevR}</button></span></div>`;
-          if (p && Array.isArray(p.righe) && p.righe.length) {
-            const daDecidere = Array.isArray(p.da_decidere) ? p.da_decidere : [];
-            const riga = (r) => `<div class="rf-piano-riga"><span class="s">${rfEsc(r.stanza)}</span><span class="f">${r.segmenti.map(x => x.chi ? `<b>${rfEsc(x.chi)}</b> <span class="o">${rfEsc(x.dalle)}–${rfEsc(x.alle)}</span>` : `<span class="vuoto">${rfEsc(x.perche)}</span>`).join(' · ')}</span></div>`;
-            return `<div class="card">${testa(daDecidere.length ? `<span class="badge count">${daDecidere.length} da decidere</span>` : '<span class="badge success">tutto deciso</span>')}
-              <div class="rf-piano">${p.righe.map(riga).join('')}</div>
-              ${p.proposta ? `<div class="rf-piano-prop"><div class="t">${ICONS.ai} Proposta per le caselle aperte</div><div class="c">${rfEsc(p.proposta).replace(/\n/g, '<br>')}</div><div class="caption mt-8">${rfEsc(p.proposta_da || '')}${p.accettata_at ? ' · accettata' : ' · da confermare, la decisione è di chi è in studio'}</div></div>` : ''}
-              ${notaCapienza}
-              <div class="caption mt-8" style="padding:0 6px">Le regole stanno nella pagina «Medici/Sale»: si cambiano lì, non nel codice.</div></div>`;
-          }
-          return `<div class="card">${testa('')}
-            ${sale.length ? sale.slice(0, 10).map(rigaSala).join('') : `<div class="caption" style="padding:8px 6px">Nessuna sala registrata.${RF.data.agendeMedico ? ` Le ${RF.data.agendeMedico} colonne dell'agenda di oggi sono <b>agende di medici</b>, non luoghi: in MediOnline una colonna è un'agenda, e dove avviene la visita non è scritto da nessuna parte.` : ''} Le sale si registrano in Studio → Sale e apparecchi.</div>`}
-            ${sale.length ? '<div class="caption mt-8" style="padding:0 6px">Barra piena = 8 ore. Il luogo viene dal campo «luogo» dell\'agenda.</div>' : ''}
-            ${notaCapienza}
-            ${notaAgende}</div>`; })()}
+        ${rfCardSale(sale, rigaSala, nMed)}
         <div class="card"><div class="card-head"><span class="section-title">In studio oggi</span><span class="badge count">${nMed}</span></div>
           <div class="list">${nMed ? mediciOggi.map(d => `<div class="rf-persona"><i class="dot success"></i><span>${rfEsc(DOCTORS[d] || d)}${rfEtichettaRuolo(d)}</span><span class="caption" style="margin-left:auto">${appts.filter(a => a.doc === d).length} app.</span></div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessun medico con agenda oggi.</div>'}</div>
           <div class="caption mt-8" style="padding:0 6px">${s.accessi_attivi ?? 0} accessi attivi alla piattaforma</div></div>
@@ -3110,3 +3087,280 @@ window.addEventListener('load', () => {
   void rfCaricaDati();
   setInterval(() => { if (RF.live && state.route !== 'review') void rfCaricaDati(); }, 120000);
 });
+
+/* ---------- Sale e medici (15.9.2026) ---------- */
+// La domanda a cui risponde questo riquadro è una sola: «chi è dove, adesso».
+// Non è un calendario: è la situazione di questo momento più il primo cambio
+// che arriva. Il piano lo fanno le regole della pagina wiki «Medici/Sale» e il
+// cron che lo prepara di notte; qui si disegna, si apre una sala per il
+// dettaglio e si corregge la singola fascia (POST /api/prototipo/piano-sale,
+// vale per oggi soltanto: la regola resta nella pagina).
+(function () { const st = document.createElement('style'); st.textContent = `
+.rf-sale-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:12px; }
+.rf-sale-sint { font-size:12.5px; color:var(--text-2); margin-top:3px; }
+.rf-seg { display:inline-flex; padding:2px; gap:2px; border-radius:999px; background:var(--surface-3); border:1px solid var(--border); flex:none; }
+.rf-seg button { border:0; background:transparent; font:inherit; font-size:11.5px; color:var(--text-2); padding:4px 11px; border-radius:999px; cursor:pointer; transition:.18s var(--ease); }
+.rf-seg button:hover { color:var(--text); }
+.rf-seg button.on { background:var(--surface); color:var(--text); box-shadow:var(--shadow-1); font-weight:650; }
+
+.rf-mappa { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
+.rf-stanza { text-align:left; font:inherit; color:inherit; cursor:pointer; display:flex; flex-direction:column; gap:5px; min-height:94px;
+  border:1px solid var(--border); background:var(--surface-2); border-radius:14px; padding:10px 11px; transition:.18s var(--ease); }
+.rf-stanza:hover { border-color:var(--border-2); transform:translateY(-1px); box-shadow:var(--shadow-1); }
+.rf-stanza.sel { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+.rf-stanza .t { display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:650; letter-spacing:-.01em; }
+.rf-stanza .t .p { width:7px; height:7px; border-radius:50%; background:var(--text-3); flex:none; }
+.rf-stanza .m { display:flex; align-items:center; gap:7px; font-size:12.5px; line-height:1.25; }
+.rf-stanza .m .nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rf-stanza .m.vuota { color:var(--text-2); font-style:italic; }
+.rf-stanza .s { font-size:11.5px; color:var(--text-2); line-height:1.35; margin-top:auto; }
+.rf-stanza .s b { font-weight:600; color:var(--text); }
+.rf-stanza .f { font-size:11px; color:var(--text-3); text-transform:uppercase; letter-spacing:.04em; }
+.rf-stanza .amano { font-size:10px; font-weight:650; color:var(--accent-text); }
+.rf-stanza.st-occupata { background:var(--accent-soft); border-color:transparent; }
+.rf-stanza.st-occupata .t .p { background:var(--accent); }
+.rf-stanza.st-libera { background:var(--success-soft); border-color:transparent; }
+.rf-stanza.st-libera .t .p { background:var(--success); }
+.rf-stanza.st-cambio { background:var(--warning-soft); border-color:transparent; }
+.rf-stanza.st-cambio .t .p { background:var(--warning); }
+.rf-stanza.st-aperta { background:var(--warning-soft); border-color:transparent; }
+.rf-stanza.st-aperta .t .p { background:var(--warning); }
+.rf-stanza.st-spenta { background:var(--surface-3); border-color:transparent; opacity:.72; }
+
+.rf-av { width:22px; height:22px; border-radius:50%; display:grid; place-items:center; flex:none;
+  font-size:9.5px; font-weight:700; letter-spacing:.02em; background:hsl(var(--h) 62% 50% / .2); color:hsl(var(--h) 55% 32%); }
+.rf-av.g { width:26px; height:26px; font-size:11px; }
+:root[data-theme="dark"] .rf-av { color:hsl(var(--h) 65% 76%); }
+
+.rf-cambi { margin-top:12px; padding-top:10px; border-top:1px solid var(--border); }
+.rf-cambi .tit { font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-3); font-weight:650; margin-bottom:6px; }
+.rf-cambio { display:flex; align-items:center; gap:8px; padding:3px 2px; font-size:12.5px; }
+.rf-cambio .ora { width:44px; flex:none; color:var(--text-2); font-variant-numeric:tabular-nums; }
+.rf-cambio .dove { color:var(--text-2); margin-left:auto; font-size:11.5px; }
+
+.rf-sala-pan { margin-top:10px; border:1px solid var(--border); border-radius:14px; padding:12px 13px;
+  background:var(--glass-strong); backdrop-filter:saturate(180%) blur(20px); -webkit-backdrop-filter:saturate(180%) blur(20px); box-shadow:var(--shadow-1); }
+.rf-sala-pan .ph { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.rf-sala-pan .ph .nome { font-size:14px; font-weight:650; letter-spacing:-.01em; }
+.rf-sala-pan .x { border:0; background:transparent; color:var(--text-3); font-size:16px; line-height:1; cursor:pointer; padding:2px 4px; border-radius:6px; }
+.rf-sala-pan .x:hover { background:var(--surface-3); color:var(--text); }
+.rf-sala-riga { display:flex; align-items:center; gap:8px; margin-top:9px; font-size:12.5px; }
+.rf-sala-riga .et { font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-3); width:62px; flex:none; }
+.rf-sala-riga .or { color:var(--text-2); font-variant-numeric:tabular-nums; margin-left:auto; font-size:11.5px; }
+.rf-sala-pan .nota { font-size:11.5px; color:var(--text-2); line-height:1.5; margin-top:9px; font-style:italic; }
+.rf-sala-azioni { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:11px; padding-top:10px; border-top:1px solid var(--border); }
+.rf-sala-azioni select { min-width:150px; }
+
+.rf-barra { display:flex; height:26px; border-radius:8px; overflow:hidden; background:var(--surface-3); }
+.rf-barra span { display:flex; align-items:center; padding:0 7px; font-size:11px; font-weight:600; color:hsl(var(--h) 55% 30%); background:hsl(var(--h) 62% 50% / .22); border-right:1px solid var(--surface); overflow:hidden; white-space:nowrap; }
+.rf-barra span.vuoto { background:transparent; color:var(--text-3); font-weight:400; font-style:italic; }
+:root[data-theme="dark"] .rf-barra span { color:hsl(var(--h) 65% 78%); }
+.rf-piano-tab { display:grid; grid-template-columns:120px minmax(0,1fr); gap:10px; align-items:center; padding:7px 0; border-top:1px solid var(--border); }
+.rf-piano-tab:first-child { border-top:0; }
+.rf-piano-tab .sn { font-size:12.5px; font-weight:650; }
+.rf-piano-tab .sf { font-size:10.5px; color:var(--text-3); text-transform:uppercase; letter-spacing:.04em; }
+`; document.head.appendChild(st); })();
+
+RF.saleQuando = 'ora';   // 'ora' | 'mattina' | 'pomeriggio'
+RF.salaAperta = '';      // la stanza col pannello aperto
+RF.saleErrore = '';
+
+const RF_APERTURA = '07:00', RF_CHIUSURA = '19:30';
+
+function rfOraOra() { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
+function rfOraRif() {
+  if (RF.saleQuando === 'mattina') return '09:00';
+  if (RF.saleQuando === 'pomeriggio') return '15:00';
+  const o = rfOraOra();
+  return o < RF_APERTURA ? RF_APERTURA : o >= RF_CHIUSURA ? '19:00' : o;
+}
+function rfMinuti(t) { const [h, m] = String(t || '0:0').split(':').map(Number); return h * 60 + m; }
+/* Il nome senza titoli: «Prof. Dr. med. Tiziano Moccetti» → «Tiziano Moccetti». */
+function rfNomeNudo(n) { return String(n || '').replace(/\b(prof|dr|dott|med|ssa)\b\.?/gi, '').replace(/\s+/g, ' ').trim(); }
+function rfCognome(n) { const p = rfNomeNudo(n).split(' ').filter(Boolean); return p.length > 1 ? p[p.length - 1] : (p[0] || ''); }
+function rfIniziali(n) { const p = rfNomeNudo(n).split(' ').filter(Boolean); return ((p[0] || '')[0] || '') + (p.length > 1 ? (p[p.length - 1][0] || '') : '') || '?'; }
+/* Una tinta stabile per persona: serve a riconoscerla al volo, non a dire altro. */
+function rfTinta(n) { const s = rfNomeNudo(n).toLowerCase(); let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360; return h; }
+function rfAvatar(nome, grande) { return `<span class="rf-av${grande ? ' g' : ''}" style="--h:${rfTinta(nome)}" title="${rfEsc(nome)}">${rfEsc(rfIniziali(nome).toUpperCase())}</span>`; }
+
+function rfSegAllOra(riga, ora) {
+  const segs = riga.segmenti || [];
+  return segs.find(s => ora >= s.dalle && ora < s.alle) || segs[segs.length - 1] || null;
+}
+/* Il primo cambio di persona dopo questa fascia, se c'è. */
+function rfProssimoCambio(riga, seg) {
+  const segs = riga.segmenti || [];
+  const i = segs.indexOf(seg);
+  for (let k = i + 1; k < segs.length; k++) if (segs[k].chi !== seg.chi) return segs[k];
+  return null;
+}
+function rfStatoStanza(riga, ora) {
+  const seg = rfSegAllOra(riga, ora);
+  if (!seg) return { classe: 'st-spenta', testo: 'Nessuna fascia' };
+  const dopo = rfProssimoCambio(riga, seg);
+  const vicino = dopo && rfMinuti(dopo.dalle) - rfMinuti(ora) <= 60 && rfMinuti(dopo.dalle) >= rfMinuti(ora);
+  const aperta = !seg.chi && /^condivisa fra/.test(seg.perche || '');
+  const maiUsata = (riga.segmenti || []).every(s => !s.chi);
+  const classe = vicino ? 'st-cambio' : seg.chi ? 'st-occupata' : aperta ? 'st-aperta' : maiUsata ? 'st-spenta' : 'st-libera';
+  const testo = seg.chi ? 'Occupata' : aperta ? 'Da decidere' : maiUsata ? 'Non usata oggi' : 'Libera';
+  return { classe, testo, seg, dopo, vicino, aperta };
+}
+
+/* Tutti i cambi di persona da adesso in poi, in ordine. */
+function rfCambiDelGiorno(righe, ora) {
+  const fuori = [];
+  for (const r of righe) {
+    const segs = r.segmenti || [];
+    for (let i = 1; i < segs.length; i++) {
+      if (segs[i].chi === segs[i - 1].chi) continue;
+      if (segs[i].dalle <= ora) continue;
+      fuori.push({ ora: segs[i].dalle, stanza: r.stanza, chi: segs[i].chi, prima: segs[i - 1].chi });
+    }
+  }
+  return fuori.sort((a, b) => a.ora.localeCompare(b.ora) || a.stanza.localeCompare(b.stanza));
+}
+
+function rfSaleQuando(q) { RF.saleQuando = q; render(); }
+function rfSalaApri(nome) { RF.salaAperta = RF.salaAperta === nome ? '' : nome; RF.saleErrore = ''; render(); }
+function rfSalaChiudi() { RF.salaAperta = ''; render(); }
+
+async function rfSalePost(corpo) {
+  try {
+    const r = await fetch('/api/prototipo/piano-sale', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.errore) { RF.saleErrore = j.errore || 'Non ha funzionato.'; render(); return; }
+    RF.saleErrore = '';
+    await rfCaricaDati();
+  } catch { RF.saleErrore = 'Il server non risponde.'; render(); }
+}
+function rfSalaAssegna(stanza, dalle) {
+  const sel = document.getElementById('rf-sala-chi');
+  rfSalePost({ azione: 'assegna', stanza, dalle, chi: sel ? sel.value : '' });
+}
+function rfSalaRipristina(stanza, dalle) { rfSalePost({ azione: 'ripristina', stanza, dalle }); }
+function rfPianoAccetta() { rfSalePost({ azione: 'accetta' }); }
+
+/* Il pannello di una sala: adesso, il prossimo, la nota, e le due cose che si
+   possono fare. «Cambia medico» vale per oggi; di chi è la stanza si scrive
+   nella pagina wiki, non qui. */
+function rfSalaPannello(riga, ora) {
+  const p = RF.data.pianoSale || {};
+  const st = rfStatoStanza(riga, ora);
+  const seg = st.seg;
+  const dopo = st.dopo;
+  const presenti = Array.isArray(p.presenti) ? p.presenti : [];
+  const opzioni = [...new Set([...presenti, ...(seg && seg.chi ? [seg.chi] : [])])].sort((a, b) => rfCognome(a).localeCompare(rfCognome(b)));
+  const inProposta = (p.da_decidere || []).some(d => d.stanza === riga.stanza);
+  return `<div class="rf-sala-pan">
+    <div class="ph"><div><div class="nome">${rfEsc(riga.stanza)}</div>${riga.funzione ? `<div class="sf">${rfEsc(riga.funzione)}</div>` : ''}</div>
+      <button class="x" onclick="rfSalaChiudi()" title="Chiudi">✕</button></div>
+    <div class="rf-sala-riga"><span class="et">Adesso</span>${seg && seg.chi ? `${rfAvatar(seg.chi)}<span>${rfEsc(seg.chi)}</span>` : `<span style="color:var(--text-2);font-style:italic">${rfEsc(st.testo.toLowerCase())}</span>`}${seg ? `<span class="or">${rfEsc(seg.dalle)}–${rfEsc(seg.alle)}${seg.perche ? ` · ${rfEsc(seg.perche)}` : ''}</span>` : ''}</div>
+    ${dopo ? `<div class="rf-sala-riga"><span class="et">Poi</span>${dopo.chi ? `${rfAvatar(dopo.chi)}<span>${rfEsc(dopo.chi)}</span>` : '<span style="color:var(--text-2);font-style:italic">si libera</span>'}<span class="or">${rfEsc(dopo.dalle)}–${rfEsc(dopo.alle)}</span></div>` : ''}
+    ${riga.nota ? `<div class="nota">${rfEsc(riga.nota)}</div>` : ''}
+    ${inProposta && p.proposta ? `<div class="rf-piano-prop" style="margin-top:10px"><div class="t">${ICONS.ai} Proposta per le caselle aperte</div><div class="c">${rfEsc(p.proposta).replace(/\n/g, '<br>')}</div><div class="caption mt-8">${rfEsc(p.proposta_da || '')}${p.accettata_at ? ' · accettata' : ' · da confermare, la decisione è di chi è in studio'}</div>${p.accettata_at ? '' : '<button class="btn sm mt-8" onclick="rfPianoAccetta()">Confermo la proposta</button>'}</div>` : ''}
+    ${seg ? `<div class="rf-sala-azioni">
+      <select class="input sm" id="rf-sala-chi">${opzioni.map(n => `<option value="${rfEsc(n)}"${seg.chi === n ? ' selected' : ''}>${rfEsc(n)}</option>`).join('')}<option value=""${seg.chi ? '' : ' selected'}>Nessuno · sala libera</option></select>
+      <button class="btn sm primary" onclick="rfSalaAssegna('${rfEsc(riga.stanza)}', '${rfEsc(seg.dalle)}')">Applica per oggi</button>
+      ${seg.manuale ? `<button class="btn sm ghost" onclick="rfSalaRipristina('${rfEsc(riga.stanza)}', '${rfEsc(seg.dalle)}')">Torna alla regola</button>` : ''}
+    </div>
+    <div class="caption mt-8">Vale per la fascia ${rfEsc(seg.dalle)}–${rfEsc(seg.alle)} di oggi. Di chi è la stanza si scrive nella pagina «Medici/Sale».</div>` : ''}
+    ${RF.saleErrore ? `<div class="caption mt-8" style="color:var(--danger)">${rfEsc(RF.saleErrore)}</div>` : ''}
+  </div>`;
+}
+
+/* Il riquadro della Home. `sale` e `rigaSala` servono solo al ripiego: finché
+   il piano del giorno non c'è, si mostra l'occupazione letta dall'agenda. */
+function rfCardSale(sale, rigaSala, nMed) {
+  const p = RF.data.pianoSale;
+  const c = RF.data.capienzaSale;
+  const notaCapienza = (() => { if (!c || !c.picco) return ''; const scarso = c.oreOltre && c.oreOltre.length;
+    return `<div class="caption mt-8" style="padding:0 6px">Al massimo oggi <b>${c.picco} appuntamenti insieme</b> su ${c.stanze} stanze.${scarso ? ` Non bastano dalle <b>${rfEsc(c.oreOltre[0])}</b>${c.oreOltre.length > 1 ? ` alle <b>${rfEsc(c.oreOltre[c.oreOltre.length - 1])}</b>` : ''}. Una fetta in agenda non è sempre una persona in stanza: è una capienza da guardare, non un errore.` : ''}</div>`; })();
+  if (!p || !Array.isArray(p.righe) || !p.righe.length) {
+    const lista = Array.isArray(sale) ? sale : [];
+    return `<div class="card"><div class="card-head"><span class="section-title">Sale e medici</span><button class="btn sm ghost" data-go="#/administration">Studio ${ICONS.chevR}</button></div>
+      ${lista.length ? lista.slice(0, 10).map(rigaSala).join('') : `<div class="caption" style="padding:8px 6px">Nessuna sala registrata. Le sale si registrano in Studio → Sale e apparecchi.</div>`}
+      ${lista.length ? '<div class="caption mt-8" style="padding:0 6px">Il piano di oggi non è ancora pronto: questa è l\'occupazione letta dal campo «luogo» dell\'agenda.</div>' : ''}
+      ${notaCapienza}</div>`;
+  }
+  const ora = rfOraRif();
+  const righe = p.righe;
+  const stati = righe.map(r => ({ r, st: rfStatoStanza(r, ora) }));
+  const occupate = stati.filter(x => x.st.seg && x.st.seg.chi).length;
+  const aperte = stati.filter(x => x.st.aperta).length;
+  const cambi = rfCambiDelGiorno(righe, ora).slice(0, 3);
+  const fuoriOrario = RF.saleQuando === 'ora' && (rfOraOra() < RF_APERTURA || rfOraOra() >= RF_CHIUSURA);
+  const bottone = (k, et) => `<button class="${RF.saleQuando === k ? 'on' : ''}" onclick="rfSaleQuando('${k}')">${et}</button>`;
+  const tessera = ({ r, st }) => {
+    const seg = st.seg;
+    const sotto = seg && st.dopo
+      ? (st.dopo.chi ? `fino alle <b>${rfEsc(seg.alle)}</b> · poi ${rfEsc(rfCognome(st.dopo.chi))}` : `fino alle <b>${rfEsc(seg.alle)}</b> · poi libera`)
+      : (seg && seg.chi ? `fino alle <b>${rfEsc(seg.alle)}</b>` : '');
+    return `<button class="rf-stanza ${st.classe}${RF.salaAperta === r.stanza ? ' sel' : ''}" onclick="rfSalaApri('${rfEsc(r.stanza)}')" title="${rfEsc(r.stanza)} · ${rfEsc(st.testo)}">
+      <div class="t"><i class="p"></i>${rfEsc(r.stanza)}${seg && seg.manuale ? '<span class="amano" style="margin-left:auto">a mano</span>' : ''}</div>
+      ${seg && seg.chi ? `<div class="m">${rfAvatar(seg.chi)}<span class="nm">${rfEsc(rfNomeNudo(seg.chi))}</span></div>` : `<div class="m vuota">${rfEsc(st.testo)}</div>`}
+      ${r.funzione ? `<div class="f">${rfEsc(r.funzione)}</div>` : ''}
+      ${sotto ? `<div class="s">${sotto}</div>` : ''}
+    </button>`;
+  };
+  const apertaOra = righe.find(r => r.stanza === RF.salaAperta);
+  return `<div class="card">
+    <div class="rf-sale-head">
+      <div><span class="section-title">Sale e medici</span>
+        <div class="rf-sale-sint">${nMed} ${nMed === 1 ? 'medico' : 'medici'} in studio · ${occupate}/${righe.length} sale occupate${aperte ? ` · ${aperte} da decidere` : ''}</div></div>
+      <div class="rf-seg">${bottone('ora', 'Ora')}${bottone('mattina', 'Mattina')}${bottone('pomeriggio', 'Pomeriggio')}</div>
+    </div>
+    ${fuoriOrario ? '<div class="caption" style="padding:0 2px 8px">Lo studio è chiuso: questa è la giornata di oggi alle 19:00.</div>' : ''}
+    <div class="rf-mappa">${stati.map(tessera).join('')}</div>
+    ${apertaOra ? rfSalaPannello(apertaOra, ora) : ''}
+    ${cambi.length ? `<div class="rf-cambi"><div class="tit">Prossimi cambi</div>
+      ${cambi.map(x => `<div class="rf-cambio"><span class="ora num">${rfEsc(x.ora)}</span>${x.chi ? `${rfAvatar(x.chi)}<span>${rfEsc(rfNomeNudo(x.chi))}</span>` : '<span style="color:var(--text-2);font-style:italic">si libera</span>'}<span class="dove">${rfEsc(x.stanza)}</span></div>`).join('')}</div>` : ''}
+    ${aperte && p.proposta && !RF.salaAperta ? `<div class="caption mt-8" style="padding:0 2px">${aperte === 1 ? 'Una sala è condivisa' : `${aperte} sale sono condivise`} e Cleo ha una proposta: apri la sala in arancione per leggerla.</div>` : ''}
+    <div class="row mt-16" style="justify-content:space-between;align-items:center;gap:8px">
+      <button class="btn sm ghost" data-go="#/sale">Vedi pianificazione completa ${ICONS.chevR}</button>
+      ${p.accettata_at ? '<span class="badge success">piano confermato</span>' : ''}</div>
+  </div>`;
+}
+
+/* La pianificazione completa: la giornata intera, stanza per stanza. */
+if (typeof NAV_META !== 'undefined') NAV_META.sale = ['Sale', 'door'];
+PAGES.sale = () => {
+  if (!RF.live) return rfPaginaPiattaforma('Sale', 'Di chi è quale stanza, oggi');
+  const p = RF.data.pianoSale;
+  const c = RF.data.capienzaSale;
+  if (!p || !Array.isArray(p.righe) || !p.righe.length) {
+    return `<div class="page-head"><div><h2 class="page-title">Sale e medici</h2><div class="page-sub">Il piano di oggi</div></div></div>
+      <div class="card"><p class="meta" style="margin:0">Il piano di oggi non è ancora pronto. Lo prepara il giro dell'agenda; le regole stanno nella pagina wiki <code>Medici/Sale</code>.</p></div>`;
+  }
+  const ora = rfOraRif();
+  const inizio = rfMinuti(RF_APERTURA), fine = rfMinuti(RF_CHIUSURA);
+  const barra = (r) => `<div class="rf-barra">${(r.segmenti || []).map(s => {
+    const w = Math.max(0, (rfMinuti(s.alle) - rfMinuti(s.dalle)) / (fine - inizio) * 100);
+    return `<span class="${s.chi ? '' : 'vuoto'}" style="width:${w.toFixed(2)}%;--h:${rfTinta(s.chi || 'x')}" title="${rfEsc(s.dalle)}–${rfEsc(s.alle)} · ${rfEsc(s.chi || s.perche || '')}">${rfEsc(s.chi ? rfCognome(s.chi) : s.perche === 'libera' ? 'libera' : '')}</span>`;
+  }).join('')}</div>`;
+  const cambi = rfCambiDelGiorno(p.righe, ora);
+  const aMano = (p.modifiche || []).length;
+  return `<div class="page-head"><div><h2 class="page-title">Sale e medici</h2>
+      <div class="page-sub">Il piano di oggi · ${p.righe.length} stanze${(p.da_decidere || []).length ? ` · ${p.da_decidere.length} da decidere` : ''}</div></div>
+    <div class="actions"><button class="btn" data-go="#/home">${ICONS.chevR} Torna alla Home</button></div></div>
+  <div class="grid grid-main-side">
+    <div class="stack">
+      <div class="card"><div class="card-head"><span class="section-title">La giornata, stanza per stanza</span><span class="caption">${RF_APERTURA} – ${RF_CHIUSURA}</span></div>
+        ${p.righe.map(r => `<div class="rf-piano-tab"><div><div class="sn">${rfEsc(r.stanza)}</div>${r.funzione ? `<div class="sf">${rfEsc(r.funzione)}</div>` : ''}</div>${barra(r)}</div>`).join('')}
+        <div class="caption mt-16">Le regole stanno nella pagina wiki <code>Medici/Sale</code> (SilverBullet sulla rete dello studio, porta 3400): si cambia la pagina, non il codice. La piattaforma la rilegge entro 5 minuti.</div></div>
+      ${p.proposta ? `<div class="card"><div class="card-head"><span class="section-title">${ICONS.ai} Proposta per le caselle aperte</span>${p.accettata_at ? '<span class="badge success">confermata</span>' : '<span class="badge warning">da confermare</span>'}</div>
+        <p class="meta" style="margin:0;line-height:1.6">${rfEsc(p.proposta).replace(/\n/g, '<br>')}</p>
+        <div class="caption mt-8">${rfEsc(p.proposta_da || '')} · la decisione resta di chi è in studio.</div>
+        ${p.accettata_at ? '' : '<div class="row mt-16"><button class="btn primary" onclick="rfPianoAccetta()">Confermo la proposta</button></div>'}</div>` : ''}
+    </div>
+    <div class="stack">
+      <div class="card"><div class="card-head"><span class="section-title">Prossimi cambi</span><span class="badge count">${cambi.length}</span></div>
+        ${cambi.length ? cambi.map(x => `<div class="rf-cambio"><span class="ora num">${rfEsc(x.ora)}</span>${x.chi ? `${rfAvatar(x.chi)}<span>${rfEsc(rfNomeNudo(x.chi))}</span>` : '<span style="color:var(--text-2);font-style:italic">si libera</span>'}<span class="dove">${rfEsc(x.stanza)}</span></div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessun cambio da qui a fine giornata.</div>'}</div>
+      ${c && c.picco ? `<div class="card"><div class="card-head"><span class="section-title">Capienza</span></div>
+        <p class="meta" style="margin:0;line-height:1.55">Al massimo oggi <b>${c.picco} appuntamenti insieme</b> su ${c.stanze} stanze.${c.oreOltre && c.oreOltre.length ? ` Non bastano dalle <b>${rfEsc(c.oreOltre[0])}</b>${c.oreOltre.length > 1 ? ` alle <b>${rfEsc(c.oreOltre[c.oreOltre.length - 1])}</b>` : ''}.` : ''}</p>
+        <div class="caption mt-8">Una fetta in agenda vuol dire «pratica aperta», non «persona dentro una stanza»: è una capienza da guardare, non un errore.</div></div>` : ''}
+      ${aMano ? `<div class="card"><div class="card-head"><span class="section-title">Corretto a mano oggi</span><span class="badge count">${aMano}</span></div>
+        <div class="list">${(p.modifiche || []).map(m => `<div class="list-item"><div class="grow"><div class="name" style="font-size:13px">${rfEsc(m.stanza)} dalle ${rfEsc(m.dalle)}</div><div class="sub">${m.chi ? rfEsc(m.chi) : 'sala libera'}${m.da ? ` · ${rfEsc(m.da)}` : ''}</div></div></div>`).join('')}</div>
+        <div class="caption mt-8">Valgono per oggi. Domani il piano riparte dalle regole della pagina.</div></div>` : ''}
+    </div>
+  </div>`;
+};

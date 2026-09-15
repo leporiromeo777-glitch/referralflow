@@ -6,7 +6,8 @@ import { costruisciRevisione } from '@/lib/prototipo-revisione';
 import { tipoEsame } from '@/lib/briefing-regole';
 import { estraiTerapia } from '@/lib/referti-terapia';
 import { leggiTitolo, nomePulito } from '@/lib/agenda-titolo';
-import { capienza, leggiSale, titolare } from '@/lib/sale';
+import { capienza, leggiSale, titolare, applicaModifiche } from '@/lib/sale';
+import type { ModificaSala, RigaPiano } from '@/lib/sale';
 import { abbinaPrestazioneAgenda, tipoDaTesto, type VoceCatalogo } from '@/lib/prestazioni';
 import { lettereRitardoGrezzo } from '@/lib/procedure';
 
@@ -381,10 +382,16 @@ export async function GET() {
   // La capienza: quante stanze servirebbero adesso e quando non bastano.
   const minuti = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
   // Il piano delle sale del giorno, preparato dal cron: qui si legge e basta.
-  const [pianoOggi] = await query<{ righe: unknown; da_decidere: unknown; proposta: string | null; proposta_da: string | null; accettata_at: string | null }>(
-    `select righe, da_decidere, proposta, proposta_da, accettata_at::text from piano_sale where studio_id = $1 and giorno = current_date`,
+  const [pianoOggi] = await query<{ righe: RigaPiano[]; da_decidere: unknown; proposta: string | null; proposta_da: string | null; accettata_at: string | null; modifiche: ModificaSala[] }>(
+    `select righe, da_decidere, proposta, proposta_da, accettata_at::text, modifiche from piano_sale where studio_id = $1 and giorno = current_date`,
     [sid]
   );
+  // Le correzioni a mano si applicano qui, una volta sola: chiunque legga il
+  // piano vede la stessa giornata, e la fascia corretta si riconosce
+  // (`manuale`). Le regole della pagina wiki restano quelle.
+  const piano = pianoOggi
+    ? { ...pianoOggi, righe: applicaModifiche(pianoOggi.righe ?? [], pianoOggi.modifiche ?? []), presenti: presentiOggi }
+    : null;
   const cap = capienza(
     apptsOggi.map((a) => ({ inizio: minuti(a.start), fine: minuti(a.start) + a.dur })),
     sale.length
@@ -405,7 +412,7 @@ export async function GET() {
   };
   return NextResponse.json({
     utente: { role: RUOLO[session.role] ?? 'secretary', name: nome, initials: iniz, studio: session.studioNome, email: session.email },
-    today, doctors, patients, appts: apptsOggi, agenda, tasks, reports, documents, inbox, audioInbox, stats, sale, agendeMedico, ruoliMedici, pianoSale: pianoOggi ?? null, capienzaSale: { ...cap, stanze: sale.length },
+    today, doctors, patients, appts: apptsOggi, agenda, tasks, reports, documents, inbox, audioInbox, stats, sale, agendeMedico, ruoliMedici, pianoSale: piano, capienzaSale: { ...cap, stanze: sale.length },
     risorse: risorse.map((r) => ({ id: r.id, tipo: r.tipo, nome: r.nome, posti: r.posti })),
     catalogo, coloriMedici, daChiamare, moduli_nascosti: stud?.moduli_nascosti ?? [],
   });

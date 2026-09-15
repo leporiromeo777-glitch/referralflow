@@ -973,3 +973,6 @@ create table if not exists piano_sale (
   updated_at   timestamptz not null default now()
 );
 create unique index if not exists piano_sale_giorno_idx on piano_sale (studio_id, giorno);
+
+-- 052: correzioni a mano al piano delle sale, valide per il solo giorno.
+alter table piano_sale add column if not exists modifiche jsonb not null default '[]'::jsonb;

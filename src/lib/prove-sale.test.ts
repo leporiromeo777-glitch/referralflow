@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { capienza, daDeciderePerPrompt, leggiSale, pianoDelGiorno, salePerPrompt, titolare } from './sale';
+import { applicaModifiche, capienza, daDeciderePerPrompt, leggiSale, pianoDelGiorno, salePerPrompt, titolare } from './sale';
 
 const MD = `
 ## Sala 3
@@ -19,6 +19,7 @@ const MD = `
 
 ## Appar
 - Di: Vera Paiocchi
+- Funzione: Apparecchi
 - Stato: validato
 `;
 
@@ -32,6 +33,14 @@ test('sale: il parser legge titolare, fascia oraria, giorni, chi divide e stato'
   assert.deepEqual(tre.giorni, ['lun', 'mar', 'mer', 'gio']);
   assert.equal(s[2].stato, 'validato');
   assert.deepEqual(s[1].chi, ['Davide Girola', 'Georgios Moschovitis', 'Miko Pedrotti']);
+});
+
+test('sale: «Funzione» dice a che serve la stanza e arriva fino al piano del giorno', () => {
+  const s = leggiSale(MD);
+  assert.equal(s[2].funzione, 'Apparecchi');
+  assert.equal(s[0].funzione, '', 'una stanza senza «Funzione» non se la inventa');
+  const piano = pianoDelGiorno(s, ['Vera Paiocchi'], 'mar');
+  assert.equal(piano.righe.find((r) => r.stanza === 'Appar')?.funzione, 'Apparecchi');
 });
 
 test('sala 3: di Marco la mattina, di Tiziano dalle 13, e di Marco tutto il venerdì', () => {
@@ -114,4 +123,29 @@ test('piano: quello che si manda al modello ha il già deciso, le caselle aperte
   assert.ok(t.includes('IN STUDIO OGGI: Dr. Davide Girola, Dr. med. Miko Pedrotti'));
   assert.ok(t.includes('GIÀ DECISO DALLE REGOLE:'));
   assert.ok(t.includes('Sala 5'));
+});
+
+test('correzioni a mano: cambiano la fascia del giorno, non la regola', () => {
+  const piano = pianoDelGiorno(leggiSale(MD), ['Marco Moccetti', 'Tiziano Moccetti'], 'mar');
+  const prima = piano.righe.find((r) => r.stanza === 'Sala 3')!;
+  assert.equal(prima.segmenti[0].chi, 'Marco Moccetti');
+  const dopo = applicaModifiche(piano.righe, [{ stanza: 'Sala 3', dalle: '07:00', chi: 'Vera Paiocchi', da: 'Anna' }]);
+  const tre = dopo.find((r) => r.stanza === 'Sala 3')!;
+  assert.equal(tre.segmenti[0].chi, 'Vera Paiocchi');
+  assert.equal(tre.segmenti[0].manuale, true);
+  assert.match(tre.segmenti[0].perche, /a mano da Anna/);
+  assert.equal(tre.segmenti[1].chi, 'Tiziano Moccetti', 'le altre fasce non si toccano');
+  assert.equal(piano.righe.find((r) => r.stanza === 'Sala 3')!.segmenti[0].chi, 'Marco Moccetti', 'il piano di partenza resta intatto');
+});
+
+test('correzioni a mano: «chi» vuoto libera la sala, e l\'ultima correzione vince', () => {
+  const piano = pianoDelGiorno(leggiSale(MD), ['Vera Paiocchi'], 'mar');
+  const dopo = applicaModifiche(piano.righe, [
+    { stanza: 'Appar', dalle: '07:00', chi: 'Marco Moccetti' },
+    { stanza: 'Appar', dalle: '07:00', chi: '' },
+  ]);
+  const a = dopo.find((r) => r.stanza === 'Appar')!.segmenti[0];
+  assert.equal(a.chi, '');
+  assert.equal(a.manuale, true);
+  assert.match(a.perche, /liberata a mano/);
 });

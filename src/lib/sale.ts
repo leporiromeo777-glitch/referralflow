@@ -22,6 +22,7 @@ export type Sala = {
   fasce: FasciaSala[];   // «Dalle 13:00: Tiziano Moccetti»
   chi: string[];         // i nomi che se la dividono, quando è condivisa
   giorni: string[];      // 'lun'…'ven'; vuoto = tutti
+  funzione: string;      // a che serve la stanza: «ecografia», «laboratorio»…
   nota: string;
   stato: string;         // 'proposta' | 'validato'
 };
@@ -35,7 +36,7 @@ export function leggiSale(markdown: string): Sala[] {
     const riga = grezza.trim();
     const titolo = /^##\s+(.+)$/.exec(riga);
     if (titolo) {
-      corrente = { nome: titolo[1].trim(), di: '', fasce: [], chi: [], giorni: [], nota: '', stato: 'proposta' };
+      corrente = { nome: titolo[1].trim(), di: '', fasce: [], chi: [], giorni: [], funzione: '', nota: '', stato: 'proposta' };
       fuori.push(corrente);
       continue;
     }
@@ -55,6 +56,7 @@ export function leggiSale(markdown: string): Sala[] {
     if (chiave === 'di') corrente.di = valore;
     else if (chiave === 'chi') corrente.chi = valore.split(',').map((x) => x.trim()).filter(Boolean);
     else if (chiave === 'giorni') corrente.giorni = valore.toLowerCase().split(/[\s,]+/).filter((g) => GIORNI.includes(g));
+    else if (chiave === 'funzione') corrente.funzione = valore;
     else if (chiave === 'nota') corrente.nota = valore;
     else if (chiave === 'stato') corrente.stato = valore.toLowerCase();
   }
@@ -143,8 +145,8 @@ export function salePerPrompt(sale: Sala[]): string {
 // condivisa con più persone presenti, o nessuna — esce in `daDecidere`: è lì,
 // e solo lì, che ha senso chiedere una proposta a un modello.
 
-export type Segmento = { dalle: string; alle: string; chi: string; perche: string };
-export type RigaPiano = { stanza: string; segmenti: Segmento[]; nota: string; stato: string };
+export type Segmento = { dalle: string; alle: string; chi: string; perche: string; manuale?: boolean };
+export type RigaPiano = { stanza: string; segmenti: Segmento[]; funzione: string; nota: string; stato: string };
 export type Piano = { giorno: string; righe: RigaPiano[]; daDecidere: { stanza: string; dalle: string; alle: string; perche: string }[] };
 
 const APERTURA = '07:00';
@@ -167,7 +169,7 @@ export function pianoDelGiorno(sale: Sala[], presenti: string[], giorno: string)
       if (ultimo && ultimo.chi === t.chi && ultimo.perche === t.perche) ultimo.alle = confini[i + 1];
       else segmenti.push({ dalle: confini[i], alle: confini[i + 1], chi: t.chi, perche: t.perche });
     }
-    righe.push({ stanza: s.nome, segmenti, nota: s.nota, stato: s.stato });
+    righe.push({ stanza: s.nome, segmenti, funzione: s.funzione, nota: s.nota, stato: s.stato });
     for (const seg of segmenti) {
       if (!seg.chi && seg.perche.startsWith('condivisa fra')) {
         daDecidere.push({ stanza: s.nome, dalle: seg.dalle, alle: seg.alle, perche: seg.perche });
@@ -185,4 +187,31 @@ export function daDeciderePerPrompt(piano: Piano, presenti: string[]): string {
     .join('\n');
   const aperte = piano.daDecidere.map((d) => `${d.stanza} ${d.dalle}-${d.alle}: ${d.perche}`).join('\n');
   return `IN STUDIO OGGI: ${presenti.join(', ') || 'nessuno'}\n\nGIÀ DECISO DALLE REGOLE:\n${fatto}\n\nDA DECIDERE:\n${aperte}`;
+}
+
+// ---------------------------------------------------------------------------
+// Le correzioni a mano (15.9.2026).
+//
+// Le regole fanno il piano, ma la giornata vera cambia: uno non viene, una
+// stanza serve a un altro. Chi è in studio corregge la singola fascia e la
+// correzione vale per quel giorno soltanto — la pagina wiki resta la regola.
+// Una fascia corretta si vede: `manuale` è vero e il perché lo dice.
+
+export type ModificaSala = { stanza: string; dalle: string; chi: string; da?: string };
+
+export function applicaModifiche(righe: RigaPiano[], modifiche: ModificaSala[]): RigaPiano[] {
+  if (!modifiche?.length) return righe;
+  const chiave = (stanza: string, dalle: string) => `${stanza.toLowerCase()}|${dalle}`;
+  // L'ultima correzione su una fascia è quella che vale.
+  const per = new Map<string, ModificaSala>();
+  for (const m of modifiche) per.set(chiave(m.stanza ?? '', m.dalle ?? ''), m);
+  return righe.map((r) => ({
+    ...r,
+    segmenti: r.segmenti.map((s) => {
+      const m = per.get(chiave(r.stanza, s.dalle));
+      if (!m) return s;
+      const da = m.da ? ` da ${m.da}` : '';
+      return { ...s, chi: m.chi ?? '', manuale: true, perche: m.chi ? `assegnata a mano${da}` : `liberata a mano${da}` };
+    }),
+  }));
 }
