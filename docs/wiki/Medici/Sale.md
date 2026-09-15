@@ -14,6 +14,10 @@ Questa pagina è **letta dalla piattaforma** (`src/lib/sale.ts`, cache di 5 minu
 - `Nota:` una riga per chi legge, ignorata dal codice.
 - `Stato:` `proposta` finché lo studio non la conferma, poi `validato`.
 
+Una riga sola, qui sopra le stanze, dice **chi non entra nel piano**: persone che lavorano in studio ma le cui sedute non occupano una sala dei medici. Non vengono contate fra le «visite senza sala», perché non è un problema da risolvere.
+
+- Fuori dal piano: Andrea Bronz
+
 Le regole qui sotto vengono dalla conversazione del 15.9.2026 e dalle misure sull'agenda vera (chi lavora quando, quanti pazienti in parallelo). **Sono una proposta**: chi le vive le corregge.
 
 ## Sala 1

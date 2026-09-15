@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { applicaModifiche, assegnaVisite, capienza, daSistemarePerPrompt, leggiProposta, daDeciderePerPrompt, leggiSale, pianoDelGiorno, salePerPrompt, titolare } from './sale';
+import { applicaModifiche, assegnaVisite, capienza, daSistemarePerPrompt, escluso, fuoriDalPiano, leggiProposta, daDeciderePerPrompt, leggiSale, pianoDelGiorno, salePerPrompt, titolare } from './sale';
 
 const MD = `
 ## Sala 3
@@ -275,4 +275,20 @@ test('la proposta non applica righe ambigue o su stanze con due turni', () => {
   const l = leggiProposta('Sala 3 → Moccetti: prende la stanza.', piano.righe, ['Dr. med. Marco Moccetti', 'Prof. Dr. med. Tiziano Moccetti']);
   assert.equal(l.applicabili.length, 0);
   assert.match(l.saltate[0].perche, /due persone|due turni/);
+});
+
+test('chi è fuori dal piano si legge dalla pagina e si riconosce anche col nome girato', () => {
+  const md = `# Sale\n\n- Nota: qualcosa\n- Fuori dal piano: Andrea Bronz, Tal dei Tali\n\n## Sala 1\n- Di: Marco Moccetti\n- Stato: proposta\n`;
+  const fuori = fuoriDalPiano(md);
+  assert.deepEqual(fuori, ['Andrea Bronz', 'Tal dei Tali']);
+  assert.ok(escluso('Bronz Andrea', fuori));
+  assert.ok(escluso('Dr. Andrea Bronz', fuori));
+  assert.ok(!escluso('Marco Moccetti', fuori));
+  assert.equal(leggiSale(md).length, 1, 'la riga non diventa una stanza');
+  assert.deepEqual(fuoriDalPiano('## Sala 1\n- Fuori dal piano: Tizio\n'), [], 'vale solo prima delle stanze');
+});
+
+test('la pagina vera tiene Andrea Bronz fuori dal piano', () => {
+  const md = readFileSync(path.join(process.cwd(), 'docs/wiki/Medici/Sale.md'), 'utf-8');
+  assert.ok(escluso('Andrea Bronz', fuoriDalPiano(md)));
 });

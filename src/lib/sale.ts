@@ -29,6 +29,27 @@ export type Sala = {
 
 const GIORNI = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
 
+// Chi non entra nel piano delle sale (15.9.2026). Nella pagina, PRIMA della
+// prima stanza, una riga «- Fuori dal piano: Nome, Nome». Sono persone che
+// lavorano in studio ma le cui sedute non occupano una sala dei medici — la
+// riabilitazione, per dire — e contarle fra le «visite senza sala» farebbe
+// sembrare un problema una cosa che non lo è.
+export function fuoriDalPiano(markdown: string): string[] {
+  for (const grezza of (markdown ?? '').split('\n')) {
+    const riga = grezza.trim();
+    if (riga.startsWith('## ')) break;                 // da qui in poi sono stanze
+    const m = /^[-*]\s*`?fuori dal piano`?\s*:\s*(.+)$/i.exec(riga);
+    if (m) return m[1].split(',').map((x) => x.replace(/[`*]/g, '').trim()).filter(Boolean);
+  }
+  return [];
+}
+
+// Questa persona è fuori dal piano? Il confronto è quello dei nomi: «Andrea
+// Bronz» riconosce anche «Bronz Andrea» e «Dr. Andrea Bronz».
+export function escluso(nome: string, fuori: string[]): boolean {
+  return (fuori ?? []).some((f) => uguali(f, nome));
+}
+
 export function leggiSale(markdown: string): Sala[] {
   const fuori: Sala[] = [];
   let corrente: Sala | null = null;

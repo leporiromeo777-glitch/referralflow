@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { query } from '@/lib/db';
 import { generaOllamaEsito } from '@/lib/ollama';
-import { assegnaVisite, daSistemarePerPrompt, leggiSale, pianoDelGiorno } from '@/lib/sale';
+import { assegnaVisite, daSistemarePerPrompt, escluso, fuoriDalPiano, leggiSale, pianoDelGiorno } from '@/lib/sale';
 
 // Preparare il piano delle sale (15.9.2026). Sta qui, e non dentro una rotta,
 // perché lo chiedono in due: il cron di notte e il pulsante «Prepara con
@@ -91,8 +91,11 @@ export async function preparaPianoSale(
 
   try {
     let regole;
+    let fuori: string[] = [];
     try {
-      regole = leggiSale(readFileSync(path.join(process.cwd(), 'docs/wiki/Medici/Sale.md'), 'utf-8'));
+      const md = readFileSync(path.join(process.cwd(), 'docs/wiki/Medici/Sale.md'), 'utf-8');
+      regole = leggiSale(md);
+      fuori = fuoriDalPiano(md);
     } catch {
       finisci('errore', 'la pagina «Medici/Sale» non si legge');
       return { ok: false, stato: 'pagina non leggibile' };
@@ -118,13 +121,16 @@ export async function preparaPianoSale(
           and coalesce(a.stato_medionline, '') not in ('annullato', 'scusato')`,
       [studioId, giornoIso]
     );
-    const visite = assegnaVisite(piano.righe, app.map((a) => ({ id: a.id, chi: a.chi ?? '', start: a.start, dur: a.dur })));
+    // Chi è fuori dal piano non entra nel conto delle sale né nel testo che
+    // va al modello: le sue sedute non occupano una stanza dei medici.
+    const utili = app.filter((a) => !escluso(a.chi ?? '', fuori));
+    const visite = assegnaVisite(piano.righe, utili.map((a) => ({ id: a.id, chi: a.chi ?? '', start: a.start, dur: a.dur })));
     const libere = piano.righe
       .filter((r) => !(visite[r.stanza] ?? []).length)
       .map((r) => ({ stanza: r.stanza, di: r.segmenti.find((x) => x.chi)?.chi ?? '' }));
     const messe = new Set(Object.values(visite).flat().map((v) => v.id));
     const conta = new Map<string, number>();
-    for (const a of app) if (!messe.has(a.id)) {
+    for (const a of utili) if (!messe.has(a.id)) {
       const chi = a.chi || 'appuntamenti senza medico in agenda';
       conta.set(chi, (conta.get(chi) ?? 0) + 1);
     }

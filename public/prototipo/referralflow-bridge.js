@@ -3400,6 +3400,8 @@ function rfSalaChiudi() { RF.salaAperta = ''; render(); }
 RF.pianoLavoro = null;
 RF.pianoOrologio = null;
 RF.saleEsito = null;
+RF.senzaSalaAperto = '';
+function rfSenzaSala(chi) { RF.senzaSalaAperto = RF.senzaSalaAperto === chi ? '' : chi; render(); }
 
 /* Il pulsante: fa partire lo stesso lavoro che il cron fa di notte, e poi
    guarda a che punto è. Il modello locale ci mette minuti, quindi la risposta
@@ -3699,8 +3701,10 @@ PAGES.sale = () => {
         <div class="caption mt-8">Tocca una sala per la sua giornata. Le regole stanno nella pagina wiki <code>Medici/Sale</code> (SilverBullet sulla rete dello studio, porta 3400): si cambia la pagina, non il codice — la piattaforma la rilegge entro 5 minuti.</div></div>
     <div class="grid grid-3">
       ${(p.senzaSala || []).length ? `<div class="card" style="border-left:3px solid var(--warning)"><div class="card-head"><span class="section-title">Visite senza sala</span><span class="badge count">${p.senzaSala.reduce((t, x) => t + x.n, 0)}</span></div>
-        <div class="list">${p.senzaSala.map(x => `<div class="list-item"><div class="grow"><div class="name" style="font-size:13px">${rfEsc(x.chi)}</div><div class="sub">${x.n} ${x.n === 1 ? 'visita' : 'visite'}</div></div></div>`).join('')}</div>
-        <div class="caption mt-8">Oggi lavorano ma nella pagina «Medici/Sale» non hanno una stanza — o ce l'hanno condivisa e non è ancora deciso di chi è. Si aggiusta assegnando la sala qui sopra, o scrivendo la regola nella pagina.</div></div>` : ''}
+        <div class="list">${p.senzaSala.map(x => `<div class="list-item clickable" style="cursor:pointer;align-items:flex-start" onclick="rfSenzaSala('${rfEsc(x.chi)}')"><div class="grow"><div class="name" style="font-size:13px">${rfEsc(x.chi)} <span class="caption">${RF.senzaSalaAperto === x.chi ? '▾' : '▸'}</span></div><div class="sub">${x.n} ${x.n === 1 ? 'visita' : 'visite'}</div>
+          ${RF.senzaSalaAperto === x.chi ? `<div class="mt-8">${(x.visite || []).map(v => `<div class="rf-cambio" onclick="event.stopPropagation(); rfApptScheda('${rfEsc(v.id)}')" style="cursor:pointer"><span class="ora num">${rfEsc(v.inizio)}</span><span>${rfEsc(v.paziente || 'Paziente')}</span><span class="dove">${rfEsc(v.motivo || v.sala || '')}</span></div>`).join('') || '<div class="caption">Nessun dettaglio.</div>'}${x.n > (x.visite || []).length ? `<div class="caption mt-8">…e altre ${x.n - x.visite.length}.</div>` : ''}</div>` : ''}
+        </div></div>`).join('')}</div>
+        <div class="caption mt-8">Oggi lavorano ma nella pagina «Medici/Sale» non hanno una stanza — o ce l'hanno condivisa e non è ancora deciso di chi è. Tocca un nome per vedere quali visite sono; tocca una visita per aprirla. Si aggiusta assegnando la sala qui sopra, o scrivendo la regola nella pagina.${(p.fuoriPiano || []).length ? ` Fuori dal conto: ${p.fuoriPiano.map(rfEsc).join(', ')} — così dice la pagina.` : ''}</div></div>` : ''}
       <div class="card"><div class="card-head"><span class="section-title">Prossimi cambi</span><span class="badge count">${cambi.length}</span></div>
         ${cambi.length ? cambi.map(x => `<div class="rf-cambio"><span class="ora num">${rfEsc(x.ora)}</span>${x.chi ? `${rfAvatar(x.chi)}<span>${rfEsc(rfNomeNudo(x.chi))}</span>` : '<span style="color:var(--text-2);font-style:italic">si libera</span>'}<span class="dove">${rfEsc(x.stanza)}</span></div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessun cambio da qui a fine giornata.</div>'}</div>
       ${c && c.picco ? `<div class="card"><div class="card-head"><span class="section-title">Capienza</span></div>

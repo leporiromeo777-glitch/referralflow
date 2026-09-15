@@ -6,7 +6,7 @@ import { costruisciRevisione } from '@/lib/prototipo-revisione';
 import { tipoEsame } from '@/lib/briefing-regole';
 import { estraiTerapia } from '@/lib/referti-terapia';
 import { leggiTitolo, nomePulito } from '@/lib/agenda-titolo';
-import { assegnaVisite, capienza, leggiSale, titolare, applicaModifiche } from '@/lib/sale';
+import { assegnaVisite, capienza, escluso, fuoriDalPiano, leggiSale, titolare, applicaModifiche } from '@/lib/sale';
 import type { ModificaSala, RigaPiano } from '@/lib/sale';
 import { abbinaPrestazioneAgenda, tipoDaTesto, type VoceCatalogo } from '@/lib/prestazioni';
 import { lettereRitardoGrezzo } from '@/lib/procedure';
@@ -363,10 +363,12 @@ export async function GET() {
   // Di chi è quale stanza: regole dalla pagina wiki «Medici/Sale», applicate
   // ai medici che sono davvero in studio oggi ([[src/lib/sale]]).
   let regoleSale: ReturnType<typeof leggiSale> = [];
+  let mdSale = '';
   try {
     const { readFileSync } = await import('node:fs');
     const path = await import('node:path');
-    regoleSale = leggiSale(readFileSync(path.join(process.cwd(), 'docs/wiki/Medici/Sale.md'), 'utf-8'));
+    mdSale = readFileSync(path.join(process.cwd(), 'docs/wiki/Medici/Sale.md'), 'utf-8');
+    regoleSale = leggiSale(mdSale);
   } catch { regoleSale = []; }
   const GG = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
   const giornoOggi = GG[oggiIso.getDay()];
@@ -394,7 +396,10 @@ export async function GET() {
     const righe = applicaModifiche(pianoOggi.righe ?? [], pianoOggi.modifiche ?? []);
     // Quando le sale hanno le visite: MediOnline non scrive la stanza, si
     // deduce da chi ha la stanza in quel momento ([[src/lib/sale]]).
-    const vive = apptsOggi.filter((a) => a.status !== 'CANCELLED');
+    // Chi è fuori dal piano (la riabilitazione, per dire) non entra nel conto
+    // delle sale: le sue sedute non occupano una stanza dei medici.
+    const fuori = fuoriDalPiano(mdSale);
+    const vive = apptsOggi.filter((a) => a.status !== 'CANCELLED' && !escluso(doctors[a.doc] ?? '', fuori));
     const visite = assegnaVisite(righe, vive
       .map((a) => ({ id: a.id, chi: doctors[a.doc] ?? '', start: a.start, dur: a.dur, etichetta: a.prestazione || a.tipoPrest || '' })));
     // Il cartellino che si vede passandoci sopra: chi è il paziente, che cosa
@@ -417,14 +422,23 @@ export async function GET() {
     // Chi oggi lavora ma non ha una stanza nel piano: le sue visite non si
     // possono mostrare da nessuna parte, e tacerlo sarebbe peggio che dirlo.
     const messe = new Set(Object.values(visite).flat().map((v) => v.id));
-    const conta = new Map<string, number>();
+    const conta = new Map<string, typeof vive>();
     for (const a of vive) {
       if (messe.has(a.id)) continue;
       const chi = doctors[a.doc] || 'senza medico in agenda';
-      conta.set(chi, (conta.get(chi) ?? 0) + 1);
+      conta.set(chi, [...(conta.get(chi) ?? []), a]);
     }
-    const senzaSala = [...conta].map(([chi, n]) => ({ chi, n })).sort((x, y) => y.n - x.n);
-    return { ...pianoOggi, righe, presenti: presentiOggi, visite, senzaSala };
+    // «Senza sala» porta anche QUALI visite sono: una riga che dice soltanto
+    // «9 visite» non si può né controllare né sistemare.
+    const senzaSala = [...conta.entries()].map(([chi, lista]) => ({
+      chi,
+      n: lista.length,
+      visite: lista.slice(0, 40).map((a) => ({
+        id: a.id, inizio: a.start, paziente: a.nomeBreve || a.nome || '',
+        motivo: a.prestazione || a.motivoVero || '', sala: a.room || '',
+      })),
+    })).sort((x, y) => y.n - x.n);
+    return { ...pianoOggi, righe, presenti: presentiOggi, visite, senzaSala, fuoriPiano: fuori };
   })();
   const cap = capienza(
     apptsOggi.map((a) => ({ inizio: minuti(a.start), fine: minuti(a.start) + a.dur })),
