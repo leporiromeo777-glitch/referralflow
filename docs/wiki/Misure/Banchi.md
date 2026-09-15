@@ -105,12 +105,15 @@ Stesso testo della catena, dati veri di **mercoledì 16.9** — una giornata con
 | deepseek-r1:14b | 106,1 s | 3 | 1 | 0 | si contraddice |
 | nemotron-3-nano:4b | 46,0 s | 1 | 0 | 0 | 5 / 21 |
 | qwen3:14b | — | **timeout a 600 s, due volte su due** | | | |
-| qwen3.8:27b | — | **risposta vuota**, tre volte su tre durante il lavoro | | | |
+| Qwen3.8-27B IQ4_XS (15,2 GB) | 520 s | 4 | 13 | 0 | 19 / 21 |
+| qwen3.8:27b (17,7 GB) | — | **timeout a 600 s anche con 17 GB liberi**; risposta vuota tre volte su tre durante il lavoro | | | |
 
 **Scelto gemma3:12b**, lo stesso modello della catena. Ha assegnato Sala 5 a Franscella (spiegando: ha più visite di Pedrotti), Sport 1 a Pedrotti, Sport 2 a Paveri, e ha detto che la visita singola di Moccetti non merita una stanza in più.
 
 Tre cose imparate, che valgono oltre questo banco:
 - **deepseek-r1 ha dato la stessa stanza a due persone** e la stessa persona a due stanze. Il punteggio grezzo lo premiava («21 visite sistemate»): il difetto era nel banco. Ora `leggiProposta` rifiuta le righe che si contraddicono, con un test che usa la risposta vera di deepseek.
 - **qwen3:14b sembrava il migliore** perché era stato giudicato su un'unica risposta fortunata. Ripetuto, si impianta: dieci minuti senza arrivare alla risposta.
+- **La Qwen 3.8 in quantizzazione stretta (15,2 GB) risponde**, ed è la migliore per contenuto — 19 visite su 21 — ma ci mette **otto minuti e mezzo** e scrive pagine di ragionamento ad alta voce in inglese prima delle righe buone: 13 righe scartate dal lettore su 17. Come qualità vale un posto; come strumento costa 26 volte gemma per una visita in più.
+- **La Qwen 3.8 piena (17,7 GB) non risponde nemmeno a macchina libera**: timeout a dieci minuti con 17 GB disponibili. Non era solo memoria — su questo Mac è troppo lenta e basta. L'unica risposta riuscita, 72 s alle 04:00 del 15.9, va considerata un caso fortunato e non una misura.
 - **Il 27B non è utilizzabile su questa macchina durante il lavoro**: 18 GB su 24, e quando è caricato restano 90 MB liberi — risponde vuoto perché non ha spazio per il proprio contesto. Con tutto il resto spento il Mac usa meno di 7 GB: non è la macchina a essere piccola, è quel modello a non entrarci.
 
