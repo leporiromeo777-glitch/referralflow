@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { applicaModifiche, capienza, daDeciderePerPrompt, leggiSale, pianoDelGiorno, salePerPrompt, titolare } from './sale';
+import { applicaModifiche, assegnaVisite, capienza, daDeciderePerPrompt, leggiSale, pianoDelGiorno, salePerPrompt, titolare } from './sale';
 
 const MD = `
 ## Sala 3
@@ -150,4 +150,70 @@ test('correzioni a mano: «chi» vuoto libera la sala, e l\'ultima correzione vi
   assert.equal(a.chi, '');
   assert.equal(a.manuale, true);
   assert.match(a.perche, /liberata a mano/);
+});
+
+const MD_VISITE = `
+## Sala 1
+- Di: Marco Moccetti
+- Stato: proposta
+
+## Sala 2
+- Di: Marco Moccetti
+- Stato: proposta
+
+## Appar
+- Di: Vera Paiocchi
+- Stato: proposta
+`;
+
+test('visite: due pazienti insieme di chi ha due stanze finiscono uno per stanza', () => {
+  const piano = pianoDelGiorno(leggiSale(MD_VISITE), ['Marco Moccetti'], 'mar');
+  const v = assegnaVisite(piano.righe, [
+    { id: 'a', chi: 'Dr. med. Marco Moccetti', start: '09:00', dur: 30 },
+    { id: 'b', chi: 'Dr. med. Marco Moccetti', start: '09:00', dur: 30 },
+  ]);
+  assert.deepEqual(v['Sala 1'].map((x) => x.id), ['a']);
+  assert.deepEqual(v['Sala 2'].map((x) => x.id), ['b']);
+  assert.equal(v['Sala 1'][0].fine, '09:30');
+  assert.ok(!v['Sala 1'][0].sovra && !v['Sala 2'][0].sovra);
+});
+
+test('visite: quando le stanze non bastano la visita resta segnata, non sparisce', () => {
+  const piano = pianoDelGiorno(leggiSale(MD_VISITE), ['Marco Moccetti'], 'mar');
+  const v = assegnaVisite(piano.righe, ['a', 'b', 'c'].map((id) => ({ id, chi: 'Marco Moccetti', start: '09:00', dur: 30 })));
+  const tutte = [...v['Sala 1'], ...v['Sala 2']];
+  assert.equal(tutte.length, 3, 'nessuna visita persa');
+  assert.equal(tutte.filter((x) => x.sovra).length, 1);
+});
+
+test('visite: una dopo l’altra riusano la stessa stanza; senza stanza non si mostrano', () => {
+  const piano = pianoDelGiorno(leggiSale(MD_VISITE), ['Marco Moccetti'], 'mar');
+  const v = assegnaVisite(piano.righe, [
+    { id: 'a', chi: 'Marco Moccetti', start: '09:00', dur: 30 },
+    { id: 'b', chi: 'Marco Moccetti', start: '09:30', dur: 30 },
+    { id: 'x', chi: 'Qualcun Altro', start: '09:00', dur: 30 },
+  ]);
+  assert.deepEqual(v['Sala 1'].map((x) => x.id), ['a', 'b']);
+  assert.deepEqual(v['Sala 2'], []);
+  assert.deepEqual(v['Appar'], [], 'la stanza di chi oggi non c’è resta vuota');
+});
+
+test('visite: due nella stessa stanza allo stesso momento stanno in corsie diverse', () => {
+  const piano = pianoDelGiorno(leggiSale('## Sola\n- Di: Marco Moccetti\n- Stato: proposta\n'), ['Marco Moccetti'], 'mar');
+  const v = assegnaVisite(piano.righe, [
+    { id: 'a', chi: 'Marco Moccetti', start: '09:00', dur: 30 },
+    { id: 'b', chi: 'Marco Moccetti', start: '09:15', dur: 30 },
+    { id: 'c', chi: 'Marco Moccetti', start: '11:00', dur: 30 },
+  ])['Sola'];
+  const per = Object.fromEntries(v.map((x) => [x.id, x]));
+  assert.notEqual(per.a.corsia, per.b.corsia, 'a e b si sovrappongono: corsie diverse');
+  assert.equal(per.a.corsie, 2);
+  assert.equal(per.b.corsie, 2);
+  assert.equal(per.c.corsia, 0, 'finito il gruppo si riparte dalla prima corsia');
+  assert.equal(per.c.corsie, 1);
+  // la regola che conta: mai due visite sovrapposte nella stessa corsia
+  for (const x of v) for (const y of v) {
+    if (x.id >= y.id || x.corsia !== y.corsia) continue;
+    assert.ok(x.fine <= y.inizio || y.fine <= x.inizio, `${x.id} e ${y.id} si sovrappongono nella corsia ${x.corsia}`);
+  }
 });

@@ -6,7 +6,7 @@ import { costruisciRevisione } from '@/lib/prototipo-revisione';
 import { tipoEsame } from '@/lib/briefing-regole';
 import { estraiTerapia } from '@/lib/referti-terapia';
 import { leggiTitolo, nomePulito } from '@/lib/agenda-titolo';
-import { capienza, leggiSale, titolare, applicaModifiche } from '@/lib/sale';
+import { assegnaVisite, capienza, leggiSale, titolare, applicaModifiche } from '@/lib/sale';
 import type { ModificaSala, RigaPiano } from '@/lib/sale';
 import { abbinaPrestazioneAgenda, tipoDaTesto, type VoceCatalogo } from '@/lib/prestazioni';
 import { lettereRitardoGrezzo } from '@/lib/procedure';
@@ -389,9 +389,26 @@ export async function GET() {
   // Le correzioni a mano si applicano qui, una volta sola: chiunque legga il
   // piano vede la stessa giornata, e la fascia corretta si riconosce
   // (`manuale`). Le regole della pagina wiki restano quelle.
-  const piano = pianoOggi
-    ? { ...pianoOggi, righe: applicaModifiche(pianoOggi.righe ?? [], pianoOggi.modifiche ?? []), presenti: presentiOggi }
-    : null;
+  const piano = (() => {
+    if (!pianoOggi) return null;
+    const righe = applicaModifiche(pianoOggi.righe ?? [], pianoOggi.modifiche ?? []);
+    // Quando le sale hanno le visite: MediOnline non scrive la stanza, si
+    // deduce da chi ha la stanza in quel momento ([[src/lib/sale]]).
+    const vive = apptsOggi.filter((a) => a.status !== 'CANCELLED');
+    const visite = assegnaVisite(righe, vive
+      .map((a) => ({ id: a.id, chi: doctors[a.doc] ?? '', start: a.start, dur: a.dur, etichetta: a.prestazione || a.tipoPrest || '' })));
+    // Chi oggi lavora ma non ha una stanza nel piano: le sue visite non si
+    // possono mostrare da nessuna parte, e tacerlo sarebbe peggio che dirlo.
+    const messe = new Set(Object.values(visite).flat().map((v) => v.id));
+    const conta = new Map<string, number>();
+    for (const a of vive) {
+      if (messe.has(a.id)) continue;
+      const chi = doctors[a.doc] || 'senza medico in agenda';
+      conta.set(chi, (conta.get(chi) ?? 0) + 1);
+    }
+    const senzaSala = [...conta].map(([chi, n]) => ({ chi, n })).sort((x, y) => y.n - x.n);
+    return { ...pianoOggi, righe, presenti: presentiOggi, visite, senzaSala };
+  })();
   const cap = capienza(
     apptsOggi.map((a) => ({ inizio: minuti(a.start), fine: minuti(a.start) + a.dur })),
     sale.length

@@ -215,3 +215,73 @@ export function applicaModifiche(righe: RigaPiano[], modifiche: ModificaSala[]):
     }),
   }));
 }
+
+// ---------------------------------------------------------------------------
+// Quando una sala ha le visite (15.9.2026).
+//
+// MediOnline non scrive MAI in quale stanza avviene una visita: scrive di chi
+// è l'agenda. Quindi la stanza si deduce, e la deduzione è una sola riga:
+// una visita sta in una delle stanze che il suo medico ha in quel momento.
+// Quando il medico ne ha più d'una — Marco ha la 1, la 2 e la 3 — le visite si
+// distribuiscono nell'ordine in cui cominciano, ognuna nella prima stanza
+// libera: è esattamente ciò che vuol dire «tiene tre pazienti in parallelo».
+// Se le stanze non bastano la visita resta segnata `sovra`: non la si nasconde
+// e non si inventa una stanza in più.
+
+// `corsia`/`corsie`: quante visite corrono INSIEME in quella stanza e quale
+// posto occupa questa. Non è un dettaglio di disegno — è la capienza vera: se
+// una stanza ha due corsie, lì dentro ci sono due pazienti nello stesso
+// momento. Chi disegna ci fa due colonne affiancate invece di due riquadri
+// uno sopra l'altro.
+export type VisitaSala = { id: string; inizio: string; fine: string; etichetta: string; sovra: boolean; corsia: number; corsie: number };
+export type VisitaGrezza = { id: string; chi: string; start: string; dur: number; etichetta?: string };
+
+export function assegnaVisite(righe: RigaPiano[], visite: VisitaGrezza[]): Record<string, VisitaSala[]> {
+  const min = (t: string) => { const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
+  const hm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  const fuori: Record<string, VisitaSala[]> = {};
+  const liberaDa: Record<string, number> = {};
+  for (const r of righe) { fuori[r.stanza] = []; liberaDa[r.stanza] = -1; }
+  const ordinate = [...visite].sort((a, b) => a.start.localeCompare(b.start) || a.id.localeCompare(b.id));
+  for (const v of ordinate) {
+    if (!v.chi) continue;
+    const i = min(v.start), f = i + Math.max(5, v.dur || 30);
+    const sue = righe.filter((r) => (r.segmenti ?? []).some((s) => s.chi && uguali(s.chi, v.chi) && v.start >= s.dalle && v.start < s.alle));
+    if (!sue.length) continue;   // nessuna stanza in quel momento: non si mostra
+    let scelta = sue.find((r) => liberaDa[r.stanza] <= i);
+    const sovra = !scelta;
+    if (!scelta) scelta = sue.reduce((a, b) => (fuori[a.stanza].length <= fuori[b.stanza].length ? a : b));
+    fuori[scelta.stanza].push({ id: v.id, inizio: v.start, fine: hm(f), etichetta: v.etichetta ?? '', sovra, corsia: 0, corsie: 1 });
+    liberaDa[scelta.stanza] = Math.max(liberaDa[scelta.stanza], f);
+  }
+  for (const stanza of Object.keys(fuori)) corsie(fuori[stanza], min);
+  return fuori;
+}
+
+// Le corsie dentro una stanza: si scorrono le visite in ordine d'inizio, si
+// tiene aperto il gruppo finché una comincia prima che l'ultima sia finita, e
+// dentro il gruppo ognuna prende la prima corsia libera. Due visite che si
+// sovrappongono non finiscono mai nella stessa corsia.
+function corsie(visite: VisitaSala[], min: (t: string) => number): void {
+  visite.sort((a, b) => a.inizio.localeCompare(b.inizio) || a.id.localeCompare(b.id));
+  let gruppo: VisitaSala[] = [];
+  let fine = -1;
+  const chiudi = () => {
+    if (!gruppo.length) return;
+    const fini: number[] = [];
+    for (const v of gruppo) {
+      let i = 0;
+      while (fini[i] !== undefined && fini[i] > min(v.inizio)) i++;
+      fini[i] = min(v.fine);
+      v.corsia = i;
+    }
+    for (const v of gruppo) v.corsie = fini.length;
+    gruppo = []; fine = -1;
+  };
+  for (const v of visite) {
+    if (gruppo.length && min(v.inizio) >= fine) chiudi();
+    gruppo.push(v);
+    fine = Math.max(fine, min(v.fine));
+  }
+  chiudi();
+}
