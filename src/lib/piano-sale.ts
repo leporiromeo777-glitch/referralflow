@@ -28,7 +28,12 @@ const MODELLO = process.env.PIANO_SALE_LLM || 'qwen3.8:27b';
 // proposta. Allora si riprova con un modello che ci sta comodo: meglio una
 // proposta più semplice che nessuna, e nella pagina si legge quale ha
 // risposto (`proposta_da`).
-const RIPIEGO = process.env.PIANO_SALE_LLM_RIPIEGO || 'gemma3:12b';
+// Provati tutti e due sullo stesso piano, il 15.9: gemma3:12b ha risposto «Sala
+// 5 a Girola e Moschovitis, come da indicazioni» — cioè ha ripetuto la domanda
+// — mentre qwen3:14b ha proposto di dividerla per fascia oraria e ha detto che
+// le sei visite senza medico non erano assegnabili. 9 GB invece di 8: entra
+// lo stesso dove il 27B non entra.
+const RIPIEGO = process.env.PIANO_SALE_LLM_RIPIEGO || 'qwen3:14b';
 const GG = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
 const ATTESA_PREDEFINITA = 150_000;   // quanto ci mette, finché non se ne sa di meglio
 
