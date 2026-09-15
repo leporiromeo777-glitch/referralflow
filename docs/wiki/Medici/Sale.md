@@ -35,10 +35,10 @@ Le regole qui sotto vengono dalla conversazione del 15.9.2026 e dalle misure sul
 - Stato: proposta
 
 ## Sala 3
-- Di: Marco Moccetti
+- Di: Georgios Moschovitis
 - Dalle 13:00: Tiziano Moccetti
 - Giorni: lun mar mer gio
-- Nota: Tiziano non è mai in studio prima delle 13 e mai il venerdì; il venerdì la sala resta di Marco tutto il giorno.
+- Nota: la mattina è di Moschovitis — detto dallo studio il 15.9.2026; prima la pagina la dava a Marco Moccetti. Tiziano non è mai in studio prima delle 13 e mai il venerdì. Marco Moccetti resta così senza una stanza sua nella pagina: il 15.9 tutti i suoi appuntamenti erano colloqui telefonici, che una stanza non la occupano — ma se un giorno visita, va detto dove.
 - Stato: proposta
 
 ## Sala 4
