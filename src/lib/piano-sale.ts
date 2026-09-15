@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { query } from '@/lib/db';
 import { generaOllamaEsito } from '@/lib/ollama';
-import { assegnaVisite, daSistemarePerPrompt, escluso, fuoriDalPiano, leggiSale, pianoDelGiorno, prestazioniFuoriPiano } from '@/lib/sale';
+import { applicaModifiche, assegnaVisite, daSistemarePerPrompt, escluso, fuoriDalPiano, leggiSale, pianoDelGiorno, prestazioniFuoriPiano, type ModificaSala } from '@/lib/sale';
 
 // Preparare il piano delle sale (15.9.2026). Sta qui, e non dentro una rotta,
 // perché lo chiedono in due: il cron di notte e il pulsante «Prepara con
@@ -23,6 +23,12 @@ import { assegnaVisite, daSistemarePerPrompt, escluso, fuoriDalPiano, leggiSale,
 // che nessuno aspetta, quindi si può spendere un minuto per una risposta
 // migliore. È lo stesso modello delle tappe locali della catena.
 const MODELLO = process.env.PIANO_SALE_LLM || 'qwen3.8:27b';
+// Il 27B occupa 20 GB su un Mac che fa anche da server: quando la memoria non
+// basta Ollama risponde 200 con il corpo vuoto, e la giornata resta senza
+// proposta. Allora si riprova con un modello che ci sta comodo: meglio una
+// proposta più semplice che nessuna, e nella pagina si legge quale ha
+// risposto (`proposta_da`).
+const RIPIEGO = process.env.PIANO_SALE_LLM_RIPIEGO || 'gemma3:12b';
 const GG = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
 const ATTESA_PREDEFINITA = 150_000;   // quanto ci mette, finché non se ne sa di meglio
 
@@ -132,8 +138,13 @@ export async function preparaPianoSale(
     // Chi è fuori dal piano non entra nel conto delle sale né nel testo che
     // va al modello: le sue sedute non occupano una stanza dei medici.
     const utili = app.filter((a) => !escluso(a.chi ?? '', fuori) && !(a.prestazione && escluso(a.prestazione, fuoriPrest)));
-    const visite = assegnaVisite(piano.righe, utili.map((a) => ({ id: a.id, chi: a.chi ?? '', start: a.start, dur: a.dur })));
-    const libere = piano.righe
+    // Le correzioni già fatte a mano oggi valgono anche qui: rigenerare il
+    // piano non deve far ricomparire «senza sala» chi una sala l'ha ricevuta.
+    const [vecchio] = await query<{ modifiche: ModificaSala[] }>(
+      'select modifiche from piano_sale where studio_id = $1 and giorno = $2', [studioId, giornoIso]);
+    const righeVere = applicaModifiche(piano.righe, vecchio?.modifiche ?? []);
+    const visite = assegnaVisite(righeVere, utili.map((a) => ({ id: a.id, chi: a.chi ?? '', start: a.start, dur: a.dur })));
+    const libere = righeVere
       .filter((r) => !(visite[r.stanza] ?? []).length)
       .map((r) => ({ stanza: r.stanza, di: r.segmenti.find((x) => x.chi)?.chi ?? '' }));
     const messe = new Set(Object.values(visite).flat().map((v) => v.id));
@@ -151,18 +162,22 @@ export async function preparaPianoSale(
     if (piano.daDecidere.length || senzaSala.length || libere.length) {
       l.fase = 'modello';
       l.dettaglio = `${MODELLO} sta guardando ${piano.righe.length} stanze`;
-      const esito = await generaOllamaEsito(
-        PROMPT.replace('{testo}', daSistemarePerPrompt(piano, presenti, libere, senzaSala)),
-        {
-          modello: MODELLO, timeoutMs: 900_000, aPezzi: true,
-          onPezzo: ({ caratteri, pensiero }) => { l.caratteri = caratteri; l.pensiero = pensiero; },
-        }
-      );
+      const testo = PROMPT.replace('{testo}', daSistemarePerPrompt(piano, presenti, libere, senzaSala));
+      const guarda = { onPezzo: ({ caratteri, pensiero }: { caratteri: number; pensiero: number }) => { l.caratteri = caratteri; l.pensiero = pensiero; } };
+      let usato = MODELLO;
+      let esito = await generaOllamaEsito(testo, { modello: MODELLO, timeoutMs: 900_000, aPezzi: true, ...guarda });
+      if (!esito.ok && RIPIEGO && RIPIEGO !== MODELLO) {
+        console.log(`[piano-sale] ${MODELLO} non ha risposto (${esito.causa}): riprovo con ${RIPIEGO}`);
+        l.dettaglio = `${MODELLO} non ha risposto, riprovo con ${RIPIEGO}`;
+        l.caratteri = 0; l.pensiero = 0;
+        usato = RIPIEGO;
+        esito = await generaOllamaEsito(testo, { modello: RIPIEGO, timeoutMs: 600_000, aPezzi: true, ...guarda });
+      }
       if (esito.ok) {
         // Qwen 3.8 ragiona ad alta voce fra <think>…</think>: si tiene solo
         // quello che viene dopo, altrimenti il piano è illeggibile.
         proposta = esito.testo.includes('</think>') ? esito.testo.split('</think>').pop()!.trim() : esito.testo.trim();
-        propostaDa = `${MODELLO} · modello locale`;
+        propostaDa = `${usato} · modello locale${usato === RIPIEGO ? ' (ripiego: il modello grande non è entrato in memoria)' : ''}`;
         ms = esito.ms;
       } else {
         console.log(`[piano-sale] proposta non riuscita: ${esito.causa}`);
