@@ -22,20 +22,16 @@ import { applicaModifiche, assegnaVisite, daSistemarePerPrompt, escluso, fuoriDa
 // Qui gira **Qwen 3.8 27B**, non il 12B dell'assistente: è un lavoro di fondo
 // che nessuno aspetta, quindi si può spendere un minuto per una risposta
 // migliore. È lo stesso modello delle tappe locali della catena.
+// Un modello solo, di notte come al pulsante. Banco del 15.9.2026 su una
+// giornata vera — due caselle aperte, quattro stanze vuote, 21 visite scoperte
+// ([[Misure/Banchi]]): gemma3:12b sistema 18 visite su 21 in 20 secondi senza
+// contraddirsi. La Qwen 3.8 stretta ne sistema 19, ma ci mette otto minuti e
+// mezzo e scrive pagine di ragionamento da ripulire; quella piena va in
+// timeout anche a macchina libera. Una visita in più non paga un secondo
+// modello, la ripulitura e un ripiego: tre pezzi che possono rompersi alle
+// quattro di notte senza che nessuno se ne accorga. È anche il modello della
+// catena dei referti — uno solo da tenere caldo.
 const MODELLO = process.env.PIANO_SALE_LLM || 'gemma3:12b';
-// Il 27B occupa 20 GB su un Mac che fa anche da server: quando la memoria non
-// basta Ollama risponde 200 con il corpo vuoto, e la giornata resta senza
-// proposta. Allora si riprova con un modello che ci sta comodo: meglio una
-// proposta più semplice che nessuna, e nella pagina si legge quale ha
-// risposto (`proposta_da`).
-// Nessun ripiego: il modello è uno solo e ci sta in memoria. Banco del
-// 15.9.2026 su una giornata vera con due caselle aperte e 21 visite scoperte
-// ([[Misure/Banchi]]): gemma3:12b ha sistemato 18 visite su 21 in 20 secondi
-// senza contraddirsi; deepseek-r1:14b ha dato la stessa stanza a due persone
-// in 106 s; nemotron 4B ha assegnato una stanza sola; qwen3:14b è andato in
-// timeout a 10 minuti due volte su due. Il 27B resta fuori: su questa macchina
-// occupa 18 GB su 24 e durante il lavoro risponde vuoto.
-const RIPIEGO = process.env.PIANO_SALE_LLM_RIPIEGO || '';
 const GG = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
 const ATTESA_PREDEFINITA = 150_000;   // quanto ci mette, finché non se ne sa di meglio
 
@@ -176,28 +172,20 @@ export async function preparaPianoSale(
     let proposta: string | null = null;
     let propostaDa: string | null = null;
     let ms: number | null = null;
-    let usatoAlla = MODELLO;          // quale modello è stato davvero caricato
 
     if (piano.daDecidere.length || senzaSala.length || libere.length) {
       l.fase = 'modello';
       l.dettaglio = `${MODELLO} sta guardando ${piano.righe.length} stanze`;
       const testo = PROMPT.replace('{testo}', daSistemarePerPrompt(piano, presenti, libere, senzaSala));
-      const guarda = { onPezzo: ({ caratteri, pensiero }: { caratteri: number; pensiero: number }) => { l.caratteri = caratteri; l.pensiero = pensiero; } };
-      let usato = MODELLO;
-      let esito = await generaOllamaEsito(testo, { modello: MODELLO, timeoutMs: 900_000, aPezzi: true, ...guarda });
-      if (!esito.ok && RIPIEGO && RIPIEGO !== MODELLO) {   // spento: il modello è uno solo
-        console.log(`[piano-sale] ${MODELLO} non ha risposto (${esito.causa}): riprovo con ${RIPIEGO}`);
-        l.dettaglio = `${MODELLO} non ha risposto, riprovo con ${RIPIEGO}`;
-        l.caratteri = 0; l.pensiero = 0;
-        usato = RIPIEGO;
-        esito = await generaOllamaEsito(testo, { modello: RIPIEGO, timeoutMs: 600_000, aPezzi: true, ...guarda });
-      }
-      usatoAlla = usato;
+      const esito = await generaOllamaEsito(testo, {
+        modello: MODELLO, timeoutMs: 600_000, aPezzi: true,
+        onPezzo: ({ caratteri, pensiero }) => { l.caratteri = caratteri; l.pensiero = pensiero; },
+      });
       if (esito.ok) {
         // Qwen 3.8 ragiona ad alta voce fra <think>…</think>: si tiene solo
         // quello che viene dopo, altrimenti il piano è illeggibile.
         proposta = esito.testo.includes('</think>') ? esito.testo.split('</think>').pop()!.trim() : esito.testo.trim();
-        propostaDa = `${usato} · modello locale${usato === RIPIEGO ? ' (ripiego: il modello grande non è entrato in memoria)' : ''}`;
+        propostaDa = `${MODELLO} · modello locale`;
         ms = esito.ms;
       } else {
         console.log(`[piano-sale] proposta non riuscita: ${esito.causa}`);
@@ -211,7 +199,7 @@ export async function preparaPianoSale(
     try {
       await fetch(`${process.env.OLLAMA_URL || 'http://localhost:11434'}/api/generate`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: usatoAlla, keep_alive: 0 }), signal: AbortSignal.timeout(30_000),
+        body: JSON.stringify({ model: MODELLO, keep_alive: 0 }), signal: AbortSignal.timeout(30_000),
       });
     } catch { /* se Ollama non risponde, pazienza: il piano è già fatto */ }
 
