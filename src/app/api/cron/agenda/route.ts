@@ -26,5 +26,12 @@ export async function GET(req: NextRequest) {
     else errori++;
   }
 
+  // Il piano delle sale del giorno si prepara da solo, agganciato a questo
+  // giro: non è una risposta a una domanda, dev'essere già pronto quando si
+  // apre la Home. Non si aspetta l'esito — se fallisce, riprova fra 15 minuti.
+  void fetch(`${req.nextUrl.origin}/api/cron/piano-sale?key=${encodeURIComponent(key ?? '')}`, {
+    signal: AbortSignal.timeout(180_000),
+  }).catch(() => {});
+
   return NextResponse.json({ feeds: feeds.length, ok, errori });
 }

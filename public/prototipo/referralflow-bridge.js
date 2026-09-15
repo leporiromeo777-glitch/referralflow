@@ -300,6 +300,13 @@ PAGES.home = () => {
           <div class="tl">${appts.length ? appts.map(a => `<div class="tl-item ${a.status === 'COMPLETED' ? 'done' : a === next ? 'now' : a.late ? 'warn' : ''} clickable" data-go="#/patients/${a.p}" style="cursor:pointer"><span class="time num">${a.start}<span class="caption" style="display:block;font-weight:400">${a.dur ? `${a.dur}'` : ''}</span></span><div class="b"><div class="n">${rfEsc(fullName(P[a.p]))}</div><div class="s">${rfEsc(a.reason)} · ${rfEsc(DOCTORS[a.doc] || '')}${a.room ? ` · ${rfEsc(a.room)}` : ''}</div></div>${a.status === 'CANCELLED' ? '' : (typeof statusBadge === 'function' ? statusBadge(a.status) : '')}</div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessun appuntamento oggi in agenda.</div>'}</div></div>
       </div>
       <div class="stack">
+        ${(() => { const p = RF.data.pianoSale; if (!p || !Array.isArray(p.righe) || !p.righe.length) return '';
+          const daDecidere = Array.isArray(p.da_decidere) ? p.da_decidere : [];
+          const riga = (r) => `<div class="rf-piano-riga"><span class="s">${rfEsc(r.stanza)}</span><span class="f">${r.segmenti.map(x => x.chi ? `<b>${rfEsc(x.chi)}</b> <span class="o">${rfEsc(x.dalle)}–${rfEsc(x.alle)}</span>` : `<span class="vuoto">${rfEsc(x.perche)}</span>`).join(' · ')}</span></div>`;
+          return `<div class="card"><div class="card-head"><span class="section-title">Piano delle sale</span>${daDecidere.length ? `<span class="badge count">${daDecidere.length} da decidere</span>` : '<span class="badge success">tutto deciso</span>'}</div>
+            <div class="rf-piano">${p.righe.map(riga).join('')}</div>
+            ${p.proposta ? `<div class="rf-piano-prop"><div class="t">${ICONS.ai} Proposta per le caselle aperte</div><div class="c">${rfEsc(p.proposta).replace(/\n/g, '<br>')}</div><div class="caption mt-8">${rfEsc(p.proposta_da || '')}${p.accettata_at ? ' · accettata' : ' · da confermare, la decisione è di chi è in studio'}</div></div>` : ''}
+            <div class="caption mt-8" style="padding:0 6px">Le regole stanno nella pagina «Medici/Sale»: si cambiano lì, non nel codice.</div></div>`; })()}
         <div class="card"><div class="card-head"><span class="section-title">Sale oggi</span><button class="btn sm ghost" data-go="#/administration">Studio ${ICONS.chevR}</button></div>
           ${sale.length ? sale.slice(0, 10).map(rigaSala).join('') : `<div class="caption" style="padding:8px 6px">Nessuna sala registrata.${RF.data.agendeMedico ? ` Le ${RF.data.agendeMedico} colonne dell'agenda di oggi sono <b>agende di medici</b>, non luoghi: in MediOnline una colonna è un'agenda, e dove avviene la visita non è scritto da nessuna parte.` : ''} Le sale si registrano in Studio → Sale e apparecchi.</div>`}
           ${sale.length ? '<div class="caption mt-8" style="padding:0 6px">Barra piena = 8 ore. Il luogo viene dal campo «luogo» dell\'agenda.</div>' : ''}
@@ -854,6 +861,17 @@ const RF_AI_NOME = 'Cleo';
 /* Di chi è la stanza, accanto al nome nel riquadro «Sale oggi». */
 .rf-sala-chi { display:block; font-size:11.5px; font-weight:400; color:var(--accent); margin-top:1px; }
 .rf-sala-chi.vuota { color:var(--text-3); font-style:italic; }
+/* Piano delle sale: preparato dal cron prima che qualcuno lo chieda. */
+.rf-piano { display:flex; flex-direction:column; }
+.rf-piano-riga { display:grid; grid-template-columns:62px minmax(0,1fr); gap:8px; padding:5px 6px; border-top:1px solid var(--border); font-size:12.5px; align-items:baseline; }
+.rf-piano-riga:first-child { border-top:0; }
+.rf-piano-riga .s { color:var(--text-3); font-weight:600; }
+.rf-piano-riga .o { color:var(--text-3); font-size:11.5px; }
+.rf-piano-riga .vuoto { color:var(--warning); font-style:italic; }
+.rf-piano-prop { margin-top:10px; padding:10px 12px; border-radius:var(--r-card,10px); background:var(--accent-soft); }
+.rf-piano-prop .t { display:flex; align-items:center; gap:6px; font-size:11.5px; font-weight:650; text-transform:uppercase; letter-spacing:.03em; color:var(--accent-text); margin-bottom:6px; }
+.rf-piano-prop .t svg { width:13px; height:13px; }
+.rf-piano-prop .c { font-size:12.5px; line-height:1.5; }
 /* Con medici + tipi le colonne diventano tante: la griglia scorre dentro il
    suo riquadro invece di essere tagliata (.cal ha overflow:hidden). */
 .rf-cal-scorre { overflow-x: auto; overflow-y: hidden; padding-bottom: 2px; }

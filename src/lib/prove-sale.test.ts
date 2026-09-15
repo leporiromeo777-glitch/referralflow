@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { capienza, leggiSale, salePerPrompt, titolare } from './sale';
+import { capienza, daDeciderePerPrompt, leggiSale, pianoDelGiorno, salePerPrompt, titolare } from './sale';
 
 const MD = `
 ## Sala 3
@@ -83,4 +83,35 @@ test('una sala «condivisa» senza dire fra chi lo dichiara, non stampa un elenc
   const t = salePerPrompt(s);
   assert.ok(!t.includes('condivisa fra ;'), t);
   assert.ok(t.includes('non è scritto fra chi'));
+});
+
+test('piano: fasce contigue con lo stesso titolare si fondono', () => {
+  const p = pianoDelGiorno(leggiSale(MD), ['Dr. med. Marco Moccetti'], 'mar');
+  const tre = p.righe.find((r) => r.stanza === 'Sala 3')!;
+  assert.equal(tre.segmenti.length, 1, 'senza Tiziano la 3 è di Marco tutto il giorno');
+  assert.equal(tre.segmenti[0].chi, 'Marco Moccetti');
+});
+
+test('piano: con Tiziano la Sala 3 si spezza in due fasce', () => {
+  const p = pianoDelGiorno(leggiSale(MD), ['Dr. med. Marco Moccetti', 'Prof. Dr. med. Tiziano Moccetti'], 'mar');
+  const tre = p.righe.find((r) => r.stanza === 'Sala 3')!;
+  assert.equal(tre.segmenti.length, 2);
+  assert.deepEqual(tre.segmenti.map((s) => [s.dalle, s.chi]), [['07:00', 'Marco Moccetti'], ['13:00', 'Tiziano Moccetti']]);
+});
+
+test('piano: una stanza condivisa con due presenti finisce in «da decidere»', () => {
+  const p = pianoDelGiorno(leggiSale(MD), ['Dr. Davide Girola', 'Dr. med. Miko Pedrotti'], 'lun');
+  assert.equal(p.daDecidere.length, 1);
+  assert.equal(p.daDecidere[0].stanza, 'Sala 5');
+  // con uno solo non c'è niente da decidere
+  const solo = pianoDelGiorno(leggiSale(MD), ['Dr. Davide Girola'], 'lun');
+  assert.equal(solo.daDecidere.length, 0);
+});
+
+test('piano: quello che si manda al modello ha il già deciso, le caselle aperte e chi c’è', () => {
+  const presenti = ['Dr. Davide Girola', 'Dr. med. Miko Pedrotti'];
+  const t = daDeciderePerPrompt(pianoDelGiorno(leggiSale(MD), presenti, 'lun'), presenti);
+  assert.ok(t.includes('IN STUDIO OGGI: Dr. Davide Girola, Dr. med. Miko Pedrotti'));
+  assert.ok(t.includes('GIÀ DECISO DALLE REGOLE:'));
+  assert.ok(t.includes('Sala 5'));
 });

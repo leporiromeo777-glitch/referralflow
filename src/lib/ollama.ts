@@ -92,6 +92,11 @@ export type OpzioniOllama = {
   immagini?: string[];
   timeoutMs?: number;
   modello?: string;
+  // Generazioni LUNGHE (un modello grande e freddo: Qwen 3.8 27B ci mette
+  // minuti a partire). `fetch` di Node chiude la connessione se il primo byte
+  // non arriva entro 300 secondi, e `AbortSignal.timeout` non sposta quel
+  // limite: si prende la risposta a pezzi, così i byte cominciano subito.
+  aPezzi?: boolean;
 };
 
 export type EsitoOllama =
@@ -109,6 +114,7 @@ export async function generaOllamaEsito(prompt: string, opzioni: OpzioniOllama =
     stream: false,
     options: { temperature: 0 },
   };
+  if (opzioni.aPezzi) corpo.stream = true;
   if (opzioni.json) corpo.format = 'json';
   if (opzioni.immagini?.length) corpo.images = opzioni.immagini;
 
@@ -133,8 +139,28 @@ export async function generaOllamaEsito(prompt: string, opzioni: OpzioniOllama =
       console.error(`[ai-locale] generazione fallita (${causa}) modello=${modello} ${dettaglio} in ${ms}ms`);
       return { ok: false, causa, dettaglio, ms };
     }
-    const dati = await r.json();
-    const testo = typeof dati?.response === 'string' ? dati.response.trim() : '';
+    let testo = '';
+    if (opzioni.aPezzi) {
+      // Ollama manda una riga JSON per pezzo; si concatenano i `response`.
+      const lettore = r.body?.getReader();
+      const dec = new TextDecoder();
+      let resto = '';
+      while (lettore) {
+        const { value, done } = await lettore.read();
+        if (done) break;
+        resto += dec.decode(value, { stream: true });
+        const righe = resto.split('\n');
+        resto = righe.pop() ?? '';
+        for (const riga of righe) {
+          if (!riga.trim()) continue;
+          try { testo += String(JSON.parse(riga)?.response ?? ''); } catch { /* riga incompleta */ }
+        }
+      }
+      testo = testo.trim();
+    } else {
+      const dati = await r.json();
+      testo = typeof dati?.response === 'string' ? dati.response.trim() : '';
+    }
     if (!testo) {
       console.error(`[ai-locale] risposta vuota modello=${modello} in ${ms}ms`);
       return { ok: false, causa: 'risposta_vuota', dettaglio: 'campo response vuoto', ms };

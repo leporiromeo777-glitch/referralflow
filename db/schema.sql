@@ -953,3 +953,23 @@ alter table studio_risorse add constraint studio_risorse_tipo_check
 -- `ruolo` dice se può comparire come medico in fattura, `professione` dice cosa
 -- fa, che è quello che serve leggere in agenda (migrazione 050).
 alter table providers add column if not exists professione text;
+
+-- Piano delle sale del giorno, preparato in anticipo: il codice lo calcola
+-- dalle regole della wiki, il modello propone solo dove restano caselle aperte
+-- e la proposta resta marcata finché una persona non la accetta
+-- (migrazione 051).
+create table if not exists piano_sale (
+  id           uuid primary key default gen_random_uuid(),
+  studio_id    uuid not null references studios(id) on delete cascade,
+  giorno       date not null,
+  righe        jsonb not null,
+  da_decidere  jsonb not null default '[]'::jsonb,
+  proposta     text,
+  proposta_da  text,
+  proposta_ms  integer,
+  accettata_at timestamptz,
+  accettata_da uuid references users(id),
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+create unique index if not exists piano_sale_giorno_idx on piano_sale (studio_id, giorno);

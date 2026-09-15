@@ -135,3 +135,54 @@ export function salePerPrompt(sale: Sala[]): string {
     })
     .join('\n');
 }
+
+// ---------------------------------------------------------------------------
+// Il piano della giornata: chi sta dove, fascia per fascia.
+//
+// Lo prepara il CODICE dalle regole. Quel che resta scoperto — una stanza
+// condivisa con più persone presenti, o nessuna — esce in `daDecidere`: è lì,
+// e solo lì, che ha senso chiedere una proposta a un modello.
+
+export type Segmento = { dalle: string; alle: string; chi: string; perche: string };
+export type RigaPiano = { stanza: string; segmenti: Segmento[]; nota: string; stato: string };
+export type Piano = { giorno: string; righe: RigaPiano[]; daDecidere: { stanza: string; dalle: string; alle: string; perche: string }[] };
+
+const APERTURA = '07:00';
+const CHIUSURA = '19:30';
+
+export function pianoDelGiorno(sale: Sala[], presenti: string[], giorno: string): Piano {
+  const righe: RigaPiano[] = [];
+  const daDecidere: Piano['daDecidere'] = [];
+  for (const s of sale) {
+    // I confini delle fasce sono l'apertura più le ore scritte nella regola.
+    const confini = [APERTURA, ...s.fasce.map((f) => f.dalle), CHIUSURA]
+      .filter((x, i, v) => v.indexOf(x) === i)
+      .sort();
+    const segmenti: Segmento[] = [];
+    for (let i = 0; i < confini.length - 1; i++) {
+      const t = titolare(s, confini[i], giorno, presenti);
+      const ultimo = segmenti[segmenti.length - 1];
+      // Fasce contigue con lo stesso titolare si fondono: «di Marco dalle 7
+      // alle 13» invece di tre righe uguali.
+      if (ultimo && ultimo.chi === t.chi && ultimo.perche === t.perche) ultimo.alle = confini[i + 1];
+      else segmenti.push({ dalle: confini[i], alle: confini[i + 1], chi: t.chi, perche: t.perche });
+    }
+    righe.push({ stanza: s.nome, segmenti, nota: s.nota, stato: s.stato });
+    for (const seg of segmenti) {
+      if (!seg.chi && seg.perche.startsWith('condivisa fra')) {
+        daDecidere.push({ stanza: s.nome, dalle: seg.dalle, alle: seg.alle, perche: seg.perche });
+      }
+    }
+  }
+  return { giorno, righe, daDecidere };
+}
+
+// Quel che si manda al modello quando c'è qualcosa da decidere: il piano già
+// risolto, le caselle aperte e chi è in studio. Nessun nome di paziente.
+export function daDeciderePerPrompt(piano: Piano, presenti: string[]): string {
+  const fatto = piano.righe
+    .flatMap((r) => r.segmenti.filter((s) => s.chi).map((s) => `${r.stanza} ${s.dalle}-${s.alle}: ${s.chi}`))
+    .join('\n');
+  const aperte = piano.daDecidere.map((d) => `${d.stanza} ${d.dalle}-${d.alle}: ${d.perche}`).join('\n');
+  return `IN STUDIO OGGI: ${presenti.join(', ') || 'nessuno'}\n\nGIÀ DECISO DALLE REGOLE:\n${fatto}\n\nDA DECIDERE:\n${aperte}`;
+}
