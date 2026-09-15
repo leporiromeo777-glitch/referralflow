@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { query } from '@/lib/db';
 import { generaOllamaEsito } from '@/lib/ollama';
-import { assegnaVisite, daSistemarePerPrompt, escluso, fuoriDalPiano, leggiSale, pianoDelGiorno } from '@/lib/sale';
+import { assegnaVisite, daSistemarePerPrompt, escluso, fuoriDalPiano, leggiSale, pianoDelGiorno, prestazioniFuoriPiano } from '@/lib/sale';
 
 // Preparare il piano delle sale (15.9.2026). Sta qui, e non dentro una rotta,
 // perché lo chiedono in due: il cron di notte e il pulsante «Prepara con
@@ -92,10 +92,12 @@ export async function preparaPianoSale(
   try {
     let regole;
     let fuori: string[] = [];
+    let fuoriPrest: string[] = [];
     try {
       const md = readFileSync(path.join(process.cwd(), 'docs/wiki/Medici/Sale.md'), 'utf-8');
       regole = leggiSale(md);
       fuori = fuoriDalPiano(md);
+      fuoriPrest = prestazioniFuoriPiano(md);
     } catch {
       finisci('errore', 'la pagina «Medici/Sale» non si legge');
       return { ok: false, stato: 'pagina non leggibile' };
@@ -113,17 +115,23 @@ export async function preparaPianoSale(
 
     const piano = pianoDelGiorno(regole, presenti, giorno);
 
-    const app = await query<{ id: string; chi: string | null; start: string; dur: number }>(
+    // La prestazione si riconosce dal colore dell'agenda, come in tutto il
+    // resto: serve per lasciar fuori quel che non si fa in studio (una
+    // risonanza, un intervento in ospedale).
+    const app = await query<{ id: string; chi: string | null; start: string; dur: number; prestazione: string | null }>(
       `select a.id, pr.nome as chi, to_char(a.starts_at, 'HH24:MI') as start,
-              greatest(5, round(extract(epoch from (coalesce(a.ends_at, a.starts_at + interval '30 min') - a.starts_at)) / 60))::int as dur
-         from appointments a left join providers pr on pr.id = a.provider_id
+              greatest(5, round(extract(epoch from (coalesce(a.ends_at, a.starts_at + interval '30 min') - a.starts_at)) / 60))::int as dur,
+              c.nome as prestazione
+         from appointments a
+         left join providers pr on pr.id = a.provider_id
+         left join prestazioni_catalogo c on c.studio_id = a.studio_id and c.attivo and lower(c.colore) = lower(a.colore)
         where a.studio_id = $1 and a.starts_at::date = $2::date
           and coalesce(a.stato_medionline, '') not in ('annullato', 'scusato')`,
       [studioId, giornoIso]
     );
     // Chi è fuori dal piano non entra nel conto delle sale né nel testo che
     // va al modello: le sue sedute non occupano una stanza dei medici.
-    const utili = app.filter((a) => !escluso(a.chi ?? '', fuori));
+    const utili = app.filter((a) => !escluso(a.chi ?? '', fuori) && !(a.prestazione && escluso(a.prestazione, fuoriPrest)));
     const visite = assegnaVisite(piano.righe, utili.map((a) => ({ id: a.id, chi: a.chi ?? '', start: a.start, dur: a.dur })));
     const libere = piano.righe
       .filter((r) => !(visite[r.stanza] ?? []).length)

@@ -35,11 +35,24 @@ const GIORNI = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
 // riabilitazione, per dire — e contarle fra le «visite senza sala» farebbe
 // sembrare un problema una cosa che non lo è.
 export function fuoriDalPiano(markdown: string): string[] {
+  return elencoInTesta(markdown, 'fuori dal piano');
+}
+
+// Le prestazioni che non occupano una sala dello studio: quelle che si fanno
+// altrove (una risonanza, un intervento in ospedale). Riga «- Prestazioni
+// fuori dal piano: …», sempre prima della prima stanza.
+export function prestazioniFuoriPiano(markdown: string): string[] {
+  return elencoInTesta(markdown, 'prestazioni fuori dal piano');
+}
+
+function elencoInTesta(markdown: string, chiave: string): string[] {
   for (const grezza of (markdown ?? '').split('\n')) {
     const riga = grezza.trim();
     if (riga.startsWith('## ')) break;                 // da qui in poi sono stanze
-    const m = /^[-*]\s*`?fuori dal piano`?\s*:\s*(.+)$/i.exec(riga);
-    if (m) return m[1].split(',').map((x) => x.replace(/[`*]/g, '').trim()).filter(Boolean);
+    const m = /^[-*]\s*`?([^:`]+)`?\s*:\s*(.+)$/.exec(riga);
+    if (m && m[1].trim().toLowerCase() === chiave) {
+      return m[2].split(',').map((x) => x.replace(/[`*]/g, '').trim()).filter(Boolean);
+    }
   }
   return [];
 }

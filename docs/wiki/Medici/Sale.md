@@ -14,9 +14,10 @@ Questa pagina è **letta dalla piattaforma** (`src/lib/sale.ts`, cache di 5 minu
 - `Nota:` una riga per chi legge, ignorata dal codice.
 - `Stato:` `proposta` finché lo studio non la conferma, poi `validato`.
 
-Una riga sola, qui sopra le stanze, dice **chi non entra nel piano**: persone che lavorano in studio ma le cui sedute non occupano una sala dei medici. Non vengono contate fra le «visite senza sala», perché non è un problema da risolvere.
+Due righe, qui sopra le stanze, dicono **che cosa non entra nel piano**: persone che lavorano in studio ma le cui sedute non occupano una sala dei medici, e prestazioni che si fanno altrove (una risonanza, un intervento in ospedale). Non vengono contate fra le «visite senza sala», perché non è un problema da risolvere. La prestazione di un appuntamento si riconosce dal colore dell'agenda: una voce elencata qui ha effetto solo se nel catalogo dello studio ha un colore.
 
 - Fuori dal piano: Andrea Bronz
+- Prestazioni fuori dal piano: Intervento, Risonanza magnetica, TAC
 
 Le regole qui sotto vengono dalla conversazione del 15.9.2026 e dalle misure sull'agenda vera (chi lavora quando, quanti pazienti in parallelo). **Sono una proposta**: chi le vive le corregge.
 
@@ -25,7 +26,9 @@ Le regole qui sotto vengono dalla conversazione del 15.9.2026 e dalle misure sul
 - Stato: proposta
 
 ## Sala 2
-- Di: Marco Moccetti
+- Di: Daniela Cassani
+- Funzione: Ecografia
+- Nota: ecografista, una decina di esami al giorno. La stanza era intestata a Marco Moccetti, che ha anche la 1 e la 3 e non la usava: il 15.9.2026 lo studio ha applicato questa assegnazione dalla proposta del giorno. Se la sua stanza vera è un'altra, si cambia qui.
 - Stato: proposta
 
 ## Sala 3
