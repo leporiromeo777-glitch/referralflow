@@ -22,13 +22,14 @@ Due righe, qui sopra le stanze, dicono **che cosa non entra nel piano**: persone
 Le regole qui sotto vengono dalla conversazione del 15.9.2026 e dalle misure sull'agenda vera (chi lavora quando, quanti pazienti in parallelo). **Sono una proposta**: chi le vive le corregge.
 
 ## Sala 1
-- Di: Marco Moccetti
-- Stato: proposta
+- Di: Vera Lucia Paiocchi
+- Nota: è sempre la sua, non cambia mai — detto dallo studio il 15.9.2026. Prima la pagina la dava a Marco Moccetti.
+- Stato: validato
 
 ## Sala 2
 - Di: Daniela Cassani
 - Funzione: Ecografia
-- Nota: ecografista, una decina di esami al giorno. La stanza era intestata a Marco Moccetti, che ha anche la 1 e la 3 e non la usava: il 15.9.2026 lo studio ha applicato questa assegnazione dalla proposta del giorno. Se la sua stanza vera è un'altra, si cambia qui.
+- Nota: ecografista, una decina di esami al giorno. La stanza era intestata a Marco Moccetti e non la usava: il 15.9.2026 lo studio ha applicato questa assegnazione dalla proposta del giorno. Se la sua stanza vera è un'altra, si cambia qui.
 - Stato: proposta
 
 ## Sala 3

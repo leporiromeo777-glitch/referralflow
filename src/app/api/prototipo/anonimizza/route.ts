@@ -10,10 +10,13 @@ export const dynamic = 'force-dynamic';
 // piattaforma (`src/lib/anonimizza.ts`: modello LOCALE che individua i dati
 // identificativi, il CODICE li sostituisce con segnaposto, rete di regole per
 // AVS, e-mail e telefoni svizzeri). Testo incollato o file .txt/.md/.pdf/.docx.
-// Del documento non resta NULLA: né il testo, né il nome del file. Resta solo
-// una riga di registro — chi, quando, da dove, quanto lungo, quanti segnaposto
-// per tipo — perché sapere che cosa è stato fatto non richiede conservare
-// quello su cui è stato fatto (tabella `anonimizzazioni`, migrazione 053).
+// Che cosa resta: una riga di registro (chi, quando, da dove, quanto lungo,
+// quanti segnaposto per tipo) e — per gli ULTIMI CINQUE documenti — il testo
+// ANONIMIZZATO, così si può riscaricare senza rifare il lavoro. Mai
+// l'originale, mai il nome del file, mai la tabella dei segnaposto: quella è
+// la chiave per tornare indietro, e tenerla accanto al testo annullerebbe il
+// senso della pagina (`anonimizzazioni`, migrazioni 053 e 054).
+const QUANTI_TESTI = 5;
 const FILE_MAX = 10 * 1024 * 1024;
 const RUOLI_AMMESSI = new Set(['segretaria', 'medico', 'admin']);
 
@@ -75,9 +78,17 @@ export async function POST(req: NextRequest) {
     }
     try {
       await query(
-        `insert into anonimizzazioni (studio_id, user_id, origine, caratteri, sostituzioni, per_tipo, modello, ms)
-         values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)`,
-        [session.studioId, session.id, origine, testo.length, esito.sostituzioni.length, JSON.stringify(perTipo), esito.modello, ms]
+        `insert into anonimizzazioni (studio_id, user_id, origine, caratteri, sostituzioni, per_tipo, modello, ms, testo)
+         values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)`,
+        [session.studioId, session.id, origine, testo.length, esito.sostituzioni.length, JSON.stringify(perTipo), esito.modello, ms, esito.testo]
+      );
+      // Oltre il quinto il testo si cancella da solo: la riga resta, il
+      // documento no. Non è una pulizia da fare a mano, se no non si fa.
+      await query(
+        `update anonimizzazioni set testo = null
+          where studio_id = $1 and testo is not null
+            and id not in (select id from anonimizzazioni where studio_id = $1 and testo is not null order by created_at desc limit $2)`,
+        [session.studioId, QUANTI_TESTI]
       );
     } catch (e) { console.warn(`[anonimizza] registro non scritto: ${(e as Error).message}`); }
     return NextResponse.json({ ok: true, originale: testo, testo: esito.testo, sostituzioni: esito.sostituzioni, modello: esito.modello, ms }, { headers: { 'Cache-Control': 'no-store' } });
@@ -87,17 +98,30 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Lo storico: le ultime anonimizzazioni dello studio. Numeri e nient'altro.
-export async function GET() {
+// Lo storico: le ultime anonimizzazioni dello studio — numeri, e per le
+// ultime cinque anche il testo anonimizzato da riscaricare (`?id=…`).
+export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
   if (!RUOLI_AMMESSI.has(session.role)) return NextResponse.json({ errore: 'ruolo_non_ammesso' }, { status: 403 });
-  const storico = await query<{ id: string; origine: string; caratteri: number; sostituzioni: number; per_tipo: Record<string, number>; modello: string | null; ms: number | null; created_at: string; da: string | null }>(
+
+  const id = req.nextUrl.searchParams.get('id');
+  if (id) {
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ errore: 'id_non_valido' }, { status: 400 });
+    const [riga] = await query<{ testo: string | null; created_at: string }>(
+      'select testo, created_at::text from anonimizzazioni where id = $1 and studio_id = $2', [id, session.studioId]);
+    if (!riga) return NextResponse.json({ errore: 'non_trovato' }, { status: 404 });
+    if (!riga.testo) return NextResponse.json({ errore: 'Questo documento non c’è più: se ne tengono solo gli ultimi cinque.' }, { status: 410 });
+    console.log(`[anonimizza] riscaricato id=${id} da=${session.email}`);
+    return NextResponse.json({ ok: true, testo: riga.testo, created_at: riga.created_at }, { headers: { 'Cache-Control': 'no-store' } });
+  }
+
+  const storico = await query<{ id: string; origine: string; caratteri: number; sostituzioni: number; per_tipo: Record<string, number>; modello: string | null; ms: number | null; created_at: string; da: string | null; ha_testo: boolean }>(
     `select a.id, a.origine, a.caratteri, a.sostituzioni, a.per_tipo, a.modello, a.ms, a.created_at::text,
-            split_part(u.email, '@', 1) as da
+            split_part(u.email, '@', 1) as da, (a.testo is not null) as ha_testo
        from anonimizzazioni a left join users u on u.id = a.user_id
       where a.studio_id = $1 order by a.created_at desc limit 50`,
     [session.studioId]
   );
-  return NextResponse.json({ storico }, { headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json({ storico, quanti_testi: QUANTI_TESTI }, { headers: { 'Cache-Control': 'no-store' } });
 }

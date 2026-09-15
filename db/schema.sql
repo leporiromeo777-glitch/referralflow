@@ -991,3 +991,6 @@ create table if not exists anonimizzazioni (
   created_at    timestamptz not null default now()
 );
 create index if not exists anonimizzazioni_studio_idx on anonimizzazioni (studio_id, created_at desc);
+
+-- 054: testo anonimizzato degli ultimi cinque documenti (mai l'originale).
+alter table anonimizzazioni add column if not exists testo text;

@@ -2648,6 +2648,20 @@ function rfAnonDrop(e, el) {
 function rfAnonScegli() { const i = document.getElementById('rf-anon-file'); if (i) i.click(); }
 function rfAnonFile(input) { const f = input.files && input.files[0]; if (f) { RF.anon = { ...RF.anon, file: f, errore: null }; render(); } }
 function rfAnonTogliFile() { RF.anon = { ...RF.anon, file: null }; render(); }
+/* Riscaricare uno dei cinque tenuti: è il testo anonimizzato, non l'originale. */
+async function rfAnonRiscarica(id) {
+  try {
+    const r = await fetch(`/api/prototipo/anonimizza?id=${encodeURIComponent(id)}`, { credentials: 'include' });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.testo) { toast(j.errore || 'Documento non disponibile'); void rfCaricaAnon(); return; }
+    const d = new Date(j.created_at || Date.now());
+    const nome = `anonimizzato-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}.txt`;
+    const url = URL.createObjectURL(new Blob([j.testo], { type: 'text/plain;charset=utf-8' }));
+    const a = document.createElement('a'); a.href = url; a.download = nome;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch { toast('Piattaforma non raggiungibile'); }
+}
 function rfAnonPeso(n) { return n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} kB`; }
 function rfAnonQuando(iso) {
   if (!iso) return '';
@@ -2678,9 +2692,9 @@ PAGES.anonymize = () => {
         <span class="q">${rfEsc(rfAnonQuando(x.created_at))}</span>
         <span class="n">${rfEsc(RF_ANON_ORIGINE[x.origine] || x.origine)}</span>
         <span class="t">${Object.entries(x.per_tipo || {}).sort((p, q) => q[1] - p[1]).slice(0, 5).map(([k, n]) => `<span class="badge">${rfEsc(k)} · ${n}</span>`).join('') || '<span class="caption">nessun dato trovato</span>'}</span>
-        <span class="dx">${x.caratteri} car.${x.da ? ` · ${rfEsc(x.da)}` : ''}</span>
+        <span class="dx">${x.caratteri} car.${x.da ? ` · ${rfEsc(x.da)}` : ''}${x.ha_testo ? `<button class="btn sm ghost" style="margin-left:8px" onclick="rfAnonRiscarica('${rfEsc(x.id)}')">Scarica</button>` : ''}</span>
       </div>`).join('') : '<div class="caption" style="padding:8px 6px">Ancora nessuna anonimizzazione.</div>'}
-    <div class="caption mt-8" style="padding:0 6px">Del documento non resta niente: né il testo, né il nome del file. Qui ci sono solo quando, da dove, quanto era lungo e quanti segnaposto per tipo — serve a sapere che cosa è stato fatto, non a ritrovarlo.</div></div>`;
+    <div class="caption mt-8" style="padding:0 6px">Degli <b>ultimi cinque</b> documenti si tiene il testo <b>anonimizzato</b>, così si può riscaricare senza rifare il lavoro; dal sesto in poi resta solo la riga. Non si conservano mai l'originale, il nome del file o la tabella dei segnaposto — quella è la chiave per tornare indietro.</div></div>`;
 
   if (a.esito) {
     return `
@@ -2728,7 +2742,7 @@ PAGES.anonymize = () => {
       <div class="stack">
         <div class="card"><div class="section-title">Come funziona</div><div class="meta" style="line-height:1.7;font-size:13px;margin-top:6px">Il modello locale indica i dati identificativi, il <b>codice</b> li sostituisce con segnaposto — <code>[NOME_1]</code>, <code>[DATA_2]</code> — così il modello non può riscrivere il testo. Una rete di regole prende comunque AVS, e-mail e telefoni svizzeri anche se al modello sfuggono.</div></div>
         <div class="card"><div class="section-title">Che cosa NON fa</div><div class="meta" style="line-height:1.7;font-size:13px;margin-top:6px">Non anonimizza le scansioni: un PDF fotografato non ha testo da leggere. Non rende un documento <b>anonimo</b> a norma di legge — lo rende <b>pseudonimizzato</b>: chi ha la tabella dei segnaposto può tornare indietro, e nel dubbio vale come dato sanitario.</div></div>
-        <div class="card"><div class="section-title">Dove finisce</div><div class="meta" style="line-height:1.7;font-size:13px;margin-top:6px">Da nessuna parte. Il testo entra, esce anonimizzato e viene dimenticato: nel registro qui accanto restano solo la data, l'origine e i conteggi. Se ti serve il risultato, copialo o scaricalo prima di chiudere.</div></div>
+        <div class="card"><div class="section-title">Dove finisce</div><div class="meta" style="line-height:1.7;font-size:13px;margin-top:6px">L'originale viene dimenticato appena finito. Del <b>testo anonimizzato</b> si tengono gli <b>ultimi cinque</b>, per poterli riscaricare dallo storico; dal sesto in poi resta solo la riga con data, origine e conteggi. Non si conservano mai il nome del file né la tabella dei segnaposto.</div></div>
       </div>
     </div>`;
 };
