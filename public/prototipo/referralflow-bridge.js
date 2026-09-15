@@ -3206,8 +3206,11 @@ window.addEventListener('load', () => {
 /* Le visite dentro la colonna del calendario. */
 .rf-cs-vv { position:absolute; top:0; bottom:0; left:16px; right:4px; z-index:2; }
 .rf-cs-v { position:absolute; z-index:2; border:0; cursor:pointer; font:inherit; text-align:left; overflow:hidden;
+  display:flex; flex-direction:column; align-items:stretch; gap:0;
   padding:2px 6px; border-radius:6px; background:var(--surface); color:var(--text-2); box-shadow:0 0 0 1px var(--border), inset 2px 0 0 var(--accent);
-  font-size:10.5px; line-height:1.25; white-space:nowrap; }
+  font-size:10.5px; line-height:1.25; }
+.rf-cs-v .nm { font-size:10.5px; font-weight:650; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rf-cs-v .pr { font-size:9.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .rf-cs-v:hover { color:var(--text); box-shadow:0 0 0 1px var(--border-2), inset 2px 0 0 var(--accent); }
 .rf-cs-v.sovra { box-shadow:0 0 0 1px var(--danger-soft), inset 2px 0 0 var(--danger); }
 .rf-sug { position:fixed; z-index:9999; max-width:270px; padding:9px 11px; border-radius:11px; pointer-events:none;
@@ -3529,7 +3532,7 @@ PAGES.sale = () => {
       const h = (rfMinuti(v.fine) - rfMinuti(v.inizio)) * M - 1;
       const n = Math.max(1, v.corsie || 1), c = v.corsia || 0;
       return `<button class="rf-cs-v${v.sovra ? ' sovra' : ''}" style="top:${su(v.inizio).toFixed(1)}px;height:${Math.max(7, h).toFixed(1)}px;left:${(c / n * 100).toFixed(2)}%;width:calc(${(100 / n).toFixed(2)}% - 2px)"
-        onclick="event.stopPropagation(); rfApptScheda('${rfEsc(v.id)}')" data-sug="${rfEsc(rfSugVisita(v, r.stanza))}">${h >= 14 && n === 1 ? `${rfEsc(v.inizio)}${v.etichetta ? ` · ${rfEsc(v.etichetta)}` : ''}` : (h >= 14 ? rfEsc(v.inizio) : '')}</button>`;
+        onclick="event.stopPropagation(); rfApptScheda('${rfEsc(v.id)}')" data-sug="${rfEsc(rfSugVisita(v, r.stanza))}"><span class="nm">${rfEsc(v.paziente || v.inizio)}</span>${(v.motivo || v.etichetta) ? `<span class="pr">${rfEsc(v.motivo || v.etichetta)}</span>` : ''}</button>`;
     }).join('')}</div></div>`;
 
   return `<div class="page-head"><div><h2 class="page-title">Sale e medici</h2>
