@@ -112,3 +112,20 @@ export function capienza(
   const hm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
   return { picco, oreOltre: oltre.map(hm), minutiOltre: oltre.length ? oltre[oltre.length - 1] - oltre[0] : 0 };
 }
+
+// Le regole delle sale in forma leggibile per il modello. Cleo NON decide di
+// chi è una stanza — quello lo fa `titolare()` — ma quando la capienza non
+// basta, o manca qualcuno, o arriva un'urgenza, serve un giudizio con dei
+// compromessi: lì il modello propone e la persona decide. Perciò riceve le
+// regole com'è scritte, non le conclusioni.
+export function salePerPrompt(sale: Sala[]): string {
+  return sale
+    .map((s) => {
+      const pezzi = [s.di === 'condivisa' ? `condivisa fra ${s.chi.join(', ')}` : `di ${s.di}`];
+      for (const f of s.fasce) pezzi.push(`dalle ${f.dalle} di ${f.chi}`);
+      if (s.giorni.length) pezzi.push(`solo ${s.giorni.join(' ')}`);
+      if (s.stato && s.stato !== 'validato') pezzi.push(`regola ancora «${s.stato}»`);
+      return `- ${s.nome}: ${pezzi.join('; ')}${s.nota ? ` — ${s.nota}` : ''}`;
+    })
+    .join('\n');
+}

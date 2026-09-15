@@ -983,7 +983,8 @@ function rfAiBenvenuto() {
     { t: 'La giornata', icona: ICONS.clock, voci: [
       ['prepara la giornata', 'dal codice, subito'],
       ['chi arriva domani', 'dall\'agenda della Cassa dei Medici'],
-      ['come sono messe le sale oggi', 'dall\'agenda, per luogo'],
+      ['di chi è la Sala 3 oggi pomeriggio', 'dalle regole delle sale'],
+      ['dove mettiamo un\'urgenza alle 15', 'proposta, non decisione'],
     ] },
     { t: 'Rimasto indietro', icona: ICONS.alert, voci: [
       ['lettere in ritardo', 'dalle referral e dai referti'],

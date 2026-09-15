@@ -8,6 +8,7 @@ import { query } from '@/lib/db';
 import { elencoPerPrompt, trovaProcedura } from '@/lib/procedure-registro';
 import { caricaOrganizzazione, organizzazionePerPrompt } from '@/lib/organizzazione';
 import { caricaPercorsi, percorsiPerPrompt, trovaPercorso } from '@/lib/percorsi';
+import { leggiSale, salePerPrompt } from '@/lib/sale';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,6 +55,18 @@ export async function POST(req: NextRequest) {
   // percorsi, sequenze o esami da fare, o nomina un percorso.
   const percorsi = caricaPercorsi();
   const percorsoNominato = trovaPercorso(percorsi, domanda);
+  // Sale: le regole entrano nel prompt solo se la domanda parla di stanze. Il
+  // modello non decide di chi è una sala — la regola lo dice già — ma quando
+  // la capienza non basta o manca qualcuno propone una sistemazione, e chi
+  // legge decide.
+  let bloccoSale = '';
+  if (/\bsal[ae]\b|stanz|dove\s+(mettiamo|metto|sta|va)|capienz|libera|liber[ei]\b/i.test(domanda)) {
+    try {
+      const { readFileSync } = await import('node:fs');
+      const path = await import('node:path');
+      bloccoSale = salePerPrompt(leggiSale(readFileSync(path.join(process.cwd(), 'docs/wiki/Medici/Sale.md'), 'utf-8')));
+    } catch { bloccoSale = ''; }
+  }
   const bloccoPercorsi = percorsoNominato || /percors|sequenz|quali esami|che esami|iter\b/i.test(domanda) ? percorsiPerPrompt(percorsoNominato ? [percorsoNominato] : percorsi) : '';
   const proceduraSimile = trovaProcedura(domanda, ruolo);
   const blocccoDoc = doc ? `\n\nDOCUMENTO APERTO («${doc.nota || doc.filename}»${doc.troncato ? ', troncato' : ''}):\n${doc.testo || '(nessun testo estraibile: immagine o scansione senza OCR)'}` : '';
@@ -68,6 +81,7 @@ export async function POST(req: NextRequest) {
 PROCEDURE DISPONIBILI (se la domanda corrisponde a una di queste, rispondi in una riga suggerendo di chiederla con quel nome, senza eseguirla):
 ${elencoPerPrompt(ruolo)}
 ${bloccoOrg ? `\nORGANIZZAZIONE DELLO STUDIO (chi fa che cosa; rispondi con il ruolo, mai con nomi di persone):\n${bloccoOrg}\n` : ''}
+${bloccoSale ? `\nSALE DELLO STUDIO (regole dalla wiki «Medici/Sale»; di chi è quale stanza e da che ora). Se la domanda è su una sistemazione, PROPONI e spiega il compromesso, non decidere: la decisione è di chi è in studio. Ricorda che una fetta in agenda non è sempre una persona dentro una stanza.\n${bloccoSale}\n` : ''}
 ${bloccoPercorsi ? `\nPERCORSI DIAGNOSTICO-TERAPEUTICI DELLO STUDIO (sequenze standard dalla wiki, stato «proposta» finché il medico non le valida; cita il percorso per nome, non aggiungere esami):\n${bloccoPercorsi}\n` : ''}
 DATI:
 ${contesto}${bloccoFatti}${blocccoDoc}
