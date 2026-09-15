@@ -285,3 +285,25 @@ function corsie(visite: VisitaSala[], min: (t: string) => number): void {
   }
   chiudi();
 }
+
+// Che cosa si manda al modello quando c'è qualcosa da sistemare (15.9.2026).
+//
+// Non solo le caselle aperte: da quando le visite entrano nel piano si sa
+// anche quali stanze restano vuote tutto il giorno e chi lavora senza averne
+// una. È lì che una proposta serve davvero — e resta una proposta: chi entra
+// in quale stanza lo decide chi è in studio. Nessun nome di paziente.
+export function daSistemarePerPrompt(
+  piano: Piano,
+  presenti: string[],
+  libere: { stanza: string; di: string }[],
+  senzaSala: { chi: string; n: number }[]
+): string {
+  const pezzi = [daDeciderePerPrompt(piano, presenti)];
+  pezzi.push(`\nSALE SENZA NESSUNA VISITA OGGI:\n${libere.length
+    ? libere.map((l) => `- ${l.stanza}${l.di ? ` (intestata a ${l.di})` : ''}`).join('\n')
+    : '- nessuna: tutte le stanze hanno almeno una visita'}`);
+  pezzi.push(`\nCHI LAVORA OGGI SENZA UNA SALA:\n${senzaSala.length
+    ? senzaSala.map((s) => `- ${s.chi}: ${s.n} ${s.n === 1 ? 'visita' : 'visite'}`).join('\n')
+    : '- nessuno: tutti hanno una stanza'}`);
+  return pezzi.join('\n');
+}

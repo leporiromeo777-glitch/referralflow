@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { applicaModifiche, assegnaVisite, capienza, daDeciderePerPrompt, leggiSale, pianoDelGiorno, salePerPrompt, titolare } from './sale';
+import { applicaModifiche, assegnaVisite, capienza, daSistemarePerPrompt, daDeciderePerPrompt, leggiSale, pianoDelGiorno, salePerPrompt, titolare } from './sale';
 
 const MD = `
 ## Sala 3
@@ -216,4 +216,17 @@ test('visite: due nella stessa stanza allo stesso momento stanno in corsie diver
     if (x.id >= y.id || x.corsia !== y.corsia) continue;
     assert.ok(x.fine <= y.inizio || y.fine <= x.inizio, `${x.id} e ${y.id} si sovrappongono nella corsia ${x.corsia}`);
   }
+});
+
+test('quel che si manda al modello dice anche le sale vuote e chi è senza stanza', () => {
+  const piano = pianoDelGiorno(leggiSale(MD_VISITE), ['Marco Moccetti'], 'mar');
+  const t = daSistemarePerPrompt(piano, ['Marco Moccetti'],
+    [{ stanza: 'Sala 2', di: 'Marco Moccetti' }],
+    [{ chi: 'Daniela Cassani', n: 10 }]);
+  assert.match(t, /SALE SENZA NESSUNA VISITA OGGI:\n- Sala 2 \(intestata a Marco Moccetti\)/);
+  assert.match(t, /CHI LAVORA OGGI SENZA UNA SALA:\n- Daniela Cassani: 10 visite/);
+  assert.ok(!t.includes('Paziente'), 'nel testo per il modello non entrano pazienti');
+  const vuoto = daSistemarePerPrompt(piano, ['Marco Moccetti'], [], []);
+  assert.match(vuoto, /nessuna: tutte le stanze/);
+  assert.match(vuoto, /nessuno: tutti hanno una stanza/);
 });
