@@ -300,19 +300,30 @@ PAGES.home = () => {
           <div class="tl">${appts.length ? appts.map(a => `<div class="tl-item ${a.status === 'COMPLETED' ? 'done' : a === next ? 'now' : a.late ? 'warn' : ''} clickable" data-go="#/patients/${a.p}" style="cursor:pointer"><span class="time num">${a.start}<span class="caption" style="display:block;font-weight:400">${a.dur ? `${a.dur}'` : ''}</span></span><div class="b"><div class="n">${rfEsc(fullName(P[a.p]))}</div><div class="s">${rfEsc(a.reason)} · ${rfEsc(DOCTORS[a.doc] || '')}${a.room ? ` · ${rfEsc(a.room)}` : ''}</div></div>${a.status === 'CANCELLED' ? '' : (typeof statusBadge === 'function' ? statusBadge(a.status) : '')}</div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessun appuntamento oggi in agenda.</div>'}</div></div>
       </div>
       <div class="stack">
-        ${(() => { const p = RF.data.pianoSale; if (!p || !Array.isArray(p.righe) || !p.righe.length) return '';
-          const daDecidere = Array.isArray(p.da_decidere) ? p.da_decidere : [];
-          const riga = (r) => `<div class="rf-piano-riga"><span class="s">${rfEsc(r.stanza)}</span><span class="f">${r.segmenti.map(x => x.chi ? `<b>${rfEsc(x.chi)}</b> <span class="o">${rfEsc(x.dalle)}–${rfEsc(x.alle)}</span>` : `<span class="vuoto">${rfEsc(x.perche)}</span>`).join(' · ')}</span></div>`;
-          return `<div class="card"><div class="card-head"><span class="section-title">Piano delle sale</span>${daDecidere.length ? `<span class="badge count">${daDecidere.length} da decidere</span>` : '<span class="badge success">tutto deciso</span>'}</div>
-            <div class="rf-piano">${p.righe.map(riga).join('')}</div>
-            ${p.proposta ? `<div class="rf-piano-prop"><div class="t">${ICONS.ai} Proposta per le caselle aperte</div><div class="c">${rfEsc(p.proposta).replace(/\n/g, '<br>')}</div><div class="caption mt-8">${rfEsc(p.proposta_da || '')}${p.accettata_at ? ' · accettata' : ' · da confermare, la decisione è di chi è in studio'}</div></div>` : ''}
-            <div class="caption mt-8" style="padding:0 6px">Le regole stanno nella pagina «Medici/Sale»: si cambiano lì, non nel codice.</div></div>`; })()}
-        <div class="card"><div class="card-head"><span class="section-title">Sale oggi</span><button class="btn sm ghost" data-go="#/administration">Studio ${ICONS.chevR}</button></div>
-          ${sale.length ? sale.slice(0, 10).map(rigaSala).join('') : `<div class="caption" style="padding:8px 6px">Nessuna sala registrata.${RF.data.agendeMedico ? ` Le ${RF.data.agendeMedico} colonne dell'agenda di oggi sono <b>agende di medici</b>, non luoghi: in MediOnline una colonna è un'agenda, e dove avviene la visita non è scritto da nessuna parte.` : ''} Le sale si registrano in Studio → Sale e apparecchi.</div>`}
-          ${sale.length ? '<div class="caption mt-8" style="padding:0 6px">Barra piena = 8 ore. Il luogo viene dal campo «luogo» dell\'agenda.</div>' : ''}
-          ${(() => { const c = RF.data.capienzaSale; if (!c || !c.picco) return ''; const scarso = c.oreOltre && c.oreOltre.length;
-            return `<div class="caption mt-8" style="padding:0 6px">Al massimo oggi <b>${c.picco} appuntamenti insieme</b> su ${c.stanze} stanze.${scarso ? ` Non bastano dalle <b>${rfEsc(c.oreOltre[0])}</b>${c.oreOltre.length > 1 ? ` alle <b>${rfEsc(c.oreOltre[c.oreOltre.length - 1])}</b>` : ''}. Una fetta in agenda non è sempre una persona in stanza: è una capienza da guardare, non un errore.` : ''}</div>`; })()}
-          ${RF.data.agendeMedico ? `<div class="caption mt-8" style="padding:0 6px">Fuori da questo elenco: <b>${RF.data.agendeMedico} agende di medici</b> — in MediOnline la colonna è l'agenda del medico, non la stanza.</div>` : ''}</div>
+        ${(() => {
+          /* Una sola carta per le sale: se il piano del giorno è pronto (lo prepara
+             il cron, nessuno deve chiederlo) si mostra quello; finché non c'è si
+             ricade sull'occupazione letta dal campo «luogo» dell'agenda. */
+          const p = RF.data.pianoSale;
+          const c = RF.data.capienzaSale;
+          const notaCapienza = (() => { if (!c || !c.picco) return ''; const scarso = c.oreOltre && c.oreOltre.length;
+            return `<div class="caption mt-8" style="padding:0 6px">Al massimo oggi <b>${c.picco} appuntamenti insieme</b> su ${c.stanze} stanze.${scarso ? ` Non bastano dalle <b>${rfEsc(c.oreOltre[0])}</b>${c.oreOltre.length > 1 ? ` alle <b>${rfEsc(c.oreOltre[c.oreOltre.length - 1])}</b>` : ''}. Una fetta in agenda non è sempre una persona in stanza: è una capienza da guardare, non un errore.` : ''}</div>`; })();
+          const notaAgende = RF.data.agendeMedico ? `<div class="caption mt-8" style="padding:0 6px">Fuori da questo elenco: <b>${RF.data.agendeMedico} agende di medici</b> — in MediOnline la colonna è l'agenda del medico, non la stanza.</div>` : '';
+          const testa = (destra) => `<div class="card-head"><span class="section-title">Sale oggi</span><span style="display:flex;align-items:center;gap:8px">${destra}<button class="btn sm ghost" data-go="#/administration">Studio ${ICONS.chevR}</button></span></div>`;
+          if (p && Array.isArray(p.righe) && p.righe.length) {
+            const daDecidere = Array.isArray(p.da_decidere) ? p.da_decidere : [];
+            const riga = (r) => `<div class="rf-piano-riga"><span class="s">${rfEsc(r.stanza)}</span><span class="f">${r.segmenti.map(x => x.chi ? `<b>${rfEsc(x.chi)}</b> <span class="o">${rfEsc(x.dalle)}–${rfEsc(x.alle)}</span>` : `<span class="vuoto">${rfEsc(x.perche)}</span>`).join(' · ')}</span></div>`;
+            return `<div class="card">${testa(daDecidere.length ? `<span class="badge count">${daDecidere.length} da decidere</span>` : '<span class="badge success">tutto deciso</span>')}
+              <div class="rf-piano">${p.righe.map(riga).join('')}</div>
+              ${p.proposta ? `<div class="rf-piano-prop"><div class="t">${ICONS.ai} Proposta per le caselle aperte</div><div class="c">${rfEsc(p.proposta).replace(/\n/g, '<br>')}</div><div class="caption mt-8">${rfEsc(p.proposta_da || '')}${p.accettata_at ? ' · accettata' : ' · da confermare, la decisione è di chi è in studio'}</div></div>` : ''}
+              ${notaCapienza}
+              <div class="caption mt-8" style="padding:0 6px">Le regole stanno nella pagina «Medici/Sale»: si cambiano lì, non nel codice.</div></div>`;
+          }
+          return `<div class="card">${testa('')}
+            ${sale.length ? sale.slice(0, 10).map(rigaSala).join('') : `<div class="caption" style="padding:8px 6px">Nessuna sala registrata.${RF.data.agendeMedico ? ` Le ${RF.data.agendeMedico} colonne dell'agenda di oggi sono <b>agende di medici</b>, non luoghi: in MediOnline una colonna è un'agenda, e dove avviene la visita non è scritto da nessuna parte.` : ''} Le sale si registrano in Studio → Sale e apparecchi.</div>`}
+            ${sale.length ? '<div class="caption mt-8" style="padding:0 6px">Barra piena = 8 ore. Il luogo viene dal campo «luogo» dell\'agenda.</div>' : ''}
+            ${notaCapienza}
+            ${notaAgende}</div>`; })()}
         <div class="card"><div class="card-head"><span class="section-title">In studio oggi</span><span class="badge count">${nMed}</span></div>
           <div class="list">${nMed ? mediciOggi.map(d => `<div class="rf-persona"><i class="dot success"></i><span>${rfEsc(DOCTORS[d] || d)}${rfEtichettaRuolo(d)}</span><span class="caption" style="margin-left:auto">${appts.filter(a => a.doc === d).length} app.</span></div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessun medico con agenda oggi.</div>'}</div>
           <div class="caption mt-8" style="padding:0 6px">${s.accessi_attivi ?? 0} accessi attivi alla piattaforma</div></div>
