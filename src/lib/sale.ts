@@ -307,3 +307,67 @@ export function daSistemarePerPrompt(
     : '- nessuno: tutti hanno una stanza'}`);
   return pezzi.join('\n');
 }
+
+// ---------------------------------------------------------------------------
+// Leggere la proposta del modello per applicarla (15.9.2026).
+//
+// «Confermo» deve cambiare la giornata sotto, non solo mettere un timbro. Ma
+// la proposta è testo libero, e un testo libero non si esegue a fiducia: qui
+// si riconoscono SOLO le righe della forma «<stanza> … → <persona> …», dove
+// la stanza dev'essere una di quelle del piano e la persona una di quelle che
+// oggi sono in studio. Tutto il resto resta scritto e non applicato — chi
+// legge vede che cosa è stato saltato e perché.
+//
+// La persona si cerca DOPO la freccia: «Sala 2 (intestata a Moccetti) →
+// Cassani» assegna a Cassani, non a Moccetti.
+
+export type RigaProposta = { stanza: string; chi: string; riga: string };
+export type LetturaProposta = { applicabili: RigaProposta[]; saltate: { riga: string; perche: string }[] };
+
+const FRECCE = ['→', '->', '=>', '⟶'];
+
+export function leggiProposta(testo: string, righe: RigaPiano[], persone: string[]): LetturaProposta {
+  const applicabili: RigaProposta[] = [];
+  const saltate: { riga: string; perche: string }[] = [];
+  // Le stanze più lunghe prima: «Sport 1» non dev'essere letta come «Sport».
+  const stanze = righe.map((r) => r.stanza).sort((a, b) => b.length - a.length);
+  for (const grezza of String(testo ?? '').split('\n')) {
+    const riga = grezza.trim();
+    if (!riga) continue;
+    const stanza = stanze.find((s) => riga.toLowerCase().startsWith(s.toLowerCase()));
+    if (!stanza) continue;                       // riga che non parla di una stanza: non è un errore
+    const taglio = FRECCE.map((f) => riga.indexOf(f)).filter((i) => i >= 0).sort((a, b) => a - b)[0];
+    if (taglio === undefined) { saltate.push({ riga, perche: 'non dice a chi va la stanza' }); continue; }
+    const coda = riga.slice(taglio + 1);
+    const trovate = persone
+      .map((p) => ({ p, dove: posizioneNome(coda, p) }))
+      .filter((x) => x.dove >= 0)
+      .sort((a, b) => a.dove - b.dove);
+    if (!trovate.length) { saltate.push({ riga, perche: 'non nomina nessuno di chi è in studio oggi' }); continue; }
+    if (trovate.length > 1 && trovate[0].dove === trovate[1].dove) {
+      saltate.push({ riga, perche: 'il nome può essere di due persone' }); continue;
+    }
+    const piano = righe.find((r) => r.stanza === stanza)!;
+    const turni = piano.segmenti.filter((s) => s.chi);
+    if (turni.length > 1) { saltate.push({ riga, perche: `${stanza} ha già due turni nella giornata` }); continue; }
+    applicabili.push({ stanza, chi: trovate[0].p, riga });
+  }
+  return { applicabili, saltate };
+}
+
+// Dove compare il cognome (o il nome) di questa persona, come parola intera.
+function posizioneNome(testo: string, persona: string): number {
+  const t = ` ${testo.toLowerCase()} `;
+  const parole = persona.toLowerCase()
+    .replace(/\b(prof|dr|dott|med|ssa)\b\.?/g, ' ')
+    .split(/[^a-zà-ÿ]+/i)
+    .filter((w) => w.length > 2);
+  let dove = -1;
+  for (const w of parole) {
+    const i = t.indexOf(` ${w} `);
+    const j = t.search(new RegExp(`[^a-zà-ÿ]${w}[^a-zà-ÿ]`, 'i'));
+    const k = i >= 0 ? i : j;
+    if (k >= 0 && (dove < 0 || k < dove)) dove = k;
+  }
+  return dove;
+}

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { applicaModifiche, assegnaVisite, capienza, daSistemarePerPrompt, daDeciderePerPrompt, leggiSale, pianoDelGiorno, salePerPrompt, titolare } from './sale';
+import { applicaModifiche, assegnaVisite, capienza, daSistemarePerPrompt, leggiProposta, daDeciderePerPrompt, leggiSale, pianoDelGiorno, salePerPrompt, titolare } from './sale';
 
 const MD = `
 ## Sala 3
@@ -229,4 +229,50 @@ test('quel che si manda al modello dice anche le sale vuote e chi è senza stanz
   const vuoto = daSistemarePerPrompt(piano, ['Marco Moccetti'], [], []);
   assert.match(vuoto, /nessuna: tutte le stanze/);
   assert.match(vuoto, /nessuno: tutti hanno una stanza/);
+});
+
+const PROPOSTA_VERA = `Sala 5 → Girola: Moschovitis ha già Sport 3, la condivisione è ridondante e la stanza va a chi non ne ha.
+Sala 2 (intestata a Moccetti) → Cassani, 10 visite: prestito per la giornata, non cambio di intestazione.
+Sport 1 (intestata a Capelli) → appuntamenti senza medico, 9 visite: prestito per la giornata.
+Bronz, 3 visite: stanze vuote esaurite, non le viene assegnata una sala.
+La conferma di ogni assegnazione spetta a chi è in studio.`;
+
+test('la proposta si legge riga per riga, e la persona si cerca dopo la freccia', () => {
+  const regole = leggiSale(`
+## Sala 2
+- Di: Marco Moccetti
+- Stato: proposta
+
+## Sala 5
+- Di: condivisa
+- Chi: Davide Girola, Georgios Moschovitis
+- Stato: proposta
+
+## Sport 1
+- Di: Bruno Capelli
+- Stato: proposta
+`);
+  const piano = pianoDelGiorno(regole, ['Marco Moccetti', 'Davide Girola', 'Georgios Moschovitis'], 'mar');
+  const l = leggiProposta(PROPOSTA_VERA, piano.righe, ['Dr. med. Marco Moccetti', 'Dr. Davide Girola', 'Daniela Cassani', 'Dr. med. Georgios Moschovitis']);
+  assert.deepEqual(l.applicabili.map((x) => [x.stanza, x.chi]), [
+    ['Sala 5', 'Dr. Davide Girola'],
+    ['Sala 2', 'Daniela Cassani'],
+  ], '«(intestata a Moccetti)» non deve rubare l’assegnazione a Cassani');
+  // «appuntamenti senza medico» non è una persona: la riga resta scritta e non applicata
+  assert.equal(l.saltate.length, 1);
+  assert.match(l.saltate[0].riga, /^Sport 1/);
+  assert.match(l.saltate[0].perche, /nessuno di chi è in studio/);
+});
+
+test('la proposta non applica righe ambigue o su stanze con due turni', () => {
+  const regole = leggiSale(`
+## Sala 3
+- Di: Marco Moccetti
+- Dalle 13:00: Tiziano Moccetti
+- Stato: proposta
+`);
+  const piano = pianoDelGiorno(regole, ['Marco Moccetti', 'Tiziano Moccetti'], 'mar');
+  const l = leggiProposta('Sala 3 → Moccetti: prende la stanza.', piano.righe, ['Dr. med. Marco Moccetti', 'Prof. Dr. med. Tiziano Moccetti']);
+  assert.equal(l.applicabili.length, 0);
+  assert.match(l.saltate[0].perche, /due persone|due turni/);
 });

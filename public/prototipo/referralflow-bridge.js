@@ -3399,6 +3399,7 @@ function rfSalaChiudi() { RF.salaAperta = ''; render(); }
 
 RF.pianoLavoro = null;
 RF.pianoOrologio = null;
+RF.saleEsito = null;
 
 /* Il pulsante: fa partire lo stesso lavoro che il cron fa di notte, e poi
    guarda a che punto è. Il modello locale ci mette minuti, quindi la risposta
@@ -3477,7 +3478,19 @@ function rfSalaAssegna(stanza, dalle) {
   rfSalePost({ azione: 'assegna', stanza, dalle, chi: sel ? sel.value : '' });
 }
 function rfSalaRipristina(stanza, dalle) { rfSalePost({ azione: 'ripristina', stanza, dalle }); }
-function rfPianoAccetta() { rfSalePost({ azione: 'accetta' }); }
+/* Confermare non mette un timbro: applica. Quel che non si è potuto applicare
+   si dice, invece di sparire. */
+async function rfPianoAccetta() {
+  RF.saleEsito = null;
+  try {
+    const r = await fetch('/api/prototipo/piano-sale', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'accetta' }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.errore) { RF.saleErrore = j.errore || 'Non ha funzionato.'; render(); return; }
+    RF.saleErrore = '';
+    RF.saleEsito = { applicate: j.applicate || [], saltate: j.saltate || [] };
+    await rfCaricaDati();
+  } catch { RF.saleErrore = 'Il server non risponde.'; render(); }
+}
 
 /* La giornata di una sala, dall'apertura alla chiusura: la barra con le fasce,
    le ore sotto, il segno di dov'è adesso, e l'elenco delle fasce a parole —
@@ -3519,7 +3532,7 @@ function rfSalaPannello(riga, ora) {
       <button class="x" onclick="rfSalaChiudi()" title="Chiudi">✕</button></div>
     ${rfSalaTimeline(riga, ora)}
     ${riga.nota ? `<div class="nota">${rfEsc(riga.nota)}</div>` : ''}
-    ${inProposta && p.proposta ? `<div class="rf-piano-prop" style="margin-top:10px"><div class="t">${ICONS.ai} Proposta per le caselle aperte</div><div class="c">${rfEsc(p.proposta).replace(/\n/g, '<br>')}</div><div class="caption mt-8">${rfEsc(p.proposta_da || '')}${p.accettata_at ? ' · accettata' : ' · da confermare, la decisione è di chi è in studio'}</div>${p.accettata_at ? '' : '<button class="btn sm mt-8" onclick="rfPianoAccetta()">Confermo la proposta</button>'}</div>` : ''}
+    ${inProposta && p.proposta ? `<div class="rf-piano-prop" style="margin-top:10px"><div class="t">${ICONS.ai} Proposta per le caselle aperte</div><div class="c">${rfEsc(p.proposta).replace(/\n/g, '<br>')}</div><div class="caption mt-8">${rfEsc(p.proposta_da || '')}${p.accettata_at ? ' · accettata' : ' · da confermare, la decisione è di chi è in studio'}</div>${p.accettata_at ? '' : '<button class="btn sm mt-8" onclick="rfPianoAccetta()">Confermo e applico</button>'}</div>` : ''}
     ${seg ? `<div class="rf-sala-azioni">
       <select class="input sm" id="rf-sala-chi">${opzioni.map(n => `<option value="${rfEsc(n)}"${seg.chi === n ? ' selected' : ''}>${rfEsc(n)}</option>`).join('')}<option value=""${seg.chi ? '' : ' selected'}>Nessuno · sala libera</option></select>
       <button class="btn sm primary" onclick="rfSalaAssegna('${rfEsc(riga.stanza)}', '${rfEsc(seg.dalle)}')">Applica per oggi</button>
@@ -3669,8 +3682,9 @@ PAGES.sale = () => {
     ${rfPianoCarta()}
     ${p.proposta ? `<div class="card"><div class="card-head"><span class="rf-lavoro-t">${ICONS.ai} Proposta per oggi</span>${p.accettata_at ? '<span class="badge success">confermata</span>' : '<span class="badge warning">da confermare</span>'}</div>
       <p class="meta" style="margin:0;line-height:1.6">${rfEsc(p.proposta).replace(/\n/g, '<br>')}</p>
-      <div class="caption mt-8">${rfEsc(p.proposta_da || '')} · la decisione resta di chi è in studio. Per applicarne una: apri la sala nel calendario, scegli il nome, «Applica per oggi».</div>
-      ${p.accettata_at ? '' : '<div class="row mt-16"><button class="btn primary" onclick="rfPianoAccetta()">Confermo la proposta</button></div>'}</div>` : ''}
+      <div class="caption mt-8">${rfEsc(p.proposta_da || '')} · la decisione resta di chi è in studio. <b>Confermando</b>, le assegnazioni entrano subito nel calendario qui sotto, per oggi; le regole restano nella pagina «Medici/Sale».</div>
+      ${RF.saleEsito ? `<div class="caption mt-8">${RF.saleEsito.applicate.length ? `<b>Applicate:</b> ${RF.saleEsito.applicate.map(rfEsc).join(' · ')}.` : 'Nessuna riga applicabile.'}${RF.saleEsito.saltate.length ? `<br><b>Non applicate:</b> ${RF.saleEsito.saltate.map(x => `${rfEsc(x.riga.split(':')[0])} — ${rfEsc(x.perche)}`).join(' · ')}.` : ''}</div>` : ''}
+      ${p.accettata_at ? '' : '<div class="row mt-16"><button class="btn primary" onclick="rfPianoAccetta()">Confermo e applico</button></div>'}</div>` : ''}
     ${aperta ? rfSalaPannello(aperta, ora) : ''}
       <div class="card">
         <div class="rf-cs-scorre">

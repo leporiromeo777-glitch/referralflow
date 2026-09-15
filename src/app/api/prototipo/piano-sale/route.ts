@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
-import type { ModificaSala } from '@/lib/sale';
+import { leggiProposta, type ModificaSala, type RigaPiano } from '@/lib/sale';
 import { preparaPianoSale, statoLavoro } from '@/lib/piano-sale';
 
 export const dynamic = 'force-dynamic';
@@ -41,16 +41,35 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, avviato: true, lavoro: statoLavoro(studio) });
   }
 
-  const [piano] = await query<{ id: string; modifiche: ModificaSala[]; righe: { stanza: string; segmenti: { dalle: string }[] }[]; proposta: string | null }>(
+  const [piano] = await query<{ id: string; modifiche: ModificaSala[]; righe: RigaPiano[]; proposta: string | null }>(
     `select id, modifiche, righe, proposta from piano_sale where studio_id = $1 and giorno = current_date`,
     [session.studioId]
   );
   if (!piano) return NextResponse.json({ errore: 'Il piano di oggi non è ancora pronto.' }, { status: 400 });
 
+  // Confermare APPLICA: la giornata sotto cambia subito. Si applicano solo le
+  // righe che si capiscono senza interpretare — stanza del piano, persona in
+  // studio oggi, un turno solo in quella stanza — e le altre tornano indietro
+  // con il motivo, invece di sparire ([[src/lib/sale]], `leggiProposta`).
   if (azione === 'accetta') {
     if (!piano.proposta) return NextResponse.json({ errore: 'Non c’è nessuna proposta da confermare.' }, { status: 400 });
-    await query('update piano_sale set accettata_at = now(), accettata_da = $2, updated_at = now() where id = $1', [piano.id, session.id]);
-    return NextResponse.json({ ok: true });
+    const persone = (await query<{ nome: string }>(
+      `select distinct pr.nome from appointments a join providers pr on pr.id = a.provider_id
+        where a.studio_id = $1 and a.starts_at::date = current_date and pr.attivo order by 1`, [session.studioId]
+    )).map((r) => r.nome);
+    const lettura = leggiProposta(piano.proposta, piano.righe ?? [], persone);
+    const da = (session.email || '').split('@')[0];
+    const restanti = (piano.modifiche ?? []).filter((m) => !lettura.applicabili.some((a) => a.stanza.toLowerCase() === m.stanza?.toLowerCase()));
+    const nuove: ModificaSala[] = [];
+    for (const a of lettura.applicabili) {
+      const riga = (piano.righe ?? []).find((r) => r.stanza === a.stanza);
+      for (const seg of riga?.segmenti ?? []) nuove.push({ stanza: a.stanza, dalle: seg.dalle, chi: a.chi, da });
+    }
+    await query(
+      `update piano_sale set accettata_at = now(), accettata_da = $2, modifiche = $3::jsonb, updated_at = now() where id = $1`,
+      [piano.id, session.id, JSON.stringify([...restanti, ...nuove])]
+    );
+    return NextResponse.json({ ok: true, applicate: lettura.applicabili.map((a) => `${a.stanza} → ${a.chi}`), saltate: lettura.saltate });
   }
 
   if (azione === 'assegna') {
