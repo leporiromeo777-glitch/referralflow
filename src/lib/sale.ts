@@ -23,6 +23,7 @@ export type Sala = {
   chi: string[];         // i nomi che se la dividono, quando è condivisa
   giorni: string[];      // 'lun'…'ven'; vuoto = tutti
   funzione: string;      // a che serve la stanza: «ecografia», «laboratorio»…
+  ultima: boolean;       // si riempie solo se le altre non bastano
   nota: string;
   stato: string;         // 'proposta' | 'validato'
 };
@@ -110,7 +111,7 @@ export function leggiSale(markdown: string): Sala[] {
     const riga = grezza.trim();
     const titolo = /^##\s+(.+)$/.exec(riga);
     if (titolo) {
-      corrente = { nome: titolo[1].trim(), di: '', fasce: [], chi: [], giorni: [], funzione: '', nota: '', stato: 'proposta' };
+      corrente = { nome: titolo[1].trim(), di: '', fasce: [], chi: [], giorni: [], funzione: '', nota: '', stato: 'proposta', ultima: false };
       fuori.push(corrente);
       continue;
     }
@@ -131,6 +132,7 @@ export function leggiSale(markdown: string): Sala[] {
     else if (chiave === 'chi') corrente.chi = valore.split(',').map((x) => x.trim()).filter(Boolean);
     else if (chiave === 'giorni') corrente.giorni = valore.toLowerCase().split(/[\s,]+/).filter((g) => GIORNI.includes(g));
     else if (chiave === 'funzione') corrente.funzione = valore;
+    else if (chiave === 'ultima') corrente.ultima = /^(s|y|1|v)/i.test(valore);
     else if (chiave === 'nota') corrente.nota = valore;
     else if (chiave === 'stato') corrente.stato = valore.toLowerCase();
   }
@@ -220,7 +222,7 @@ export function salePerPrompt(sale: Sala[]): string {
 // e solo lì, che ha senso chiedere una proposta a un modello.
 
 export type Segmento = { dalle: string; alle: string; chi: string; perche: string; manuale?: boolean };
-export type RigaPiano = { stanza: string; segmenti: Segmento[]; funzione: string; nota: string; stato: string };
+export type RigaPiano = { stanza: string; segmenti: Segmento[]; funzione: string; nota: string; stato: string; ultima: boolean };
 export type Piano = { giorno: string; righe: RigaPiano[]; daDecidere: { stanza: string; dalle: string; alle: string; perche: string }[] };
 
 const APERTURA = '07:00';
@@ -243,7 +245,7 @@ export function pianoDelGiorno(sale: Sala[], presenti: string[], giorno: string)
       if (ultimo && ultimo.chi === t.chi && ultimo.perche === t.perche) ultimo.alle = confini[i + 1];
       else segmenti.push({ dalle: confini[i], alle: confini[i + 1], chi: t.chi, perche: t.perche });
     }
-    righe.push({ stanza: s.nome, segmenti, funzione: s.funzione, nota: s.nota, stato: s.stato });
+    righe.push({ stanza: s.nome, segmenti, funzione: s.funzione, nota: s.nota, stato: s.stato, ultima: s.ultima });
     for (const seg of segmenti) {
       if (!seg.chi && seg.perche.startsWith('condivisa fra')) {
         daDecidere.push({ stanza: s.nome, dalle: seg.dalle, alle: seg.alle, perche: seg.perche });
@@ -320,7 +322,11 @@ export function assegnaVisite(righe: RigaPiano[], visite: VisitaGrezza[], vincol
   for (const v of ordinate) {
     if (!v.chi) continue;
     const i = min(v.start), f = i + Math.max(5, v.dur || 30);
-    let sue = righe.filter((r) => (r.segmenti ?? []).some((s) => s.chi && uguali(s.chi, v.chi) && v.start >= s.dalle && v.start < s.alle));
+    // Prima le stanze normali, le «ultime» solo se le altre non bastano:
+    // le sale dello sport si aprono quando servono, non per prime.
+    let sue = righe
+      .filter((r) => (r.segmenti ?? []).some((s) => s.chi && uguali(s.chi, v.chi) && v.start >= s.dalle && v.start < s.alle))
+      .sort((a, b) => Number(a.ultima) - Number(b.ultima));
     // Chi ha una stanza sola per regola non ne prende altre, mai.
     const vincolo = (vincoli ?? []).find((x) => uguali(x.chi, v.chi));
     if (vincolo) sue = sue.filter((r) => r.stanza.toLowerCase() === vincolo.stanza.toLowerCase());
@@ -377,7 +383,7 @@ export function daSistemarePerPrompt(
 ): string {
   const pezzi = [daDeciderePerPrompt(piano, presenti)];
   pezzi.push(`\nFASCE SENZA NESSUNA VISITA OGGI:\n${libere.length
-    ? libere.map((l) => `- ${l.stanza} ${l.dalle}-${l.alle}${l.di ? ` (intestata a ${l.di})` : ''}`).join('\n')
+    ? libere.map((l) => `- ${l.stanza} ${l.dalle}-${l.alle}${l.di ? ` (intestata a ${l.di})` : ''}${l.ultima ? ' — da usare solo se le altre non bastano' : ''}`).join('\n')
     : '- nessuna: tutte le stanze hanno visite in ogni fascia'}`);
   pezzi.push(`\nCHI LAVORA OGGI SENZA UNA SALA:\n${senzaSala.length
     ? senzaSala.map((s) => `- ${s.chi}: ${s.n} ${s.n === 1 ? 'visita' : 'visite'}`).join('\n')
@@ -487,15 +493,16 @@ function posizioneNome(testo: string, persona: string): number {
 // risultava libera mai, e nessuno poteva proporla. Visto il 15.9.2026:
 // Moschovitis lavorava 09:00-10:30 in una sala dello sport mentre la Sala 3
 // era deserta.
-export type FasciaLibera = { stanza: string; di: string; dalle: string; alle: string };
+export type FasciaLibera = { stanza: string; di: string; dalle: string; alle: string; ultima?: boolean };
 
 export function fasceLibere(righe: RigaPiano[], visite: Record<string, VisitaSala[]>): FasciaLibera[] {
   const fuori: FasciaLibera[] = [];
-  for (const r of righe) {
+  // Stesso ordine dell'assegnazione: chi legge trova per prime quelle da usare.
+  for (const r of [...righe].sort((a, b) => Number(a.ultima) - Number(b.ultima))) {
     const dentro = visite[r.stanza] ?? [];
     for (const s of r.segmenti) {
       if (dentro.some((v) => v.inizio >= s.dalle && v.inizio < s.alle)) continue;
-      fuori.push({ stanza: r.stanza, di: s.chi, dalle: s.dalle, alle: s.alle });
+      fuori.push({ stanza: r.stanza, di: s.chi, dalle: s.dalle, alle: s.alle, ultima: r.ultima });
     }
   }
   return fuori;

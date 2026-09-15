@@ -11,6 +11,7 @@ Questa pagina è **letta dalla piattaforma** (`src/lib/sale.ts`, cache di 5 minu
 - `Chi:` i nomi che se la dividono, quando è condivisa.
 - `Giorni:` i giorni in cui la regola vale (lun mar mer gio ven); assente = tutti.
 - `Funzione:` a che serve la stanza (ecografia, laboratorio, riabilitazione…); si vede nella Home sotto il nome della sala. Vuoto se nessuno l'ha ancora detto.
+- `Ultima:` `sì` se la stanza si riempie **solo quando le altre non bastano** — le sale dello sport si aprono al bisogno, non per prime.
 - `Nota:` una riga per chi legge, ignorata dal codice.
 - `Stato:` `proposta` finché lo studio non la conferma, poi `validato`.
 
@@ -54,12 +55,14 @@ Le regole qui sotto vengono dalla conversazione del 15.9.2026 e dalle misure sul
 - Di: Bruno Capelli
 - Nota: medicina dello sport.
 - Funzione: Sport
+- Ultima: sì
 - Stato: proposta
 
 ## Sport 2
 - Di: Bruno Capelli
 - Nota: medicina dello sport. Capelli non supera mai due pazienti in parallelo: due stanze gli bastano.
 - Funzione: Sport
+- Ultima: sì
 - Stato: proposta
 
 ## Sport 3
@@ -67,4 +70,5 @@ Le regole qui sotto vengono dalla conversazione del 15.9.2026 e dalle misure sul
 - Chi: Bruno Capelli, Georgios Moschovitis, Miko Pedrotti, Sebastiano Franscella
 - Nota: Capelli la usa solo mercoledì e giovedì dalle 13:15; il resto del tempo va a chi non ha stanza. Tutte e tre le sale Sport sono libere ogni mattina.
 - Funzione: Sport
+- Ultima: sì
 - Stato: proposta

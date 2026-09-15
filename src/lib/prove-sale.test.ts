@@ -423,3 +423,26 @@ test('libera è la fascia, non la stanza: la Sala 3 al mattino conta', () => {
   // contata per giornata intera, la Sala 3 non sarebbe mai risultata libera
   assert.ok((visite['Sala 3'] ?? []).length > 0, 'la stanza ha visite, ma non nella prima fascia');
 });
+
+test('le sale «ultime» si riempiono solo quando le altre non bastano', () => {
+  const md = `## Sala 9\n- Di: Georgios Moschovitis\n- Stato: proposta\n\n## Sport 1\n- Di: Georgios Moschovitis\n- Ultima: sì\n- Stato: proposta\n`;
+  const sale = leggiSale(md);
+  assert.equal(sale.find((x) => x.nome === 'Sport 1')?.ultima, true);
+  assert.equal(sale.find((x) => x.nome === 'Sala 9')?.ultima, false);
+  const piano = pianoDelGiorno(sale, ['Georgios Moschovitis'], 'mar');
+  // una visita sola: va nella sala normale, non nello sport
+  const una = assegnaVisite(piano.righe, [{ id: 'a', chi: 'Georgios Moschovitis', start: '09:00', dur: 30 }]);
+  assert.deepEqual(una['Sala 9'].map((x) => x.id), ['a']);
+  assert.deepEqual(una['Sport 1'], []);
+  // due insieme: la seconda apre lo sport, perché la normale è occupata
+  const due = assegnaVisite(piano.righe, [
+    { id: 'a', chi: 'Georgios Moschovitis', start: '09:00', dur: 30 },
+    { id: 'b', chi: 'Georgios Moschovitis', start: '09:00', dur: 30 },
+  ]);
+  assert.deepEqual(due['Sala 9'].map((x) => x.id), ['a']);
+  assert.deepEqual(due['Sport 1'].map((x) => x.id), ['b']);
+  // e nell'elenco delle fasce libere le «ultime» vengono dopo, e lo dicono
+  const libere = fasceLibere(piano.righe, una);
+  assert.deepEqual(libere.map((x) => x.stanza), ['Sport 1']);
+  assert.equal(libere[0].ultima, true);
+});
