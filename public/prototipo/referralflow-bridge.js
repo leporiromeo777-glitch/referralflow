@@ -3120,11 +3120,13 @@ window.addEventListener('load', () => {
 .rf-sala-r .sn { font-size:12.5px; font-weight:600; letter-spacing:-.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .rf-sala-r .chi { display:flex; align-items:center; gap:7px; min-width:0; font-size:12.5px; }
 .rf-sala-r .chi span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.rf-sala-r .chi.vuota { color:var(--text-2); font-style:italic; }
+.rf-sala-r .chi.vuota { color:var(--text-2); font-style:italic; white-space:nowrap; }
+.rf-sala-r .chi .di { font-style:normal; color:var(--text-3); font-size:11px; overflow:hidden; text-overflow:ellipsis; }
 .rf-sala-r .dx { font-size:11px; color:var(--text-3); white-space:nowrap; }
 .rf-sala-r .dx b { font-weight:600; color:var(--text-2); }
 .rf-sala-r.st-occupata .p { background:var(--accent); }
 .rf-sala-r.st-libera .p { background:transparent; border:1.5px solid var(--success); }
+.rf-sala-r.st-attesa .p { background:transparent; border:1.5px solid var(--accent); }
 .rf-sala-r.st-cambio .p, .rf-sala-r.st-aperta .p { background:var(--warning); }
 .rf-sala-r.st-spenta { opacity:.6; }
 
@@ -3182,6 +3184,7 @@ window.addEventListener('load', () => {
 .rf-cs-testa .sn .p { width:7px; height:7px; border-radius:50%; background:var(--text-3); flex:none; }
 .rf-cs-testa.st-occupata .p { background:var(--accent); }
 .rf-cs-testa.st-libera .p { background:transparent; border:1.5px solid var(--success); }
+.rf-cs-testa.st-attesa .p { background:transparent; border:1.5px solid var(--accent); }
 .rf-cs-testa.st-cambio .p, .rf-cs-testa.st-aperta .p { background:var(--warning); }
 .rf-cs-testa .sf { font-size:10px; color:var(--text-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .rf-cs { position:relative; display:flex; gap:4px; border-top:1px solid var(--border); }
@@ -3197,6 +3200,8 @@ window.addEventListener('load', () => {
 .rf-cs-b .o { font-size:10px; opacity:.75; font-variant-numeric:tabular-nums; }
 .rf-cs-b .n { font-size:11.5px; font-weight:600; line-height:1.25; word-break:break-word; }
 .rf-cs-b .am { font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; opacity:.8; }
+.rf-cs-b.vuota { background:var(--surface-3); color:var(--text-3); box-shadow:inset 3px 0 0 var(--border-2); }
+.rf-cs-b.vuota .n { font-weight:500; }
 .rf-cs-b.aperta { background:var(--warning-soft); color:var(--warning); box-shadow:inset 3px 0 0 var(--warning); font-style:italic; }
 :root[data-theme="dark"] .rf-cs-b { color:hsl(var(--h) 65% 80%); }
 /* Quando la sala ha le visite: micro-barra nell'elenco della Home. */
@@ -3344,16 +3349,27 @@ function rfProssimoCambio(riga, seg) {
   for (let k = i + 1; k < segs.length; k++) if (segs[k].chi !== seg.chi) return segs[k];
   return null;
 }
+// Lo stato di una sala non è «di chi è», è «chi c'è dentro». Una stanza
+// intestata a Marco in cui oggi non entra nessuno è LIBERA, e dirlo occupata
+// sarebbe una bugia comoda: le visite si stringono nelle stanze che servono
+// davvero (assegnaVisite riempie la prima libera), e quel che resta si può
+// dare a chi una stanza non ce l'ha.
 function rfStatoStanza(riga, ora) {
   const seg = rfSegAllOra(riga, ora);
-  if (!seg) return { classe: 'st-spenta', testo: 'Nessuna fascia' };
+  if (!seg) return { classe: 'st-spenta', testo: 'Nessuna fascia', visite: [], vuotaOggi: true };
   const dopo = rfProssimoCambio(riga, seg);
   const vicino = !!dopo && rfMinuti(dopo.dalle) - rfMinuti(ora) <= 60 && rfMinuti(dopo.dalle) >= rfMinuti(ora);
   const aperta = !seg.chi && /^condivisa fra/.test(seg.perche || '');
-  const maiUsata = (riga.segmenti || []).every(s => !s.chi);
-  const classe = vicino ? 'st-cambio' : seg.chi ? 'st-occupata' : aperta ? 'st-aperta' : maiUsata ? 'st-spenta' : 'st-libera';
-  const testo = seg.chi ? 'Occupata' : aperta ? 'Da decidere' : maiUsata ? 'Non usata oggi' : 'Libera';
-  return { classe, testo, seg, dopo, vicino, aperta };
+  const visite = rfVisiteSala(riga.stanza);
+  const inCorso = visite.filter(v => v.inizio <= ora && ora < v.fine);
+  const prossima = visite.find(v => v.inizio > ora) || null;
+  const vuotaOggi = visite.length === 0;
+  let classe, testo;
+  if (inCorso.length) { classe = 'st-occupata'; testo = inCorso.length > 1 ? `${inCorso.length} pazienti` : 'Occupata'; }
+  else if (vuotaOggi) { classe = aperta ? 'st-aperta' : 'st-libera'; testo = aperta ? 'Da decidere' : 'Libera oggi'; }
+  else if (prossima) { classe = vicino ? 'st-cambio' : 'st-attesa'; testo = `Libera fino alle ${prossima.inizio}`; }
+  else { classe = 'st-attesa'; testo = 'Finita per oggi'; }
+  return { classe, testo, seg, dopo, vicino, aperta, visite, inCorso, prossima, vuotaOggi };
 }
 
 /* Tutti i cambi di persona da adesso in poi, in ordine. */
@@ -3458,7 +3474,9 @@ function rfSaleElenco(righe, ora) {
     const dx = `${visite.length ? `<b>${visite.length}</b>` : ''}${mini}`;
     const riga = `<button class="rf-sala-r ${st.classe}${RF.salaAperta === r.stanza ? ' sel' : ''}" onclick="rfSalaApri('${rfEsc(r.stanza)}')" title="${rfEsc(r.stanza)} · ${rfEsc(st.testo)}${r.funzione ? ` · ${rfEsc(r.funzione)}` : ''}">
       <i class="p"></i><span class="sn">${rfEsc(r.stanza)}</span>
-      ${seg && seg.chi ? `<span class="chi">${rfAvatar(seg.chi)}<span>${rfEsc(rfNomeNudo(seg.chi))}</span>${seg.manuale ? '<span class="pe" style="font-size:10px;color:var(--accent-text);font-weight:650">a mano</span>' : ''}</span>` : `<span class="chi vuota">${rfEsc(st.testo)}</span>`}
+      ${seg && seg.chi && !st.vuotaOggi
+        ? `<span class="chi">${rfAvatar(seg.chi)}<span>${rfEsc(rfNomeNudo(seg.chi))}</span>${seg.manuale ? '<span class="pe" style="font-size:10px;color:var(--accent-text);font-weight:650">a mano</span>' : ''}</span>`
+        : `<span class="chi vuota">${rfEsc(st.testo)}${seg && seg.chi ? `<span class="di">· di ${rfEsc(rfNomeCorto(seg.chi))}</span>` : ''}</span>`}
       <span class="dx">${dx}</span></button>`;
     return riga + (RF.salaAperta === r.stanza ? rfSalaPannello(r, ora) : '');
   }).join('')}</div>`;
@@ -3481,7 +3499,8 @@ function rfCardSale(sale, rigaSala, nMed) {
   const ora = rfOraRif();
   const righe = p.righe;
   const stati = righe.map(r => rfStatoStanza(r, ora));
-  const occupate = stati.filter(x => x.seg && x.seg.chi).length;
+  const inUso = stati.filter(x => x.inCorso && x.inCorso.length).length;
+  const libere = stati.filter(x => x.vuotaOggi && !x.aperta).length;
   const aperte = stati.filter(x => x.aperta).length;
   const cambi = rfCambiDelGiorno(righe, ora).slice(0, 3);
   const fuoriOrario = RF.saleQuando === 'ora' && (rfOraOra() < RF_APERTURA || rfOraOra() >= RF_CHIUSURA);
@@ -3489,7 +3508,7 @@ function rfCardSale(sale, rigaSala, nMed) {
   return `<div class="card">
     <div class="rf-sale-head"><span class="section-title">Sale e medici</span>
       <div class="rf-seg">${bottone('ora', 'Ora')}${bottone('mattina', 'Mattina')}${bottone('pomeriggio', 'Pomeriggio')}</div></div>
-    <div class="rf-sale-sint">${nMed} ${nMed === 1 ? 'medico' : 'medici'} in studio · ${occupate}/${righe.length} sale occupate${aperte ? ` · ${aperte} da decidere` : ''}</div>
+    <div class="rf-sale-sint">${nMed} ${nMed === 1 ? 'medico' : 'medici'} in studio · ${inUso} ${inUso === 1 ? 'sala in uso' : 'sale in uso'}${libere ? ` · ${libere} ${libere === 1 ? 'libera oggi' : 'libere oggi'}` : ''}${aperte ? ` · ${aperte} da decidere` : ''}</div>
     ${fuoriOrario ? `<div class="caption" style="padding:0 2px 8px">Lo studio è chiuso: questa è la giornata di oggi alle ${rfEsc(ora)}.</div>` : ''}
     ${rfSaleElenco(righe, ora)}
     ${cambi.length ? `<div class="rf-cambi"><div class="tit">Prossimi cambi</div>
@@ -3524,7 +3543,8 @@ PAGES.sale = () => {
   const M = alto / (fine - inizio);
   const su = (t) => (rfMinuti(t) - inizio) * M;
   const stati = p.righe.map(r => rfStatoStanza(r, ora));
-  const occupate = stati.filter(x => x.seg && x.seg.chi).length;
+  const inUso = stati.filter(x => x.inCorso && x.inCorso.length).length;
+  const libere = stati.filter(x => x.vuotaOggi && !x.aperta).length;
   const cambi = rfCambiDelGiorno(p.righe, ora);
   const aMano = (p.modifiche || []).length;
   const bottone = (k, et) => `<button class="${RF.saleQuando === k ? 'on' : ''}" onclick="rfSaleQuando('${k}')">${et}</button>`;
@@ -3537,14 +3557,15 @@ PAGES.sale = () => {
     const n = rfVisiteSala(r.stanza).length;
     return `<button class="rf-cs-testa ${st.classe}${RF.salaAperta === r.stanza ? ' sel' : ''}" onclick="rfSalaApri('${rfEsc(r.stanza)}')" title="${rfEsc(r.stanza)} · ${rfEsc(st.testo)}${r.funzione ? ` · ${rfEsc(r.funzione)}` : ''}">
       <span class="sn"><i class="p"></i>${rfEsc(r.stanza)}</span>
-      <span class="sf">${n ? `${n} ${n === 1 ? 'visita' : 'visite'}` : 'nessuna visita'}${r.funzione ? ` · ${rfEsc(r.funzione)}` : ''}</span></button>`;
+      <span class="sf">${n ? `${n} ${n === 1 ? 'visita' : 'visite'}` : `libera${st.seg && st.seg.chi ? ` · di ${rfEsc(rfNomeCorto(st.seg.chi))}` : ''}`}${r.funzione ? ` · ${rfEsc(r.funzione)}` : ''}</span></button>`;
   };
   const colonna = (r) => `<div class="rf-cs-col${RF.salaAperta === r.stanza ? ' sel' : ''}" style="--riga:${(60 * M).toFixed(2)}px">
     ${(r.segmenti || []).map(s => {
+      const senzaVisite = !rfVisiteFascia(r.stanza, s).length;
       const vuoto = rfTestoVuoto(s);
       if (!s.chi && vuoto !== 'da decidere') return '';
       const h = (rfMinuti(s.alle) - rfMinuti(s.dalle)) * M - 3;
-      return `<button class="rf-cs-b${s.chi ? '' : ' aperta'}" style="top:${su(s.dalle).toFixed(1)}px;height:${Math.max(20, h).toFixed(1)}px;--h:${rfTinta(s.chi || 'x')}"
+      return `<button class="rf-cs-b${s.chi ? '' : ' aperta'}${senzaVisite && s.chi ? ' vuota' : ''}" style="top:${su(s.dalle).toFixed(1)}px;height:${Math.max(20, h).toFixed(1)}px;--h:${rfTinta(s.chi || 'x')}"
         onclick="rfSalaApri('${rfEsc(r.stanza)}')" data-sug="${rfEsc(`<div class="t">${rfEsc(r.stanza)}${r.funzione ? ` · ${rfEsc(r.funzione)}` : ''}</div><div class="r"><b>${rfEsc(s.dalle)}–${rfEsc(s.alle)}</b> · ${rfEsc(s.chi ? rfNomeNudo(s.chi) : 'nessuno')}</div><div class="r">${rfEsc(s.perche || '')}${(() => { const q = rfVisiteFascia(r.stanza, s).length; return q ? ` · ${q} ${q === 1 ? 'visita' : 'visite'}` : ''; })()}</div>${r.nota ? `<div class="c">${rfEsc(r.nota)}</div>` : ''}`)}">
         <span class="o">${rfEsc(s.dalle)}–${rfEsc(s.alle)}</span>
         <span class="n">${rfEsc(s.chi ? rfNomeCorto(s.chi) : 'da decidere')}</span>
@@ -3558,7 +3579,7 @@ PAGES.sale = () => {
     }).join('')}</div></div>`;
 
   return `<div class="page-head"><div><h2 class="page-title">Sale e medici</h2>
-      <div class="page-sub">Il calendario delle sale di oggi · ${occupate}/${p.righe.length} occupate${(p.da_decidere || []).length ? ` · ${p.da_decidere.length} da decidere` : ''}</div></div>
+      <div class="page-sub">Il calendario delle sale di oggi · ${p.righe.length} stanze · ${inUso} in uso adesso${libere ? ` · ${libere} ${libere === 1 ? 'libera tutto il giorno' : 'libere tutto il giorno'}` : ''}${(p.da_decidere || []).length ? ` · ${p.da_decidere.length} da decidere` : ''}</div></div>
     <div class="actions"><div class="rf-seg">${bottone('ora', 'Ora')}${bottone('mattina', 'Mattina')}${bottone('pomeriggio', 'Pomeriggio')}</div></div></div>
   <div class="stack">
     ${aperta ? rfSalaPannello(aperta, ora) : ''}
