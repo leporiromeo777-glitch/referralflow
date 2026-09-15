@@ -3225,6 +3225,13 @@ window.addEventListener('load', () => {
 .rf-cs-v .pr { font-size:9.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .rf-cs-v:hover { color:var(--text); box-shadow:0 0 0 1px var(--border-2), inset 2px 0 0 var(--accent); }
 .rf-cs-v.sovra { box-shadow:0 0 0 1px var(--danger-soft), inset 2px 0 0 var(--danger); }
+/* «Prepara con l'AI»: la barra dice a che punto è. La percentuale è una stima
+   sul tempo che ci ha messo l'ultima volta — nessuno sa quanto scriverà — e si
+   ferma al 97 % finché non ha finito davvero. */
+.rf-avanza { height:6px; border-radius:999px; background:var(--surface-3); overflow:hidden; }
+.rf-avanza i { display:block; height:100%; border-radius:999px; background:linear-gradient(90deg, var(--ai-1), var(--ai-2)); transition:width .4s var(--ease); }
+.rf-lavoro-t { display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; }
+.rf-lavoro-t svg { width:14px; height:14px; }
 .rf-sug { position:fixed; z-index:9999; max-width:270px; padding:9px 11px; border-radius:11px; pointer-events:none;
   background:var(--glass-strong); backdrop-filter:saturate(180%) blur(20px); -webkit-backdrop-filter:saturate(180%) blur(20px);
   border:1px solid var(--border); box-shadow:var(--shadow-2); font-size:12px; line-height:1.45; color:var(--text); }
@@ -3390,6 +3397,72 @@ function rfSaleQuando(q) { RF.saleQuando = q; render(); }
 function rfSalaApri(nome) { RF.salaAperta = RF.salaAperta === nome ? '' : nome; RF.saleErrore = ''; render(); }
 function rfSalaChiudi() { RF.salaAperta = ''; render(); }
 
+RF.pianoLavoro = null;
+RF.pianoOrologio = null;
+
+/* Il pulsante: fa partire lo stesso lavoro che il cron fa di notte, e poi
+   guarda a che punto è. Il modello locale ci mette minuti, quindi la risposta
+   torna subito e l'avanzamento si chiede ogni secondo e mezzo. */
+async function rfPianoGenera() {
+  RF.saleErrore = '';
+  RF.pianoLavoro = { attivo: true, fase: 'regole', percento: 0, ms: 0, caratteri: 0, pensiero: 0, dettaglio: 'preparo il lavoro' };
+  render();
+  try {
+    const r = await fetch('/api/prototipo/piano-sale', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'rigenera' }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.errore) { RF.saleErrore = j.errore || 'Non è partito.'; RF.pianoLavoro = null; render(); return; }
+    if (j.lavoro) RF.pianoLavoro = j.lavoro;
+    rfPianoSegui();
+  } catch { RF.saleErrore = 'Il server non risponde.'; RF.pianoLavoro = null; render(); }
+}
+function rfPianoMmSs(ms) {
+  const s = Math.max(0, Math.round((ms || 0) / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+function rfPianoDettaglio(l) {
+  if (!l) return '';
+  if (l.fase === 'modello') {
+    const quanto = l.pensiero ? `${l.pensiero} caratteri di ragionamento` : l.caratteri ? `${l.caratteri} caratteri scritti` : 'sta leggendo il piano';
+    return `${rfEsc(l.dettaglio)} · ${rfPianoMmSs(l.ms)} · ${quanto}`;
+  }
+  return `${rfEsc(l.dettaglio)}${l.attivo ? ` · ${rfPianoMmSs(l.ms)}` : ''}`;
+}
+/* L'aggiornamento tocca i tre pezzi della barra invece di ridisegnare la
+   pagina: se c'è un pannello aperto con una scelta a metà, non si perde. */
+function rfPianoSegui() {
+  clearTimeout(RF.pianoOrologio);
+  RF.pianoOrologio = setTimeout(async () => {
+    let l = null;
+    try {
+      const r = await fetch('/api/prototipo/piano-sale', { credentials: 'include' });
+      const j = await r.json().catch(() => ({}));
+      l = j.lavoro || null;
+    } catch { RF.pianoLavoro = null; render(); return; }
+    RF.pianoLavoro = l;
+    if (l && l.attivo) {
+      const barra = document.getElementById('rf-piano-barra');
+      const pct = document.getElementById('rf-piano-pct');
+      const det = document.getElementById('rf-piano-det');
+      if (barra && pct && det) { barra.style.width = `${l.percento}%`; pct.textContent = `${l.percento}%`; det.innerHTML = rfPianoDettaglio(l); }
+      else render();
+      rfPianoSegui();
+      return;
+    }
+    await rfCaricaDati();   // finito: il piano nuovo arriva insieme ai dati
+  }, 1500);
+}
+function rfPianoCarta() {
+  const l = RF.pianoLavoro;
+  if (!l) return '';
+  const finito = !l.attivo;
+  return `<div class="card">
+    <div class="card-head"><span class="rf-lavoro-t">${ICONS.ai} ${finito ? (l.fase === 'errore' ? 'Non è riuscito' : 'Piano pronto') : 'L\'AI sta preparando il piano'}</span><span class="badge count" id="rf-piano-pct">${l.percento}%</span></div>
+    <div class="rf-avanza"><i id="rf-piano-barra" style="width:${l.percento}%"></i></div>
+    <div class="caption mt-8" id="rf-piano-det">${rfPianoDettaglio(l)}</div>
+    ${l.attivo ? `<div class="caption mt-8">La percentuale è una stima sul tempo che ci ha messo l'ultima volta (${rfPianoMmSs(l.attesi)}): quanto scriverà non si sa prima. Puoi lasciare la pagina, il lavoro va avanti.</div>` : ''}
+  </div>`;
+}
+
 async function rfSalePost(corpo) {
   try {
     const r = await fetch('/api/prototipo/piano-sale', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
@@ -3530,8 +3603,10 @@ PAGES.sale = () => {
   const p = RF.data.pianoSale;
   const c = RF.data.capienzaSale;
   if (!p || !Array.isArray(p.righe) || !p.righe.length) {
-    return `<div class="page-head"><div><h2 class="page-title">Sale e medici</h2><div class="page-sub">Il calendario delle sale di oggi</div></div></div>
-      <div class="card"><p class="meta" style="margin:0">Il piano di oggi non è ancora pronto. Lo prepara il giro dell'agenda; le regole stanno nella pagina wiki <code>Medici/Sale</code>.</p></div>`;
+    return `<div class="page-head"><div><h2 class="page-title">Sale e medici</h2><div class="page-sub">Il calendario delle sale di oggi</div></div>
+        <div class="actions"><button class="btn ai"${RF.pianoLavoro && RF.pianoLavoro.attivo ? ' disabled' : ''} onclick="rfPianoGenera()">${ICONS.ai} Prepara con l'AI</button></div></div>
+      ${rfPianoCarta()}
+      <div class="card"><p class="meta" style="margin:0">Il piano di oggi non è ancora pronto. Lo prepara il giro dell'agenda, oppure lo si chiede adesso con il pulsante qui sopra. Le regole stanno nella pagina wiki <code>Medici/Sale</code>.</p></div>`;
   }
   const ora = rfOraRif();
   const inizio = rfMinuti(RF_APERTURA), fine = rfMinuti(RF_CHIUSURA);
@@ -3580,8 +3655,10 @@ PAGES.sale = () => {
 
   return `<div class="page-head"><div><h2 class="page-title">Sale e medici</h2>
       <div class="page-sub">Il calendario delle sale di oggi · ${p.righe.length} stanze · ${inUso} in uso adesso${libere ? ` · ${libere} ${libere === 1 ? 'libera tutto il giorno' : 'libere tutto il giorno'}` : ''}${(p.da_decidere || []).length ? ` · ${p.da_decidere.length} da decidere` : ''}</div></div>
-    <div class="actions"><div class="rf-seg">${bottone('ora', 'Ora')}${bottone('mattina', 'Mattina')}${bottone('pomeriggio', 'Pomeriggio')}</div></div></div>
+    <div class="actions"><div class="rf-seg">${bottone('ora', 'Ora')}${bottone('mattina', 'Mattina')}${bottone('pomeriggio', 'Pomeriggio')}</div>
+      <button class="btn ai"${RF.pianoLavoro && RF.pianoLavoro.attivo ? ' disabled' : ''} onclick="rfPianoGenera()">${ICONS.ai} ${p.proposta ? 'Rifai la proposta' : 'Prepara con l\'AI'}</button></div></div>
   <div class="stack">
+    ${rfPianoCarta()}
     ${aperta ? rfSalaPannello(aperta, ora) : ''}
       <div class="card">
         <div class="rf-cs-scorre">

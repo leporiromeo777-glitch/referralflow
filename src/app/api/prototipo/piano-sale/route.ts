@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import type { ModificaSala } from '@/lib/sale';
+import { preparaPianoSale, statoLavoro } from '@/lib/piano-sale';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,11 +16,30 @@ export const dynamic = 'force-dynamic';
 
 const ORA = /^\d{2}:\d{2}$/;
 
+// A che punto è il piano che si sta preparando. Si chiede un paio di volte al
+// secondo mentre gira: risponde con numeri, non con quel che il modello scrive.
+export async function GET() {
+  const session = await getSession();
+  if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  return NextResponse.json({ lavoro: statoLavoro(session.studioId) }, { headers: { 'Cache-Control': 'no-store' } });
+}
+
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
   const c = await req.json().catch(() => null);
   const azione = String(c?.azione ?? '');
+
+  // «Prepara con l'AI»: il lavoro parte e la risposta torna subito, perché il
+  // modello locale ci mette minuti. L'avanzamento si chiede con la GET qui
+  // sopra. È lo stesso lavoro che fa il cron di notte.
+  if (azione === 'rigenera') {
+    const gia = statoLavoro(session.studioId);
+    if (gia?.attivo) return NextResponse.json({ ok: true, stato: 'già in corso', lavoro: gia });
+    const studio = session.studioId;
+    void preparaPianoSale(studio, { forza: true });
+    return NextResponse.json({ ok: true, avviato: true, lavoro: statoLavoro(studio) });
+  }
 
   const [piano] = await query<{ id: string; modifiche: ModificaSala[]; righe: { stanza: string; segmenti: { dalle: string }[] }[]; proposta: string | null }>(
     `select id, modifiche, righe, proposta from piano_sale where studio_id = $1 and giorno = current_date`,

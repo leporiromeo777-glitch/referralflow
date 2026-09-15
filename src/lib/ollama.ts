@@ -97,6 +97,11 @@ export type OpzioniOllama = {
   // non arriva entro 300 secondi, e `AbortSignal.timeout` non sposta quel
   // limite: si prende la risposta a pezzi, così i byte cominciano subito.
   aPezzi?: boolean;
+  // Chiamata a ogni pezzo che arriva, per mostrare a che punto è il lavoro.
+  // Riceve solo LUNGHEZZE: quanto testo e quanto ragionamento sono arrivati,
+  // mai il contenuto — così un indicatore di avanzamento non diventa una
+  // finestra su quel che il modello sta scrivendo.
+  onPezzo?: (avanzamento: { caratteri: number; pensiero: number }) => void;
 };
 
 export type EsitoOllama =
@@ -162,6 +167,9 @@ export async function generaOllamaEsito(prompt: string, opzioni: OpzioniOllama =
             const pezzo = JSON.parse(riga);
             testo += String(pezzo?.response ?? '');
             pensiero += String(pezzo?.thinking ?? '');
+            // Chi ha chiesto di guardare vede il lavoro mentre succede: solo
+            // quanto è arrivato, non che cosa (il contenuto non esce di qui).
+            opzioni.onPezzo?.({ caratteri: testo.length, pensiero: pensiero.length });
           } catch { /* riga incompleta */ }
         }
       }
