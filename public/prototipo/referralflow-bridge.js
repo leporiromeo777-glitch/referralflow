@@ -3162,7 +3162,7 @@ window.addEventListener('load', () => {
 .rf-tl-fascia.ora { font-weight:600; }
 
 .rf-sala-pan { margin:2px 0 8px; border:1px solid var(--border); border-radius:14px; padding:12px 13px;
-  background:var(--glass-strong); backdrop-filter:saturate(180%) blur(20px); -webkit-backdrop-filter:saturate(180%) blur(20px); box-shadow:var(--shadow-1); }
+  background:var(--surface); box-shadow:var(--shadow-1); }
 .rf-sala-pan .ph { display:flex; align-items:center; justify-content:space-between; gap:10px; }
 .rf-sala-pan .ph .nome { font-size:14px; font-weight:650; letter-spacing:-.01em; }
 .rf-sala-pan .ph .sf { font-size:11px; color:var(--text-3); }
@@ -3233,8 +3233,7 @@ window.addEventListener('load', () => {
 .rf-lavoro-t { display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; }
 .rf-lavoro-t svg { width:14px; height:14px; }
 .rf-sug { position:fixed; z-index:9999; max-width:270px; padding:9px 11px; border-radius:11px; pointer-events:none;
-  background:var(--glass-strong); backdrop-filter:saturate(180%) blur(20px); -webkit-backdrop-filter:saturate(180%) blur(20px);
-  border:1px solid var(--border); box-shadow:var(--shadow-2); font-size:12px; line-height:1.45; color:var(--text); }
+  background:var(--surface); border:1px solid var(--border); box-shadow:var(--shadow-2); font-size:12px; line-height:1.45; color:var(--text); }
 .rf-sug .t { font-weight:650; font-size:13px; letter-spacing:-.01em; }
 .rf-sug .r { color:var(--text-2); margin-top:2px; }
 .rf-sug .r b { color:var(--text); font-weight:600; }

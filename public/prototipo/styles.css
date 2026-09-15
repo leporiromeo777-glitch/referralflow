@@ -400,7 +400,7 @@ select.input { padding-right: 28px; }
 /* ---------- AI sidebar ---------- */
 .ai-panel {
   display: none; flex-direction: column; height: 100vh; border-left: 1px solid var(--border);
-  background: var(--glass-strong); backdrop-filter: blur(28px) saturate(160%); -webkit-backdrop-filter: blur(28px) saturate(160%);
+  background: var(--surface);
 }
 #app.with-ai .ai-panel { display: flex; }
 .ai-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
@@ -438,7 +438,7 @@ select.input { padding-right: 28px; }
 .overlay.show { display: flex; }
 .palette {
   width: 640px; max-width: calc(100vw - 32px); border-radius: var(--r-panel); overflow: hidden;
-  background: var(--glass-strong); backdrop-filter: blur(30px) saturate(170%); -webkit-backdrop-filter: blur(30px) saturate(170%);
+  background: var(--surface);
   border: 1px solid var(--border-2); box-shadow: var(--shadow-2); animation: pal-in .18s var(--ease);
 }
 @keyframes pal-in { from { opacity: 0; transform: translateY(-6px) scale(.98); } to { opacity: 1; transform: none; } }
@@ -460,7 +460,7 @@ select.input { padding-right: 28px; }
 .sheet-overlay.show { display: block; }
 .sheet {
   position: fixed; top: 10px; right: 10px; bottom: 10px; width: 480px; max-width: calc(100vw - 20px); z-index: 41; border-radius: var(--r-panel);
-  background: var(--glass-strong); backdrop-filter: blur(28px) saturate(160%); -webkit-backdrop-filter: blur(28px) saturate(160%);
+  background: var(--surface);
   border: 1px solid var(--border-2); box-shadow: var(--shadow-2); display: none; flex-direction: column; animation: sheet-in .22s var(--ease);
 }
 .sheet.show { display: flex; }
@@ -481,13 +481,16 @@ select.input { padding-right: 28px; }
 .modal .m-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 
 /* ---------- Toast ---------- */
+/* Niente `backdrop-filter` su quel che compare e sparisce: creare e distruggere
+   un livello sfocato lascia sullo schermo aree non ridisegnate — su macOS si
+   vedono come rettangoli magenta. Il vetro resta sulla cornice fissa. */
 .toasts { position: fixed; right: 20px; bottom: 44px; z-index: 70; display: flex; flex-direction: column; gap: 8px; }
-.toast { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; background: var(--glass-strong); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid var(--border-2); box-shadow: var(--shadow-2); font-size: 13px; animation: toast-in .2s var(--ease); }
+.toast { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border-2); box-shadow: var(--shadow-2); font-size: 13px; animation: toast-in .2s var(--ease); }
 @keyframes toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .toast .undo { color: var(--accent-text); font-weight: 600; background: none; border: 0; }
 
 /* ---------- Status bar ---------- */
-.statusbar { position: fixed; left: 0; right: 0; bottom: 0; height: 26px; z-index: 30; display: flex; align-items: center; gap: 16px; padding: 0 16px; font-size: 11px; color: var(--text-3); background: var(--glass); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-top: 1px solid var(--border); }
+.statusbar { position: fixed; left: 0; right: 0; bottom: 0; height: 26px; z-index: 30; display: flex; align-items: center; gap: 16px; padding: 0 16px; font-size: 11px; color: var(--text-3); background: var(--surface); border-top: 1px solid var(--border); }
 .statusbar .dot { width: 6px; height: 6px; }
 .statusbar .ai-act { display: flex; align-items: center; gap: 6px; margin-left: auto; }
 .statusbar .orb { width: 9px; height: 9px; }
@@ -757,7 +760,7 @@ select.input { padding-right: 28px; }
 #app.with-doc.visit-mode.with-ai { grid-template-columns: 1fr var(--doc-w) var(--ai-w); }
 #app.with-doc .doc-viewer { display: flex; flex-direction: column; min-width: 0; height: 100vh; border-left: 1px solid var(--border); background: var(--surface-2); animation: dv-in .25s var(--ease); }
 @keyframes dv-in { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
-.dv-bar { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); background: var(--glass); backdrop-filter: blur(20px) saturate(160%); -webkit-backdrop-filter: blur(20px) saturate(160%); }
+.dv-bar { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); background: var(--surface); }
 .dv-body { flex: 1; overflow: auto; padding: 14px; }
 .dv-page { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-1); padding: 22px 24px; font-size: 13.5px; line-height: 1.6; min-height: 60%; }
 .dv-page h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-3); margin: 16px 0 4px; }
