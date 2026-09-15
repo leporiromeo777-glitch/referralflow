@@ -151,4 +151,6 @@ In MediOnline **una colonna è un'agenda, non un luogo**. Lo studio ne usa 15 e 
 
 Ora una colonna esce dall'elenco se è **abbinata a un medico** e non è anche registrata come sala o apparecchio; sotto il riquadro si dice quante sono state escluse e perché. Il numero è in `agendeMedico`.
 
+Dal 15.9.2026 il riquadro «Sale oggi» in Home è **uno solo** e mostra il piano del giorno quando è pronto (lo prepara il cron `/api/cron/piano-sale`, tabella `piano_sale`): una riga per stanza con chi ce l'ha e in che fascia, le caselle aperte in ambra, e sotto la proposta del modello locale per quelle caselle, marcata «da confermare». Finché il piano del giorno non c'è, la carta ricade sull'occupazione letta dal campo `luogo` dell'agenda, com'era prima. La nota sulla capienza (picco di appuntamenti insieme contro stanze disponibili) resta in tutti e due i casi.
+
 Resta vero, e va detto: **dove avvenga la visita MediOnline non lo scrive da nessuna parte**. Finché lo studio non registra le sale in Studio → Sale e apparecchi e non abbina i codici, l'occupazione per sala è un'approssimazione basata sulle colonne dell'agenda.
