@@ -928,7 +928,7 @@ const RF_AI_NOME = 'Cleo';
    lato per vedere la propria. Si toglie il limite di 1440 px e si stringono i
    margini; le colonne si restringono fino a --cal-min, calcolato su quante
    sono, e solo se proprio non ci stanno la griglia scorre. */
-#app.agenda-larga .content > .page { max-width: none; }
+#app.agenda-larga .content > .page { max-width: none; }   /* agenda e sale: tutta la larghezza */
 #app.agenda-larga .content { padding-left: 14px; padding-right: 14px; }
 .cal { grid-template-columns: 52px repeat(var(--cols, 3), minmax(var(--cal-min, 180px), 1fr)); }
 .cal-head { padding: 9px 10px; }
@@ -1143,10 +1143,11 @@ pageTitle = function () {
 // l'agenda va ridisegnata, altrimenti resta con le misure di prima.
 (function () {
   let attesa = null;
+  const grandi = ['agenda', 'sale'];   // l'altezza del calendario delle sale viene dalla finestra
   window.addEventListener('resize', () => {
-    if (state.route !== 'agenda') return;
+    if (!grandi.includes(state.route)) return;
     clearTimeout(attesa);
-    attesa = setTimeout(() => { if (state.route === 'agenda') render(); }, 180);
+    attesa = setTimeout(() => { if (grandi.includes(state.route)) render(); }, 180);
   });
 })();
 
@@ -1156,7 +1157,7 @@ render = function () {
   const app = document.getElementById('app');
   if (app) {
     app.classList.toggle('ai-mode', state.route === 'ai');
-    app.classList.toggle('agenda-larga', state.route === 'agenda');
+    app.classList.toggle('agenda-larga', state.route === 'agenda' || state.route === 'sale');
   }
 };
 
@@ -3299,10 +3300,21 @@ function rfVisiteSala(stanza) {
 /* Che cosa dice il cartellino di una visita: chi è, che cosa è, di chi è
    l'agenda, a che punto è — e che la sala è dedotta, perché MediOnline non la
    scrive. Il testo è già passato da rfEsc: finisce dentro un attributo. */
+/* Il nome del paziente come lo scrive il resto dell'app: prima la cartella,
+   poi quel che c'è scritto nel riquadro dell'agenda. Così nel calendario delle
+   sale e nell'agenda si legge lo stesso nome. */
+function rfVisitaNome(v) {
+  const a = (typeof APPTS !== 'undefined' ? APPTS : []).find(x => x.id === v.id);
+  if (a && a.p && typeof P !== 'undefined' && P[a.p] && typeof fullName === 'function') {
+    const n = fullName(P[a.p]);
+    if (n) return n;
+  }
+  return (a && (a.nomeBreve || a.nome)) || v.paziente || 'Paziente';
+}
 function rfSugVisita(v, stanza) {
   const et = v.motivo || v.etichetta || (v.tipo ? v.tipo : '');
   const righe = [
-    `<div class="t">${rfEsc(v.paziente || 'Paziente')}</div>`,
+    `<div class="t">${rfEsc(rfVisitaNome(v))}</div>`,
     `<div class="r"><b>${rfEsc(v.inizio)}–${rfEsc(v.fine)}</b>${et ? ` · ${rfEsc(et)}` : ' · appuntamento senza motivo scritto'}</div>`,
   ];
   if (v.medico) righe.push(`<div class="r">${rfEsc(rfNomeNudo(v.medico))} · ${rfEsc(stanza)}</div>`);
@@ -3498,8 +3510,11 @@ PAGES.sale = () => {
   }
   const ora = rfOraRif();
   const inizio = rfMinuti(RF_APERTURA), fine = rfMinuti(RF_CHIUSURA);
-  const M = 1.3;                        // pixel per minuto: la giornata larga, non stretta
-  const alto = (fine - inizio) * M;
+  // Il calendario si prende lo spazio che c'è: l'altezza viene dalla finestra
+  // (meno intestazione, teste delle colonne e didascalie), con un minimo sotto
+  // il quale i riquadri diventerebbero illeggibili.
+  const alto = Math.max(640, (typeof window !== 'undefined' ? window.innerHeight : 1000) - 280);
+  const M = alto / (fine - inizio);
   const su = (t) => (rfMinuti(t) - inizio) * M;
   const stati = p.righe.map(r => rfStatoStanza(r, ora));
   const occupate = stati.filter(x => x.seg && x.seg.chi).length;
@@ -3532,7 +3547,7 @@ PAGES.sale = () => {
       const h = (rfMinuti(v.fine) - rfMinuti(v.inizio)) * M - 1;
       const n = Math.max(1, v.corsie || 1), c = v.corsia || 0;
       return `<button class="rf-cs-v${v.sovra ? ' sovra' : ''}" style="top:${su(v.inizio).toFixed(1)}px;height:${Math.max(7, h).toFixed(1)}px;left:${(c / n * 100).toFixed(2)}%;width:calc(${(100 / n).toFixed(2)}% - 2px)"
-        onclick="event.stopPropagation(); rfApptScheda('${rfEsc(v.id)}')" data-sug="${rfEsc(rfSugVisita(v, r.stanza))}"><span class="nm">${rfEsc(v.paziente || v.inizio)}</span>${(v.motivo || v.etichetta) ? `<span class="pr">${rfEsc(v.motivo || v.etichetta)}</span>` : ''}</button>`;
+        onclick="event.stopPropagation(); rfApptScheda('${rfEsc(v.id)}')" data-sug="${rfEsc(rfSugVisita(v, r.stanza))}"><span class="nm">${rfEsc(rfVisitaNome(v))}</span>${(v.motivo || v.etichetta) ? `<span class="pr">${rfEsc(v.motivo || v.etichetta)}</span>` : ''}</button>`;
     }).join('')}</div></div>`;
 
   return `<div class="page-head"><div><h2 class="page-title">Sale e medici</h2>
