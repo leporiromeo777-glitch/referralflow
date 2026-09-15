@@ -44,7 +44,18 @@ Il piano qui sotto è già deciso dalle regole dello studio: NON discuterlo e no
 2. le stanze che oggi non hanno NESSUNA visita: le visite di ogni medico sono già state strette nel minor numero di stanze possibile, quindi quelle vuote sono davvero disponibili;
 3. chi oggi lavora senza avere una stanza: MediOnline non scrive dove avviene una visita, e per queste persone il piano non sa dove metterle.
 
-Per ognuna proponi che cosa fare, e in una riga il perché. Regole del tuo lavoro:
+COME SI SCRIVE LA RISPOSTA — questo conta, perché le assegnazioni vengono applicate da un programma:
+- Ogni assegnazione su una riga sua, esattamente così: ASSEGNA <nome della sala> -> <nome della persona>
+- Il nome della sala e quello della persona devono essere copiati identici da qui sotto. Niente numeri d'elenco, niente parentesi prima della freccia.
+- Dopo le righe ASSEGNA, scrivi il perché in prosa, al massimo quattro righe.
+- Quello che NON si può assegnare non si scrive come ASSEGNA: si dice in prosa.
+
+Esempio:
+ASSEGNA Sala 2 -> Daniela Cassani
+ASSEGNA Sport 1 -> Marco Moccetti
+Sala 2 era intestata a Moccetti e oggi non la usa: prestito per la giornata. Le visite senza medico restano senza stanza, non ne avanzano.
+
+Regole del tuo lavoro:
 - Proponi, non decidere: chiudi dicendo che la conferma è di chi è in studio.
 - Dai una stanza vuota a chi non ce l'ha, quando ha senso; se una stanza vuota è intestata a qualcuno, dillo — è un prestito per la giornata, non un cambio di regola.
 - Se due persone hanno orari diversi, dividi la stanza per fascia oraria invece di sceglierne una.

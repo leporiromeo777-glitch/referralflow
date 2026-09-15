@@ -346,14 +346,18 @@ export function daSistemarePerPrompt(
 // Leggere la proposta del modello per applicarla (15.9.2026).
 //
 // «Confermo» deve cambiare la giornata sotto, non solo mettere un timbro. Ma
-// la proposta è testo libero, e un testo libero non si esegue a fiducia: qui
-// si riconoscono SOLO le righe della forma «<stanza> … → <persona> …», dove
-// la stanza dev'essere una di quelle del piano e la persona una di quelle che
-// oggi sono in studio. Tutto il resto resta scritto e non applicato — chi
-// legge vede che cosa è stato saltato e perché.
+// la proposta è testo libero, e un testo libero non si esegue a fiducia.
 //
-// La persona si cerca DOPO la freccia: «Sala 2 (intestata a Moccetti) →
-// Cassani» assegna a Cassani, non a Moccetti.
+// Perciò al modello si chiede di scrivere ogni assegnazione su una riga sua,
+// in una forma fissa — «ASSEGNA <stanza> -> <persona>» — e qui si leggono solo
+// quelle. Un modello piccolo che scrive «2. Sport 1 (intestata a Capelli):
+// assegnare a Marco Moccetti» non viene indovinato: viene scartato e detto.
+// Si accetta ancora anche la forma vecchia «<stanza> … → <persona>» a inizio
+// riga, con o senza numero davanti, perché una proposta già scritta così
+// continui a funzionare.
+//
+// La persona si cerca sempre DOPO la freccia: «Sala 2 (intestata a Moccetti)
+// → Cassani» assegna a Cassani, non a Moccetti.
 
 export type RigaProposta = { stanza: string; chi: string; riga: string };
 export type LetturaProposta = { applicabili: RigaProposta[]; saltate: { riga: string; perche: string }[] };
@@ -366,7 +370,8 @@ export function leggiProposta(testo: string, righe: RigaPiano[], persone: string
   // Le stanze più lunghe prima: «Sport 1» non dev'essere letta come «Sport».
   const stanze = righe.map((r) => r.stanza).sort((a, b) => b.length - a.length);
   for (const grezza of String(testo ?? '').split('\n')) {
-    const riga = grezza.trim();
+    // Via il numero o il trattino dell'elenco, e la parola chiave ASSEGNA.
+    const riga = grezza.trim().replace(/^[-*•]\s*/, '').replace(/^\d+[.)]\s*/, '').replace(/^assegna\s+/i, '').trim();
     if (!riga) continue;
     const stanza = stanze.find((s) => riga.toLowerCase().startsWith(s.toLowerCase()));
     if (!stanza) continue;                       // riga che non parla di una stanza: non è un errore

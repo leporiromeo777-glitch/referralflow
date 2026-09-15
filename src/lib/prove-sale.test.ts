@@ -310,3 +310,25 @@ test('la pagina vera tiene fuori dal piano risonanza, TAC e interventi', () => {
   const p = prestazioniFuoriPiano(md);
   for (const x of ['Intervento', 'Risonanza magnetica', 'TAC']) assert.ok(escluso(x, p), x);
 });
+
+test('la proposta si legge anche con «ASSEGNA» e con i numeri d’elenco', () => {
+  const regole = leggiSale(`
+## Sala 2
+- Di: Marco Moccetti
+- Stato: proposta
+
+## Sport 1
+- Di: Bruno Capelli
+- Stato: proposta
+`);
+  const piano = pianoDelGiorno(regole, ['Marco Moccetti'], 'mar');
+  const persone = ['Dr. med. Marco Moccetti', 'Daniela Cassani'];
+  const nuovo = leggiProposta('ASSEGNA Sala 2 -> Daniela Cassani\nASSEGNA Sport 1 -> Marco Moccetti\nIl resto in prosa.', piano.righe, persone);
+  assert.deepEqual(nuovo.applicabili.map((x) => [x.stanza, x.chi]), [['Sala 2', 'Daniela Cassani'], ['Sport 1', 'Dr. med. Marco Moccetti']]);
+  const numerato = leggiProposta('1. Sala 2 → Cassani: prestito.\n2. Sport 1 (intestata a Capelli) → Marco Moccetti', piano.righe, persone);
+  assert.deepEqual(numerato.applicabili.map((x) => x.stanza), ['Sala 2', 'Sport 1']);
+  // senza freccia resta fuori: «assegnare a X» dopo i due punti non si indovina
+  const senza = leggiProposta('Sport 1 (intestata a Capelli): assegnare a Marco Moccetti', piano.righe, persone);
+  assert.equal(senza.applicabili.length, 0);
+  assert.match(senza.saltate[0].perche, /non dice a chi/);
+});
