@@ -14,10 +14,10 @@ Questa pagina è **letta dalla piattaforma** (`src/lib/sale.ts`, cache di 5 minu
 - `Nota:` una riga per chi legge, ignorata dal codice.
 - `Stato:` `proposta` finché lo studio non la conferma, poi `validato`.
 
-Due righe, qui sopra le stanze, dicono **che cosa non entra nel piano**: persone che lavorano in studio ma le cui sedute non occupano una sala dei medici, e prestazioni che una stanza non la occupano: quelle che si fanno altrove (una risonanza, un intervento in ospedale) e quelle che si fanno al telefono. Non vengono contate fra le «visite senza sala», perché non è un problema da risolvere. La prestazione di un appuntamento si riconosce dal colore dell'agenda: una voce elencata qui ha effetto solo se nel catalogo dello studio ha un colore.
+Due righe, qui sopra le stanze, dicono **che cosa non entra nel piano**: persone che lavorano in studio ma le cui sedute non occupano una sala dei medici, e prestazioni che una stanza non la occupano: quelle che si fanno altrove (una risonanza, un intervento in ospedale) e quelle che si fanno al telefono. Non vengono contate fra le «visite senza sala», perché non è un problema da risolvere. Si può fare un'eccezione per persona — `Risonanza magnetica (tranne Vera Lucia Paiocchi)` — perché la realtà non è pulita: la risonanza in sé non occupa una stanza dello studio, ma quelle che segue Paiocchi sì, nella sua sala. La prestazione di un appuntamento si riconosce dal colore dell'agenda: una voce elencata qui ha effetto solo se nel catalogo dello studio ha un colore.
 
 - Fuori dal piano: Andrea Bronz
-- Prestazioni fuori dal piano: Colloquio telefonico, Intervento, Risonanza magnetica, TAC
+- Prestazioni fuori dal piano: Colloquio telefonico, Intervento, Risonanza magnetica (tranne Vera Lucia Paiocchi), TAC (tranne Vera Lucia Paiocchi)
 
 Le regole qui sotto vengono dalla conversazione del 15.9.2026 e dalle misure sull'agenda vera (chi lavora quando, quanti pazienti in parallelo). **Sono una proposta**: chi le vive le corregge.
 

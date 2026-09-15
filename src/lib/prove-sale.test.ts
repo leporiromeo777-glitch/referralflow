@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { applicaModifiche, assegnaVisite, capienza, daSistemarePerPrompt, escluso, fuoriDalPiano, leggiProposta, prestazioniFuoriPiano, daDeciderePerPrompt, leggiSale, pianoDelGiorno, salePerPrompt, titolare } from './sale';
+import { applicaModifiche, assegnaVisite, capienza, daSistemarePerPrompt, escluso, fuoriDalPiano, leggiProposta, prestazioneEsclusa, prestazioniFuoriPiano, daDeciderePerPrompt, leggiSale, pianoDelGiorno, salePerPrompt, titolare } from './sale';
 
 const MD = `
 ## Sala 3
@@ -296,19 +296,35 @@ test('la pagina vera tiene Andrea Bronz fuori dal piano', () => {
 test('anche le prestazioni possono stare fuori dal piano, e le due righe non si confondono', () => {
   const md = `# Sale\n\n- Fuori dal piano: Andrea Bronz\n- Prestazioni fuori dal piano: Intervento, Risonanza magnetica, TAC\n\n## Sala 1\n- Di: Marco Moccetti\n- Stato: proposta\n`;
   assert.deepEqual(fuoriDalPiano(md), ['Andrea Bronz']);
-  assert.deepEqual(prestazioniFuoriPiano(md), ['Intervento', 'Risonanza magnetica', 'TAC']);
+  assert.deepEqual(prestazioniFuoriPiano(md).map((x) => x.nome), ['Intervento', 'Risonanza magnetica', 'TAC']);
   const p = prestazioniFuoriPiano(md);
-  assert.ok(escluso('Risonanza magnetica', p));
-  assert.ok(escluso('TAC', p));
-  assert.ok(!escluso('Visita cardiologica', p));
-  assert.ok(!escluso('Ecocardiogramma', p));
+  assert.ok(prestazioneEsclusa('Risonanza magnetica', 'Chiunque', p));
+  assert.ok(prestazioneEsclusa('TAC', 'Chiunque', p));
+  assert.ok(!prestazioneEsclusa('Visita cardiologica', 'Chiunque', p));
+  assert.ok(!prestazioneEsclusa('Ecocardiogramma', 'Chiunque', p));
   assert.equal(leggiSale(md).length, 1);
 });
 
-test('la pagina vera tiene fuori dal piano risonanza, TAC e interventi', () => {
+test('la pagina vera tiene fuori interventi, telefonate e risonanze — ma non quelle di Paiocchi', () => {
   const md = readFileSync(path.join(process.cwd(), 'docs/wiki/Medici/Sale.md'), 'utf-8');
   const p = prestazioniFuoriPiano(md);
-  for (const x of ['Intervento', 'Risonanza magnetica', 'TAC']) assert.ok(escluso(x, p), x);
+  for (const x of ['Intervento', 'Risonanza magnetica', 'TAC', 'Colloquio telefonico']) {
+    assert.ok(prestazioneEsclusa(x, 'Dr. med. Marco Moccetti', p), x);
+  }
+  // le risonanze e le TAC di Paiocchi occupano la sua sala, e vanno contate
+  assert.ok(!prestazioneEsclusa('Risonanza magnetica', 'Dr.ssa med. Vera Lucia Paiocchi', p));
+  assert.ok(!prestazioneEsclusa('TAC', 'Dr.ssa med. Vera Lucia Paiocchi', p));
+  // ma una sua telefonata resta una telefonata
+  assert.ok(prestazioneEsclusa('Colloquio telefonico', 'Dr.ssa med. Vera Lucia Paiocchi', p));
+});
+
+test('l’eccezione non spezza la voce sulle virgole dentro la parentesi', () => {
+  const md = '- Prestazioni fuori dal piano: Risonanza magnetica (tranne Vera Paiocchi, François Rego), TAC\n\n## Sala 1\n- Di: Marco Moccetti\n';
+  const p = prestazioniFuoriPiano(md);
+  assert.deepEqual(p.map((x) => x.nome), ['Risonanza magnetica', 'TAC']);
+  assert.deepEqual(p[0].tranne, ['Vera Paiocchi', 'François Rego']);
+  assert.ok(!prestazioneEsclusa('Risonanza magnetica', 'Dr. med. François Diederik Rego', p));
+  assert.ok(prestazioneEsclusa('Risonanza magnetica', 'Marco Moccetti', p));
 });
 
 test('la proposta si legge anche con «ASSEGNA» e con i numeri d’elenco', () => {

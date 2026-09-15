@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { query } from '@/lib/db';
 import { generaOllamaEsito } from '@/lib/ollama';
-import { applicaModifiche, assegnaVisite, daSistemarePerPrompt, escluso, fuoriDalPiano, leggiSale, pianoDelGiorno, prestazioniFuoriPiano, type ModificaSala } from '@/lib/sale';
+import { applicaModifiche, assegnaVisite, daSistemarePerPrompt, escluso, fuoriDalPiano, leggiSale, pianoDelGiorno, prestazioneEsclusa, prestazioniFuoriPiano, type ModificaSala, type PrestazioneFuori } from '@/lib/sale';
 
 // Preparare il piano delle sale (15.9.2026). Sta qui, e non dentro una rotta,
 // perché lo chiedono in due: il cron di notte e il pulsante «Prepara con
@@ -114,7 +114,7 @@ export async function preparaPianoSale(
   try {
     let regole;
     let fuori: string[] = [];
-    let fuoriPrest: string[] = [];
+    let fuoriPrest: PrestazioneFuori[] = [];
     try {
       const md = readFileSync(path.join(process.cwd(), 'docs/wiki/Medici/Sale.md'), 'utf-8');
       regole = leggiSale(md);
@@ -153,7 +153,7 @@ export async function preparaPianoSale(
     );
     // Chi è fuori dal piano non entra nel conto delle sale né nel testo che
     // va al modello: le sue sedute non occupano una stanza dei medici.
-    const utili = app.filter((a) => !escluso(a.chi ?? '', fuori) && !(a.prestazione && escluso(a.prestazione, fuoriPrest)));
+    const utili = app.filter((a) => !escluso(a.chi ?? '', fuori) && !prestazioneEsclusa(a.prestazione ?? '', a.chi ?? '', fuoriPrest));
     // Le correzioni già fatte a mano oggi valgono anche qui: rigenerare il
     // piano non deve far ricomparire «senza sala» chi una sala l'ha ricevuta.
     const [vecchio] = await query<{ modifiche: ModificaSala[] }>(

@@ -6,7 +6,7 @@ import { costruisciRevisione } from '@/lib/prototipo-revisione';
 import { tipoEsame } from '@/lib/briefing-regole';
 import { estraiTerapia } from '@/lib/referti-terapia';
 import { leggiTitolo, nomePulito } from '@/lib/agenda-titolo';
-import { assegnaVisite, capienza, escluso, fuoriDalPiano, leggiSale, prestazioniFuoriPiano, titolare, applicaModifiche } from '@/lib/sale';
+import { assegnaVisite, capienza, escluso, fuoriDalPiano, leggiSale, prestazioneEsclusa, prestazioniFuoriPiano, titolare, applicaModifiche } from '@/lib/sale';
 import type { ModificaSala, RigaPiano } from '@/lib/sale';
 import { abbinaPrestazioneAgenda, tipoDaTesto, type VoceCatalogo } from '@/lib/prestazioni';
 import { lettereRitardoGrezzo } from '@/lib/procedure';
@@ -402,7 +402,7 @@ export async function GET() {
     const fuoriPrest = prestazioniFuoriPiano(mdSale);
     const vive = apptsOggi.filter((a) => a.status !== 'CANCELLED'
       && !escluso(doctors[a.doc] ?? '', fuori)
-      && !(a.prestazione && escluso(a.prestazione, fuoriPrest)));
+      && !prestazioneEsclusa(a.prestazione ?? '', doctors[a.doc] ?? '', fuoriPrest));
     const visite = assegnaVisite(righe, vive
       .map((a) => ({ id: a.id, chi: doctors[a.doc] ?? '', start: a.start, dur: a.dur, etichetta: a.prestazione || a.tipoPrest || '' })));
     // Il cartellino che si vede passandoci sopra: chi è il paziente, che cosa
@@ -441,7 +441,7 @@ export async function GET() {
         motivo: a.prestazione || a.motivoVero || '', sala: a.room || '',
       })),
     })).sort((x, y) => y.n - x.n);
-    return { ...pianoOggi, righe, presenti: presentiOggi, visite, senzaSala, fuoriPiano: fuori, fuoriPrestazioni: fuoriPrest };
+    return { ...pianoOggi, righe, presenti: presentiOggi, visite, senzaSala, fuoriPiano: fuori, fuoriPrestazioni: fuoriPrest.map((x) => x.tranne.length ? `${x.nome} (tranne ${x.tranne.join(', ')})` : x.nome) };
   })();
   const cap = capienza(
     apptsOggi.map((a) => ({ inizio: minuti(a.start), fine: minuti(a.start) + a.dur })),

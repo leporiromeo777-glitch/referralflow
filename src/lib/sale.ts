@@ -38,11 +38,28 @@ export function fuoriDalPiano(markdown: string): string[] {
   return elencoInTesta(markdown, 'fuori dal piano');
 }
 
-// Le prestazioni che non occupano una sala dello studio: quelle che si fanno
-// altrove (una risonanza, un intervento in ospedale). Riga «- Prestazioni
+// Le prestazioni che non occupano una sala: quelle che si fanno altrove (una
+// risonanza, un intervento in ospedale) o al telefono. Riga «- Prestazioni
 // fuori dal piano: …», sempre prima della prima stanza.
-export function prestazioniFuoriPiano(markdown: string): string[] {
-  return elencoInTesta(markdown, 'prestazioni fuori dal piano');
+//
+// Con un'eccezione per persona, perché la realtà non è pulita: la risonanza
+// in sé non occupa una stanza dello studio, ma quelle di Vera Paiocchi sì —
+// le segue lei, nella sua sala. Si scrive «Risonanza magnetica (tranne Vera
+// Lucia Paiocchi)».
+export type PrestazioneFuori = { nome: string; tranne: string[] };
+
+export function prestazioniFuoriPiano(markdown: string): PrestazioneFuori[] {
+  return elencoInTesta(markdown, 'prestazioni fuori dal piano').map((voce) => {
+    const m = /^(.*?)\s*\(\s*tranne\s+(.+?)\s*\)\s*$/i.exec(voce);
+    if (!m) return { nome: voce, tranne: [] };
+    return { nome: m[1].trim(), tranne: m[2].split(/\s*[,;]\s*|\s+e\s+/).map((x) => x.trim()).filter(Boolean) };
+  });
+}
+
+// Questa prestazione, fatta da questa persona, sta fuori dal piano?
+export function prestazioneEsclusa(prestazione: string, chi: string, lista: PrestazioneFuori[]): boolean {
+  if (!prestazione) return false;
+  return (lista ?? []).some((p) => escluso(prestazione, [p.nome]) && !escluso(chi, p.tranne));
 }
 
 function elencoInTesta(markdown: string, chiave: string): string[] {
@@ -51,7 +68,18 @@ function elencoInTesta(markdown: string, chiave: string): string[] {
     if (riga.startsWith('## ')) break;                 // da qui in poi sono stanze
     const m = /^[-*]\s*`?([^:`]+)`?\s*:\s*(.+)$/.exec(riga);
     if (m && m[1].trim().toLowerCase() === chiave) {
-      return m[2].split(',').map((x) => x.replace(/[`*]/g, '').trim()).filter(Boolean);
+      // Le virgole DENTRO una parentesi non separano una voce: «Risonanza
+      // magnetica (tranne Paiocchi, Rego)» è una voce sola.
+      const fuori: string[] = [];
+      let pezzo = '', dentro = 0;
+      for (const c of m[2]) {
+        if (c === '(') dentro++;
+        else if (c === ')') dentro = Math.max(0, dentro - 1);
+        if (c === ',' && dentro === 0) { fuori.push(pezzo); pezzo = ''; continue; }
+        pezzo += c;
+      }
+      fuori.push(pezzo);
+      return fuori.map((x) => x.replace(/[`*]/g, '').trim()).filter(Boolean);
     }
   }
   return [];
