@@ -95,3 +95,22 @@ Nota di metodo: la chiave Anthropic del primo tentativo è stata invalidata fra 
 **Effetto del contesto svizzero nel prompt** (15.9.2026, misurato rigirando il solo gemma 4 31B con `--solo`): le unità passano da americane a SI — prima «Creatinina sierica ≥ 1,5 mg/dL (133 µmol/L)», dopo «≥ 133 µmol/L (1.5 mg/dL)» — e compare il riferimento a Compendium ed ESC. Sulla pressione distingue ora esplicitamente ipertensione mascherata e da camice bianco, che il modello locale invertiva. Costo del prompt: da ~110 a ~405 token in entrata per domanda, cioè niente. Test app: **94**.
 
 **Prova end-to-end della domanda medica** (15.9.2026, paziente inventato). Scritta dal medico: nome, data di nascita, telefono, «creatinina 118, peso 54 kg», apixaban 5 mg × 2. Primo esito: la riformulazione toglieva nome, data e telefono — ma buttava via anche **«peso 54 kg»**, che è uno dei tre criteri che decidono la risposta: la risposta restava corretta in generale e inutile nel caso. Corretto il prompt («non eliminare i dati che DETERMINANO la risposta: trasformali in categorie»), la riscritta diventa «paziente con fibrillazione atriale permanente, insufficienza renale lieve, peso inferiore a 60 kg, in apixaban 5 mg × 2 da due anni» — criteri salvi, identità sparita. Risposta da Infomaniak in 3,4 s, con i criteri in µmol/L e il riferimento a Swissmedic.
+
+## Quale modello per il piano delle sale (15.9.2026)
+Stesso testo della catena, dati veri di **mercoledì 16.9** — una giornata con due caselle aperte (Sala 5 e Sport 3 condivise fra Pedrotti e Franscella), quattro stanze vuote e 21 visite senza sala. Provato prima su martedì: **inutile**, perché le regole avevano già sistemato tutto e restavano solo appuntamenti senza titolare d'agenda, che nessun modello può assegnare. Un banco su una giornata senza problema misura solo la fantasia del modello.
+
+| modello | tempo | assegnazioni leggibili | scartate | affermazioni false | visite sistemate |
+| --- | --- | --- | --- | --- | --- |
+| **gemma3:12b** | **19,7 s** | 3 | 1 | 0 | **18 / 21** |
+| deepseek-r1:14b | 106,1 s | 3 | 1 | 0 | si contraddice |
+| nemotron-3-nano:4b | 46,0 s | 1 | 0 | 0 | 5 / 21 |
+| qwen3:14b | — | **timeout a 600 s, due volte su due** | | | |
+| qwen3.8:27b | — | **risposta vuota**, tre volte su tre durante il lavoro | | | |
+
+**Scelto gemma3:12b**, lo stesso modello della catena. Ha assegnato Sala 5 a Franscella (spiegando: ha più visite di Pedrotti), Sport 1 a Pedrotti, Sport 2 a Paveri, e ha detto che la visita singola di Moccetti non merita una stanza in più.
+
+Tre cose imparate, che valgono oltre questo banco:
+- **deepseek-r1 ha dato la stessa stanza a due persone** e la stessa persona a due stanze. Il punteggio grezzo lo premiava («21 visite sistemate»): il difetto era nel banco. Ora `leggiProposta` rifiuta le righe che si contraddicono, con un test che usa la risposta vera di deepseek.
+- **qwen3:14b sembrava il migliore** perché era stato giudicato su un'unica risposta fortunata. Ripetuto, si impianta: dieci minuti senza arrivare alla risposta.
+- **Il 27B non è utilizzabile su questa macchina durante il lavoro**: 18 GB su 24, e quando è caricato restano 90 MB liberi — risponde vuoto perché non ha spazio per il proprio contesto. Con tutto il resto spento il Mac usa meno di 7 GB: non è la macchina a essere piccola, è quel modello a non entrarci.
+

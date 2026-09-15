@@ -348,3 +348,34 @@ test('la proposta si legge anche con «ASSEGNA» e con i numeri d’elenco', () 
   assert.equal(senza.applicabili.length, 0);
   assert.match(senza.saltate[0].perche, /non dice a chi/);
 });
+
+test('una proposta che si contraddice non si applica a metà', () => {
+  const regole = leggiSale(`
+## Sala 5
+- Di: condivisa
+- Chi: Miko Pedrotti, Sebastiano Franscella
+- Stato: proposta
+
+## Sport 3
+- Di: condivisa
+- Chi: Miko Pedrotti, Sebastiano Franscella
+- Stato: proposta
+`);
+  const piano = pianoDelGiorno(regole, ['Miko Pedrotti', 'Sebastiano Franscella'], 'mer');
+  const persone = ['Dr. med. Miko Pedrotti', 'Dr. med. Sebastiano Franscella'];
+  // la risposta vera di deepseek-r1 al banco del 15.9: la Sala 5 a due persone
+  const l = leggiProposta(
+    'ASSEGNA Sala 5 -> Dr. med. Miko Pedrotti\nASSEGNA Sala 5 -> Dr. med. Sebastiano Franscella\nASSEGNA Sport 3 -> Dr. med. Sebastiano Franscella',
+    piano.righe, persone);
+  // La riga contraddittoria cade; le altre due restano, e nessuno finisce in
+  // due stanze o due persone nella stessa stanza.
+  assert.deepEqual(l.applicabili.map((x) => [x.stanza, x.chi]), [
+    ['Sala 5', 'Dr. med. Miko Pedrotti'],
+    ['Sport 3', 'Dr. med. Sebastiano Franscella'],
+  ]);
+  assert.equal(l.saltate.length, 1);
+  assert.match(l.saltate[0].perche, /era già stata assegnata/);
+  const stanze = l.applicabili.map((x) => x.stanza), chi = l.applicabili.map((x) => x.chi);
+  assert.equal(new Set(stanze).size, stanze.length, 'una stanza sola per riga');
+  assert.equal(new Set(chi).size, chi.length, 'una persona in una stanza sola');
+});

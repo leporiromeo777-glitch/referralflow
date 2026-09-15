@@ -417,7 +417,16 @@ export function leggiProposta(testo: string, righe: RigaPiano[], persone: string
     const piano = righe.find((r) => r.stanza === stanza)!;
     const turni = piano.segmenti.filter((s) => s.chi);
     if (turni.length > 1) { saltate.push({ riga, perche: `${stanza} ha già due turni nella giornata` }); continue; }
-    applicabili.push({ stanza, chi: trovate[0].p, riga });
+    // Le contraddizioni non si applicano: un modello che scrive «Sala 5 a
+    // Pedrotti» e due righe sotto «Sala 5 a Franscella» non ha deciso, e
+    // applicare l'ultima riga sarebbe scegliere noi al posto suo. Vale anche
+    // al contrario: la stessa persona in due stanze.
+    const chi = trovate[0].p;
+    const giaStanza = applicabili.find((x) => x.stanza === stanza);
+    if (giaStanza) { saltate.push({ riga, perche: `${stanza} era già stata assegnata a ${giaStanza.chi}` }); continue; }
+    const giaPersona = applicabili.find((x) => x.chi === chi);
+    if (giaPersona) { saltate.push({ riga, perche: `${chi} aveva già ${giaPersona.stanza}` }); continue; }
+    applicabili.push({ stanza, chi, riga });
   }
   return { applicabili, saltate };
 }

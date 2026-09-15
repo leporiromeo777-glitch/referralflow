@@ -22,18 +22,20 @@ import { applicaModifiche, assegnaVisite, daSistemarePerPrompt, escluso, fuoriDa
 // Qui gira **Qwen 3.8 27B**, non il 12B dell'assistente: è un lavoro di fondo
 // che nessuno aspetta, quindi si può spendere un minuto per una risposta
 // migliore. È lo stesso modello delle tappe locali della catena.
-const MODELLO = process.env.PIANO_SALE_LLM || 'qwen3.8:27b';
+const MODELLO = process.env.PIANO_SALE_LLM || 'gemma3:12b';
 // Il 27B occupa 20 GB su un Mac che fa anche da server: quando la memoria non
 // basta Ollama risponde 200 con il corpo vuoto, e la giornata resta senza
 // proposta. Allora si riprova con un modello che ci sta comodo: meglio una
 // proposta più semplice che nessuna, e nella pagina si legge quale ha
 // risposto (`proposta_da`).
-// Provati tutti e due sullo stesso piano, il 15.9: gemma3:12b ha risposto «Sala
-// 5 a Girola e Moschovitis, come da indicazioni» — cioè ha ripetuto la domanda
-// — mentre qwen3:14b ha proposto di dividerla per fascia oraria e ha detto che
-// le sei visite senza medico non erano assegnabili. 9 GB invece di 8: entra
-// lo stesso dove il 27B non entra.
-const RIPIEGO = process.env.PIANO_SALE_LLM_RIPIEGO || 'qwen3:14b';
+// Nessun ripiego: il modello è uno solo e ci sta in memoria. Banco del
+// 15.9.2026 su una giornata vera con due caselle aperte e 21 visite scoperte
+// ([[Misure/Banchi]]): gemma3:12b ha sistemato 18 visite su 21 in 20 secondi
+// senza contraddirsi; deepseek-r1:14b ha dato la stessa stanza a due persone
+// in 106 s; nemotron 4B ha assegnato una stanza sola; qwen3:14b è andato in
+// timeout a 10 minuti due volte su due. Il 27B resta fuori: su questa macchina
+// occupa 18 GB su 24 e durante il lavoro risponde vuoto.
+const RIPIEGO = process.env.PIANO_SALE_LLM_RIPIEGO || '';
 const GG = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
 const ATTESA_PREDEFINITA = 150_000;   // quanto ci mette, finché non se ne sa di meglio
 
@@ -174,6 +176,7 @@ export async function preparaPianoSale(
     let proposta: string | null = null;
     let propostaDa: string | null = null;
     let ms: number | null = null;
+    let usatoAlla = MODELLO;          // quale modello è stato davvero caricato
 
     if (piano.daDecidere.length || senzaSala.length || libere.length) {
       l.fase = 'modello';
@@ -182,13 +185,14 @@ export async function preparaPianoSale(
       const guarda = { onPezzo: ({ caratteri, pensiero }: { caratteri: number; pensiero: number }) => { l.caratteri = caratteri; l.pensiero = pensiero; } };
       let usato = MODELLO;
       let esito = await generaOllamaEsito(testo, { modello: MODELLO, timeoutMs: 900_000, aPezzi: true, ...guarda });
-      if (!esito.ok && RIPIEGO && RIPIEGO !== MODELLO) {
+      if (!esito.ok && RIPIEGO && RIPIEGO !== MODELLO) {   // spento: il modello è uno solo
         console.log(`[piano-sale] ${MODELLO} non ha risposto (${esito.causa}): riprovo con ${RIPIEGO}`);
         l.dettaglio = `${MODELLO} non ha risposto, riprovo con ${RIPIEGO}`;
         l.caratteri = 0; l.pensiero = 0;
         usato = RIPIEGO;
         esito = await generaOllamaEsito(testo, { modello: RIPIEGO, timeoutMs: 600_000, aPezzi: true, ...guarda });
       }
+      usatoAlla = usato;
       if (esito.ok) {
         // Qwen 3.8 ragiona ad alta voce fra <think>…</think>: si tiene solo
         // quello che viene dopo, altrimenti il piano è illeggibile.
@@ -200,6 +204,16 @@ export async function preparaPianoSale(
         l.dettaglio = `il modello non ha risposto (${esito.causa})`;
       }
     }
+
+    // Il modello si scarica appena finito, come fa la catena dei referti
+    // (`libera_llm`): tenerlo in memoria cinque minuti dopo aver finito è
+    // quello che faceva fallire whisper il 16.8, e non serve a nessuno.
+    try {
+      await fetch(`${process.env.OLLAMA_URL || 'http://localhost:11434'}/api/generate`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: usatoAlla, keep_alive: 0 }), signal: AbortSignal.timeout(30_000),
+      });
+    } catch { /* se Ollama non risponde, pazienza: il piano è già fatto */ }
 
     l.fase = 'salvo';
     await query(
