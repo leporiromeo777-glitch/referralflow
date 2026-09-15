@@ -18,12 +18,13 @@ Due righe, qui sopra le stanze, dicono **che cosa non entra nel piano**: persone
 
 - Fuori dal piano: Andrea Bronz
 - Prestazioni fuori dal piano: Colloquio telefonico, Intervento, Risonanza magnetica (tranne Vera Lucia Paiocchi), TAC (tranne Vera Lucia Paiocchi)
+- Sempre e solo: Vera Lucia Paiocchi in Sala 1
 
 Le regole qui sotto vengono dalla conversazione del 15.9.2026 e dalle misure sull'agenda vera (chi lavora quando, quanti pazienti in parallelo). **Sono una proposta**: chi le vive le corregge.
 
 ## Sala 1
 - Di: Vera Lucia Paiocchi
-- Nota: è sempre la sua, non cambia mai — detto dallo studio il 15.9.2026. Prima la pagina la dava a Marco Moccetti.
+- Nota: è sempre la sua, non cambia mai — detto dallo studio il 15.9.2026. Prima la pagina la dava a Marco Moccetti. La riga «Sempre e solo» qui sopra fa sì che il suo lavoro non finisca in nessun'altra stanza, nemmeno quando una proposta lo suggerirebbe.
 - Stato: validato
 
 ## Sala 2

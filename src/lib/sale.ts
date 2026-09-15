@@ -48,6 +48,18 @@ export function fuoriDalPiano(markdown: string): string[] {
 // Lucia Paiocchi)».
 export type PrestazioneFuori = { nome: string; tranne: string[] };
 
+// Chi non si sposta mai. «- Sempre e solo: Vera Lucia Paiocchi in Sala 1»:
+// le sue visite vanno lì e in nessun altro posto, nemmeno se una proposta o
+// una casella aperta suggerirebbero altro. Detto dallo studio il 15.9.2026.
+export type SoloIn = { chi: string; stanza: string };
+
+export function soloIn(markdown: string): SoloIn[] {
+  return elencoInTesta(markdown, 'sempre e solo').map((voce) => {
+    const m = /^(.+?)\s+in\s+(.+)$/i.exec(voce.trim());
+    return m ? { chi: m[1].trim(), stanza: m[2].trim() } : null;
+  }).filter((x): x is SoloIn => !!x);
+}
+
 export function prestazioniFuoriPiano(markdown: string): PrestazioneFuori[] {
   return elencoInTesta(markdown, 'prestazioni fuori dal piano').map((voce) => {
     const m = /^(.*?)\s*\(\s*tranne\s+(.+?)\s*\)\s*$/i.exec(voce);
@@ -298,7 +310,7 @@ export function applicaModifiche(righe: RigaPiano[], modifiche: ModificaSala[]):
 export type VisitaSala = { id: string; inizio: string; fine: string; etichetta: string; sovra: boolean; corsia: number; corsie: number };
 export type VisitaGrezza = { id: string; chi: string; start: string; dur: number; etichetta?: string };
 
-export function assegnaVisite(righe: RigaPiano[], visite: VisitaGrezza[]): Record<string, VisitaSala[]> {
+export function assegnaVisite(righe: RigaPiano[], visite: VisitaGrezza[], vincoli: SoloIn[] = []): Record<string, VisitaSala[]> {
   const min = (t: string) => { const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
   const hm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
   const fuori: Record<string, VisitaSala[]> = {};
@@ -308,7 +320,10 @@ export function assegnaVisite(righe: RigaPiano[], visite: VisitaGrezza[]): Recor
   for (const v of ordinate) {
     if (!v.chi) continue;
     const i = min(v.start), f = i + Math.max(5, v.dur || 30);
-    const sue = righe.filter((r) => (r.segmenti ?? []).some((s) => s.chi && uguali(s.chi, v.chi) && v.start >= s.dalle && v.start < s.alle));
+    let sue = righe.filter((r) => (r.segmenti ?? []).some((s) => s.chi && uguali(s.chi, v.chi) && v.start >= s.dalle && v.start < s.alle));
+    // Chi ha una stanza sola per regola non ne prende altre, mai.
+    const vincolo = (vincoli ?? []).find((x) => uguali(x.chi, v.chi));
+    if (vincolo) sue = sue.filter((r) => r.stanza.toLowerCase() === vincolo.stanza.toLowerCase());
     if (!sue.length) continue;   // nessuna stanza in quel momento: non si mostra
     let scelta = sue.find((r) => liberaDa[r.stanza] <= i);
     const sovra = !scelta;
@@ -392,7 +407,7 @@ export type LetturaProposta = { applicabili: RigaProposta[]; saltate: { riga: st
 
 const FRECCE = ['→', '->', '=>', '⟶'];
 
-export function leggiProposta(testo: string, righe: RigaPiano[], persone: string[]): LetturaProposta {
+export function leggiProposta(testo: string, righe: RigaPiano[], persone: string[], vincoli: SoloIn[] = []): LetturaProposta {
   const applicabili: RigaProposta[] = [];
   const saltate: { riga: string; perche: string }[] = [];
   // Le stanze più lunghe prima: «Sport 1» non dev'essere letta come «Sport».
@@ -422,6 +437,11 @@ export function leggiProposta(testo: string, righe: RigaPiano[], persone: string
     // applicare l'ultima riga sarebbe scegliere noi al posto suo. Vale anche
     // al contrario: la stessa persona in due stanze.
     const chi = trovate[0].p;
+    const vincolo = (vincoli ?? []).find((x) => uguali(x.chi, chi));
+    if (vincolo && vincolo.stanza.toLowerCase() !== stanza.toLowerCase()) {
+      saltate.push({ riga, perche: `${chi} sta sempre e solo in ${vincolo.stanza}` });
+      continue;
+    }
     const giaStanza = applicabili.find((x) => x.stanza === stanza);
     if (giaStanza) { saltate.push({ riga, perche: `${stanza} era già stata assegnata a ${giaStanza.chi}` }); continue; }
     const giaPersona = applicabili.find((x) => x.chi === chi);
@@ -446,4 +466,36 @@ function posizioneNome(testo: string, persona: string): number {
     if (k >= 0 && (dove < 0 || k < dove)) dove = k;
   }
   return dove;
+}
+
+// ---------------------------------------------------------------------------
+// Di chi è un appuntamento che non ha un medico (15.9.2026).
+//
+// In MediOnline «Appar», «Labor», «DC» non sono agende di medici: sono colonne
+// di apparecchi e di servizi. Chi prenota mette lì il paziente e la colonna non
+// porta un nome, quindi l'appuntamento arriva senza titolare — e il piano lo
+// segnava «senza medico» anche quando in studio sanno benissimo di chi è.
+//
+// Si ricostruisce da un fatto: quel paziente, quel giorno, vede un medico. Su
+// trenta giorni di agenda vera funziona nel 92 % dei casi per Labor, 87 % per
+// DC, 71 % per Appar. È una DEDUZIONE, e va detta come tale: dove il paziente
+// non vede nessuno, «senza medico» resta la risposta onesta.
+
+export type VisitaDaDedurre = { id: string; paziente: string; start: string; chi: string };
+
+export function deduciMedici(visite: VisitaDaDedurre[]): Record<string, string> {
+  const min = (t: string) => { const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
+  const conMedico = visite.filter((v) => v.chi && v.paziente);
+  const fuori: Record<string, string> = {};
+  for (const v of visite) {
+    if (v.chi || !v.paziente) continue;
+    let scelto = '', distanza = Infinity;
+    for (const altro of conMedico) {
+      if (altro.paziente !== v.paziente) continue;
+      const d = Math.abs(min(altro.start) - min(v.start));
+      if (d < distanza) { distanza = d; scelto = altro.chi; }
+    }
+    if (scelto) fuori[v.id] = scelto;
+  }
+  return fuori;
 }

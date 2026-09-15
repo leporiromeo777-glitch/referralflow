@@ -6,7 +6,7 @@ import { costruisciRevisione } from '@/lib/prototipo-revisione';
 import { tipoEsame } from '@/lib/briefing-regole';
 import { estraiTerapia } from '@/lib/referti-terapia';
 import { leggiTitolo, nomePulito } from '@/lib/agenda-titolo';
-import { assegnaVisite, capienza, escluso, fuoriDalPiano, leggiSale, prestazioneEsclusa, prestazioniFuoriPiano, titolare, applicaModifiche } from '@/lib/sale';
+import { assegnaVisite, capienza, deduciMedici, escluso, fuoriDalPiano, leggiSale, prestazioneEsclusa, prestazioniFuoriPiano, soloIn, titolare, applicaModifiche } from '@/lib/sale';
 import type { ModificaSala, RigaPiano } from '@/lib/sale';
 import { abbinaPrestazioneAgenda, tipoDaTesto, type VoceCatalogo } from '@/lib/prestazioni';
 import { lettereRitardoGrezzo } from '@/lib/procedure';
@@ -400,11 +400,16 @@ export async function GET() {
     // delle sale: le sue sedute non occupano una stanza dei medici.
     const fuori = fuoriDalPiano(mdSale);
     const fuoriPrest = prestazioniFuoriPiano(mdSale);
-    const vive = apptsOggi.filter((a) => a.status !== 'CANCELLED'
-      && !escluso(doctors[a.doc] ?? '', fuori)
-      && !prestazioneEsclusa(a.prestazione ?? '', doctors[a.doc] ?? '', fuoriPrest));
+    const vincoli = soloIn(mdSale);
+    // «Appar», «Labor», «DC» non sono agende di medici: chi non ha titolare lo
+    // prende in prestito da chi vede quel paziente quel giorno, e si segna che
+    // è dedotto ([[src/lib/sale]]).
+    const nonAnnullati = apptsOggi.filter((a) => a.status !== 'CANCELLED');
+    const dedotti = deduciMedici(nonAnnullati.map((a) => ({ id: a.id, paziente: a.nomeBreve || a.nome || '', start: a.start, chi: doctors[a.doc] ?? '' })));
+    const mediciDi = (a: (typeof nonAnnullati)[number]) => doctors[a.doc] || dedotti[a.id] || '';
+    const vive = nonAnnullati.filter((a) => !escluso(mediciDi(a), fuori) && !prestazioneEsclusa(a.prestazione ?? '', mediciDi(a), fuoriPrest));
     const visite = assegnaVisite(righe, vive
-      .map((a) => ({ id: a.id, chi: doctors[a.doc] ?? '', start: a.start, dur: a.dur, etichetta: a.prestazione || a.tipoPrest || '' })));
+      .map((a) => ({ id: a.id, chi: mediciDi(a), start: a.start, dur: a.dur, etichetta: a.prestazione || a.tipoPrest || '' })), vincoli);
     // Il cartellino che si vede passandoci sopra: chi è il paziente, che cosa
     // è l'appuntamento, di chi è l'agenda, a che punto è. Sono dati che stanno
     // già nell'agenda della stessa pagina; qui si attaccano alla visita.
@@ -415,7 +420,8 @@ export async function GET() {
         if (!a) continue;
         Object.assign(v, {
           paziente: a.nomeBreve || a.nome || '',
-          medico: doctors[a.doc] ?? '',
+          medico: mediciDi(a),
+          medicoDedotto: !doctors[a.doc] && !!dedotti[a.id],
           stato: a.statoMol || '',
           motivo: a.prestazione || a.motivoVero || '',
           tipo: a.tipoPrest || '',
@@ -428,7 +434,7 @@ export async function GET() {
     const conta = new Map<string, typeof vive>();
     for (const a of vive) {
       if (messe.has(a.id)) continue;
-      const chi = doctors[a.doc] || 'senza medico in agenda';
+      const chi = mediciDi(a) || 'senza medico in agenda';
       conta.set(chi, [...(conta.get(chi) ?? []), a]);
     }
     // «Senza sala» porta anche QUALI visite sono: una riga che dice soltanto

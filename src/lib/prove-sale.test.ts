@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { applicaModifiche, assegnaVisite, capienza, daSistemarePerPrompt, escluso, fuoriDalPiano, leggiProposta, prestazioneEsclusa, prestazioniFuoriPiano, daDeciderePerPrompt, leggiSale, pianoDelGiorno, salePerPrompt, titolare } from './sale';
+import { applicaModifiche, assegnaVisite, capienza, daSistemarePerPrompt, deduciMedici, escluso, fuoriDalPiano, leggiProposta, prestazioneEsclusa, prestazioniFuoriPiano, soloIn, daDeciderePerPrompt, leggiSale, pianoDelGiorno, salePerPrompt, titolare } from './sale';
 
 const MD = `
 ## Sala 3
@@ -378,4 +378,34 @@ test('una proposta che si contraddice non si applica a metà', () => {
   const stanze = l.applicabili.map((x) => x.stanza), chi = l.applicabili.map((x) => x.chi);
   assert.equal(new Set(stanze).size, stanze.length, 'una stanza sola per riga');
   assert.equal(new Set(chi).size, chi.length, 'una persona in una stanza sola');
+});
+
+test('il medico si deduce da chi vede quel paziente quel giorno, non si inventa', () => {
+  const d = deduciMedici([
+    { id: 'lab1', paziente: 'Gorla Claudio', start: '09:45', chi: '' },
+    { id: 'vis1', paziente: 'Gorla Claudio', start: '10:15', chi: 'Dr. Davide Girola' },
+    { id: 'vis2', paziente: 'Gorla Claudio', start: '16:00', chi: 'Dr. med. Marco Moccetti' },
+    { id: 'lab2', paziente: 'Nessun Altro', start: '11:00', chi: '' },
+    { id: 'lab3', paziente: '', start: '12:00', chi: '' },
+  ]);
+  assert.equal(d.lab1, 'Dr. Davide Girola', 'vince il medico più vicino nel tempo');
+  assert.ok(!('lab2' in d), 'un paziente che non vede nessuno resta senza medico');
+  assert.ok(!('lab3' in d), 'senza paziente non si deduce niente');
+});
+
+test('chi sta «sempre e solo» in una stanza non ne prende altre', () => {
+  const md = `- Sempre e solo: Vera Lucia Paiocchi in Sala 1\n\n## Sala 1\n- Di: Vera Lucia Paiocchi\n- Stato: validato\n\n## Sala 2\n- Di: condivisa\n- Chi: Vera Lucia Paiocchi, Marco Moccetti\n- Stato: proposta\n`;
+  const v = soloIn(md);
+  assert.deepEqual(v, [{ chi: 'Vera Lucia Paiocchi', stanza: 'Sala 1' }]);
+  const piano = pianoDelGiorno(leggiSale(md), ['Vera Lucia Paiocchi'], 'mar');
+  // senza vincolo la Sala 2 sarebbe sua (unica presente fra chi la divide)
+  const senza = assegnaVisite(piano.righe, [{ id: 'a', chi: 'Dr.ssa med. Vera Lucia Paiocchi', start: '09:00', dur: 30 }]);
+  assert.equal(senza['Sala 2'].length + senza['Sala 1'].length, 1);
+  const con = assegnaVisite(piano.righe, [{ id: 'a', chi: 'Dr.ssa med. Vera Lucia Paiocchi', start: '09:00', dur: 30 }], v);
+  assert.deepEqual(con['Sala 1'].map((x) => x.id), ['a']);
+  assert.deepEqual(con['Sala 2'], [], 'nemmeno quando la stanza sarebbe libera');
+  // e una proposta che prova a spostarla non si applica
+  const l = leggiProposta('ASSEGNA Sala 2 -> Dr.ssa med. Vera Lucia Paiocchi', piano.righe, ['Dr.ssa med. Vera Lucia Paiocchi'], v);
+  assert.equal(l.applicabili.length, 0);
+  assert.match(l.saltate[0].perche, /sempre e solo in Sala 1/);
 });

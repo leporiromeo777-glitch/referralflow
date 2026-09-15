@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
-import { leggiProposta, type ModificaSala, type RigaPiano } from '@/lib/sale';
+import { leggiProposta, soloIn, type ModificaSala, type RigaPiano } from '@/lib/sale';
 import { preparaPianoSale, statoLavoro } from '@/lib/piano-sale';
 
 export const dynamic = 'force-dynamic';
@@ -57,7 +57,15 @@ export async function POST(req: NextRequest) {
       `select distinct pr.nome from appointments a join providers pr on pr.id = a.provider_id
         where a.studio_id = $1 and a.starts_at::date = current_date and pr.attivo order by 1`, [session.studioId]
     )).map((r) => r.nome);
-    const lettura = leggiProposta(piano.proposta, piano.righe ?? [], persone);
+    // I vincoli valgono anche contro una proposta: chi sta sempre e solo in
+    // una stanza non ci si sposta nemmeno se il modello lo suggerisce.
+    let vincoli: ReturnType<typeof soloIn> = [];
+    try {
+      const { readFileSync } = await import('node:fs');
+      const path = await import('node:path');
+      vincoli = soloIn(readFileSync(path.join(process.cwd(), 'docs/wiki/Medici/Sale.md'), 'utf-8'));
+    } catch { vincoli = []; }
+    const lettura = leggiProposta(piano.proposta, piano.righe ?? [], persone, vincoli);
     const da = (session.email || '').split('@')[0];
     const restanti = (piano.modifiche ?? []).filter((m) => !lettura.applicabili.some((a) => a.stanza.toLowerCase() === m.stanza?.toLowerCase()));
     const nuove: ModificaSala[] = [];

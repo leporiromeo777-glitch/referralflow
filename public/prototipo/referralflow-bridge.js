@@ -3455,8 +3455,9 @@ function rfSugVisita(v, stanza) {
     `<div class="t">${rfEsc(rfVisitaNome(v))}</div>`,
     `<div class="r"><b>${rfEsc(v.inizio)}–${rfEsc(v.fine)}</b>${et ? ` · ${rfEsc(et)}` : ' · appuntamento senza motivo scritto'}</div>`,
   ];
-  if (v.medico) righe.push(`<div class="r">${rfEsc(rfNomeNudo(v.medico))} · ${rfEsc(stanza)}</div>`);
+  if (v.medico) righe.push(`<div class="r">${rfEsc(rfNomeNudo(v.medico))}${v.medicoDedotto ? ' <span class="pe" style="font-size:10.5px">(medico dedotto)</span>' : ''} · ${rfEsc(stanza)}</div>`);
   if (v.stato && typeof rfStatoPill === 'function') righe.push(`<div class="r">${rfStatoPill(v.stato)}</div>`);
+  if (v.medicoDedotto) righe.push(`<div class="c">In agenda questo appuntamento non ha un medico — è in una colonna di apparecchi. Il nome viene da chi vede questo paziente oggi.</div>`);
   righe.push(`<div class="c">${v.sovra
     ? 'Sala dedotta: in questo momento il medico ha già tutte le sue stanze occupate. Una fetta in agenda non è sempre una persona dentro una stanza.'
     : 'Sala dedotta da chi ha la stanza in questa fascia: MediOnline non scrive dove avviene la visita.'}</div>`);
