@@ -151,6 +151,17 @@ In MediOnline **una colonna è un'agenda, non un luogo**. Lo studio ne usa 15 e 
 
 Ora una colonna esce dall'elenco se è **abbinata a un medico** e non è anche registrata come sala o apparecchio; sotto il riquadro si dice quante sono state escluse e perché. Il numero è in `agendeMedico`.
 
-Dal 15.9.2026 il riquadro «Sale oggi» in Home è **uno solo** e mostra il piano del giorno quando è pronto (lo prepara il cron `/api/cron/piano-sale`, tabella `piano_sale`): una riga per stanza con chi ce l'ha e in che fascia, le caselle aperte in ambra, e sotto la proposta del modello locale per quelle caselle, marcata «da confermare». Finché il piano del giorno non c'è, la carta ricade sull'occupazione letta dal campo `luogo` dell'agenda, com'era prima. La nota sulla capienza (picco di appuntamenti insieme contro stanze disponibili) resta in tutti e due i casi.
+Dal 15.9.2026 il riquadro in Home si chiama **«Sale e medici»** ed è uno solo. Risponde a una domanda sola — *chi è dove, adesso* — e non è un calendario:
+
+- **una sala per riga**: pallino di stato, nome della sala, avatar e nome di chi ce l'ha, e a destra l'ora del prossimo cambio (oppure la `Funzione:` della stanza quando non cambia niente);
+- **colore appena accennato**: il pallino è azzurro se occupata, verde vuoto se libera, ambra se il cambio è entro un'ora o la casella è da decidere, spento se la sala oggi non si usa — lo stato è comunque scritto a parole, il colore non dice mai nulla da solo;
+- in alto **«N medici in studio · X/Y sale occupate»** e un selettore **Ora / Mattina / Pomeriggio** (Ora è il predefinito; fuori orario mostra la giornata e lo dice);
+- sotto, i **prossimi tre cambi**.
+
+Un tocco su una sala apre, **sotto la riga stessa**, la **timeline della sua giornata**: la barra dalle 07:00 alle 19:30 con una fetta per fascia e il nome dentro, le ore sotto, il segno rosso dell'ora di riferimento, poi le fasce a parole (orario, avatar, nome, perché), la nota della regola e la proposta del modello se quella casella è aperta. In fondo le due cose che si possono fare: **«Applica per oggi»** (cambia chi ha la fascia, o la libera) e **«Torna alla regola»**. Le correzioni stanno in `piano_sale.modifiche` (migrazione 052) e le applica l'endpoint dei dati con `applicaModifiche`, così chiunque apra la Home vede la stessa giornata e la fascia corretta si riconosce. Valgono per il giorno: di chi è una stanza si scrive in [[Medici/Sale]].
+
+La pagina **«Sale»** (Operatività, dopo Agenda) è un **calendario giornaliero**: le ore scendono a sinistra, una colonna per sala, ogni fascia è un blocco col nome dentro e una riga rossa segna l'ora di riferimento. Un tocco sulla testa della colonna o su un blocco apre **a destra** la stessa timeline della Home, con le stesse due azioni. Nella colonna di destra anche i prossimi cambi, la proposta del modello per esteso con «Confermo la proposta», la capienza e le correzioni fatte a mano oggi.
+
+Finché il piano del giorno non c'è, la carta ricade sull'occupazione letta dal campo `luogo` dell'agenda, com'era prima. La nota sulla capienza (picco di appuntamenti insieme contro stanze disponibili) resta in tutti e due i casi.
 
 Resta vero, e va detto: **dove avvenga la visita MediOnline non lo scrive da nessuna parte**. Finché lo studio non registra le sale in Studio → Sale e apparecchi e non abbina i codici, l'occupazione per sala è un'approssimazione basata sulle colonne dell'agenda.

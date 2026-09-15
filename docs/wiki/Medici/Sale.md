@@ -44,36 +44,18 @@ Le regole qui sotto vengono dalla conversazione del 15.9.2026 e dalle misure sul
 ## Sport 1
 - Di: Bruno Capelli
 - Nota: medicina dello sport.
-- Funzione: Medicina dello sport
+- Funzione: Sport
 - Stato: proposta
 
 ## Sport 2
 - Di: Bruno Capelli
 - Nota: medicina dello sport. Capelli non supera mai due pazienti in parallelo: due stanze gli bastano.
-- Funzione: Medicina dello sport
+- Funzione: Sport
 - Stato: proposta
 
 ## Sport 3
 - Di: condivisa
 - Chi: Bruno Capelli, Georgios Moschovitis, Miko Pedrotti, Sebastiano Franscella
 - Nota: Capelli la usa solo mercoledì e giovedì dalle 13:15; il resto del tempo va a chi non ha stanza. Tutte e tre le sale Sport sono libere ogni mattina.
-- Funzione: Medicina dello sport
-- Stato: proposta
-
-## Appar
-- Di: Vera Paiocchi
-- Nota: sala con apparecchi particolari; è la sua stanza, non un deposito.
-- Funzione: Apparecchi
-- Stato: proposta
-
-## Labor
-- Di: aiuto medici
-- Nota: laboratorio. Gli appuntamenti qui non hanno un medico in agenda, ed è giusto così.
-- Funzione: Laboratorio
-- Stato: proposta
-
-## RIA
-- Di: Andrea Bronz
-- Nota: riabilitazione, con Andrea Bronz fisioterapista. Sedute ripetute, slegate dalle visite: 53 appuntamenti su 12 persone in nove giorni.
-- Funzione: Riabilitazione
+- Funzione: Sport
 - Stato: proposta
