@@ -3511,7 +3511,9 @@ function rfSalaPannello(riga, ora) {
   const seg = st.seg;
   const presenti = Array.isArray(p.presenti) ? p.presenti : [];
   const opzioni = [...new Set([...presenti, ...(seg && seg.chi ? [seg.chi] : [])])].sort((a, b) => rfNomeCorto(a).localeCompare(rfNomeCorto(b)));
-  const inProposta = (p.da_decidere || []).some(d => d.stanza === riga.stanza);
+  // La proposta riguarda questa sala se la nomina: da quando il modello
+  // assegna anche le stanze vuote, «da_decidere» non basta più.
+  const inProposta = !!p.proposta && (p.proposta.includes(riga.stanza) || (p.da_decidere || []).some(d => d.stanza === riga.stanza));
   return `<div class="rf-sala-pan">
     <div class="ph"><div><div class="nome">${rfEsc(riga.stanza)}</div>${riga.funzione ? `<div class="sf">${rfEsc(riga.funzione)}</div>` : ''}</div>
       <button class="x" onclick="rfSalaChiudi()" title="Chiudi">✕</button></div>
@@ -3586,7 +3588,13 @@ function rfCardSale(sale, rigaSala, nMed) {
     ${rfSaleElenco(righe, ora)}
     ${cambi.length ? `<div class="rf-cambi"><div class="tit">Prossimi cambi</div>
       ${cambi.map(x => `<div class="rf-cambio"><span class="ora num">${rfEsc(x.ora)}</span>${x.chi ? `${rfAvatar(x.chi)}<span>${rfEsc(rfNomeNudo(x.chi))}</span>` : '<span style="color:var(--text-2);font-style:italic">si libera</span>'}<span class="dove">${rfEsc(x.stanza)}</span></div>`).join('')}</div>` : ''}
-    ${aperte && p.proposta && !RF.salaAperta ? `<div class="caption mt-8" style="padding:0 2px">${aperte === 1 ? 'Una sala è condivisa' : `${aperte} sale sono condivise`} e Cleo ha una proposta: apri la sala col pallino arancione per leggerla.</div>` : ''}
+    ${p.proposta && !RF.salaAperta ? (() => {
+      const righeP = String(p.proposta).split('\n').filter(x => x.trim());
+      const prime = righeP.slice(0, 2).map(rfEsc).join('<br>');
+      return `<div class="rf-piano-prop" style="margin-top:12px"><div class="t">${ICONS.ai} Proposta per oggi</div>
+        <div class="c">${prime}</div>
+        <div class="caption mt-8">${righeP.length > 2 ? `…e altre ${righeP.length - 2} righe. ` : ''}${p.accettata_at ? 'Confermata.' : '<b>Da confermare</b>, la decisione è di chi è in studio.'} <a href="#/sale">Aprila in Sale</a></div></div>`;
+    })() : ''}
     <div class="row mt-16" style="justify-content:space-between;align-items:center;gap:8px">
       <button class="btn sm ghost" data-go="#/sale">Vedi pianificazione completa ${ICONS.chevR}</button>
       ${p.accettata_at ? '<span class="badge success">piano confermato</span>' : ''}</div>
@@ -3659,6 +3667,10 @@ PAGES.sale = () => {
       <button class="btn ai"${RF.pianoLavoro && RF.pianoLavoro.attivo ? ' disabled' : ''} onclick="rfPianoGenera()">${ICONS.ai} ${p.proposta ? 'Rifai la proposta' : 'Prepara con l\'AI'}</button></div></div>
   <div class="stack">
     ${rfPianoCarta()}
+    ${p.proposta ? `<div class="card"><div class="card-head"><span class="rf-lavoro-t">${ICONS.ai} Proposta per oggi</span>${p.accettata_at ? '<span class="badge success">confermata</span>' : '<span class="badge warning">da confermare</span>'}</div>
+      <p class="meta" style="margin:0;line-height:1.6">${rfEsc(p.proposta).replace(/\n/g, '<br>')}</p>
+      <div class="caption mt-8">${rfEsc(p.proposta_da || '')} · la decisione resta di chi è in studio. Per applicarne una: apri la sala nel calendario, scegli il nome, «Applica per oggi».</div>
+      ${p.accettata_at ? '' : '<div class="row mt-16"><button class="btn primary" onclick="rfPianoAccetta()">Confermo la proposta</button></div>'}</div>` : ''}
     ${aperta ? rfSalaPannello(aperta, ora) : ''}
       <div class="card">
         <div class="rf-cs-scorre">
@@ -3677,10 +3689,6 @@ PAGES.sale = () => {
         <div class="caption mt-8">Oggi lavorano ma nella pagina «Medici/Sale» non hanno una stanza — o ce l'hanno condivisa e non è ancora deciso di chi è. Si aggiusta assegnando la sala qui sopra, o scrivendo la regola nella pagina.</div></div>` : ''}
       <div class="card"><div class="card-head"><span class="section-title">Prossimi cambi</span><span class="badge count">${cambi.length}</span></div>
         ${cambi.length ? cambi.map(x => `<div class="rf-cambio"><span class="ora num">${rfEsc(x.ora)}</span>${x.chi ? `${rfAvatar(x.chi)}<span>${rfEsc(rfNomeNudo(x.chi))}</span>` : '<span style="color:var(--text-2);font-style:italic">si libera</span>'}<span class="dove">${rfEsc(x.stanza)}</span></div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessun cambio da qui a fine giornata.</div>'}</div>
-      ${p.proposta ? `<div class="card"><div class="card-head"><span class="section-title">${ICONS.ai} Proposta</span>${p.accettata_at ? '<span class="badge success">confermata</span>' : '<span class="badge warning">da confermare</span>'}</div>
-        <p class="meta" style="margin:0;line-height:1.6">${rfEsc(p.proposta).replace(/\n/g, '<br>')}</p>
-        <div class="caption mt-8">${rfEsc(p.proposta_da || '')} · la decisione resta di chi è in studio.</div>
-        ${p.accettata_at ? '' : '<div class="row mt-16"><button class="btn primary" onclick="rfPianoAccetta()">Confermo la proposta</button></div>'}</div>` : ''}
       ${c && c.picco ? `<div class="card"><div class="card-head"><span class="section-title">Capienza</span></div>
         <p class="meta" style="margin:0;line-height:1.55">Al massimo oggi <b>${c.picco} appuntamenti insieme</b> su ${c.stanze} stanze.${c.oreOltre && c.oreOltre.length ? ` Non bastano dalle <b>${rfEsc(c.oreOltre[0])}</b>${c.oreOltre.length > 1 ? ` alle <b>${rfEsc(c.oreOltre[c.oreOltre.length - 1])}</b>` : ''}.` : ''}</p>
         <div class="caption mt-8">Una fetta in agenda vuol dire «pratica aperta», non «persona dentro una stanza»: è una capienza da guardare, non un errore.</div></div>` : ''}

@@ -163,6 +163,11 @@ Un tocco su una sala apre, **sotto la riga stessa**, la **timeline della sua gio
 
 La pagina **«Sale»** (Operatività, dopo Agenda) è un **calendario giornaliero a tutta pagina**: le ore scendono a sinistra, una colonna per sala, la fascia è lo sfondo colorato della colonna e una riga rossa segna l'ora di riferimento. La pagina sta in mezzo fra la larghezza normale e quella dell'agenda: `#app.sale-larga` porta il limite da 1440 a **1760 px** con margini di 20 px — oltre, le colonne diventano lenzuola. L'altezza della giornata viene dalla finestra (minimo **780 px**) e si ridisegna al ridimensionamento. Il nome del paziente è quello canonico dell'app (`fullName` dalla cartella, poi il riquadro dell'agenda), così nel calendario delle sale e nell'agenda si legge lo stesso nome. Un tocco sulla testa della colonna o su una fascia apre **sopra il calendario** la stessa timeline della Home, con le stesse due azioni. Sotto: visite senza sala, prossimi cambi, la proposta del modello per esteso con «Confermo la proposta», la capienza e le correzioni fatte a mano oggi.
 
+### Dove si vede la proposta (15.9.2026)
+In tre posti, in ordine di fretta: nella **Home**, dentro il riquadro «Sale e medici», le prime due righe con «da confermare» e il rimando a Sale; nella **pagina Sale**, per esteso e **sopra il calendario** — è la cosa che aspetta una decisione, non una nota a piè di pagina — con «Confermo la proposta»; nel **pannello di una sala**, quando la proposta nomina quella stanza (da quando il modello assegna anche le stanze vuote, `da_decidere` non basta più per decidere se mostrarla).
+
+Confermare segna `accettata_at`: dice che qualcuno l'ha letta e la fa sua. Applicarla è un gesto diverso — si apre la sala, si sceglie il nome, «Applica per oggi» — perché la proposta è testo libero e il codice non la esegue da solo.
+
 ### Il pulsante «Prepara con l'AI» e la barra (15.9.2026)
 Il lavoro che prepara il piano sta in `src/lib/piano-sale.ts` perché lo chiedono in due — il cron di notte e il pulsante nella pagina Sale — e dev'essere lo stesso lavoro. `POST /api/prototipo/piano-sale` con `azione: 'rigenera'` lo avvia e risponde **subito** (il modello locale ci mette minuti); `GET` sulla stessa rotta dice a che punto è.
 
