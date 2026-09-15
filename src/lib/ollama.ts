@@ -140,6 +140,11 @@ export async function generaOllamaEsito(prompt: string, opzioni: OpzioniOllama =
       return { ok: false, causa, dettaglio, ms };
     }
     let testo = '';
+    // I modelli che ragionano (Qwen 3.8, Kimi…) a volte mettono TUTTO nel
+    // campo `thinking` e lasciano `response` vuoto: senza raccoglierlo, una
+    // generazione riuscita si legge come «risposta vuota». Si tiene da parte
+    // e si usa solo se la risposta vera non arriva.
+    let pensiero = '';
     if (opzioni.aPezzi) {
       // Ollama manda una riga JSON per pezzo; si concatenano i `response`.
       const lettore = r.body?.getReader();
@@ -153,13 +158,23 @@ export async function generaOllamaEsito(prompt: string, opzioni: OpzioniOllama =
         resto = righe.pop() ?? '';
         for (const riga of righe) {
           if (!riga.trim()) continue;
-          try { testo += String(JSON.parse(riga)?.response ?? ''); } catch { /* riga incompleta */ }
+          try {
+            const pezzo = JSON.parse(riga);
+            testo += String(pezzo?.response ?? '');
+            pensiero += String(pezzo?.thinking ?? '');
+          } catch { /* riga incompleta */ }
         }
       }
       testo = testo.trim();
+      pensiero = pensiero.trim();
     } else {
       const dati = await r.json();
       testo = typeof dati?.response === 'string' ? dati.response.trim() : '';
+      pensiero = typeof dati?.thinking === 'string' ? dati.thinking.trim() : '';
+    }
+    if (!testo && pensiero) {
+      console.warn(`[ai-locale] ${modello}: risposta nel campo «thinking», la uso (${pensiero.length} caratteri in ${ms}ms)`);
+      testo = pensiero;
     }
     if (!testo) {
       console.error(`[ai-locale] risposta vuota modello=${modello} in ${ms}ms`);
