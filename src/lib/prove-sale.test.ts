@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { capienza, leggiSale, titolare } from './sale';
+import { capienza, leggiSale, salePerPrompt, titolare } from './sale';
 
 const MD = `
 ## Sala 3
@@ -76,4 +76,11 @@ test('sale: la pagina vera si legge e ogni stanza ha un titolare o chi la divide
   assert.ok(s.length >= 10, `stanze lette: ${s.length}`);
   for (const x of s) assert.ok(x.di || x.chi.length, `${x.nome} senza titolare`);
   assert.ok(s.some((x) => x.fasce.length), 'almeno una stanza ha una regola oraria');
+});
+
+test('una sala «condivisa» senza dire fra chi lo dichiara, non stampa un elenco vuoto', () => {
+  const s = leggiSale('## RIA\n- Di: condivisa\n- Stato: proposta\n');
+  const t = salePerPrompt(s);
+  assert.ok(!t.includes('condivisa fra ;'), t);
+  assert.ok(t.includes('non è scritto fra chi'));
 });

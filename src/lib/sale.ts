@@ -121,7 +121,13 @@ export function capienza(
 export function salePerPrompt(sale: Sala[]): string {
   return sale
     .map((s) => {
-      const pezzi = [s.di === 'condivisa' ? `condivisa fra ${s.chi.join(', ')}` : `di ${s.di}`];
+      // «condivisa» senza l'elenco di chi la divide è una regola incompleta:
+      // si dice così invece di scrivere «condivisa fra » e basta.
+      const pezzi = [
+        s.di === 'condivisa'
+          ? (s.chi.length ? `condivisa fra ${s.chi.join(', ')}` : 'condivisa, ma nella pagina non è scritto fra chi')
+          : `di ${s.di}`,
+      ];
       for (const f of s.fasce) pezzi.push(`dalle ${f.dalle} di ${f.chi}`);
       if (s.giorni.length) pezzi.push(`solo ${s.giorni.join(' ')}`);
       if (s.stato && s.stato !== 'validato') pezzi.push(`regola ancora «${s.stato}»`);

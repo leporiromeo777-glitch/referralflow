@@ -67,6 +67,6 @@ Le regole qui sotto vengono dalla conversazione del 15.9.2026 e dalle misure sul
 - Stato: proposta
 
 ## RIA
-- Di: condivisa
-- Nota: riabilitazione. Sedute ripetute, slegate dalle visite.
+- Di: Andrea Bronz
+- Nota: riabilitazione, con Andrea Bronz fisioterapista. Sedute ripetute, slegate dalle visite: 53 appuntamenti su 12 persone in nove giorni.
 - Stato: proposta
