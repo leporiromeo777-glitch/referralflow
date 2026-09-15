@@ -6,6 +6,7 @@ import { costruisciRevisione } from '@/lib/prototipo-revisione';
 import { tipoEsame } from '@/lib/briefing-regole';
 import { estraiTerapia } from '@/lib/referti-terapia';
 import { leggiTitolo, nomePulito } from '@/lib/agenda-titolo';
+import { capienza, leggiSale, titolare } from '@/lib/sale';
 import { abbinaPrestazioneAgenda, tipoDaTesto, type VoceCatalogo } from '@/lib/prestazioni';
 import { lettereRitardoGrezzo } from '@/lib/procedure';
 
@@ -357,7 +358,32 @@ export async function GET() {
   // Un'agenda di medico NON è una sala: esce dall'elenco, a meno che quella
   // sigla sia anche registrata come sala o apparecchio in Studio → Sale.
   const tutteLeColonne = [...perSala.values()].sort((a, b) => b.minuti - a.minuti || a.nome.localeCompare(b.nome));
-  const sale = tutteLeColonne.filter((x) => x.tipo !== 'codice' || x.conMedico === 0);
+  const saleGrezze = tutteLeColonne.filter((x) => x.tipo !== 'codice' || x.conMedico === 0);
+  // Di chi è quale stanza: regole dalla pagina wiki «Medici/Sale», applicate
+  // ai medici che sono davvero in studio oggi ([[src/lib/sale]]).
+  let regoleSale: ReturnType<typeof leggiSale> = [];
+  try {
+    const { readFileSync } = await import('node:fs');
+    const path = await import('node:path');
+    regoleSale = leggiSale(readFileSync(path.join(process.cwd(), 'docs/wiki/Medici/Sale.md'), 'utf-8'));
+  } catch { regoleSale = []; }
+  const GG = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
+  const giornoOggi = GG[oggiIso.getDay()];
+  const presentiOggi = [...new Set(apptsOggi.map((a) => doctors[a.doc]).filter(Boolean))];
+  // Le stanze registrate che nella pagina non compaiono restano senza regola.
+  const perNome = new Map(regoleSale.map((r) => [r.nome.toLowerCase(), r]));
+  const sale = saleGrezze.map((x) => {
+    const r = perNome.get(x.nome.toLowerCase());
+    if (!r) return { ...x, titolare: '', perche: '', stato: '' };
+    const t = titolare(r, hm, giornoOggi, presentiOggi);
+    return { ...x, titolare: t.chi, perche: t.perche, stato: r.stato, nota: r.nota };
+  });
+  // La capienza: quante stanze servirebbero adesso e quando non bastano.
+  const minuti = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const cap = capienza(
+    apptsOggi.map((a) => ({ inizio: minuti(a.start), fine: minuti(a.start) + a.dur })),
+    sale.length
+  );
   const agendeMedico = tutteLeColonne.filter((x) => x.tipo === 'codice' && x.conMedico > 0).length;
   const refertiOggiPer = new Set(reports.filter((r) => r.date === dCh(oggiIso.toISOString())).map((r) => r.p));
   const vistiSenzaReferto = apptsOggi.filter((a) => a.status === 'COMPLETED' && a.p && !refertiOggiPer.has(a.p)).length;
@@ -374,7 +400,7 @@ export async function GET() {
   };
   return NextResponse.json({
     utente: { role: RUOLO[session.role] ?? 'secretary', name: nome, initials: iniz, studio: session.studioNome, email: session.email },
-    today, doctors, patients, appts: apptsOggi, agenda, tasks, reports, documents, inbox, audioInbox, stats, sale, agendeMedico, ruoliMedici,
+    today, doctors, patients, appts: apptsOggi, agenda, tasks, reports, documents, inbox, audioInbox, stats, sale, agendeMedico, ruoliMedici, capienzaSale: { ...cap, stanze: sale.length },
     risorse: risorse.map((r) => ({ id: r.id, tipo: r.tipo, nome: r.nome, posti: r.posti })),
     catalogo, coloriMedici, daChiamare, moduli_nascosti: stud?.moduli_nascosti ?? [],
   });

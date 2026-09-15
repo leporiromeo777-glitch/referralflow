@@ -269,7 +269,8 @@ PAGES.home = () => {
   const rigaSala = (x) => {
     const pct = Math.min(100, Math.round(x.minuti / 480 * 100));
     const cap = x.occupataOra ? 'occupata adesso' : x.prossima ? `prossima alle ${x.prossima}` : x.n ? (x.prima ? `finita · prima era alle ${x.prima}` : 'finita per oggi') : 'libera oggi';
-    return `<div class="rf-sala"><div class="rf-sala-top"><span class="name">${rfEsc(x.nome)}${x.tipo === 'apparecchio' ? ' <span class="caption">apparecchio</span>' : x.tipo === 'codice' ? ' <span class="caption">codice agenda</span>' : ''}</span><span class="n num">${x.n ? `${x.n} · ${oreSala(x.minuti)}` : '—'}${x.posti > 1 ? ` <span class="caption">· ${x.posti} posti</span>` : ''}</span></div><div class="meter${x.occupataOra ? ' now' : ''}"><i style="width:${pct}%"></i></div><div class="cap${x.occupataOra ? ' now' : ''}">${cap}</div></div>`;
+    const chi = x.titolare ? `<span class="rf-sala-chi">${rfEsc(x.titolare)}</span>` : (x.perche && x.perche !== 'libera' ? `<span class="rf-sala-chi vuota">${rfEsc(x.perche)}</span>` : '');
+    return `<div class="rf-sala"><div class="rf-sala-top"><span class="name">${rfEsc(x.nome)}${chi}${x.tipo === 'apparecchio' ? ' <span class="caption">apparecchio</span>' : x.tipo === 'codice' ? ' <span class="caption">codice agenda</span>' : ''}</span><span class="n num">${x.n ? `${x.n} · ${oreSala(x.minuti)}` : '—'}${x.posti > 1 ? ` <span class="caption">· ${x.posti} posti</span>` : ''}</span></div><div class="meter${x.occupataOra ? ' now' : ''}"><i style="width:${pct}%"></i></div><div class="cap${x.occupataOra ? ' now' : ''}">${cap}</div></div>`;
   };
   return `
     <div class="page-head"><div><div class="eyebrow">La giornata dello studio</div><div class="display">${rfEsc(ROLES[state.role].greet)}</div><div class="page-sub" style="text-transform:none">${data} · ${appts.length} ${appts.length === 1 ? 'appuntamento' : 'appuntamenti'}${nMed ? ` · ${nMed} ${nMed === 1 ? 'medico' : 'medici'} in agenda` : ''} · ${TASKS.length ? `${TASKS.length} cose da fare` : 'niente in sospeso'}</div></div>
@@ -302,6 +303,8 @@ PAGES.home = () => {
         <div class="card"><div class="card-head"><span class="section-title">Sale oggi</span><button class="btn sm ghost" data-go="#/administration">Studio ${ICONS.chevR}</button></div>
           ${sale.length ? sale.slice(0, 10).map(rigaSala).join('') : `<div class="caption" style="padding:8px 6px">Nessuna sala registrata.${RF.data.agendeMedico ? ` Le ${RF.data.agendeMedico} colonne dell'agenda di oggi sono <b>agende di medici</b>, non luoghi: in MediOnline una colonna è un'agenda, e dove avviene la visita non è scritto da nessuna parte.` : ''} Le sale si registrano in Studio → Sale e apparecchi.</div>`}
           ${sale.length ? '<div class="caption mt-8" style="padding:0 6px">Barra piena = 8 ore. Il luogo viene dal campo «luogo» dell\'agenda.</div>' : ''}
+          ${(() => { const c = RF.data.capienzaSale; if (!c || !c.picco) return ''; const scarso = c.oreOltre && c.oreOltre.length;
+            return `<div class="caption mt-8" style="padding:0 6px">Al massimo oggi <b>${c.picco} appuntamenti insieme</b> su ${c.stanze} stanze.${scarso ? ` Non bastano dalle <b>${rfEsc(c.oreOltre[0])}</b>${c.oreOltre.length > 1 ? ` alle <b>${rfEsc(c.oreOltre[c.oreOltre.length - 1])}</b>` : ''}. Una fetta in agenda non è sempre una persona in stanza: è una capienza da guardare, non un errore.` : ''}</div>`; })()}
           ${RF.data.agendeMedico ? `<div class="caption mt-8" style="padding:0 6px">Fuori da questo elenco: <b>${RF.data.agendeMedico} agende di medici</b> — in MediOnline la colonna è l'agenda del medico, non la stanza.</div>` : ''}</div>
         <div class="card"><div class="card-head"><span class="section-title">In studio oggi</span><span class="badge count">${nMed}</span></div>
           <div class="list">${nMed ? mediciOggi.map(d => `<div class="rf-persona"><i class="dot success"></i><span>${rfEsc(DOCTORS[d] || d)}${rfEtichettaRuolo(d)}</span><span class="caption" style="margin-left:auto">${appts.filter(a => a.doc === d).length} app.</span></div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessun medico con agenda oggi.</div>'}</div>
@@ -848,6 +851,9 @@ const RF_AI_NOME = 'Cleo';
 .appt.rf-stretta .n { gap: 4px; font-size: 11px; }
 .appt.rf-stretta .s { font-size: 10px; }
 .appt.rf-stretta .dot { width: 6px; height: 6px; }
+/* Di chi è la stanza, accanto al nome nel riquadro «Sale oggi». */
+.rf-sala-chi { display:block; font-size:11.5px; font-weight:400; color:var(--accent); margin-top:1px; }
+.rf-sala-chi.vuota { color:var(--text-3); font-style:italic; }
 /* Con medici + tipi le colonne diventano tante: la griglia scorre dentro il
    suo riquadro invece di essere tagliata (.cal ha overflow:hidden). */
 .rf-cal-scorre { overflow-x: auto; overflow-y: hidden; padding-bottom: 2px; }
