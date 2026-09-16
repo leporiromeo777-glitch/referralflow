@@ -1,9 +1,6 @@
-import { readFileSync } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { fornitoreAutorizzato, leggiConf } from '@/lib/fornitori';
+import { fornitoreEsterno } from '@/lib/fornitore-esterno';
 // La RIFORMULAZIONE resta locale: la domanda col paziente dentro non esce da
 // questo Mac nemmeno per essere ripulita. Esce solo ciò che è già generale.
 import { generaOllamaEsito } from '@/lib/ollama';
@@ -38,24 +35,11 @@ export const dynamic = 'force-dynamic';
 // Indirizzo e chiave sono quelli che la catena usa già: una chiave sola, in
 // un file solo, con i permessi giusti.
 const MODELLO = process.env.DOMANDA_MEDICA_MODELLO || 'google/gemma-4-31B-it';
-const CONF = path.join(os.homedir(), '.referralflow-esterno.conf');
 
-function fornitore(): { url: string; chiave: string } | null {
-  try {
-    const c = leggiConf(readFileSync(CONF, 'utf-8'));
-    if (!c.url || !c.chiave) return null;
-    // La guardia: un indirizzo fuori lista non si chiama, anche se è scritto
-    // nel file. Stessa regola della catena.
-    if (!fornitoreAutorizzato(c.url)) {
-      log(`indirizzo NON autorizzato nella configurazione: rifiutato`);
-      return null;
-    }
-    return { url: c.url, chiave: c.chiave };
-  } catch {
-    return null;
-  }
-}
-
+// La porta verso il fornitore sta in un posto solo: `fornitore-esterno.ts`.
+// La usa anche la ricerca clinica, e due copie della stessa guardia
+// divergono sempre.
+const fornitore = () => fornitoreEsterno((m) => log(m));
 
 function log(m: string) {
   console.log(`[domanda-medica] ${m}`);

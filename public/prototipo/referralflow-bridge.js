@@ -903,6 +903,13 @@ const RF_AI_NOME = 'Cleo';
 .rf-cart-v b { font-weight:600; }
 .rf-cart-v span { color:var(--text-3); font-size:11.5px; margin-left:auto; }
 .rf-cart-p { margin:8px 0; padding:9px 11px; border-radius:10px; background:var(--surface-2); font-size:12.5px; line-height:1.55; }
+.rf-cart-t { width:100%; box-sizing:border-box; margin-top:4px; padding:7px 9px; border:1px solid var(--border); border-radius:8px;
+  font:inherit; font-size:12.5px; line-height:1.5; color:var(--text-1); background:var(--surface-1); resize:vertical; }
+.rf-cart-t:focus { outline:none; border-color:var(--accent); }
+.rf-cert { margin-left:auto; font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:.04em;
+  padding:2px 7px; border-radius:999px; background:var(--surface-2); color:var(--text-3); }
+.rf-cert.alta { background:#e8f3ee; color:#0d5c48; }
+.rf-cert.bassa { background:#fdf0e6; color:#8a4b12; }
 .rf-cart-p b { display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-3); margin-bottom:3px; }
 .rf-med textarea { width:100%; min-height:62px; padding:9px 11px; border:1px solid var(--border); border-radius:8px; background:var(--surface-2); font:inherit; font-size:14px; line-height:1.5; color:var(--text); resize:vertical; }
 .rf-med .segnali { margin:9px 0 0; display:flex; flex-direction:column; gap:4px; }
@@ -1162,6 +1169,77 @@ function rfCartellaPrimo() {
   const trovati = rfCartellaTrova(el ? el.value : '');
   if (trovati.length) rfCartellaPaziente(trovati[0].id);
 }
+/* Passi 5-7: esce il pacchetto, torna la ricerca, il modello locale la
+   rilegge con la cartella davanti. Il testo che parte è quello nei due riquadri
+   — il medico può averlo corretto — e la piattaforma lo ricontrolla lo stesso. */
+async function rfCartellaManda() {
+  const c = state.cartellaCtx; if (!c || !c.esito || !c.esito.ricerca_id) return;
+  const ctx = document.getElementById('rf-cart-ctx'), dom = document.getElementById('rf-cart-dom');
+  const corpo = {
+    azione: 'manda', ricerca_id: c.esito.ricerca_id,
+    contesto: ctx ? ctx.value : c.esito.contesto,
+    domanda_generale: dom ? dom.value : c.esito.domanda_generale,
+  };
+  state.cartellaCtx = { ...c, stato: 'cerca', errore: null };
+  render();
+  try {
+    const r = await fetch('/api/prototipo/contesto-clinico', {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(corpo),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.errore) { state.cartellaCtx = { ...c, stato: 'fatto', erroreInvio: j.errore || 'Non ha funzionato.' }; render(); return; }
+    state.cartellaCtx = { ...c, stato: 'risposta', ricerca: j, errore: null };
+  } catch { state.cartellaCtx = { ...c, stato: 'fatto', erroreInvio: 'La piattaforma non risponde.' }; }
+  render();
+}
+/* Passo 8: che cosa ne ha fatto il medico. Resta scritto accanto a tutto il
+   resto, perché di una consulenza si deve poter dire mesi dopo com'è finita. */
+async function rfCartellaConferma(scelta) {
+  const c = state.cartellaCtx; if (!c || !c.ricerca) return;
+  state.cartellaCtx = { ...c, conferma: scelta };
+  render();
+  try {
+    await fetch('/api/prototipo/contesto-clinico', {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ azione: 'conferma', ricerca_id: c.ricerca.ricerca_id, conferma: scelta }),
+    });
+  } catch {}
+}
+const RF_SEZIONI = [
+  ['sintesi', 'Sintesi'],
+  ['evidenze', 'Evidenze trovate'],
+  ['pertinenti', 'Per questo paziente'],
+  ['attenzioni', 'Attenzioni'],
+  ['mancanti', 'Informazioni mancanti'],
+];
+function rfCartellaRisposta(c, paz) {
+  const j = c.ricerca || {}, sez = j.sezioni || {};
+  const righe = RF_SEZIONI.filter(([k]) => (sez[k] || '').trim())
+    .map(([k, titolo]) => `<div class="rf-cart-p"><b>${titolo}</b><div>${rfEsc(sez[k]).replace(/\n/g, '<br>')}</div></div>`).join('');
+  const fonti = (j.fonti || []);
+  const dubbie = (j.da_verificare || []);
+  const cert = j.certezza ? `<span class="rf-cert ${rfEsc(j.certezza)}">certezza ${rfEsc(j.certezza)}</span>` : '';
+  return `<div class="rf-med">
+    <div class="t">${ICONS.book || ICONS.ai} La ricerca, riletta sulla cartella di ${rfEsc(paz.last)} ${cert}</div>
+    ${righe || `<p class="caption" style="margin:0 0 8px">Il modello non ha risposto nella forma attesa.</p>`}
+    <div class="rf-cart-p"><b>Fonti · citate a memoria, da verificare</b><div>${
+      fonti.length ? fonti.map(f => rfEsc(f)).join('<br>') : 'Nessuna fonte sicura indicata.'
+    }</div></div>
+    <div class="segnali">
+      ${dubbie.length ? `<div class="segnale blocco">${ICONS.alert}<span>Ci sono ${dubbie.length} fra link e codici: il modello esterno non naviga, quindi non li ha verificati. Non fidartene senza aprirli.</span></div>` : ''}
+      <div class="segnale">${ICONS.info}<span>Supporto alla decisione: non cambia terapie, non fa diagnosi. Decide il medico.</span></div>
+    </div>
+    <div class="azioni">
+      ${c.conferma
+        ? `<span class="caption">Segnata come ${c.conferma === 'usata' ? 'usata' : 'scartata'}.</span>`
+        : `<button class="btn primary" onclick="rfCartellaConferma('usata')">${ICONS.check} L'ho usata</button>
+           <button class="btn" onclick="rfCartellaConferma('scartata')">Non mi serve</button>`}
+      <button class="btn" onclick="rfCartellaChiudi()">Chiudi</button>
+      <span class="dove">Sono usciti ${(j.uscito && j.uscito.contesto) || 0}+${(j.uscito && j.uscito.domanda) || 0} caratteri verso ${rfEsc(j.dove || '')} · ${rfEsc(j.modello_esterno || '')} in ${(((j.ms_esterno || 0)) / 1000).toFixed(1)} s, riletti qui da ${rfEsc(j.modello_locale || '')} in ${(((j.ms_finale || 0)) / 1000).toFixed(1)} s. La cartella non è uscita.</span>
+    </div>
+  </div>`;
+}
 function rfCartellaRiquadro() {
   if (!state.modoCartella && !state.cartellaCtx) return '';
   const c = state.cartellaCtx;
@@ -1194,20 +1272,36 @@ function rfCartellaRiquadro() {
       ...(k.etaEsatta ? [`c'è l'età esatta («${k.etaEsatta}»)`] : []),
       ...(k.vuoto ? ['il modello non ha prodotto un contesto utile'] : []),
     ];
+    const puo = male.length === 0;
     return `<div class="rf-med">
-      <div class="t">${ICONS.shield || ICONS.activity} Questo è ciò che uscirebbe — e non è uscito</div>
-      <p class="caption" style="margin:0 0 8px">Dalla cartella di ${rfEsc(paz.last)} (${e.cartella_caratteri} caratteri) il modello locale ha tenuto ${(e.contesto || '').length + (e.domanda_generale || '').length} caratteri.</p>
-      <div class="rf-cart-p"><b>Contesto</b><div>${rfEsc(e.contesto || '—').replace(/\n/g, '<br>')}</div></div>
-      <div class="rf-cart-p"><b>Domanda</b><div>${rfEsc(e.domanda_generale || '—').replace(/\n/g, '<br>')}</div></div>
-      ${male.length
-        ? `<div class="segnali">${male.map(x => `<div class="segnale blocco">${ICONS.alert}<span>${rfEsc(x)}</span></div>`).join('')}</div>`
-        : `<div class="segnali"><div class="segnale"><span>Nessun dato che identifichi ${rfEsc(paz.last)}, domanda valida per chiunque, nessuna età esatta.</span></div></div>`}
+      <div class="t">${ICONS.shield || ICONS.activity} Questo è ciò che uscirebbe${puo ? '' : ' — e così non esce'}</div>
+      <p class="caption" style="margin:0 0 8px">Dalla cartella di ${rfEsc(paz.last)} (${e.cartella_caratteri} caratteri) il modello locale ha tenuto ${(e.contesto || '').length + (e.domanda_generale || '').length} caratteri. Puoi correggerli prima di mandarli: il controllo si rifà dall'altra parte.</p>
+      <div class="rf-cart-p"><b>Contesto</b><textarea class="rf-cart-t" id="rf-cart-ctx" rows="4">${rfEsc(e.contesto || '')}</textarea></div>
+      <div class="rf-cart-p"><b>Domanda</b><textarea class="rf-cart-t" id="rf-cart-dom" rows="3">${rfEsc(e.domanda_generale || '')}</textarea></div>
+      <div class="segnali">
+        ${c.erroreInvio ? `<div class="segnale blocco">${ICONS.alert}<span>${rfEsc(c.erroreInvio)}</span></div>` : ''}
+        ${male.length
+          ? male.map(x => `<div class="segnale blocco">${ICONS.alert}<span>${rfEsc(x)}</span></div>`).join('')
+          : `<div class="segnale"><span>Nessun dato che identifichi ${rfEsc(paz.last)}, domanda valida per chiunque, nessuna età esatta.</span></div>`}
+      </div>
       <div class="azioni">
+        ${puo && e.collegato !== false
+          ? `<button class="btn primary" onclick="rfCartellaManda()">${ICONS.send} Manda fuori la ricerca</button>`
+          : ''}
         <button class="btn" onclick="rfCartellaChiudi()">Chiudi</button>
-        <span class="dove">${rfEsc(e.modello || '')} · ${((e.ms || 0) / 1000).toFixed(1)} s · <b>niente è uscito da questo Mac</b>: la parte che manda fuori non è ancora costruita.</span>
+        <span class="dove">${rfEsc(e.modello || '')} · ${((e.ms || 0) / 1000).toFixed(1)} s · ${puo
+          ? (e.collegato === false
+            ? '<b>non è collegato nessun fornitore autorizzato</b>: il pacchetto è pronto e resta qui.'
+            : 'esce solo quello che vedi qui sopra, verso Infomaniak · Ginevra.')
+          : '<b>niente è uscito</b>: finché c\'è un segnale rosso non parte.'}</span>
       </div>
     </div>`;
   }
+  if (c && c.stato === 'cerca') {
+    return `<div class="rf-med"><div class="t">${ICONS.activity} Cerco fuori, poi rileggo con la cartella</div>
+      <p class="caption" style="margin:0">Il pacchetto è uscito verso Infomaniak (Ginevra). Quando torna, il modello di questo Mac lo rimette accanto alla cartella di ${rfEsc(paz.last)}: è l'unico che conosce tutti e due i lati. Un minuto circa.</p></div>`;
+  }
+  if (c && c.stato === 'risposta') return rfCartellaRisposta(c, paz);
   return `<div class="rf-med"><div class="t">${ICONS.file || ICONS.patients} Con la cartella di ${rfEsc(paz.last)}</div>
     <p class="caption" style="margin:0">Scrivi la domanda come ti viene. Il modello locale legge la cartella intera e prepara il minimo che servirebbe a chi non conosce il paziente: lo vedi prima, e per ora non esce da qui.</p>
     <div class="azioni"><button class="btn sm ghost" onclick="rfCartellaPaziente('')">Cambia paziente</button></div></div>`;
