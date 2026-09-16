@@ -896,6 +896,12 @@ const RF_AI_NOME = 'Cleo';
 .rf-med { border:1px solid var(--accent); border-radius:var(--r-card,10px); background:var(--surface); padding:14px 18px; margin-bottom:10px; }
 .rf-med .t { display:flex; align-items:center; gap:7px; font-size:12px; font-weight:650; text-transform:uppercase; letter-spacing:.03em; color:var(--text-3); margin-bottom:9px; }
 .rf-med .t svg { width:14px; height:14px; }
+.rf-cart-lista { display:flex; flex-direction:column; gap:4px; margin-top:8px; max-height:220px; overflow:auto; }
+.rf-cart-v { display:flex; align-items:baseline; gap:8px; width:100%; text-align:left; font:inherit; color:inherit; cursor:pointer;
+  border:1px solid var(--border); background:var(--surface); border-radius:9px; padding:7px 10px; font-size:12.5px; transition:.14s var(--ease); }
+.rf-cart-v:hover { border-color:var(--accent); background:var(--accent-soft); }
+.rf-cart-v b { font-weight:600; }
+.rf-cart-v span { color:var(--text-3); font-size:11.5px; margin-left:auto; }
 .rf-cart-p { margin:8px 0; padding:9px 11px; border-radius:10px; background:var(--surface-2); font-size:12.5px; line-height:1.55; }
 .rf-cart-p b { display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-3); margin-bottom:3px; }
 .rf-med textarea { width:100%; min-height:62px; padding:9px 11px; border:1px solid var(--border); border-radius:8px; background:var(--surface-2); font:inherit; font-size:14px; line-height:1.5; color:var(--text); resize:vertical; }
@@ -1129,18 +1135,47 @@ async function rfCartellaChiedi(q) {
 }
 function rfCartellaChiudi() { state.cartellaCtx = null; render(); }
 function rfCartellaPaziente(id) { state.patientCtx = id || null; render(); const i = document.getElementById('rf-aip-in'); if (i) i.focus(); }
+/* La ricerca del paziente: tocca solo la lista, non ridisegna la pagina —
+   a ogni lettera si perderebbe il cursore. Al massimo otto nomi: se non basta
+   si scrive una lettera in più. */
+function rfCartellaTrova(q) {
+  const t = String(q ?? '').trim().toLowerCase();
+  if (t.length < 2) return [];
+  const tutti = (typeof PATIENTS !== 'undefined' ? PATIENTS : []);
+  return tutti.filter(p => {
+    const a = `${p.last ?? ''} ${p.first ?? ''}`.toLowerCase(), b = `${p.first ?? ''} ${p.last ?? ''}`.toLowerCase();
+    return a.includes(t) || b.includes(t);
+  }).slice(0, 8);
+}
+function rfCartellaCerca(q) {
+  const box = document.getElementById('rf-cart-lista');
+  if (!box) return;
+  const t = String(q ?? '').trim();
+  const trovati = rfCartellaTrova(t);
+  box.innerHTML = trovati.length
+    ? trovati.map(p => `<button type="button" class="rf-cart-v" onclick="rfCartellaPaziente('${rfEsc(p.id)}')">
+        <b>${rfEsc(`${p.last ?? ''} ${p.first ?? ''}`.trim())}</b>${p.dob ? `<span>${rfEsc(p.dob)}</span>` : ''}</button>`).join('')
+    : `<span class="caption">${t.length < 2 ? 'Scrivi almeno due lettere.' : 'Nessun paziente con questo nome.'}</span>`;
+}
+function rfCartellaPrimo() {
+  const el = document.getElementById('rf-cart-cerca');
+  const trovati = rfCartellaTrova(el ? el.value : '');
+  if (trovati.length) rfCartellaPaziente(trovati[0].id);
+}
 function rfCartellaRiquadro() {
   if (!state.modoCartella && !state.cartellaCtx) return '';
   const c = state.cartellaCtx;
   const paz = state.patientCtx && P[state.patientCtx] ? P[state.patientCtx] : null;
   // Senza paziente non si può fare niente: si sceglie qui.
   if (!paz) {
-    const elenco = (typeof PATIENTS !== 'undefined' ? PATIENTS : []).slice(0, 300)
-      .map(x => `<option value="${rfEsc(x.id)}">${rfEsc(`${x.last} ${x.first}`.trim())}</option>`).join('');
+    // Si cerca scrivendo: con qualche migliaio di pazienti un elenco a tendina
+    // non si scorre. La lista si aggiorna da sola senza ridisegnare la pagina,
+    // altrimenti a ogni lettera si perderebbe il cursore.
     return `<div class="rf-med"><div class="t">${ICONS.patients || ICONS.file} Quale paziente</div>
       <p class="caption" style="margin:0 0 8px">La domanda parte dalla sua cartella. La cartella resta su questo Mac.</p>
-      <div class="azioni"><select class="input sm" id="rf-cart-paz" style="min-width:220px"><option value="">Scegli…</option>${elenco}</select>
-        <button class="btn" onclick="rfCartellaPaziente(document.getElementById('rf-cart-paz').value)">Usa questo paziente</button></div></div>`;
+      <input class="input" id="rf-cart-cerca" placeholder="Cerca per cognome o nome…" autocomplete="off"
+        oninput="rfCartellaCerca(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();rfCartellaPrimo();}">
+      <div class="rf-cart-lista" id="rf-cart-lista"><span class="caption">Scrivi almeno due lettere.</span></div></div>`;
   }
   if (c && c.stato === 'lavora') {
     return `<div class="rf-med"><div class="t">${ICONS.activity} Leggo la cartella di ${rfEsc(paz.last)} e preparo il minimo indispensabile</div>
