@@ -74,5 +74,7 @@ export async function login(_prev: State, formData: FormData): Promise<State> {
     studioId: user.studio_id ?? '',
     studioNome: user.studio_nome ?? '',
   });
-  redirect(next ?? (user.role === 'medico' ? '/programma' : user.role === 'inviante' ? '/invii' : '/'));
+  // L'inviante ha un'area sua e non c'entra con l'interfaccia dello studio;
+  // tutti gli altri entrano nell'interfaccia nuova, che è l'unica.
+  redirect(next ?? (user.role === 'inviante' ? '/invii' : '/prototipo/index.html'));
 }

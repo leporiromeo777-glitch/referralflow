@@ -38,6 +38,11 @@ const nextConfig = {
   // un rewrite, che lascerebbe l'URL senza la barra finale.
   async redirects() {
     return [
+      // 16.9.2026: l'interfaccia della piattaforma è UNA SOLA, ed è questa.
+      // Chi entra dalla radice finisce qui; le pagine vecchie restano
+      // raggiungibili per indirizzo finché non si spegne quel che c'è solo lì
+      // ([[Piattaforma/Una interfaccia sola]]).
+      { source: '/', destination: '/prototipo/index.html', permanent: false },
       { source: '/prototipo', destination: '/prototipo/index.html', permanent: false },
       { source: '/prototipo/', destination: '/prototipo/index.html', permanent: false },
     ];

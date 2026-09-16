@@ -39,7 +39,8 @@ export async function middleware(req: NextRequest) {
       path.startsWith('/profilo');
     if (!consentito) {
       const url = req.nextUrl.clone();
-      url.pathname = '/programma';
+      url.pathname = '/prototipo/index.html';
+      url.search = '';
       return NextResponse.redirect(url);
     }
   }
@@ -54,7 +55,8 @@ export async function middleware(req: NextRequest) {
   // Le impostazioni (gestione utenti dello studio) sono solo per l'admin.
   if (path.startsWith('/impostazioni') && role !== 'admin') {
     const url = req.nextUrl.clone();
-    url.pathname = '/';
+    url.pathname = '/prototipo/index.html';
+    url.search = '';
     return NextResponse.redirect(url);
   }
   return NextResponse.next();
