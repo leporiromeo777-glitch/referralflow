@@ -1,7 +1,18 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
-import { leggiProposta, soloIn, type ModificaSala, type RigaPiano } from '@/lib/sale';
+import { elencoStanze, leggiProposta, modificaAmmessa, soloIn, vincoloDi, type ModificaSala, type RigaPiano, type SoloIn } from '@/lib/sale';
+
+// I vincoli della pagina wiki: servono sia contro una proposta del modello sia
+// contro una correzione a mano. Una correzione vale per il giorno, una regola
+// vale sempre: se si contraddicono vince la regola.
+async function vincoliDelleSale(): Promise<SoloIn[]> {
+  try {
+    const { readFileSync } = await import('node:fs');
+    const path = await import('node:path');
+    return soloIn(readFileSync(path.join(process.cwd(), 'docs/wiki/Medici/Sale.md'), 'utf-8'));
+  } catch { return []; }
+}
 import { preparaPianoSale, statoLavoro } from '@/lib/piano-sale';
 
 export const dynamic = 'force-dynamic';
@@ -59,12 +70,7 @@ export async function POST(req: NextRequest) {
     )).map((r) => r.nome);
     // I vincoli valgono anche contro una proposta: chi sta sempre e solo in
     // una stanza non ci si sposta nemmeno se il modello lo suggerisce.
-    let vincoli: ReturnType<typeof soloIn> = [];
-    try {
-      const { readFileSync } = await import('node:fs');
-      const path = await import('node:path');
-      vincoli = soloIn(readFileSync(path.join(process.cwd(), 'docs/wiki/Medici/Sale.md'), 'utf-8'));
-    } catch { vincoli = []; }
+    const vincoli = await vincoliDelleSale();
     const lettura = leggiProposta(piano.proposta, piano.righe ?? [], persone, vincoli);
     const da = (session.email || '').split('@')[0];
     const restanti = (piano.modifiche ?? []).filter((m) => !lettura.applicabili.some((a) => a.stanza.toLowerCase() === m.stanza?.toLowerCase()));
@@ -92,6 +98,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ errore: 'Questa fascia non è nel piano di oggi.' }, { status: 400 });
     }
     if (chi.length > 80) return NextResponse.json({ errore: 'Nome troppo lungo.' }, { status: 400 });
+    // Una correzione vale per il giorno, una regola vale sempre: se si
+    // contraddicono non si salva la correzione, e si dice quale regola.
+    const vincoli = await vincoliDelleSale();
+    if (!modificaAmmessa({ stanza: riga.stanza, dalle, chi }, vincoli)) {
+      const v = vincoloDi(chi, vincoli);
+      return NextResponse.json({
+        errore: `${chi} sta solo in ${v ? elencoStanze(v.stanze) : 'altre stanze'}: la correzione non è stata salvata. La regola si cambia nella pagina «Medici/Sale».`,
+      }, { status: 400 });
+    }
     const da = (session.email || '').split('@')[0];
     const restanti = (piano.modifiche ?? []).filter((m) => !(m.stanza?.toLowerCase() === stanza.toLowerCase() && m.dalle === dalle));
     const modifiche = [...restanti, { stanza: riga.stanza, dalle, chi, da }];

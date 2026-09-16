@@ -331,12 +331,21 @@ export function daDeciderePerPrompt(piano: Piano, presenti: string[]): string {
 
 export type ModificaSala = { stanza: string; dalle: string; chi: string; da?: string };
 
-export function applicaModifiche(righe: RigaPiano[], modifiche: ModificaSala[]): RigaPiano[] {
+// I vincoli valgono ANCHE contro una correzione a mano (16.9.2026). Prima no,
+// e si vedeva: il 16.9 il piano di oggi portava ancora «Sport 1 → Marco
+// Moccetti», scritto a mano quando la regola «solo in Sala 2 o Sala 3» non
+// esisteva. Una correzione vale per il giorno, una regola vale sempre: se si
+// contraddicono vince la regola, e la correzione scaduta smette da sola di
+// avere effetto invece di restare lì a dire una cosa falsa.
+export function applicaModifiche(righe: RigaPiano[], modifiche: ModificaSala[], vincoli: SoloIn[] = []): RigaPiano[] {
   if (!modifiche?.length) return righe;
   const chiave = (stanza: string, dalle: string) => `${stanza.toLowerCase()}|${dalle}`;
   // L'ultima correzione su una fascia è quella che vale.
   const per = new Map<string, ModificaSala>();
-  for (const m of modifiche) per.set(chiave(m.stanza ?? '', m.dalle ?? ''), m);
+  for (const m of modifiche) {
+    if (!modificaAmmessa(m, vincoli)) continue;
+    per.set(chiave(m.stanza ?? '', m.dalle ?? ''), m);
+  }
   return righe.map((r) => ({
     ...r,
     segmenti: r.segmenti.map((s) => {
@@ -346,6 +355,21 @@ export function applicaModifiche(righe: RigaPiano[], modifiche: ModificaSala[]):
       return { ...s, chi: m.chi ?? '', manuale: true, perche: m.chi ? `assegnata a mano${da}` : `liberata a mano${da}` };
     }),
   }));
+}
+
+// Il vincolo di questa persona, riconoscendola come ovunque nel file: senza
+// titoli, senza accenti, nome e cognome in qualsiasi ordine.
+export function vincoloDi(chi: string, vincoli: SoloIn[] = []): SoloIn | undefined {
+  const n = String(chi ?? '').trim();
+  if (!n) return undefined;
+  return (vincoli ?? []).find((x) => uguali(x.chi, n));
+}
+
+// Una correzione può liberare una fascia (chi vuoto): quella passa sempre.
+export function modificaAmmessa(m: ModificaSala, vincoli: SoloIn[] = []): boolean {
+  const chi = String(m?.chi ?? '').trim();
+  if (!chi) return true;
+  return stanzaAmmessa(String(m?.stanza ?? ''), vincoloDi(chi, vincoli));
 }
 
 // ---------------------------------------------------------------------------

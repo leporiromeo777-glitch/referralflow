@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { agendaEsclusa, agendeFuoriPiano, applicaModifiche, assegnaVisite, prese, capienza, daSistemarePerPrompt, deduciMedici, escluso, fasceLibere, fuoriDalPiano, leggiProposta, prestazioneEsclusa, prestazioniFuoriPiano, soloIn, daDeciderePerPrompt, leggiSale, pianoDelGiorno, salePerPrompt, titolare } from './sale';
+import { agendaEsclusa, agendeFuoriPiano, applicaModifiche, assegnaVisite, modificaAmmessa, prese, capienza, daSistemarePerPrompt, deduciMedici, escluso, fasceLibere, fuoriDalPiano, leggiProposta, prestazioneEsclusa, prestazioniFuoriPiano, soloIn, daDeciderePerPrompt, leggiSale, pianoDelGiorno, salePerPrompt, titolare } from './sale';
 
 const MD = `
 ## Sala 3
@@ -436,6 +436,25 @@ test('i vincoli fissi arrivano anche nel testo per il modello, non solo nel cont
   assert.match(testo, /VINCOLI FISSI/);
   assert.match(testo, /Marco Moccetti: solo in Sala 2 o Sala 3, mai altrove/);
   assert.ok(!daSistemarePerPrompt(piano, ['Marco Moccetti'], [], []).includes('VINCOLI FISSI'), 'senza vincoli non si scrive una sezione vuota');
+});
+
+test('una correzione a mano che viola una regola non ha effetto: vince la regola', () => {
+  // Il caso vero del 16.9.2026: «Sport 1 → Marco Moccetti», scritta a mano
+  // quando il vincolo non esisteva ancora, faceva comparire M.M. due volte.
+  const md = `- Solo in: Marco Moccetti in Sala 2 o Sala 3\n\n## Sala 2\n- Di: Marco Moccetti\n- Stato: proposta\n\n## Sport 1\n- Di: Bruno Capelli\n- Ultima: sì\n- Stato: proposta\n`;
+  const v = soloIn(md);
+  const piano = pianoDelGiorno(leggiSale(md), ['Marco Moccetti', 'Bruno Capelli'], 'mar');
+  const mod = [{ stanza: 'Sport 1', dalle: '07:00', chi: 'Dr. med. Marco Moccetti', da: 'admin' }];
+  // senza vincoli la correzione valeva, ed è così che il piano era finito storto
+  const prima = applicaModifiche(piano.righe, mod);
+  assert.match(prima.find((r) => r.stanza === 'Sport 1')!.segmenti[0].chi, /Marco Moccetti/);
+  // con i vincoli non ha effetto, e la stanza torna al suo titolare
+  const dopo = applicaModifiche(piano.righe, mod, v);
+  assert.equal(dopo.find((r) => r.stanza === 'Sport 1')!.segmenti[0].chi, 'Bruno Capelli');
+  assert.equal(modificaAmmessa(mod[0], v), false);
+  assert.equal(modificaAmmessa({ stanza: 'Sala 3', dalle: '07:00', chi: 'Marco Moccetti' }, v), true);
+  // liberare una fascia si può sempre: non mette nessuno da nessuna parte
+  assert.equal(modificaAmmessa({ stanza: 'Sport 1', dalle: '07:00', chi: '' }, v), true);
 });
 
 test('un\'agenda fuori dal piano non porta nessuno in stanza: «Labor» è il prelievo', () => {

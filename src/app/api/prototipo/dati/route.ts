@@ -393,7 +393,7 @@ export async function GET() {
   // (`manuale`). Le regole della pagina wiki restano quelle.
   const piano = (() => {
     if (!pianoOggi) return null;
-    const righe = applicaModifiche(pianoOggi.righe ?? [], pianoOggi.modifiche ?? []);
+    const righe = applicaModifiche(pianoOggi.righe ?? [], pianoOggi.modifiche ?? [], soloIn(mdSale));
     // Quando le sale hanno le visite: MediOnline non scrive la stanza, si
     // deduce da chi ha la stanza in quel momento ([[src/lib/sale]]).
     // Chi è fuori dal piano (la riabilitazione, per dire) non entra nel conto

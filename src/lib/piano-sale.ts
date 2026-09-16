@@ -168,7 +168,7 @@ export async function preparaPianoSale(
     // piano non deve far ricomparire «senza sala» chi una sala l'ha ricevuta.
     const [vecchio] = await query<{ modifiche: ModificaSala[] }>(
       'select modifiche from piano_sale where studio_id = $1 and giorno = $2', [studioId, giornoIso]);
-    const righeVere = applicaModifiche(piano.righe, vecchio?.modifiche ?? []);
+    const righeVere = applicaModifiche(piano.righe, vecchio?.modifiche ?? [], vincoli);
     const visite = assegnaVisite(righeVere, utili.map((a) => ({ id: a.id, chi: a.chi ?? '', start: a.start, dur: a.dur })), vincoli);
     const libere = fasceLibere(righeVere, visite);
     const messe = new Set(Object.values(visite).flat().map((v) => v.id));
