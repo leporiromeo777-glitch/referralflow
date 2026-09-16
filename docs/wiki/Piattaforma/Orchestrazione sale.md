@@ -618,6 +618,8 @@ Quattro viste, una sola pagina, sopra il prototipo attuale (la pagina «Sale» e
 
 L'ordine non è alfabetico ed è la parte che fa il lavoro: **in cima chi ha un paziente già preparato che lo aspetta** (è la cosa da fare adesso, ed è evidenziata), poi chi è libero, poi chi è dentro in ordine di quando esce, in fondo chi deve ancora arrivare e chi ha finito. La prima versione era una catena di frecce con orari, nomi e stanze tutti allo stesso peso: per capirla bisognava leggerla.
 
+**Il ritardo accanto al nome.** Ovunque compaia un medico — dentro una stanza nella mappa, nella riga «prossimo», nell'elenco dell'accoglienza, nei blocchi del calendario, nella card della Home — accanto al nome c'è la stessa pastiglia col suo ritardo («+12»), ambra fino a venti minuti e rossa oltre. Sotto la soglia di comunicazione (5 minuti) non compare: sarebbe rumore. Una funzione sola per tutta l'interfaccia, così il numero è sempre lo stesso.
+
 **D. Gli avvisi.** Frasi corte, nell'ordine in cui arrivano, sopra la mappa, mai più di tre insieme: «Rego +12 min» · «P-17 resta in Sala 3» · «P-21: ingresso 10:40 → 10:52» · «Sala 4 usata per assorbire il ritardo» · «Piano dei prossimi 30 minuti aggiornato». Clic: la spiegazione intera.
 
 Dal 16.9 sera **l'accoglienza sta nella Home, al posto della colonna destra** (arrivi di oggi coi tasti e la frase in italiano); la card «Sale e medici» è passata a sinistra al posto del «Programma di oggi», che era diventato un doppione. Le pagine Accoglienza e Stanza non sono nel menu: si aprono dall'indirizzo (`#/accoglienza`, `#/stanza`) o dai due link piccoli nella pagina Sale, perché sono fatte per un tablet e per lo schermo di una stanza, non per la barra laterale.

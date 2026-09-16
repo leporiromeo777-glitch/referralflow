@@ -3952,7 +3952,7 @@ function rfCardSale(sale, rigaSala, nMed) {
   const dot = (st) => st === 'occupata_visita' ? 'st-occupata' : ['occupata_pronto', 'in_preparazione', 'riservata'].includes(st) ? 'st-cambio' : ['bloccata', 'fuori_servizio'].includes(st) ? 'st-spenta' : 'st-libera';
   const righe = o.sale.map(x => {
     const d = x.dentro[0];
-    const chi = d ? `<span class="chi">${rfAvatar(d.medico || '?')}<span>${rfEsc(rfNomeCorto(d.medico || 'senza medico'))} · ${rfEsc(rfNomeCortoPaz(d.etichetta))}</span></span>` : `<span class="chi vuota">nessuno</span>`;
+    const chi = d ? `<span class="chi">${rfAvatar(d.medico || '?')}<span>${rfEsc(rfNomeCorto(d.medico || 'senza medico'))}${rfOrRitardo(d.medico)} · ${rfEsc(rfNomeCortoPaz(d.etichetta))}</span></span>` : `<span class="chi vuota">nessuno</span>`;
     const testo = d ? `${rfOrStato(d.stato)}${d.inizio != null ? ` dalle ${rfOrHm(d.inizio)}` : ''}${x.dentro.length > 1 ? ` · +${x.dentro.length - 1}` : ''}`
       : ['bloccata', 'fuori_servizio'].includes(x.stato) ? rfOrStato(x.stato)
       : x.prossimo ? `libera · ${rfEsc(rfNomeCortoPaz(x.prossimo.etichetta))} alle ${rfOrHm(x.prossimo.ingresso)}` : 'libera oggi';
@@ -3966,7 +3966,7 @@ function rfCardSale(sale, rigaSala, nMed) {
     <div class="rf-sale-sint">${presenti} ${presenti === 1 ? 'medico presente' : 'medici presenti'} · ${occupate}/${o.sale.length} sale occupate${ritardi.length ? ` · ${ritardi.map(m => `<b style="color:#8a4b12">${rfEsc(rfNomeCorto(m.nome))} +${m.ritardo}</b>`).join(', ')}` : ''}</div>
     <div class="rf-sale-el">${righe}</div>
     ${prossimi.length ? `<div class="rf-cambi"><div class="tit">Prossimi ingressi</div>
-      ${prossimi.map(x => `<div class="rf-cambio"><span class="ora num">${rfOrHm(x.ingresso)}</span>${rfAvatar(x.medico || '?')}<span>${rfEsc(rfNomeCortoPaz(x.etichetta))} · ${rfEsc(rfNomeCorto(x.medico || ''))}</span><span class="dove">${rfEsc(x.stanza)}</span></div>`).join('')}</div>` : ''}
+      ${prossimi.map(x => `<div class="rf-cambio"><span class="ora num">${rfOrHm(x.ingresso)}</span>${rfAvatar(x.medico || '?')}<span>${rfEsc(rfNomeCortoPaz(x.etichetta))} · ${rfEsc(rfNomeCorto(x.medico || ''))}${rfOrRitardo(x.medico)}</span><span class="dove">${rfEsc(x.stanza)}</span></div>`).join('')}</div>` : ''}
     ${(o.proposte || []).length ? `<div class="rf-piano-prop" style="margin-top:12px"><div class="t">${ICONS.ai} Proposta da confermare</div><div class="c">${rfEsc(o.proposte[0].perche || '')}</div><div class="caption mt-8"><a href="#/sale">Aprila in Sale</a></div></div>` : ''}
     <div class="row mt-16" style="justify-content:space-between;align-items:center;gap:8px">
       <button class="btn sm ghost" data-go="#/sale">Vedi pianificazione completa ${ICONS.chevR}</button>
@@ -4124,6 +4124,11 @@ PAGES.sale = () => {
 .rf-or-pill.occupata_visita { background:var(--accent-soft); color:var(--accent); }
 .rf-or-pill.bloccata, .rf-or-pill.fuori_servizio, .rf-or-pill.assente { background:#f8e3df; color:#a23b2a; }
 .rf-or-pill.da_ripristinare { background:var(--surface-3); color:var(--text-2); }
+.rf-or-rit { display:inline-block; margin-left:5px; padding:0 5px; border-radius:999px; font-size:10px; font-weight:700;
+  font-variant-numeric:tabular-nums; background:#fdf0e6; color:#8a4b12; vertical-align:1px; white-space:nowrap; }
+.rf-or-rit.male { background:#f8e3df; color:#a23b2a; }
+:root[data-theme="dark"] .rf-or-rit { background:#3a2a18; color:#e0a870; }
+:root[data-theme="dark"] .rf-or-rit.male { background:#3a1f1a; color:#e08a70; }
 .rf-or-dentro { display:flex; align-items:center; gap:8px; font-size:13px; }
 .rf-or-dentro .n { font-weight:600; }
 .rf-or-dentro .s { color:var(--text-3); font-size:11.5px; }
@@ -4265,6 +4270,18 @@ async function rfOrchMattino() {
 }
 function rfOrchVista(v) { RF.saleVista = v; if ((v === 'calendario' || v === 'agenda') && !RF.orchPiano) rfOrchCaricaPiano().then(() => render()); render(); }
 function rfOrchApriSala(nome) { RF.orchSala = RF.orchSala === nome ? '' : nome; render(); }
+// Il ritardo di un medico, accanto al suo nome, ovunque compaia (16.9.2026
+// sera). Una pastiglia sola per tutta l'interfaccia, così il numero è sempre
+// lo stesso e si riconosce a colpo d'occhio. Sotto la soglia di
+// comunicazione (5 minuti) non si mostra: sarebbe rumore.
+function rfOrRitardo(nome, grande) {
+  const o = RF.orch; if (!o || !nome) return '';
+  const m = (o.medici || []).find(x => x.nome === nome) || (o.medici || []).find(x => rfNomeNudo(x.nome).toLowerCase() === rfNomeNudo(nome).toLowerCase());
+  const r = m && m.ritardo || 0;
+  const soglia = (o.parametri && o.parametri.soglia_comunicazione_min) || 5;
+  if (r < soglia) return '';
+  return `<span class="rf-or-rit${r >= 20 ? ' male' : ''}" title="${rfEsc(rfNomeNudo(nome))} è indietro di ${r} minuti sul previsto">+${r}${grande ? ' min' : ''}</span>`;
+}
 const rfOrHm = (m) => m == null ? '—' : `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(((m % 60) + 60) % 60).padStart(2, '0')}`;
 const RF_OR_STATO = { atteso: 'atteso', arrivato: 'arrivato', in_attesa: 'in sala d\'attesa', chiamato: 'chiamato', in_preparazione: 'in preparazione', pronto: 'pronto', in_visita: 'in visita', visita_finita: 'visita finita', dimesso: 'uscito', assente: 'assente', annullato: 'annullato',
   libera: 'libera', riservata: 'riservata', occupata_pronto: 'pronto per il medico', occupata_visita: 'in visita', da_ripristinare: 'da ripristinare', bloccata: 'bloccata', fuori_servizio: 'fuori servizio', disponibile: 'disponibile' };
@@ -4278,9 +4295,9 @@ function rfOrMappa(o) {
     const d = s.dentro[0];
     return `<button type="button" class="rf-or-sala${sel === s.nome ? ' sel' : ''}" onclick="rfOrchApriSala('${rfEsc(s.nome)}')">
       <div class="t"><b>${rfEsc(s.nome)}</b>${s.funzione ? `<span class="f">${rfEsc(s.funzione)}</span>` : ''}<span class="rf-or-pill pill ${rfEsc(s.stato)}">${rfEsc(rfOrStato(s.stato))}</span></div>
-      ${d ? `<div class="rf-or-dentro">${rfAvatar(d.medico || '?')}<div><div class="n">${rfEsc(d.etichetta)}</div><div class="s">${rfEsc(rfNomeCorto(d.medico || 'senza medico'))} · ${rfEsc(rfOrStato(d.stato))}${d.inizio != null ? ` dalle ${rfOrHm(d.inizio)}` : ''}</div></div></div>${s.dentro.length > 1 ? `<div class="caption">+${s.dentro.length - 1} in parallelo</div>` : ''}`
+      ${d ? `<div class="rf-or-dentro">${rfAvatar(d.medico || '?')}<div><div class="n">${rfEsc(d.etichetta)}</div><div class="s">${rfEsc(rfNomeCorto(d.medico || 'senza medico'))}${rfOrRitardo(d.medico)} · ${rfEsc(rfOrStato(d.stato))}${d.inizio != null ? ` dalle ${rfOrHm(d.inizio)}` : ''}</div></div></div>${s.dentro.length > 1 ? `<div class="caption">+${s.dentro.length - 1} in parallelo</div>` : ''}`
         : `<div class="caption">${s.liberaFinoA != null ? `Libera fino alle ${rfOrHm(s.liberaFinoA)}` : 'Nessuno dentro'}</div>`}
-      ${s.prossimo ? `<div class="rf-or-pross">Prossimo: <b>${rfEsc(s.prossimo.etichetta)}</b> · ${rfEsc(rfNomeCorto(s.prossimo.medico || ''))} · entra alle ${rfOrHm(s.prossimo.ingresso)}${s.prossimo.inizio != null && s.prossimo.inizio - o.adesso <= 60 ? `, medico fra ${Math.max(0, s.prossimo.inizio - o.adesso)} min` : ''}</div>` : `<div class="rf-or-pross">Nessun altro ingresso previsto</div>`}
+      ${s.prossimo ? `<div class="rf-or-pross">Prossimo: <b>${rfEsc(s.prossimo.etichetta)}</b> · ${rfEsc(rfNomeCorto(s.prossimo.medico || ''))}${rfOrRitardo(s.prossimo.medico)} · entra alle ${rfOrHm(s.prossimo.ingresso)}${s.prossimo.inizio != null && s.prossimo.inizio - o.adesso <= 60 ? `, medico fra ${Math.max(0, s.prossimo.inizio - o.adesso)} min` : ''}</div>` : `<div class="rf-or-pross">Nessun altro ingresso previsto</div>`}
     </button>`; }).join('')}</div>
     ${sel ? rfOrPannelloSala(o, sel) : ''}`;
 }
@@ -4294,7 +4311,7 @@ function rfOrPannelloSala(o, nome) {
         ${cmd ? `<button class="btn sm" onclick="rfOrchRitira('${rfEsc(cmd.id)}')">Riapri la stanza</button>` : `<button class="btn sm ghost" onclick="rfOrchComando('blocca_sala',{sala:'${rfEsc(nome)}'})">Blocca per oggi</button><button class="btn sm ghost" onclick="rfOrchComando('sala_fuori_servizio',{sala:'${rfEsc(nome)}'})">Fuori servizio</button>`}
         <button class="btn sm ghost" onclick="rfOrchApriSala('')">Chiudi</button></div></div>
     ${bloccata ? `<div class="caption" style="margin-bottom:8px">La stanza è ${rfOrStato(s.stato)}: nessun nuovo ingresso finché non viene riaperta.</div>` : ''}
-    ${coda.length ? coda.map(p => `<div class="rf-or-ingr">${rfAvatar(p.medico || '?')}<div><b>${rfEsc(p.etichetta)}</b> <span class="q">${rfEsc(p.prestazione || '')} · ${rfEsc(rfNomeCorto(p.medico || 'senza medico'))} · teorica ${rfOrHm(p.teorica)}</span><div class="q">${rfEsc(rfOrStato(p.stato))}${p.ingresso != null ? ` · ingresso previsto ${rfOrHm(p.ingresso)}, medico alle ${rfOrHm(p.inizio)}` : ''}${p.rigidita >= 2 ? ' · <b>fermo</b>' : ''}</div></div>
+    ${coda.length ? coda.map(p => `<div class="rf-or-ingr">${rfAvatar(p.medico || '?')}<div><b>${rfEsc(p.etichetta)}</b> <span class="q">${rfEsc(p.prestazione || '')} · ${rfEsc(rfNomeCorto(p.medico || 'senza medico'))}${rfOrRitardo(p.medico)} · teorica ${rfOrHm(p.teorica)}</span><div class="q">${rfEsc(rfOrStato(p.stato))}${p.ingresso != null ? ` · ingresso previsto ${rfOrHm(p.ingresso)}, medico alle ${rfOrHm(p.inizio)}` : ''}${p.rigidita >= 2 ? ' · <b>fermo</b>' : ''}</div></div>
         <div class="az" style="margin-left:auto;display:flex;gap:6px">${p.rigidita < 2 && ['atteso', 'arrivato', 'in_attesa'].includes(p.stato) ? `<button class="btn sm ghost" onclick="rfOrchComando('non_spostare',{appointment_id:'${rfEsc(p.id)}'})" title="La stanza resta questa">Non spostare</button>` : ''}</div></div>`).join('')
       : '<div class="caption">Nessun paziente previsto qui oggi.</div>'}</div>`;
 }
@@ -4369,7 +4386,7 @@ function rfOrIngressi(o) {
   const chiama = ing.filter(i => i.azione === 'chiama');
   const resto = ing.filter(i => i.azione !== 'chiama');
   if (!ing.length) return '<div class="caption">Nessuno in sala d\'attesa.</div>';
-  return `${chiama.map(i => `<div class="rf-or-ingr"><b>${rfEsc(i.etichetta)}</b><span class="q">→ ${rfEsc(i.sala)} con ${rfEsc(rfNomeCorto(i.medico || ''))} · ${rfEsc(i.perche)}</span><button class="btn primary sm" onclick="rfOrchEvento('paziente_chiamato',{appointment_id:'${rfEsc(i.id)}',sala:'${rfEsc(i.sala)}'})">Chiama in ${rfEsc(i.sala)}</button></div>`).join('')}
+  return `${chiama.map(i => `<div class="rf-or-ingr"><b>${rfEsc(i.etichetta)}</b><span class="q">→ ${rfEsc(i.sala)} con ${rfEsc(rfNomeCorto(i.medico || ''))}${rfOrRitardo(i.medico)} · ${rfEsc(i.perche)}</span><button class="btn primary sm" onclick="rfOrchEvento('paziente_chiamato',{appointment_id:'${rfEsc(i.id)}',sala:'${rfEsc(i.sala)}'})">Chiama in ${rfEsc(i.sala)}</button></div>`).join('')}
     ${resto.map(i => `<div class="rf-or-ingr"><span>${rfEsc(i.etichetta)}</span><span class="q">${rfEsc(i.sala)} · ${rfEsc(i.perche)}${i.azione === 'attendi' ? ' — resta in sala d\'attesa' : ''}</span></div>`).join('')}`;
 }
 function rfOrAdesso(o) {
@@ -4410,7 +4427,7 @@ function rfOrGiornata(o) {
   const colonna = (nome) => `<div class="rf-cs-col" style="--riga:${(60 * M).toFixed(2)}px"><div class="rf-cs-vv">${conCorsie(perSala[nome] || []).map(v => {
     const h = (v.fine_stimata - v.ingresso_previsto) * M - 1; const stato = statoDi(v.appointment_id);
     return `<button class="rf-cs-v divisa${['in_visita', 'pronto', 'in_preparazione'].includes(stato) ? ' sovra' : ''}" style="top:${su(v.ingresso_previsto).toFixed(1)}px;height:${Math.max(7, h).toFixed(1)}px;left:${(v._c / v._n * 100).toFixed(2)}%;width:calc(${(100 / v._n).toFixed(2)}% - 2px);--h:${rfTinta(v.medico || 'x')}" title="${rfEsc(etichettaDi(v.appointment_id))} · ${rfEsc(v.prestazione)} · entra ${rfOrHm(v.ingresso_previsto)}, medico ${rfOrHm(v.inizio_stimato)}–${rfOrHm(v.fine_stimata)} · ${rfEsc(rfOrStato(stato))}${v.rigidita >= 2 ? ' · fermo' : ''}">
-      <span class="nm"><i class="md">${rfEsc(rfIniziali(v.medico || '?').toUpperCase())}</i>${rfEsc(etichettaDi(v.appointment_id))}</span><span class="pr">${rfOrHm(v.inizio_stimato)} · ${rfEsc(v.prestazione)}</span></button>`; }).join('')}</div></div>`;
+      <span class="nm"><i class="md">${rfEsc(rfIniziali(v.medico || '?').toUpperCase())}</i>${rfEsc(etichettaDi(v.appointment_id))}${rfOrRitardo(v.medico)}</span><span class="pr">${rfOrHm(v.inizio_stimato)} · ${rfEsc(v.prestazione)}</span></button>`; }).join('')}</div></div>`;
   // i fili: per medico, una spezzata che unisce le sue visite in ordine
   const perMedico = {};
   for (const v of visite) { if (!v.medico) continue; (perMedico[v.medico] ??= []).push(v); }
@@ -4508,14 +4525,15 @@ async function rfOrchRitira(id) { try { await fetch('/api/orchestrazione/comandi
 function rfOrAccoglienzaCorpo(o, compatto) {
   const ingressi = new Map((o.ingressi || []).map(i => [i.id, i]));
   const pazienti = [...o.pazienti].sort((a, b) => a.teorica - b.teorica);
+  const rit = (medico) => compatto ? rfOrRitardo(medico) : '';
   const righe = pazienti.map(p => {
     const i = ingressi.get(p.id);
     const fatto = ['dimesso', 'assente', 'annullato', 'visita_finita'].includes(p.stato);
     let sis = '';
     if (p.stato === 'atteso' || p.stato === 'arrivato' || p.stato === 'in_attesa') {
-      if (i && i.azione === 'chiama') sis = `<b>Chiamare adesso</b> in ${rfEsc(i.sala)} con ${rfEsc(rfNomeCorto(i.medico || ''))}`;
+      if (i && i.azione === 'chiama') sis = `<b>Chiamare adesso</b> in ${rfEsc(i.sala)} con ${rfEsc(rfNomeCorto(i.medico || ''))}${rit(i.medico)}`;
       else if (i && i.azione === 'attendi') sis = `Resta in attesa: ${rfEsc(i.perche)}`;
-      else if (p.sala && p.ingresso != null) sis = `Entra in <b>${rfEsc(p.sala)}</b> alle <b>${rfOrHm(p.ingresso)}</b>, con ${rfEsc(rfNomeCorto(p.medico || ''))}${p.inizio != null && p.inizio > p.teorica + 4 ? ` <span style="color:#8a4b12">(+${p.inizio - p.teorica} min)</span>` : ''}`;
+      else if (p.sala && p.ingresso != null) sis = `Entra in <b>${rfEsc(p.sala)}</b> alle <b>${rfOrHm(p.ingresso)}</b>, con ${rfEsc(rfNomeCorto(p.medico || ''))}${rit(p.medico)}${p.inizio != null && p.inizio > p.teorica + 4 ? ` <span class="caption">— ${p.inizio - p.teorica} min dopo l'ora dell'agenda</span>` : ''}`;
       else sis = p.medico ? 'Nessuna stanza prevista: da sistemare' : 'Senza medico in agenda';
     } else if (p.sala) sis = `${rfEsc(p.sala)}${p.inizioReale != null ? ` dalle ${rfOrHm(p.inizioReale)}` : ''}`;
     const az = [];
@@ -4523,7 +4541,7 @@ function rfOrAccoglienzaCorpo(o, compatto) {
     if (p.stato === 'arrivato') az.push(`<button class="btn sm" onclick="rfOrchEvento('paziente_accolto',{appointment_id:'${p.id}'},'tablet')">In attesa</button>`);
     if (['arrivato', 'in_attesa'].includes(p.stato) && p.sala) az.push(`<button class="btn sm ${i && i.azione === 'chiama' ? 'primary' : ''}" onclick="rfOrchEvento('paziente_chiamato',{appointment_id:'${p.id}',sala:'${rfEsc(p.sala)}'},'tablet')">Chiama</button>`);
     if (p.stato === 'chiamato') az.push(`<button class="btn sm ghost" onclick="rfOrchEvento('paziente_richiamato',{appointment_id:'${p.id}'},'tablet')" title="Torna in sala d'attesa: lo può fare solo una persona">Richiama</button>`);
-    return `<div class="r${fatto ? ' fatto' : ''}${compatto ? ' compatta' : ''}"><span class="h">${rfOrHm(p.teorica)}</span><span><span class="n">${rfEsc(p.etichetta)}</span><br><span class="rf-or-pill ${rfEsc(p.stato)}">${rfEsc(rfOrStato(p.stato))}</span></span><span class="m">${rfEsc(p.prestazione || '—')}<br>${rfEsc(rfNomeCorto(p.medico || 'senza medico'))}</span><span class="sis">${sis}</span><span class="az">${az.join('')}</span></div>`;
+    return `<div class="r${fatto ? ' fatto' : ''}${compatto ? ' compatta' : ''}"><span class="h">${rfOrHm(p.teorica)}</span><span><span class="n">${rfEsc(p.etichetta)}</span><br><span class="rf-or-pill ${rfEsc(p.stato)}">${rfEsc(rfOrStato(p.stato))}</span></span><span class="m">${rfEsc(p.prestazione || '—')}<br>${rfEsc(rfNomeCorto(p.medico || 'senza medico'))}${rfOrRitardo(p.medico)}</span><span class="sis">${sis}</span><span class="az">${az.join('')}</span></div>`;
   }).join('');
   const t = RF.orchTesto;
   const testo = `<div class="row" style="gap:8px"><input class="input" id="rf-or-testo" placeholder="Scrivi cosa succede: «la signora delle 10:30 arriva alle 11», «Rego è in ritardo di 15 minuti»" onkeydown="if(event.key==='Enter'){event.preventDefault();rfOrchTesto(this.value);}"><button class="btn" onclick="rfOrchTesto(document.getElementById('rf-or-testo').value)">Interpreta</button></div>
