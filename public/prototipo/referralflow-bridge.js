@@ -3935,44 +3935,38 @@ function rfSaleElenco(righe, ora) {
 /* Il riquadro della Home. `sale` e `rigaSala` servono solo al ripiego: finché
    il piano del giorno non c'è, si mostra l'occupazione letta dall'agenda. */
 function rfCardSale(sale, rigaSala, nMed) {
-  const p = RF.data.pianoSale;
-  const c = RF.data.capienzaSale;
-  const notaCapienza = (() => { if (!c || !c.picco) return ''; const scarso = c.oreOltre && c.oreOltre.length;
-    return `<div class="caption mt-8" style="padding:0 6px">Al massimo oggi <b>${c.picco} appuntamenti insieme</b> su ${c.stanze} stanze.${scarso ? ` Non bastano dalle <b>${rfEsc(c.oreOltre[0])}</b>${c.oreOltre.length > 1 ? ` alle <b>${rfEsc(c.oreOltre[c.oreOltre.length - 1])}</b>` : ''}. Una fetta in agenda non è sempre una persona in stanza: è una capienza da guardare, non un errore.` : ''}</div>`; })();
-  if (!p || !Array.isArray(p.righe) || !p.righe.length) {
-    const lista = Array.isArray(sale) ? sale : [];
-    return `<div class="card"><div class="card-head"><span class="section-title">Sale e medici</span><button class="btn sm ghost" data-go="#/administration">Studio ${ICONS.chevR}</button></div>
-      ${lista.length ? lista.slice(0, 10).map(rigaSala).join('') : `<div class="caption" style="padding:8px 6px">Nessuna sala registrata. Le sale si registrano in Studio → Sale e apparecchi.</div>`}
-      ${lista.length ? '<div class="caption mt-8" style="padding:0 6px">Il piano di oggi non è ancora pronto: questa è l\'occupazione letta dal campo «luogo» dell\'agenda.</div>' : ''}
-      ${notaCapienza}</div>`;
+  // Dal 16.9.2026 la card legge il gemello (api/orchestrazione/stato): chi
+  // c'è dentro ogni stanza adesso e chi entra dopo. La stanza non è più «di»
+  // un medico: è del paziente che ci sta.
+  const o = RF.orch;
+  if (!o) {
+    return `<div class="card"><div class="card-head"><span class="section-title">Sale e medici</span><button class="btn sm ghost" data-go="#/sale">Sale ${ICONS.chevR}</button></div>
+      <div class="caption" style="padding:8px 6px">Carico chi è dove…</div></div>`;
   }
-  const ora = rfOraRif();
-  const righe = p.righe;
-  const stati = righe.map(r => rfStatoStanza(r, ora));
-  const inUso = stati.filter(x => x.inCorso && x.inCorso.length).length;
-  const libere = stati.filter(x => x.vuotaOggi && !x.aperta).length;
-  const aperte = stati.filter(x => x.aperta).length;
-  const cambi = rfCambiDelGiorno(righe, ora).slice(0, 3);
-  const fuoriOrario = RF.saleQuando === 'ora' && (rfOraOra() < RF_APERTURA || rfOraOra() >= RF_CHIUSURA);
-  const bottone = (k, et) => `<button class="${RF.saleQuando === k ? 'on' : ''}" onclick="rfSaleQuando('${k}')">${et}</button>`;
+  const presenti = (o.medici || []).filter(m => m.stato !== 'assente').length;
+  const occupate = o.sale.filter(x => ['occupata_visita', 'occupata_pronto', 'in_preparazione'].includes(x.stato)).length;
+  const dot = (st) => st === 'occupata_visita' ? 'st-occupata' : ['occupata_pronto', 'in_preparazione', 'riservata'].includes(st) ? 'st-cambio' : ['bloccata', 'fuori_servizio'].includes(st) ? 'st-spenta' : 'st-libera';
+  const righe = o.sale.map(x => {
+    const d = x.dentro[0];
+    const chi = d ? `<span class="chi">${rfAvatar(d.medico || '?')}<span>${rfEsc(rfNomeCorto(d.medico || 'senza medico'))} · ${rfEsc(rfNomeCortoPaz(d.etichetta))}</span></span>` : `<span class="chi vuota">nessuno</span>`;
+    const testo = d ? `${rfOrStato(d.stato)}${d.inizio != null ? ` dalle ${rfOrHm(d.inizio)}` : ''}${x.dentro.length > 1 ? ` · +${x.dentro.length - 1}` : ''}`
+      : ['bloccata', 'fuori_servizio'].includes(x.stato) ? rfOrStato(x.stato)
+      : x.prossimo ? `libera · ${rfEsc(rfNomeCortoPaz(x.prossimo.etichetta))} alle ${rfOrHm(x.prossimo.ingresso)}` : 'libera oggi';
+    return `<button type="button" class="rf-sala-r ${dot(x.stato)}" onclick="RF.saleVista='adesso';RF.orchSala='${rfEsc(x.nome)}';go('#/sale')" title="${rfEsc(x.nome)} · ${rfEsc(rfOrStato(x.stato))}">
+      <i class="p"></i><span class="sn">${rfEsc(x.nome)}</span>${chi}<span class="dx">${testo}</span></button>`;
+  }).join('');
+  const prossimi = o.sale.filter(x => x.prossimo).map(x => ({ ...x.prossimo, stanza: x.nome })).sort((a, b) => a.ingresso - b.ingresso).slice(0, 3);
+  const ritardi = (o.medici || []).filter(m => (m.ritardo || 0) >= (o.parametri && o.parametri.soglia_avviso_min || 8));
   return `<div class="card">
-    <div class="rf-sale-head"><span class="section-title">Sale e medici</span>
-      <div class="rf-seg">${bottone('ora', 'Ora')}${bottone('mattina', 'Mattina')}${bottone('pomeriggio', 'Pomeriggio')}</div></div>
-    <div class="rf-sale-sint">${nMed} ${nMed === 1 ? 'medico' : 'medici'} in studio · ${inUso} ${inUso === 1 ? 'sala in uso' : 'sale in uso'}${libere ? ` · ${libere} ${libere === 1 ? 'libera oggi' : 'libere oggi'}` : ''}${aperte ? ` · ${aperte} da decidere` : ''}</div>
-    ${fuoriOrario ? `<div class="caption" style="padding:0 2px 8px">Lo studio è chiuso: questa è la giornata di oggi alle ${rfEsc(ora)}.</div>` : ''}
-    ${rfSaleElenco(righe, ora)}
-    ${cambi.length ? `<div class="rf-cambi"><div class="tit">Prossimi cambi</div>
-      ${cambi.map(x => `<div class="rf-cambio"><span class="ora num">${rfEsc(x.ora)}</span>${x.chi ? `${rfAvatar(x.chi)}<span>${rfEsc(rfNomeNudo(x.chi))}</span>` : '<span style="color:var(--text-2);font-style:italic">si libera</span>'}<span class="dove">${rfEsc(x.stanza)}</span></div>`).join('')}</div>` : ''}
-    ${p.proposta && !RF.salaAperta ? (() => {
-      const righeP = String(p.proposta).split('\n').filter(x => x.trim());
-      const prime = righeP.slice(0, 2).map(rfEsc).join('<br>');
-      return `<div class="rf-piano-prop" style="margin-top:12px"><div class="t">${ICONS.ai} Proposta per oggi</div>
-        <div class="c">${prime}</div>
-        <div class="caption mt-8">${righeP.length > 2 ? `…e altre ${righeP.length - 2} righe. ` : ''}${p.accettata_at ? 'Confermata.' : '<b>Da confermare</b>, la decisione è di chi è in studio.'} <a href="#/sale">Aprila in Sale</a></div></div>`;
-    })() : ''}
+    <div class="rf-sale-head"><span class="section-title">Sale e medici</span><span class="caption">${o.adessoHm}</span></div>
+    <div class="rf-sale-sint">${presenti} ${presenti === 1 ? 'medico presente' : 'medici presenti'} · ${occupate}/${o.sale.length} sale occupate${ritardi.length ? ` · ${ritardi.map(m => `<b style="color:#8a4b12">${rfEsc(rfNomeCorto(m.nome))} +${m.ritardo}</b>`).join(', ')}` : ''}</div>
+    <div class="rf-sale-el">${righe}</div>
+    ${prossimi.length ? `<div class="rf-cambi"><div class="tit">Prossimi ingressi</div>
+      ${prossimi.map(x => `<div class="rf-cambio"><span class="ora num">${rfOrHm(x.ingresso)}</span>${rfAvatar(x.medico || '?')}<span>${rfEsc(rfNomeCortoPaz(x.etichetta))} · ${rfEsc(rfNomeCorto(x.medico || ''))}</span><span class="dove">${rfEsc(x.stanza)}</span></div>`).join('')}</div>` : ''}
+    ${(o.proposte || []).length ? `<div class="rf-piano-prop" style="margin-top:12px"><div class="t">${ICONS.ai} Proposta da confermare</div><div class="c">${rfEsc(o.proposte[0].perche || '')}</div><div class="caption mt-8"><a href="#/sale">Aprila in Sale</a></div></div>` : ''}
     <div class="row mt-16" style="justify-content:space-between;align-items:center;gap:8px">
       <button class="btn sm ghost" data-go="#/sale">Vedi pianificazione completa ${ICONS.chevR}</button>
-      ${p.accettata_at ? '<span class="badge success">piano confermato</span>' : ''}</div>
+      ${o.versione != null ? `<span class="caption">piano v${o.versione} · ${rfEsc(o.motore || '')}</span>` : ''}</div>
   </div>`;
 }
 
@@ -4178,7 +4172,7 @@ if (typeof NAV_META !== 'undefined') { NAV_META.accoglienza = ['Accoglienza', 'd
 RF.orch = null; RF.orchPiano = null; RF.orchMsg = null; RF.saleVista = RF.saleVista || 'adesso'; RF.orchSala = ''; RF.orchTimer = null; RF.orchTesto = null;
 try { RF.stanzaScelta = localStorage.getItem('rf-stanza') || ''; } catch { RF.stanzaScelta = ''; }
 
-const RF_OR_PAGINE = new Set(['sale', 'accoglienza', 'stanza']);
+const RF_OR_PAGINE = new Set(['home', 'sale', 'accoglienza', 'stanza']);
 function rfOrchSincronizza() {
   const dentro = RF.live && RF_OR_PAGINE.has(state.route);
   if (dentro && !RF.orchTimer) { RF.orchTimer = setInterval(() => rfOrchCarica(), 20000); if (!RF.orch) rfOrchCarica(); }
@@ -4188,7 +4182,7 @@ async function rfOrchCarica(dopo) {
   try {
     const r = await fetch('/api/orchestrazione/stato', { credentials: 'include', cache: 'no-store' });
     const j = await r.json().catch(() => null);
-    if (r.ok && j) { RF.orch = j; if (state.route === 'sale' && (RF.saleVista === 'giornata' || RF.saleVista === 'agenda')) await rfOrchCaricaPiano(); }
+    if (r.ok && j) { RF.orch = j; if (state.route === 'sale' && RF.saleVista !== 'adesso') await rfOrchCaricaPiano(); }
   } catch { /* la prossima volta */ }
   if (typeof dopo === 'function') dopo();
   if (RF_OR_PAGINE.has(state.route)) render();
@@ -4226,7 +4220,7 @@ async function rfOrchMattino() {
   try { const r = await fetch('/api/orchestrazione/mattino', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ forza: true }) }); const j = await r.json().catch(() => ({})); RF.orchMsg = { tipo: j.ok ? 'ok' : 'male', testo: j.ok ? `Piano v${j.versione} (${j.motore}, ${((j.ms || 0) / 1000).toFixed(1)} s): ${j.visite} visite, ${j.senzaSala} senza sala.` : (j.errore || 'Non riuscito.') }; } catch { RF.orchMsg = { tipo: 'male', testo: 'La piattaforma non risponde.' }; }
   await rfOrchCarica(); await rfOrchCaricaPiano(); render();
 }
-function rfOrchVista(v) { RF.saleVista = v; if ((v === 'giornata' || v === 'agenda') && !RF.orchPiano) rfOrchCaricaPiano().then(() => render()); render(); }
+function rfOrchVista(v) { RF.saleVista = v; if ((v === 'calendario' || v === 'agenda') && !RF.orchPiano) rfOrchCaricaPiano().then(() => render()); render(); }
 function rfOrchApriSala(nome) { RF.orchSala = RF.orchSala === nome ? '' : nome; render(); }
 const rfOrHm = (m) => m == null ? '—' : `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(((m % 60) + 60) % 60).padStart(2, '0')}`;
 const RF_OR_STATO = { atteso: 'atteso', arrivato: 'arrivato', in_attesa: 'in sala d\'attesa', chiamato: 'chiamato', in_preparazione: 'in preparazione', pronto: 'pronto', in_visita: 'in visita', visita_finita: 'visita finita', dimesso: 'uscito', assente: 'assente', annullato: 'annullato',
@@ -4406,18 +4400,17 @@ function rfOrAgenda(o) {
 const rfSaleCalendarioOrig = PAGES.sale;
 PAGES.sale = () => {
   if (!RF.live) return rfSaleCalendarioOrig();
-  const vista = RF.saleVista || 'adesso';
-  if (vista === 'calendario') {
-    const orig = rfSaleCalendarioOrig();
-    return orig.replace('<div class="actions">', `<div class="actions"><div class="rf-seg rf-or-viste">${rfOrBottoniVista(vista)}</div>`);
-  }
+  // Il calendario «sale a medico» di prima non c'è più (16.9.2026): con la
+  // stanza assegnata al paziente avrebbe raccontato un altro modello. Il
+  // calendario è quello del piano, una colonna per stanza.
+  const vista = (RF.saleVista === 'giornata' || RF.saleVista === 'calendario') ? 'calendario' : (RF.saleVista || 'adesso');
   const o = RF.orch;
-  const testa = `<div class="page-head"><div><h2 class="page-title">Sale e medici</h2><div class="page-sub">${vista === 'adesso' ? 'Chi è dove adesso, e chi entra dopo' : vista === 'agenda' ? 'La giornata di ogni medico, stanza per stanza' : 'La giornata come è pianificata adesso'}</div></div>
+  const testa = `<div class="page-head"><div><h2 class="page-title">Sale e medici</h2><div class="page-sub">${vista === 'adesso' ? 'Chi è dove adesso, e chi entra dopo' : vista === 'agenda' ? 'La giornata di ogni medico, stanza per stanza' : 'Una colonna per stanza: i pazienti, e i medici che si spostano'}</div></div>
     <div class="actions"><div class="rf-seg rf-or-viste">${rfOrBottoniVista(vista)}</div></div></div>`;
   if (!o) return `${testa}<div class="card"><div class="caption">Carico lo stato dello studio…</div></div>`;
   return `${testa}${rfOrMsg()}<div class="stack">${vista === 'adesso' ? rfOrAdesso(o) : vista === 'agenda' ? rfOrAgenda(o) : rfOrGiornata(o)}</div>`;
 };
-function rfOrBottoniVista(v) { const b = (k, et) => `<button class="${v === k ? 'on' : ''}" onclick="rfOrchVista('${k}')">${et}</button>`; return b('adesso', 'Adesso') + b('giornata', 'Giornata') + b('agenda', 'Agenda') + b('calendario', 'Calendario'); }
+function rfOrBottoniVista(v) { const b = (k, et) => `<button class="${v === k ? 'on' : ''}" onclick="rfOrchVista('${k}')">${et}</button>`; return b('adesso', 'Adesso') + b('calendario', 'Calendario') + b('agenda', 'Agenda'); }
 async function rfOrchRitira(id) { try { await fetch('/api/orchestrazione/comandi', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'ritira', id }) }); } catch {} RF.orchSala = ''; await rfOrchCarica(); }
 
 /* ---------- Accoglienza: il tablet ---------- */

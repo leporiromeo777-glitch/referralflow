@@ -4,7 +4,9 @@ aggiornata: 2026-09-15
 ---
 # Sale: di chi è quale stanza
 
-Questa pagina è **letta dalla piattaforma** (`src/lib/sale.ts`, cache di 5 minuti): si cambia la pagina, non il codice. Una sezione `##` per stanza; i campi in elenco puntato con la chiave in testa.
+Questa pagina è **letta dalla piattaforma** (`src/lib/sale.ts` e `src/lib/orchestrazione/grafo.ts`, cache di 5 minuti): si cambia la pagina, non il codice.
+
+**Dal 16.9.2026 sera la stanza si assegna al paziente e il medico si sposta** ([[Piattaforma/Orchestrazione sale]]). Per questa pagina vuol dire: `Solo in:` e `Sempre e solo:` restano **vincoli**; `Di:` è diventata una **preferenza** — se la stanza del medico è libera si usa quella, ma il paziente successivo si prepara in un'altra mentre lui finisce. Le fasce `Dalle HH:MM:` e la proposta notturna del vecchio piano non guidano più la Home né la pagina Sale. Una sezione `##` per stanza; i campi in elenco puntato con la chiave in testa.
 
 - `Di:` chi ne è titolare. `condivisa` se non ha un titolare fisso.
 - `Dalle HH:MM:` chi la prende da quell'ora in poi (si possono mettere più righe).

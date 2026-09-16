@@ -26,14 +26,12 @@ export async function GET(req: NextRequest) {
     else errori++;
   }
 
-  // Il piano delle sale del giorno si prepara da solo, agganciato a questo
-  // giro: non è una risposta a una domanda, dev'essere già pronto quando si
-  // apre la Home. Non si aspetta l'esito — se fallisce, riprova fra 15 minuti.
-  void fetch(`${req.nextUrl.origin}/api/cron/piano-sale?key=${encodeURIComponent(key ?? '')}`, {
-    signal: AbortSignal.timeout(180_000),
-  }).catch(() => {});
-  // E la baseline dell'orchestrazione (16.9.2026, Piattaforma/Orchestrazione
-  // sale §4): una volta al giorno, poi si riusa.
+  // La baseline dell'orchestrazione (16.9.2026, Piattaforma/Orchestrazione
+  // sale §4) si prepara da sola, agganciata a questo giro: una volta al
+  // giorno, poi si riusa. Il vecchio piano «una stanza per medico»
+  // (cron/piano-sale, con la proposta notturna del modello) non si chiama più:
+  // la Home e la pagina Sale leggono il gemello. La rotta resta per chi la
+  // volesse a mano.
   void fetch(`${req.nextUrl.origin}/api/cron/orchestrazione?key=${encodeURIComponent(key ?? '')}`, {
     signal: AbortSignal.timeout(180_000),
   }).catch(() => {});
