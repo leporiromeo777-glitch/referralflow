@@ -30,12 +30,17 @@ Due righe, qui sopra le stanze, dicono **che cosa non entra nel piano**: persone
 - Solo in: Sebastiano Franscella in Sport 1 o Sport 2 o Sport 3
 - Solo in: Georgios Moschovitis in Sport 1 o Sport 2 o Sport 3
 - Solo in: Tiziano Moccetti in Sala 4 o Sala 5
+- Solo in: Bruno Capelli in Sport 1 o Sport 2 o Sport 3
+- Solo in: François Rego in Sala 2 o Sala 3 o Sala 4 o Sala 5
+- Solo in: Daniela Cassani in Sala 2 o Sala 3 o Sala 4 o Sala 5
 
 Altre righe dicono **chi non si sposta**, con due forze diverse. `Sempre e solo:` è una stanza e nient'altro. `Solo in:` è un elenco di stanze ammesse. La riga dice **due cose**: quelle stanze sono le sue fra cui scegliere — anche quando il titolare è un altro — e fuori da lì non va. Senza la prima metà la regola non servirebbe a chi nella pagina una stanza non ce l'ha: dire dove NON può stare non lo mette da nessuna parte. Non è un cambio di titolare, e l'ordine conta: le visite si assegnano in **tre giri**. Prima ognuno nelle stanze vuote che ha **per regola** — il titolare viene prima di chi la stanza la usa soltanto perché un vincolo glielo permette. Poi chi è rimasto fuori prova le altre stanze **vuote** che il vincolo gli ammette. Solo all'ultimo giro una visita si accavalla, e **solo dove c'è già lo stesso medico**: sta tenendo due pazienti in parallelo, che in ambulatorio succede.
 
 **Due medici diversi nella stessa stanza alla stessa ora non esistono.** Se l'unica stanza rimasta è occupata da un altro, la visita non ci entra: finisce fra le «visite senza sala», che è un problema da far vedere, non una stanza inventata con due medici dentro. La proposta dell'AI che prova a mandare qualcuno fuori dal suo elenco viene scartata, con scritto il perché.
 
 **Le stanze si separano con «o», non con la virgola**: in questa pagina la virgola separa le voci dell'elenco, e «in Sala 2, Sala 3» si leggerebbe come due persone. La chiave si può ripetere su più righe: sei persone su una riga sola non si leggerebbero.
+
+**Due gruppi, dal 16.9.2026 sera** (detto dallo studio): Girola, Franscella, Moschovitis, Pedrotti e Paveri **si gestiscono le tre sale dello sport**; tutti gli altri **le cinque sale normali**, con dentro le regole più strette già dette (Paiocchi solo la Sala 1, ed esclusiva; Marco Moccetti Sala 2 o 3; Tiziano Moccetti Sala 4 o 5). Non nominato dallo studio: Bruno Capelli, che fa medicina dello sport e le cui ergometrie si fanno solo nelle Sport — è scritto con il gruppo sport, da correggere se non è così. «M.V» nel messaggio dello studio è stato letto come M.P., Miko Pedrotti: fra i medici non c'è nessun M.V.
 
 `Agende fuori dal piano:` toglie una **colonna** dell'agenda MediOnline. `Labor` è il prelievo: il paziente passa in studio ma non occupa una stanza dei medici — e siccome quell'appuntamento arriva senza titolare, il medico gli veniva prestato da chi vede quel paziente quel giorno, facendogli prendere una stanza che non serve (detto dallo studio il 16.9.2026).
 

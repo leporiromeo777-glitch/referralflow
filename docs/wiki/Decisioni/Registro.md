@@ -95,6 +95,8 @@ Una riga per decisione, con la data e il perché. Non si rilitigano senza un dat
 
 | 2026-09-16 | Il calendario «una stanza per medico» **sparisce** dalla pagina Sale e la card della Home legge il gemello; la proposta notturna del vecchio piano non gira più | l'utente, vedendo le due viste affiancate: «il calendario però è ancora sale a medico». Due modelli della stessa giornata in una pagina sola si contraddicono, e un modello che gira di notte per un piano che nessuno guarda più spende GPU per niente. Il codice del vecchio piano resta (rotta e libreria), la wiki lo dice superato ([[Piattaforma/Orchestrazione sale]], [[Medici/Sale]]) |
 
+| 2026-09-16 | **Due gruppi di stanze**: Girola, Franscella, Moschovitis, Pedrotti e Paveri si gestiscono le tre sale dello sport; tutti gli altri le cinque normali (con dentro Paiocchi solo Sala 1, Marco Moccetti 2 o 3, Tiziano 4 o 5). Capelli, non nominato, sta con lo sport | detto dallo studio la sera del 16.9. Scritto come righe `Solo in` in [[Medici/Sale]]: il gruppo sport aveva già le sue righe, si sono aggiunte quelle di Rego e Cassani (Sala 2-5; la 1 è esclusa dall'esclusiva di Paiocchi). Capelli fa medicina dello sport e le ergometrie si fanno solo nelle Sport: metterlo nelle normali avrebbe lasciato le sue ergometrie senza stanza. «M.V» letto come M.P., Miko Pedrotti — non c'è nessun M.V fra i medici. Emerso rileggendo le compatibilità: l'ecocardiogramma si fa solo in Sala 5, quindi Moschovitis (sport) e Marco Moccetti (2 o 3) non hanno una stanza per un'eco — da chiarire nella pagina delle prestazioni |
+
 ## Aperte
 - Conservare l'audio per un LoRA futuro; togliere il denoise se arriva un oro verificato dal medico.
 - Livello 2 del server (dominio, HTTPS) dopo la parte legale.
