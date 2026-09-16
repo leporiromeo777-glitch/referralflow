@@ -4674,7 +4674,8 @@ window.addEventListener('resize', () => { try { rfOrAltezzaAccoglienza(); } catc
 .rf-vis-back svg { width:18px; height:18px; }
 .rf-vis-di { margin:12px 2px 0; font-size:11.5px; color:var(--text-3); letter-spacing:.02em; }
 .rf-vis-di b { color:var(--text-2); font-weight:650; }
-.rf-vis-lista { display:flex; flex-direction:column; margin-top:6px; max-height:56vh; overflow:auto; }
+.rf-vis-di .q { font-variant-numeric:tabular-nums; }
+.rf-vis-lista { display:flex; flex-direction:column; margin-top:6px; max-height:min(72vh, 900px); overflow:auto; overscroll-behavior:contain; }
 /* Un elenco e basta: una riga per paziente, una riga sottile fra una e
    l'altra. Ora, nome, prestazione, stato. Niente riquadri. */
 .rf-vis-v { display:grid; grid-template-columns:52px minmax(0,1fr) auto; gap:12px; align-items:baseline; width:100%; text-align:left;
@@ -4741,8 +4742,10 @@ function rfVisTrova(q, tuttiIMedici) {
   // paziente di un collega diventerebbe irraggiungibile proprio dalla pagina
   // fatta per aprirlo.
   if (!tuttiIMedici && io && io !== '*' && t.length < 2) tutte = tutte.filter(x => rfNomeNudo(x.medico || '').toLowerCase() === rfNomeNudo(io).toLowerCase());
-  if (t.length < 2) return tutte.filter(x => !['dimesso', 'assente', 'annullato'].includes(x.stato)).slice(0, 40);
-  return tutte.filter(x => `${x.etichetta} ${x.medico} ${x.prestazione}`.toLowerCase().includes(t)).slice(0, 12);
+  // Nessun taglio: l'elenco scorre. Prima si fermava a 40 nomi su 68 senza
+  // dirlo, e sembrava che la giornata finisse lì.
+  if (t.length < 2) return tutte.filter(x => !['dimesso', 'assente', 'annullato'].includes(x.stato));
+  return tutte.filter(x => `${x.etichetta} ${x.medico} ${x.prestazione}`.toLowerCase().includes(t));
 }
 // Di chi sono i pazienti dell'elenco, scritto sopra l'elenco stesso: appena
 // si scrive un nome il filtro cade — un paziente di un collega dev'essere
@@ -4750,9 +4753,11 @@ function rfVisTrova(q, tuttiIMedici) {
 function rfVisDi() {
   const io = rfVisChiSono();
   const cerca = String(RF.visitaQ || '').trim().length >= 2;
-  if (cerca) return `Fra <b>tutti</b> i pazienti di oggi`;
-  if (io === '*') return `Tutti i pazienti di oggi${(RF.orch && RF.orch.io) ? '' : ` · <a href="#" onclick="event.preventDefault();rfVisIoScegli('')">solo i miei</a>`}`;
-  return `I pazienti di <b>${rfEsc(rfNomeNudo(io))}</b>${(RF.orch && RF.orch.io) ? '' : ` · <a href="#" onclick="event.preventDefault();rfVisIoScegli('*')">tutti</a>`}`;
+  const n = rfVisTrova(RF.visitaQ || '').length;
+  const quanti = `<span class="q">${n} ${n === 1 ? 'paziente' : 'pazienti'}</span>`;
+  if (cerca) return `Fra <b>tutti</b> i pazienti di oggi · ${quanti}`;
+  if (io === '*') return `Tutti i pazienti di oggi · ${quanti}${(RF.orch && RF.orch.io) ? '' : ` · <a href="#" onclick="event.preventDefault();rfVisIoScegli('')">solo i miei</a>`}`;
+  return `I pazienti di <b>${rfEsc(rfNomeNudo(io))}</b> · ${quanti}${(RF.orch && RF.orch.io) ? '' : ` · <a href="#" onclick="event.preventDefault();rfVisIoScegli('*')">tutti</a>`}`;
 }
 function rfVisCerca(q) {
   RF.visitaQ = q;
