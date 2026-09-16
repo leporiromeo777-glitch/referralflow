@@ -86,7 +86,11 @@ test('sale: la pagina vera si legge e ogni stanza ha un titolare o chi la divide
   // qui si controlla che la pagina si legga e che nessuna regola sia monca.
   assert.ok(s.length >= 1, `nessuna stanza letta dalla pagina vera`);
   for (const x of s) assert.ok(x.di || x.chi.length, `${x.nome} senza titolare`);
-  assert.ok(s.some((x) => x.fasce.length), 'almeno una stanza ha una regola oraria');
+  // Qui NON si pretende che esista una regola oraria («Dalle 13:00: …»): il
+  // 16.9.2026 è sparita l'ultima, quando Tiziano Moccetti è passato in Sala 4
+  // o Sala 5, e il test è diventato rosso senza che niente fosse rotto. Che il
+  // parser le legga lo provano le prove qui sotto, su pagine finte; se ce ne
+  // siano è una scelta dello studio, non un invariante del codice.
 });
 
 test('una sala «condivisa» senza dire fra chi lo dichiara, non stampa un elenco vuoto', () => {
