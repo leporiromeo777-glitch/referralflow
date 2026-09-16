@@ -1,6 +1,6 @@
 ---
 tipo: indice
-aggiornata: 2026-09-11
+aggiornata: 2026-09-16
 ---
 # Wiki di ReferralFlow
 
@@ -27,6 +27,7 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 - [[Piattaforma/Moduli]] — i moduli dello studio in versione digitale (letti a runtime: compilazione, dossier, stampa)
 - [[Piattaforma/Organizzazione dello studio]] — ruoli, responsabilità, servizi: il grafo organizzativo letto dalla piattaforma (solo ruoli, mai nomi)
 - [[Piattaforma/AI locale dell'app]] — l'assistente dentro la piattaforma: modello, configurazione, perché a volte non risponde
+- [[Piattaforma/Orchestrazione sale]] — il progetto del gemello digitale: la stanza al paziente, il medico mobile, solver CP-SAT, orizzonte mobile, ritardi, due modelli, fasi
 
 ## Per chi usa la piattaforma
 - [[Procedure/Segretaria]] — dal dettato alla lettera, passo per passo
