@@ -39,6 +39,6 @@ Soglia **640 px**: sotto, l'interfaccia cambia forma, non solo dimensione. Sopra
 - **Le sale stanno in una colonna**, le pastiglie di stato non escono più dalla scheda.
 - Nella pagina della visita la colonna dell'assistente passa sotto la parte clinica (soglia 980 px) e i tasti principali diventano larghi quanto lo schermo.
 
-- **Cleo, sul telefono, è la sua pagina**, non il pannello laterale. Il pannello a tutto schermo somigliava a Cleo ma non lo era: niente benvenuto, niente tasti «Domanda medica» e «Con la cartella». Ora il tasto AI della barra in alto e ogni «chiedi a Cleo» portano a `#/ai`, la stessa pagina del computer (col microfono il pannello resta: la dettatura scrive nel campo che sta lì dentro). Il benvenuto parte dall'alto e il campo **non prende il fuoco da solo**, o la tastiera coprirebbe mezza pagina appena si apre.
+- **Cleo, sul telefono, è la sua pagina**, non il pannello laterale. Il pannello a tutto schermo somigliava a Cleo ma non lo era: niente benvenuto, niente tasti «Domanda medica» e «Con la cartella». Ora il tasto **Cleo del menu in basso**, il tasto AI della barra in alto e ogni «chiedi a Cleo» portano a `#/ai`, la stessa pagina del computer (col microfono il pannello resta: la dettatura scrive nel campo che sta lì dentro). Il benvenuto parte dall'alto e il campo **non prende il fuoco da solo**, o la tastiera coprirebbe mezza pagina appena si apre.
 
 Misura: sulle 15 pagine raggiungibili, **zero elementi fuori dallo schermo** a 375 px e nessuno scorrimento orizzontale della pagina.

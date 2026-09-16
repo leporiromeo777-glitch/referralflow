@@ -2722,11 +2722,15 @@ renderMobileNav = function () {
   const voci = [['home', 'Oggi', 'home'], ['agenda', 'Agenda', 'agenda'], ['patients', 'Pazienti', 'patients'], ['reports', 'Referti', 'reports'], ['dittafono', 'Dittafono', 'mic'], ['ai', 'Cleo', 'ai'], ['altro', 'Altro', 'moreV']];
   const fisse = new Set(voci.map(v => v[0]));
   const altre = (NAV[state.role] || []).filter(k => !fisse.has(k));
-  const attiva = (k) => k === 'ai' ? state.aiOpen : k === 'altro' ? altre.includes(state.route) : (state.route === k || (k === 'patients' && ['patient', 'visit'].includes(state.route)) || (k === 'reports' && ['report', 'review'].includes(state.route)));
+  const attiva = (k) => k === 'ai' ? (state.route === 'ai' || state.aiOpen) : k === 'altro' ? altre.includes(state.route) : (state.route === k || (k === 'patients' && ['patient', 'visit'].includes(state.route)) || (k === 'reports' && ['report', 'review'].includes(state.route)));
   nav.innerHTML = voci.map(([k, l, i]) => `<button class="${attiva(k) ? 'active' : ''}" data-mnav="${k}" aria-label="${l}">${ICONS[i] || ''}<span>${l}</span></button>`).join('');
   nav.querySelectorAll('button').forEach(b => b.onclick = () => {
     const k = b.dataset.mnav;
-    if (k === 'ai') { state.aiOpen = !state.aiOpen; render(); return; }
+    // Cleo porta alla SUA PAGINA, la stessa del computer: benvenuto, filo
+    // della conversazione e i due modi «Domanda medica» e «Con la cartella».
+    // Prima apriva il pannello laterale, che sul telefono è un foglio a tutto
+    // schermo senza quei tasti: sembrava Cleo e non lo era.
+    if (k === 'ai') { state.aiOpen = false; if (state.route === 'ai') { render(); } else { go('#/ai'); } return; }
     if (k === 'dittafono') { window.location.href = '/dittafono/index.html'; return; }
     if (k === 'altro') { rfMenuAltro(altre); return; }
     go('#/' + k);
