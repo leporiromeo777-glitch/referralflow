@@ -87,7 +87,33 @@ async function qualitaDella(studioId: string) {
     query<{ stato: string; n: number }>(
       `select stato, count(*)::int as n from referti_bozze where studio_id = $1 group by 1`, [studioId]),
   ]);
-  return { settimane, perUtente, classi, origini, dizionario, bozze };
+  // ── «Quanto corregge la segretaria» (portata qui il 16.9.2026) ──────────
+  // Un punto per referto: quante correzioni ha fatto una persona sull'ultimo
+  // testo dell'AI. Le trasformazioni AI→AI non entrano, e nemmeno le
+  // modifiche del medico: quelle sono un'altra domanda.
+  const { mediaMobile, statistiche } = await import('@/lib/audit/metriche');
+  const punti = await query<{ bozza_id: string; created_at: string; edit_count: number; edits_per_100_words: number; words_total: number; severity_max: string | null; medico: string | null; review_seconds: number | null; categories: Record<string, number> | null; tipo: string | null; revisore: string | null }>(
+    `select h.bozza_id::text, h.created_at::text, h.edit_count, h.edits_per_100_words::float, h.words_total,
+            h.severity_max, h.medico, h.review_seconds, h.categories, b.tipo, u.email as revisore
+       from audit.human_edits h join referti_bozze b on b.id = h.bozza_id
+       left join users u on u.id = h.editor_user_id
+      where h.studio_id = $1 and h.editor_role = 'SECRETARY'
+      order by h.created_at desc limit 200`, [studioId]).catch(() => []);
+  const inOrdine = [...punti].reverse();
+  const valori = inOrdine.map((x) => x.edit_count);
+  const finestra = valori.length >= 100 ? 50 : 20;
+  const categorie: Record<string, number> = {};
+  for (const x of inOrdine) for (const [k, v] of Object.entries(x.categories ?? {})) categorie[k] = (categorie[k] ?? 0) + Number(v || 0);
+  const correzioni = {
+    punti: inOrdine.map((x, i) => ({ ...x, media: mediaMobile(valori, finestra)[i] })),
+    st: statistiche(valori),
+    per100: statistiche(inOrdine.map((x) => x.edits_per_100_words)),
+    tempo: statistiche(inOrdine.map((x) => Number(x.review_seconds ?? 0)).filter((v) => v > 0)),
+    senzaCorrezioni: valori.filter((v) => v === 0).length,
+    categorie: Object.entries(categorie).map(([k, n]) => ({ categoria: k, n })).sort((a, b) => b.n - a.n).slice(0, 12),
+    finestra,
+  };
+  return { settimane, perUtente, classi, origini, dizionario, bozze, correzioni };
 }
 
 async function statisticheDello(studioId: string) {

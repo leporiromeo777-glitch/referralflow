@@ -5498,7 +5498,8 @@ function rfStudioQualita(d) {
   const barre = (lista, chiave) => lista.length ? `<div class="rf-con-el">${lista.map(x => `<div class="rf-stu-r"><div><div class="n">${rfEsc(x[chiave])}</div></div><div class="num">${x.n}</div></div>`).join('')}</div>` : '<div class="caption">Ancora niente.</div>';
   const diz = (q.dizionario || []).reduce((a, r) => (a[r.stato] = r.n, a), {});
   const bozze = (q.bozze || []).reduce((a, r) => (a[r.stato] = r.n, a), {});
-  return `<div class="grid grid-4">
+  return `${rfQualitaCorrezioni(q.correzioni)}
+    <div class="grid grid-4 mt-16">
       <div class="card tight stat"><span class="label">Referti confermati</span><span class="value num">${bozze.confermata || 0}</span><span class="delta">${bozze.bozza || 0} aperti · ${bozze.scartata || 0} scartati</span></div>
       <div class="card tight stat"><span class="label">Con la revisione misurata</span><span class="value num">${totale}</span><span class="delta">ultime 8 settimane</span></div>
       <div class="card tight stat"><span class="label">Dizionario</span><span class="value num">${diz.confermato || 0}</span><span class="delta">${diz.proposto || 0} da confermare</span></div>
@@ -5714,4 +5715,49 @@ if (typeof PAGES !== 'undefined' && PAGES.statistics) {
     setTimeout(() => go('#/administration'), 0);
     return '<div class="page"><div class="caption">Le statistiche stanno nello Studio…</div></div>';
   };
+}
+
+/* ---------- «Quanto corregge la segretaria» (16.9.2026) ----------
+   La funzione della piattaforma vecchia, portata qui: ogni correzione fatta
+   a mano su un referto finisce nel registro (`audit.human_edits`), e da lì
+   si vede quante ne servono, referto per referto, e se col tempo calano.
+   Un punto = un referto. L'altezza = le correzioni della persona sull'ULTIMO
+   testo dell'AI: le trasformazioni AI→AI non entrano, e nemmeno le modifiche
+   del medico, che sono un'altra domanda. La linea è la media mobile: è quella
+   che dice se la catena sta migliorando, non il singolo referto. */
+function rfQualitaCorrezioni(c) {
+  if (!c || !c.punti || !c.punti.length) {
+    return `<div class="card"><div class="card-head"><span class="section-title">Quanto si corregge</span></div>
+      <p class="meta" style="margin:0;line-height:1.55">Nessuna correzione registrata. Il conto parte da solo: ogni volta che qualcuno rivede una bozza e la conferma, la differenza rispetto al testo dell&rsquo;AI finisce nel registro e compare qui.</p></div>`;
+  }
+  const p = c.punti;
+  const max = Math.max(1, ...p.map(x => x.edit_count));
+  const L = 640, H = 150, passo = L / Math.max(1, p.length);
+  const larg = Math.max(2, Math.min(18, passo - 2));
+  const y = (v) => H - (v / max) * (H - 12);
+  const barre = p.map((x, i) => {
+    const alto = H - y(x.edit_count);
+    const tit = `${x.edit_count} correzioni · ${Math.round((x.edits_per_100_words || 0) * 10) / 10} ogni 100 parole · ${rfEsc((x.created_at || '').slice(0, 10).split('-').reverse().join('.'))}${x.medico ? ` · ${rfEsc(rfNomeCorto(x.medico))}` : ''}`;
+    return `<rect x="${(i * passo + (passo - larg) / 2).toFixed(1)}" y="${y(x.edit_count).toFixed(1)}" width="${larg.toFixed(1)}" height="${Math.max(1, alto).toFixed(1)}" rx="2" fill="var(--accent)" opacity="${x.edit_count === 0 ? '.25' : '.55'}"><title>${tit}</title></rect>`;
+  }).join('');
+  const linea = p.map((x, i) => x.media == null ? null : `${(i * passo + passo / 2).toFixed(1)},${y(x.media).toFixed(1)}`).filter(Boolean).join(' ');
+  const n = (v, d = 1) => v == null ? '—' : String(Math.round(Number(v) * 10 ** d) / 10 ** d);
+  const tempo = c.tempo && c.tempo.mediana != null ? `${Math.round(c.tempo.mediana)} s` : '—';
+  return `<div class="card">
+    <div class="card-head"><span class="section-title">Quanto si corregge, referto per referto</span><span class="caption">${p.length} referti rivisti · media mobile su ${c.finestra}</span></div>
+    <div class="grid grid-4" style="margin-bottom:14px">
+      <div class="card tight stat" style="box-shadow:none"><span class="label">Correzioni per referto</span><span class="value num">${n(c.st.mediana, 0)}</span><span class="delta">mediana · media ${n(c.st.media)}</span></div>
+      <div class="card tight stat" style="box-shadow:none"><span class="label">Ogni 100 parole</span><span class="value num">${n(c.per100.mediana)}</span><span class="delta">peggiore ${n(c.per100.p90)} (9 su 10 sotto)</span></div>
+      <div class="card tight stat" style="box-shadow:none"><span class="label">Referti senza correzioni</span><span class="value num">${c.senzaCorrezioni}</span><span class="delta">su ${p.length}</span></div>
+      <div class="card tight stat" style="box-shadow:none"><span class="label">Tempo di revisione</span><span class="value num">${tempo}</span><span class="delta">mediana</span></div>
+    </div>
+    <div style="overflow-x:auto"><svg viewBox="0 0 ${L} ${H + 16}" style="width:100%;min-width:320px;height:${H + 16}px" role="img" aria-label="Correzioni per referto nel tempo">
+      <line x1="0" y1="${H}" x2="${L}" y2="${H}" stroke="var(--border-2)" stroke-width="1"/>
+      ${barre}
+      ${linea ? `<polyline points="${linea}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>` : ''}
+    </svg></div>
+    <div class="caption" style="line-height:1.5">Da sinistra (il più vecchio) a destra (l&rsquo;ultimo). Le barre sono i singoli referti, la linea è la media mobile: se scende, la catena sta imparando a sbagliare meno. Le correzioni del medico non entrano — qui si misura solo quanto lavoro resta a chi rivede.</div>
+    ${c.categorie.length ? `<div class="mt-16"><div class="section-title" style="margin-bottom:8px">Che cosa si corregge</div>
+      <div class="row wrap" style="gap:8px">${c.categorie.map(x => `<span class="badge">${rfEsc(x.categoria)} · ${x.n}</span>`).join('')}</div></div>` : ''}
+  </div>`;
 }
