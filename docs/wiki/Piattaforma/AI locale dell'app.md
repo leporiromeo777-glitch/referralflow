@@ -58,3 +58,15 @@ Non scrive nei log il prompt, la risposta o qualsiasi contenuto clinico: solo no
 
 ## Nome (14.9.2026)
 L'assistente dell'interfaccia nuova si chiama **Cleo**: il prompt di `api/prototipo/assistente` e del briefing glielo dice («Ti chiami Cleo…»), e a «come ti chiami?» / «chi sei?» risponde il codice del ponte (`rfRispostaNome`) senza chiamare il modello.
+
+## Ricerca clinica esterna protetta — prima fetta (16.9.2026)
+L'idea: il medico fa una domanda **con davanti la cartella intera**; un modello locale ricava il **contesto minimo** che serve a rispondere; solo quello uscirebbe. La cartella non lascia mai il Mac.
+
+Questa prima fetta è **tutta locale e non manda niente da nessuna parte**: `POST /api/prototipo/contesto-clinico` assembla la cartella con `briefingGrezzo` (la stessa del briefing pre-visita), chiede a **gemma3:12b** il pacchetto, e lo passa a un controllo. Al medico si mostra che cosa uscirebbe, prima che esista un fuori dove mandarlo.
+
+**Il controllo non è euristico**: cerca dentro il pacchetto gli identificatori **veri di quel paziente** — il suo cognome, la sua data di nascita nei due formati, il suo AVS, telefono, e-mail, via, località, numero d'assicurato. Se ce n'è uno è una fuga, non un sospetto. In più due prove che il primo banco non faceva e che hanno bocciato un modello: la **domanda deve essere generale** (niente «in questo paziente»: sarebbe la domanda di prima con i nomi tolti) e **l'età esatta non deve comparire** («donna di 78 anni» restringe di molto chi può essere).
+
+I nomi si cercano **con la maiuscola**: «capelli neri» non è il cognome Neri. Il prezzo è che una fuga scritta tutta minuscola sfuggirebbe; nei banchi non è mai successo, ed è scritto nel codice perché si sappia.
+
+Banco del 16.9 su **cartelle inventate** con identificatori piantati apposta (`scripts/banco-contesto-clinico.ts`, [[Misure/Banchi]]): gemma3:12b zero fughe, 10 fatti determinanti su 10, domanda sempre generale, mai l'età esatta. medgemma 1.5 4B — modello medico — zero fughe ma **ricopiava la domanda del medico** e scriveva «donna di 78 anni»: il più bravo sul contenuto, il più ingenuo sulla protezione.
+

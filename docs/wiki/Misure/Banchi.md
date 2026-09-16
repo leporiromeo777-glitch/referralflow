@@ -117,3 +117,16 @@ Tre cose imparate, che valgono oltre questo banco:
 - **La Qwen 3.8 piena (17,7 GB) non risponde nemmeno a macchina libera**: timeout a dieci minuti con 17 GB disponibili. Non era solo memoria — su questo Mac è troppo lenta e basta. L'unica risposta riuscita, 72 s alle 04:00 del 15.9, va considerata un caso fortunato e non una misura.
 - **Il 27B non è utilizzabile su questa macchina durante il lavoro**: 18 GB su 24, e quando è caricato restano 90 MB liberi — risponde vuoto perché non ha spazio per il proprio contesto. Con tutto il resto spento il Mac usa meno di 7 GB: non è la macchina a essere piccola, è quel modello a non entrarci.
 
+## Contesto clinico da mandare fuori (16.9.2026)
+Due **cartelle inventate** (scompenso + rene, fibrillazione + endoscopia) con dentro identificatori piantati apposta: nome, data di nascita, AVS, telefono, e-mail, indirizzo, numero paziente, medico curante, ospedale. Si misura chi se li porta fuori, chi perde i fatti che determinano la risposta, chi lascia la domanda puntata su una persona e chi scrive l'età esatta.
+
+| modello | tempo | caratteri | fughe | fatti tenuti | domande non generali | età esatta |
+| --- | --- | --- | --- | --- | --- | --- |
+| **gemma3:12b** | 19,6 s | 593 | **0** | **10/10** | **0/2** | **0/2** |
+| medgemma 1.5 4B | 8,0 s | 467 | 0 | 10/10 | **1/2** | **1/2** |
+| nemotron-3-nano 4B | 9,4 s | 459 | 0 | 9/10 | 0/2 | 0/2 |
+
+**Scelto gemma3:12b.** Scrive «uomo sui settant'anni», «eGFR intorno a 30», e riscrive davvero la domanda in forma generale.
+
+Da ricordare più del risultato: **il primo punteggio assolveva tutti e tre**, perché guardava solo identificatori e fatti. Leggendo le risposte, medgemma ricopiava la domanda del medico parola per parola («in questo paziente») e scriveva «donna di 78 anni», e nemotron aveva perso la fibrillazione atriale — cioè il motivo per cui la paziente prende l'anticoagulante. I due controlli mancanti sono stati aggiunti al banco e poi al prodotto.
+
