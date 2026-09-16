@@ -3,7 +3,7 @@
   "short_name": "ReferralFlow",
   "description": "ReferralFlow — lo studio in tasca: agenda, pazienti, referti, dittafono.",
   "lang": "it",
-  "start_url": "./index.html?v=118#/home",
+  "start_url": "./index.html?v=119#/home",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",

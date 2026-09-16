@@ -298,7 +298,7 @@ PAGES.home = () => {
           <div class="list">${TASKS.length ? TASKS.slice(0, 12).map(t => `<div class="list-item"><i class="dot ${t.prio === 'urgent' || t.prio === 'high' ? 'danger' : 'accent'}"></i><div class="grow"><div class="name">${rfEsc(t.title)}</div><div class="sub">${rfEsc(t.due)}</div></div><a class="btn sm" href="${t.href}">Apri</a></div>`).join('') : '<div class="caption" style="padding:8px 6px">Tutto gestito. Buon lavoro.</div>'}</div></div>
         ${rfCardSale(sale, rigaSala, nMed)}
       </div>
-      <div class="stack">
+      <div class="stack rf-home-acc">
         ${(() => {
           // L'accoglienza al posto della colonna destra (16.9.2026 sera):
           // gli arrivi di oggi coi tasti, e la frase in italiano.
@@ -4158,7 +4158,14 @@ PAGES.sale = () => {
 .rf-or-acc .r .sis b { color:var(--text); }
 .rf-or-acc .r .az { display:flex; gap:6px; }
 .rf-or-acc .r.fatto { opacity:.55; }
-.rf-or-acc.scorre { max-height:min(62vh, 620px); overflow-y:auto; overscroll-behavior:contain; padding-right:4px; }
+.rf-or-acc.scorre { flex:1 1 auto; min-height:220px; overflow-y:auto; overscroll-behavior:contain; padding-right:4px; }
+/* La colonna dell'accoglienza arriva in fondo come quella di sinistra: la
+   griglia allunga le due colonne alla stessa altezza (stretch è il default),
+   la card cresce dentro la colonna e l'elenco prende quel che resta dopo il
+   titolo e la casella del testo. Senza «min-height:0» sul contenitore flex
+   l'elenco non si accorcerebbe mai e la pagina si allungherebbe lo stesso. */
+.rf-home-acc { display:flex; flex-direction:column; min-height:0; }
+.rf-home-acc > .card { display:flex; flex-direction:column; min-height:0; flex:1 1 auto; }
 .rf-or-acc.scorre::-webkit-scrollbar { width:8px; }
 .rf-or-acc.scorre::-webkit-scrollbar-thumb { background:var(--border-2); border-radius:4px; }
 .rf-or-acc .r.compatta { grid-template-columns:46px minmax(0,1.3fr) minmax(0,1.2fr) auto; font-size:13px; padding:7px 0; }
