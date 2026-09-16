@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
     const nuove: ModificaSala[] = [];
     for (const a of lettura.applicabili) {
       const riga = (piano.righe ?? []).find((r) => r.stanza === a.stanza);
-      for (const seg of riga?.segmenti ?? []) nuove.push({ stanza: a.stanza, dalle: seg.dalle, chi: a.chi, da });
+      for (const seg of riga?.segmenti ?? []) nuove.push({ stanza: a.stanza, dalle: seg.dalle, chi: a.chi, da, fonte: 'ai' });
     }
     await query(
       `update piano_sale set accettata_at = now(), accettata_da = $2, modifiche = $3::jsonb, updated_at = now() where id = $1`,
@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
     }
     const da = (session.email || '').split('@')[0];
     const restanti = (piano.modifiche ?? []).filter((m) => !(m.stanza?.toLowerCase() === stanza.toLowerCase() && m.dalle === dalle));
-    const modifiche = [...restanti, { stanza: riga.stanza, dalle, chi, da }];
+    const modifiche = [...restanti, { stanza: riga.stanza, dalle, chi, da, fonte: 'mano' as const }];
     await query('update piano_sale set modifiche = $2::jsonb, updated_at = now() where id = $1', [piano.id, JSON.stringify(modifiche)]);
     return NextResponse.json({ ok: true, modifiche });
   }

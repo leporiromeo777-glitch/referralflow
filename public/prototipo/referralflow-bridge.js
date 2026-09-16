@@ -4015,7 +4015,7 @@ PAGES.sale = () => {
         <span class="o">${rfEsc(dalle)}–${rfEsc(alle)}</span>
         <span class="n">${rfEsc(eti)}</span>
         ${quando ? `<span class="q">${rfEsc(quando)}</span>` : ''}
-        ${s.manuale ? '<span class="am">a mano</span>' : ''}</button>`;
+        ${s.manuale ? `<span class="am">${s.fonte === 'ai' ? 'dall’AI' : 'a mano'}</span>` : ''}</button>`;
       };
       if (!s.chi) return [blocco(s.dalle, s.alle, ' aperta', 'da decidere')];
       if (!presa) return [blocco(s.dalle, s.alle, ' vuota', rfNomeCorto(s.chi))];

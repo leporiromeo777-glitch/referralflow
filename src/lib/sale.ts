@@ -277,7 +277,7 @@ export function salePerPrompt(sale: Sala[]): string {
 // condivisa con più persone presenti, o nessuna — esce in `daDecidere`: è lì,
 // e solo lì, che ha senso chiedere una proposta a un modello.
 
-export type Segmento = { dalle: string; alle: string; chi: string; perche: string; manuale?: boolean };
+export type Segmento = { dalle: string; alle: string; chi: string; perche: string; manuale?: boolean; fonte?: 'mano' | 'ai' };
 export type RigaPiano = { stanza: string; segmenti: Segmento[]; funzione: string; nota: string; stato: string; ultima: boolean };
 export type Piano = { giorno: string; righe: RigaPiano[]; daDecidere: { stanza: string; dalle: string; alle: string; perche: string }[] };
 
@@ -329,7 +329,7 @@ export function daDeciderePerPrompt(piano: Piano, presenti: string[]): string {
 // correzione vale per quel giorno soltanto — la pagina wiki resta la regola.
 // Una fascia corretta si vede: `manuale` è vero e il perché lo dice.
 
-export type ModificaSala = { stanza: string; dalle: string; chi: string; da?: string };
+export type ModificaSala = { stanza: string; dalle: string; chi: string; da?: string; fonte?: 'mano' | 'ai' };
 
 // I vincoli valgono ANCHE contro una correzione a mano (16.9.2026). Prima no,
 // e si vedeva: il 16.9 il piano di oggi portava ancora «Sport 1 → Marco
@@ -352,7 +352,13 @@ export function applicaModifiche(righe: RigaPiano[], modifiche: ModificaSala[], 
       const m = per.get(chiave(r.stanza, s.dalle));
       if (!m) return s;
       const da = m.da ? ` da ${m.da}` : '';
-      return { ...s, chi: m.chi ?? '', manuale: true, perche: m.chi ? `assegnata a mano${da}` : `liberata a mano${da}` };
+      // Una proposta confermata NON è una correzione a mano: veniva scritta
+      // nello stesso posto e l'etichetta diceva «a mano» anche quando la
+      // stanza l'aveva scelta il modello.
+      const ai = m.fonte === 'ai';
+      const come = ai ? `proposta dall'AI, confermata${da}` : `assegnata a mano${da}`;
+      return { ...s, chi: m.chi ?? '', manuale: true, fonte: ai ? 'ai' : 'mano',
+        perche: m.chi ? come : `liberata a mano${da}` };
     }),
   }));
 }
@@ -412,9 +418,16 @@ export function assegnaVisite(righe: RigaPiano[], visite: VisitaGrezza[], vincol
     // la regola valga anche per chi nella pagina una stanza non ce l'ha.
     const vincolo = (vincoli ?? []).find((x) => uguali(x.chi, v.chi));
     if (vincolo) {
+      // Prima le stanze che sono DAVVERO sue in quel momento, poi le altre
+      // ammesse dal vincolo. Senza questo ordine chi ha una stanza assegnata
+      // finiva lo stesso nella prima libera dell'elenco: il 16.9.2026 la Sport
+      // 3 era stata data a Franscella e le sue nove visite erano comparse
+      // nella Sport 1 e nella Sport 2, sotto il nome di altri.
+      const sua = new Set(sue.map((r) => r.stanza));
       sue = righe
         .filter((r) => stanzaAmmessa(r.stanza, vincolo))
-        .sort((a, b) => Number(a.ultima) - Number(b.ultima));
+        .sort((a, b) => (Number(sua.has(b.stanza)) - Number(sua.has(a.stanza)))
+          || (Number(a.ultima) - Number(b.ultima)));
     }
     if (!sue.length) continue;   // nessuna stanza in quel momento: non si mostra
     let scelta = sue.find((r) => liberaDa[r.stanza] <= i);
@@ -603,7 +616,7 @@ export type FasciaLibera = { stanza: string; di: string; dalle: string; alle: st
 // La fine NON si taglia al confine della fascia: una visita che comincia alle
 // 12:50 tiene la stanza fino alle 13:20 anche se la fascia finisce alle 13, e
 // far finta di no sarebbe comodo e falso.
-export type Presa = { stanza: string; chi: string; dalle: string; alle: string; perche: string; manuale?: boolean };
+export type Presa = { stanza: string; chi: string; dalle: string; alle: string; perche: string; manuale?: boolean; fonte?: 'mano' | 'ai' };
 
 export function prese(righe: RigaPiano[], visite: Record<string, VisitaSala[]>): Record<string, Presa[]> {
   const fuori: Record<string, Presa[]> = {};
@@ -615,7 +628,7 @@ export function prese(righe: RigaPiano[], visite: Record<string, VisitaSala[]>):
       if (!sue.length) continue;
       let dalle = sue[0].inizio, alle = sue[0].fine;
       for (const v of sue) { if (v.inizio < dalle) dalle = v.inizio; if (v.fine > alle) alle = v.fine; }
-      fuori[r.stanza].push({ stanza: r.stanza, chi: s.chi, dalle, alle, perche: s.perche, manuale: s.manuale });
+      fuori[r.stanza].push({ stanza: r.stanza, chi: s.chi, dalle, alle, perche: s.perche, manuale: s.manuale, fonte: s.fonte });
     }
   }
   return fuori;

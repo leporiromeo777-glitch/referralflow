@@ -29,7 +29,7 @@ Due righe, qui sopra le stanze, dicono **che cosa non entra nel piano**: persone
 - Solo in: Georgios Moschovitis in Sport 1 o Sport 2 o Sport 3
 - Solo in: Tiziano Moccetti in Sala 4 o Sala 5
 
-Altre righe dicono **chi non si sposta**, con due forze diverse. `Sempre e solo:` è una stanza e nient'altro. `Solo in:` è un elenco di stanze ammesse. La riga dice **due cose**: quelle stanze sono le sue fra cui scegliere — anche quando il titolare è un altro — e fuori da lì non va. Senza la prima metà la regola non servirebbe a chi nella pagina una stanza non ce l'ha: dire dove NON può stare non lo mette da nessuna parte. Non è un cambio di titolare: la stanza la usa quando è libera. La proposta dell'AI che prova a mandare qualcuno fuori dal suo elenco viene scartata, con scritto il perché.
+Altre righe dicono **chi non si sposta**, con due forze diverse. `Sempre e solo:` è una stanza e nient'altro. `Solo in:` è un elenco di stanze ammesse. La riga dice **due cose**: quelle stanze sono le sue fra cui scegliere — anche quando il titolare è un altro — e fuori da lì non va. Senza la prima metà la regola non servirebbe a chi nella pagina una stanza non ce l'ha: dire dove NON può stare non lo mette da nessuna parte. Non è un cambio di titolare: la stanza la usa quando è libera. Fra le stanze ammesse viene **prima quella che è davvero sua** in quel momento, e solo dopo le altre. La proposta dell'AI che prova a mandare qualcuno fuori dal suo elenco viene scartata, con scritto il perché.
 
 **Le stanze si separano con «o», non con la virgola**: in questa pagina la virgola separa le voci dell'elenco, e «in Sala 2, Sala 3» si leggerebbe come due persone. La chiave si può ripetere su più righe: sei persone su una riga sola non si leggerebbero.
 

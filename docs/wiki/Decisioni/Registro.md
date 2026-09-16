@@ -79,6 +79,9 @@ Una riga per decisione, con la data e il perché. Non si rilitigano senza un dat
 
 | 2026-09-16 | Tiziano Moccetti sta **sempre in Sala 4 o Sala 5**; la Sala 3 resta senza titolare | detto dallo studio. Prima la pagina gli dava la Sala 3 dalle 13, che era una proposta mai confermata. Sala 4 è di Rego e Sala 5 di Cassani: non è un cambio di titolare, le usa quando sono libere. Con lui la Sala 3 perde anche l'ultima riga (il mattino era già stato tolto a Moschovitis) e resta a disposizione di Marco Moccetti, che può stare solo lì o in Sala 2 ([[Medici/Sale]]) |
 
+| 2026-09-16 | Fra le stanze che un vincolo ammette viene **prima quella davvero sua** in quel momento, poi le altre | trovato sul piano vero: la Sport 3 era stata assegnata a Franscella e le sue nove visite erano comparse nella Sport 1 e nella Sport 2, sotto il nome di altri — la stanza che gli era stata data restava vuota. Il primo-che-è-libero da solo non basta quando più persone condividono lo stesso elenco di stanze ([[Medici/Sale]]) |
+| 2026-09-16 | Una **proposta dell'AI confermata** non si etichetta «a mano»: `ModificaSala.fonte` dice se la stanza l'ha scelta una persona o il modello, e il calendario scrive «dall'AI» | le due cose finivano nella stessa colonna del database e il calendario le raccontava uguali. Chi guarda deve poter distinguere una decisione di chi è in studio da una proposta accettata, altrimenti non sa di chi fidarsi ([[Medici/Sale]]) |
+
 ## Aperte
 - Conservare l'audio per un LoRA futuro; togliere il denoise se arriva un oro verificato dal medico.
 - Livello 2 del server (dominio, HTTPS) dopo la parte legale.

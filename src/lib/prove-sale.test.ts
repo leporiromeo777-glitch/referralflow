@@ -442,6 +442,35 @@ test('i vincoli fissi arrivano anche nel testo per il modello, non solo nel cont
   assert.ok(!daSistemarePerPrompt(piano, ['Marco Moccetti'], [], []).includes('VINCOLI FISSI'), 'senza vincoli non si scrive una sezione vuota');
 });
 
+test('chi ha una stanza sua fra quelle ammesse la usa per prima', () => {
+  // Il caso vero del 16.9.2026: la Sport 3 assegnata a Franscella, e le sue
+  // visite comparse nella Sport 1 e nella Sport 2, sotto il nome di altri.
+  const md = `- Solo in: Sebastiano Franscella in Sport 1 o Sport 2 o Sport 3\n\n## Sport 1\n- Di: Vanja Paveri\n- Ultima: sì\n- Stato: proposta\n\n## Sport 2\n- Di: Miko Pedrotti\n- Ultima: sì\n- Stato: proposta\n\n## Sport 3\n- Di: Sebastiano Franscella\n- Ultima: sì\n- Stato: proposta\n`;
+  const v = soloIn(md);
+  const piano = pianoDelGiorno(leggiSale(md), ['Vanja Paveri', 'Miko Pedrotti', 'Sebastiano Franscella'], 'mer');
+  const visite = assegnaVisite(piano.righe, [
+    { id: 'a', chi: 'Dr. med. Sebastiano Franscella', start: '09:00', dur: 30 },
+    { id: 'b', chi: 'Dr. med. Sebastiano Franscella', start: '10:00', dur: 30 },
+  ], v);
+  assert.deepEqual(visite['Sport 3'].map((x) => x.id), ['a', 'b'], 'nella sua, non nella prima libera dell’elenco');
+  assert.deepEqual(visite['Sport 1'], []);
+  assert.deepEqual(visite['Sport 2'], []);
+  // e se la sua è già occupata, il vincolo gli lascia comunque le altre due
+  const tante = assegnaVisite(piano.righe, ['a', 'b', 'c'].map((id) => ({ id, chi: 'Sebastiano Franscella', start: '09:00', dur: 30 })), v);
+  assert.equal(tante['Sport 3'].length, 1);
+  assert.equal(tante['Sport 1'].length + tante['Sport 2'].length, 2);
+});
+
+test('una proposta confermata non si chiama «a mano»: la stanza l’ha scelta il modello', () => {
+  const piano = pianoDelGiorno(leggiSale('## Sport 3\n- Di: Bruno Capelli\n- Stato: proposta\n'), ['Bruno Capelli'], 'mer');
+  const [dallAi] = applicaModifiche(piano.righe, [{ stanza: 'Sport 3', dalle: '07:00', chi: 'Sebastiano Franscella', da: 'admin', fonte: 'ai' }]);
+  assert.equal(dallAi.segmenti[0].fonte, 'ai');
+  assert.match(dallAi.segmenti[0].perche, /proposta dall'AI, confermata da admin/);
+  const [aMano] = applicaModifiche(piano.righe, [{ stanza: 'Sport 3', dalle: '07:00', chi: 'Sebastiano Franscella', da: 'romeo' }]);
+  assert.equal(aMano.segmenti[0].fonte, 'mano');
+  assert.match(aMano.segmenti[0].perche, /assegnata a mano da romeo/);
+});
+
 test('una correzione a mano che viola una regola non ha effetto: vince la regola', () => {
   // Il caso vero del 16.9.2026: «Sport 1 → Marco Moccetti», scritta a mano
   // quando il vincolo non esisteva ancora, faceva comparire M.M. due volte.
