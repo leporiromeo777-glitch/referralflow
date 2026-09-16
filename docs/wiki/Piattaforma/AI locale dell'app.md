@@ -62,6 +62,8 @@ L'assistente dell'interfaccia nuova si chiama **Cleo**: il prompt di `api/protot
 ## Ricerca clinica esterna protetta — prima fetta (16.9.2026)
 L'idea: il medico fa una domanda **con davanti la cartella intera**; un modello locale ricava il **contesto minimo** che serve a rispondere; solo quello uscirebbe. La cartella non lascia mai il Mac.
 
+In **Cleo** è un secondo tasto-modo accanto a «Domanda medica»: **«Con la cartella»**. Se non c'è un paziente in contesto lo si sceglie lì; poi si scrive la domanda come viene. Il riquadro mostra le due parti del pacchetto — contesto e domanda generale — con l'esito del controllo, e in fondo la riga che conta: **«niente è uscito da questo Mac»**. I due modi si escludono a vicenda: o la domanda generale senza paziente, o la cartella.
+
 Questa prima fetta è **tutta locale e non manda niente da nessuna parte**: `POST /api/prototipo/contesto-clinico` assembla la cartella con `briefingGrezzo` (la stessa del briefing pre-visita), chiede a **gemma3:12b** il pacchetto, e lo passa a un controllo. Al medico si mostra che cosa uscirebbe, prima che esista un fuori dove mandarlo.
 
 **Il controllo non è euristico**: cerca dentro il pacchetto gli identificatori **veri di quel paziente** — il suo cognome, la sua data di nascita nei due formati, il suo AVS, telefono, e-mail, via, località, numero d'assicurato. Se ce n'è uno è una fuga, non un sospetto. In più due prove che il primo banco non faceva e che hanno bocciato un modello: la **domanda deve essere generale** (niente «in questo paziente»: sarebbe la domanda di prima con i nomi tolti) e **l'età esatta non deve comparire** («donna di 78 anni» restringe di molto chi può essere).

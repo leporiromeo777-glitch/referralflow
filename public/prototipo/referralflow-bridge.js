@@ -896,6 +896,8 @@ const RF_AI_NOME = 'Cleo';
 .rf-med { border:1px solid var(--accent); border-radius:var(--r-card,10px); background:var(--surface); padding:14px 18px; margin-bottom:10px; }
 .rf-med .t { display:flex; align-items:center; gap:7px; font-size:12px; font-weight:650; text-transform:uppercase; letter-spacing:.03em; color:var(--text-3); margin-bottom:9px; }
 .rf-med .t svg { width:14px; height:14px; }
+.rf-cart-p { margin:8px 0; padding:9px 11px; border-radius:10px; background:var(--surface-2); font-size:12.5px; line-height:1.55; }
+.rf-cart-p b { display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-3); margin-bottom:3px; }
 .rf-med textarea { width:100%; min-height:62px; padding:9px 11px; border:1px solid var(--border); border-radius:8px; background:var(--surface-2); font:inherit; font-size:14px; line-height:1.5; color:var(--text); resize:vertical; }
 .rf-med .segnali { margin:9px 0 0; display:flex; flex-direction:column; gap:4px; }
 .rf-med .segnale { font-size:12.5px; display:flex; align-items:flex-start; gap:6px; }
@@ -949,6 +951,7 @@ function rfAiPaginaInvia() {
   const el = document.getElementById('rf-aip-in'); const v = el ? el.value.trim() : '';
   if (!v) return; el.value = '';
   if (state.modoMedico && rfPuoDomandaMedica()) { void rfDomandaMedica(v); return; }
+  if (state.modoCartella && rfPuoDomandaMedica()) { void rfCartellaChiedi(v); return; }
   askAI(v);
 }
 // Domanda avviata ma non mandata: quelle che finiscono con un nome le scrive
@@ -964,16 +967,23 @@ function rfAiPrecompila(inizio) {
 // a conversazione iniziata in fondo. È lo stesso pezzo, spostato.
 // Il modo «domanda medica» lo può accendere chi fa medicina: la segreteria no.
 function rfPuoDomandaMedica() { return ['doctor', 'org_admin'].includes(state.role); }
-function rfModoMedico() { state.modoMedico = !state.modoMedico; render(); const i = document.getElementById('rf-aip-in'); if (i) i.focus(); }
+function rfModoMedico() { state.modoMedico = !state.modoMedico; if (state.modoMedico) state.modoCartella = false; render(); const i = document.getElementById('rf-aip-in'); if (i) i.focus(); }
+/* «Con la cartella»: il modello locale legge la cartella intera e prepara il
+   contesto minimo che servirebbe a chi non conosce il paziente. In questa
+   fetta NON esce niente — si mostra che cosa uscirebbe. */
+function rfModoCartella() { state.modoCartella = !state.modoCartella; if (state.modoCartella) state.modoMedico = false; render(); const i = document.getElementById('rf-aip-in'); if (i) i.focus(); }
 function rfAiCampo() {
   const paz = state.patientCtx && P[state.patientCtx] ? P[state.patientCtx] : null;
   const med = !!state.modoMedico;
   const ph = med
     ? 'Scrivi la domanda come ti viene, col paziente dentro: non esce da qui'
-    : (paz ? 'Chiedi qualcosa su ' + rfEsc(paz.first) + '…' : 'Scrivi una domanda…');
+    : state.modoCartella
+      ? (paz ? `Chiedi guardando la cartella di ${rfEsc(paz.first)}…` : 'Scegli un paziente qui sotto, poi scrivi la domanda…')
+      : (paz ? 'Chiedi qualcosa su ' + rfEsc(paz.first) + '…' : 'Scrivi una domanda…');
   return `<div class="rf-gpt-comp">
     <input id="rf-aip-in" placeholder="${ph}" autocomplete="off" onkeydown="if(event.key==='Enter'){rfAiPaginaInvia();}">
-    <div class="rf-gpt-modi">${rfPuoDomandaMedica() ? `<button type="button" class="rf-modo" aria-pressed="${med}" onclick="rfModoMedico()" title="La domanda viene riscritta in forma generale dal modello locale, e la approvi tu prima che parta">${ICONS.activity} Domanda medica</button>` : ''}</div>
+    <div class="rf-gpt-modi">${rfPuoDomandaMedica() ? `<button type="button" class="rf-modo" aria-pressed="${med}" onclick="rfModoMedico()" title="La domanda viene riscritta in forma generale dal modello locale, e la approvi tu prima che parta">${ICONS.activity} Domanda medica</button>
+      <button type="button" class="rf-modo" aria-pressed="${!!state.modoCartella}" onclick="rfModoCartella()" title="Il modello locale legge la cartella intera e prepara il minimo che servirebbe a chi non conosce il paziente. In questa versione non esce niente: si guarda e basta.">${ICONS.file || ICONS.patients} Con la cartella</button>` : ''}</div>
     <button type="button" class="invia" title="Invia" onclick="rfAiPaginaInvia()">${ICONS.send}</button>
   </div>`;
 }
@@ -1013,7 +1023,7 @@ function rfAiBenvenuto() {
     : `<button type="button" data-ai="${rfEsc(testo)}">${rfEsc(testo)}<span class="da">${rfEsc(da)}</span></button>`;
   return `<div class="rf-gpt-w">
     <h3>Che cosa ti serve sapere?</h3>
-    ${rfAiCampo()}
+    ${rfCartellaRiquadro()}${rfAiCampo()}
     <p class="sotto">${rfEsc(RF_AI_NOME)} legge quello che c'è qui dentro — agenda, attività, referti, documenti, cartelle, procedure dello studio — e niente altro. Le risposte immediate le calcola il codice; quelle di sintesi il modello che gira su questo Mac.</p>
     <div class="rf-aiw-grid">${gruppi.map(g => `<div class="rf-aiw-g"><div class="t">${g.icona}${rfEsc(g.t)}</div>${g.voci.map(voce).join('')}</div>`).join('')}</div>
     ${rfAiNota()}
@@ -1096,6 +1106,78 @@ async function rfMedicaInvia() {
   }
   render();
 }
+/* ---------- «Con la cartella»: il pacchetto, e che cosa uscirebbe ---------- */
+// Prima fetta della ricerca clinica esterna protetta. Il modello LOCALE legge
+// la cartella intera e ne ricava il minimo indispensabile; un controllo cerca
+// dentro quel testo gli identificatori VERI di quel paziente. Niente esce da
+// questo Mac: il «fuori» non è ancora costruito, e si vede prima di farlo.
+async function rfCartellaChiedi(q) {
+  const pid = state.patientCtx;
+  if (!pid) { state.cartellaCtx = { stato: 'pronto', errore: 'Scegli prima il paziente.' }; render(); return; }
+  state.cartellaCtx = { stato: 'lavora', domanda: q, errore: null };
+  render();
+  try {
+    const r = await fetch('/api/prototipo/contesto-clinico', {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ patient_id: pid, domanda: q }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.errore) { state.cartellaCtx = { stato: 'pronto', domanda: q, errore: j.errore || 'Non ha funzionato.' }; render(); return; }
+    state.cartellaCtx = { stato: 'fatto', domanda: q, esito: j, errore: null };
+    render();
+  } catch { state.cartellaCtx = { stato: 'pronto', domanda: q, errore: 'La piattaforma non risponde.' }; render(); }
+}
+function rfCartellaChiudi() { state.cartellaCtx = null; render(); }
+function rfCartellaPaziente(id) { state.patientCtx = id || null; render(); const i = document.getElementById('rf-aip-in'); if (i) i.focus(); }
+function rfCartellaRiquadro() {
+  if (!state.modoCartella && !state.cartellaCtx) return '';
+  const c = state.cartellaCtx;
+  const paz = state.patientCtx && P[state.patientCtx] ? P[state.patientCtx] : null;
+  // Senza paziente non si può fare niente: si sceglie qui.
+  if (!paz) {
+    const elenco = (typeof PATIENTS !== 'undefined' ? PATIENTS : []).slice(0, 300)
+      .map(x => `<option value="${rfEsc(x.id)}">${rfEsc(`${x.last} ${x.first}`.trim())}</option>`).join('');
+    return `<div class="rf-med"><div class="t">${ICONS.patients || ICONS.file} Quale paziente</div>
+      <p class="caption" style="margin:0 0 8px">La domanda parte dalla sua cartella. La cartella resta su questo Mac.</p>
+      <div class="azioni"><select class="input sm" id="rf-cart-paz" style="min-width:220px"><option value="">Scegli…</option>${elenco}</select>
+        <button class="btn" onclick="rfCartellaPaziente(document.getElementById('rf-cart-paz').value)">Usa questo paziente</button></div></div>`;
+  }
+  if (c && c.stato === 'lavora') {
+    return `<div class="rf-med"><div class="t">${ICONS.activity} Leggo la cartella di ${rfEsc(paz.last)} e preparo il minimo indispensabile</div>
+      <p class="caption" style="margin:0">Lo fa il modello su questo Mac. Su una cartella lunga ci mette una ventina di secondi.</p></div>`;
+  }
+  if (c && c.errore) {
+    return `<div class="rf-med"><div class="t">${ICONS.alert} Non ha funzionato</div>
+      <p class="caption" style="margin:0 0 8px">${rfEsc(c.errore)}</p>
+      <div class="azioni"><button class="btn" onclick="rfCartellaChiudi()">Chiudi</button></div></div>`;
+  }
+  if (c && c.stato === 'fatto') {
+    const e = c.esito, k = e.controllo || {};
+    const male = [
+      ...(k.fughe || []).map(x => `nel testo compare «${x}»`),
+      ...(k.deittici || []).map(x => `la domanda dice «${x}»: non vale per chiunque`),
+      ...(k.etaEsatta ? [`c'è l'età esatta («${k.etaEsatta}»)`] : []),
+      ...(k.vuoto ? ['il modello non ha prodotto un contesto utile'] : []),
+    ];
+    return `<div class="rf-med">
+      <div class="t">${ICONS.shield || ICONS.activity} Questo è ciò che uscirebbe — e non è uscito</div>
+      <p class="caption" style="margin:0 0 8px">Dalla cartella di ${rfEsc(paz.last)} (${e.cartella_caratteri} caratteri) il modello locale ha tenuto ${(e.contesto || '').length + (e.domanda_generale || '').length} caratteri.</p>
+      <div class="rf-cart-p"><b>Contesto</b><div>${rfEsc(e.contesto || '—').replace(/\n/g, '<br>')}</div></div>
+      <div class="rf-cart-p"><b>Domanda</b><div>${rfEsc(e.domanda_generale || '—').replace(/\n/g, '<br>')}</div></div>
+      ${male.length
+        ? `<div class="segnali">${male.map(x => `<div class="segnale blocco">${ICONS.alert}<span>${rfEsc(x)}</span></div>`).join('')}</div>`
+        : `<div class="segnali"><div class="segnale"><span>Nessun dato che identifichi ${rfEsc(paz.last)}, domanda valida per chiunque, nessuna età esatta.</span></div></div>`}
+      <div class="azioni">
+        <button class="btn" onclick="rfCartellaChiudi()">Chiudi</button>
+        <span class="dove">${rfEsc(e.modello || '')} · ${((e.ms || 0) / 1000).toFixed(1)} s · <b>niente è uscito da questo Mac</b>: la parte che manda fuori non è ancora costruita.</span>
+      </div>
+    </div>`;
+  }
+  return `<div class="rf-med"><div class="t">${ICONS.file || ICONS.patients} Con la cartella di ${rfEsc(paz.last)}</div>
+    <p class="caption" style="margin:0">Scrivi la domanda come ti viene. Il modello locale legge la cartella intera e prepara il minimo che servirebbe a chi non conosce il paziente: lo vedi prima, e per ora non esce da qui.</p>
+    <div class="azioni"><button class="btn sm ghost" onclick="rfCartellaPaziente('')">Cambia paziente</button></div></div>`;
+}
+
 function rfMedicaRiquadro() {
   const m = state.medica; if (!m) return '';
   if (m.stato === 'riformulo') return `<div class="rf-med"><div class="t">${ICONS.activity} Riscrivo la domanda in forma generale</div><p class="caption" style="margin:0">Lo fa il modello su questo Mac. La tua domanda non è uscita.</p></div>`;
@@ -1130,7 +1212,7 @@ PAGES.ai = () => {
       <div class="rf-gpt-scroll ${vuota ? 'vuota' : ''}" id="rf-aip-body">
         <div class="rf-gpt-col">${vuota ? rfAiBenvenuto() : `<div class="rf-gpt-thread">${state.aiMessages.map(m => m.html).join('')}</div>`}</div>
       </div>
-      ${vuota ? '' : `<div class="rf-gpt-foot"><div class="rf-gpt-col">${rfMedicaRiquadro()}${rfAiCampo()}${rfAiNota()}</div></div>`}
+      ${vuota ? '' : `<div class="rf-gpt-foot"><div class="rf-gpt-col">${rfMedicaRiquadro()}${rfCartellaRiquadro()}${rfAiCampo()}${rfAiNota()}</div></div>`}
     </div>`;
 };
 // Il titolo nella barra in alto: sulla pagina di Cleo porta la stessa lucina.
