@@ -77,6 +77,8 @@ Una riga per decisione, con la data e il perché. Non si rilitigano senza un dat
 
 | 2026-09-16 | I vincoli valgono **anche contro una correzione a mano**: `applicaModifiche` scarta la correzione che mette qualcuno fuori dalle sue stanze, e l'endpoint rifiuta di salvarla dicendo quale regola | trovato sul piano vero del 16.9: il calendario mostrava Marco Moccetti due volte, una in Sport 1, per una correzione scritta a mano quando la regola «solo in Sala 2 o Sala 3» non esisteva ancora. Una correzione vale per il giorno, una regola vale sempre: se si contraddicono vince la regola, e la correzione scaduta smette da sola di avere effetto invece di restare a dire una cosa falsa. Liberare una fascia resta sempre permesso, perché non mette nessuno da nessuna parte ([[Medici/Sale]]) |
 
+| 2026-09-16 | Tiziano Moccetti sta **sempre in Sala 4 o Sala 5**; la Sala 3 resta senza titolare | detto dallo studio. Prima la pagina gli dava la Sala 3 dalle 13, che era una proposta mai confermata. Sala 4 è di Rego e Sala 5 di Cassani: non è un cambio di titolare, le usa quando sono libere. Con lui la Sala 3 perde anche l'ultima riga (il mattino era già stato tolto a Moschovitis) e resta a disposizione di Marco Moccetti, che può stare solo lì o in Sala 2 ([[Medici/Sale]]) |
+
 ## Aperte
 - Conservare l'audio per un LoRA futuro; togliere il denoise se arriva un oro verificato dal medico.
 - Livello 2 del server (dominio, HTTPS) dopo la parte legale.

@@ -27,6 +27,7 @@ Due righe, qui sopra le stanze, dicono **che cosa non entra nel piano**: persone
 - Solo in: Davide Girola in Sport 1 o Sport 2 o Sport 3
 - Solo in: Sebastiano Franscella in Sport 1 o Sport 2 o Sport 3
 - Solo in: Georgios Moschovitis in Sport 1 o Sport 2 o Sport 3
+- Solo in: Tiziano Moccetti in Sala 4 o Sala 5
 
 Altre righe dicono **chi non si sposta**, con due forze diverse. `Sempre e solo:` è una stanza e nient'altro. `Solo in:` è un elenco di stanze ammesse. La riga dice **due cose**: quelle stanze sono le sue fra cui scegliere — anche quando il titolare è un altro — e fuori da lì non va. Senza la prima metà la regola non servirebbe a chi nella pagina una stanza non ce l'ha: dire dove NON può stare non lo mette da nessuna parte. Non è un cambio di titolare: la stanza la usa quando è libera. La proposta dell'AI che prova a mandare qualcuno fuori dal suo elenco viene scartata, con scritto il perché.
 
@@ -50,19 +51,18 @@ Le regole qui sotto vengono dalla conversazione del 15.9.2026 e dalle misure sul
 
 ## Sala 3
 - Di: condivisa
-- Dalle 13:00: Tiziano Moccetti
-- Giorni: lun mar mer gio
-- Nota: al mattino non ha un titolare. Il 15.9.2026 era stata data a Moschovitis; il 16.9.2026 lo studio ha detto che Moschovitis sta sempre nelle sale dello sport e ha tolto questa regola. Tiziano non è mai in studio prima delle 13 e mai il venerdì. La mattina resta disponibile, e Marco Moccetti può prendersela: la riga «Solo in» in testa lo ammette qui e in Sala 2, e basta questo perché le sue visite ci finiscano quando servono.
+- Nota: senza titolare dal 16.9.2026. La mattina era di Moschovitis (15.9), il pomeriggio di Tiziano Moccetti: lo studio ha poi detto che Moschovitis sta sempre nelle sale dello sport e Tiziano sempre in Sala 4 o Sala 5, e le due righe sono state tolte. Resta a disposizione, e Marco Moccetti può prendersela: la riga «Solo in» in testa lo ammette qui e in Sala 2, e basta questo perché le sue visite ci finiscano quando servono.
 - Stato: proposta
 
 ## Sala 4
 - Di: François Rego
+- Nota: dal 16.9.2026 ci sta anche Tiziano Moccetti, che è sempre in Sala 4 o Sala 5 (riga «Solo in» in testa): non è un cambio di titolare, la usa quando è libera. Tiziano non è mai in studio prima delle 13 e mai il venerdì.
 - Stato: proposta
 
 ## Sala 5
 - Di: Daniela Cassani
 - Funzione: Ecografia
-- Nota: sua dal 16.9.2026, detto dallo studio. Ecografista, una decina di esami al giorno; prima la pagina le dava la Sala 2, che era un'assegnazione provvisoria presa da una proposta dell'AI. La stanza la dividevano Girola, Moschovitis, Pedrotti e Franscella, che dal 16.9 stanno sempre nelle sale dello sport.
+- Nota: sua dal 16.9.2026, detto dallo studio; dal pomeriggio ci sta anche Tiziano Moccetti, che è sempre in Sala 4 o Sala 5. Ecografista, una decina di esami al giorno; prima la pagina le dava la Sala 2, che era un'assegnazione provvisoria presa da una proposta dell'AI. La stanza la dividevano Girola, Moschovitis, Pedrotti e Franscella, che dal 16.9 stanno sempre nelle sale dello sport.
 - Stato: proposta
 
 ## Sport 1
