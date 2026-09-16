@@ -3262,7 +3262,11 @@ PAGES.agenda = () => {
   const passaTipo = (a) => !filtroTipo || a.tipoPrest === filtroTipo;
   const lista = (RF.agenda || []).filter(a => a.d === giorno && passaTipo(a)).sort((a, b) => a.start.localeCompare(b.start));
   const nomeDi = (a) => (a.p && P[a.p]) ? fullName(P[a.p]) : (a.nome || 'Paziente');
-  const medici = [...new Set(lista.filter(a => a.doc && a.doc !== 'studio').map(a => a.doc))].sort((x, y) => (DOCTORS[x] || '').localeCompare(DOCTORS[y] || ''));
+  // Le colonne sono di chi TIENE un'agenda, non di chi ha appuntamenti quel
+  // giorno (16.9.2026): prima Moschovitis spariva il mercoledì perché non
+  // aveva visite, e l'agenda cambiava forma da un giorno all'altro. Una
+  // colonna vuota dice «nessun appuntamento» e resta al suo posto.
+  const medici = [...new Set((RF.agenda || []).filter(a => a.doc && a.doc !== 'studio').map(a => a.doc))].sort((x, y) => (DOCTORS[x] || '').localeCompare(DOCTORS[y] || ''));
   const minuti = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
   // Vista per sala (14.9.2026): colonne = luoghi dell'agenda del giorno
   // abbinati alle risorse dello studio (più le sale registrate senza
