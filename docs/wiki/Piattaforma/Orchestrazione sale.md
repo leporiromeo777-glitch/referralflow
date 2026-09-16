@@ -605,7 +605,7 @@ Solo quando il diff contiene più di tre mosse, o una proposta del modello grand
 
 ## 14. L'interfaccia
 
-Quattro viste, una sola pagina, sopra il prototipo attuale (la pagina «Sale» evolve, non si rifà). Dal 16.9 sera il calendario «sale a medico» di prima **non c'è più**: con la stanza assegnata al paziente avrebbe raccontato un altro modello. La pagina ha *Adesso · Calendario (per stanza) · Agenda (per medico)*, e la card della Home legge lo stesso stato.
+Quattro viste, una sola pagina, sopra il prototipo attuale (la pagina «Sale» evolve, non si rifà). Dal 16.9 sera il calendario «sale a medico» di prima **non c'è più**: con la stanza assegnata al paziente avrebbe raccontato un altro modello. La pagina ha *Adesso · Calendario (per stanza) · Agenda (per medico)*, e la card della Home legge lo stesso stato. In testa alla pagina il tasto **«Ridistribuisci le stanze»** rifà da capo la distribuzione di oggi con le regole di adesso (lo stesso lavoro del cron del mattino): chi è già dentro una stanza non si muove, perché è congelato per stato.
 
 **A. La mappa dello studio.** Le otto stanze disegnate nella disposizione vera (una piantina semplice, non una lista): per ogni stanza il paziente di adesso, il medico di adesso, lo stato come colore discreto e parola, e sotto, più piccolo, *il prossimo*: chi entra, con quale medico, fra quanti minuti. Le stanze libere dicono per quanto. Clic sulla stanza: i comandi del §11.
 

@@ -4216,8 +4216,11 @@ async function rfOrchProposta(id, azione) {
   await rfOrchCarica();
 }
 async function rfOrchMattino() {
-  RF.orchMsg = { tipo: 'ok', testo: 'Preparo il piano del mattino…' }; render();
+  if (RF.orchLavora) return;
+  RF.orchLavora = true;
+  RF.orchMsg = { tipo: 'ok', testo: 'Ridistribuisco le stanze con le regole di adesso: chi è già dentro una stanza non si muove. Con le regole strette il solver può metterci fino a un minuto.' }; render();
   try { const r = await fetch('/api/orchestrazione/mattino', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ forza: true }) }); const j = await r.json().catch(() => ({})); RF.orchMsg = { tipo: j.ok ? 'ok' : 'male', testo: j.ok ? `Piano v${j.versione} (${j.motore}, ${((j.ms || 0) / 1000).toFixed(1)} s): ${j.visite} visite, ${j.senzaSala} senza sala.` : (j.errore || 'Non riuscito.') }; } catch { RF.orchMsg = { tipo: 'male', testo: 'La piattaforma non risponde.' }; }
+  RF.orchLavora = false;
   await rfOrchCarica(); await rfOrchCaricaPiano(); render();
 }
 function rfOrchVista(v) { RF.saleVista = v; if ((v === 'calendario' || v === 'agenda') && !RF.orchPiano) rfOrchCaricaPiano().then(() => render()); render(); }
@@ -4335,7 +4338,7 @@ function rfOrGiornata(o) {
   const legenda = Object.keys(perMedico).map(m => `<span><i style="background:hsl(${rfTinta(m)} 55% 45%)"></i>${rfEsc(rfNomeCorto(m))}</span>`).join('');
   const vers = (pj.versioni || []);
   return `<div class="caption" style="margin:-4px 0 8px">Piano v${pj.piano.versione} · ${rfEsc(pj.piano.motore)} in ${((pj.piano.ms || 0) / 1000).toFixed(1)} s · ${vers.length} versioni oggi${pj.piano.comunicata_at ? ' · comunicato' : ''} · ogni blocco è un paziente, i fili sono i medici che si spostano
-      <span style="float:right"><button class="btn sm ghost" onclick="rfOrchMattino()">Rifai il piano del mattino</button></span></div>
+      </div>
     <div class="card"><div class="rf-cs-scorre">
       <div class="rf-cs-teste" style="min-width:${52 + n * 104}px"><span class="rf-cs-vuoto"></span>${o.sale.map(s => `<button class="rf-cs-testa st-${['occupata_visita', 'occupata_pronto', 'in_preparazione'].includes(s.stato) ? 'occupata' : 'libera'}"><span class="sn"><i class="p"></i>${rfEsc(s.nome)}</span><span class="sf">${(perSala[s.nome] || []).length} ${(perSala[s.nome] || []).length === 1 ? 'paziente' : 'pazienti'}${s.funzione ? ` · ${rfEsc(s.funzione)}` : ''}</span></button>`).join('')}</div>
       <div class="rf-cs" style="height:${alto.toFixed(0)}px;min-width:${52 + n * 104}px;position:relative">
@@ -4406,7 +4409,8 @@ PAGES.sale = () => {
   const vista = (RF.saleVista === 'giornata' || RF.saleVista === 'calendario') ? 'calendario' : (RF.saleVista || 'adesso');
   const o = RF.orch;
   const testa = `<div class="page-head"><div><h2 class="page-title">Sale e medici</h2><div class="page-sub">${vista === 'adesso' ? 'Chi è dove adesso, e chi entra dopo' : vista === 'agenda' ? 'La giornata di ogni medico, stanza per stanza' : 'Una colonna per stanza: i pazienti, e i medici che si spostano'}</div></div>
-    <div class="actions"><div class="rf-seg rf-or-viste">${rfOrBottoniVista(vista)}</div></div></div>`;
+    <div class="actions"><div class="rf-seg rf-or-viste">${rfOrBottoniVista(vista)}</div>
+      <button class="btn primary"${RF.orchLavora ? ' disabled' : ''} onclick="rfOrchMattino()" title="Rifà da capo la distribuzione delle stanze di oggi con le regole di adesso. Chi è già in una stanza non si muove.">${ICONS.flow || ICONS.ai} ${RF.orchLavora ? 'Ridistribuisco…' : 'Ridistribuisci le stanze'}</button></div></div>`;
   if (!o) return `${testa}<div class="card"><div class="caption">Carico lo stato dello studio…</div></div>`;
   return `${testa}${rfOrMsg()}<div class="stack">${vista === 'adesso' ? rfOrAdesso(o) : vista === 'agenda' ? rfOrAgenda(o) : rfOrGiornata(o)}</div>`;
 };
