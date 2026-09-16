@@ -273,7 +273,7 @@ PAGES.home = () => {
     return `<div class="rf-sala"><div class="rf-sala-top"><span class="name">${rfEsc(x.nome)}${chi}${x.tipo === 'apparecchio' ? ' <span class="caption">apparecchio</span>' : x.tipo === 'codice' ? ' <span class="caption">codice agenda</span>' : ''}</span><span class="n num">${x.n ? `${x.n} · ${oreSala(x.minuti)}` : '—'}${x.posti > 1 ? ` <span class="caption">· ${x.posti} posti</span>` : ''}</span></div><div class="meter${x.occupataOra ? ' now' : ''}"><i style="width:${pct}%"></i></div><div class="cap${x.occupataOra ? ' now' : ''}">${cap}</div></div>`;
   };
   return `
-    <div class="page-head"><div><div class="eyebrow">La giornata dello studio</div><div class="display">${rfEsc(ROLES[state.role].greet)}</div><div class="page-sub" style="text-transform:none">${data} · ${appts.length} ${appts.length === 1 ? 'appuntamento' : 'appuntamenti'}${nMed ? ` · ${nMed} ${nMed === 1 ? 'medico' : 'medici'} in agenda` : ''} · ${TASKS.length ? `${TASKS.length} cose da fare` : 'niente in sospeso'}</div></div>
+    <div class="page-head"><div><div class="eyebrow">La giornata dello studio</div><div class="display">${rfEsc(ROLES[state.role].greet)}</div><div class="page-sub" style="text-transform:none">${data} · ${appts.length} ${appts.length === 1 ? 'appuntamento' : 'appuntamenti'}${nMed ? ` · ${nMed} ${nMed === 1 ? 'medico' : 'medici'} in agenda` : ''} · ${TASKS.length ? `${TASKS.length} ${TASKS.length === 1 ? 'cosa' : 'cose'} da fare` : 'niente in sospeso'}</div></div>
       <div class="actions"><button class="btn" data-go="#/agenda">${ICONS.agenda} Agenda</button><button class="btn" data-go="#/reports">${ICONS.reports} Referti</button><button class="btn ai" data-ai="Preparazione della giornata">${ICONS.ai} Prepara la giornata</button></div></div>
     <div class="grid grid-6">
       ${stat(s.appuntamenti_oggi ?? appts.length, 'Appuntamenti oggi', '#/agenda', s.visti_oggi ? `${s.visti_oggi} già visti` : (next ? `prossimo alle ${next.start}` : ''))}
@@ -3388,11 +3388,11 @@ PAGES.agenda = () => {
   }
   return `
     <div class="page-head"><div><h2 class="page-title">Agenda</h2><div class="page-sub">${rfEsc(etichetta)} · ${lista.length} appuntamenti${medici.length ? ` · ${medici.length} medici` : ''}${senza ? ` · ${senza} senza medico` : ''}</div></div>
-      <div class="actions"><div class="seg"><button class="${periodo === 'giorno' ? 'active' : ''}" onclick="state.agendaPeriodo='giorno';render()">Giorno</button><button class="${periodo === 'settimana' ? 'active' : ''}" onclick="state.agendaPeriodo='settimana';render()">Settimana</button></div><div class="seg"><button class="${!filtroTipo ? 'active' : ''}" onclick="state.agendaTipo='';render()">Tutto</button><button class="${filtroTipo === 'visita' ? 'active' : ''}" onclick="state.agendaTipo='visita';render()">Visite</button><button class="${filtroTipo === 'esame' ? 'active' : ''}" onclick="state.agendaTipo='esame';render()">Esami</button><button class="${filtroTipo === 'procedura' ? 'active' : ''}" onclick="state.agendaTipo='procedura';render()">Procedure</button></div><div class="seg"><button class="${vista === 'medici' ? 'active' : ''}" onclick="state.agendaVista='medici';render()">Per medico</button><button class="${vista === 'sale' ? 'active' : ''}" onclick="state.agendaVista='sale';render()">Per sala</button></div><div class="seg"><button onclick="state.agendaGiorno='${sposta(periodo === 'settimana' ? -7 : -1)}';render()">‹</button><button class="${giorno === oggi ? 'active' : ''}" onclick="state.agendaGiorno='${oggi}';render()">Oggi</button><button onclick="state.agendaGiorno='${sposta(periodo === 'settimana' ? 7 : 1)}';render()">›</button></div><input type="date" class="input sm" value="${giorno}" onchange="state.agendaGiorno=this.value;render()" style="max-width:160px"><button class="btn ai" data-ai="Preparazione della giornata">${ICONS.ai} Prepara la giornata</button></div></div>
+      <div class="actions"><div class="seg"><button class="${periodo === 'giorno' ? 'active' : ''}" onclick="state.agendaPeriodo='giorno';render()">Giorno</button><button class="${periodo === 'settimana' ? 'active' : ''}" onclick="state.agendaPeriodo='settimana';render()">Settimana</button></div><div class="seg"><button class="${!filtroTipo ? 'active' : ''}" onclick="state.agendaTipo='';render()">Tutto</button><button class="${filtroTipo === 'visita' ? 'active' : ''}" onclick="state.agendaTipo='visita';render()">Visite</button><button class="${filtroTipo === 'esame' ? 'active' : ''}" onclick="state.agendaTipo='esame';render()">Esami</button><button class="${filtroTipo === 'procedura' ? 'active' : ''}" onclick="state.agendaTipo='procedura';render()">Procedure</button></div>${rfTelefono() ? '' : `<div class="seg"><button class="${vista === 'medici' ? 'active' : ''}" onclick="state.agendaVista='medici';render()">Per medico</button><button class="${vista === 'sale' ? 'active' : ''}" onclick="state.agendaVista='sale';render()">Per sala</button></div>`}<div class="seg"><button onclick="state.agendaGiorno='${sposta(periodo === 'settimana' ? -7 : -1)}';render()">‹</button><button class="${giorno === oggi ? 'active' : ''}" onclick="state.agendaGiorno='${oggi}';render()">Oggi</button><button onclick="state.agendaGiorno='${sposta(periodo === 'settimana' ? 7 : 1)}';render()">›</button></div><input type="date" class="input sm" value="${giorno}" onchange="state.agendaGiorno=this.value;render()" style="max-width:160px">${rfTelefono() ? '' : `<button class="btn ai" data-ai="Preparazione della giornata">${ICONS.ai} Prepara la giornata</button>`}</div></div>
     ${avvisi.length ? `<div class="card mb-16" style="border-left:3px solid var(--danger)"><b>Più pazienti dei posti della sala</b>: ${avvisi.map(rfEsc).join(' · ')}. I posti si impostano in Studio → Sale.</div>` : ''}
     ${vista === 'sale' && cols.length && !risorse.some(r => r.tipo === 'sala') ? `<div class="caption mb-16">Nessuna sala registrata: le colonne sono i codici del campo «luogo» dell'agenda. In Studio → Sale si registrano le sale con i posti; in Medici agenda → Codici dell'agenda un codice diventa una sala.</div>` : ''}
     ${senza && vista === 'medici' ? `<div class="caption mb-16">Le colonne a destra della linea sono gli appuntamenti <b>non abbinati a un medico</b>, divisi per colore dell'agenda originale, cioè per tipo. I codici del luogo non abbinati sono ${[...new Set(lista.filter(a => !a.doc || a.doc === 'studio').map(a => a.room).filter(Boolean))].map(rfEsc).join(', ') || 'vuoti'}: si abbinano in Studio → Medici agenda → Codici dell'agenda, e allora tornano nella colonna del medico.</div>` : ''}
-    ${lista.length ? (() => {
+    ${lista.length ? (rfTelefono() ? rfAgendaListaHtml(lista, vista) : (() => {
       // Larghezza disponibile stimata: finestra meno barra laterale, margini e
       // colonna delle ore. Le colonne si dividono quello che resta, con un
       // minimo sotto il quale diventano illeggibili.
@@ -3402,7 +3402,7 @@ PAGES.agenda = () => {
     })() + `
       <div class="cal-head"></div>${cols.map(c => `<div class="cal-head${String(c.k).startsWith('col:') ? ' rf-tipo' : ''}">${c.colore ? `<i class="dot" style="background:${rfEsc(c.colore)};margin-right:6px"></i>` : ''}${rfEsc(c.et)}</div>`).join('')}
       <div class="cal-times" style="--slots:${slots};--slot-h:${slotH}px">${times}</div>${cols.map(colHtml).join('')}
-    </div></div>` : `<div class="card"><div class="caption">Nessun appuntamento in agenda per questo giorno${Math.abs((d - new Date(`${oggi}T12:00:00`)) / 86400000) > 30 ? ' (la piattaforma carica ±30 giorni da oggi)' : ''}.</div></div>`}
+    </div></div>`) : `<div class="card"><div class="caption">Nessun appuntamento in agenda per questo giorno${Math.abs((d - new Date(`${oggi}T12:00:00`)) / 86400000) > 30 ? ' (la piattaforma carica ±30 giorni da oggi)' : ''}.</div></div>`}
     ${(() => { const c = {}; for (const a of lista) if (a.colore) c[a.colore] = (c[a.colore] || 0) + 1; const voci = Object.entries(c).sort((x, y) => y[1] - x[1]); return voci.length ? `<div class="row mt-16 caption wrap" style="gap:10px"><span>Colori dell'agenda originale:</span>${voci.map(([col, n]) => `<span class="status"><i class="dot" style="background:${rfEsc(col)}"></i>${n}</span>`).join('')}</div>` : ''; })()}
     <div class="row mt-16 caption wrap"><span class="status"><i class="dot accent"></i>Programmato</span><span class="status"><i class="dot success"></i>Completato</span><span class="status"><i class="dot warning"></i>In ritardo</span><span class="caption">Dal robot MediOnline, in sola lettura; si aggiorna ogni ora.</span></div>`;
 };
@@ -5029,3 +5029,143 @@ PAGES.visite = () => {
   const sel = rfVAperta();
   return `${rfOrMsg()}${sel ? rfVVisita(sel) : rfVElenco()}`;
 };
+
+/* =====================================================================
+   Il telefono (16.9.2026 sera).
+   L'interfaccia è nata su uno schermo grande e sul telefono si vedeva:
+   tabelle larghe il doppio dello schermo che scorrevano di lato, il
+   calendario del giorno con cinque colonne da cento pixel e i nomi
+   tagliati a metà, le barre dei filtri alte quattro righe, le pastiglie
+   di stato che uscivano dalla loro scheda.
+   Qui sotto: le tabelle diventano schede (una riga = una scheda, con le
+   etichette prese dall'intestazione), l'agenda del giorno diventa una
+   lista in ordine d'ora, i filtri stanno su una riga che scorre, e
+   niente esce più dallo schermo.
+   Soglia: 640 px — un telefono in verticale. Sul tablet resta tutto
+   com'era.
+   ===================================================================== */
+const rfTelefono = () => (typeof window !== 'undefined' ? window.innerWidth : 1440) <= 640;
+
+/* Le tabelle: l'intestazione sparisce e ogni cella si porta dietro il suo
+   nome. L'attributo si mette dopo il disegno, così vale per tutte le
+   tabelle — anche quelle che verranno. */
+function rfTabelleTelefono() {
+  const c = document.getElementById('content');
+  if (!c) return;
+  const tel = rfTelefono();
+  c.querySelectorAll('table').forEach((t) => {
+    t.classList.toggle('rf-tab-schede', tel);
+    if (!tel) return;
+    const teste = [...t.querySelectorAll('thead th')].map((th) => th.textContent.trim());
+    if (!teste.length) return;
+    t.querySelectorAll('tbody tr').forEach((tr) => {
+      [...tr.children].forEach((td, i) => {
+        if (td.dataset.l == null && teste[i] != null) td.dataset.l = teste[i];
+      });
+    });
+  });
+}
+
+/* L'agenda del giorno sul telefono: una lista in ordine d'ora. Il
+   calendario a colonne resta su schermo grande — su un telefono cinque
+   colonne da cento pixel non sono un'agenda, sono un indovinello. */
+function rfAgendaListaHtml(lista, vista) {
+  const nome = (a) => (a.p && typeof P !== 'undefined' && P[a.p] && typeof fullName === 'function') ? fullName(P[a.p]) : (a.nomeBreve || a.nome || 'Paziente');
+  const ordinati = [...lista].sort((a, b) => String(a.start).localeCompare(String(b.start)));
+  return `<div class="rf-ag-lista">${ordinati.map((a) => {
+    const sotto = [a.prestazione || a.reason || '', vista === 'sale' ? (a.room || '') : (DOCTORS[a.doc] ? rfNomeCorto(DOCTORS[a.doc]) : '')].filter(Boolean).join(' · ');
+    return `<button type="button" class="rf-ag-r${a.status === 'COMPLETED' ? ' fatta' : ''}${a.late ? ' tardi' : ''}" ${a.p && rfUuid(a.p) ? `data-go="#/patients/${rfEsc(a.p)}"` : ''}>
+      <span class="h">${rfEsc(a.start)}</span>
+      <span class="c"><span class="n">${rfEsc(nome(a))}</span>${sotto ? `<span class="s">${rfEsc(sotto)}</span>` : ''}</span>
+      ${a.colore ? `<i class="pun" style="background:${rfEsc(a.colore)}"></i>` : ''}
+    </button>`;
+  }).join('')}</div>`;
+}
+
+(function () { const st = document.createElement('style'); st.textContent = `
+@media (max-width: 640px) {
+  /* nella barra in alto il titolo sparisce: la pagina ce l'ha già sotto, e
+     su 375 px quello spazio serve alle icone (si leggeva «Age…») */
+  .topbar .title, .topbar .crumb { display:none; }
+  .page-head { flex-direction:column; align-items:stretch; gap:12px; }
+  .page-head .actions { width:100%; }
+
+  /* filtri e bottoni: vanno a capo. Scorrere di lato nascondeva mezzo tasto
+     verde, e un tasto tagliato sembra un guasto. */
+  .page-head .actions, .toolbar { flex-wrap:wrap; row-gap:8px; }
+  .page-head .actions > *, .toolbar > * { max-width:100%; }
+  .page-head .actions .btn, .toolbar .btn { flex:0 1 auto; }
+  .toolbar .input, .page-head .actions .input { min-width:0; width:100%; }
+  .seg { max-width:100%; overflow-x:auto; scrollbar-width:none; }
+  .seg::-webkit-scrollbar { display:none; }
+
+  /* le tabelle diventano schede: una riga, una scheda */
+  .table-wrap { overflow:visible; max-height:none; box-shadow:none; }
+  .rf-tab-schede { display:block; width:100%; border-collapse:separate; }
+  .rf-tab-schede thead { display:none; }
+  .rf-tab-schede tbody, .rf-tab-schede tr, .rf-tab-schede td { display:block; width:auto; }
+  .rf-tab-schede tr { border:1px solid var(--border); border-radius:10px; background:var(--surface); padding:10px 12px; margin-bottom:8px; }
+  .rf-tab-schede tr:hover { border-color:var(--accent); }
+  /* etichetta a sinistra e valore di seguito, con il rientro sporgente: così
+     un valore fatto di due pezzi («01.03.1950» e «(60)») resta sulla stessa
+     riga invece di finire sotto l'etichetta. */
+  .rf-tab-schede td { padding:3px 0 3px 100px; text-indent:-100px; border:0; font-size:13px; white-space:normal; line-height:1.45; }
+  .rf-tab-schede td::before { content:attr(data-l); display:inline-block; width:92px; margin-right:8px; text-indent:0;
+    color:var(--text-3); font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; vertical-align:baseline; }
+  .rf-tab-schede td:first-child { padding:0 0 6px; text-indent:0; font-size:15.5px; font-weight:600; }
+  .rf-tab-schede td:first-child::before { display:none; }
+  .rf-tab-schede td:empty { display:none; }
+  /* il rientro sporgente non deve scendere nei figli: una pastiglia lo
+     ereditava e il suo testo finiva 100 px a sinistra, fuori dalla vista. */
+  .rf-tab-schede td * { text-indent:0; }
+  .rf-tab-schede td .row { display:inline-flex; flex-wrap:wrap; gap:6px; vertical-align:baseline; }
+
+  /* l'agenda del giorno: lista invece di calendario */
+  .rf-ag-lista { display:flex; flex-direction:column; border-top:1px solid var(--border); }
+  .rf-ag-r { display:grid; grid-template-columns:52px minmax(0,1fr) auto; gap:12px; align-items:center; width:100%; text-align:left;
+    background:none; border:0; border-bottom:1px solid var(--border); padding:13px 2px; font:inherit; color:inherit; cursor:pointer; }
+  .rf-ag-r .h { font-variant-numeric:tabular-nums; font-size:14px; font-weight:600; color:var(--text-2); }
+  .rf-ag-r .c { min-width:0; display:flex; flex-direction:column; gap:2px; }
+  .rf-ag-r .n { font-size:15px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rf-ag-r .s { font-size:12.5px; color:var(--text-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rf-ag-r .pun { width:8px; height:8px; border-radius:50%; flex:none; }
+  .rf-ag-r.fatta { opacity:.55; }
+  .rf-ag-r.tardi .h { color:var(--warning); }
+
+  /* sale: una colonna, e le pastiglie non escono più dalla scheda */
+  .rf-or-mappa { grid-template-columns:minmax(0,1fr); }
+  .rf-or-sala { min-height:0; }
+  .rf-or-sala .t { flex-wrap:wrap; row-gap:4px; }
+  .rf-or-sala .t b { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rf-or-pill { font-size:9.5px; padding:2px 6px; max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+
+  /* le tessere dei numeri: due per riga, tutte della stessa altezza */
+  .grid-4, .grid-5 { grid-template-columns:repeat(2, minmax(0,1fr)); }
+  .stat .label, .card.tight .label { font-size:10px; line-height:1.3; }
+  .stat .value, .card .num { font-size:28px; }
+
+  /* la visita: la colonna dell'assistente sotto, non di fianco */
+  .rf-v-testa { position:static; }
+  .rf-v-testa .rf-v-spinta { margin-left:0; padding-left:0; width:100%; }
+  .rf-v-testa .rf-v-spinta .btn { width:100%; }
+  .rf-v-voce { grid-template-columns:minmax(0,1fr); gap:2px; }
+  .rf-v-voce .e { font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+
+  /* niente esce mai di lato */
+  #content, #content > .page { max-width:100%; overflow-x:hidden; }
+  .rf-cal-scorre { max-width:100%; }
+}
+`; document.head.appendChild(st); })();
+
+/* Le tabelle si sistemano dopo ogni disegno, e quando si gira il telefono. */
+(function () {
+  const r = render;
+  render = function () { const out = r.apply(this, arguments); try { rfTabelleTelefono(); } catch { /* pazienza */ } return out; };
+  let largo = (typeof window !== 'undefined' ? window.innerWidth : 0);
+  window.addEventListener('resize', () => {
+    // Si ridisegna solo quando si passa la soglia: sul telefono il resize
+    // scatta anche quando compare la tastiera.
+    const ora = window.innerWidth;
+    if ((largo <= 640) !== (ora <= 640)) { largo = ora; render(); } else { largo = ora; try { rfTabelleTelefono(); } catch { /* idem */ } }
+  });
+})();

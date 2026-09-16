@@ -28,3 +28,15 @@ Lo strato `public/prototipo/minimal.css` (caricato dopo `styles.css`, si toglie 
 
 Regola: il vetro resta sulla **cornice fissa** (barra in alto, colonna laterale, barra di stato), che esiste per tutta la sessione. Tutto ciò che appare e scompare — pannelli, fogli, palette, avvisi, cartellini — usa uno sfondo pieno (`--surface`) con bordo e ombra. Si perde la sfocatura, si guadagna una schermata che non si sporca.
 
+## Sul telefono (16.9.2026)
+
+Soglia **640 px**: sotto, l'interfaccia cambia forma, non solo dimensione. Sopra (tablet e computer) resta identica a prima.
+
+- **Le tabelle diventano schede.** Una riga = una scheda; l'intestazione sparisce e ogni cella si porta dietro il suo nome, preso dall'intestazione stessa (`rfTabelleTelefono()` dopo ogni disegno: vale per tutte le tabelle, anche quelle che verranno). Prima la tabella dei pazienti era larga 1250 px su uno schermo da 375 e si scorreva di lato.
+- **L'agenda del giorno diventa una lista** in ordine d'ora (`rfAgendaListaHtml`): ora, paziente, prestazione, medico. Cinque colonne da cento pixel non sono un'agenda, sono un indovinello. Il calendario a colonne resta sullo schermo grande; spariscono anche «Per medico / Per sala» e «Prepara la giornata», che in lista non servono.
+- **I filtri vanno a capo**, non scorrono di lato: un tasto tagliato a metà sembra un guasto.
+- **Nella barra in alto il titolo sparisce**: la pagina ce l'ha già sotto, e su 375 px quello spazio serve alle icone (si leggeva «Age…»).
+- **Le sale stanno in una colonna**, le pastiglie di stato non escono più dalla scheda.
+- Nella pagina della visita la colonna dell'assistente passa sotto la parte clinica (soglia 980 px) e i tasti principali diventano larghi quanto lo schermo.
+
+Misura: sulle 15 pagine raggiungibili, **zero elementi fuori dallo schermo** a 375 px e nessuno scorrimento orizzontale della pagina.
