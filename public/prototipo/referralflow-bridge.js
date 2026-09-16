@@ -309,7 +309,7 @@ PAGES.home = () => {
           const daChiamare = (o.ingressi || []).filter(i => i.azione === 'chiama').length;
           return `${rfOrMsg()}<div class="card"><div class="card-head"><span class="section-title">Accoglienza</span><span class="caption">${arrivati} in attesa${daChiamare ? ` · <b>${daChiamare} da chiamare</b>` : ''}</span></div>
             ${c.testo}
-            <div class="rf-or-acc" style="margin-top:10px">${c.righe}</div></div>`;
+            <div class="rf-or-acc scorre" style="margin-top:10px">${c.righe}</div></div>`;
         })()}
       </div>
     </div>`;
@@ -4158,6 +4158,9 @@ PAGES.sale = () => {
 .rf-or-acc .r .sis b { color:var(--text); }
 .rf-or-acc .r .az { display:flex; gap:6px; }
 .rf-or-acc .r.fatto { opacity:.55; }
+.rf-or-acc.scorre { max-height:min(62vh, 620px); overflow-y:auto; overscroll-behavior:contain; padding-right:4px; }
+.rf-or-acc.scorre::-webkit-scrollbar { width:8px; }
+.rf-or-acc.scorre::-webkit-scrollbar-thumb { background:var(--border-2); border-radius:4px; }
 .rf-or-acc .r.compatta { grid-template-columns:46px minmax(0,1.3fr) minmax(0,1.2fr) auto; font-size:13px; padding:7px 0; }
 .rf-or-acc .r.compatta .m { display:none; }
 .rf-or-acc .r.compatta .az { flex-wrap:wrap; justify-content:flex-end; }
@@ -4508,8 +4511,25 @@ PAGES.stanza = () => {
 };
 function rfOrchScegliStanza(n) { RF.stanzaScelta = n; try { localStorage.setItem('rf-stanza', n); } catch {} render(); }
 
+/* L'elenco dell'accoglienza resta in ordine d'ora, ma si apre dove siamo
+   adesso: alle tre del pomeriggio nessuno vuole scorrere mezza mattinata di
+   pazienti già usciti. Chi ha fatto la sua visita resta sopra, a portata di
+   rotella. Si riposiziona solo quando cambia la persona in cima, così una
+   ricarica ogni venti secondi non fa saltare la lista sotto le mani. */
+function rfOrScorriAccoglienza() {
+  const box = document.querySelector('.rf-or-acc.scorre');
+  if (!box) { RF.orAccAncora = null; return; }
+  const righe = [...box.querySelectorAll('.r')];
+  const i = righe.findIndex(r => !r.classList.contains('fatto'));
+  if (i <= 0) return;
+  const ancora = righe[i].textContent.slice(0, 40);
+  if (RF.orAccAncora === ancora) return;
+  RF.orAccAncora = ancora;
+  box.scrollTop = Math.max(0, righe[i].offsetTop - box.offsetTop - 8);
+}
+
 /* Il caricamento e il battito seguono la pagina. */
 (function () {
   const r = render;
-  render = function () { const out = r.apply(this, arguments); try { rfOrchSincronizza(); } catch {} return out; };
+  render = function () { const out = r.apply(this, arguments); try { rfOrchSincronizza(); rfOrScorriAccoglienza(); } catch {} return out; };
 })();
