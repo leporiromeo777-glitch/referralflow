@@ -626,6 +626,8 @@ Dal 16.9 sera **l'accoglienza sta nella Home, al posto della colonna destra** (a
 
 **E. La pagina «Visita»** (16.9.2026 sera) — il centro di controllo di una singola visita, ridotto all'osso perché si guarda con un paziente davanti. Si apre scrivendo il nome nella barra di ricerca (cerca fra gli appuntamenti di oggi: quelli del piano più quelli dell'agenda che il piano non ha preso), oppure dall'agenda, dove la scheda di un appuntamento di oggi ha «Apri la visita».
 
+**L'elenco iniziale è dei propri pazienti.** Chi sta guardando lo dice il server quando l'utente è collegato a un medico (`providers.user_id`); finché in studio entrano tutti con lo stesso account, la prima volta la pagina chiede «Chi sei?» e la scelta resta su quel dispositivo — con «Mostrami tutti» per la segreteria. Il filtro **cade appena si scrive un nome**: altrimenti il paziente di un collega sarebbe irraggiungibile proprio dalla pagina fatta per aprirlo. In cima, il conto della giornata: «3 fatte, 6 rimaste».
+
 Dentro c'è il nome grande, la prestazione, il medico col suo ritardo, e **un tasto solo**: *Inizia visita*. Da lì un cronometro che gira al secondo e diventa rosso quando supera la durata prevista, poi *Fine visita* e *Il paziente è uscito*. In fondo le ore, in colonna: quella dell'agenda, l'arrivo, l'ingresso in stanza, **l'inizio vero** e la fine — e dove manca c'è scritto perché («si registra premendo Inizia visita»).
 
 È la risposta alla domanda «come sappiamo quando il medico comincia davvero»: lo sappiamo perché qualcuno tocca quel tasto, e quel tocco è anche ciò che misura la durata (§9). Senza, l'inizio resta una stima.

@@ -403,7 +403,7 @@ export async function tick(studioId: string) {
 }
 
 // ---------- lo stato operativo per l'interfaccia (§14) ----------
-export async function statoOperativo(studioId: string) {
+export async function statoOperativo(studioId: string, userId?: string | null) {
   await tick(studioId).catch((e) => log(`tick: ${(e as Error).message}`));
   const g = await caricaGiornata(studioId);
   const r = costruisciRichiesta(g);
@@ -448,6 +448,11 @@ export async function statoOperativo(studioId: string) {
     const d = decidiIngresso({ arrivoMedico, adesso: g.adesso, prep: v.prep, pazienteArrivato: true, stanzaLibera, assistenteLibero: true }, g.p);
     return { id: x.id, etichetta: x.etichetta, sala: x.sala, medico: x.medico, azione: d.azione, quando: d.quando, quandoHm: hm(d.quando), perche: d.perche };
   });
+  // Chi sta guardando, se l'utente è collegato a un medico in `providers`.
+  // Finché in studio entrano tutti con lo stesso account resta vuoto e la
+  // persona sceglie sé stessa nella pagina; quando ci saranno utenti veri
+  // questo basterà.
+  const [io] = userId ? await query<{ nome: string }>('select nome from providers where studio_id = $1 and user_id = $2 and attivo limit 1', [studioId, userId]) : [];
   const [spieg, proposte, anomalie] = await Promise.all([
     query<{ id: number; livello: string; testo: string; at: string; appointment_id: string | null }>(`select id, livello, testo, at::text, appointment_id from orchestrazione_spiegazioni where studio_id = $1 and giorno = $2::date and livello <> 'silenzio' order by at desc limit 12`, [studioId, g.giorno]),
     query<{ id: string; perche: string; modello: string; created_at: string; strategia: unknown }>(`select id, perche, modello, created_at::text, strategia from orchestrazione_proposte where studio_id = $1 and giorno = $2::date and stato = 'aperta' order by created_at desc`, [studioId, g.giorno]),
@@ -455,6 +460,7 @@ export async function statoOperativo(studioId: string) {
   ]);
   return {
     giorno: g.giorno, adesso: g.adesso, adessoHm: hm(g.adesso), versione: piano?.versione ?? null, motore: piano?.motore ?? null,
+    io: io?.nome ?? null,
     sale, medici, pazienti, ingressi, avvisi: spieg, proposte, anomalie,
     senzaSala: piano ? pazienti.filter((x) => !x.sala && !['dimesso', 'assente', 'annullato'].includes(x.stato)).map((x) => ({ id: x.id, etichetta: x.etichetta, medico: x.medico })) : [],
     senzaPrestazione: g.app.filter((a) => !a.prestazione).length,

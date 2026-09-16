@@ -7,6 +7,6 @@ export const dynamic = 'force-dynamic';
 // massimo ogni 30, dentro.
 export async function GET() {
   const a = await sessioneStudio(); if ('r' in a) return a.r;
-  try { return NextResponse.json(await statoOperativo(a.s.studioId), senzaCache); }
+  try { return NextResponse.json(await statoOperativo(a.s.studioId, a.s.id), senzaCache); }
   catch (e) { console.log(`[orchestrazione] stato: ${(e as Error).message}`); return NextResponse.json({ errore: 'stato non disponibile' }, { status: 500 }); }
 }

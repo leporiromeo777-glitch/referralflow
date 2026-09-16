@@ -4685,6 +4685,13 @@ window.addEventListener('resize', () => { try { rfOrAltezzaAccoglienza(); } catc
 
 if (typeof NAV_META !== 'undefined') NAV_META.visite = ['Visita', 'visits'];
 RF.visitaSel = null; RF.visitaQ = ''; RF.visitaCrono = null;
+try { RF.visitaIo = localStorage.getItem('rf-medico') || ''; } catch { RF.visitaIo = ''; }
+/* Chi sta guardando la pagina. Se l'utente è collegato a un medico in
+   `providers` lo dice il server (`io`); altrimenti lo sceglie la persona e
+   resta su questo dispositivo — oggi in studio entrano tutti con lo stesso
+   account, e senza questo la lista sarebbe di tutti. «*» vuol dire «tutti». */
+function rfVisChiSono() { const o = RF.orch; return (o && o.io) || RF.visitaIo || ''; }
+function rfVisIoScegli(nome) { RF.visitaIo = nome; try { localStorage.setItem('rf-medico', nome); } catch {} render(); }
 
 /* Gli appuntamenti fra cui si cerca: quelli di oggi che il gemello conosce
    (hanno stato e stanza), e in coda quelli dell'agenda del giorno che il
@@ -4701,10 +4708,15 @@ function rfVisElenco() {
   }
   return [...dal.values()].sort((a, b) => a.teorica - b.teorica);
 }
-function rfVisTrova(q) {
+function rfVisTrova(q, tuttiIMedici) {
   const t = String(q || '').trim().toLowerCase();
-  const tutte = rfVisElenco();
-  if (t.length < 2) return tutte.filter(x => !['dimesso', 'assente', 'annullato'].includes(x.stato)).slice(0, 12);
+  const io = rfVisChiSono();
+  let tutte = rfVisElenco();
+  // I miei pazienti: il filtro cade quando si cerca per nome, altrimenti un
+  // paziente di un collega diventerebbe irraggiungibile proprio dalla pagina
+  // fatta per aprirlo.
+  if (!tuttiIMedici && io && io !== '*' && t.length < 2) tutte = tutte.filter(x => rfNomeNudo(x.medico || '').toLowerCase() === rfNomeNudo(io).toLowerCase());
+  if (t.length < 2) return tutte.filter(x => !['dimesso', 'assente', 'annullato'].includes(x.stato)).slice(0, 40);
   return tutte.filter(x => `${x.etichetta} ${x.medico} ${x.prestazione}`.toLowerCase().includes(t)).slice(0, 12);
 }
 function rfVisCerca(q) {
@@ -4748,9 +4760,25 @@ PAGES.visite = () => {
   const sel = RF.visitaSel ? rfVisElenco().find(x => x.id === RF.visitaSel) : null;
 
   if (!sel) {
-    // In corso adesso: se una visita è aperta si va lì con un tasto solo.
-    const inCorso = rfVisElenco().filter(x => x.stato === 'in_visita');
-    return `<div class="page-head"><div><h2 class="page-title">Visita</h2><div class="page-sub">Scrivi il nome del paziente, o scegli dall'elenco di oggi</div></div></div>
+    const io = rfVisChiSono();
+    // Chi sei: senza, la lista sarebbe di tutto lo studio. Si sceglie una
+    // volta e resta su questo dispositivo, finché non ci sono utenti veri.
+    if (!io) {
+      const medici = [...new Set(rfVisElenco().map(x => x.medico).filter(Boolean))].sort((a, b) => rfNomeCorto(a).localeCompare(rfNomeCorto(b)));
+      return `<div class="page-head"><div><h2 class="page-title">Visita</h2><div class="page-sub">Chi sei?</div></div></div>
+        <div class="rf-vis-cerca"><div class="card">
+          <p class="meta" style="margin:0 0 12px">La pagina mostra i <b>tuoi</b> pazienti di oggi. Scegli una volta: resta su questo dispositivo, e si cambia quando vuoi.</p>
+          <div class="rf-or-scelta">${medici.map(m => `<button class="btn" onclick="rfVisIoScegli('${rfEsc(m)}')">${rfEsc(rfNomeNudo(m))}</button>`).join('') || '<span class="caption">Nessun medico con appuntamenti oggi.</span>'}</div>
+          <div class="row mt-16"><button class="btn sm ghost" onclick="rfVisIoScegli('*')">Mostrami tutti</button></div>
+        </div></div>`;
+    }
+    const inCorso = rfVisElenco().filter(x => x.stato === 'in_visita' && (io === '*' || rfNomeNudo(x.medico || '').toLowerCase() === rfNomeNudo(io).toLowerCase()));
+    // Chi è già in «In corso adesso» non si ripete nell'elenco sotto.
+    const mie = rfVisTrova(RF.visitaQ || '').filter(x => !inCorso.some(y => y.id === x.id));
+    const rimasti = rfVisElenco().filter(x => !['dimesso', 'assente', 'annullato', 'in_visita'].includes(x.stato) && (io === '*' || rfNomeNudo(x.medico || '').toLowerCase() === rfNomeNudo(io).toLowerCase())).length;
+    const fatte = rfVisElenco().filter(x => ['dimesso', 'visita_finita'].includes(x.stato) && (io === '*' || rfNomeNudo(x.medico || '').toLowerCase() === rfNomeNudo(io).toLowerCase())).length;
+    return `<div class="page-head"><div><h2 class="page-title">Visita</h2>
+        <div class="page-sub">${io === '*' ? 'Tutti i pazienti di oggi' : `Pazienti di <b>${rfEsc(rfNomeNudo(io))}</b>`} · ${fatte} ${fatte === 1 ? 'fatta' : 'fatte'}, ${rimasti} ${rimasti === 1 ? 'rimasta' : 'rimaste'}${(RF.orch && RF.orch.io) ? '' : ` · <a href="#" onclick="event.preventDefault();rfVisIoScegli('')">cambia</a>`}</div></div></div>
       ${rfOrMsg()}
       <div class="rf-vis-cerca">
         ${inCorso.length ? `<div class="card" style="margin-bottom:12px"><div class="card-head"><span class="section-title">In corso adesso</span></div>
@@ -4758,7 +4786,8 @@ PAGES.visite = () => {
         <div class="card">
           <input class="input" id="rf-vis-q" placeholder="Nome del paziente…" autocomplete="off" value="${rfEsc(RF.visitaQ || '')}"
             oninput="rfVisCerca(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();const l=rfVisTrova(this.value);if(l.length)rfVisApri(l[0].id);}">
-          <div class="rf-vis-lista" id="rf-vis-lista">${rfVisRighe(rfVisTrova(RF.visitaQ || ''))}</div>
+          <div class="rf-vis-lista" id="rf-vis-lista">${rfVisRighe(mie)}</div>
+          ${io !== '*' ? `<div class="caption mt-8">Scrivendo un nome si cerca fra <b>tutti</b> i pazienti di oggi, non solo i tuoi.</div>` : ''}
         </div>
       </div>`;
   }
