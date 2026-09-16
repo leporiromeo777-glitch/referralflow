@@ -96,6 +96,14 @@ export const TRANSIZIONE_DI_EVENTO: Partial<Record<TipoEvento, StatoPaziente>> =
 
 // Gli eventi che fanno ripartire il solver (§7). Gli altri aggiornano lo
 // stato e basta.
+// «Arrivato» vuol dire «è in sala d'attesa»: chi segna l'arrivo all'accoglienza
+// non deve fare un secondo gesto per dirlo, e il medico deve vedere il
+// paziente subito. Lo stato `arrivato` resta per chi non è una persona — il
+// robot legge l'agenda e dell'attesa non sa niente.
+export function statoDopoArrivo(nuovo: StatoPaziente, fonte: Fonte): StatoPaziente {
+  return nuovo === 'arrivato' && fonte === 'persona' ? 'in_attesa' : nuovo;
+}
+
 export const RIPIANIFICA: Set<TipoEvento> = new Set([
   'paziente_arrivato', 'paziente_in_ritardo', 'paziente_assente', 'visita_iniziata', 'visita_quasi_finita', 'visita_finita',
   'medico_in_ritardo', 'sala_libera', 'sala_occupata', 'sala_fuori_servizio', 'sala_ripristinata', 'apparecchio_indisponibile',

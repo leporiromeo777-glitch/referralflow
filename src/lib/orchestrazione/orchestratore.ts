@@ -5,7 +5,7 @@ import { query } from '@/lib/db';
 import { generaOllamaEsito } from '@/lib/ollama';
 import { PARAMETRI_DEFAULT, fondiParametri, type Parametri } from './parametri';
 import { costruisciGrafo, distanzaSecondi, entraNelPiano, prestazioneDi, salaPreferita, salePossibili, stessaPersona, type Grafo } from './grafo';
-import { RIPIANIFICA, STATI_PAZIENTE, TRANSIZIONE_DI_EVENTO, rigidita, ritardoMedico, statoSala, transizioneAmmessa, type Fonte, type StatoPaziente, type TipoEvento } from './stato';
+import { RIPIANIFICA, STATI_PAZIENTE, TRANSIZIONE_DI_EVENTO, rigidita, ritardoMedico, statoDopoArrivo, statoSala, transizioneAmmessa, type Fonte, type StatoPaziente, type TipoEvento } from './stato';
 import { stimaDurata, type Fissata, type Osservazione } from './previsione';
 import { misura, pianifica, type ApparecchioDisp, type AssistenteDisp, type MedicoDisp, type Piano, type Pianificata, type StanzaDisp, type VisitaDaPianificare } from './riparatore';
 import { decidiIngresso, dentroOrizzonte, hm, ritardoDaRipianificare, ritardoResiduo, spostaABlocco } from './orizzonte';
@@ -316,7 +316,10 @@ export async function registraEvento(studioId: string, ev: EventoIn) {
       return { ok: false, errore: `da «${st.stato}» non si passa a «${nuovoStato}»${fonte === 'sistema' ? '' : ': lo può fare solo con un altro passaggio'}`, anomalia: true };
     }
     const a = g.app.find((x) => x.id === appId)!;
-    const campi: string[] = ['stato = $3', 'updated_at = now()']; const val: any[] = [appId, studioId, nuovoStato];
+    // Chi segna un arrivo lo porta dritto in sala d'attesa (`statoDopoArrivo`):
+    // due gesti per dire una cosa sola erano uno di troppo.
+    const statoFinale = statoDopoArrivo(nuovoStato, fonte);
+    const campi: string[] = ['stato = $3', 'updated_at = now()']; const val: any[] = [appId, studioId, statoFinale];
     const set = (c: string, v: any) => { val.push(v); campi.push(`${c} = $${val.length}`); };
     if (nuovoStato === 'arrivato') set('arrivo', g.adesso);
     if (nuovoStato === 'chiamato') { set('chiamato_a', g.adesso); set('sala', ev.sala ?? g.corrente?.visite.get(appId)?.sala ?? null); }

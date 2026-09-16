@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PARAMETRI_DEFAULT, fondiParametri } from './parametri';
 import { costruisciGrafo, entraNelPiano, leggiPrestazioni, medicoAbilitato, salaPreferita, salePossibili } from './grafo';
-import { rigidita, ritardoMedico, statoSala, transizioneAmmessa } from './stato';
+import { rigidita, ritardoMedico, statoDopoArrivo, statoSala, transizioneAmmessa } from './stato';
 import { mediana, riepilogoDurate, scartoMedico, stimaDurata } from './previsione';
 import { pianifica, type VisitaDaPianificare } from './riparatore';
 import { decidiIngresso, livelloComunicazione, spostaABlocco } from './orizzonte';
@@ -277,4 +277,17 @@ test('la strategia del modello grande: solo la forma fissa, solo mosse ammesse, 
   assert.deepEqual([...a.forzaAttesa], ['P-21']);
   assert.equal(a.riordini.length, 0);
   assert.equal(a.scartate.length, 4, 'congelato, medici diversi, congelato, stanza sconosciuta');
+});
+
+test('arrivo segnato da una persona porta dritto in sala d\'attesa', () => {
+  // Il gesto della segretaria è uno solo: «arrivato». Il paziente deve
+  // comparire subito nella pagina del suo medico, senza un secondo tocco.
+  assert.equal(statoDopoArrivo('arrivato', 'persona'), 'in_attesa');
+  // Il robot invece dice solo che l'appuntamento c'è: dell'attesa non sa niente.
+  assert.equal(statoDopoArrivo('arrivato', 'robot'), 'arrivato');
+  // Gli altri stati non li tocca nessuno.
+  assert.equal(statoDopoArrivo('in_visita', 'persona'), 'in_visita');
+  // E la catena che percorre è ammessa dalla macchina a stati.
+  assert.ok(transizioneAmmessa('atteso', 'arrivato', 'persona'));
+  assert.ok(transizioneAmmessa('arrivato', 'in_attesa', 'persona'));
 });
