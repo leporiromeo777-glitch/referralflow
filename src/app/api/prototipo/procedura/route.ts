@@ -4,7 +4,7 @@ import { isUuid } from '@/lib/cartella';
 import { cambiamentiUltimaVisita, chiusuraMese, controlloPrimaDellaFirma, lettereRitardo, preparazioneGiornata, richiamiMese } from '@/lib/procedure';
 import { proceduraPerNome } from '@/lib/procedure-registro';
 
-const RUOLO: Record<string, string> = { segretaria: 'secretary', medico: 'doctor', admin: 'org_admin', inviante: 'inviante' };
+const RUOLO: Record<string, string> = { segretaria: 'secretary', medico: 'doctor', admin: 'org_admin', inviante: 'inviante', assistente: 'assistant', tecnico: 'tech_admin' };
 
 export const dynamic = 'force-dynamic';
 

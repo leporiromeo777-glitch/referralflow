@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 // (src/lib/interprete.ts). Solo nei casi «probabili» il modello locale fa da
 // giudice tra i candidati, e la sua scelta vale solo se è nel registro; quel
 // giudizio lascia una traccia. Mai il testo della domanda nei log.
-const RUOLO: Record<string, string> = { segretaria: 'secretary', medico: 'doctor', admin: 'org_admin', inviante: 'inviante' };
+const RUOLO: Record<string, string> = { segretaria: 'secretary', medico: 'doctor', admin: 'org_admin', inviante: 'inviante', assistente: 'assistant', tecnico: 'tech_admin' };
 const MODELLO = process.env.PROTOTIPO_LLM || 'gemma3:12b';
 
 export async function POST(req: NextRequest) {

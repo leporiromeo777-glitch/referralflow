@@ -1280,3 +1280,9 @@ create table if not exists richiami_telefonate (
 );
 create index if not exists richiami_telefonate_studio_idx on richiami_telefonate (studio_id, created_at desc);
 create index if not exists richiami_telefonate_origine_idx on richiami_telefonate (studio_id, origine, origine_id);
+-- Due ruoli che esistevano nell'interfaccia ma non nel database (16.9.2026):
+-- l'aiuto medico e il tecnico. Senza, ogni persona dello studio doveva
+-- entrare come segretaria o come admin, e il registro degli accessi non
+-- sapeva distinguere chi fosse.
+alter type user_role add value if not exists 'assistente';
+alter type user_role add value if not exists 'tecnico';

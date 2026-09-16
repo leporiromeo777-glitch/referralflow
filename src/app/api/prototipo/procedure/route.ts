@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 // procedure che il ruolo può lanciare (frasi, input, chip, chi ne risponde e
 // quando) e l'organizzazione dello studio dalla wiki. Solo ruoli, nessun dato
 // clinico.
-const RUOLO: Record<string, string> = { segretaria: 'secretary', medico: 'doctor', admin: 'org_admin', inviante: 'inviante' };
+const RUOLO: Record<string, string> = { segretaria: 'secretary', medico: 'doctor', admin: 'org_admin', inviante: 'inviante', assistente: 'assistant', tecnico: 'tech_admin' };
 
 export async function GET() {
   const session = await getSession();

@@ -19,6 +19,7 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 - [[Piattaforma/Demo pubblica]] — la piattaforma vera con dati inventati, raggiungibile da fuori con un link
 - [[Piattaforma/Una interfaccia sola]] — l'interfaccia è quella nuova; che cosa resta nelle pagine vecchie
 - [[Piattaforma/Richiami e buchi]] — chi va richiamato e dove metterlo: i buchi in agenda e le proposte
+- [[Piattaforma/Accessi e ruoli]] — i cinque accessi dello studio, i ruoli veri e quello che manca
 - [[Piattaforma/Automazioni]] — cron, SMS, watchdog, report
 - [[Piattaforma/Robot agenda MediOnline]]
 - [[Piattaforma/Funzioni fatte]] — tutto ciò che esiste già, in ordine inverso

@@ -41,7 +41,7 @@ function eta(dob: string | null): number | '' {
 function slug(s: string): string {
   return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
-const RUOLO: Record<string, string> = { segretaria: 'secretary', medico: 'doctor', admin: 'org_admin', inviante: 'secretary' };
+const RUOLO: Record<string, string> = { segretaria: 'secretary', medico: 'doctor', admin: 'org_admin', inviante: 'secretary', assistente: 'assistant', tecnico: 'tech_admin' };
 const ETICHETTA_ESAME: Record<string, string> = { ecg: 'ECG', eco: 'Ecocardiogramma', holter: 'Holter', ergometria: 'Ergometria', duplex: 'Duplex', laboratorio: 'Laboratorio', referto: 'Referto di esame', altro: 'Documento' };
 const DOC_TYPE: Record<string, string> = { referto: 'report', ecg: 'ecg', imaging: 'imaging', lettera: 'letter', consenso: 'consent', altro: 'admin' };
 
