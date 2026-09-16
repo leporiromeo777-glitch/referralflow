@@ -4666,7 +4666,9 @@ window.addEventListener('resize', () => { try { rfOrAltezzaAccoglienza(); } catc
 (function () { const st = document.createElement('style'); st.textContent = `
 .rf-vis { max-width:760px; margin:0 auto; }
 .rf-vis-cerca { max-width:620px; margin:0 auto; }
-.rf-vis-lista { display:flex; flex-direction:column; margin-top:10px; max-height:56vh; overflow:auto; }
+.rf-vis-di { margin:12px 2px 0; font-size:11.5px; color:var(--text-3); letter-spacing:.02em; }
+.rf-vis-di b { color:var(--text-2); font-weight:650; }
+.rf-vis-lista { display:flex; flex-direction:column; margin-top:6px; max-height:56vh; overflow:auto; }
 /* Un elenco e basta: una riga per paziente, una riga sottile fra una e
    l'altra. Ora, nome, prestazione, stato. Niente riquadri. */
 .rf-vis-v { display:grid; grid-template-columns:52px minmax(0,1fr) auto; gap:12px; align-items:baseline; width:100%; text-align:left;
@@ -4736,12 +4738,24 @@ function rfVisTrova(q, tuttiIMedici) {
   if (t.length < 2) return tutte.filter(x => !['dimesso', 'assente', 'annullato'].includes(x.stato)).slice(0, 40);
   return tutte.filter(x => `${x.etichetta} ${x.medico} ${x.prestazione}`.toLowerCase().includes(t)).slice(0, 12);
 }
+// Di chi sono i pazienti dell'elenco, scritto sopra l'elenco stesso: appena
+// si scrive un nome il filtro cade — un paziente di un collega dev'essere
+// raggiungibile — e lì bisogna che si veda, o sembra che il filtro non ci sia.
+function rfVisDi() {
+  const io = rfVisChiSono();
+  const cerca = String(RF.visitaQ || '').trim().length >= 2;
+  if (cerca) return `Fra <b>tutti</b> i pazienti di oggi`;
+  if (io === '*') return `Tutti i pazienti di oggi${(RF.orch && RF.orch.io) ? '' : ` · <a href="#" onclick="event.preventDefault();rfVisIoScegli('')">solo i miei</a>`}`;
+  return `I pazienti di <b>${rfEsc(rfNomeNudo(io))}</b>${(RF.orch && RF.orch.io) ? '' : ` · <a href="#" onclick="event.preventDefault();rfVisIoScegli('*')">tutti</a>`}`;
+}
 function rfVisCerca(q) {
   RF.visitaQ = q;
+  const di = document.getElementById('rf-vis-di'); if (di) di.innerHTML = rfVisDi();
   const box = document.getElementById('rf-vis-lista'); if (!box) return;
-  box.innerHTML = rfVisRighe(rfVisTrova(q));
+  const io = rfVisChiSono();
+  box.innerHTML = rfVisRighe(rfVisTrova(q), io === '*' || String(q || '').trim().length >= 2);
 }
-function rfVisRighe(lista) {
+function rfVisRighe(lista, conMedico) {
   if (!lista.length) return '<div class="caption" style="padding:12px 4px">Nessun appuntamento con questo nome, oggi.</div>';
   return lista.map(p => {
     // L'ora vera quando c'è: se il medico è entrato, o se il piano l'ha
@@ -4749,7 +4763,7 @@ function rfVisRighe(lista) {
     const vera = p.inizioReale ?? (p.inizio != null && p.inizio > p.teorica + 4 ? p.inizio : null);
     return `<button type="button" class="rf-vis-v st-${rfEsc(p.stato)}" onclick="rfVisApri('${rfEsc(p.id)}')" title="${rfEsc(p.etichetta)} · ${rfEsc(rfNomeNudo(p.medico || 'senza medico'))}${p.sala ? ` · ${rfEsc(p.sala)}` : ''}">
       <span class="h">${rfOrHm(vera ?? p.teorica)}</span>
-      <span class="n">${rfEsc(p.etichetta)}${p.prestazione ? ` <span class="pr">${rfEsc(p.prestazione)}</span>` : ''}</span>
+      <span class="n">${rfEsc(p.etichetta)}${p.prestazione ? ` <span class="pr">${rfEsc(p.prestazione)}</span>` : ''}${conMedico ? ` <span class="pr">· ${rfEsc(rfNomeCorto(p.medico || 'senza medico'))}</span>` : ''}</span>
       <span class="st">${rfEsc(rfOrStato(p.stato))}${p.sala ? ` · ${rfEsc(p.sala)}` : ''}</span></button>`;
   }).join('');
 }
@@ -4804,12 +4818,12 @@ PAGES.visite = () => {
       ${rfOrMsg()}
       <div class="rf-vis-cerca">
         ${inCorso.length ? `<div class="card" style="margin-bottom:12px"><div class="card-head"><span class="section-title">In corso adesso</span></div>
-          ${rfVisRighe(inCorso)}</div>` : ''}
+          ${rfVisRighe(inCorso, io === '*')}</div>` : ''}
         <div class="card">
           <input class="input" id="rf-vis-q" placeholder="Nome del paziente…" autocomplete="off" value="${rfEsc(RF.visitaQ || '')}"
             oninput="rfVisCerca(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();const l=rfVisTrova(this.value);if(l.length)rfVisApri(l[0].id);}">
-          <div class="rf-vis-lista" id="rf-vis-lista">${rfVisRighe(mie)}</div>
-          ${io !== '*' ? `<div class="caption mt-8">Scrivendo un nome si cerca fra <b>tutti</b> i pazienti di oggi, non solo i tuoi.</div>` : ''}
+          <div class="rf-vis-di" id="rf-vis-di">${rfVisDi()}</div>
+          <div class="rf-vis-lista" id="rf-vis-lista">${rfVisRighe(mie, io === '*')}</div>
         </div>
       </div>`;
   }
