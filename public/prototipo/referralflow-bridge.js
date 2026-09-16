@@ -3674,6 +3674,13 @@ function rfSugVisita(v, stanza) {
     : 'Sala dedotta da chi ha la stanza in questa fascia: MediOnline non scrive dove avviene la visita.'}</div>`);
   return righe.join('');
 }
+/* Quanto una stanza è presa davvero in questa fascia: dalla prima all'ultima
+   visita. Lo calcola la piattaforma (`prese` in src/lib/sale), così il
+   calendario e quel che legge l'AI dicono la stessa cosa. */
+function rfPresaFascia(stanza, seg) {
+  const p = (RF.data && RF.data.pianoSale && RF.data.pianoSale.prese) || {};
+  return (p[stanza] || []).find(x => x.dalle >= seg.dalle && x.dalle < seg.alle) || null;
+}
 function rfVisiteFascia(stanza, seg) {
   return rfVisiteSala(stanza).filter(v => v.inizio >= seg.dalle && v.inizio < seg.alle);
 }
@@ -3990,16 +3997,28 @@ PAGES.sale = () => {
       <span class="sf">${n ? `${n} ${n === 1 ? 'visita' : 'visite'}` : `libera${st.seg && st.seg.chi ? ` · di ${rfEsc(rfNomeCorto(st.seg.chi))}` : ''}`}${r.funzione ? ` · ${rfEsc(r.funzione)}` : ''}</span></button>`;
   };
   const colonna = (r) => `<div class="rf-cs-col${RF.salaAperta === r.stanza ? ' sel' : ''}" style="--riga:${(60 * M).toFixed(2)}px">
-    ${(r.segmenti || []).map(s => {
-      const senzaVisite = !rfVisiteFascia(r.stanza, s).length;
+    ${(r.segmenti || []).flatMap(s => {
+      const dentro = rfVisiteFascia(r.stanza, s);
       const vuoto = rfTestoVuoto(s);
-      if (!s.chi && vuoto !== 'da decidere') return '';
-      const h = (rfMinuti(s.alle) - rfMinuti(s.dalle)) * M - 3;
-      return `<button class="rf-cs-b${s.chi ? '' : ' aperta'}${senzaVisite && s.chi ? ' vuota' : ''}" style="top:${su(s.dalle).toFixed(1)}px;height:${Math.max(20, h).toFixed(1)}px;--h:${rfTinta(s.chi || 'x')}"
-        onclick="rfSalaApri('${rfEsc(r.stanza)}')" data-sug="${rfEsc(`<div class="t">${rfEsc(r.stanza)}${r.funzione ? ` · ${rfEsc(r.funzione)}` : ''}</div><div class="r"><b>${rfEsc(s.dalle)}–${rfEsc(s.alle)}</b> · ${rfEsc(s.chi ? rfNomeNudo(s.chi) : 'nessuno')}</div><div class="r">${rfEsc(s.perche || '')}${(() => { const q = rfVisiteFascia(r.stanza, s).length; return q ? ` · ${q} ${q === 1 ? 'visita' : 'visite'}` : ''; })()}</div>${r.nota ? `<div class="c">${rfEsc(r.nota)}</div>` : ''}`)}">
-        <span class="o">${rfEsc(s.dalle)}–${rfEsc(s.alle)}</span>
-        <span class="n">${rfEsc(s.chi ? rfNomeCorto(s.chi) : 'da decidere')}</span>
+      if (!s.chi && vuoto !== 'da decidere') return [];
+      // Di chi è la stanza resta disegnato per tutta la fascia, ma sbiadito:
+      // è la regola. Quanto è PRESA davvero lo dicono le visite — se uno ha
+      // visite solo al pomeriggio, il blocco pieno è solo il pomeriggio.
+      const presa = rfPresaFascia(r.stanza, s);
+      const blocco = (dalle, alle, cls, eti) => {
+        const h = (rfMinuti(alle) - rfMinuti(dalle)) * M - 3;
+        return `<button class="rf-cs-b${cls}" style="top:${su(dalle).toFixed(1)}px;height:${Math.max(20, h).toFixed(1)}px;--h:${rfTinta(s.chi || 'x')}"
+        onclick="rfSalaApri('${rfEsc(r.stanza)}')" data-sug="${rfEsc(`<div class="t">${rfEsc(r.stanza)}${r.funzione ? ` · ${rfEsc(r.funzione)}` : ''}</div><div class="r"><b>${rfEsc(dalle)}–${rfEsc(alle)}</b> · ${rfEsc(s.chi ? rfNomeNudo(s.chi) : 'nessuno')}</div><div class="r">${rfEsc(presa ? `stanza presa dalle ${presa.dalle} alle ${presa.alle}` : (s.perche || ''))}${dentro.length ? ` · ${dentro.length} ${dentro.length === 1 ? 'visita' : 'visite'}` : ''}</div>${presa ? `<div class="c">La fascia ${rfEsc(s.dalle)}–${rfEsc(s.alle)} è sua per regola; occupata solo per il tempo delle visite.</div>` : ''}${r.nota ? `<div class="c">${rfEsc(r.nota)}</div>` : ''}`)}">
+        <span class="o">${rfEsc(dalle)}–${rfEsc(alle)}</span>
+        <span class="n">${rfEsc(eti)}</span>
         ${s.manuale ? '<span class="am">a mano</span>' : ''}</button>`;
+      };
+      if (!s.chi) return [blocco(s.dalle, s.alle, ' aperta', 'da decidere')];
+      if (!presa) return [blocco(s.dalle, s.alle, ' vuota', rfNomeCorto(s.chi))];
+      return [
+        blocco(s.dalle, s.alle, ' vuota', ''),
+        blocco(presa.dalle, presa.alle < s.alle ? presa.alle : presa.alle, '', rfNomeCorto(s.chi)),
+      ];
     }).join('')}
     <div class="rf-cs-vv">${rfVisiteSala(r.stanza).map(v => {
       const h = (rfMinuti(v.fine) - rfMinuti(v.inizio)) * M - 1;

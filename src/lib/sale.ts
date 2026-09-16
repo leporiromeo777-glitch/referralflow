@@ -57,9 +57,16 @@ export type PrestazioneFuori = { nome: string; tranne: string[] };
 //     può stare in una di quelle, mai altrove — detto dallo studio il
 //     16.9.2026: niente sale dello sport, niente Sala 4 e 5.
 //
-// La differenza fra le due è quante stanze ammettono, non come funzionano: in
-// tutti e due i casi le visite non escono da quell'elenco, nemmeno se una
-// proposta o una casella aperta suggerirebbero altro.
+// La differenza fra le due è quante stanze ammettono, non come funzionano.
+//
+// La riga dice DUE cose, e la seconda è arrivata con Vanja Paveri il
+// 16.9.2026: quelle stanze sono le sue fra cui scegliere — anche quando il
+// titolare è un altro — e fuori da lì non va. Senza la prima metà la regola
+// non servirebbe a niente per chi nella pagina non ha nessuna stanza: Paveri
+// resterebbe «senza sala» come prima, e dire dove NON può stare non la mette
+// da nessuna parte. Non è un cambio di titolare: la usa quando è libera, e se
+// il titolare ce l'ha occupata la visita si vede accavallata come tutte le
+// altre.
 //
 // Le stanze si separano con «o» (o con «e»), non con la virgola: la virgola
 // in questa pagina separa le VOCI dell'elenco, e «in Sala 2, Sala 3» si
@@ -89,6 +96,24 @@ export function stanzaAmmessa(stanza: string, vincolo: SoloIn | undefined): bool
   return vincolo.stanze.some((x) => x.toLowerCase() === String(stanza ?? '').toLowerCase());
 }
 
+// Le AGENDE che non contano per le sale (16.9.2026). In MediOnline una
+// colonna è un'agenda, non un luogo, e alcune non sono di medici: «Labor» è
+// il prelievo. Il paziente del laboratorio passa in studio, ma non occupa una
+// stanza dei medici — e siccome quell'appuntamento arriva senza titolare, il
+// medico gli veniva prestato da chi vede quel paziente quel giorno, facendogli
+// prendere una stanza che non serve. Riga «- Agende fuori dal piano: Labor».
+export function agendeFuoriPiano(markdown: string): string[] {
+  return elencoInTesta(markdown, 'agende fuori dal piano');
+}
+
+// Il confronto è sul nome della colonna, senza maiuscole né spazi: nella
+// pagina si scrive «Labor» come si vede in agenda.
+export function agendaEsclusa(agenda: string, lista: string[]): boolean {
+  const a = String(agenda ?? '').trim().toLowerCase();
+  if (!a) return false;
+  return (lista ?? []).some((x) => x.trim().toLowerCase() === a);
+}
+
 export function prestazioniFuoriPiano(markdown: string): PrestazioneFuori[] {
   return elencoInTesta(markdown, 'prestazioni fuori dal piano').map((voce) => {
     const m = /^(.*?)\s*\(\s*tranne\s+(.+?)\s*\)\s*$/i.exec(voce);
@@ -104,6 +129,9 @@ export function prestazioneEsclusa(prestazione: string, chi: string, lista: Pres
 }
 
 function elencoInTesta(markdown: string, chiave: string): string[] {
+  // La stessa chiave può tornare su più righe e i valori si sommano: sei
+  // persone con «Solo in» su una riga sola non si leggono più.
+  const tutte: string[] = [];
   for (const grezza of (markdown ?? '').split('\n')) {
     const riga = grezza.trim();
     if (riga.startsWith('## ')) break;                 // da qui in poi sono stanze
@@ -120,10 +148,10 @@ function elencoInTesta(markdown: string, chiave: string): string[] {
         pezzo += c;
       }
       fuori.push(pezzo);
-      return fuori.map((x) => x.replace(/[`*]/g, '').trim()).filter(Boolean);
+      tutte.push(...fuori.map((x) => x.replace(/[`*]/g, '').trim()).filter(Boolean));
     }
   }
-  return [];
+  return tutte;
 }
 
 // Questa persona è fuori dal piano? Il confronto è quello dei nomi: «Andrea
@@ -355,9 +383,15 @@ export function assegnaVisite(righe: RigaPiano[], visite: VisitaGrezza[], vincol
     let sue = righe
       .filter((r) => (r.segmenti ?? []).some((s) => s.chi && uguali(s.chi, v.chi) && v.start >= s.dalle && v.start < s.alle))
       .sort((a, b) => Number(a.ultima) - Number(b.ultima));
-    // Chi per regola sta solo in certe stanze non ne prende altre, mai.
+    // Chi per regola sta solo in certe stanze non ne prende altre, mai — e
+    // quelle sono sue anche se il titolare è un altro: è l'unico modo perché
+    // la regola valga anche per chi nella pagina una stanza non ce l'ha.
     const vincolo = (vincoli ?? []).find((x) => uguali(x.chi, v.chi));
-    if (vincolo) sue = sue.filter((r) => stanzaAmmessa(r.stanza, vincolo));
+    if (vincolo) {
+      sue = righe
+        .filter((r) => stanzaAmmessa(r.stanza, vincolo))
+        .sort((a, b) => Number(a.ultima) - Number(b.ultima));
+    }
     if (!sue.length) continue;   // nessuna stanza in quel momento: non si mostra
     let scelta = sue.find((r) => liberaDa[r.stanza] <= i);
     const sovra = !scelta;
@@ -418,9 +452,9 @@ export function daSistemarePerPrompt(
     pezzi.push(`\nVINCOLI FISSI — una proposta che li viola viene scartata:\n${
       vincoli.map((v) => `- ${v.chi}: solo in ${elencoStanze(v.stanze)}, mai altrove`).join('\n')}`);
   }
-  pezzi.push(`\nFASCE SENZA NESSUNA VISITA OGGI:\n${libere.length
+  pezzi.push(`\nQUANDO LE STANZE SONO LIBERE OGGI (una stanza si prende solo per il tempo delle visite, non per tutto il giorno):\n${libere.length
     ? libere.map((l) => `- ${l.stanza} ${l.dalle}-${l.alle}${l.di ? ` (intestata a ${l.di})` : ''}${l.ultima ? ' — da usare solo se le altre non bastano' : ''}`).join('\n')
-    : '- nessuna: tutte le stanze hanno visite in ogni fascia'}`);
+    : '- nessuna: ogni fascia di ogni stanza ha visite'}`);
   pezzi.push(`\nCHI LAVORA OGGI SENZA UNA SALA:\n${senzaSala.length
     ? senzaSala.map((s) => `- ${s.chi}: ${s.n} ${s.n === 1 ? 'visita' : 'visite'}`).join('\n')
     : '- nessuno: tutti hanno una stanza'}`);
@@ -531,14 +565,62 @@ function posizioneNome(testo: string, persona: string): number {
 // era deserta.
 export type FasciaLibera = { stanza: string; di: string; dalle: string; alle: string; ultima?: boolean };
 
+// Per quanto una stanza è davvero presa (16.9.2026, detto dallo studio: «ogni
+// medico deve prendere la camera per il tempo necessario delle visite; se ha
+// le visite solo al pomeriggio occuperà solo il pomeriggio, non tutto il
+// giorno»).
+//
+// La fascia della pagina dice DI CHI è la stanza; la presa dice QUANDO è
+// occupata, e si ricava dalle visite: dalla prima all'ultima. Sono due fatti
+// diversi e vanno tenuti separati — la regola non cambia perché un giorno uno
+// ha poche visite. Se in una fascia non c'è nessuna visita, non c'è presa: la
+// stanza in quelle ore è libera, anche se ha un titolare.
+//
+// La fine NON si taglia al confine della fascia: una visita che comincia alle
+// 12:50 tiene la stanza fino alle 13:20 anche se la fascia finisce alle 13, e
+// far finta di no sarebbe comodo e falso.
+export type Presa = { stanza: string; chi: string; dalle: string; alle: string; perche: string; manuale?: boolean };
+
+export function prese(righe: RigaPiano[], visite: Record<string, VisitaSala[]>): Record<string, Presa[]> {
+  const fuori: Record<string, Presa[]> = {};
+  for (const r of righe ?? []) {
+    const dentro = visite?.[r.stanza] ?? [];
+    fuori[r.stanza] = [];
+    for (const s of r.segmenti ?? []) {
+      const sue = dentro.filter((v) => v.inizio >= s.dalle && v.inizio < s.alle);
+      if (!sue.length) continue;
+      let dalle = sue[0].inizio, alle = sue[0].fine;
+      for (const v of sue) { if (v.inizio < dalle) dalle = v.inizio; if (v.fine > alle) alle = v.fine; }
+      fuori[r.stanza].push({ stanza: r.stanza, chi: s.chi, dalle, alle, perche: s.perche, manuale: s.manuale });
+    }
+  }
+  return fuori;
+}
+
+// Una finestra più corta di mezz'ora non è una stanza libera: è il buco fra
+// due visite. Segnalarla riempirebbe l'elenco di righe che nessuno può usare.
+const MINIMA = 30;
+
 export function fasceLibere(righe: RigaPiano[], visite: Record<string, VisitaSala[]>): FasciaLibera[] {
   const fuori: FasciaLibera[] = [];
+  const min = (t: string) => { const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
+  const tutte = prese(righe, visite);
   // Stesso ordine dell'assegnazione: chi legge trova per prime quelle da usare.
-  for (const r of [...righe].sort((a, b) => Number(a.ultima) - Number(b.ultima))) {
-    const dentro = visite[r.stanza] ?? [];
-    for (const s of r.segmenti) {
-      if (dentro.some((v) => v.inizio >= s.dalle && v.inizio < s.alle)) continue;
-      fuori.push({ stanza: r.stanza, di: s.chi, dalle: s.dalle, alle: s.alle, ultima: r.ultima });
+  for (const r of [...(righe ?? [])].sort((a, b) => Number(a.ultima) - Number(b.ultima))) {
+    for (const s of r.segmenti ?? []) {
+      const dentro = (tutte[r.stanza] ?? []).filter((x) => x.dalle >= s.dalle && x.dalle < s.alle);
+      if (!dentro.length) {
+        fuori.push({ stanza: r.stanza, di: s.chi, dalle: s.dalle, alle: s.alle, ultima: r.ultima });
+        continue;
+      }
+      // Quel che resta della fascia attorno alla presa: prima e dopo.
+      const presa = dentro[0];
+      if (min(presa.dalle) - min(s.dalle) >= MINIMA) {
+        fuori.push({ stanza: r.stanza, di: s.chi, dalle: s.dalle, alle: presa.dalle, ultima: r.ultima });
+      }
+      if (min(s.alle) - min(presa.alle) >= MINIMA) {
+        fuori.push({ stanza: r.stanza, di: s.chi, dalle: presa.alle, alle: s.alle, ultima: r.ultima });
+      }
     }
   }
   return fuori;

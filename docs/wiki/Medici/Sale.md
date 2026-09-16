@@ -20,9 +20,21 @@ Due righe, qui sopra le stanze, dicono **che cosa non entra nel piano**: persone
 - Fuori dal piano: Andrea Bronz
 - Prestazioni fuori dal piano: Colloquio telefonico, Intervento, Risonanza magnetica (tranne Vera Lucia Paiocchi), TAC (tranne Vera Lucia Paiocchi)
 - Sempre e solo: Vera Lucia Paiocchi in Sala 1
+- Agende fuori dal piano: Labor
 - Solo in: Marco Moccetti in Sala 2 o Sala 3
+- Solo in: Vanja Paveri in Sport 1 o Sport 2 o Sport 3
+- Solo in: Miko Pedrotti in Sport 1 o Sport 2 o Sport 3
+- Solo in: Davide Girola in Sport 1 o Sport 2 o Sport 3
+- Solo in: Sebastiano Franscella in Sport 1 o Sport 2 o Sport 3
+- Solo in: Georgios Moschovitis in Sport 1 o Sport 2 o Sport 3
 
-Due righe dicono anche **chi non si sposta**, con due forze diverse. `Sempre e solo:` è una stanza e nient'altro. `Solo in:` è un elenco di stanze ammesse — `Marco Moccetti in Sala 2 o Sala 3`, detto dallo studio il 16.9.2026: niente sale dello sport, niente Sala 4 e Sala 5. In tutti e due i casi le visite non escono da quell'elenco, nemmeno quando una proposta lo suggerirebbe, e la proposta che ci prova viene scartata con scritto il perché. **Le stanze si separano con «o», non con la virgola**: in questa pagina la virgola separa le voci dell'elenco, e «in Sala 2, Sala 3» si leggerebbe come due persone.
+Altre righe dicono **chi non si sposta**, con due forze diverse. `Sempre e solo:` è una stanza e nient'altro. `Solo in:` è un elenco di stanze ammesse. La riga dice **due cose**: quelle stanze sono le sue fra cui scegliere — anche quando il titolare è un altro — e fuori da lì non va. Senza la prima metà la regola non servirebbe a chi nella pagina una stanza non ce l'ha: dire dove NON può stare non lo mette da nessuna parte. Non è un cambio di titolare: la stanza la usa quando è libera. La proposta dell'AI che prova a mandare qualcuno fuori dal suo elenco viene scartata, con scritto il perché.
+
+**Le stanze si separano con «o», non con la virgola**: in questa pagina la virgola separa le voci dell'elenco, e «in Sala 2, Sala 3» si leggerebbe come due persone. La chiave si può ripetere su più righe: sei persone su una riga sola non si leggerebbero.
+
+`Agende fuori dal piano:` toglie una **colonna** dell'agenda MediOnline. `Labor` è il prelievo: il paziente passa in studio ma non occupa una stanza dei medici — e siccome quell'appuntamento arriva senza titolare, il medico gli veniva prestato da chi vede quel paziente quel giorno, facendogli prendere una stanza che non serve (detto dallo studio il 16.9.2026).
+
+**Una stanza si prende per il tempo che serve alle visite, non per tutto il giorno** (detto dallo studio il 16.9.2026). La fascia qui sotto dice *di chi è* la stanza; quando è *occupata* lo dicono le visite, dalla prima all'ultima. Chi ha visite solo al pomeriggio occupa solo il pomeriggio; chi non ne ha non la occupa affatto. Nel calendario la fascia della regola resta disegnata sbiadita e il blocco pieno copre solo la presa.
 
 Le regole qui sotto vengono dalla conversazione del 15.9.2026 e dalle misure sull'agenda vera (chi lavora quando, quanti pazienti in parallelo). **Sono una proposta**: chi le vive le corregge.
 
@@ -41,7 +53,7 @@ Le regole qui sotto vengono dalla conversazione del 15.9.2026 e dalle misure sul
 - Di: Georgios Moschovitis
 - Dalle 13:00: Tiziano Moccetti
 - Giorni: lun mar mer gio
-- Nota: la mattina è di Moschovitis — detto dallo studio il 15.9.2026; prima la pagina la dava a Marco Moccetti. Tiziano non è mai in studio prima delle 13 e mai il venerdì. Marco Moccetti resta così senza una stanza sua nella pagina: il 15.9 tutti i suoi appuntamenti erano colloqui telefonici, che una stanza non la occupano — ma se un giorno visita, va detto dove. Dal 16.9.2026 si sa almeno **dove non va**: la riga «Solo in» in testa lo tiene dentro Sala 2 o Sala 3.
+- Nota: **da chiarire.** Il 15.9.2026 lo studio ha detto che la mattina è di Moschovitis; il 16.9.2026 ha detto che Moschovitis sta sempre nelle sale dello sport. Vince la seconda, che è più recente: le sue visite vanno nello sport e questa fascia risulta libera. Se la Sala 3 al mattino è davvero sua, si toglie Moschovitis dalla riga «Solo in» in testa. — la mattina è di Moschovitis, detto dallo studio il 15.9.2026; prima la pagina la dava a Marco Moccetti. Tiziano non è mai in studio prima delle 13 e mai il venerdì. Marco Moccetti resta così senza una stanza sua nella pagina: il 15.9 tutti i suoi appuntamenti erano colloqui telefonici, che una stanza non la occupano — ma se un giorno visita, va detto dove. Dal 16.9.2026 si sa almeno **dove non va**: la riga «Solo in» in testa lo tiene dentro Sala 2 o Sala 3.
 - Stato: proposta
 
 ## Sala 4
@@ -50,8 +62,7 @@ Le regole qui sotto vengono dalla conversazione del 15.9.2026 e dalle misure sul
 
 ## Sala 5
 - Di: condivisa
-- Chi: Davide Girola, Georgios Moschovitis, Miko Pedrotti, Sebastiano Franscella
-- Nota: Girola tiene la stanza tutto il giorno lun, mar e ven; gli altri si innestano sopra e allora serve anche Sport 3.
+- Nota: **senza assegnatario dal 16.9.2026.** La dividevano Girola, Moschovitis, Pedrotti e Franscella, ma lo studio ha detto che quei quattro stanno sempre nelle sale dello sport: lasciarli scritti qui avrebbe prodotto ogni notte una casella «da decidere» che il vincolo rifiuta comunque. Chi usa questa stanza va detto.
 - Stato: proposta
 
 ## Sport 1
@@ -70,7 +81,7 @@ Le regole qui sotto vengono dalla conversazione del 15.9.2026 e dalle misure sul
 
 ## Sport 3
 - Di: condivisa
-- Chi: Bruno Capelli, Georgios Moschovitis, Miko Pedrotti, Sebastiano Franscella
+- Chi: Bruno Capelli, Georgios Moschovitis, Miko Pedrotti, Sebastiano Franscella, Davide Girola, Vanja Paveri
 - Nota: Capelli la usa solo mercoledì e giovedì dalle 13:15; il resto del tempo va a chi non ha stanza. Tutte e tre le sale Sport sono libere ogni mattina.
 - Funzione: Sport
 - Ultima: sì

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { applicaModifiche, assegnaVisite, capienza, daSistemarePerPrompt, deduciMedici, escluso, fasceLibere, fuoriDalPiano, leggiProposta, prestazioneEsclusa, prestazioniFuoriPiano, soloIn, daDeciderePerPrompt, leggiSale, pianoDelGiorno, salePerPrompt, titolare } from './sale';
+import { agendaEsclusa, agendeFuoriPiano, applicaModifiche, assegnaVisite, prese, capienza, daSistemarePerPrompt, deduciMedici, escluso, fasceLibere, fuoriDalPiano, leggiProposta, prestazioneEsclusa, prestazioniFuoriPiano, soloIn, daDeciderePerPrompt, leggiSale, pianoDelGiorno, salePerPrompt, titolare } from './sale';
 
 const MD = `
 ## Sala 3
@@ -223,11 +223,11 @@ test('quel che si manda al modello dice anche le sale vuote e chi è senza stanz
   const t = daSistemarePerPrompt(piano, ['Marco Moccetti'],
     [{ stanza: 'Sala 2', di: 'Marco Moccetti', dalle: '07:00', alle: '19:30' }],
     [{ chi: 'Daniela Cassani', n: 10 }]);
-  assert.match(t, /FASCE SENZA NESSUNA VISITA OGGI:\n- Sala 2 07:00-19:30 \(intestata a Marco Moccetti\)/);
+  assert.match(t, /QUANDO LE STANZE SONO LIBERE OGGI[^\n]*:\n- Sala 2 07:00-19:30 \(intestata a Marco Moccetti\)/);
   assert.match(t, /CHI LAVORA OGGI SENZA UNA SALA:\n- Daniela Cassani: 10 visite/);
   assert.ok(!t.includes('Paziente'), 'nel testo per il modello non entrano pazienti');
   const vuoto = daSistemarePerPrompt(piano, ['Marco Moccetti'], [], []);
-  assert.match(vuoto, /nessuna: tutte le stanze hanno visite in ogni fascia/);
+  assert.match(vuoto, /nessuna: ogni fascia di ogni stanza ha visite/);
   assert.match(vuoto, /nessuno: tutti hanno una stanza/);
 });
 
@@ -438,7 +438,18 @@ test('i vincoli fissi arrivano anche nel testo per il modello, non solo nel cont
   assert.ok(!daSistemarePerPrompt(piano, ['Marco Moccetti'], [], []).includes('VINCOLI FISSI'), 'senza vincoli non si scrive una sezione vuota');
 });
 
-test('libera è la fascia, non la stanza: la Sala 3 al mattino conta', () => {
+test('un\'agenda fuori dal piano non porta nessuno in stanza: «Labor» è il prelievo', () => {
+  const md = `- Agende fuori dal piano: Labor, Appar\n- Fuori dal piano: Andrea Bronz\n\n## Sala 1\n- Di: François Rego\n- Stato: proposta\n`;
+  assert.deepEqual(agendeFuoriPiano(md), ['Labor', 'Appar']);
+  assert.equal(agendaEsclusa('Labor', agendeFuoriPiano(md)), true);
+  assert.equal(agendaEsclusa(' labor ', agendeFuoriPiano(md)), true, 'senza maiuscole né spazi');
+  assert.equal(agendaEsclusa('frego', agendeFuoriPiano(md)), false);
+  assert.equal(agendaEsclusa('', agendeFuoriPiano(md)), false, 'agenda non scritta non è esclusa');
+  assert.deepEqual(agendeFuoriPiano('## Sala 1\n- Agende fuori dal piano: Labor\n'), [],
+    'le righe in testa contano solo prima della prima stanza');
+});
+
+test('la stanza si prende per il tempo delle visite, non per tutto il giorno', () => {
   const md = `## Sala 3\n- Di: Marco Moccetti\n- Dalle 13:00: Tiziano Moccetti\n- Stato: proposta\n\n## Sala 4\n- Di: François Rego\n- Stato: proposta\n`;
   const piano = pianoDelGiorno(leggiSale(md), ['Marco Moccetti', 'Tiziano Moccetti', 'François Rego'], 'mar');
   // Marco lavora solo il pomeriggio, Tiziano riempie la sua fascia
@@ -446,10 +457,29 @@ test('libera è la fascia, non la stanza: la Sala 3 al mattino conta', () => {
     { id: 'a', chi: 'Tiziano Moccetti', start: '13:30', dur: 30 },
     { id: 'b', chi: 'François Rego', start: '09:00', dur: 30 },
   ]);
+  // La presa è il tempo che le visite occupano davvero, non la fascia intera.
+  const p = prese(piano.righe, visite);
+  assert.deepEqual(p['Sala 3'].map((x) => `${x.dalle}-${x.alle} ${x.chi}`), ['13:30-14:00 Tiziano Moccetti']);
+  assert.deepEqual(p['Sala 4'].map((x) => `${x.dalle}-${x.alle}`), ['09:00-09:30']);
   const libere = fasceLibere(piano.righe, visite);
-  assert.deepEqual(libere.map((x) => `${x.stanza} ${x.dalle}-${x.alle} ${x.di}`), ['Sala 3 07:00-13:00 Marco Moccetti']);
+  assert.deepEqual(libere.map((x) => `${x.stanza} ${x.dalle}-${x.alle} ${x.di}`), [
+    'Sala 3 07:00-13:00 Marco Moccetti',      // Marco non ha visite: la sua fascia è tutta libera
+    'Sala 3 13:00-13:30 Tiziano Moccetti',    // prima della sua unica visita
+    'Sala 3 14:00-19:30 Tiziano Moccetti',    // e dopo: non tiene la stanza fino a sera
+    'Sala 4 07:00-09:00 François Rego',
+    'Sala 4 09:30-19:30 François Rego',
+  ]);
   // contata per giornata intera, la Sala 3 non sarebbe mai risultata libera
   assert.ok((visite['Sala 3'] ?? []).length > 0, 'la stanza ha visite, ma non nella prima fascia');
+});
+
+test('un buco più corto di mezz’ora fra due visite non è una stanza libera', () => {
+  const md = `## Sala 9\n- Di: François Rego\n- Stato: proposta\n`;
+  const piano = pianoDelGiorno(leggiSale(md), ['François Rego'], 'mar');
+  // una visita alle 07:10: i dieci minuti prima non si annunciano come liberi
+  const v = assegnaVisite(piano.righe, [{ id: 'a', chi: 'François Rego', start: '07:10', dur: 30 }]);
+  const libere = fasceLibere(piano.righe, v);
+  assert.deepEqual(libere.map((x) => `${x.dalle}-${x.alle}`), ['07:40-19:30']);
 });
 
 test('le sale «ultime» si riempiono solo quando le altre non bastano', () => {
@@ -471,6 +501,9 @@ test('le sale «ultime» si riempiono solo quando le altre non bastano', () => {
   assert.deepEqual(due['Sport 1'].map((x) => x.id), ['b']);
   // e nell'elenco delle fasce libere le «ultime» vengono dopo, e lo dicono
   const libere = fasceLibere(piano.righe, una);
-  assert.deepEqual(libere.map((x) => x.stanza), ['Sport 1']);
-  assert.equal(libere[0].ultima, true);
+  // la Sport 1 è libera tutto il giorno; la Sala 9 solo attorno alla visita
+  assert.deepEqual(libere.map((x) => `${x.stanza} ${x.dalle}-${x.alle}`),
+    ['Sala 9 07:00-09:00', 'Sala 9 09:30-19:30', 'Sport 1 07:00-19:30']);
+  assert.equal(libere.find((x) => x.stanza === 'Sport 1')!.ultima, true);
+  assert.equal(libere.find((x) => x.stanza === 'Sala 9')!.ultima, false);
 });

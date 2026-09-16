@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { query } from '@/lib/db';
 import { generaOllamaEsito } from '@/lib/ollama';
-import { applicaModifiche, assegnaVisite, daSistemarePerPrompt, deduciMedici, fasceLibere, escluso, fuoriDalPiano, leggiSale, pianoDelGiorno, prestazioneEsclusa, prestazioniFuoriPiano, soloIn, type ModificaSala, type PrestazioneFuori, type SoloIn } from '@/lib/sale';
+import { agendaEsclusa, agendeFuoriPiano, applicaModifiche, assegnaVisite, daSistemarePerPrompt, deduciMedici, fasceLibere, escluso, fuoriDalPiano, leggiSale, pianoDelGiorno, prestazioneEsclusa, prestazioniFuoriPiano, soloIn, type ModificaSala, type PrestazioneFuori, type SoloIn } from '@/lib/sale';
 
 // Preparare il piano delle sale (15.9.2026). Sta qui, e non dentro una rotta,
 // perché lo chiedono in due: il cron di notte e il pulsante «Prepara con
@@ -116,12 +116,14 @@ export async function preparaPianoSale(
     let fuori: string[] = [];
     let fuoriPrest: PrestazioneFuori[] = [];
     let vincoli: SoloIn[] = [];
+    let agendeFuori: string[] = [];
     try {
       const md = readFileSync(path.join(process.cwd(), 'docs/wiki/Medici/Sale.md'), 'utf-8');
       regole = leggiSale(md);
       fuori = fuoriDalPiano(md);
       fuoriPrest = prestazioniFuoriPiano(md);
       vincoli = soloIn(md);
+      agendeFuori = agendeFuoriPiano(md);
     } catch {
       finisci('errore', 'la pagina «Medici/Sale» non si legge');
       return { ok: false, stato: 'pagina non leggibile' };
@@ -142,10 +144,10 @@ export async function preparaPianoSale(
     // La prestazione si riconosce dal colore dell'agenda, come in tutto il
     // resto: serve per lasciar fuori quel che non si fa in studio (una
     // risonanza, un intervento in ospedale).
-    const app = await query<{ id: string; chi: string | null; start: string; dur: number; prestazione: string | null; paziente: string }>(
+    const app = await query<{ id: string; chi: string | null; start: string; dur: number; prestazione: string | null; paziente: string; agenda: string }>(
       `select a.id, pr.nome as chi, to_char(a.starts_at, 'HH24:MI') as start,
               greatest(5, round(extract(epoch from (coalesce(a.ends_at, a.starts_at + interval '30 min') - a.starts_at)) / 60))::int as dur,
-              c.nome as prestazione, coalesce(a.paziente_nome, a.titolo, '') as paziente
+              c.nome as prestazione, coalesce(a.paziente_nome, a.titolo, '') as paziente, coalesce(a.luogo, '') as agenda
          from appointments a
          left join providers pr on pr.id = a.provider_id
          left join prestazioni_catalogo c on c.studio_id = a.studio_id and c.attivo and lower(c.colore) = lower(a.colore)
@@ -160,7 +162,8 @@ export async function preparaPianoSale(
     // giorno ([[src/lib/sale]], `deduciMedici`).
     const dedotti = deduciMedici(app.map((a) => ({ id: a.id, paziente: a.paziente, start: a.start, chi: a.chi ?? '' })));
     const conMedico = app.map((a) => ({ ...a, chi: a.chi || dedotti[a.id] || '' }));
-    const utili = conMedico.filter((a) => !escluso(a.chi ?? '', fuori) && !prestazioneEsclusa(a.prestazione ?? '', a.chi ?? '', fuoriPrest));
+    const utili = conMedico.filter((a) => !agendaEsclusa(a.agenda ?? '', agendeFuori)
+      && !escluso(a.chi ?? '', fuori) && !prestazioneEsclusa(a.prestazione ?? '', a.chi ?? '', fuoriPrest));
     // Le correzioni già fatte a mano oggi valgono anche qui: rigenerare il
     // piano non deve far ricomparire «senza sala» chi una sala l'ha ricevuta.
     const [vecchio] = await query<{ modifiche: ModificaSala[] }>(

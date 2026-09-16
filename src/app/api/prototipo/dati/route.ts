@@ -6,7 +6,7 @@ import { costruisciRevisione } from '@/lib/prototipo-revisione';
 import { tipoEsame } from '@/lib/briefing-regole';
 import { estraiTerapia } from '@/lib/referti-terapia';
 import { leggiTitolo, nomePulito } from '@/lib/agenda-titolo';
-import { assegnaVisite, capienza, deduciMedici, escluso, fuoriDalPiano, leggiSale, prestazioneEsclusa, prestazioniFuoriPiano, soloIn, titolare, applicaModifiche } from '@/lib/sale';
+import { agendaEsclusa, agendeFuoriPiano, assegnaVisite, capienza, deduciMedici, escluso, fuoriDalPiano, leggiSale, prese, prestazioneEsclusa, prestazioniFuoriPiano, soloIn, titolare, applicaModifiche } from '@/lib/sale';
 import type { ModificaSala, RigaPiano } from '@/lib/sale';
 import { abbinaPrestazioneAgenda, tipoDaTesto, type VoceCatalogo } from '@/lib/prestazioni';
 import { lettereRitardoGrezzo } from '@/lib/procedure';
@@ -401,13 +401,15 @@ export async function GET() {
     const fuori = fuoriDalPiano(mdSale);
     const fuoriPrest = prestazioniFuoriPiano(mdSale);
     const vincoli = soloIn(mdSale);
+    const agendeFuori = agendeFuoriPiano(mdSale);
     // «Appar», «Labor», «DC» non sono agende di medici: chi non ha titolare lo
     // prende in prestito da chi vede quel paziente quel giorno, e si segna che
     // è dedotto ([[src/lib/sale]]).
     const nonAnnullati = apptsOggi.filter((a) => a.status !== 'CANCELLED');
     const dedotti = deduciMedici(nonAnnullati.map((a) => ({ id: a.id, paziente: a.nomeBreve || a.nome || '', start: a.start, chi: doctors[a.doc] ?? '' })));
     const mediciDi = (a: (typeof nonAnnullati)[number]) => doctors[a.doc] || dedotti[a.id] || '';
-    const vive = nonAnnullati.filter((a) => !escluso(mediciDi(a), fuori) && !prestazioneEsclusa(a.prestazione ?? '', mediciDi(a), fuoriPrest));
+    const vive = nonAnnullati.filter((a) => !agendaEsclusa(a.room ?? '', agendeFuori)
+      && !escluso(mediciDi(a), fuori) && !prestazioneEsclusa(a.prestazione ?? '', mediciDi(a), fuoriPrest));
     const visite = assegnaVisite(righe, vive
       .map((a) => ({ id: a.id, chi: mediciDi(a), start: a.start, dur: a.dur, etichetta: a.prestazione || a.tipoPrest || '' })), vincoli);
     // Il cartellino che si vede passandoci sopra: chi è il paziente, che cosa
@@ -447,7 +449,7 @@ export async function GET() {
         motivo: a.prestazione || a.motivoVero || '', sala: a.room || '',
       })),
     })).sort((x, y) => y.n - x.n);
-    return { ...pianoOggi, righe, presenti: presentiOggi, visite, senzaSala, fuoriPiano: fuori, fuoriPrestazioni: fuoriPrest.map((x) => x.tranne.length ? `${x.nome} (tranne ${x.tranne.join(', ')})` : x.nome) };
+    return { ...pianoOggi, righe, presenti: presentiOggi, visite, prese: prese(righe, visite), senzaSala, fuoriPiano: fuori, fuoriPrestazioni: fuoriPrest.map((x) => x.tranne.length ? `${x.nome} (tranne ${x.tranne.join(', ')})` : x.nome) };
   })();
   const cap = capienza(
     apptsOggi.map((a) => ({ inizio: minuti(a.start), fine: minuti(a.start) + a.dur })),
