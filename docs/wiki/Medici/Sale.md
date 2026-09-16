@@ -44,16 +44,15 @@ Le regole qui sotto vengono dalla conversazione del 15.9.2026 e dalle misure sul
 - Stato: validato
 
 ## Sala 2
-- Di: Daniela Cassani
-- Funzione: Ecografia
-- Nota: ecografista, una decina di esami al giorno. La stanza era intestata a Marco Moccetti e non la usava: il 15.9.2026 lo studio ha applicato questa assegnazione dalla proposta del giorno. Se la sua stanza vera è un'altra, si cambia qui.
+- Di: Marco Moccetti
+- Nota: torna sua il 16.9.2026. Il 15.9 era stata data a Daniela Cassani applicando la proposta del giorno, con scritto «se la sua stanza vera è un'altra, si cambia qui»: lo studio ha poi detto che la sua è la Sala 5. Marco Moccetti sta solo in Sala 2 o Sala 3 (riga «Solo in» in testa), e questa è la prima delle due.
 - Stato: proposta
 
 ## Sala 3
-- Di: Georgios Moschovitis
+- Di: condivisa
 - Dalle 13:00: Tiziano Moccetti
 - Giorni: lun mar mer gio
-- Nota: **da chiarire.** Il 15.9.2026 lo studio ha detto che la mattina è di Moschovitis; il 16.9.2026 ha detto che Moschovitis sta sempre nelle sale dello sport. Vince la seconda, che è più recente: le sue visite vanno nello sport e questa fascia risulta libera. Se la Sala 3 al mattino è davvero sua, si toglie Moschovitis dalla riga «Solo in» in testa. — la mattina è di Moschovitis, detto dallo studio il 15.9.2026; prima la pagina la dava a Marco Moccetti. Tiziano non è mai in studio prima delle 13 e mai il venerdì. Marco Moccetti resta così senza una stanza sua nella pagina: il 15.9 tutti i suoi appuntamenti erano colloqui telefonici, che una stanza non la occupano — ma se un giorno visita, va detto dove. Dal 16.9.2026 si sa almeno **dove non va**: la riga «Solo in» in testa lo tiene dentro Sala 2 o Sala 3.
+- Nota: al mattino non ha un titolare. Il 15.9.2026 era stata data a Moschovitis; il 16.9.2026 lo studio ha detto che Moschovitis sta sempre nelle sale dello sport e ha tolto questa regola. Tiziano non è mai in studio prima delle 13 e mai il venerdì. La mattina resta disponibile, e Marco Moccetti può prendersela: la riga «Solo in» in testa lo ammette qui e in Sala 2, e basta questo perché le sue visite ci finiscano quando servono.
 - Stato: proposta
 
 ## Sala 4
@@ -61,8 +60,9 @@ Le regole qui sotto vengono dalla conversazione del 15.9.2026 e dalle misure sul
 - Stato: proposta
 
 ## Sala 5
-- Di: condivisa
-- Nota: **senza assegnatario dal 16.9.2026.** La dividevano Girola, Moschovitis, Pedrotti e Franscella, ma lo studio ha detto che quei quattro stanno sempre nelle sale dello sport: lasciarli scritti qui avrebbe prodotto ogni notte una casella «da decidere» che il vincolo rifiuta comunque. Chi usa questa stanza va detto.
+- Di: Daniela Cassani
+- Funzione: Ecografia
+- Nota: sua dal 16.9.2026, detto dallo studio. Ecografista, una decina di esami al giorno; prima la pagina le dava la Sala 2, che era un'assegnazione provvisoria presa da una proposta dell'AI. La stanza la dividevano Girola, Moschovitis, Pedrotti e Franscella, che dal 16.9 stanno sempre nelle sale dello sport.
 - Stato: proposta
 
 ## Sport 1
