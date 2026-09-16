@@ -402,40 +402,79 @@ export function assegnaVisite(righe: RigaPiano[], visite: VisitaGrezza[], vincol
   const min = (t: string) => { const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
   const hm = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
   const fuori: Record<string, VisitaSala[]> = {};
-  const liberaDa: Record<string, number> = {};
-  for (const r of righe) { fuori[r.stanza] = []; liberaDa[r.stanza] = -1; }
+  // Chi c'è dentro a ogni stanza, momento per momento. Prima si teneva solo
+  // «da quando è libera», che basta finché si guarda una persona sola: non
+  // sapendo CHI c'era dentro, una visita che non trovava posto finiva nella
+  // stanza meno carica, anche se lì stava lavorando un altro medico. Due
+  // cardiologi nella stessa stanza alla stessa ora non esistono (16.9.2026).
+  const dentro: Record<string, { da: number; a: number; chi: string }[]> = {};
+  for (const r of righe) { fuori[r.stanza] = []; dentro[r.stanza] = []; }
   const ordinate = [...visite].sort((a, b) => a.start.localeCompare(b.start) || a.id.localeCompare(b.id));
+
+  // Le stanze che questa persona ha PER REGOLA in quel momento, sempre dentro
+  // il suo vincolo. Prima le normali, le «ultime» solo se le altre non
+  // bastano: le sale dello sport si aprono quando servono, non per prime.
+  const sueDiRegola = (v: VisitaGrezza, vincolo?: SoloIn) => righe
+    .filter((r) => (r.segmenti ?? []).some((sg) => sg.chi && uguali(sg.chi, v.chi) && v.start >= sg.dalle && v.start < sg.alle))
+    .filter((r) => stanzaAmmessa(r.stanza, vincolo))
+    .sort((a, b) => Number(a.ultima) - Number(b.ultima));
+
+  const collocate = new Set<string>();
+  const vincoloDiVisita = (v: VisitaGrezza) => (vincoli ?? []).find((x) => uguali(x.chi, v.chi));
+  // Le altre stanze che il vincolo ammette ma che non sono sue per regola.
+  const altreAmmesse = (v: VisitaGrezza, vincolo?: SoloIn) => {
+    if (!vincolo) return [] as RigaPiano[];
+    const sua = new Set(sueDiRegola(v, vincolo).map((r) => r.stanza));
+    return righe
+      .filter((r) => stanzaAmmessa(r.stanza, vincolo) && !sua.has(r.stanza))
+      .sort((a, b) => Number(a.ultima) - Number(b.ultima));
+  };
+
+  const prova = (v: VisitaGrezza, candidate: RigaPiano[], accavalla: boolean) => {
+    if (!candidate.length) return false;
+    const i = min(v.start), f = i + Math.max(5, v.dur || 30);
+    const occupanti = (stanza: string) => dentro[stanza].filter((x) => x.da < f && x.a > i);
+    let scelta = candidate.find((r) => !occupanti(r.stanza).length);
+    // Accavallare si fa solo all'ultimo giro, e solo dove c'è già LUI: sta
+    // tenendo due pazienti in parallelo, ed è la cosa che succede davvero in
+    // ambulatorio. Dove lavora un ALTRO medico non si entra mai: due
+    // cardiologi nella stessa stanza alla stessa ora non esistono, e la visita
+    // finisce fra le «visite senza sala» — che è un problema da risolvere, non
+    // una stanza inventata con due medici dentro (16.9.2026).
+    if (!scelta && accavalla) scelta = candidate.find((r) => occupanti(r.stanza).every((x) => uguali(x.chi, v.chi)));
+    if (!scelta) return false;
+    const sovra = !!occupanti(scelta.stanza).length;
+    fuori[scelta.stanza].push({ id: v.id, inizio: v.start, fine: hm(f), etichetta: v.etichetta ?? '', sovra, corsia: 0, corsie: 1 });
+    dentro[scelta.stanza].push({ da: i, a: f, chi: v.chi });
+    collocate.add(v.id);
+    return true;
+  };
+
+  // Tre giri, in quest'ordine.
+  //
+  // 1. Ognuno nelle stanze vuote che ha PER REGOLA. Il titolare viene prima di
+  //    chi la stanza la usa soltanto perché un vincolo glielo permette:
+  //    altrimenti vince chi comincia prima, e il 16.9.2026 Tiziano Moccetti si
+  //    prendeva la Sala 4 lasciando fuori Rego, che ne è il titolare.
   for (const v of ordinate) {
     if (!v.chi) continue;
-    const i = min(v.start), f = i + Math.max(5, v.dur || 30);
-    // Prima le stanze normali, le «ultime» solo se le altre non bastano:
-    // le sale dello sport si aprono quando servono, non per prime.
-    let sue = righe
-      .filter((r) => (r.segmenti ?? []).some((s) => s.chi && uguali(s.chi, v.chi) && v.start >= s.dalle && v.start < s.alle))
-      .sort((a, b) => Number(a.ultima) - Number(b.ultima));
-    // Chi per regola sta solo in certe stanze non ne prende altre, mai — e
-    // quelle sono sue anche se il titolare è un altro: è l'unico modo perché
-    // la regola valga anche per chi nella pagina una stanza non ce l'ha.
-    const vincolo = (vincoli ?? []).find((x) => uguali(x.chi, v.chi));
-    if (vincolo) {
-      // Prima le stanze che sono DAVVERO sue in quel momento, poi le altre
-      // ammesse dal vincolo. Senza questo ordine chi ha una stanza assegnata
-      // finiva lo stesso nella prima libera dell'elenco: il 16.9.2026 la Sport
-      // 3 era stata data a Franscella e le sue nove visite erano comparse
-      // nella Sport 1 e nella Sport 2, sotto il nome di altri.
-      const sua = new Set(sue.map((r) => r.stanza));
-      sue = righe
-        .filter((r) => stanzaAmmessa(r.stanza, vincolo))
-        .sort((a, b) => (Number(sua.has(b.stanza)) - Number(sua.has(a.stanza)))
-          || (Number(a.ultima) - Number(b.ultima)));
-    }
-    if (!sue.length) continue;   // nessuna stanza in quel momento: non si mostra
-    let scelta = sue.find((r) => liberaDa[r.stanza] <= i);
-    const sovra = !scelta;
-    if (!scelta) scelta = sue.reduce((a, b) => (fuori[a.stanza].length <= fuori[b.stanza].length ? a : b));
-    fuori[scelta.stanza].push({ id: v.id, inizio: v.start, fine: hm(f), etichetta: v.etichetta ?? '', sovra, corsia: 0, corsie: 1 });
-    liberaDa[scelta.stanza] = Math.max(liberaDa[scelta.stanza], f);
+    prova(v, sueDiRegola(v, vincoloDiVisita(v)), false);
   }
+  // 2. Chi è rimasto fuori prova le altre stanze VUOTE che il suo vincolo
+  //    ammette. È il caso di chi nella pagina una stanza non ce l'ha: senza
+  //    questo giro «solo in Sport 1 o Sport 2 o Sport 3» non lo metterebbe da
+  //    nessuna parte.
+  for (const v of ordinate) {
+    if (!v.chi || collocate.has(v.id)) continue;
+    prova(v, altreAmmesse(v, vincoloDiVisita(v)), false);
+  }
+  // 3. Solo adesso si accavalla, e solo su sé stessi.
+  for (const v of ordinate) {
+    if (!v.chi || collocate.has(v.id)) continue;
+    const vincolo = vincoloDiVisita(v);
+    prova(v, [...sueDiRegola(v, vincolo), ...altreAmmesse(v, vincolo)], true);
+  }
+
   for (const stanza of Object.keys(fuori)) corsie(fuori[stanza], min);
   return fuori;
 }

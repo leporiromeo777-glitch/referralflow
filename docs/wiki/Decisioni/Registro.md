@@ -86,6 +86,8 @@ Una riga per decisione, con la data e il perché. Non si rilitigano senza un dat
 
 | 2026-09-16 | In una stanza divisa fra più medici ogni visita porta **iniziali e colore del suo medico**, e la testa della colonna li elenca; con un medico solo non compare niente | da quando i vincoli fanno condividere le stanze, il nome sulla fascia non basta più: nella Sala 4 le visite di Rego e di Tiziano Moccetti erano indistinguibili e sembravano tutte dello stesso. Il segno si accende solo dove serve, altrimenti sarebbe rumore su ogni colonna ([[Medici/Sale]]) |
 
+| 2026-09-16 | Le visite si assegnano in **tre giri** — stanze vuote proprie, stanze vuote ammesse dal vincolo, e solo alla fine l'accavallamento **su sé stessi** — e due medici diversi non stanno MAI nella stessa stanza alla stessa ora: la visita che non entra va fra le «visite senza sala» | prima, quando nessuna stanza era libera, la visita finiva in quella meno carica chiunque ci fosse dentro: nella Sala 4 comparivano Rego e Tiziano Moccetti insieme. Il codice sapeva «da quando la stanza è libera», non CHI c'era dentro. E senza il primo giro separato vinceva chi cominciava prima: Tiziano si prendeva la Sala 4 lasciando fuori Rego, che ne è il titolare. Misurato su lunedì e mercoledì veri: zero medici sovrapposti, e restano scoperte 7-8 visite di Tiziano al pomeriggio — che è il fatto vero, non un difetto del calcolo ([[Medici/Sale]]) |
+
 ## Aperte
 - Conservare l'audio per un LoRA futuro; togliere il denoise se arriva un oro verificato dal medico.
 - Livello 2 del server (dominio, HTTPS) dopo la parte legale.

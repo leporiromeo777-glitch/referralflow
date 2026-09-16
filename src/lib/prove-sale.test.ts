@@ -461,6 +461,24 @@ test('chi ha una stanza sua fra quelle ammesse la usa per prima', () => {
   assert.equal(tante['Sport 1'].length + tante['Sport 2'].length, 2);
 });
 
+test('due medici diversi non stanno nella stessa stanza alla stessa ora', () => {
+  // Rego è il titolare della Sala 4; Tiziano ci sta solo perché il vincolo
+  // glielo permette. Alle 14 sono tutti e due in visita: uno solo entra.
+  const md = `- Solo in: Tiziano Moccetti in Sala 4\n\n## Sala 4\n- Di: François Rego\n- Stato: proposta\n`;
+  const v = soloIn(md);
+  const piano = pianoDelGiorno(leggiSale(md), ['François Rego', 'Tiziano Moccetti'], 'mar');
+  const visite = assegnaVisite(piano.righe, [
+    { id: 'r1', chi: 'Dr. med. François Rego', start: '14:00', dur: 30 },
+    { id: 't1', chi: 'Prof. Dr. med. Tiziano Moccetti', start: '14:00', dur: 30 },
+    { id: 'r2', chi: 'Dr. med. François Rego', start: '14:00', dur: 30 },
+  ], v);
+  const dentro = visite['Sala 4'].map((x) => x.id);
+  assert.ok(dentro.includes('r1'), 'il titolare entra per primo');
+  assert.ok(dentro.includes('r2'), 'e può tenere due pazienti in parallelo nella sua stanza');
+  assert.ok(!dentro.includes('t1'), 'l’altro medico NON entra: finisce fra le visite senza sala');
+  assert.equal(visite['Sala 4'].filter((x) => x.sovra).length, 1, 'accavallata solo la seconda, e su sé stesso');
+});
+
 test('nessuno finisce con due stanze, ma uno scambio passa', () => {
   // Il caso vero del 16.9.2026: la Sala 3 era rimasta vuota e il modello l'ha
   // data a Daniela Cassani, che ha già la Sala 5.
