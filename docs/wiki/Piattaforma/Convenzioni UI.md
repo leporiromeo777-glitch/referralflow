@@ -41,4 +41,6 @@ Soglia **640 px**: sotto, l'interfaccia cambia forma, non solo dimensione. Sopra
 
 - **Cleo, sul telefono, è la sua pagina**, non il pannello laterale. Il pannello a tutto schermo somigliava a Cleo ma non lo era: niente benvenuto, niente tasti «Domanda medica» e «Con la cartella». Ora il tasto **Cleo del menu in basso**, il tasto AI della barra in alto e ogni «chiedi a Cleo» portano a `#/ai`, la stessa pagina del computer (col microfono il pannello resta: la dettatura scrive nel campo che sta lì dentro). Il benvenuto parte dall'alto e il campo **non prende il fuoco da solo**, o la tastiera coprirebbe mezza pagina appena si apre.
 
+- **Le barre che scorrono di lato non seguono il dito in su.** Schede dello Studio, segmenti, pastiglie: `touch-action: pan-x` più `overscroll-behavior-x: contain`. Bastava un filo di movimento verticale e partiva anche la pagina, così la barra scappava mentre la si trascinava. Vale **solo per le barre basse**: dentro una tabella o un calendario, che sono alti, bloccare il verticale vorrebbe dire non poter più scorrere la pagina col dito appoggiato sopra.
+
 Misura: sulle 15 pagine raggiungibili, **zero elementi fuori dallo schermo** a 375 px e nessuno scorrimento orizzontale della pagina.
