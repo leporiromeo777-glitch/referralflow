@@ -614,7 +614,9 @@ Quattro viste, una sola pagina, sopra il prototipo attuale (la pagina «Sale» e
 
 **B. La timeline.** Quella di oggi, con due cambiamenti: le righe sono le **stanze** e i blocchi sono i **pazienti** — ogni blocco col colore e le iniziali del suo medico, come già fatto il 16.9 — e sopra i blocchi corrono i **fili dei medici**: una linea sottile per medico che va di stanza in stanza. Un ritardo si vede come un blocco che si allunga e un filo che si sposta a destra. Le modifiche rispetto al piano comunicato sono segnate con un bordo tratteggiato dov'era il blocco prima.
 
-**C. Il movimento dei medici.** Una riga per medico: adesso, poi, poi. «Rego · Sala 4 (P-12, finisce ~10:41) → Sala 3 (P-17, pronto) → Sala 4 (P-21, 11:05)». È la vista che un medico guarda uscendo da una stanza.
+**C. La disponibilità dei medici.** Una riga per medico che risponde a «chi è libero, e quando». Ogni riga dice una cosa sola in grande — *In Sala 4 con Ferretti G.* / *Lo aspettano in Sport 1* / *Comincia alle 13:00* / *Ha finito* — e sotto, più piccolo, quando si libera e dove va poi; a destra quante visite ha fatto sulle sue di oggi. Il ritardo è scritto a parole («12 min di ritardo»), il bordo colorato dice lo stato senza legenda.
+
+L'ordine non è alfabetico ed è la parte che fa il lavoro: **in cima chi ha un paziente già preparato che lo aspetta** (è la cosa da fare adesso, ed è evidenziata), poi chi è libero, poi chi è dentro in ordine di quando esce, in fondo chi deve ancora arrivare e chi ha finito. La prima versione era una catena di frecce con orari, nomi e stanze tutti allo stesso peso: per capirla bisognava leggerla.
 
 **D. Gli avvisi.** Frasi corte, nell'ordine in cui arrivano, sopra la mappa, mai più di tre insieme: «Rego +12 min» · «P-17 resta in Sala 3» · «P-21: ingresso 10:40 → 10:52» · «Sala 4 usata per assorbire il ritardo» · «Piano dei prossimi 30 minuti aggiornato». Clic: la spiegazione intera.
 

@@ -4129,6 +4129,28 @@ PAGES.sale = () => {
 .rf-or-dentro .s { color:var(--text-3); font-size:11.5px; }
 .rf-or-pross { font-size:12px; color:var(--text-2); border-top:1px dashed var(--border); padding-top:6px; margin-top:auto; }
 .rf-or-pross b { color:var(--text); font-weight:600; }
+.rf-or-med2 { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:11px; align-items:center;
+  padding:10px 10px 10px 8px; border-bottom:1px solid var(--border); }
+.rf-or-med2:last-child { border-bottom:0; }
+.rf-or-med2 .c { min-width:0; }
+.rf-or-med2 .r1 { display:flex; align-items:baseline; gap:8px; }
+.rf-or-med2 .nome { font-size:13px; font-weight:650; }
+.rf-or-med2 .rit { font-size:10.5px; font-weight:600; padding:1px 6px; border-radius:999px; background:#fdf0e6; color:#8a4b12; white-space:nowrap; }
+.rf-or-med2 .rit.male { background:#f8e3df; color:#a23b2a; }
+.rf-or-med2 .r2 { font-size:13.5px; line-height:1.35; margin-top:1px; color:var(--text); }
+.rf-or-med2 .r2 b { font-weight:650; }
+.rf-or-med2 .r3 { font-size:11.5px; color:var(--text-3); line-height:1.35; margin-top:1px; overflow:hidden; text-overflow:ellipsis; }
+.rf-or-med2 .dx { text-align:right; line-height:1.1; }
+.rf-or-med2 .conta { font-size:15px; font-weight:650; font-variant-numeric:tabular-nums; }
+.rf-or-med2 .conta i { font-style:normal; font-weight:500; color:var(--text-3); font-size:12px; }
+.rf-or-med2 .et { display:block; font-size:10px; color:var(--text-3); letter-spacing:.03em; }
+/* Il bordo sinistro dice lo stato senza bisogno di una legenda. */
+.rf-or-med2.occupato { box-shadow:inset 3px 0 0 var(--accent); }
+.rf-or-med2.libero { box-shadow:inset 3px 0 0 #0d5c48; }
+.rf-or-med2.aspetta { box-shadow:inset 3px 0 0 #8a4b12; background:#fdf0e6; }
+:root[data-theme="dark"] .rf-or-med2.aspetta { background:#3a2a18; }
+.rf-or-med2.atteso { box-shadow:inset 3px 0 0 var(--border-2); }
+.rf-or-med2.finito { box-shadow:inset 3px 0 0 var(--border-2); opacity:.7; }
 .rf-or-med { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); font-size:13px; }
 .rf-or-med:last-child { border-bottom:0; }
 .rf-or-med .nome { min-width:150px; font-weight:600; }
@@ -4276,17 +4298,61 @@ function rfOrPannelloSala(o, nome) {
         <div class="az" style="margin-left:auto;display:flex;gap:6px">${p.rigidita < 2 && ['atteso', 'arrivato', 'in_attesa'].includes(p.stato) ? `<button class="btn sm ghost" onclick="rfOrchComando('non_spostare',{appointment_id:'${rfEsc(p.id)}'})" title="La stanza resta questa">Non spostare</button>` : ''}</div></div>`).join('')
       : '<div class="caption">Nessun paziente previsto qui oggi.</div>'}</div>`;
 }
+// La disponibilità dei medici: la domanda vera è «chi è libero, e quando»
+// (16.9.2026 sera). Prima era una catena di frecce con dentro orari, nomi e
+// stanze tutti allo stesso peso, e per capirla bisognava leggerla. Adesso
+// ogni riga dice una cosa sola in grande — dov'è e fino a quando — e sotto,
+// più piccolo, dove va dopo e quanto è indietro. In cima chi si libera prima.
+// La disponibilità dei medici: la domanda vera è «chi è libero, e quando»
+// (16.9.2026 sera). Prima era una catena di frecce con dentro orari, nomi e
+// stanze tutti allo stesso peso, e per capirla bisognava leggerla. Adesso
+// ogni riga dice una cosa sola in grande — dov'è e fino a quando — e sotto,
+// più piccolo, dove va dopo e quanto è indietro.
+//
+// L'ordine non è alfabetico: in cima chi ha un paziente che lo aspetta già
+// preparato in una stanza (è la cosa da fare adesso), poi chi è libero, poi
+// chi è dentro in ordine di quando esce, e in fondo chi deve ancora arrivare
+// e chi ha finito.
 function rfOrMedici(o) {
   const medici = (o.medici || []).filter(m => m.stato !== 'assente');
   if (!medici.length) return '<div class="caption">Nessun medico con appuntamenti oggi.</div>';
-  return medici.map(m => {
-    const rit = m.ritardo || 0;
-    const cls = rit >= 20 ? 'male' : rit >= 8 ? 'poco' : '';
-    const catena = [];
-    if (m.adesso) catena.push(`<span class="ora">${rfEsc(m.adesso.sala)} · ${rfEsc(rfNomeCortoPaz(m.adesso.etichetta))}, finisce ~${rfOrHm(m.adesso.fine)}</span>`);
-    for (const p of m.prossime) catena.push(`<i>→</i><span class="poi">${rfEsc(p.sala || '—')} · ${rfEsc(rfNomeCortoPaz(p.etichetta))} ${rfOrHm(p.inizio)}</span>`);
-    return `<div class="rf-or-med">${rfAvatar(m.nome)}<span class="nome">${rfEsc(rfNomeCorto(m.nome))}</span><span class="rit ${cls}">${rit > 0 ? `+${rit} min` : (m.stato === 'in_visita' ? 'in orario' : rfOrStato(m.stato))}</span><span class="catena">${catena.join('') || '<i>nessuna visita in vista</i>'}</span></div>`;
-  }).join('');
+  const fra = (min) => min <= 0 ? 'adesso' : min === 1 ? 'fra un minuto' : min < 60 ? `fra ${min} minuti` : `alle ${rfOrHm(o.adesso + min)}`;
+  const calcola = (m) => {
+    const sue = o.pazienti.filter(p => p.medico === m.nome && !['assente', 'annullato'].includes(p.stato));
+    const fatte = sue.filter(p => ['visita_finita', 'dimesso'].includes(p.stato)).length;
+    const attende = sue.find(p => p.stato === 'pronto') || sue.find(p => ['chiamato', 'in_preparazione'].includes(p.stato));
+    const manca = Math.max(0, (m.liberoDa ?? o.adesso) - o.adesso);
+    const prima = sue.filter(p => p.inizio != null && p.inizio > o.adesso).sort((x, y) => x.inizio - y.inizio)[0];
+    if (m.adesso) return { rango: 2, ordine: m.liberoDa ?? 0, cls: 'occupato', sue, fatte,
+      titolo: `In <b>${rfEsc(m.adesso.sala)}</b> con ${rfEsc(rfNomeCortoPaz(m.adesso.etichetta))}`,
+      sotto: `si libera ${fra(manca)}${manca > 0 ? ` (~${rfOrHm(m.liberoDa)})` : ''}${attende ? ` · un paziente lo aspetta in ${rfEsc(attende.sala)}` : ''}` };
+    if (attende) return { rango: 0, ordine: attende.inizio ?? 0, cls: 'aspetta', sue, fatte,
+      titolo: `Lo aspettano in <b>${rfEsc(attende.sala)}</b>`,
+      sotto: `${rfEsc(rfNomeCortoPaz(attende.etichetta))} è ${rfOrStato(attende.stato)}` };
+    if (!fatte && prima) return { rango: 3, ordine: prima.inizio, cls: 'atteso', sue, fatte, detta: prima.id,
+      titolo: `Comincia alle <b>${rfOrHm(prima.inizio)}</b>`, sotto: `in ${rfEsc(prima.sala || 'una stanza da decidere')}` };
+    if (prima) return { rango: 1, ordine: prima.inizio, cls: 'libero', sue, fatte, detta: prima.id,
+      titolo: `<b>Libero</b>${m.inSala ? `, è uscito da ${rfEsc(m.inSala)}` : ''}`,
+      sotto: `il prossimo alle ${rfOrHm(prima.inizio)} in ${rfEsc(prima.sala || 'una stanza da decidere')}` };
+    return { rango: 4, ordine: 0, cls: 'finito', sue, fatte,
+      titolo: `<b>Ha finito</b> per oggi`, sotto: fatte ? `${fatte} ${fatte === 1 ? 'visita fatta' : 'visite fatte'}` : 'nessun\'altra visita in agenda' };
+  };
+  return medici.map(m => ({ m, x: calcola(m) }))
+    .sort((a, b) => (a.x.rango - b.x.rango) || (a.x.ordine - b.x.ordine) || rfNomeCorto(a.m.nome).localeCompare(rfNomeCorto(b.m.nome)))
+    .map(({ m, x }) => {
+      const rit = m.ritardo || 0;
+      // «poi» non ripete la visita già nominata nella riga sopra.
+      const poi = m.prossime.filter(p => p.id !== x.detta && p.inizio > (m.liberoDa ?? o.adesso) - 1).slice(0, 2);
+      return `<div class="rf-or-med2 ${x.cls}">
+      <div class="av">${rfAvatar(m.nome)}</div>
+      <div class="c">
+        <div class="r1"><span class="nome">${rfEsc(rfNomeCorto(m.nome))}</span>${rit > 0 ? `<span class="rit ${rit >= 20 ? 'male' : 'poco'}" title="La visita sta andando più lunga del previsto">${rit} min di ritardo</span>` : ''}</div>
+        <div class="r2">${x.titolo}</div>
+        <div class="r3">${x.sotto}${poi.length ? ` · poi ${poi.map(p => `${rfEsc(p.sala || '—')} alle ${rfOrHm(p.inizio)}`).join(', ')}` : ''}</div>
+      </div>
+      <div class="dx"><span class="conta">${x.fatte}<i>/${x.sue.length}</i></span><span class="et">visite</span></div>
+    </div>`;
+    }).join('');
 }
 function rfNomeCortoPaz(n) { const p = String(n || '').trim().split(/\s+/); return p.length > 1 ? `${p[0]} ${p[1][0]}.` : (p[0] || ''); }
 function rfOrAvvisi(o) {
@@ -4313,7 +4379,7 @@ function rfOrAdesso(o) {
     ${rfOrMappa(o)}
     <div class="grid grid-2" style="margin-top:10px;align-items:start">
       <div class="stack">
-        <div class="card"><div class="card-head"><span class="section-title">Movimento dei medici</span></div>${rfOrMedici(o)}</div>
+        <div class="card"><div class="card-head"><span class="section-title">Disponibilità dei medici</span><span class="caption">chi si libera prima, in cima</span></div>${rfOrMedici(o)}</div>
         <div class="card"><div class="card-head"><span class="section-title">Da chiamare</span></div>${rfOrIngressi(o)}</div>
         ${(o.senzaSala || []).length ? `<div class="card"><div class="card-head"><span class="section-title">Senza sala</span></div>${o.senzaSala.map(s => `<div class="rf-or-ingr"><b>${rfEsc(s.etichetta)}</b><span class="q">${rfEsc(rfNomeCorto(s.medico || 'senza medico'))} · nessuna stanza libera in tempo utile: da sistemare</span></div>`).join('')}</div>` : ''}
       </div>
