@@ -3533,6 +3533,9 @@ window.addEventListener('load', () => {
 .rf-cs-b .n { font-size:11.5px; font-weight:600; line-height:1.25; word-break:break-word; }
 .rf-cs-b .am { font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; opacity:.8; }
 .rf-cs-b.vuota { background:var(--surface-3); color:var(--text-3); box-shadow:inset 3px 0 0 var(--border-2); }
+.rf-cs-b.fuori { background:hsl(var(--h) 60% 50% / .06); box-shadow:inset 3px 0 0 hsl(var(--h) 55% 55% / .25); }
+.rf-cs-b.fuori .n { font-weight:600; }
+.rf-cs-b.fuori .q { font-size:10px; opacity:.7; }
 .rf-cs-b.vuota .n { font-weight:500; }
 .rf-cs-b.aperta { background:var(--warning-soft); color:var(--warning); box-shadow:inset 3px 0 0 var(--warning); font-style:italic; }
 :root[data-theme="dark"] .rf-cs-b { color:hsl(var(--h) 65% 80%); }
@@ -4005,19 +4008,23 @@ PAGES.sale = () => {
       // è la regola. Quanto è PRESA davvero lo dicono le visite — se uno ha
       // visite solo al pomeriggio, il blocco pieno è solo il pomeriggio.
       const presa = rfPresaFascia(r.stanza, s);
-      const blocco = (dalle, alle, cls, eti) => {
+      const blocco = (dalle, alle, cls, eti, quando) => {
         const h = (rfMinuti(alle) - rfMinuti(dalle)) * M - 3;
         return `<button class="rf-cs-b${cls}" style="top:${su(dalle).toFixed(1)}px;height:${Math.max(20, h).toFixed(1)}px;--h:${rfTinta(s.chi || 'x')}"
         onclick="rfSalaApri('${rfEsc(r.stanza)}')" data-sug="${rfEsc(`<div class="t">${rfEsc(r.stanza)}${r.funzione ? ` · ${rfEsc(r.funzione)}` : ''}</div><div class="r"><b>${rfEsc(dalle)}–${rfEsc(alle)}</b> · ${rfEsc(s.chi ? rfNomeNudo(s.chi) : 'nessuno')}</div><div class="r">${rfEsc(presa ? `stanza presa dalle ${presa.dalle} alle ${presa.alle}` : (s.perche || ''))}${dentro.length ? ` · ${dentro.length} ${dentro.length === 1 ? 'visita' : 'visite'}` : ''}</div>${presa ? `<div class="c">La fascia ${rfEsc(s.dalle)}–${rfEsc(s.alle)} è sua per regola; occupata solo per il tempo delle visite.</div>` : ''}${r.nota ? `<div class="c">${rfEsc(r.nota)}</div>` : ''}`)}">
         <span class="o">${rfEsc(dalle)}–${rfEsc(alle)}</span>
         <span class="n">${rfEsc(eti)}</span>
+        ${quando ? `<span class="q">${rfEsc(quando)}</span>` : ''}
         ${s.manuale ? '<span class="am">a mano</span>' : ''}</button>`;
       };
       if (!s.chi) return [blocco(s.dalle, s.alle, ' aperta', 'da decidere')];
       if (!presa) return [blocco(s.dalle, s.alle, ' vuota', rfNomeCorto(s.chi))];
+      // Il nome e il colore stanno sulla fascia INTERA, in chiaro: lì non ci
+      // passa sopra niente. Il blocco pieno segna quando la stanza è presa
+      // davvero, e non ripete il nome — sotto le visite non si leggerebbe.
       return [
-        blocco(s.dalle, s.alle, ' vuota', ''),
-        blocco(presa.dalle, presa.alle < s.alle ? presa.alle : presa.alle, '', rfNomeCorto(s.chi)),
+        blocco(s.dalle, s.alle, ' fuori', rfNomeCorto(s.chi), `presa ${presa.dalle}–${presa.alle}`),
+        blocco(presa.dalle, presa.alle, '', ''),
       ];
     }).join('')}
     <div class="rf-cs-vv">${rfVisiteSala(r.stanza).map(v => {
