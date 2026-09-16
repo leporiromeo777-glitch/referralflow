@@ -618,6 +618,8 @@ Quattro viste, una sola pagina, sopra il prototipo attuale (la pagina «Sale» e
 
 **D. Gli avvisi.** Frasi corte, nell'ordine in cui arrivano, sopra la mappa, mai più di tre insieme: «Rego +12 min» · «P-17 resta in Sala 3» · «P-21: ingresso 10:40 → 10:52» · «Sala 4 usata per assorbire il ritardo» · «Piano dei prossimi 30 minuti aggiornato». Clic: la spiegazione intera.
 
+Dal 16.9 sera **l'accoglienza sta nella Home, al posto della colonna destra** (arrivi di oggi coi tasti e la frase in italiano); la card «Sale e medici» è passata a sinistra al posto del «Programma di oggi», che era diventato un doppione. Le pagine Accoglienza e Stanza non sono nel menu: si aprono dall'indirizzo (`#/accoglienza`, `#/stanza`) o dai due link piccoli nella pagina Sale, perché sono fatte per un tablet e per lo schermo di una stanza, non per la barra laterale.
+
 **Il tablet all'accoglienza** è una lista dei pazienti di oggi in ordine d'ora con tre tasti: *arrivato · chiamato · assente*, e la riga del sistema sotto ogni nome: «entra in Sala 3 alle 10:52, con Rego». **Il pulsante in stanza** (uno schermo piccolo o il telefono del medico): *in preparazione · pronto · finito*, più il nome del paziente e del prossimo. Niente altro: chi è in stanza non deve leggere.
 
 Regole di stile come nel resto ([[Piattaforma/Convenzioni UI]]): colori appena accennati, stato sempre scritto a parole, niente animazioni che distraggono, il ritardo in minuti con il segno.

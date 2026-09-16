@@ -56,7 +56,7 @@ async function rfCaricaDati() {
   for (const nome of ['ARCHIVE', 'AUDIT', 'AIJOBS', 'KNOWLEDGE', 'INVOICES']) { try { if (Array.isArray(window[nome])) rfSvuota(window[nome]); } catch { /* assente */ } }
   // Voci per ruolo (14.9.2026: Percorsi, Moduli, Da fatturare). Questa riga
   // vince su qualunque aggiunta fatta al caricamento dello script.
-  const nav = ['home', 'agenda', 'sale', 'accoglienza', 'stanza', 'prestazioni', 'patients', 'invianti', 'percorsi', 'reports', 'dittafono', 'documents', 'moduli', 'anonymize', 'inbox', 'ai', 'fatturazione', 'administration'];
+  const nav = ['home', 'agenda', 'sale', 'prestazioni', 'patients', 'invianti', 'percorsi', 'reports', 'dittafono', 'documents', 'moduli', 'anonymize', 'inbox', 'ai', 'fatturazione', 'administration'];
   const nascosti = new Set(Array.isArray(RF.data.moduli_nascosti) ? RF.data.moduli_nascosti : []);
   for (const k of Object.keys(NAV)) NAV[k] = nav.filter(v => (v !== 'fatturazione' || ['secretary', 'org_admin'].includes(k)) && (!nascosti.has(v) || v === 'home' || v === 'administration'));
   render();
@@ -183,7 +183,7 @@ const rfRenderSidebarOrig = renderSidebar;
 // Barra laterale a sezioni (14.9.2026, tema minimale): le voci del ruolo
 // raggruppate con un'etichetta; una voce fuori da ogni gruppo finisce in coda.
 const RF_NAV_GRUPPI = [
-  ['Operatività', ['home', 'agenda', 'sale', 'accoglienza', 'stanza', 'prestazioni', 'inbox']],
+  ['Operatività', ['home', 'agenda', 'sale', 'prestazioni', 'inbox']],
   ['Clinico', ['patients', 'invianti', 'percorsi', 'visits', 'reports', 'dittafono', 'documents', 'moduli']],
   ['AI', ['ai', 'anonymize']],
   ['Amministrazione', ['fatturazione', 'communications', 'statistics', 'administration', 'system']],
@@ -296,21 +296,21 @@ PAGES.home = () => {
       <div class="stack">
         <div class="card"><div class="card-head"><span class="section-title">Da fare adesso</span><button class="btn sm ghost" data-go="#/inbox">Tutte ${ICONS.chevR}</button></div>
           <div class="list">${TASKS.length ? TASKS.slice(0, 12).map(t => `<div class="list-item"><i class="dot ${t.prio === 'urgent' || t.prio === 'high' ? 'danger' : 'accent'}"></i><div class="grow"><div class="name">${rfEsc(t.title)}</div><div class="sub">${rfEsc(t.due)}</div></div><a class="btn sm" href="${t.href}">Apri</a></div>`).join('') : '<div class="caption" style="padding:8px 6px">Tutto gestito. Buon lavoro.</div>'}</div></div>
-        <div class="card"><div class="card-head"><span class="section-title">Programma di oggi</span><button class="btn sm ghost" data-go="#/agenda">Agenda completa ${ICONS.chevR}</button></div>
-          <div class="tl">${appts.length ? appts.map(a => `<div class="tl-item ${a.status === 'COMPLETED' ? 'done' : a === next ? 'now' : a.late ? 'warn' : ''} clickable" data-go="#/patients/${a.p}" style="cursor:pointer"><span class="time num">${a.start}<span class="caption" style="display:block;font-weight:400">${a.dur ? `${a.dur}'` : ''}</span></span><div class="b"><div class="n">${rfEsc(fullName(P[a.p]))}</div><div class="s">${rfEsc(a.reason)} · ${rfEsc(DOCTORS[a.doc] || '')}${a.room ? ` · ${rfEsc(a.room)}` : ''}</div></div>${a.status === 'CANCELLED' ? '' : (typeof statusBadge === 'function' ? statusBadge(a.status) : '')}</div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessun appuntamento oggi in agenda.</div>'}</div></div>
+        ${rfCardSale(sale, rigaSala, nMed)}
       </div>
       <div class="stack">
-        ${rfCardSale(sale, rigaSala, nMed)}
-        <div class="card"><div class="card-head"><span class="section-title">In studio oggi</span><span class="badge count">${nMed}</span></div>
-          <div class="list">${nMed ? mediciOggi.map(d => `<div class="rf-persona"><i class="dot success"></i><span>${rfEsc(DOCTORS[d] || d)}${rfEtichettaRuolo(d)}</span><span class="caption" style="margin-left:auto">${appts.filter(a => a.doc === d).length} app.</span></div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessun medico con agenda oggi.</div>'}</div>
-          <div class="caption mt-8" style="padding:0 6px">${s.accessi_attivi ?? 0} accessi attivi alla piattaforma</div></div>
-        ${urgenti.length ? `<div class="card"><div class="card-head"><span class="section-title">Urgenti</span><span class="badge count" style="background:var(--danger);color:#fff">${urgenti.length}</span></div>
-          <div class="list">${urgenti.map(t => `<div class="list-item"><i class="dot danger"></i><div class="grow"><div class="name" style="font-size:13px">${rfEsc(t.title)}</div><div class="sub">${rfEsc(t.due)}</div></div><a class="btn sm" href="${t.href}">Apri</a></div>`).join('')}</div></div>` : ''}
-        ${(RF.data.daChiamare || []).length ? `<div class="card"><div class="card-head"><span class="section-title">Da chiamare per la preparazione</span><span class="badge count">${RF.data.daChiamare.length}</span></div>
-          <div class="list">${RF.data.daChiamare.slice(0, 8).map(x => `<div class="list-item" style="align-items:flex-start"><div class="grow"><div class="name" style="font-size:13px"><a href="#/patients/${x.p}">${rfEsc(fullName(P[x.p]) || x.reason)}</a></div><div class="sub">${rfEsc(x.d.split('-').reverse().join('.'))} ${x.start} · ${rfEsc(x.reason)}${x.motivi.length ? ` · <b>${rfEsc(x.motivi.join(', '))}</b>` : ''}</div><div class="row mt-8" style="gap:6px"><select class="input sm" id="rf-ch-${x.id}" style="min-width:150px"><option value="raggiunto">Raggiunto</option><option value="segreteria_telefonica">Segreteria telefonica</option><option value="non_risponde">Non risponde</option><option value="da_richiamare">Da richiamare</option><option value="non_serve">Non serve</option></select><button class="btn sm" onclick="rfChiamata('${x.id}', '${x.p}')">Segna</button></div></div></div>`).join('')}</div>
-          <div class="caption mt-8" style="padding:0 6px">Appuntamenti dei prossimi 7 giorni senza una chiamata registrata.</div></div>` : ''}
-        <div class="card"><div class="card-head"><span class="section-title">Referti dalla catena</span><span class="badge count">${RF.queue.filter(r => r.status !== 'APPROVED').length}</span></div>
-          <div class="list">${RF.queue.filter(r => r.status !== 'APPROVED').slice(0, 5).map(r => `<div class="list-item"><div class="grow"><div class="name">${rfEsc(fullName(P[r.p]))}</div><div class="sub">${rfEsc(r.note)} · ${r.at}</div></div><button class="btn sm" data-go="#/review/${r.id}">Rivedi</button></div>`).join('') || '<div class="caption" style="padding:8px 6px">Nessuna bozza da controllare.</div>'}</div></div>
+        ${(() => {
+          // L'accoglienza al posto della colonna destra (16.9.2026 sera):
+          // gli arrivi di oggi coi tasti, e la frase in italiano.
+          const o = RF.orch;
+          if (!o) return `<div class="card"><div class="card-head"><span class="section-title">Accoglienza</span></div><div class="caption" style="padding:8px 6px">Carico chi è arrivato…</div></div>`;
+          const c = rfOrAccoglienzaCorpo(o, true);
+          const arrivati = o.pazienti.filter(p => ['arrivato', 'in_attesa'].includes(p.stato)).length;
+          const daChiamare = (o.ingressi || []).filter(i => i.azione === 'chiama').length;
+          return `${rfOrMsg()}<div class="card"><div class="card-head"><span class="section-title">Accoglienza</span><span class="caption">${arrivati} in attesa${daChiamare ? ` · <b>${daChiamare} da chiamare</b>` : ''}</span></div>
+            ${c.testo}
+            <div class="rf-or-acc" style="margin-top:10px">${c.righe}</div></div>`;
+        })()}
       </div>
     </div>`;
 };
@@ -4158,6 +4158,9 @@ PAGES.sale = () => {
 .rf-or-acc .r .sis b { color:var(--text); }
 .rf-or-acc .r .az { display:flex; gap:6px; }
 .rf-or-acc .r.fatto { opacity:.55; }
+.rf-or-acc .r.compatta { grid-template-columns:46px minmax(0,1.3fr) minmax(0,1.2fr) auto; font-size:13px; padding:7px 0; }
+.rf-or-acc .r.compatta .m { display:none; }
+.rf-or-acc .r.compatta .az { flex-wrap:wrap; justify-content:flex-end; }
 .rf-or-stanza { max-width:560px; margin:0 auto; text-align:center; }
 .rf-or-stanza .chi { font-size:26px; font-weight:600; margin:10px 0 4px; }
 .rf-or-stanza .cosa { color:var(--text-2); margin-bottom:18px; }
@@ -4295,7 +4298,7 @@ function rfOrIngressi(o) {
 function rfOrAdesso(o) {
   const inUso = o.sale.filter(s => ['occupata_visita', 'occupata_pronto', 'in_preparazione'].includes(s.stato)).length;
   const presenti = (o.medici || []).filter(m => m.stato !== 'assente').length;
-  return `<div class="caption" style="margin:-4px 0 10px">${presenti} medici presenti · ${inUso}/${o.sale.length} sale occupate · piano ${o.versione != null ? `v${o.versione} (${rfEsc(o.motore || '')})` : 'non ancora fatto'} · ${o.adessoHm}${o.senzaPrestazione ? ` · <span title="Colore dell'agenda senza prestazione: durata dal catalogo di base">${o.senzaPrestazione} senza prestazione riconosciuta</span>` : ''}</div>
+  return `<div class="caption" style="margin:-4px 0 10px">${presenti} medici presenti · ${inUso}/${o.sale.length} sale occupate · piano ${o.versione != null ? `v${o.versione} (${rfEsc(o.motore || '')})` : 'non ancora fatto'} · ${o.adessoHm}${o.senzaPrestazione ? ` · <span title="Colore dell'agenda senza prestazione: durata dal catalogo di base">${o.senzaPrestazione} senza prestazione riconosciuta</span>` : ''} · <a href="#/stanza" title="Da aprire sullo schermo o sul telefono in una stanza: i tre tasti">schermo di stanza</a> · <a href="#/accoglienza" title="Da aprire su un tablet all'accoglienza">tablet accoglienza</a></div>
     ${rfOrMappa(o)}
     <div class="grid grid-2" style="margin-top:10px;align-items:start">
       <div class="stack">
@@ -4422,13 +4425,13 @@ function rfOrBottoniVista(v) { const b = (k, et) => `<button class="${v === k ? 
 async function rfOrchRitira(id) { try { await fetch('/api/orchestrazione/comandi', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'ritira', id }) }); } catch {} RF.orchSala = ''; await rfOrchCarica(); }
 
 /* ---------- Accoglienza: il tablet ---------- */
-PAGES.accoglienza = () => {
-  if (!RF.live) return rfPaginaPiattaforma('Accoglienza', 'Arrivi e chiamate');
-  const o = RF.orch;
-  const testa = `<div class="page-head"><div><h2 class="page-title">Accoglienza</h2><div class="page-sub">Chi è arrivato, chi si chiama, e dove va</div></div></div>`;
-  if (!o) return `${testa}<div class="card"><div class="caption">Carico…</div></div>`;
+/* Il corpo dell'accoglienza: la lista di oggi con i tasti e la frase in
+   italiano. Lo usano la pagina Accoglienza (per un tablet) e la Home, dove
+   dal 16.9 sera sta al posto della colonna destra. */
+function rfOrAccoglienzaCorpo(o, compatto) {
   const ingressi = new Map((o.ingressi || []).map(i => [i.id, i]));
-  const righe = [...o.pazienti].sort((a, b) => a.teorica - b.teorica).map(p => {
+  const pazienti = [...o.pazienti].sort((a, b) => a.teorica - b.teorica);
+  const righe = pazienti.map(p => {
     const i = ingressi.get(p.id);
     const fatto = ['dimesso', 'assente', 'annullato', 'visita_finita'].includes(p.stato);
     let sis = '';
@@ -4443,18 +4446,25 @@ PAGES.accoglienza = () => {
     if (p.stato === 'arrivato') az.push(`<button class="btn sm" onclick="rfOrchEvento('paziente_accolto',{appointment_id:'${p.id}'},'tablet')">In attesa</button>`);
     if (['arrivato', 'in_attesa'].includes(p.stato) && p.sala) az.push(`<button class="btn sm ${i && i.azione === 'chiama' ? 'primary' : ''}" onclick="rfOrchEvento('paziente_chiamato',{appointment_id:'${p.id}',sala:'${rfEsc(p.sala)}'},'tablet')">Chiama</button>`);
     if (p.stato === 'chiamato') az.push(`<button class="btn sm ghost" onclick="rfOrchEvento('paziente_richiamato',{appointment_id:'${p.id}'},'tablet')" title="Torna in sala d'attesa: lo può fare solo una persona">Richiama</button>`);
-    return `<div class="r${fatto ? ' fatto' : ''}"><span class="h">${rfOrHm(p.teorica)}</span><span><span class="n">${rfEsc(p.etichetta)}</span><br><span class="rf-or-pill ${rfEsc(p.stato)}">${rfEsc(rfOrStato(p.stato))}</span></span><span class="m">${rfEsc(p.prestazione || '—')}<br>${rfEsc(rfNomeCorto(p.medico || 'senza medico'))}</span><span class="sis">${sis}</span><span class="az">${az.join('')}</span></div>`;
+    return `<div class="r${fatto ? ' fatto' : ''}${compatto ? ' compatta' : ''}"><span class="h">${rfOrHm(p.teorica)}</span><span><span class="n">${rfEsc(p.etichetta)}</span><br><span class="rf-or-pill ${rfEsc(p.stato)}">${rfEsc(rfOrStato(p.stato))}</span></span><span class="m">${rfEsc(p.prestazione || '—')}<br>${rfEsc(rfNomeCorto(p.medico || 'senza medico'))}</span><span class="sis">${sis}</span><span class="az">${az.join('')}</span></div>`;
   }).join('');
   const t = RF.orchTesto;
-  return `${testa}${rfOrMsg()}<div class="stack">
-    <div class="card"><div class="card-head"><span class="section-title">Scrivi cosa succede</span><span class="caption">«la signora delle 10:30 arriva alle 11», «Rego è in ritardo di 15 minuti»</span></div>
-      <div class="row" style="gap:8px"><input class="input" id="rf-or-testo" placeholder="Una frase, come la diresti a un collega" onkeydown="if(event.key==='Enter'){event.preventDefault();rfOrchTesto(this.value);}"><button class="btn" onclick="rfOrchTesto(document.getElementById('rf-or-testo').value)">Interpreta</button></div>
-      ${t ? (t.interpretazione ? `<div class="rf-or-msg ok" style="margin-top:8px">Ho capito: <b>${rfEsc(t.interpretazione.tipo)}</b>${t.interpretazione.etichetta ? ` · ${rfEsc(t.interpretazione.etichetta)}` : ''}${t.interpretazione.medico ? ` · ${rfEsc(t.interpretazione.medico)}` : ''}${t.interpretazione.stanza ? ` · ${rfEsc(t.interpretazione.stanza)}` : ''}${t.interpretazione.minuti != null ? ` · ${t.interpretazione.minuti} min` : ''}${t.interpretazione.nota ? ` · ${rfEsc(t.interpretazione.nota)}` : ''}
+  const testo = `<div class="row" style="gap:8px"><input class="input" id="rf-or-testo" placeholder="Scrivi cosa succede: «la signora delle 10:30 arriva alle 11», «Rego è in ritardo di 15 minuti»" onkeydown="if(event.key==='Enter'){event.preventDefault();rfOrchTesto(this.value);}"><button class="btn" onclick="rfOrchTesto(document.getElementById('rf-or-testo').value)">Interpreta</button></div>
+      ${t ? (t.attesa ? '<div class="caption" style="margin-top:8px">Leggo…</div>' : t.interpretazione ? `<div class="rf-or-msg ok" style="margin-top:8px">Ho capito: <b>${rfEsc(t.interpretazione.tipo)}</b>${t.interpretazione.etichetta ? ` · ${rfEsc(t.interpretazione.etichetta)}` : ''}${t.interpretazione.medico ? ` · ${rfEsc(t.interpretazione.medico)}` : ''}${t.interpretazione.stanza ? ` · ${rfEsc(t.interpretazione.stanza)}` : ''}${t.interpretazione.minuti != null ? ` · ${t.interpretazione.minuti} min` : ''}${t.interpretazione.nota ? ` · ${rfEsc(t.interpretazione.nota)}` : ''}
           ${(t.problemi || []).length ? `<br><span style="color:#a23b2a">${rfEsc(t.problemi.join(' · '))}</span>` : ''}
           <div class="row" style="gap:6px;margin-top:6px">${(t.problemi || []).length ? '' : `<button class="btn primary sm" onclick="rfOrchConfermaTesto()">Confermo</button>`}<button class="btn sm ghost" onclick="RF.orchTesto=null;render()">Annulla</button></div></div>`
-        : `<div class="caption" style="margin-top:8px">${rfEsc(t.nota || t.errore || '')}</div>`) : ''}
-    </div>
-    <div class="card"><div class="rf-or-acc">${righe || '<div class="caption">Nessun appuntamento oggi.</div>'}</div></div></div>`;
+        : `<div class="caption" style="margin-top:8px">${rfEsc(t.nota || t.errore || '')}</div>`) : ''}`;
+  return { righe: righe || '<div class="caption">Nessun appuntamento oggi.</div>', testo };
+}
+PAGES.accoglienza = () => {
+  if (!RF.live) return rfPaginaPiattaforma('Accoglienza', 'Arrivi e chiamate');
+  const o = RF.orch;
+  const testa = `<div class="page-head"><div><h2 class="page-title">Accoglienza</h2><div class="page-sub">Chi è arrivato, chi si chiama, e dove va</div></div></div>`;
+  if (!o) return `${testa}<div class="card"><div class="caption">Carico…</div></div>`;
+  const c = rfOrAccoglienzaCorpo(o, false);
+  return `${testa}${rfOrMsg()}<div class="stack">
+    <div class="card"><div class="card-head"><span class="section-title">Scrivi cosa succede</span></div>${c.testo}</div>
+    <div class="card"><div class="rf-or-acc">${c.righe}</div></div></div>`;
 };
 async function rfOrchTesto(testo) {
   const t = String(testo || '').trim(); if (t.length < 4) return;
