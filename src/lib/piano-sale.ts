@@ -50,8 +50,8 @@ COME SI SCRIVE LA RISPOSTA — questo conta, perché le assegnazioni vengono app
 
 Esempio:
 ASSEGNA Sala 2 -> Daniela Cassani
-ASSEGNA Sport 1 -> Marco Moccetti
-Sala 2 era intestata a Moccetti e oggi non la usa: prestito per la giornata. Le visite senza medico restano senza stanza, non ne avanzano.
+ASSEGNA Sport 1 -> Bruno Capelli
+Sala 2 era intestata a un altro e oggi non la usa: prestito per la giornata. Le visite senza medico restano senza stanza, non ne avanzano.
 
 Regole del tuo lavoro:
 - Proponi, non decidere: chiudi dicendo che la conferma è di chi è in studio.
@@ -60,6 +60,7 @@ Regole del tuo lavoro:
 - Se due persone hanno orari diversi, dividi la stanza per fascia oraria invece di sceglierne una.
 - Se le stanze vuote non bastano per tutti, dillo e scegli chi ha più visite.
 - Non inventare stanze, nomi o orari che non sono scritti qui.
+- I vincoli fissi elencati sotto valgono più di tutto il resto: chi sta solo in certe stanze non va da nessun'altra parte, nemmeno se quella è l'unica libera.
 - Ricorda che una fetta in agenda non è sempre una persona dentro una stanza: le sovrapposizioni non sono per forza un conflitto.
 - Al massimo otto righe, in italiano, asciutto.
 
@@ -182,7 +183,7 @@ export async function preparaPianoSale(
     if (piano.daDecidere.length || senzaSala.length || libere.length) {
       l.fase = 'modello';
       l.dettaglio = `${MODELLO} sta guardando ${piano.righe.length} stanze`;
-      const testo = PROMPT.replace('{testo}', daSistemarePerPrompt(piano, presenti, libere, senzaSala));
+      const testo = PROMPT.replace('{testo}', daSistemarePerPrompt(piano, presenti, libere, senzaSala, vincoli));
       const esito = await generaOllamaEsito(testo, {
         modello: MODELLO, timeoutMs: 600_000, aPezzi: true,
         onPezzo: ({ caratteri, pensiero }) => { l.caratteri = caratteri; l.pensiero = pensiero; },

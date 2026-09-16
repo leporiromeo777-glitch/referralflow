@@ -396,7 +396,7 @@ test('il medico si deduce da chi vede quel paziente quel giorno, non si inventa'
 test('chi sta «sempre e solo» in una stanza non ne prende altre', () => {
   const md = `- Sempre e solo: Vera Lucia Paiocchi in Sala 1\n\n## Sala 1\n- Di: Vera Lucia Paiocchi\n- Stato: validato\n\n## Sala 2\n- Di: condivisa\n- Chi: Vera Lucia Paiocchi, Marco Moccetti\n- Stato: proposta\n`;
   const v = soloIn(md);
-  assert.deepEqual(v, [{ chi: 'Vera Lucia Paiocchi', stanza: 'Sala 1' }]);
+  assert.deepEqual(v, [{ chi: 'Vera Lucia Paiocchi', stanze: ['Sala 1'] }]);
   const piano = pianoDelGiorno(leggiSale(md), ['Vera Lucia Paiocchi'], 'mar');
   // senza vincolo la Sala 2 sarebbe sua (unica presente fra chi la divide)
   const senza = assegnaVisite(piano.righe, [{ id: 'a', chi: 'Dr.ssa med. Vera Lucia Paiocchi', start: '09:00', dur: 30 }]);
@@ -407,7 +407,35 @@ test('chi sta «sempre e solo» in una stanza non ne prende altre', () => {
   // e una proposta che prova a spostarla non si applica
   const l = leggiProposta('ASSEGNA Sala 2 -> Dr.ssa med. Vera Lucia Paiocchi', piano.righe, ['Dr.ssa med. Vera Lucia Paiocchi'], v);
   assert.equal(l.applicabili.length, 0);
-  assert.match(l.saltate[0].perche, /sempre e solo in Sala 1/);
+  assert.match(l.saltate[0].perche, /solo in Sala 1/);
+});
+
+test('«Solo in» ammette più stanze, e le separa con «o» perché la virgola separa le voci', () => {
+  const md = `- Sempre e solo: Vera Lucia Paiocchi in Sala 1\n- Solo in: Marco Moccetti in Sala 2 o Sala 3\n\n## Sala 2\n- Di: Marco Moccetti\n- Stato: proposta\n\n## Sport 1\n- Di: Marco Moccetti\n- Ultima: sì\n- Stato: proposta\n`;
+  const v = soloIn(md);
+  assert.deepEqual(v, [
+    { chi: 'Vera Lucia Paiocchi', stanze: ['Sala 1'] },
+    { chi: 'Marco Moccetti', stanze: ['Sala 2', 'Sala 3'] },
+  ]);
+  const piano = pianoDelGiorno(leggiSale(md), ['Marco Moccetti'], 'mar');
+  const visite = ['a', 'b', 'c'].map((id) => ({ id, chi: 'Dr. med. Marco Moccetti', start: '09:00', dur: 30 }));
+  // Senza vincolo la terza visita traboccherebbe nella Sport 1; col vincolo no.
+  assert.ok(assegnaVisite(piano.righe, visite)['Sport 1'].length > 0);
+  const con = assegnaVisite(piano.righe, visite, v);
+  assert.deepEqual(con['Sport 1'], [], 'nelle sale dello sport non ci va nemmeno quando la sua è piena');
+  assert.equal(con['Sala 2'].length, 3, 'si accavallano in corsie nella sua stanza, invece di uscirne');
+  const l = leggiProposta('ASSEGNA Sport 1 -> Marco Moccetti', piano.righe, ['Dr. med. Marco Moccetti'], v);
+  assert.equal(l.applicabili.length, 0);
+  assert.match(l.saltate[0].perche, /solo in Sala 2 o Sala 3/);
+});
+
+test('i vincoli fissi arrivano anche nel testo per il modello, non solo nel controllo dopo', () => {
+  const md = `- Solo in: Marco Moccetti in Sala 2 o Sala 3\n\n## Sala 2\n- Di: Marco Moccetti\n- Stato: proposta\n`;
+  const piano = pianoDelGiorno(leggiSale(md), ['Marco Moccetti'], 'mar');
+  const testo = daSistemarePerPrompt(piano, ['Marco Moccetti'], [], [], soloIn(md));
+  assert.match(testo, /VINCOLI FISSI/);
+  assert.match(testo, /Marco Moccetti: solo in Sala 2 o Sala 3, mai altrove/);
+  assert.ok(!daSistemarePerPrompt(piano, ['Marco Moccetti'], [], []).includes('VINCOLI FISSI'), 'senza vincoli non si scrive una sezione vuota');
 });
 
 test('libera è la fascia, non la stanza: la Sala 3 al mattino conta', () => {

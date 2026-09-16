@@ -20,6 +20,9 @@ Due righe, qui sopra le stanze, dicono **che cosa non entra nel piano**: persone
 - Fuori dal piano: Andrea Bronz
 - Prestazioni fuori dal piano: Colloquio telefonico, Intervento, Risonanza magnetica (tranne Vera Lucia Paiocchi), TAC (tranne Vera Lucia Paiocchi)
 - Sempre e solo: Vera Lucia Paiocchi in Sala 1
+- Solo in: Marco Moccetti in Sala 2 o Sala 3
+
+Due righe dicono anche **chi non si sposta**, con due forze diverse. `Sempre e solo:` è una stanza e nient'altro. `Solo in:` è un elenco di stanze ammesse — `Marco Moccetti in Sala 2 o Sala 3`, detto dallo studio il 16.9.2026: niente sale dello sport, niente Sala 4 e Sala 5. In tutti e due i casi le visite non escono da quell'elenco, nemmeno quando una proposta lo suggerirebbe, e la proposta che ci prova viene scartata con scritto il perché. **Le stanze si separano con «o», non con la virgola**: in questa pagina la virgola separa le voci dell'elenco, e «in Sala 2, Sala 3» si leggerebbe come due persone.
 
 Le regole qui sotto vengono dalla conversazione del 15.9.2026 e dalle misure sull'agenda vera (chi lavora quando, quanti pazienti in parallelo). **Sono una proposta**: chi le vive le corregge.
 
@@ -38,7 +41,7 @@ Le regole qui sotto vengono dalla conversazione del 15.9.2026 e dalle misure sul
 - Di: Georgios Moschovitis
 - Dalle 13:00: Tiziano Moccetti
 - Giorni: lun mar mer gio
-- Nota: la mattina è di Moschovitis — detto dallo studio il 15.9.2026; prima la pagina la dava a Marco Moccetti. Tiziano non è mai in studio prima delle 13 e mai il venerdì. Marco Moccetti resta così senza una stanza sua nella pagina: il 15.9 tutti i suoi appuntamenti erano colloqui telefonici, che una stanza non la occupano — ma se un giorno visita, va detto dove.
+- Nota: la mattina è di Moschovitis — detto dallo studio il 15.9.2026; prima la pagina la dava a Marco Moccetti. Tiziano non è mai in studio prima delle 13 e mai il venerdì. Marco Moccetti resta così senza una stanza sua nella pagina: il 15.9 tutti i suoi appuntamenti erano colloqui telefonici, che una stanza non la occupano — ma se un giorno visita, va detto dove. Dal 16.9.2026 si sa almeno **dove non va**: la riga «Solo in» in testa lo tiene dentro Sala 2 o Sala 3.
 - Stato: proposta
 
 ## Sala 4

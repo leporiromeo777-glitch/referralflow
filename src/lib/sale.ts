@@ -49,16 +49,44 @@ export function fuoriDalPiano(markdown: string): string[] {
 // Lucia Paiocchi)».
 export type PrestazioneFuori = { nome: string; tranne: string[] };
 
-// Chi non si sposta mai. «- Sempre e solo: Vera Lucia Paiocchi in Sala 1»:
-// le sue visite vanno lì e in nessun altro posto, nemmeno se una proposta o
-// una casella aperta suggerirebbero altro. Detto dallo studio il 15.9.2026.
-export type SoloIn = { chi: string; stanza: string };
+// Chi non si sposta. Due righe in testa alla pagina, con due forze diverse:
+//
+//   «- Sempre e solo: Vera Lucia Paiocchi in Sala 1»
+//     la sua è quella e nient'altro — detto dallo studio il 15.9.2026.
+//   «- Solo in: Marco Moccetti in Sala 2 o Sala 3»
+//     può stare in una di quelle, mai altrove — detto dallo studio il
+//     16.9.2026: niente sale dello sport, niente Sala 4 e 5.
+//
+// La differenza fra le due è quante stanze ammettono, non come funzionano: in
+// tutti e due i casi le visite non escono da quell'elenco, nemmeno se una
+// proposta o una casella aperta suggerirebbero altro.
+//
+// Le stanze si separano con «o» (o con «e»), non con la virgola: la virgola
+// in questa pagina separa le VOCI dell'elenco, e «in Sala 2, Sala 3» si
+// leggerebbe come due persone.
+export type SoloIn = { chi: string; stanze: string[] };
 
 export function soloIn(markdown: string): SoloIn[] {
-  return elencoInTesta(markdown, 'sempre e solo').map((voce) => {
+  const leggi = (voce: string): SoloIn | null => {
     const m = /^(.+?)\s+in\s+(.+)$/i.exec(voce.trim());
-    return m ? { chi: m[1].trim(), stanza: m[2].trim() } : null;
-  }).filter((x): x is SoloIn => !!x);
+    if (!m) return null;
+    const stanze = m[2].split(/\s*,\s*|\s+o\s+|\s+e\s+/i).map((x) => x.trim()).filter(Boolean);
+    return stanze.length ? { chi: m[1].trim(), stanze } : null;
+  };
+  return [...elencoInTesta(markdown, 'sempre e solo'), ...elencoInTesta(markdown, 'solo in')]
+    .map(leggi).filter((x): x is SoloIn => !!x);
+}
+
+// «Sala 2 o Sala 3», come si scrive in una frase.
+export function elencoStanze(stanze: string[]): string {
+  const s = stanze ?? [];
+  if (s.length <= 1) return s[0] ?? '';
+  return `${s.slice(0, -1).join(', ')} o ${s[s.length - 1]}`;
+}
+
+export function stanzaAmmessa(stanza: string, vincolo: SoloIn | undefined): boolean {
+  if (!vincolo) return true;
+  return vincolo.stanze.some((x) => x.toLowerCase() === String(stanza ?? '').toLowerCase());
 }
 
 export function prestazioniFuoriPiano(markdown: string): PrestazioneFuori[] {
@@ -327,9 +355,9 @@ export function assegnaVisite(righe: RigaPiano[], visite: VisitaGrezza[], vincol
     let sue = righe
       .filter((r) => (r.segmenti ?? []).some((s) => s.chi && uguali(s.chi, v.chi) && v.start >= s.dalle && v.start < s.alle))
       .sort((a, b) => Number(a.ultima) - Number(b.ultima));
-    // Chi ha una stanza sola per regola non ne prende altre, mai.
+    // Chi per regola sta solo in certe stanze non ne prende altre, mai.
     const vincolo = (vincoli ?? []).find((x) => uguali(x.chi, v.chi));
-    if (vincolo) sue = sue.filter((r) => r.stanza.toLowerCase() === vincolo.stanza.toLowerCase());
+    if (vincolo) sue = sue.filter((r) => stanzaAmmessa(r.stanza, vincolo));
     if (!sue.length) continue;   // nessuna stanza in quel momento: non si mostra
     let scelta = sue.find((r) => liberaDa[r.stanza] <= i);
     const sovra = !scelta;
@@ -379,9 +407,17 @@ export function daSistemarePerPrompt(
   piano: Piano,
   presenti: string[],
   libere: FasciaLibera[],
-  senzaSala: { chi: string; n: number }[]
+  senzaSala: { chi: string; n: number }[],
+  vincoli: SoloIn[] = []
 ): string {
   const pezzi = [daDeciderePerPrompt(piano, presenti)];
+  // I vincoli fissi vanno DETTI al modello, non solo applicati dopo: una
+  // proposta che li viola viene scartata, e scartarla in silenzio vuol dire
+  // una casella che resta aperta senza che nessuno sappia perché.
+  if (vincoli.length) {
+    pezzi.push(`\nVINCOLI FISSI — una proposta che li viola viene scartata:\n${
+      vincoli.map((v) => `- ${v.chi}: solo in ${elencoStanze(v.stanze)}, mai altrove`).join('\n')}`);
+  }
   pezzi.push(`\nFASCE SENZA NESSUNA VISITA OGGI:\n${libere.length
     ? libere.map((l) => `- ${l.stanza} ${l.dalle}-${l.alle}${l.di ? ` (intestata a ${l.di})` : ''}${l.ultima ? ' — da usare solo se le altre non bastano' : ''}`).join('\n')
     : '- nessuna: tutte le stanze hanno visite in ogni fascia'}`);
@@ -444,8 +480,8 @@ export function leggiProposta(testo: string, righe: RigaPiano[], persone: string
     // al contrario: la stessa persona in due stanze.
     const chi = trovate[0].p;
     const vincolo = (vincoli ?? []).find((x) => uguali(x.chi, chi));
-    if (vincolo && vincolo.stanza.toLowerCase() !== stanza.toLowerCase()) {
-      saltate.push({ riga, perche: `${chi} sta sempre e solo in ${vincolo.stanza}` });
+    if (vincolo && !stanzaAmmessa(stanza, vincolo)) {
+      saltate.push({ riga, perche: `${chi} sta solo in ${elencoStanze(vincolo.stanze)}` });
       continue;
     }
     const giaStanza = applicabili.find((x) => x.stanza === stanza);
