@@ -2555,7 +2555,11 @@ async function rfInterpretaEAgisci(q) {
 const rfAskOrig = askAI;
 askAI = function (q) {
   if (!RF.live) return rfAskOrig(q);
-  if (!state.aiOpen) state.aiOpen = true;
+  // Sul telefono il pannello laterale a tutto schermo è una seconda Cleo più
+  // povera di quella vera: niente benvenuto, niente tasti dei modi. La
+  // domanda va quindi nella PAGINA di Cleo, la stessa del computer.
+  if (rfTelefono()) { state.aiOpen = false; if (state.route !== 'ai') go('#/ai'); }
+  else if (!state.aiOpen) state.aiOpen = true;
   state.aiMessages.push({ html: `<div class="ai-msg user">${rfEsc(q)}</div>` });
   const org = rfRispostaOrganizzazione(q);
   if (org) { rfRispondiSubito(org); return; }
@@ -3420,7 +3424,16 @@ if (rfDentro()) {
     if (!RF.caricato) return rfPaginaCarico();
     if (state.route === 'ai') state.aiOpen = false;
     const out = rfRenderVero();
-    const aip = document.getElementById('rf-aip-body'); if (aip) { aip.scrollTop = 1e6; const inp = document.getElementById('rf-aip-in'); if (inp && !document.activeElement?.closest('#modal')) setTimeout(() => inp.focus({ preventScroll: true }), 0); }
+    // La pagina di Cleo scende in fondo SOLO se c'è una conversazione: col
+    // benvenuto scendere significava saltare titolo e campo. E sul telefono
+    // non si prende il fuoco da sola: la tastiera coprirebbe mezza pagina
+    // appena si apre.
+    const aip = document.getElementById('rf-aip-body');
+    if (aip) {
+      aip.scrollTop = state.aiMessages.length ? 1e6 : 0;
+      const inp = document.getElementById('rf-aip-in');
+      if (inp && !rfTelefono() && !document.activeElement?.closest('#modal')) setTimeout(() => inp.focus({ preventScroll: true }), 0);
+    }
     rfRicordaPagina();
     rfTastoIndietro();
     document.querySelectorAll('[data-prefirma]').forEach(el => { el.onclick = (e) => { e.stopPropagation(); if (!state.aiOpen) state.aiOpen = true; state.aiMessages.push({ html: `<div class="ai-msg user">Controllo prima della firma</div>` }); rfProcedura({ nome: 'controllo_prefirma', bozza_id: el.dataset.prefirma }, 'Controllo la bozza prima della firma…'); }; });
@@ -5151,6 +5164,14 @@ function rfAgendaListaHtml(lista, vista) {
   .rf-v-voce { grid-template-columns:minmax(0,1fr); gap:2px; }
   .rf-v-voce .e { font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
 
+  /* la pagina di Cleo: il benvenuto parte dall'alto, così la prima cosa che
+     si vede è il campo con i due modi e non la metà di un elenco. */
+  .rf-gpt-scroll.vuota { justify-content:flex-start; }
+  .rf-gpt-col { padding:0 16px; }
+  .rf-gpt-w h3 { font-size:20px; margin-top:8px; }
+  .rf-aiw-grid { grid-template-columns:minmax(0,1fr); }
+  .rf-gpt-foot { padding-bottom:12px; }
+
   /* niente esce mai di lato */
   #content, #content > .page { max-width:100%; overflow-x:hidden; }
   .rf-cal-scorre { max-width:100%; }
@@ -5169,3 +5190,22 @@ function rfAgendaListaHtml(lista, vista) {
     if ((largo <= 640) !== (ora <= 640)) { largo = ora; render(); } else { largo = ora; try { rfTabelleTelefono(); } catch { /* idem */ } }
   });
 })();
+
+/* Il tasto «AI» della barra in alto, sul telefono, porta alla PAGINA di Cleo.
+   Prima apriva il pannello laterale, che sul telefono diventa un foglio a
+   tutto schermo: sembrava Cleo ma non lo era — senza benvenuto, senza i due
+   modi «Domanda medica» e «Con la cartella». Con il microfono il pannello
+   resta, perché la dettatura scrive nel campo che sta lì dentro. */
+if (typeof toggleAI === 'function') {
+  const rfToggleAiOrig = toggleAI;
+  toggleAI = function (force) {
+    // Il tasto passa l'evento del clic come primo argomento: «esplicito» è
+    // solo un vero true/false, cioè il microfono che chiede il pannello.
+    if (rfTelefono() && typeof force !== 'boolean' && !state.aiOpen) {
+      state.aiOpen = false;
+      if (state.route !== 'ai') go('#/ai'); else render();
+      return;
+    }
+    return rfToggleAiOrig.apply(this, arguments);
+  };
+}
