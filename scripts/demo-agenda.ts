@@ -53,9 +53,18 @@ async function main() {
   if (!studio) throw new Error('studio «demo» non trovato: crealo prima con create-studio');
   const medici = await query<{ id: string; nome: string }>(`select id, nome from providers where studio_id = $1`, [studio.id]);
   const catalogo = await query<{ nome: string; durata_min: number; colore: string | null }>(`select nome, durata_min, colore from prestazioni_catalogo where studio_id = $1`, [studio.id]);
-  const oggi = new Date().toISOString().slice(0, 10);
+  // Il giorno si può dare: «npx tsx scripts/demo-agenda.ts 2026-09-17», e
+  // «domani» per la riunione del giorno dopo. Senza argomento è oggi.
+  const arg = (process.argv[2] ?? '').trim();
+  const giornoDa = (v: string) => {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+    const d = new Date();
+    if (v === 'domani') d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
+  };
+  const oggi = giornoDa(arg);
 
-  const via = await query(`delete from appointments where studio_id = $1 and external_uid like 'demo-%' returning id`, [studio.id]);
+  const via = await query(`delete from appointments where studio_id = $1 and external_uid like $2 returning id`, [studio.id, `demo-${oggi}-%`]);
   if (via.length) console.log(`tolti ${via.length} appuntamenti della demo precedente`);
 
   let n = 0; let iGente = 0; let iCartella = 0;
@@ -87,7 +96,7 @@ async function main() {
   console.log(`giornata inventata: ${n} appuntamenti di oggi (${oggi}) in «${studio.nome}»`);
   const conta = await query<{ medico: string; quanti: string }>(
     `select p.nome as medico, count(*)::text as quanti from appointments a join providers p on p.id = a.provider_id
-     where a.studio_id = $1 and a.starts_at::date = current_date group by p.nome order by p.nome`, [studio.id]);
+     where a.studio_id = $1 and a.starts_at::date = $2::date group by p.nome order by p.nome`, [studio.id, oggi]);
   for (const r of conta) console.log(`  ${r.medico}: ${r.quanti}`);
 }
 

@@ -35,11 +35,12 @@ Nessun dato di persona vera esiste in quel database. Se un giorno ne finisse den
 ```
 bash mac/demo-link.sh          # il link di adesso (lo riapre se è caduto)
 launchctl kickstart -k gui/$(id -u)/ch.referralflow.demo    # riavvia la demo
-cd ~/referralflow-demo && NODE_OPTIONS=--conditions=react-server npx tsx --env-file=.env scripts/demo-agenda.ts   # rifà la giornata di oggi
+cd ~/referralflow-demo && NODE_OPTIONS=--conditions=react-server npx tsx --env-file=.env scripts/demo-agenda.ts           # rifà la giornata di oggi
+cd ~/referralflow-demo && NODE_OPTIONS=--conditions=react-server npx tsx --env-file=.env scripts/demo-agenda.ts domani    # e quella di domani (o una data: 2026-09-17)
 git -C ~/referralflow-demo checkout <commit> && launchctl kickstart -k gui/$(id -u)/ch.referralflow.demo          # porta la demo a una versione nuova
 ```
 
-La giornata **va rifatta ogni giorno**: gli appuntamenti sono scritti con la data di oggi, domani l'agenda è vuota.
+La giornata **va rifatta ogni giorno**: gli appuntamenti portano una data, e il giorno dopo l'agenda di «oggi» è vuota. Il 16.9 sono state preparate due giornate, il 16 e il 17.
 
 ## I limiti, detti prima
 
