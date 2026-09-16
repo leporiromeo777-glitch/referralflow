@@ -15,7 +15,7 @@ export async function risolviConSolver(input: {
   assistenti: AssistenteDisp[]; apparecchi: ApparecchioDisp[]; distanze: Record<string, number>; distanzaDefault: number;
 }, p: Parametri, opz: { limiteMs: number; quantiPiani?: number }): Promise<PianoSolver | null> {
   const corpo = {
-    adesso: input.adesso, anticipo: p.anticipo_ingresso_min, limite_ms: opz.limiteMs, quanti_piani: opz.quantiPiani ?? 1,
+    adesso: input.adesso, anticipo: p.anticipo_ingresso_min, pausa_stessa_stanza: p.pausa_stessa_stanza_min, limite_ms: opz.limiteMs, quanti_piani: opz.quantiPiani ?? 1,
     pesi: p.pesi, distanze: input.distanze, distanza_default: input.distanzaDefault,
     stanze: input.stanze.map((s) => ({ nome: s.nome, posti: s.posti, bloccata: s.bloccata, ultima: !!s.ultima })),
     medici: input.medici.map((m) => ({ nome: m.nome, libero_da: m.liberoDa, in_sala: m.inSala, ritardo: m.ritardo })),
@@ -25,7 +25,7 @@ export async function risolviConSolver(input: {
       id: v.id, medico: v.medico, teorica: v.teorica, durata: v.durata, prep: v.prep, ripristino: v.ripristino,
       sale_possibili: v.salePossibili, sala_preferita: v.salaPreferita ?? null, apparecchi: v.apparecchi, assistenti: v.assistenti,
       senza_medico: v.senzaMedico, arrivo: v.arrivo ?? null, stato: v.stato, rigidita: v.rigidita,
-      sala_fissa: v.salaFissa ?? null, inizio_fisso: v.inizioFisso ?? null, comunicato: v.comunicato ?? null, priorita: v.priorita,
+      sala_fissa: v.salaFissa ?? null, inizio_fisso: v.inizioFisso ?? null, comunicato: v.comunicato ?? null, priorita: v.priorita, stessa_stanza_libera: !!v.stessaStanzaLibera,
     })),
   };
   try {

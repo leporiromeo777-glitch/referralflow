@@ -39,6 +39,9 @@ export type VisitaDaPianificare = {
   comunicato?: { sala: string; ingresso: number } | null;
   priorita: number;
   etichetta?: string;
+  // Chi ha una stanza sola per regola (Paiocchi in Sala 1) può fare due
+  // visite di fila nella stessa stanza senza la pausa.
+  stessaStanzaLibera?: boolean;
 };
 
 export type StanzaDisp = { nome: string; posti: number; bloccata: [number, number][]; ultima: boolean };
@@ -86,9 +89,11 @@ export function pianifica(input: {
   // Restare nella stessa stanza non è uno spostamento, qualunque cosa dica
   // la tabella delle distanze.
   const spostamentoMin = (da: string | null, a: string) => (!da || da.toLowerCase() === a.toLowerCase()) ? 0 : Math.ceil(input.distanza(da, a) / 60);
-  const medici = new Map(input.medici.map((m) => [m.nome, { ...m, quante: 0 }]));
+  // Per ogni medico: quando è finita davvero l'ultima visita (senza i
+  // cuscinetti), per la regola della pausa nella stessa stanza.
+  const medici = new Map(input.medici.map((m) => [m.nome, { ...m, quante: 0, fineUltima: m.liberoDa }]));
   const medicoDi = (nome: string) => {
-    if (!medici.has(nome)) medici.set(nome, { nome, liberoDa: input.adesso, inSala: null, ritardo: 0, quante: 0 });
+    if (!medici.has(nome)) medici.set(nome, { nome, liberoDa: input.adesso, inSala: null, ritardo: 0, quante: 0, fineUltima: input.adesso });
     return medici.get(nome)!;
   };
   const visite: Record<string, Pianificata> = {};
@@ -156,6 +161,12 @@ export function pianifica(input: {
     for (const sala of cand) {
       let t = base;
       if (m && v.inizioFisso == null) t = Math.max(t, m.liberoDa + spostamentoMin(m.inSala, sala));
+      // Stessa stanza dell'ultima sua visita: solo con la pausa in mezzo
+      // (16.9.2026). Il paziente successivo si prepara altrove mentre lui
+      // finisce; se l'altrove non c'è, aspetta la pausa.
+      if (m && v.inizioFisso == null && !v.stessaStanzaLibera && m.inSala && m.inSala.toLowerCase() === sala.toLowerCase() && m.quante > 0) {
+        t = Math.max(t, m.fineUltima + p.pausa_stessa_stanza_min);
+      }
       let giri = 0;
       while (giri++ < 60) {
         const l = libera(v, sala, t);
@@ -197,6 +208,7 @@ export function pianifica(input: {
     if (m) {
       (sequenze[m.nome] ??= []).push({ id: v.id, sala: scelta.sala, inizio: scelta.inizio, fine, spostamento });
       m.liberoDa = Math.max(m.liberoDa, fine);
+      m.fineUltima = Math.max(m.fineUltima, fine);
       m.inSala = scelta.sala;
       m.quante += 1;
       // I cuscinetti del mattino: un buco ogni N visite, che di giorno è la

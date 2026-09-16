@@ -159,6 +159,20 @@ test('il medico è mobile: due visite di fila stanno in due stanze, la seconda s
   assert.deepEqual(piano.sequenze['Marco Moccetti'].map((t) => t.sala), ['Sala 2', 'Sala 3']);
 });
 
+test('stessa stanza uno dopo l\'altro solo con dieci minuti di pausa; chi ha una stanza sola è esente', () => {
+  // Rego con una stanza sola disponibile: la seconda visita aspetta la pausa.
+  const una = pianifica(base(500, [visita('a', 'Rego', 540, { salePossibili: ['Sala 3'] }), visita('b', 'Rego', 560, { salePossibili: ['Sala 3'] })]), P);
+  assert.equal(una.visite.a.inizio, 540);
+  assert.equal(una.visite.b.inizio, 570, 'finita alle 10:00, la seconda nella stessa stanza non prima delle 10:10');
+  // Con due stanze la seconda va nell'altra, senza aspettare.
+  const due = pianifica(base(500, [visita('a', 'Rego', 540, { salePossibili: ['Sala 3', 'Sala 5'] }), visita('b', 'Rego', 560, { salePossibili: ['Sala 3', 'Sala 5'] })]), P);
+  assert.equal(due.visite.b.sala, 'Sala 5');
+  assert.equal(due.visite.b.inizio, 561);
+  // Paiocchi ha la Sala 1 e basta: due di fila senza pausa.
+  const vp = pianifica({ ...base(500, [visita('a', 'Paiocchi', 540, { salePossibili: ['Sala 1'], stessaStanzaLibera: true }), visita('b', 'Paiocchi', 560, { salePossibili: ['Sala 1'], stessaStanzaLibera: true })]), stanze: [{ nome: 'Sala 1', posti: 1, bloccata: [], ultima: false }] }, P);
+  assert.equal(vp.visite.b.inizio, 568, 'solo gli otto minuti in cui il paziente si prepara nella stanza, niente pausa in più');
+});
+
 test('mai due medici nella stessa stanza allo stesso momento; lo stesso medico sì, fino ai posti', () => {
   const piano = pianifica(base(500, [
     visita('r1', 'Rego', 540, { salePossibili: ['Sala 3'] }),
@@ -167,7 +181,7 @@ test('mai due medici nella stessa stanza allo stesso momento; lo stesso medico s
   assert.equal(piano.visite.r1.sala, 'Sala 3');
   assert.equal(piano.visite.t1.inizio, 568, 'Tiziano entra quando Rego ha finito (10:00) più gli otto minuti in cui il suo paziente si prepara nella stanza: non insieme');
   const due = pianifica(base(500, [visita('a', 'Rego', 540, { salePossibili: ['Sala 3'] }), visita('b', 'Rego', 540, { salePossibili: ['Sala 3'] })], []), P);
-  assert.equal(due.visite.b.inizio, 568, 'con un medico solo e una stanza da un posto, il secondo entra quando il primo è uscito, con i suoi otto minuti di preparazione');
+  assert.equal(due.visite.b.inizio, 570, 'con un medico solo e una stanza da un posto, il secondo entra dopo la pausa di dieci minuti nella stessa stanza');
 });
 
 test('un congelato non si muove, e chi arriva dopo gli gira attorno', () => {

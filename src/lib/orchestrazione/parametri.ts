@@ -26,6 +26,10 @@ export type Parametri = {
   intervallo_min_ripianifica_s: number;
   limite_solver_ms: number;
   limite_solver_mattino_ms: number;
+  // Stessa stanza, uno dopo l'altro: solo con questa pausa in mezzo (16.9.2026,
+  // detto dallo studio). Altrimenti il paziente successivo va in un'altra
+  // stanza. Non vale per chi ha una stanza sola per regola.
+  pausa_stessa_stanza_min: number;
   // Spostamenti.
   distanza_default_s: number;
   // Cuscinetti: uno ogni N visite per medico, nel piano del mattino.
@@ -61,6 +65,7 @@ export const PARAMETRI_DEFAULT: Parametri = {
   intervallo_min_ripianifica_s: 30,
   limite_solver_ms: 2000,
   limite_solver_mattino_ms: 60_000,
+  pausa_stessa_stanza_min: 10,
   distanza_default_s: 60,
   cuscinetto_ogni_visite: 6,
   cuscinetto_min: 10,

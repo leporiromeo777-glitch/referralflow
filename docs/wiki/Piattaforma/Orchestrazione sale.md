@@ -287,6 +287,7 @@ Impediscono le situazioni impossibili. Nessun peso: o sono rispettati o non c'è
 | congelamento | per `rigidita ≥ 2`: `sala[a]` fissa; per `rigidita = 3`: anche `inizio[a]` fisso (§5.4) |
 | comandi umani | ogni comando del §11 è una uguaglianza o un intervallo tolto dal dominio |
 | ordine clinico | se una prestazione dipende da un'altra dello stesso paziente lo stesso giorno (ECG prima della visita), `inizio[b] ≥ fine[a]` |
+| pausa nella stessa stanza | due visite dello stesso medico nella stessa stanza, una dopo l'altra, solo se `inizio[b] ≥ fine[a] + pausa_stessa_stanza` (10 min): altrimenti la seconda va in un'altra stanza. Esente chi ha una stanza sola per regola (Paiocchi in Sala 1). Detto dallo studio il 16.9 sera |
 
 ### 5.4 Il congelamento
 

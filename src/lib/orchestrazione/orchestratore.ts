@@ -190,6 +190,9 @@ function costruisciRichiesta(g: Giornata): Richiesta {
       comunicato: com && com.sala && com.ingresso_previsto != null ? { sala: com.sala, ingresso: com.ingresso_previsto } : null,
       priorita: prio ? Number(prio.parametri.priorita ?? 1) : (a.prestazione.toLowerCase() === 'urgenza' ? 2 : 0),
       etichetta: a.paziente,
+      // La pausa nella stessa stanza non vale per chi ha una stanza sola per
+      // regola («Sempre e solo»): non avrebbe dove andare.
+      stessaStanzaLibera: g.grafo.esclusive.some((e) => stessaPersona(e.chi, a.medico)),
     });
     if (a.medico && !medici.has(a.medico)) medici.set(a.medico, { nome: a.medico, liberoDa: g.adesso, inSala: null, ritardo: 0, fermoIn: fermi[a.medico] ?? null });
   }

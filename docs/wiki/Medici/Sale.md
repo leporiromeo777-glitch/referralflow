@@ -40,6 +40,8 @@ Altre righe dicono **chi non si sposta**, con due forze diverse. `Sempre e solo:
 
 **Le stanze si separano con «o», non con la virgola**: in questa pagina la virgola separa le voci dell'elenco, e «in Sala 2, Sala 3» si leggerebbe come due persone. La chiave si può ripetere su più righe: sei persone su una riga sola non si leggerebbero.
 
+**La pausa nella stessa stanza** (16.9.2026 sera, detto dallo studio): due visite dello stesso medico nella stessa stanza, una dopo l'altra, solo se in mezzo ci sono almeno **10 minuti** — altrimenti il paziente successivo si prepara in un'altra stanza. È la regola che fa girare il medico. Esente chi ha una stanza sola per regola (Paiocchi): non avrebbe dove andare. Il numero è `pausa_stessa_stanza_min` nei parametri dell'orchestrazione.
+
 **Due gruppi, dal 16.9.2026 sera** (detto dallo studio): Girola, Franscella, Moschovitis, Pedrotti e Paveri **si gestiscono le tre sale dello sport**; tutti gli altri **le cinque sale normali**, con dentro le regole più strette già dette (Paiocchi solo la Sala 1, ed esclusiva; Marco Moccetti Sala 2 o 3; Tiziano Moccetti Sala 4 o 5). Non nominato dallo studio: Bruno Capelli, che fa medicina dello sport e le cui ergometrie si fanno solo nelle Sport — è scritto con il gruppo sport, da correggere se non è così. «M.V» nel messaggio dello studio è stato letto come M.P., Miko Pedrotti: fra i medici non c'è nessun M.V.
 
 `Agende fuori dal piano:` toglie una **colonna** dell'agenda MediOnline. `Labor` è il prelievo: il paziente passa in studio ma non occupa una stanza dei medici — e siccome quell'appuntamento arriva senza titolare, il medico gli veniva prestato da chi vede quel paziente quel giorno, facendogli prendere una stanza che non serve (detto dallo studio il 16.9.2026).

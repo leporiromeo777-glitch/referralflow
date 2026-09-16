@@ -32,6 +32,7 @@ def risolvi(r: dict) -> dict:
     t0 = time.time()
     adesso = int(r.get("adesso", 0))
     anticipo = int(r.get("anticipo", 8))
+    pausa = int(r.get("pausa_stessa_stanza", 10))
     pesi = r.get("pesi", {})
     limite_ms = int(r.get("limite_ms", 2000))
     quanti = max(1, int(r.get("quanti_piani", 1)))
@@ -154,6 +155,11 @@ def risolvi(r: dict) -> dict:
                 ab = m.NewBoolVar(f"ord_{a['v']['id']}_{b['v']['id']}")
                 m.Add(b["start"] >= a["start"] + a["durata"] + t * diff).OnlyEnforceIf(ab)
                 m.Add(a["start"] >= b["start"] + b["durata"] + t * diff).OnlyEnforceIf(ab.Not())
+                # Stessa stanza, uno dopo l'altro: solo con la pausa in mezzo
+                # (16.9.2026). Chi ha una stanza sola per regola è esente.
+                if pausa > 0 and not a["v"].get("stessa_stanza_libera"):
+                    m.Add(b["start"] >= a["start"] + a["durata"] + pausa).OnlyEnforceIf([ab, diff.Not()])
+                    m.Add(a["start"] >= b["start"] + b["durata"] + pausa).OnlyEnforceIf([ab.Not(), diff.Not()])
                 diff_vars.append(diff)
 
     # Assistenti: una preparazione alla volta.
