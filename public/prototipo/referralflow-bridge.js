@@ -4666,6 +4666,12 @@ window.addEventListener('resize', () => { try { rfOrAltezzaAccoglienza(); } catc
 (function () { const st = document.createElement('style'); st.textContent = `
 .rf-vis { max-width:760px; margin:0 auto; }
 .rf-vis-cerca { max-width:620px; margin:0 auto; }
+.rf-vis-back { display:inline-flex; align-items:center; justify-content:center; width:38px; height:38px; flex:none;
+  border:1px solid var(--border); background:var(--surface); color:var(--text-2); border-radius:50%; cursor:pointer;
+  transition:border-color .15s var(--ease), color .15s var(--ease); }
+.rf-vis-back:hover { border-color:var(--accent); color:var(--accent); }
+.rf-vis-back:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.rf-vis-back svg { width:18px; height:18px; }
 .rf-vis-di { margin:12px 2px 0; font-size:11.5px; color:var(--text-3); letter-spacing:.02em; }
 .rf-vis-di b { color:var(--text-2); font-weight:650; }
 .rf-vis-lista { display:flex; flex-direction:column; margin-top:6px; max-height:56vh; overflow:auto; }
@@ -4855,8 +4861,10 @@ PAGES.visite = () => {
     azioni = `<button class="btn primary" onclick="rfVisEvento('visita_iniziata',{appointment_id:'${sel.id}'${sel.sala ? `,sala:'${rfEsc(sel.sala)}'` : ''}})">Inizia visita</button>`;
   }
 
-  return `<div class="page-head"><div><h2 class="page-title">Visita</h2><div class="page-sub">${rfEsc(rfOrStato(sel.stato))}${sel.sala ? ` · ${rfEsc(sel.sala)}` : ''}</div></div>
-      <div class="actions"><button class="btn" onclick="rfVisChiudi()">Cambia paziente</button></div></div>
+  return `<div class="page-head"><div class="row" style="gap:10px;align-items:center">
+      <button class="rf-vis-back" onclick="rfVisChiudi()" title="Torna all'elenco dei pazienti" aria-label="Indietro">${ICONS.chevL || '‹'}</button>
+      <div><h2 class="page-title">Visita</h2><div class="page-sub">${rfEsc(rfOrStato(sel.stato))}${sel.sala ? ` · ${rfEsc(sel.sala)}` : ''}</div></div></div>
+      <div class="actions"><button class="btn" onclick="rfVisChiudi()">Altri pazienti</button></div></div>
     ${rfOrMsg()}
     <div class="rf-vis card">
       <div class="rf-vis-testa">
