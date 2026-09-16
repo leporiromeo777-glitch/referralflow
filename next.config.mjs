@@ -28,7 +28,14 @@ const SECURITY_HEADERS = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    serverActions: { bodySizeLimit: '12mb' },
+    // Origini ammesse per le server action: serve quando l'app sta dietro un
+    // indirizzo che non è il suo (la demo pubblica dietro il tunnel). Si
+    // elencano in ORIGINI_CONSENTITE nel .env di quell'istanza, separate da
+    // virgola; senza, vale solo l'origine stessa.
+    serverActions: {
+      bodySizeLimit: '12mb',
+      ...(process.env.ORIGINI_CONSENTITE ? { allowedOrigins: process.env.ORIGINI_CONSENTITE.split(',').map((x) => x.trim()).filter(Boolean) } : {}),
+    },
     serverComponentsExternalPackages: ['@node-rs/argon2', 'pg', 'pdf-parse'],
   },
   // L'interfaccia nuova è un'app statica in public/prototipo/: Next serve i file
