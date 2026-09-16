@@ -4705,6 +4705,20 @@ window.addEventListener('resize', () => { try { rfOrAltezzaAccoglienza(); } catc
 .rf-vis-riga { display:grid; grid-template-columns:130px minmax(0,1fr); gap:10px; padding:8px 0; border-top:1px solid var(--border); font-size:13.5px; align-items:baseline; }
 .rf-vis-riga .e { color:var(--text-3); font-size:12.5px; }
 .rf-vis-scorciatoie { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:18px; }
+.rf-vis-strum { text-align:left; margin-top:22px; padding-top:18px; border-top:1px solid var(--border); }
+.rf-vis-azioni { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
+.rf-vis-azioni .btn { padding:10px 16px; }
+.rf-vis-allerta { margin-top:14px; padding:9px 13px; border-radius:9px; background:#f8e3df; color:#a23b2a; font-size:13px; display:flex; align-items:center; gap:8px; }
+.rf-vis-allerta svg { width:15px; height:15px; flex:none; }
+.rf-vis-griglia { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:10px; margin-top:14px; }
+.rf-vis-box { border:1px solid var(--border); border-radius:10px; padding:11px 13px; background:var(--surface); }
+.rf-vis-box .t { font-size:10.5px; font-weight:650; letter-spacing:.06em; text-transform:uppercase; color:var(--text-3); margin-bottom:7px; display:flex; gap:8px; align-items:baseline; }
+.rf-vis-box .t .q { margin-left:auto; text-transform:none; letter-spacing:0; font-weight:400; font-size:10.5px; }
+.rf-vis-box ul { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; }
+.rf-vis-box li { font-size:13px; line-height:1.4; }
+.rf-vis-box .q { color:var(--text-3); font-size:11.5px; }
+.rf-vis-box .ind { font-size:13px; line-height:1.45; margin-bottom:5px; }
+.rf-vis-box ul.link a { color:var(--accent); }
 .rf-vis-dopo { margin-top:14px; font-size:13px; color:var(--text-2); text-align:center; }
 @media (max-width:600px) { .rf-vis-riga { grid-template-columns:1fr; gap:2px; } .rf-vis-testa .chi { font-size:25px; } }
 `; document.head.appendChild(st); })();
@@ -4801,6 +4815,50 @@ function rfVisCronometro() {
 }
 async function rfVisEvento(tipo, extra) { await rfOrchEvento(tipo, extra, 'stanza'); }
 
+/* Quel che serve al medico mentre ha il paziente davanti (16.9.2026 sera).
+   Solo roba che la piattaforma sa già: niente campi da riempire. Ogni
+   riquadro compare solo se ha qualcosa dentro — una pagina piena di sezioni
+   vuote è peggio di una pagina corta. */
+function rfVisStrumenti(sel, pid) {
+  const p = pid && P[pid] ? P[pid] : null;
+  const nome = String(sel.etichetta || '').replace(/'/g, ' ');
+  const az = [
+    pid ? `<button class="btn" data-go="#/patients/${rfEsc(pid)}">${ICONS.patients || ''} Cartella</button>` : '',
+    `<button class="btn ai" data-ai="Briefing pre-visita di ${rfEsc(nome)}">${ICONS.ai} Chiedi a Cleo</button>`,
+    `<a class="btn" href="/dittafono/index.html">${ICONS.mic} Detta il referto</a>`,
+    pid ? `<button class="btn ghost" data-go="#/patients/${rfEsc(pid)}/documents">${ICONS.file || ''} Documenti</button>` : '',
+  ].filter(Boolean).join('');
+
+  if (!p) return `<div class="rf-vis-strum"><div class="rf-vis-azioni">${az}</div>
+    <div class="caption" style="margin-top:12px">Questo paziente è solo in agenda, non in cartella: non c'è altro da mostrare.</div></div>`;
+
+  const riquadro = (t, corpo, extra) => corpo ? `<div class="rf-vis-box"><div class="t">${t}${extra || ''}</div>${corpo}</div>` : '';
+  const allergie = (p.fatti || []).filter(f => /allerg|intoller/i.test(f.relazione || ''));
+  const altriFatti = (p.fatti || []).filter(f => !/allerg|intoller/i.test(f.relazione || '')).slice(0, 5);
+  const referti = (typeof REPORTS !== 'undefined' ? REPORTS : []).filter(r => r.p === p.id)
+    .sort((a, b) => rfDataOrd(b.date).localeCompare(rfDataOrd(a.date))).slice(0, 3);
+  const esami = (p.exams || []).slice(0, 4);
+  const aperte = (p.referrals || []).filter(r => r.status !== 'chiusa');
+  const problemi = (p.problems || []).filter(x => x.s !== 'resolved').slice(0, 4);
+
+  return `<div class="rf-vis-strum">
+    <div class="rf-vis-azioni">${az}</div>
+    ${allergie.length ? `<div class="rf-vis-allerta">${ICONS.alert} <b>Allergie</b> · ${allergie.map(f => rfEsc(f.oggetto)).join(', ')}</div>` : ''}
+    <div class="rf-vis-griglia">
+      ${riquadro('Terapia in corso', (p.terapia || []).length ? `<ul>${p.terapia.map(r => `<li>${rfEsc(r)}</li>`).join('')}</ul>` : '',
+        p.terapiaDa ? `<span class="q">dal referto del ${rfEsc(p.terapiaDa)}</span>` : '')}
+      ${riquadro('Perché è qui', [p.indicazione ? `<div class="ind">${rfEsc(p.indicazione)}</div>` : '',
+        problemi.length ? `<ul>${problemi.map(x => `<li>${rfEsc(x.l)}${x.since ? ` <span class="q">dal ${rfEsc(x.since)}</span>` : ''}</li>`).join('')}</ul>` : ''].join('') || '')}
+      ${riquadro('Ultimi referti', referti.length ? `<ul class="link">${referti.map(r => `<li><a href="#/review/${rfEsc(r.id)}">${rfEsc(r.type)}</a> <span class="q">${rfEsc(r.date)} · ${r.status === 'APPROVED' ? 'confermato' : 'da controllare'}</span></li>`).join('')}</ul>` : '')}
+      ${riquadro('Esami in cartella', esami.length ? `<ul class="link">${esami.map(e => `<li><a href="/api/documents/${rfEsc(e.id)}" target="_blank" rel="noopener">${rfEsc(e.r)}</a> <span class="q">${rfEsc(e.d)}</span></li>`).join('')}</ul>` : '',
+        (p.exams || []).length > 4 ? `<span class="q">${p.exams.length} in tutto</span>` : '')}
+      ${riquadro('Referral aperte', aperte.length ? `<ul>${aperte.map(r => `<li>${rfEsc(r.quesito || 'senza quesito')} <span class="q">${rfEsc(r.medico || '')}${r.urgenza === 'urgente' ? ' · urgente' : ''}</span></li>`).join('')}</ul>` : '')}
+      ${riquadro('Altri fatti', altriFatti.length ? `<ul>${altriFatti.map(f => `<li>${rfEsc(f.oggetto)} <span class="q">${rfEsc((f.relazione || '').replace(/_/g, ' '))}${f.data ? ` · ${rfEsc(f.data)}` : ''}</span></li>`).join('')}</ul>` : '')}
+    </div>
+    <div class="caption" style="margin-top:12px">Ultima visita ${p.lastVisit ? rfEsc(p.lastVisit) : '—'}${p.next ? ` · prossima ${rfEsc(p.next)}` : ''}${p.gp ? ` · curante ${rfEsc(p.gp)}` : ''}</div>
+  </div>`;
+}
+
 PAGES.visite = () => {
   if (!RF.live) return rfPaginaPiattaforma('Visita', 'Il centro di controllo della visita');
   const o = RF.orch;
@@ -4878,13 +4936,10 @@ PAGES.visite = () => {
         <div class="cosa"><b>${rfEsc(sel.prestazione || 'prestazione non riconosciuta')}</b> · ${rfEsc(rfNomeCorto(sel.medico || 'senza medico'))}${rfOrRitardo(sel.medico, true)}</div>
         ${centro}
         <div class="rf-vis-az">${azioni}</div>
-        <div class="rf-vis-scorciatoie">
-          ${pid ? `<button class="btn sm ghost" data-go="#/patients/${rfEsc(pid)}">Cartella</button>` : ''}
-          ${pid ? `<button class="btn sm ai" data-ai="Briefing pre-visita di ${rfEsc(String(sel.etichetta).replace(/'/g, ' '))}">${ICONS.ai} Briefing</button>` : ''}
-          <button class="btn sm ghost" data-go="#/sale">Sale</button>
-        </div>
+
         ${dopo ? `<div class="rf-vis-dopo">Dopo di lui: <b>${rfEsc(dopo.etichetta)}</b> alle ${rfOrHm(dopo.inizio ?? dopo.teorica)}${dopo.sala ? ` in ${rfEsc(dopo.sala)}` : ''} · <a href="#" onclick="event.preventDefault();rfVisApri('${rfEsc(dopo.id)}')">apri</a></div>` : ''}
       </div>
+      ${rfVisStrumenti(sel, pid)}
       <div class="rf-vis-righe">
         ${riga('In agenda', `<b>${rfOrHm(sel.teorica)}</b>${sel.inizio != null && sel.inizio > sel.teorica + 4 ? ` <span class="caption">· il piano la sposta alle ${rfOrHm(sel.inizio)}</span>` : ''}`)}
         ${riga('Arrivato', sel.arrivo != null ? rfOrHm(sel.arrivo) : '<span class="caption">non segnato all&rsquo;accoglienza</span>')}
