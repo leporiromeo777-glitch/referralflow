@@ -3560,6 +3560,12 @@ window.addEventListener('load', () => {
 .rf-cs-v .pr { font-size:9.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .rf-cs-v:hover { color:var(--text); box-shadow:0 0 0 1px var(--border-2), inset 2px 0 0 var(--accent); }
 .rf-cs-v.sovra { box-shadow:0 0 0 1px var(--danger-soft), inset 2px 0 0 var(--danger); }
+.rf-cs-v.divisa { box-shadow:0 0 0 1px var(--border), inset 3px 0 0 hsl(var(--h) 55% 50%); }
+.rf-cs-v.divisa.sovra { box-shadow:0 0 0 1px var(--danger-soft), inset 3px 0 0 hsl(var(--h) 55% 50%); }
+.rf-cs-v .md { display:inline-block; margin-right:4px; padding:0 3px; border-radius:3px; font-style:normal;
+  font-size:9px; font-weight:700; letter-spacing:.02em; vertical-align:1px;
+  background:hsl(var(--h) 55% 50% / .18); color:hsl(var(--h) 55% 30%); }
+:root[data-theme="dark"] .rf-cs-v .md { color:hsl(var(--h) 65% 80%); }
 /* «Prepara con l'AI»: la barra dice a che punto è. La percentuale è una stima
    sul tempo che ci ha messo l'ultima volta — nessuno sa quanto scriverà — e si
    ferma al 97 % finché non ha finito davvero. */
@@ -3683,6 +3689,18 @@ function rfSugVisita(v, stanza) {
 function rfPresaFascia(stanza, seg) {
   const p = (RF.data && RF.data.pianoSale && RF.data.pianoSale.prese) || {};
   return (p[stanza] || []).find(x => x.dalle >= seg.dalle && x.dalle < seg.alle) || null;
+}
+/* I medici che hanno visite in questa stanza oggi. Quando sono più d'uno il
+   nome scritto sulla fascia non basta: due persone che si dividono la stessa
+   stanza vanno distinte visita per visita, o i pazienti sembrano tutti dello
+   stesso (detto guardando la Sala 4 il 16.9.2026: Rego e Tiziano mischiati). */
+function rfMediciSala(stanza) {
+  const fuori = [];
+  for (const v of rfVisiteSala(stanza)) {
+    const m = (v.medico || '').trim();
+    if (m && !fuori.some(x => x === m)) fuori.push(m);
+  }
+  return fuori;
 }
 function rfVisiteFascia(stanza, seg) {
   return rfVisiteSala(stanza).filter(v => v.inizio >= seg.dalle && v.inizio < seg.alle);
@@ -3997,7 +4015,7 @@ PAGES.sale = () => {
     const n = rfVisiteSala(r.stanza).length;
     return `<button class="rf-cs-testa ${st.classe}${RF.salaAperta === r.stanza ? ' sel' : ''}" onclick="rfSalaApri('${rfEsc(r.stanza)}')" title="${rfEsc(r.stanza)} · ${rfEsc(st.testo)}${r.funzione ? ` · ${rfEsc(r.funzione)}` : ''}">
       <span class="sn"><i class="p"></i>${rfEsc(r.stanza)}</span>
-      <span class="sf">${n ? `${n} ${n === 1 ? 'visita' : 'visite'}` : `libera${st.seg && st.seg.chi ? ` · di ${rfEsc(rfNomeCorto(st.seg.chi))}` : ''}`}${r.funzione ? ` · ${rfEsc(r.funzione)}` : ''}</span></button>`;
+      <span class="sf">${n ? `${n} ${n === 1 ? 'visita' : 'visite'}${(() => { const m = rfMediciSala(r.stanza); return m.length > 1 ? ` · ${m.map(x => rfEsc(rfNomeCorto(x))).join(', ')}` : ''; })()}` : `libera${st.seg && st.seg.chi ? ` · di ${rfEsc(rfNomeCorto(st.seg.chi))}` : ''}`}${r.funzione ? ` · ${rfEsc(r.funzione)}` : ''}</span></button>`;
   };
   const colonna = (r) => `<div class="rf-cs-col${RF.salaAperta === r.stanza ? ' sel' : ''}" style="--riga:${(60 * M).toFixed(2)}px">
     ${(r.segmenti || []).flatMap(s => {
@@ -4027,12 +4045,16 @@ PAGES.sale = () => {
         blocco(presa.dalle, presa.alle, '', ''),
       ];
     }).join('')}
-    <div class="rf-cs-vv">${rfVisiteSala(r.stanza).map(v => {
+    <div class="rf-cs-vv">${(() => {
+      const medici = rfMediciSala(r.stanza);
+      const divisa = medici.length > 1;
+      return rfVisiteSala(r.stanza).map(v => {
       const h = (rfMinuti(v.fine) - rfMinuti(v.inizio)) * M - 1;
       const n = Math.max(1, v.corsie || 1), c = v.corsia || 0;
-      return `<button class="rf-cs-v${v.sovra ? ' sovra' : ''}" style="top:${su(v.inizio).toFixed(1)}px;height:${Math.max(7, h).toFixed(1)}px;left:${(c / n * 100).toFixed(2)}%;width:calc(${(100 / n).toFixed(2)}% - 2px)"
-        onclick="event.stopPropagation(); rfApptScheda('${rfEsc(v.id)}')" data-sug="${rfEsc(rfSugVisita(v, r.stanza))}"><span class="nm">${rfEsc(rfVisitaNome(v))}</span>${(v.motivo || v.etichetta) ? `<span class="pr">${rfEsc(v.motivo || v.etichetta)}</span>` : ''}</button>`;
-    }).join('')}</div></div>`;
+      return `<button class="rf-cs-v${v.sovra ? ' sovra' : ''}${divisa ? ' divisa' : ''}" style="top:${su(v.inizio).toFixed(1)}px;height:${Math.max(7, h).toFixed(1)}px;left:${(c / n * 100).toFixed(2)}%;width:calc(${(100 / n).toFixed(2)}% - 2px);--h:${rfTinta(v.medico || 'x')}"
+        onclick="event.stopPropagation(); rfApptScheda('${rfEsc(v.id)}')" data-sug="${rfEsc(rfSugVisita(v, r.stanza))}"><span class="nm">${divisa && v.medico ? `<i class="md" title="${rfEsc(rfNomeNudo(v.medico))}">${rfEsc(rfIniziali(v.medico).toUpperCase())}</i>` : ''}${rfEsc(rfVisitaNome(v))}</span>${(v.motivo || v.etichetta) ? `<span class="pr">${rfEsc(v.motivo || v.etichetta)}</span>` : ''}</button>`;
+      }).join('');
+    })()}</div></div>`;
 
   return `<div class="page-head"><div><h2 class="page-title">Sale e medici</h2>
       <div class="page-sub">Il calendario delle sale di oggi · ${p.righe.length} stanze · ${inUso} in uso adesso${libere ? ` · ${libere} ${libere === 1 ? 'libera tutto il giorno' : 'libere tutto il giorno'}` : ''}${(p.da_decidere || []).length ? ` · ${p.da_decidere.length} da decidere` : ''}</div></div>

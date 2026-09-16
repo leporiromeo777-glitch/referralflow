@@ -84,6 +84,8 @@ Una riga per decisione, con la data e il perché. Non si rilitigano senza un dat
 
 | 2026-09-16 | Una proposta dell'AI **non dà una seconda stanza a chi ne ha già una**; il controllo guarda come finisce il giro, così uno scambio resta possibile | il 16.9 la Sala 3 era rimasta vuota (tolte le regole di Moschovitis e Tiziano) e il modello l'ha data a Daniela Cassani, che ha la Sala 5: nel calendario risultava in due stanze insieme. Una stanza vuota può restare vuota. Il controllo riga per riga non bastava: «Sala 2 a Cassani, Sport 1 a Moccetti» è uno scambio legittimo e sarebbe stato rifiutato ([[Medici/Sale]]) |
 
+| 2026-09-16 | In una stanza divisa fra più medici ogni visita porta **iniziali e colore del suo medico**, e la testa della colonna li elenca; con un medico solo non compare niente | da quando i vincoli fanno condividere le stanze, il nome sulla fascia non basta più: nella Sala 4 le visite di Rego e di Tiziano Moccetti erano indistinguibili e sembravano tutte dello stesso. Il segno si accende solo dove serve, altrimenti sarebbe rumore su ogni colonna ([[Medici/Sale]]) |
+
 ## Aperte
 - Conservare l'audio per un LoRA futuro; togliere il denoise se arriva un oro verificato dal medico.
 - Livello 2 del server (dominio, HTTPS) dopo la parte legale.

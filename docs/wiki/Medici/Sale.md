@@ -35,7 +35,9 @@ Altre righe dicono **chi non si sposta**, con due forze diverse. `Sempre e solo:
 
 `Agende fuori dal piano:` toglie una **colonna** dell'agenda MediOnline. `Labor` è il prelievo: il paziente passa in studio ma non occupa una stanza dei medici — e siccome quell'appuntamento arriva senza titolare, il medico gli veniva prestato da chi vede quel paziente quel giorno, facendogli prendere una stanza che non serve (detto dallo studio il 16.9.2026).
 
-**Una stanza si prende per il tempo che serve alle visite, non per tutto il giorno** (detto dallo studio il 16.9.2026). La fascia qui sotto dice *di chi è* la stanza; quando è *occupata* lo dicono le visite, dalla prima all'ultima. Chi ha visite solo al pomeriggio occupa solo il pomeriggio; chi non ne ha non la occupa affatto. Nel calendario la fascia della regola tiene il **colore e il nome del medico** per tutta la sua durata — lì sopra non passa niente e si legge sempre — e sotto, dalle sue ore, un blocco pieno segna quando la stanza è presa davvero.
+**Una stanza si prende per il tempo che serve alle visite, non per tutto il giorno** (detto dallo studio il 16.9.2026). La fascia qui sotto dice *di chi è* la stanza; quando è *occupata* lo dicono le visite, dalla prima all'ultima. Chi ha visite solo al pomeriggio occupa solo il pomeriggio; chi non ne ha non la occupa affatto. Quando in una stanza lavorano **più persone** — capita spesso da quando i vincoli le fanno condividere — ogni visita porta le **iniziali e il colore del suo medico**, e la testa della colonna li elenca tutti. Con una persona sola non compare niente: sarebbe rumore.
+
+Nel calendario la fascia della regola tiene il **colore e il nome del medico** per tutta la sua durata — lì sopra non passa niente e si legge sempre — e sotto, dalle sue ore, un blocco pieno segna quando la stanza è presa davvero.
 
 Le regole qui sotto vengono dalla conversazione del 15.9.2026 e dalle misure sull'agenda vera (chi lavora quando, quanti pazienti in parallelo). **Sono una proposta**: chi le vive le corregge.
 
