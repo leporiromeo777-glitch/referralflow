@@ -42,6 +42,9 @@ Elenco di ciò che esiste. Per la catena dei referti vedi [[Catena/Panoramica]].
 - **Referti Word in carta intestata** (`modelli/referto-carta-intestata.docx`, `src/lib/referto-docx.ts`): l'intestazione segue il medico che ha dettato (vedi [[Catena/Formato lettera e Word]]).
 - **Riorganizza / Impagina come lettera (AI)** (`src/lib/referto-struttura.ts`): modello locale (`REFERTO_STRUTTURA_LLM`, oggi Qwen 3.8 leggero; il 12b duplicava le sezioni) rimappa il dettato nel rapporto-tipo o nella lettera; veto se cambia un numero; proposta salvata in `testo_finale` solo su stato bozza.
 
+## 16.9.2026 — Pagina «Visita»: il centro di controllo di una visita
+Ridotta all'osso: si apre scrivendo il nome del paziente o dall'agenda, e dentro c'è un tasto solo — «Inizia visita» — poi un cronometro che diventa rosso oltre la durata prevista, «Fine visita», «Il paziente è uscito». In fondo le ore in colonna (agenda, arrivo, ingresso, inizio vero, fine). È la sorgente esatta dell'inizio di una visita, che da MediOnline non arriva mai: sugli ultimi 30 giorni gli stati letti sono `fissato`, `da_fatturare`, `fatturato`, `trattato` — nessun `arrivato`, nessun `in corso`. v123.
+
 ## 16.9.2026 — Agenda: una colonna per ogni medico che tiene un'agenda
 Le colonne della vista per medico sono di chi ha appuntamenti nella finestra caricata (±30 giorni), non solo di chi ne ha quel giorno: Moschovitis spariva il mercoledì e l'agenda cambiava forma ogni giorno. Una colonna vuota resta al suo posto. v116.
 

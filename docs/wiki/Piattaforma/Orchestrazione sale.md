@@ -624,6 +624,12 @@ L'ordine non è alfabetico ed è la parte che fa il lavoro: **in cima chi ha un 
 
 Dal 16.9 sera **l'accoglienza sta nella Home, al posto della colonna destra** (arrivi di oggi coi tasti e la frase in italiano); la card «Sale e medici» è passata a sinistra al posto del «Programma di oggi», che era diventato un doppione. Le pagine Accoglienza e Stanza non sono nel menu: si aprono dall'indirizzo (`#/accoglienza`, `#/stanza`) o dai due link piccoli nella pagina Sale, perché sono fatte per un tablet e per lo schermo di una stanza, non per la barra laterale.
 
+**E. La pagina «Visita»** (16.9.2026 sera) — il centro di controllo di una singola visita, ridotto all'osso perché si guarda con un paziente davanti. Si apre scrivendo il nome nella barra di ricerca (cerca fra gli appuntamenti di oggi: quelli del piano più quelli dell'agenda che il piano non ha preso), oppure dall'agenda, dove la scheda di un appuntamento di oggi ha «Apri la visita».
+
+Dentro c'è il nome grande, la prestazione, il medico col suo ritardo, e **un tasto solo**: *Inizia visita*. Da lì un cronometro che gira al secondo e diventa rosso quando supera la durata prevista, poi *Fine visita* e *Il paziente è uscito*. In fondo le ore, in colonna: quella dell'agenda, l'arrivo, l'ingresso in stanza, **l'inizio vero** e la fine — e dove manca c'è scritto perché («si registra premendo Inizia visita»).
+
+È la risposta alla domanda «come sappiamo quando il medico comincia davvero»: lo sappiamo perché qualcuno tocca quel tasto, e quel tocco è anche ciò che misura la durata (§9). Senza, l'inizio resta una stima.
+
 **Il tablet all'accoglienza** è una lista dei pazienti di oggi in ordine d'ora con tre tasti: *arrivato · chiamato · assente*, e la riga del sistema sotto ogni nome: «entra in Sala 3 alle 10:52, con Rego». **Il pulsante in stanza** (uno schermo piccolo o il telefono del medico): *in preparazione · pronto · finito*, più il nome del paziente e del prossimo. Niente altro: chi è in stanza non deve leggere.
 
 Regole di stile come nel resto ([[Piattaforma/Convenzioni UI]]): colori appena accennati, stato sempre scritto a parole, niente animazioni che distraggono, il ritardo in minuti con il segno.

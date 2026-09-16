@@ -413,6 +413,7 @@ export async function statoOperativo(studioId: string) {
     const st = g.stati.get(a.id); const pv = piano?.visite.get(a.id);
     const x = { id: a.id, etichetta: a.paziente, codice: g.codici.get(a.id), medico: a.medico, prestazione: a.prestazione, teorica: a.start, teoricaHm: hm(a.start),
       stato: st?.stato ?? 'atteso', sala: st?.sala ?? pv?.sala ?? null, ingresso: pv?.ingresso_previsto ?? null, inizio: pv?.inizio_stimato ?? null, fine: pv?.fine_stimata ?? null,
+      durata: pv?.durata_stimata ?? null, nascita: null as string | null,
       arrivo: st?.arrivo ?? null, inizioReale: st?.inizio_reale ?? null, fineReale: st?.fine_reale ?? null, rigidita: r.visite.find((v) => v.id === a.id)?.rigidita ?? 0 };
     if (x.sala) (perSala[x.sala] ??= []).push(x);
     return x;

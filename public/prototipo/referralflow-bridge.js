@@ -56,7 +56,7 @@ async function rfCaricaDati() {
   for (const nome of ['ARCHIVE', 'AUDIT', 'AIJOBS', 'KNOWLEDGE', 'INVOICES']) { try { if (Array.isArray(window[nome])) rfSvuota(window[nome]); } catch { /* assente */ } }
   // Voci per ruolo (14.9.2026: Percorsi, Moduli, Da fatturare). Questa riga
   // vince su qualunque aggiunta fatta al caricamento dello script.
-  const nav = ['home', 'agenda', 'sale', 'prestazioni', 'patients', 'invianti', 'percorsi', 'reports', 'dittafono', 'documents', 'moduli', 'anonymize', 'inbox', 'ai', 'fatturazione', 'administration'];
+  const nav = ['home', 'agenda', 'visite', 'sale', 'prestazioni', 'patients', 'invianti', 'percorsi', 'reports', 'dittafono', 'documents', 'moduli', 'anonymize', 'inbox', 'ai', 'fatturazione', 'administration'];
   const nascosti = new Set(Array.isArray(RF.data.moduli_nascosti) ? RF.data.moduli_nascosti : []);
   for (const k of Object.keys(NAV)) NAV[k] = nav.filter(v => (v !== 'fatturazione' || ['secretary', 'org_admin'].includes(k)) && (!nascosti.has(v) || v === 'home' || v === 'administration'));
   render();
@@ -183,7 +183,7 @@ const rfRenderSidebarOrig = renderSidebar;
 // Barra laterale a sezioni (14.9.2026, tema minimale): le voci del ruolo
 // raggruppate con un'etichetta; una voce fuori da ogni gruppo finisce in coda.
 const RF_NAV_GRUPPI = [
-  ['Operatività', ['home', 'agenda', 'sale', 'prestazioni', 'inbox']],
+  ['Operatività', ['home', 'agenda', 'visite', 'sale', 'prestazioni', 'inbox']],
   ['Clinico', ['patients', 'invianti', 'percorsi', 'visits', 'reports', 'dittafono', 'documents', 'moduli']],
   ['AI', ['ai', 'anonymize']],
   ['Amministrazione', ['fatturazione', 'communications', 'statistics', 'administration', 'system']],
@@ -3231,7 +3231,10 @@ function rfApptScheda(id) {
       <div class="rf-ap-grezzo"><span class="caption">Come sta scritto nell'agenda</span><div>${rfEsc(a.nome)}</div></div>
     </div>`;
   const azioni = `<button class="btn" data-close>Chiudi</button>` +
-    (inCartella ? `<button class="btn primary" onclick="closeModal();go('#/patients/${rfEsc(a.p)}')">Apri la cartella</button>` : '') +
+    // Dall'agenda si apre la visita: è la via più corta per chi sta guardando
+    // il programma del giorno (16.9.2026).
+    (a.d === ((RF.data && RF.data.today) || '') ? `<button class="btn primary" onclick="closeModal();rfVisApri('${rfEsc(a.id)}');go('#/visite')">Apri la visita</button>` : '') +
+    (inCartella ? `<button class="btn" onclick="closeModal();go('#/patients/${rfEsc(a.p)}')">Apri la cartella</button>` : '') +
     `<button class="btn ai" onclick="closeModal();askAI('Briefing pre-visita di ${rfEsc((a.nomeBreve || a.nome).replace(/'/g, ' '))}')">${ICONS.ai} Briefing</button>`;
   openModal('Appuntamento', corpo, azioni);
 }
@@ -4217,7 +4220,7 @@ if (typeof NAV_META !== 'undefined') { NAV_META.accoglienza = ['Accoglienza', 'd
 RF.orch = null; RF.orchPiano = null; RF.orchMsg = null; RF.saleVista = RF.saleVista || 'adesso'; RF.orchSala = ''; RF.orchTimer = null; RF.orchTesto = null;
 try { RF.stanzaScelta = localStorage.getItem('rf-stanza') || ''; } catch { RF.stanzaScelta = ''; }
 
-const RF_OR_PAGINE = new Set(['home', 'sale', 'accoglienza', 'stanza']);
+const RF_OR_PAGINE = new Set(['home', 'sale', 'accoglienza', 'stanza', 'visite']);
 function rfOrchSincronizza() {
   const dentro = RF.live && RF_OR_PAGINE.has(state.route);
   if (dentro && !RF.orchTimer) { RF.orchTimer = setInterval(() => rfOrchCarica(), 20000); if (!RF.orch) rfOrchCarica(); }
@@ -4640,5 +4643,177 @@ function rfOrScorriAccoglienza() {
 window.addEventListener('resize', () => { try { rfOrAltezzaAccoglienza(); } catch { /* idem */ } });
 (function () {
   const r = render;
-  render = function () { const out = r.apply(this, arguments); try { rfOrchSincronizza(); rfOrAltezzaAccoglienza(); rfOrScorriAccoglienza(); } catch {} return out; };
+  render = function () { const out = r.apply(this, arguments); try { rfOrchSincronizza(); rfOrAltezzaAccoglienza(); rfOrScorriAccoglienza(); rfVisCronometro(); } catch {} return out; };
 })();
+
+
+/* =====================================================================
+   «Visita»: il centro di controllo di una visita (16.9.2026 sera).
+   Ridotta all'osso, perché si guarda con un paziente davanti: chi è, che
+   cosa si fa, dove, e un tasto grande. È anche la risposta alla domanda
+   «come sappiamo quando il medico comincia davvero»: lo sappiamo perché
+   qualcuno tocca «Inizia visita», e quel tocco fa partire il cronometro,
+   registra l'ora vera e misura la durata quando si chiude.
+   ===================================================================== */
+(function () { const st = document.createElement('style'); st.textContent = `
+.rf-vis { max-width:760px; margin:0 auto; }
+.rf-vis-cerca { max-width:620px; margin:0 auto; }
+.rf-vis-lista { display:flex; flex-direction:column; gap:4px; margin-top:10px; max-height:52vh; overflow:auto; }
+.rf-vis-v { display:grid; grid-template-columns:52px minmax(0,1fr) auto; gap:10px; align-items:center; width:100%; text-align:left;
+  font:inherit; color:inherit; cursor:pointer; border:1px solid var(--border); background:var(--surface); border-radius:10px; padding:9px 12px; }
+.rf-vis-v:hover { border-color:var(--accent); background:var(--accent-soft); }
+.rf-vis-v .h { font-variant-numeric:tabular-nums; font-weight:650; font-size:13px; }
+.rf-vis-v b { font-size:14px; font-weight:650; display:block; }
+.rf-vis-v .s { font-size:12px; color:var(--text-3); }
+.rf-vis-testa { text-align:center; padding:26px 20px 20px; }
+.rf-vis-testa .chi { font-size:30px; font-weight:650; letter-spacing:-.02em; line-height:1.15; }
+.rf-vis-testa .nato { color:var(--text-3); font-size:13px; margin-top:4px; }
+.rf-vis-testa .cosa { font-size:16px; margin-top:14px; }
+.rf-vis-testa .cosa b { font-weight:650; }
+.rf-vis-crono { font-variant-numeric:tabular-nums; font-size:46px; font-weight:650; letter-spacing:-.02em; line-height:1; margin:18px 0 4px; }
+.rf-vis-crono.oltre { color:#a23b2a; }
+.rf-vis-sotto { font-size:13px; color:var(--text-3); }
+.rf-vis-az { display:grid; gap:10px; margin:22px 0 4px; }
+.rf-vis-az .btn { padding:20px 14px; font-size:17px; border-radius:14px; }
+.rf-vis-righe { display:flex; flex-direction:column; gap:1px; margin-top:20px; }
+.rf-vis-riga { display:grid; grid-template-columns:130px minmax(0,1fr); gap:10px; padding:8px 0; border-top:1px solid var(--border); font-size:13.5px; align-items:baseline; }
+.rf-vis-riga .e { color:var(--text-3); font-size:12.5px; }
+.rf-vis-scorciatoie { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:18px; }
+.rf-vis-dopo { margin-top:14px; font-size:13px; color:var(--text-2); text-align:center; }
+@media (max-width:600px) { .rf-vis-riga { grid-template-columns:1fr; gap:2px; } .rf-vis-testa .chi { font-size:25px; } }
+`; document.head.appendChild(st); })();
+
+if (typeof NAV_META !== 'undefined') NAV_META.visite = ['Visita', 'visits'];
+RF.visitaSel = null; RF.visitaQ = ''; RF.visitaCrono = null;
+
+/* Gli appuntamenti fra cui si cerca: quelli di oggi che il gemello conosce
+   (hanno stato e stanza), e in coda quelli dell'agenda del giorno che il
+   piano non ha preso — così una visita si apre anche se è fuori dal piano. */
+function rfVisElenco() {
+  const o = RF.orch;
+  const oggi = (RF.data && RF.data.today) || new Date().toISOString().slice(0, 10);
+  const dal = new Map();
+  for (const p of (o ? o.pazienti : [])) dal.set(p.id, { ...p, fonte: 'piano' });
+  for (const a of (RF.agenda || [])) {
+    if (a.d !== oggi || dal.has(a.id)) continue;
+    dal.set(a.id, { id: a.id, etichetta: a.nomeBreve || a.nome || 'Paziente', medico: DOCTORS[a.doc] || '', prestazione: a.prestazione || a.motivoVero || '',
+      teorica: rfMinuti(a.start), stato: 'atteso', sala: null, ingresso: null, inizio: null, fonte: 'agenda' });
+  }
+  return [...dal.values()].sort((a, b) => a.teorica - b.teorica);
+}
+function rfVisTrova(q) {
+  const t = String(q || '').trim().toLowerCase();
+  const tutte = rfVisElenco();
+  if (t.length < 2) return tutte.filter(x => !['dimesso', 'assente', 'annullato'].includes(x.stato)).slice(0, 12);
+  return tutte.filter(x => `${x.etichetta} ${x.medico} ${x.prestazione}`.toLowerCase().includes(t)).slice(0, 12);
+}
+function rfVisCerca(q) {
+  RF.visitaQ = q;
+  const box = document.getElementById('rf-vis-lista'); if (!box) return;
+  box.innerHTML = rfVisRighe(rfVisTrova(q));
+}
+function rfVisRighe(lista) {
+  if (!lista.length) return '<div class="caption" style="padding:10px 2px">Nessun appuntamento con questo nome, oggi.</div>';
+  return lista.map(p => `<button type="button" class="rf-vis-v" onclick="rfVisApri('${rfEsc(p.id)}')">
+    <span class="h">${rfOrHm(p.teorica)}</span>
+    <span><b>${rfEsc(p.etichetta)}</b><span class="s">${rfEsc(p.prestazione || 'prestazione non riconosciuta')} · ${rfEsc(rfNomeCorto(p.medico || 'senza medico'))}${p.sala ? ` · ${rfEsc(p.sala)}` : ''}</span></span>
+    <span class="rf-or-pill ${rfEsc(p.stato)}">${rfEsc(rfOrStato(p.stato))}</span></button>`).join('');
+}
+function rfVisApri(id) { RF.visitaSel = id; render(); }
+function rfVisChiudi() { RF.visitaSel = null; render(); }
+
+/* Il cronometro: gira in locale ogni secondo e tocca solo il suo pezzo di
+   pagina, senza ridisegnare niente. Parte dall'ora vera di inizio, che è
+   quella registrata dal tasto. */
+function rfVisCronometro() {
+  const el = document.getElementById('rf-vis-crono');
+  if (!el) { if (RF.visitaCrono) { clearInterval(RF.visitaCrono); RF.visitaCrono = null; } return; }
+  const da = Number(el.dataset.da || 0), prevista = Number(el.dataset.prevista || 0);
+  const tic = () => {
+    const box = document.getElementById('rf-vis-crono'); if (!box) { clearInterval(RF.visitaCrono); RF.visitaCrono = null; return; }
+    const s = Math.max(0, Math.floor((Date.now() - da) / 1000));
+    box.textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+    box.classList.toggle('oltre', prevista > 0 && s > prevista * 60);
+    const n = document.getElementById('rf-vis-oltre');
+    if (n && prevista > 0) n.textContent = s > prevista * 60 ? `${Math.round(s / 60 - prevista)} min oltre i ${prevista} previsti` : `previsti ${prevista} minuti`;
+  };
+  if (RF.visitaCrono) clearInterval(RF.visitaCrono);
+  tic(); RF.visitaCrono = setInterval(tic, 1000);
+}
+async function rfVisEvento(tipo, extra) { await rfOrchEvento(tipo, extra, 'stanza'); }
+
+PAGES.visite = () => {
+  if (!RF.live) return rfPaginaPiattaforma('Visita', 'Il centro di controllo della visita');
+  const o = RF.orch;
+  const sel = RF.visitaSel ? rfVisElenco().find(x => x.id === RF.visitaSel) : null;
+
+  if (!sel) {
+    // In corso adesso: se una visita è aperta si va lì con un tasto solo.
+    const inCorso = rfVisElenco().filter(x => x.stato === 'in_visita');
+    return `<div class="page-head"><div><h2 class="page-title">Visita</h2><div class="page-sub">Scrivi il nome del paziente, o scegli dall'elenco di oggi</div></div></div>
+      ${rfOrMsg()}
+      <div class="rf-vis-cerca">
+        ${inCorso.length ? `<div class="card" style="margin-bottom:12px"><div class="card-head"><span class="section-title">In corso adesso</span></div>
+          ${rfVisRighe(inCorso)}</div>` : ''}
+        <div class="card">
+          <input class="input" id="rf-vis-q" placeholder="Nome del paziente…" autocomplete="off" value="${rfEsc(RF.visitaQ || '')}"
+            oninput="rfVisCerca(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();const l=rfVisTrova(this.value);if(l.length)rfVisApri(l[0].id);}">
+          <div class="rf-vis-lista" id="rf-vis-lista">${rfVisRighe(rfVisTrova(RF.visitaQ || ''))}</div>
+        </div>
+      </div>`;
+  }
+
+  const paz = (RF.agenda || []).find(a => a.id === sel.id);
+  const pid = paz && paz.p && rfUuid(paz.p) ? paz.p : null;
+  // La durata prevista viene dal piano (è la stima misurata, non quella
+  // dell'agenda); se il piano non l'ha, resta quella dell'agenda.
+  const prevista = sel.durata || (paz ? paz.dur : 0);
+  const oggi = (RF.data && RF.data.today) || new Date().toISOString().slice(0, 10);
+  const inizioMs = sel.inizioReale != null ? new Date(`${oggi}T${rfOrHm(sel.inizioReale)}:00`).getTime() : 0;
+  const riga = (e, v) => v ? `<div class="rf-vis-riga"><span class="e">${e}</span><span class="v">${v}</span></div>` : '';
+  const dopo = rfVisElenco().filter(x => x.medico === sel.medico && x.teorica > sel.teorica && !['dimesso', 'assente', 'annullato'].includes(x.stato))[0];
+
+  let centro, azioni;
+  if (sel.stato === 'in_visita') {
+    centro = `<div class="rf-vis-crono" id="rf-vis-crono" data-da="${inizioMs}" data-prevista="${prevista}">00:00</div>
+      <div class="rf-vis-sotto" id="rf-vis-oltre">${prevista ? `previsti ${prevista} minuti` : 'durata prevista non nota'}</div>`;
+    azioni = `<button class="btn primary" onclick="rfVisEvento('visita_finita',{appointment_id:'${sel.id}'})">Fine visita</button>`;
+  } else if (['visita_finita'].includes(sel.stato)) {
+    centro = `<div class="rf-vis-sotto" style="font-size:15px;margin-top:16px">Visita finita${sel.fineReale != null && sel.inizioReale != null ? ` · durata ${sel.fineReale - sel.inizioReale} minuti` : ''}</div>`;
+    azioni = `<button class="btn primary" onclick="rfVisEvento('dimesso',{appointment_id:'${sel.id}'})">Il paziente è uscito</button>
+      <a class="btn" href="/dittafono/index.html">${ICONS.mic} Detta il referto</a>`;
+  } else if (sel.stato === 'dimesso') {
+    centro = `<div class="rf-vis-sotto" style="font-size:15px;margin-top:16px">Conclusa${sel.fineReale != null && sel.inizioReale != null ? ` · è durata ${sel.fineReale - sel.inizioReale} minuti` : ''}</div>`;
+    azioni = `<a class="btn primary" href="/dittafono/index.html">${ICONS.mic} Detta il referto</a>`;
+  } else {
+    centro = `<div class="rf-vis-sotto" style="font-size:15px;margin-top:18px">${sel.sala ? `Stanza <b>${rfEsc(sel.sala)}</b>` : 'Stanza non ancora decisa'}${prevista ? ` · previsti ${prevista} minuti` : ''}</div>`;
+    azioni = `<button class="btn primary" onclick="rfVisEvento('visita_iniziata',{appointment_id:'${sel.id}'${sel.sala ? `,sala:'${rfEsc(sel.sala)}'` : ''}})">Inizia visita</button>`;
+  }
+
+  return `<div class="page-head"><div><h2 class="page-title">Visita</h2><div class="page-sub">${rfEsc(rfOrStato(sel.stato))}${sel.sala ? ` · ${rfEsc(sel.sala)}` : ''}</div></div>
+      <div class="actions"><button class="btn" onclick="rfVisChiudi()">Cambia paziente</button></div></div>
+    ${rfOrMsg()}
+    <div class="rf-vis card">
+      <div class="rf-vis-testa">
+        <div class="chi">${rfEsc(sel.etichetta)}</div>
+        ${paz && paz.nascita ? `<div class="nato">nato il ${rfEsc(paz.nascita)}</div>` : ''}
+        <div class="cosa"><b>${rfEsc(sel.prestazione || 'prestazione non riconosciuta')}</b> · ${rfEsc(rfNomeCorto(sel.medico || 'senza medico'))}${rfOrRitardo(sel.medico, true)}</div>
+        ${centro}
+        <div class="rf-vis-az">${azioni}</div>
+        <div class="rf-vis-scorciatoie">
+          ${pid ? `<button class="btn sm ghost" data-go="#/patients/${rfEsc(pid)}">Cartella</button>` : ''}
+          ${pid ? `<button class="btn sm ai" data-ai="Briefing pre-visita di ${rfEsc(String(sel.etichetta).replace(/'/g, ' '))}">${ICONS.ai} Briefing</button>` : ''}
+          <button class="btn sm ghost" data-go="#/sale">Sale</button>
+        </div>
+        ${dopo ? `<div class="rf-vis-dopo">Dopo di lui: <b>${rfEsc(dopo.etichetta)}</b> alle ${rfOrHm(dopo.inizio ?? dopo.teorica)}${dopo.sala ? ` in ${rfEsc(dopo.sala)}` : ''} · <a href="#" onclick="event.preventDefault();rfVisApri('${rfEsc(dopo.id)}')">apri</a></div>` : ''}
+      </div>
+      <div class="rf-vis-righe">
+        ${riga('In agenda', `<b>${rfOrHm(sel.teorica)}</b>${sel.inizio != null && sel.inizio > sel.teorica + 4 ? ` <span class="caption">· il piano la sposta alle ${rfOrHm(sel.inizio)}</span>` : ''}`)}
+        ${riga('Arrivato', sel.arrivo != null ? rfOrHm(sel.arrivo) : '<span class="caption">non segnato all&rsquo;accoglienza</span>')}
+        ${riga('Entrato in stanza', sel.ingresso != null && ['chiamato', 'in_preparazione', 'pronto', 'in_visita', 'visita_finita', 'dimesso'].includes(sel.stato) ? rfOrHm(sel.ingresso) : '')}
+        ${riga('Inizio vero', sel.inizioReale != null ? `<b>${rfOrHm(sel.inizioReale)}</b>` : '<span class="caption">si registra premendo «Inizia visita»</span>')}
+        ${riga('Fine', sel.fineReale != null ? rfOrHm(sel.fineReale) : '')}
+        ${riga('N° paziente', paz && paz.nPaziente ? `<code>${rfEsc(paz.nPaziente)}</code>` : '')}
+      </div>
+    </div>`;
+};

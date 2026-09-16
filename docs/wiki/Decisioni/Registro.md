@@ -99,6 +99,8 @@ Una riga per decisione, con la data e il perché. Non si rilitigano senza un dat
 
 | 2026-09-16 | **Pausa nella stessa stanza**: due visite di fila dello stesso medico nella stessa stanza solo con almeno 10 minuti in mezzo; altrimenti il paziente successivo va in un'altra stanza. Esente chi ha una stanza sola per regola (Paiocchi) | detto dallo studio la sera del 16.9. È la regola che rende concreto «il medico si sposta»: senza, il solver poteva tenere un medico nella stessa stanza con il paziente successivo che aspetta dentro. Vincolo duro in tutti e due i motori (`riparatore.ts`, `solver.py`), parametro `pausa_stessa_stanza_min`; l'esenzione è automatica per chi ha una riga «Sempre e solo» ([[Medici/Sale]], [[Piattaforma/Orchestrazione sale]]) |
 
+| 2026-09-16 | L'inizio vero di una visita si registra con **un tasto nella pagina «Visita»**, non si deduce | l'utente ha chiesto come sapere quando il medico comincia davvero. Misurato: su 30 giorni MediOnline manda solo `fissato`, `da_fatturare`, `fatturato`, `trattato` — mai `arrivato`, mai `in corso`: dice che una visita è finita, non quando è cominciata, e con 15 minuti di ritardo. Il dettato dà la fine ed è gratis, ma in 7 giorni sono arrivati 8 audio di un medico solo. Restava il tocco di una persona: la pagina lo chiede una volta sola, al medico che ha già il telefono in mano ([[Piattaforma/Orchestrazione sale]]) |
+
 ## Aperte
 - Conservare l'audio per un LoRA futuro; togliere il denoise se arriva un oro verificato dal medico.
 - Livello 2 del server (dominio, HTTPS) dopo la parte legale.
