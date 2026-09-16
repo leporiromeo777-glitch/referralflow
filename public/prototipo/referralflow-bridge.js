@@ -4666,39 +4666,22 @@ window.addEventListener('resize', () => { try { rfOrAltezzaAccoglienza(); } catc
 (function () { const st = document.createElement('style'); st.textContent = `
 .rf-vis { max-width:760px; margin:0 auto; }
 .rf-vis-cerca { max-width:620px; margin:0 auto; }
-.rf-vis-lista { display:flex; flex-direction:column; gap:6px; margin-top:12px; max-height:56vh; overflow:auto; padding:2px; }
-/* La riga di un paziente: l'ora a sinistra su fondo proprio, il nome grande,
-   sotto la prestazione e il medico, a destra la stanza e lo stato. La
-   striscia colorata a sinistra dice lo stato senza leggerlo. */
-.rf-vis-v { display:grid; grid-template-columns:58px minmax(0,1fr) auto; gap:13px; align-items:center; width:100%; text-align:left;
-  font:inherit; color:inherit; cursor:pointer; border:1px solid var(--border); background:var(--surface); border-radius:12px;
-  padding:11px 13px 11px 11px; position:relative; overflow:hidden; transition:border-color .15s var(--ease), box-shadow .15s var(--ease), transform .15s var(--ease); }
-.rf-vis-v::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--border-2); }
-.rf-vis-v:hover { border-color:var(--accent); box-shadow:0 2px 10px rgb(0 0 0 / .06); transform:translateY(-1px); }
-.rf-vis-v:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-.rf-vis-v .h { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
-  background:var(--surface-2); border-radius:9px; padding:7px 4px; }
-.rf-vis-v .h .o { font-variant-numeric:tabular-nums; font-weight:650; font-size:14.5px; letter-spacing:-.02em; line-height:1; }
-.rf-vis-v .h .d { font-size:9.5px; color:var(--text-3); letter-spacing:.02em; }
-.rf-vis-v .c { min-width:0; }
-.rf-vis-v .n { font-size:15px; font-weight:650; letter-spacing:-.01em; line-height:1.25; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.rf-vis-v .s { display:flex; align-items:center; gap:6px; margin-top:3px; font-size:12px; color:var(--text-3); min-width:0; }
-.rf-vis-v .s .pr { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.rf-vis-v .s .med { display:inline-flex; align-items:center; gap:4px; white-space:nowrap; }
-.rf-vis-v .s .sep { opacity:.45; }
-.rf-vis-v .dx { display:flex; align-items:center; gap:8px; }
-.rf-vis-v .sala { font-size:11px; font-weight:600; padding:3px 8px; border-radius:7px; background:var(--surface-2); color:var(--text-2); white-space:nowrap; }
-.rf-vis-v .sala.manca { background:transparent; color:var(--text-3); font-weight:500; font-style:italic; }
-.rf-vis-v .frec { color:var(--border-2); display:flex; }
-.rf-vis-v .frec svg { width:15px; height:15px; }
-.rf-vis-v:hover .frec { color:var(--accent); }
-/* Lo stato, sulla striscia e sulla pastiglia. */
-.rf-vis-v.st-in_visita::before { background:var(--accent); }
-.rf-vis-v.st-in_visita { border-color:var(--accent); background:var(--accent-soft); }
-.rf-vis-v.st-pronto::before, .rf-vis-v.st-in_preparazione::before, .rf-vis-v.st-chiamato::before { background:#8a4b12; }
-.rf-vis-v.st-arrivato::before, .rf-vis-v.st-in_attesa::before { background:#0d5c48; }
-.rf-vis-v.st-dimesso, .rf-vis-v.st-visita_finita, .rf-vis-v.st-assente { opacity:.6; }
-.rf-vis-v .rf-av { width:18px; height:18px; font-size:8.5px; }
+.rf-vis-lista { display:flex; flex-direction:column; margin-top:10px; max-height:56vh; overflow:auto; }
+/* Un elenco e basta: una riga per paziente, una riga sottile fra una e
+   l'altra. Ora, nome, prestazione, stato. Niente riquadri. */
+.rf-vis-v { display:grid; grid-template-columns:52px minmax(0,1fr) auto; gap:12px; align-items:baseline; width:100%; text-align:left;
+  font:inherit; color:inherit; cursor:pointer; border:0; background:transparent; border-top:1px solid var(--border);
+  padding:10px 6px; border-radius:6px; }
+.rf-vis-v:first-child { border-top:0; }
+.rf-vis-v:hover { background:var(--surface-2); }
+.rf-vis-v:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+.rf-vis-v .h { font-variant-numeric:tabular-nums; font-size:13px; color:var(--text-2); }
+.rf-vis-v .n { font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rf-vis-v .pr { color:var(--text-3); font-weight:400; font-size:12.5px; }
+.rf-vis-v .st { font-size:12px; color:var(--text-3); white-space:nowrap; }
+.rf-vis-v.st-in_visita .h, .rf-vis-v.st-in_visita .n { color:var(--accent); }
+.rf-vis-v.st-in_visita .st { color:var(--accent); font-weight:600; }
+.rf-vis-v.st-dimesso, .rf-vis-v.st-visita_finita, .rf-vis-v.st-assente { opacity:.5; }
 .rf-vis-testa { text-align:center; padding:26px 20px 20px; }
 .rf-vis-testa .chi { font-size:30px; font-weight:650; letter-spacing:-.02em; line-height:1.15; }
 .rf-vis-testa .nato { color:var(--text-3); font-size:13px; margin-top:4px; }
@@ -4761,17 +4744,13 @@ function rfVisCerca(q) {
 function rfVisRighe(lista) {
   if (!lista.length) return '<div class="caption" style="padding:12px 4px">Nessun appuntamento con questo nome, oggi.</div>';
   return lista.map(p => {
-    // L'ora sotto è quella vera quando c'è: se il piano l'ha spostata o il
-    // medico è entrato, è quella che conta per chi guarda.
+    // L'ora vera quando c'è: se il medico è entrato, o se il piano l'ha
+    // spostata di più di quattro minuti.
     const vera = p.inizioReale ?? (p.inizio != null && p.inizio > p.teorica + 4 ? p.inizio : null);
-    return `<button type="button" class="rf-vis-v st-${rfEsc(p.stato)}" onclick="rfVisApri('${rfEsc(p.id)}')" title="${rfEsc(p.etichetta)} · ${rfEsc(rfOrStato(p.stato))}">
-    <span class="h"><span class="o">${rfOrHm(p.teorica)}</span>${vera != null ? `<span class="d">→ ${rfOrHm(vera)}</span>` : (p.durata ? `<span class="d">${p.durata}'</span>` : '')}</span>
-    <span class="c"><span class="n">${rfEsc(p.etichetta)}</span>
-      <span class="s"><span class="pr">${rfEsc(p.prestazione || 'prestazione non riconosciuta')}</span><span class="sep">·</span><span class="med">${rfAvatar(p.medico || '?')}${rfEsc(rfNomeCorto(p.medico || 'senza medico'))}</span>${rfOrRitardo(p.medico)}</span></span>
-    <span class="dx">
-      <span class="sala${p.sala ? '' : ' manca'}">${rfEsc(p.sala || 'senza stanza')}</span>
-      <span class="rf-or-pill ${rfEsc(p.stato)}">${rfEsc(rfOrStato(p.stato))}</span>
-      <span class="frec">${ICONS.chevR || ''}</span></span></button>`;
+    return `<button type="button" class="rf-vis-v st-${rfEsc(p.stato)}" onclick="rfVisApri('${rfEsc(p.id)}')" title="${rfEsc(p.etichetta)} · ${rfEsc(rfNomeNudo(p.medico || 'senza medico'))}${p.sala ? ` · ${rfEsc(p.sala)}` : ''}">
+      <span class="h">${rfOrHm(vera ?? p.teorica)}</span>
+      <span class="n">${rfEsc(p.etichetta)}${p.prestazione ? ` <span class="pr">${rfEsc(p.prestazione)}</span>` : ''}</span>
+      <span class="st">${rfEsc(rfOrStato(p.stato))}${p.sala ? ` · ${rfEsc(p.sala)}` : ''}</span></button>`;
   }).join('');
 }
 function rfVisApri(id) { RF.visitaSel = id; render(); }
