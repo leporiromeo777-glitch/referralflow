@@ -609,6 +609,8 @@ Quattro viste, una sola pagina, sopra il prototipo attuale (la pagina «Sale» e
 
 **A. La mappa dello studio.** Le otto stanze disegnate nella disposizione vera (una piantina semplice, non una lista): per ogni stanza il paziente di adesso, il medico di adesso, lo stato come colore discreto e parola, e sotto, più piccolo, *il prossimo*: chi entra, con quale medico, fra quanti minuti. Le stanze libere dicono per quanto. Clic sulla stanza: i comandi del §11.
 
+**B′. L'agenda per medico** (aggiunta il 16.9 su richiesta dello studio). La stessa pianificazione, una colonna per medico: su ogni visita la stanza prevista e l'ora in cui il medico ci arriva; una tacca tratteggiata segna l'ora dell'agenda quando il piano la sposta, e il blocco scrive «+N min». Solo le visite in studio: telefonate e prestazioni fuori sede stanno nella pagina Agenda.
+
 **B. La timeline.** Quella di oggi, con due cambiamenti: le righe sono le **stanze** e i blocchi sono i **pazienti** — ogni blocco col colore e le iniziali del suo medico, come già fatto il 16.9 — e sopra i blocchi corrono i **fili dei medici**: una linea sottile per medico che va di stanza in stanza. Un ritardo si vede come un blocco che si allunga e un filo che si sposta a destra. Le modifiche rispetto al piano comunicato sono segnate con un bordo tratteggiato dov'era il blocco prima.
 
 **C. Il movimento dei medici.** Una riga per medico: adesso, poi, poi. «Rego · Sala 4 (P-12, finisce ~10:41) → Sala 3 (P-17, pronto) → Sala 4 (P-21, 11:05)». È la vista che un medico guarda uscendo da una stanza.

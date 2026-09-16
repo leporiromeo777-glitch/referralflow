@@ -4168,6 +4168,7 @@ PAGES.sale = () => {
 .rf-or-stanza .grandi .btn.tutta { grid-column:1 / -1; }
 .rf-or-scelta { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
 .rf-or-fili { position:absolute; inset:0; pointer-events:none; overflow:visible; }
+.rf-or-teorica { position:absolute; left:2px; right:2px; border-top:1px dashed #8a4b12; opacity:.7; pointer-events:none; z-index:3; }
 .rf-or-fili polyline { fill:none; stroke-width:2px; stroke-linejoin:round; stroke-linecap:round; opacity:.7; vector-effect:non-scaling-stroke; }
 .rf-or-legenda { display:flex; flex-wrap:wrap; gap:8px 14px; font-size:11.5px; color:var(--text-2); margin-top:8px; }
 .rf-or-legenda i { display:inline-block; width:14px; height:3px; border-radius:2px; vertical-align:middle; margin-right:5px; }
@@ -4187,7 +4188,7 @@ async function rfOrchCarica(dopo) {
   try {
     const r = await fetch('/api/orchestrazione/stato', { credentials: 'include', cache: 'no-store' });
     const j = await r.json().catch(() => null);
-    if (r.ok && j) { RF.orch = j; if (state.route === 'sale' && RF.saleVista === 'giornata') await rfOrchCaricaPiano(); }
+    if (r.ok && j) { RF.orch = j; if (state.route === 'sale' && (RF.saleVista === 'giornata' || RF.saleVista === 'agenda')) await rfOrchCaricaPiano(); }
   } catch { /* la prossima volta */ }
   if (typeof dopo === 'function') dopo();
   if (RF_OR_PAGINE.has(state.route)) render();
@@ -4225,7 +4226,7 @@ async function rfOrchMattino() {
   try { const r = await fetch('/api/orchestrazione/mattino', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ forza: true }) }); const j = await r.json().catch(() => ({})); RF.orchMsg = { tipo: j.ok ? 'ok' : 'male', testo: j.ok ? `Piano v${j.versione} (${j.motore}, ${((j.ms || 0) / 1000).toFixed(1)} s): ${j.visite} visite, ${j.senzaSala} senza sala.` : (j.errore || 'Non riuscito.') }; } catch { RF.orchMsg = { tipo: 'male', testo: 'La piattaforma non risponde.' }; }
   await rfOrchCarica(); await rfOrchCaricaPiano(); render();
 }
-function rfOrchVista(v) { RF.saleVista = v; if (v === 'giornata' && !RF.orchPiano) rfOrchCaricaPiano().then(() => render()); render(); }
+function rfOrchVista(v) { RF.saleVista = v; if ((v === 'giornata' || v === 'agenda') && !RF.orchPiano) rfOrchCaricaPiano().then(() => render()); render(); }
 function rfOrchApriSala(nome) { RF.orchSala = RF.orchSala === nome ? '' : nome; render(); }
 const rfOrHm = (m) => m == null ? '—' : `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(((m % 60) + 60) % 60).padStart(2, '0')}`;
 const RF_OR_STATO = { atteso: 'atteso', arrivato: 'arrivato', in_attesa: 'in sala d\'attesa', chiamato: 'chiamato', in_preparazione: 'in preparazione', pronto: 'pronto', in_visita: 'in visita', visita_finita: 'visita finita', dimesso: 'uscito', assente: 'assente', annullato: 'annullato',
@@ -4352,7 +4353,56 @@ function rfOrGiornata(o) {
       <div class="rf-or-legenda">${legenda}</div></div>`;
 }
 
-/* ---------- la pagina «Sale» con le tre viste ---------- */
+/* ---------- la vista «Agenda»: una colonna per medico, dal piano ---------- */
+// La stessa pianificazione della «Giornata», guardata dal lato del medico:
+// per ognuno la sua giornata in colonna, ogni blocco con la stanza dov'è
+// previsto e l'ora in cui il medico ci arriva. Se l'ora pianificata è dopo
+// quella dell'agenda, il blocco lo dice. Qui ci sono solo le visite in
+// studio: le telefonate e le prestazioni fuori sede stanno nell'Agenda.
+function rfOrAgenda(o) {
+  const pj = RF.orchPiano;
+  if (!pj || !pj.piano) return `<div class="card"><p class="meta" style="margin:0">Il piano di oggi non c'è ancora. <button class="btn sm" onclick="rfOrchMattino()">Preparalo adesso</button></p></div>`;
+  const M = 0.95, inizio = 7 * 60, fine = 19 * 60 + 30;
+  const su = (m) => (m - inizio) * M;
+  const alto = (fine - inizio) * M + 20;
+  const visite = pj.piano.visite.filter(v => v.medico && v.inizio_stimato != null);
+  const medici = [...new Set(visite.map(v => v.medico))].sort((a, b) => rfNomeCorto(a).localeCompare(rfNomeCorto(b)));
+  const pazDi = (id) => o.pazienti.find(p => p.id === id) || {};
+  const ore = []; for (let h = 7; h <= 19; h++) ore.push(`${String(h).padStart(2, '0')}:00`);
+  const n = medici.length || 1;
+  const conCorsie = (lista) => {
+    const l = [...lista].sort((a, b) => a.inizio_stimato - b.inizio_stimato); const fini = [];
+    for (const v of l) { let i = 0; while (fini[i] !== undefined && fini[i] > v.inizio_stimato) i++; fini[i] = v.fine_stimata; v._c = i; }
+    const k = Math.max(1, fini.length); for (const v of l) v._n = k; return l;
+  };
+  const colonna = (m) => {
+    const mie = conCorsie(visite.filter(v => v.medico === m));
+    return `<div class="rf-cs-col" style="--riga:${(60 * M).toFixed(2)}px"><div class="rf-cs-vv">${mie.map(v => {
+      const p = pazDi(v.appointment_id); const h = (v.fine_stimata - v.inizio_stimato) * M - 1;
+      const tardi = v.inizio_stimato - v.ora_teorica;
+      const stato = p.stato || 'atteso';
+      return `<button class="rf-cs-v${['in_visita', 'pronto', 'in_preparazione'].includes(stato) ? ' sovra' : ''}" style="top:${su(v.inizio_stimato).toFixed(1)}px;height:${Math.max(7, h).toFixed(1)}px;left:${(v._c / v._n * 100).toFixed(2)}%;width:calc(${(100 / v._n).toFixed(2)}% - 2px)"
+        onclick="event.stopPropagation(); rfApptScheda('${rfEsc(v.appointment_id)}')" title="${rfEsc(p.etichetta || '')} · ${rfEsc(v.prestazione)} · agenda ${rfOrHm(v.ora_teorica)}, medico in ${rfEsc(v.sala || '—')} alle ${rfOrHm(v.inizio_stimato)} · ${rfEsc(rfOrStato(stato))}${v.rigidita >= 2 ? ' · fermo' : ''}">
+        <span class="nm">${rfEsc(p.etichetta || '')}</span><span class="pr">${rfEsc(v.sala || 'senza sala')}${tardi > 4 ? ` · <span style="color:#8a4b12">+${tardi} min</span>` : ''}</span></button>`;
+    }).join('')}${mie.filter(v => v.inizio_stimato - v.ora_teorica > 4).map(v => `<i class="rf-or-teorica" style="top:${su(v.ora_teorica).toFixed(1)}px" title="ora dell'agenda: ${rfOrHm(v.ora_teorica)}"></i>`).join('')}</div></div>`;
+  };
+  const testa = (m) => {
+    const mie = visite.filter(v => v.medico === m);
+    const md = (o.medici || []).find(x => x.nome === m) || {};
+    const rit = md.ritardo || 0;
+    return `<button class="rf-cs-testa st-${md.stato === 'in_visita' ? 'occupata' : 'libera'}" style="--h:${rfTinta(m)}"><span class="sn">${rfAvatar(m)}${rfEsc(rfNomeCorto(m))}</span><span class="sf">${mie.length} ${mie.length === 1 ? 'visita' : 'visite'}${rit > 0 ? ` · <b style="color:#8a4b12">+${rit} min</b>` : ''}${md.inSala ? ` · in ${rfEsc(md.inSala)}` : ''}</span></button>`;
+  };
+  return `<div class="caption" style="margin:-4px 0 8px">Piano v${pj.piano.versione} · una colonna per medico · su ogni visita la stanza prevista; la tacca tratteggiata è l'ora dell'agenda quando il piano la sposta. Le telefonate e le prestazioni fuori sede sono nell'Agenda, non qui.</div>
+    <div class="card"><div class="rf-cs-scorre">
+      <div class="rf-cs-teste" style="min-width:${52 + n * 124}px"><span class="rf-cs-vuoto"></span>${medici.map(testa).join('')}</div>
+      <div class="rf-cs" style="height:${alto.toFixed(0)}px;min-width:${52 + n * 124}px;position:relative">
+        <div class="rf-cs-ore">${ore.map(h => `<span style="top:${su(rfMinuti(h)).toFixed(1)}px">${h}</span>`).join('')}</div>
+        ${medici.map(colonna).join('')}
+        ${o.adesso >= inizio && o.adesso <= fine ? `<i class="rf-cs-adesso" style="top:${su(o.adesso).toFixed(1)}px"><b>${o.adessoHm}</b></i>` : ''}
+      </div></div></div>`;
+}
+
+/* ---------- la pagina «Sale» con le quattro viste ---------- */
 const rfSaleCalendarioOrig = PAGES.sale;
 PAGES.sale = () => {
   if (!RF.live) return rfSaleCalendarioOrig();
@@ -4362,12 +4412,12 @@ PAGES.sale = () => {
     return orig.replace('<div class="actions">', `<div class="actions"><div class="rf-seg rf-or-viste">${rfOrBottoniVista(vista)}</div>`);
   }
   const o = RF.orch;
-  const testa = `<div class="page-head"><div><h2 class="page-title">Sale e medici</h2><div class="page-sub">${vista === 'adesso' ? 'Chi è dove adesso, e chi entra dopo' : 'La giornata come è pianificata adesso'}</div></div>
+  const testa = `<div class="page-head"><div><h2 class="page-title">Sale e medici</h2><div class="page-sub">${vista === 'adesso' ? 'Chi è dove adesso, e chi entra dopo' : vista === 'agenda' ? 'La giornata di ogni medico, stanza per stanza' : 'La giornata come è pianificata adesso'}</div></div>
     <div class="actions"><div class="rf-seg rf-or-viste">${rfOrBottoniVista(vista)}</div></div></div>`;
   if (!o) return `${testa}<div class="card"><div class="caption">Carico lo stato dello studio…</div></div>`;
-  return `${testa}${rfOrMsg()}<div class="stack">${vista === 'adesso' ? rfOrAdesso(o) : rfOrGiornata(o)}</div>`;
+  return `${testa}${rfOrMsg()}<div class="stack">${vista === 'adesso' ? rfOrAdesso(o) : vista === 'agenda' ? rfOrAgenda(o) : rfOrGiornata(o)}</div>`;
 };
-function rfOrBottoniVista(v) { const b = (k, et) => `<button class="${v === k ? 'on' : ''}" onclick="rfOrchVista('${k}')">${et}</button>`; return b('adesso', 'Adesso') + b('giornata', 'Giornata') + b('calendario', 'Calendario'); }
+function rfOrBottoniVista(v) { const b = (k, et) => `<button class="${v === k ? 'on' : ''}" onclick="rfOrchVista('${k}')">${et}</button>`; return b('adesso', 'Adesso') + b('giornata', 'Giornata') + b('agenda', 'Agenda') + b('calendario', 'Calendario'); }
 async function rfOrchRitira(id) { try { await fetch('/api/orchestrazione/comandi', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'ritira', id }) }); } catch {} RF.orchSala = ''; await rfOrchCarica(); }
 
 /* ---------- Accoglienza: il tablet ---------- */
