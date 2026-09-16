@@ -22,11 +22,18 @@ Restano dove sono, e devono restare: **accesso** (`/login`, verifica a due fatto
 
 ## Le pagine vecchie non sono ancora state cancellate
 
-Sono ancora raggiungibili scrivendo l'indirizzo, e nessun collegamento ci porta più. Non si cancellano alla cieca perché **alcune cose esistono solo lì**:
+Sono ancora raggiungibili scrivendo l'indirizzo, e nessun collegamento ci porta più. Nella sera del 16.9 la lista di quello che viveva **solo** lì si è quasi svuotata:
 
-- **Qualità AI** (`/referti/qualita`, `+ /pipeline`) — il cruscotto dove si conferma a mano il dizionario. È l'**unico** apprendimento della catena (vedi `CLAUDE.md`, «Regole che non si negoziano»): finché non c'è un equivalente, non si tocca.
-- **Statistiche** (`/statistiche`), **Richiami** (`/richiami`), **Lista d'attesa** (`/lista-attesa`), **Consulti** (`/consulti`), **Affidamento a un altro studio** (`/affida`, `/affida/esterno`).
-- **Impostazioni**: studio, utenti, preparazioni (`/impostazioni/…`), **Sicurezza** (`/sicurezza`), **Profilo** (`/profilo`).
-- **Referral** singola (`/referral/[id]`, `/referral/nuova`), **confronto referti** (`/referti/confronto`), **feed dell'agenda** (`/programma/feed`), amministrazione multi-studio (`/piattaforma`).
+| era solo nelle pagine vecchie | adesso |
+|---|---|
+| Consulti rapidi | scheda «Consulti» di [[Piattaforma/Invii e consulti]] |
+| Affidamento a un altro studio | scheda «Affidare a un altro studio» della stessa pagina |
+| Richiami | [[Piattaforma/Richiami e buchi]], con i buchi in agenda accanto |
+| Impostazioni → utenti | scheda «Personale» dello Studio (c'era già) |
+| Sicurezza (verifica in due passi) | scheda «Il mio accesso» dello Studio |
+| Qualità AI della catena | scheda «Qualità AI» dello Studio |
+| Statistiche | scheda «Statistiche» dello Studio |
+
+Restano da decidere: la **coda** delle referral con le disdette, la **referral singola** (`/referral/[id]`, dove si arriva ancora dai collegamenti), il **confronto fra referti**, il **profilo** personale, il **feed dell'agenda** e l'amministrazione **multi-studio**. Più l'area dell'**inviante** (`/invii`), che non si tocca: è un'altra persona e un'altra interfaccia.
 
 Il lavoro che resta è per ognuna: *serve ancora?* Se sì, va rifatta nell'interfaccia nuova; se no, si cancella. Finché quella lista non è vuota, cancellare il codice vecchio vorrebbe dire togliere funzioni senza accorgersene.

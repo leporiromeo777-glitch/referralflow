@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 // dello studio modifica. Stesse regole della piattaforma: e-mail unica,
 // password di almeno 8 caratteri scelta da chi crea l'accesso, mai
 // eliminare (si disattiva), nessuno si disattiva da solo. Mai password nei log.
-const RUOLI_VALIDI = new Set(['segretaria', 'medico', 'admin']);
+const RUOLI_VALIDI = new Set(['segretaria', 'medico', 'assistente', 'admin', 'tecnico']);
 const TIPI = new Set(['sala', 'apparecchio']);
 // Posti di una sala: intero 1-99, 1 se manca o non è un numero.
 const posti = (v: unknown) => { const n = Math.round(Number(v)); return Number.isFinite(n) && n >= 1 ? Math.min(99, n) : 1; };
@@ -43,18 +43,96 @@ async function leggi(studioId: string) {
   return { studio, personale, personale_senza_accesso: personaleSenzaAccesso, medici, catalogo, sale: risorse.filter((r) => r.tipo === 'sala'), apparecchi: risorse.filter((r) => r.tipo === 'apparecchio'), codici_agenda: codici.map((c) => ({ ...c, risorsa: nomiRisorse.has(c.codice.toLowerCase()) })) };
 }
 
-export async function GET() {
+// Le tre sezioni portate qui dalle pagine vecchie (16.9.2026): la sicurezza
+// del proprio accesso, il cruscotto della qualità della catena e le
+// statistiche dello studio. Le prime due righe costano poco e vengono
+// sempre; le altre solo quando la scheda è aperta (?extra=qualita).
+async function sicurezzaDi(userId: string) {
+  const [u] = await query<{ email: string; attiva: string | null; in_corso: boolean; codici: number }>(
+    `select u.email, u.totp_enabled_at::text as attiva, (u.totp_secret is not null and u.totp_enabled_at is null) as in_corso,
+            (select count(*)::int from user_recovery_codes rc where rc.user_id = u.id and rc.used_at is null) as codici
+       from users u where u.id = $1`, [userId]);
+  return u ?? null;
+}
+
+async function qualitaDella(studioId: string) {
+  // Le stesse domande del cruscotto vecchio: tutto sta nel `payload.revisione`
+  // delle bozze confermate, scritto dal codice a ogni conferma.
+  const [settimane, perUtente, classi, origini, dizionario, bozze] = await Promise.all([
+    query<{ settimana: string; n: number; quota_med: string | null; tempo_med: string | null; flag: number | null; senza: number | null }>(
+      `select to_char(date_trunc('week', reviewed_at), 'IYYY-"s"IW') as settimana, count(*)::int as n,
+              percentile_cont(0.5) within group (order by (payload->'revisione'->>'quota_modificata')::numeric)::text as quota_med,
+              percentile_cont(0.5) within group (order by (payload->'revisione'->>'tempo_revisione_s')::numeric)::text as tempo_med,
+              sum((payload->'revisione'->>'flag_totali')::int)::int as flag,
+              sum((payload->'revisione'->>'flag_accettati_senza_riascolto')::int)::int as senza
+         from referti_bozze where studio_id = $1 and stato = 'confermata' and payload ? 'revisione'
+        group by 1 order by 1 desc limit 8`, [studioId]),
+    query<{ email: string; n: number; quota_med: string | null; tempo_med: string | null }>(
+      `select coalesce(u.email, '—') as email, count(*)::int as n,
+              percentile_cont(0.5) within group (order by (b.payload->'revisione'->>'quota_modificata')::numeric)::text as quota_med,
+              percentile_cont(0.5) within group (order by (b.payload->'revisione'->>'tempo_revisione_s')::numeric)::text as tempo_med
+         from referti_bozze b left join users u on u.id = b.reviewed_by
+        where b.studio_id = $1 and b.stato = 'confermata' and b.payload ? 'revisione'
+        group by 1 order by 2 desc limit 10`, [studioId]),
+    query<{ classe: string; n: number }>(
+      `select k as classe, sum(v::int)::int as n
+         from referti_bozze b, jsonb_each_text(coalesce(b.payload->'revisione'->'classi', '{}'::jsonb)) as t(k, v)
+        where b.studio_id = $1 and b.stato = 'confermata' group by k order by 2 desc limit 12`, [studioId]),
+    query<{ origine: string; n: number }>(
+      `select k as origine, sum(v::int)::int as n
+         from referti_bozze b, jsonb_each_text(coalesce(b.payload->'revisione'->'origini', '{}'::jsonb)) as t(k, v)
+        where b.studio_id = $1 and b.stato = 'confermata' group by k order by 2 desc limit 12`, [studioId]),
+    query<{ stato: string; n: number }>(
+      `select stato, count(*)::int as n from referti_dizionario where studio_id = $1 group by 1`, [studioId]),
+    query<{ stato: string; n: number }>(
+      `select stato, count(*)::int as n from referti_bozze where studio_id = $1 group by 1`, [studioId]),
+  ]);
+  return { settimane, perUtente, classi, origini, dizionario, bozze };
+}
+
+async function statisticheDello(studioId: string) {
+  const uno = async <T>(sql: string, def: T): Promise<T> => {
+    try { const [r] = await query<any>(sql, [studioId]); return (r ? (Object.values(r)[0] as T) : def) ?? def; } catch { return def; }
+  };
+  const [referral, prenotate, giorni, invianti, appuntamenti, refertiConf, dettature, richiamiAperti] = await Promise.all([
+    uno<number>('select count(*)::int as n from referrals where studio_id = $1', 0),
+    uno<number>(`select count(distinct h.referral_id)::int as n from referral_status_history h join referrals r on r.id = h.referral_id where r.studio_id = $1 and h.to_status = 'prenotata'::referral_status`, 0),
+    uno<string>(`select coalesce(round(avg(extract(epoch from (p.prima - r.created_at)) / 86400.0)::numeric, 1)::text, '—') as g
+                   from referrals r join (select referral_id, min(changed_at) as prima from referral_status_history where to_status = 'prenotata'::referral_status group by referral_id) p on p.referral_id = r.id
+                  where r.studio_id = $1`, '—'),
+    uno<number>('select count(distinct referring_doctor_id)::int as n from referrals where studio_id = $1 and referring_doctor_id is not null', 0),
+    uno<number>(`select count(*)::int as n from appointments where studio_id = $1 and starts_at between now() - interval '30 days' and now()`, 0),
+    uno<number>(`select count(*)::int as n from referti_bozze where studio_id = $1 and stato = 'confermata'`, 0),
+    uno<number>(`select count(*)::int as n from referti_bozze where studio_id = $1 and created_at > now() - interval '30 days'`, 0),
+    uno<number>('select count(*)::int as n from referrals where studio_id = $1 and follow_up_due is not null and follow_up_done_at is null', 0),
+  ]);
+  const perSettimana = await query<{ label: string; n: number }>(
+    `select to_char(w, 'DD.MM') as label,
+            (select count(*)::int from referrals r where r.studio_id = $1 and r.created_at >= w and r.created_at < w + interval '7 days') as n
+       from generate_series(date_trunc('week', now()) - interval '7 weeks', date_trunc('week', now()), interval '1 week') w`, [studioId]).catch(() => []);
+  return { referral, prenotate, giorni, invianti, appuntamenti, refertiConf, dettature, richiamiAperti, perSettimana };
+}
+
+export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
-  return NextResponse.json({ ...(await leggi(session.studioId)), io: session.id, admin: session.role === 'admin' }, { headers: { 'Cache-Control': 'no-store' } });
+  const extra = new URL(req.url).searchParams.get('extra') ?? '';
+  const [base, sicurezza] = await Promise.all([leggi(session.studioId), sicurezzaDi(session.id)]);
+  const qualita = extra === 'qualita' ? await qualitaDella(session.studioId) : null;
+  const statistiche = extra === 'statistiche' ? await statisticheDello(session.studioId) : null;
+  return NextResponse.json({ ...base, io: session.id, admin: session.role === 'admin', ruolo: session.role, sicurezza, qualita, statistiche }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
-  if (session.role !== 'admin') return NextResponse.json({ errore: 'Solo l’amministratore dello studio può modificare.' }, { status: 403 });
   const c = await req.json().catch(() => null);
   const azione = String(c?.azione ?? '');
+  // La verifica in due passi è una cosa PROPRIA: la accende e la spegne la
+  // persona sul suo accesso, non l'amministratore. Quindi prima del controllo
+  // dei permessi (16.9.2026, portata qui dalla pagina «Sicurezza»).
+  if (azione.startsWith('2fa_')) return await sicurezza2fa(session, azione, c);
+  if (session.role !== 'admin') return NextResponse.json({ errore: 'Solo l’amministratore dello studio può modificare.' }, { status: 403 });
   const sid = session.studioId;
   const s = (v: unknown, max = 200) => String(v ?? '').trim().slice(0, max);
   try {
@@ -169,4 +247,53 @@ export async function POST(req: NextRequest) {
   }
   console.log(`[studio] azione=${azione} da=${session.id.slice(0, 8)}`);
   return NextResponse.json({ ok: true, ...(await leggi(sid)) }, { headers: { 'Cache-Control': 'no-store' } });
+}
+
+// ── la verifica in due passi, la stessa della pagina vecchia ────────────────
+// In due tempi: il segreto nasce spento (`totp_enabled_at` nullo) e si accende
+// solo quando arriva il primo codice giusto; allora nascono i codici di
+// recupero, che si vedono una volta sola. Il segreto e il QR si generano qui
+// sul server e non passano da nessun'altra parte.
+async function sicurezza2fa(session: { id: string; email?: string | null }, azione: string, c: any) {
+  const { generateTotpSecret, verifyTotp, totpUri, generateRecoveryCodes, hashRecoveryCode } = await import('@/lib/totp');
+  const [u] = await query<{ email: string; totp_secret: string | null; totp_enabled_at: string | null }>(
+    `select email, totp_secret, totp_enabled_at::text from users where id = $1`, [session.id]);
+  if (!u) return NextResponse.json({ errore: 'utente' }, { status: 404 });
+
+  if (azione === '2fa_avvia') {
+    if (u.totp_enabled_at) return NextResponse.json({ errore: 'La verifica in due passi è già attiva.' }, { status: 400 });
+    const segreto = u.totp_secret ?? generateTotpSecret();
+    await query(`update users set totp_secret = $2 where id = $1 and totp_enabled_at is null`, [session.id, segreto]);
+    const uri = totpUri(segreto, u.email);
+    const QRCode = (await import('qrcode')).default;
+    const qr = await QRCode.toDataURL(uri, { width: 220, margin: 1 });
+    return NextResponse.json({ ok: true, segreto, uri, qr });
+  }
+
+  if (azione === '2fa_annulla') {
+    await query(`update users set totp_secret = null where id = $1 and totp_enabled_at is null`, [session.id]);
+    return NextResponse.json({ ok: true });
+  }
+
+  if (azione === '2fa_conferma') {
+    if (!u.totp_secret || u.totp_enabled_at) return NextResponse.json({ errore: 'Non c’è un\u2019attivazione in corso.' }, { status: 400 });
+    const codice = String(c?.codice ?? '').replace(/\s/g, '');
+    if (!verifyTotp(u.totp_secret, codice)) return NextResponse.json({ errore: 'Codice non valido: riprova con quello che vedi adesso.' }, { status: 400 });
+    await query(`update users set totp_enabled_at = now() where id = $1`, [session.id]);
+    const codici = generateRecoveryCodes();
+    await query(`delete from user_recovery_codes where user_id = $1`, [session.id]);
+    for (const k of codici) await query(`insert into user_recovery_codes (user_id, code_hash) values ($1,$2)`, [session.id, hashRecoveryCode(k)]);
+    return NextResponse.json({ ok: true, codici });
+  }
+
+  if (azione === '2fa_spegni') {
+    if (!u.totp_enabled_at || !u.totp_secret) return NextResponse.json({ errore: 'Non è attiva.' }, { status: 400 });
+    const codice = String(c?.codice ?? '').replace(/\s/g, '');
+    if (!verifyTotp(u.totp_secret, codice)) return NextResponse.json({ errore: 'Codice non valido: serve il codice dell’app per spegnerla.' }, { status: 400 });
+    await query(`update users set totp_secret = null, totp_enabled_at = null where id = $1`, [session.id]);
+    await query(`delete from user_recovery_codes where user_id = $1`, [session.id]);
+    return NextResponse.json({ ok: true });
+  }
+
+  return NextResponse.json({ errore: 'azione_sconosciuta' }, { status: 400 });
 }
