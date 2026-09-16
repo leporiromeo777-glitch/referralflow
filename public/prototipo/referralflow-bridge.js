@@ -1375,6 +1375,14 @@ render = function () {
     app.classList.toggle('ai-mode', state.route === 'ai');
     app.classList.toggle('agenda-larga', state.route === 'agenda');
     app.classList.toggle('sale-larga', state.route === 'sale');
+    // La visita si prende tutta la finestra: niente margini della pagina, la
+    // barra laterale stretta a icone (senza toccare la scelta dell'utente:
+    // uscendo dalla visita torna com'era) e il pannello AI globale spento,
+    // perché Cleo è già lì dentro nella sua colonna.
+    let inVisita = false;
+    try { inVisita = state.route === 'visite' && !!RF.orch && !!rfVAperta(); } catch { inVisita = false; }
+    app.classList.toggle('visita-larga', inVisita);
+    if (inVisita) app.classList.add('sidebar-collapsed');
   }
 };
 
@@ -4650,7 +4658,7 @@ function rfOrScorriAccoglienza() {
 window.addEventListener('resize', () => { try { rfOrAltezzaAccoglienza(); } catch { /* idem */ } });
 (function () {
   const r = render;
-  render = function () { const out = r.apply(this, arguments); try { rfOrchSincronizza(); rfOrAltezzaAccoglienza(); rfOrScorriAccoglienza(); rfVChatDopoRender(); } catch {} return out; };
+  render = function () { const out = r.apply(this, arguments); try { rfOrchSincronizza(); rfOrAltezzaAccoglienza(); rfOrScorriAccoglienza(); rfVDopoRender(); } catch {} return out; };
 })();
 
 /* =====================================================================
@@ -4691,10 +4699,15 @@ window.addEventListener('resize', () => { try { rfOrAltezzaAccoglienza(); } catc
 .rf-v-vuoto .dopo { margin-top:24px; padding-top:18px; border-top:1px solid var(--border); font-size:13px; color:var(--text-2); }
 
 /* la visita: parte clinica a sinistra, assistente a destra */
-.rf-v-schermo { display:grid; grid-template-columns:minmax(0,1fr) var(--rf-v-largh, 360px); gap:0; align-items:start; }
-.rf-v-clinico { min-width:0; padding-right:20px; }
+.rf-v-schermo { display:grid; grid-template-columns:minmax(0,1fr) var(--rf-v-largh, 360px); gap:0; align-items:stretch; height:100%; }
+.rf-v-clinico { min-width:0; overflow:auto; height:100%; padding:0 28px 56px; }
 .rf-v-testa { position:sticky; top:0; z-index:5; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
-  padding:13px 2px 13px; margin-bottom:18px; border-bottom:1px solid var(--border); background:var(--bg); }
+  padding:14px 0 13px; margin-bottom:18px; border-bottom:1px solid var(--border); background:var(--bg); }
+#app.visita-larga .content { padding:0; overflow:hidden; }
+#app.visita-larga .content > .page { max-width:none; height:100%; animation:none; padding:0; }
+#app.visita-larga .ai-panel { display:none; }
+#app.visita-larga.with-ai { grid-template-columns: var(--sidebar-w) 1fr; }
+#app.visita-larga.with-ai.sidebar-collapsed { grid-template-columns: var(--sidebar-c) 1fr; }
 .rf-v-testa .chi { min-width:0; }
 .rf-v-testa .chi h2 { font-size:19px; font-weight:640; letter-spacing:-.016em; margin:0; }
 .rf-v-testa .chi .r { font-size:12.5px; color:var(--text-3); margin-top:2px; }
@@ -4712,8 +4725,8 @@ window.addEventListener('resize', () => { try { rfOrAltezzaAccoglienza(); } catc
 .rf-v-pan > button { width:100%; display:flex; align-items:center; gap:12px; padding:13px 4px; background:none; border:0; cursor:pointer; text-align:left; font:inherit; color:inherit; }
 .rf-v-pan .t { font-size:14.5px; font-weight:550; letter-spacing:-.008em; }
 .rf-v-pan > button:hover .t { color:var(--accent); }
-.rf-v-pan .n { font-size:12.5px; color:var(--text-3); font-variant-numeric:tabular-nums; }
-.rf-v-pan .fr { margin-left:auto; color:var(--text-3); display:inline-flex; transition:transform .22s var(--ease); }
+.rf-v-pan .n { margin-left:auto; font-size:12.5px; color:var(--text-3); font-variant-numeric:tabular-nums; }
+.rf-v-pan .fr { color:var(--text-3); display:inline-flex; flex:none; transition:transform .22s var(--ease); }
 .rf-v-pan.aperto .fr { transform:rotate(90deg); }
 .rf-v-pan .corpo { display:none; padding:0 4px 16px; }
 .rf-v-pan.aperto .corpo { display:block; }
@@ -4725,8 +4738,19 @@ window.addEventListener('resize', () => { try { rfOrAltezzaAccoglienza(); } catc
 .rf-v-pan .tutti { margin-top:10px; font-size:13px; color:var(--accent); background:none; border:0; padding:0; cursor:pointer; font-weight:550; }
 
 /* l'assistente, colonna sua */
-.rf-v-lato { position:sticky; top:0; align-self:start; height:calc(100vh - 118px); min-height:420px; display:flex; flex-direction:column;
-  border-left:1px solid var(--border); background:var(--surface-2); }
+.rf-v-lato { position:relative; height:100%; min-height:0; display:flex; flex-direction:column; border-left:1px solid var(--border); background:var(--surface-2); }
+.rf-v-lato .rf-gpt-col { max-width:none; padding:0 14px; }
+.rf-v-lato .rf-gpt-thread { gap:18px; padding:16px 0 8px; }
+.rf-v-lato .rf-gpt-foot { padding:8px 0 14px; }
+.rf-v-lato .rf-gpt-comp { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; padding:10px 10px 9px 16px; border-radius:18px; }
+.rf-v-lato .rf-gpt-comp input { grid-column:1 / -1; height:30px; font-size:14px; }
+.rf-v-lato .rf-gpt-nota { font-size:10.5px; margin-top:8px; }
+.rf-v-lato .ai-msg { font-size:13.5px; }
+.rf-v-benv { padding:18px 0 8px; }
+.rf-v-benv p { margin:0; font-size:13.5px; line-height:1.55; color:var(--text-2); }
+.rf-v-spunti { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
+.rf-v-spunti button { border:1px solid var(--border-2); background:var(--surface); border-radius:999px; padding:5px 11px; font:inherit; font-size:12px; color:var(--text-2); cursor:pointer; }
+.rf-v-spunti button:hover { border-color:var(--accent); color:var(--accent); }
 .rf-v-maniglia { position:absolute; left:-3px; top:0; bottom:0; width:7px; cursor:col-resize; z-index:6; }
 .rf-v-maniglia::after { content:""; position:absolute; left:3px; top:0; bottom:0; width:1px; background:transparent; transition:background .15s var(--ease); }
 .rf-v-maniglia:hover::after, .rf-v-maniglia.presa::after { background:var(--accent); }
@@ -4735,18 +4759,7 @@ window.addEventListener('resize', () => { try { rfOrAltezzaAccoglienza(); } catc
 .rf-v-lato-t svg { width:15px; height:15px; }
 .rf-v-icona { margin-left:auto; width:28px; height:28px; border:0; background:none; border-radius:7px; display:grid; place-items:center; color:var(--text-3); cursor:pointer; }
 .rf-v-icona:hover { background:var(--border); color:var(--text); }
-.rf-v-filo { flex:1 1 auto; overflow:auto; padding:14px; display:flex; flex-direction:column; gap:10px; }
-.rf-v-msg { font-size:13px; line-height:1.52; border-radius:12px; padding:9px 12px; overflow-wrap:anywhere; }
-.rf-v-msg.io { background:var(--accent-soft); align-self:flex-end; max-width:92%; }
-.rf-v-msg.lei { background:var(--surface); border:1px solid var(--border); }
-.rf-v-msg .da { display:block; margin-top:7px; font-size:10.5px; color:var(--text-3); }
-.rf-v-prop { display:flex; flex-wrap:wrap; gap:6px; padding:0 14px 12px; }
-.rf-v-prop button { border:1px solid var(--border-2); background:var(--surface); border-radius:999px; padding:5px 11px; font:inherit; font-size:12px; color:var(--text-2); cursor:pointer; }
-.rf-v-prop button:hover { border-color:var(--accent); color:var(--accent); }
-.rf-v-campo { display:flex; gap:8px; padding:12px 14px; border-top:1px solid var(--border); flex:none; }
-.rf-v-campo .input { flex:1 1 auto; min-width:0; }
-.rf-v-nota { padding:0 14px 12px; font-size:10.5px; color:var(--text-3); line-height:1.45; }
-.rf-v-rail { position:sticky; top:0; align-self:start; height:calc(100vh - 118px); width:46px; border-left:1px solid var(--border); background:var(--surface-2); display:flex; flex-direction:column; align-items:center; padding-top:12px; }
+.rf-v-rail { position:relative; height:100%; width:46px; border-left:1px solid var(--border); background:var(--surface-2); display:flex; flex-direction:column; align-items:center; padding-top:12px; }
 .rf-v-rail button { width:30px; height:30px; border:0; background:none; border-radius:8px; display:grid; place-items:center; color:var(--accent); cursor:pointer; }
 .rf-v-rail button:hover { background:var(--accent-soft); }
 .rf-v-rail svg { width:16px; height:16px; }
@@ -4760,9 +4773,11 @@ window.addEventListener('resize', () => { try { rfOrAltezzaAccoglienza(); } catc
 @media (max-width:980px) {
   .rf-v-schermo { grid-template-columns:minmax(0,1fr); }
   .rf-v-clinico { padding-right:0; }
-  .rf-v-lato, .rf-v-rail { position:static; height:auto; border-left:0; border-top:1px solid var(--border); width:auto; }
-  .rf-v-lato { min-height:0; }
-  .rf-v-filo { max-height:320px; }
+  .rf-v-schermo { height:auto; }
+  .rf-v-clinico { height:auto; overflow:visible; padding:0 16px 32px; }
+  .rf-v-lato, .rf-v-rail { height:auto; border-left:0; border-top:1px solid var(--border); width:auto; }
+  .rf-v-lato .rf-gpt-scroll { max-height:340px; }
+  #app.visita-larga .content { overflow:auto; }
   .rf-v-maniglia { display:none; }
   .rf-v-riga { grid-template-columns:50px minmax(0,1fr); row-gap:10px; }
   .rf-v-riga .meta { grid-column:1 / -1; text-align:left; }
@@ -4771,7 +4786,7 @@ window.addEventListener('resize', () => { try { rfOrAltezzaAccoglienza(); } catc
 `; document.head.appendChild(st); })();
 
 if (typeof NAV_META !== 'undefined') NAV_META.visite = ['Visite', 'visits'];
-RF.vSel = null; RF.vAperto = null; RF.vConferma = false; RF.vChat = []; RF.vChatPer = null; RF.vBozza = ''; RF.vAttesaRisposta = false; RF.vFuoco = false;
+RF.vSel = null; RF.vAperto = null; RF.vConferma = false;
 try { RF.vIo = localStorage.getItem('rf-medico') || ''; } catch { RF.vIo = ''; }
 try { RF.vLatoChiuso = localStorage.getItem('rf-v-lato') === 'chiuso'; } catch { RF.vLatoChiuso = false; }
 try { RF.vLargh = Math.min(520, Math.max(300, Number(localStorage.getItem('rf-v-largh')) || 360)); } catch { RF.vLargh = 360; }
@@ -4840,7 +4855,6 @@ function rfVElenco() {
 async function rfVInizia(id) {
   const p = rfVMiei().find((x) => x.id === id);
   RF.vSel = id; RF.vAperto = null;
-  if (RF.vChatPer !== id) { RF.vChat = []; RF.vBozza = ''; RF.vChatPer = id; }
   const c = p ? rfVCartella(p) : { pid: null };
   if (c.pid) state.patientCtx = c.pid;
   await rfOrchEvento('visita_iniziata', { appointment_id: id, ...(p && p.sala ? { sala: p.sala } : {}) }, 'ui');
@@ -4904,106 +4918,37 @@ function rfVPannelliHtml(p, pid) {
     </div></div>`).join('');
 }
 
-/* ---------- l'assistente, nella sua colonna ----------
-   Stessa Cleo e stesso modello locale della pagina intera; qui il contesto è
-   già scelto (questa visita, questo paziente) e la conversazione dura quanto
-   la visita. Il riquadro non passa mai da render() mentre si scrive: la
-   pagina si ridisegna da sola col gemello ogni 20 secondi. */
-function rfVChatPulisci() { RF.vChat = []; rfVChatDisegna(); }
-function rfVChatHtml(m) {
-  if (m.chi === 'io') return `<div class="rf-v-msg io">${rfEsc(m.testo)}</div>`;
-  const corpo = m.html || (m.testo ? `${rfEsc(m.testo).replace(/\n/g, '<br>')}<span class="caption"> ▍</span>` : `<span class="caption">${rfEsc(m.attesa || 'Penso…')}</span>`);
-  return `<div class="rf-v-msg lei"><div class="c" id="${rfEsc(m.id || '')}">${corpo}</div>${m.fonte ? `<span class="da">${rfEsc(m.fonte)}</span>` : ''}</div>`;
-}
-function rfVChatBenvenuto(nome, pid) {
-  return `<div class="rf-v-msg lei">Sono qui sulla cartella di <b>${rfEsc(nome)}</b>. ${pid ? 'Posso cercare un documento, riassumere un referto o dirti che cosa è cambiato dall&rsquo;ultima volta.' : 'Di questo paziente c&rsquo;è solo l&rsquo;appuntamento: posso rispondere sulla giornata.'}<span class="da">Modello locale · su questo computer</span></div>`;
-}
-function rfVChatDisegna() {
-  const f = document.getElementById('rf-v-filo'); if (!f) return;
-  const nome = f.dataset.nome || '', pid = f.dataset.pid || '';
-  f.innerHTML = rfVChatBenvenuto(nome, pid) + RF.vChat.map(rfVChatHtml).join('');
-  f.scrollTop = f.scrollHeight;
-}
-function rfVChatDopoRender() {
-  const f = document.getElementById('rf-v-filo'); if (!f) return;
-  f.scrollTop = f.scrollHeight;
-  if (!RF.vFuoco) return;
-  const i = document.getElementById('rf-v-in');
-  if (i && document.activeElement !== i) { i.focus(); try { i.setSelectionRange(i.value.length, i.value.length); } catch {} }
-}
-function rfVContesto(sel, pid, p) {
-  const o = RF.orch;
-  const med = o ? (o.medici || []).find((x) => rfNomeNudo(x.nome || '').toLowerCase() === rfNomeNudo(sel.medico || '').toLowerCase()) : null;
-  return {
-    oggi: (RF.data && RF.data.today) || new Date().toISOString().slice(0, 10), pagina: 'visita', ruolo: state.role,
-    visita: { paziente: sel.etichetta, prestazione: sel.prestazione || null, medico: sel.medico || null, ora: rfOrHm(sel.teorica), stanza: sel.sala || null },
-    giornata: { ritardo_medico_min: med && med.ritardo ? med.ritardo : 0, in_sala_d_attesa: rfVInAttesa().length },
-    paziente: p && pid ? {
-      nome: fullName(p), nascita: p.dob || null, indicazione: p.indicazione || null, medico_inviante: p.gp || null,
-      terapia: p.terapia || [], problemi: (p.problems || []).filter((x) => x.s !== 'resolved').map((x) => x.l),
-      fatti: (p.fatti || []).slice(0, 20).map((f) => `${(f.relazione || '').replace(/_/g, ' ')}: ${f.oggetto}${f.data ? ` (${f.data})` : ''}`),
-      esami: (p.exams || []).slice(0, 8).map((e) => ({ titolo: e.r, data: e.d })),
-      referral: (p.referrals || []).map((x) => ({ quesito: x.quesito, medico: x.medico, stato: x.status })),
-      ultima_visita: p.lastVisit || null,
-    } : null,
-    referti: p && pid ? (typeof REPORTS !== 'undefined' ? REPORTS : []).filter((x) => x.p === p.id).slice(0, 6).map((x) => ({ tipo: x.type, data: x.date, stato: x.status === 'APPROVED' ? 'confermato' : 'da controllare' })) : [],
-  };
-}
-async function rfVChiedi(testo) {
-  const inp = document.getElementById('rf-v-in');
-  const q = String(testo != null ? testo : (inp ? inp.value : '')).trim();
-  if (!q || RF.vAttesaRisposta) return;
-  RF.vBozza = ''; if (inp) inp.value = '';
-  const sel = rfVAperta(); if (!sel) return;
-  const { pid, p } = rfVCartella(sel);
-  const id = `rfv${Date.now()}`;
-  RF.vChat.push({ chi: 'io', testo: q });
-  const msg = { chi: 'lei', id, testo: '', attesa: 'Leggo quello che la piattaforma sa…' };
-  RF.vChat.push(msg); RF.vAttesaRisposta = true; rfVChatDisegna();
-  const fine = (html, fonte) => { msg.html = html; msg.fonte = fonte; msg.attesa = null; RF.vAttesaRisposta = false; rfVChatDisegna(); };
-  if (pid && /^briefing/i.test(q)) {
-    try {
-      const r = await fetch('/api/prototipo/briefing', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ patient_id: pid }) });
-      if (!r.ok) { fine('Non riesco a preparare il briefing in questo momento.', 'Piattaforma'); return; }
-      const b = await r.json();
-      fine(rfHtmlBriefing(b), b.traccia && b.traccia.modello ? 'Procedura della piattaforma · sintesi del modello locale' : 'Procedura della piattaforma · solo codice');
-    } catch { fine('Non riesco a preparare il briefing in questo momento.', 'Piattaforma'); }
-    return;
-  }
-  try {
-    const r = await fetch('/api/prototipo/assistente', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ domanda: q, ruolo: state.role, contesto: rfVContesto(sel, pid, p), paziente_id: pid }) });
-    if (!r.ok || !r.body) { fine('Cleo non risponde in questo momento.', 'Piattaforma'); return; }
-    const fonte = r.headers.get('X-Fonte') === 'modello locale' ? 'Modello locale, su questo computer' : 'Piattaforma';
-    const lettore = r.body.getReader(); const dec = new TextDecoder();
-    for (;;) {
-      const { value, done } = await lettore.read();
-      if (done) break;
-      msg.testo += dec.decode(value, { stream: true }); msg.attesa = null;
-      const el = document.getElementById(id);
-      if (el) { el.innerHTML = `${rfEsc(msg.testo).replace(/\n/g, '<br>')}<span class="caption"> ▍</span>`; const f = document.getElementById('rf-v-filo'); if (f) f.scrollTop = f.scrollHeight; }
-    }
-    fine(rfEsc(msg.testo.trim() || 'Nessuna risposta.').replace(/\n/g, '<br>'), fonte);
-  } catch { fine('Cleo non risponde in questo momento.', 'Piattaforma'); }
-}
+/* ---------- l'assistente: la stessa Cleo della sua pagina ----------
+   Non una chat scritta a parte, ma i pezzi veri della pagina di Cleo montati
+   in colonna: stesso filo (`state.aiMessages`, quindi la conversazione è una
+   sola ovunque), stesso campo con i due modi — «Domanda medica» e «Con la
+   cartella» — e le stesse note sotto. Una seconda chat che somigliava alla
+   prima ma non ne aveva i tasti era peggio che non averla. */
 function rfVLato(chiuso) { RF.vLatoChiuso = chiuso; try { localStorage.setItem('rf-v-lato', chiuso ? 'chiuso' : 'aperto'); } catch {} render(); }
-function rfVLatoHtml(sel, pid, p) {
-  if (RF.vLatoChiuso) return `<div class="rf-v-rail"><button type="button" onclick="rfVLato(false)" title="Apri l&rsquo;assistente" aria-label="Apri l&rsquo;assistente">${ICONS.ai}</button></div>`;
-  const prop = pid
-    ? ['Briefing pre-visita', 'Cosa è cambiato dall’ultima volta?', 'Che esami ha in cartella?']
-    : ['Chi ho in sala d’attesa?', 'Quanto sono in ritardo?'];
-  return `<aside class="rf-v-lato" style="position:sticky">
+function rfVDopoRender() {
+  // Il filo resta in fondo, dove c'è l'ultima risposta.
+  const f = document.getElementById('rf-v-filo'); if (f) f.scrollTop = f.scrollHeight;
+}
+function rfVLatoHtml(sel, pid) {
+  if (RF.vLatoChiuso) return `<div class="rf-v-rail"><button type="button" onclick="rfVLato(false)" title="Apri ${rfEsc(RF_AI_NOME)}" aria-label="Apri l&rsquo;assistente">${ICONS.ai}</button></div>`;
+  const vuota = !state.aiMessages.length;
+  const nome = String(sel.etichetta || '').split(' ')[0] || 'questo paziente';
+  const spunti = pid
+    ? ['Briefing pre-visita', 'Cosa è cambiato dall\u2019ultima visita?', 'Quali esami ha in cartella?']
+    : ['Chi ho in sala d\u2019attesa?', 'Come va la giornata?'];
+  const benvenuto = `<div class="rf-v-benv">
+      <p>Sono qui su <b>${rfEsc(sel.etichetta)}</b>. ${pid ? 'Posso cercare un documento, riassumere un referto o dire che cosa è cambiato dall&rsquo;ultima volta.' : `Di ${rfEsc(nome)} c&rsquo;è solo l&rsquo;appuntamento, non la cartella: posso rispondere sulla giornata.`}</p>
+      <div class="rf-v-spunti">${spunti.map((x) => `<button type="button" data-ai="${rfEsc(x)}">${rfEsc(x)}</button>`).join('')}</div>
+    </div>`;
+  return `<aside class="rf-v-lato">
     <div class="rf-v-maniglia" id="rf-v-maniglia" title="Trascina per ridimensionare"></div>
-    <div class="rf-v-lato-t">${ICONS.ai}<span class="n">Assistente</span>
-      <button class="rf-v-icona" onclick="rfVChatPulisci()" title="Pulisci la conversazione" aria-label="Pulisci">${ICONS.x}</button>
-      <button class="rf-v-icona" onclick="rfVLato(true)" title="Chiudi l&rsquo;assistente" aria-label="Chiudi">${rfVFreccia}</button></div>
-    <div class="rf-v-filo" id="rf-v-filo" data-nome="${rfEsc(sel.etichetta)}" data-pid="${rfEsc(pid || '')}">${rfVChatBenvenuto(sel.etichetta, pid) + RF.vChat.map(rfVChatHtml).join('')}</div>
-    <div class="rf-v-prop">${prop.map((c) => `<button type="button" onclick="rfVChiedi(${JSON.stringify(c).replace(/"/g, '&quot;')})">${rfEsc(c)}</button>`).join('')}</div>
-    <form class="rf-v-campo" onsubmit="event.preventDefault();rfVChiedi()">
-      <input class="input" id="rf-v-in" placeholder="Chiedi qualcosa…" autocomplete="off" value="${rfEsc(RF.vBozza || '')}"
-        oninput="RF.vBozza=this.value" onfocus="RF.vFuoco=true" onblur="RF.vFuoco=false" aria-label="Chiedi all&rsquo;assistente">
-      <button class="btn primary sm" type="submit">Chiedi</button></form>
-    <div class="rf-v-nota">Legge la cartella aperta e la giornata, sul modello che gira su questo computer. Non scrive niente in cartella.</div>
+    <div class="rf-v-lato-t">${rfSegnoCleo()}<span class="n">${rfEsc(RF_AI_NOME)}</span>
+      ${vuota ? '' : `<button class="rf-v-icona" onclick="state.aiMessages=[];render()" title="Nuova conversazione" aria-label="Nuova conversazione">${ICONS.x}</button>`}
+      <button class="rf-v-icona" onclick="rfVLato(true)" title="Chiudi l&rsquo;assistente" aria-label="Chiudi l&rsquo;assistente">${rfVFreccia}</button></div>
+    <div class="rf-gpt-scroll" id="rf-v-filo">
+      <div class="rf-gpt-col">${vuota ? benvenuto : `<div class="rf-gpt-thread">${state.aiMessages.map((m) => m.html).join('')}</div>`}</div>
+    </div>
+    <div class="rf-gpt-foot"><div class="rf-gpt-col">${rfMedicaRiquadro()}${rfCartellaRiquadro()}${rfAiCampo()}${rfAiNota()}</div></div>
   </aside>`;
 }
 
@@ -5056,7 +5001,7 @@ function rfVVisita(sel) {
       <h3 class="rf-v-sez" style="margin-top:30px">Cartella${pid ? ` · <a href="#" data-go="#/patients/${rfEsc(pid)}" style="text-transform:none;letter-spacing:0;font-weight:400">apri quella intera</a>` : ''}</h3>
       <div class="rf-v-cart">${rfVPannelliHtml(p, pid)}</div>
     </div>
-    ${rfVLatoHtml(sel, pid, p)}
+    ${rfVLatoHtml(sel, pid)}
   </div>
   ${RF.vConferma ? `<div class="rf-v-velo" onclick="if(event.target===this)rfVAnnulla()"><div class="rf-v-sheet" role="dialog" aria-modal="true">
       <h3>Terminare la visita?</h3>

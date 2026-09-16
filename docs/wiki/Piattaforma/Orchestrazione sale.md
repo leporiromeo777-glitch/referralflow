@@ -638,7 +638,9 @@ Dal 16.9 sera **l'accoglienza sta nella Home, al posto della colonna destra** (a
 
 **Nessun cronometro.** L'ora d'inizio e quella di fine si registrano (§9: è l'unica sorgente esatta dell'inizio di una visita, che da MediOnline non arriva mai), ma chi è nella stanza non vede nessun numero che scorre: solo un «Visita in corso» fermo. *Termina visita* sta in alto a destra, staccato, e chiede conferma con il nome del paziente dentro — è il punto più lontano dalla cartella e dal campo dell'assistente, cioè dai due posti dove sta la mano.
 
-**L'assistente** (Cleo, modello locale) è in una colonna sua, aperta appena la visita comincia, con un fondo diverso perché **quello che scrive un modello non deve sembrare la cartella**. Si stringe, si allarga, si chiude, e se lo chiudi resta chiuso anche per la visita dopo.
+**Tutta la finestra.** Dentro una visita la pagina si prende tutto: niente margini, la barra laterale stretta a icone (la scelta dell'utente non viene toccata: uscendo torna com'era) e il pannello AI globale spento, perché Cleo è già lì dentro.
+
+**L'assistente non è una seconda chat**: nella colonna ci sono i pezzi veri della pagina di Cleo — lo stesso filo (`state.aiMessages`: la conversazione è una sola ovunque), lo stesso campo con i due modi **«Domanda medica»** e **«Con la cartella»**, le stesse note sotto. Fondo diverso dalla cartella, perché **quello che scrive un modello non deve sembrare la cartella**. Si stringe, si allarga, si chiude, e se lo chiudi resta chiuso anche per la visita dopo.
 
 Riaprendo la pagina si torna dentro la visita in corso, non davanti all'elenco. Quando non c'è nessuno in attesa la pagina non è vuota: dice *perché* è vuota, e a che ora è il prossimo appuntamento.
 
