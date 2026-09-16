@@ -16,6 +16,7 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 - [[Piattaforma/Stack e comandi]]
 - [[Piattaforma/Architettura]] — cartelle, recinto multi-studio, middleware, ciclo di vita referral
 - [[Piattaforma/Server Mac mini]] — servizi launchd, aggiornamento, backup
+- [[Piattaforma/Demo pubblica]] — la piattaforma vera con dati inventati, raggiungibile da fuori con un link
 - [[Piattaforma/Automazioni]] — cron, SMS, watchdog, report
 - [[Piattaforma/Robot agenda MediOnline]]
 - [[Piattaforma/Funzioni fatte]] — tutto ciò che esiste già, in ordine inverso
