@@ -561,7 +561,29 @@ export function leggiProposta(testo: string, righe: RigaPiano[], persone: string
     if (giaPersona) { saltate.push({ riga, perche: `${chi} aveva già ${giaPersona.stanza}` }); continue; }
     applicabili.push({ stanza, chi, riga });
   }
-  return { applicabili, saltate };
+
+  // Secondo tempo: nessuno finisce con DUE stanze. Il 16.9.2026 il modello ha
+  // dato la Sala 3, rimasta vuota, a Daniela Cassani, che ha già la Sala 5: nel
+  // calendario risultava in due stanze insieme. Una stanza vuota può restare
+  // vuota; se una persona ne ha davvero bisogno di due lo dice la pagina wiki
+  // o una correzione a mano, non una proposta che riempie un buco perché c'è.
+  //
+  // Va guardato DOPO, non riga per riga: uno SCAMBIO è legittimo — «Sala 2 a
+  // Cassani, Sport 1 a Moccetti» non lascia a Moccetti due stanze, perché la
+  // sua passa a un'altra. Conta come finisce il giro, non l'ordine delle righe.
+  const cambiaPadrone = new Set(applicabili.map((a) => a.stanza.toLowerCase()));
+  const tenute: typeof applicabili = [];
+  for (const a of applicabili) {
+    const sueAltre = (righe ?? []).filter((r) => r.stanza.toLowerCase() !== a.stanza.toLowerCase()
+      && !cambiaPadrone.has(r.stanza.toLowerCase())
+      && (r.segmenti ?? []).some((sg) => sg.chi && uguali(sg.chi, a.chi)));
+    if (sueAltre.length) {
+      saltate.push({ riga: a.riga, perche: `${a.chi} ha già ${sueAltre[0].stanza} nel piano di oggi` });
+      continue;
+    }
+    tenute.push(a);
+  }
+  return { applicabili: tenute, saltate };
 }
 
 // Dove compare il cognome (o il nome) di questa persona, come parola intera.

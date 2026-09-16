@@ -461,6 +461,23 @@ test('chi ha una stanza sua fra quelle ammesse la usa per prima', () => {
   assert.equal(tante['Sport 1'].length + tante['Sport 2'].length, 2);
 });
 
+test('nessuno finisce con due stanze, ma uno scambio passa', () => {
+  // Il caso vero del 16.9.2026: la Sala 3 era rimasta vuota e il modello l'ha
+  // data a Daniela Cassani, che ha già la Sala 5.
+  const md = `## Sala 3\n- Di: condivisa\n- Stato: proposta\n\n## Sala 5\n- Di: Daniela Cassani\n- Stato: proposta\n\n## Sport 1\n- Di: Bruno Capelli\n- Ultima: sì\n- Stato: proposta\n`;
+  const piano = pianoDelGiorno(leggiSale(md), ['Daniela Cassani', 'Bruno Capelli', 'Vanja Paveri'], 'mer');
+  const persone = ['Daniela Cassani', 'Bruno Capelli', 'Vanja Paveri'];
+  const doppia = leggiProposta('ASSEGNA Sala 3 -> Daniela Cassani', piano.righe, persone);
+  assert.equal(doppia.applicabili.length, 0, 'ha già la Sala 5: la Sala 3 resta vuota');
+  assert.match(doppia.saltate[0].perche, /ha già Sala 5 nel piano di oggi/);
+  // a chi non ha niente, invece, la stanza vuota si dà
+  const giusta = leggiProposta('ASSEGNA Sala 3 -> Vanja Paveri', piano.righe, persone);
+  assert.deepEqual(giusta.applicabili.map((x) => x.stanza), ['Sala 3']);
+  // e uno SCAMBIO passa: Cassani lascia la 5 a Paveri e prende la 3
+  const scambio = leggiProposta('ASSEGNA Sala 5 -> Vanja Paveri\nASSEGNA Sala 3 -> Daniela Cassani', piano.righe, persone);
+  assert.deepEqual(scambio.applicabili.map((x) => [x.stanza, x.chi]), [['Sala 5', 'Vanja Paveri'], ['Sala 3', 'Daniela Cassani']]);
+});
+
 test('una proposta confermata non si chiama «a mano»: la stanza l’ha scelta il modello', () => {
   const piano = pianoDelGiorno(leggiSale('## Sport 3\n- Di: Bruno Capelli\n- Stato: proposta\n'), ['Bruno Capelli'], 'mer');
   const [dallAi] = applicaModifiche(piano.righe, [{ stanza: 'Sport 3', dalle: '07:00', chi: 'Sebastiano Franscella', da: 'admin', fonte: 'ai' }]);

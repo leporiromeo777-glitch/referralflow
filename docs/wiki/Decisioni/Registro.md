@@ -82,6 +82,8 @@ Una riga per decisione, con la data e il perché. Non si rilitigano senza un dat
 | 2026-09-16 | Fra le stanze che un vincolo ammette viene **prima quella davvero sua** in quel momento, poi le altre | trovato sul piano vero: la Sport 3 era stata assegnata a Franscella e le sue nove visite erano comparse nella Sport 1 e nella Sport 2, sotto il nome di altri — la stanza che gli era stata data restava vuota. Il primo-che-è-libero da solo non basta quando più persone condividono lo stesso elenco di stanze ([[Medici/Sale]]) |
 | 2026-09-16 | Una **proposta dell'AI confermata** non si etichetta «a mano»: `ModificaSala.fonte` dice se la stanza l'ha scelta una persona o il modello, e il calendario scrive «dall'AI» | le due cose finivano nella stessa colonna del database e il calendario le raccontava uguali. Chi guarda deve poter distinguere una decisione di chi è in studio da una proposta accettata, altrimenti non sa di chi fidarsi ([[Medici/Sale]]) |
 
+| 2026-09-16 | Una proposta dell'AI **non dà una seconda stanza a chi ne ha già una**; il controllo guarda come finisce il giro, così uno scambio resta possibile | il 16.9 la Sala 3 era rimasta vuota (tolte le regole di Moschovitis e Tiziano) e il modello l'ha data a Daniela Cassani, che ha la Sala 5: nel calendario risultava in due stanze insieme. Una stanza vuota può restare vuota. Il controllo riga per riga non bastava: «Sala 2 a Cassani, Sport 1 a Moccetti» è uno scambio legittimo e sarebbe stato rifiutato ([[Medici/Sale]]) |
+
 ## Aperte
 - Conservare l'audio per un LoRA futuro; togliere il denoise se arriva un oro verificato dal medico.
 - Livello 2 del server (dominio, HTTPS) dopo la parte legale.

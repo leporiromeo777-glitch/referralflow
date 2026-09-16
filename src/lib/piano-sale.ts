@@ -59,6 +59,7 @@ Regole del tuo lavoro:
 - Riempi PRIMA le sale normali. Le fasce segnate «da usare solo se le altre non bastano» sono le sale dello sport: si aprono solo quando le altre sono esaurite.
 - Se due persone hanno orari diversi, dividi la stanza per fascia oraria invece di sceglierne una.
 - Se le stanze vuote non bastano per tutti, dillo e scegli chi ha più visite.
+- NON dare una seconda stanza a chi ne ha già una: una stanza vuota può restare vuota. Se nessuno è senza stanza, dillo e non assegnare niente.
 - Non inventare stanze, nomi o orari che non sono scritti qui.
 - I vincoli fissi elencati sotto valgono più di tutto il resto: chi sta solo in certe stanze non va da nessun'altra parte, nemmeno se quella è l'unica libera.
 - Ricorda che una fetta in agenda non è sempre una persona dentro una stanza: le sovrapposizioni non sono per forza un conflitto.
