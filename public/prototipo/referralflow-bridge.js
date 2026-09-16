@@ -293,7 +293,7 @@ PAGES.home = () => {
       <div class="row mt-24"><button class="btn primary lg" data-go="#/patients/${next.p}">Scheda paziente</button>${rfUuid(next.p) ? `<button class="btn lg ai" data-ai="Briefing pre-visita di ${rfEsc(fullName(P[next.p]))}">${ICONS.ai} Briefing pre-visita</button>` : ''}<button class="btn lg" data-go="#/agenda">Agenda di oggi</button></div>
     </div>` : ''}
     <div class="grid grid-main-side mt-16">
-      <div class="stack">
+      <div class="stack rf-home-sx">
         <div class="card"><div class="card-head"><span class="section-title">Da fare adesso</span><button class="btn sm ghost" data-go="#/inbox">Tutte ${ICONS.chevR}</button></div>
           <div class="list">${TASKS.length ? TASKS.slice(0, 12).map(t => `<div class="list-item"><i class="dot ${t.prio === 'urgent' || t.prio === 'high' ? 'danger' : 'accent'}"></i><div class="grow"><div class="name">${rfEsc(t.title)}</div><div class="sub">${rfEsc(t.due)}</div></div><a class="btn sm" href="${t.href}">Apri</a></div>`).join('') : '<div class="caption" style="padding:8px 6px">Tutto gestito. Buon lavoro.</div>'}</div></div>
         ${rfCardSale(sale, rigaSala, nMed)}
@@ -4158,12 +4158,13 @@ PAGES.sale = () => {
 .rf-or-acc .r .sis b { color:var(--text); }
 .rf-or-acc .r .az { display:flex; gap:6px; }
 .rf-or-acc .r.fatto { opacity:.55; }
-.rf-or-acc.scorre { flex:1 1 auto; min-height:220px; overflow-y:auto; overscroll-behavior:contain; padding-right:4px; }
-/* La colonna dell'accoglienza arriva in fondo come quella di sinistra: la
-   griglia allunga le due colonne alla stessa altezza (stretch è il default),
-   la card cresce dentro la colonna e l'elenco prende quel che resta dopo il
-   titolo e la casella del testo. Senza «min-height:0» sul contenitore flex
-   l'elenco non si accorcerebbe mai e la pagina si allungherebbe lo stesso. */
+.rf-or-acc.scorre { flex:1 1 0; min-height:180px; overflow-y:auto; overscroll-behavior:contain; padding-right:4px; }
+/* L'accoglienza finisce dove finisce «Sale e medici», cioè in fondo alla
+   colonna di sinistra. Non lo può fare il CSS da solo: in una griglia la riga
+   è alta quanto l'elemento più alto, e qui il più alto sarebbe proprio
+   l'accoglienza — si misurerebbe da sé. Quindi l'altezza la copia da sinistra
+   (rfOrAltezzaAccoglienza), e la lista dentro si accorcia fino a 180px prima
+   di far crescere la pagina. */
 .rf-home-acc { display:flex; flex-direction:column; min-height:0; }
 .rf-home-acc > .card { display:flex; flex-direction:column; min-height:0; flex:1 1 auto; }
 .rf-or-acc.scorre::-webkit-scrollbar { width:8px; }
@@ -4523,6 +4524,22 @@ function rfOrchScegliStanza(n) { RF.stanzaScelta = n; try { localStorage.setItem
    pazienti già usciti. Chi ha fatto la sua visita resta sopra, a portata di
    rotella. Si riposiziona solo quando cambia la persona in cima, così una
    ricarica ogni venti secondi non fa saltare la lista sotto le mani. */
+// L'altezza della colonna di sinistra, copiata su quella dell'accoglienza.
+// Solo quando le due colonne sono affiancate: sul telefono la griglia le
+// impila e un tetto le renderebbe scomode.
+function rfOrAltezzaAccoglienza() {
+  const sx = document.querySelector('.rf-home-sx');
+  const dx = document.querySelector('.rf-home-acc');
+  if (!sx || !dx) return;
+  if (Math.abs(sx.getBoundingClientRect().top - dx.getBoundingClientRect().top) > 4 || sx.offsetWidth === dx.offsetWidth) {
+    dx.style.maxHeight = ''; return;
+  }
+  dx.style.maxHeight = `${sx.offsetHeight}px`;
+  if (!RF.orAccOsserva && typeof ResizeObserver === 'function') {
+    RF.orAccOsserva = new ResizeObserver(() => { try { rfOrAltezzaAccoglienza(); } catch { /* la prossima volta */ } });
+    RF.orAccOsserva.observe(sx);
+  }
+}
 function rfOrScorriAccoglienza() {
   const box = document.querySelector('.rf-or-acc.scorre');
   if (!box) { RF.orAccAncora = null; return; }
@@ -4536,7 +4553,8 @@ function rfOrScorriAccoglienza() {
 }
 
 /* Il caricamento e il battito seguono la pagina. */
+window.addEventListener('resize', () => { try { rfOrAltezzaAccoglienza(); } catch { /* idem */ } });
 (function () {
   const r = render;
-  render = function () { const out = r.apply(this, arguments); try { rfOrchSincronizza(); rfOrScorriAccoglienza(); } catch {} return out; };
+  render = function () { const out = r.apply(this, arguments); try { rfOrchSincronizza(); rfOrAltezzaAccoglienza(); rfOrScorriAccoglienza(); } catch {} return out; };
 })();
