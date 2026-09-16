@@ -56,7 +56,7 @@ async function rfCaricaDati() {
   for (const nome of ['ARCHIVE', 'AUDIT', 'AIJOBS', 'KNOWLEDGE', 'INVOICES']) { try { if (Array.isArray(window[nome])) rfSvuota(window[nome]); } catch { /* assente */ } }
   // Voci per ruolo (14.9.2026: Percorsi, Moduli, Da fatturare). Questa riga
   // vince su qualunque aggiunta fatta al caricamento dello script.
-  const nav = ['home', 'agenda', 'visite', 'sale', 'prestazioni', 'patients', 'invianti', 'percorsi', 'reports', 'dittafono', 'documents', 'moduli', 'anonymize', 'inbox', 'ai', 'fatturazione', 'administration'];
+  const nav = ['home', 'agenda', 'visite', 'richiami', 'sale', 'prestazioni', 'patients', 'invianti', 'percorsi', 'reports', 'dittafono', 'documents', 'moduli', 'anonymize', 'inbox', 'ai', 'fatturazione', 'administration'];
   const nascosti = new Set(Array.isArray(RF.data.moduli_nascosti) ? RF.data.moduli_nascosti : []);
   for (const k of Object.keys(NAV)) NAV[k] = nav.filter(v => (v !== 'fatturazione' || ['secretary', 'org_admin'].includes(k)) && (!nascosti.has(v) || v === 'home' || v === 'administration'));
   render();
@@ -183,7 +183,7 @@ const rfRenderSidebarOrig = renderSidebar;
 // Barra laterale a sezioni (14.9.2026, tema minimale): le voci del ruolo
 // raggruppate con un'etichetta; una voce fuori da ogni gruppo finisce in coda.
 const RF_NAV_GRUPPI = [
-  ['Operatività', ['home', 'agenda', 'visite', 'sale', 'prestazioni', 'inbox']],
+  ['Operatività', ['home', 'agenda', 'visite', 'richiami', 'sale', 'prestazioni', 'inbox']],
   ['Clinico', ['patients', 'invianti', 'percorsi', 'visits', 'reports', 'dittafono', 'documents', 'moduli']],
   ['AI', ['ai', 'anonymize']],
   ['Amministrazione', ['fatturazione', 'communications', 'statistics', 'administration', 'system']],
@@ -5213,3 +5213,208 @@ if (typeof toggleAI === 'function') {
     return rfToggleAiOrig.apply(this, arguments);
   };
 }
+
+/* =====================================================================
+   «Richiami» (16.9.2026): chi va richiamato, e dove metterlo.
+   Due cose che finora stavano in due mondi diversi — i richiami in una
+   pagina della piattaforma vecchia, i buchi in agenda da nessuna parte —
+   e che servono insieme: un richiamo scaduto senza un posto dove metterlo
+   è una lista che cresce, e un buco senza un nome da chiamare è tempo
+   perso. Qui la proposta è una riga sola: «questo paziente, in questo
+   buco, perché».
+   Il conto lo fa il codice ([[src/lib/agenda-buchi]]); il modello locale
+   scrive solo la frase da dire al telefono; a prenotare, sull'agenda
+   della Cassa dei Medici, è sempre una persona.
+   ===================================================================== */
+(function () { const st = document.createElement('style'); st.textContent = `
+.rf-ric { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(0,1fr); gap:16px; align-items:start; }
+.rf-ric-prop { display:flex; flex-direction:column; border-top:1px solid var(--border); }
+.rf-ric-p { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; padding:13px 2px; border-bottom:1px solid var(--border); align-items:start; }
+.rf-ric-p .quando { font-size:12.5px; color:var(--text-2); font-variant-numeric:tabular-nums; }
+.rf-ric-p .quando b { color:var(--text); }
+.rf-ric-p .chi { font-size:15.5px; font-weight:600; margin-top:3px; }
+.rf-ric-p .perche { font-size:12.5px; color:var(--text-3); line-height:1.45; margin-top:3px; }
+.rf-ric-p .az { display:flex; flex-direction:column; gap:6px; align-items:stretch; }
+.rf-ric-p .az .btn { white-space:nowrap; }
+.rf-ric-p.pausa { opacity:.62; }
+.rf-ric-el { display:flex; flex-direction:column; border-top:1px solid var(--border); max-height:none; }
+.rf-ric-r { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; padding:11px 2px; border-bottom:1px solid var(--border); align-items:center; }
+.rf-ric-r .n { font-size:14px; font-weight:600; }
+.rf-ric-r .s { font-size:12px; color:var(--text-3); margin-top:2px; }
+.rf-ric-r .s.tardi { color:var(--warning); }
+.rf-ric-alt { grid-column:1 / -1; margin:6px 0 2px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:var(--surface-2); }
+.rf-ric-alt .t { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-3); margin-bottom:8px; }
+.rf-ric-alt button.scelta { display:block; width:100%; text-align:left; border:0; background:none; font:inherit; padding:7px 4px; border-top:1px solid var(--border); cursor:pointer; font-size:13px; }
+.rf-ric-alt button.scelta:first-of-type { border-top:0; }
+.rf-ric-alt button.scelta:hover { color:var(--accent); }
+.rf-ric-tel { grid-column:1 / -1; margin:8px 0 2px; padding:11px 13px; border-left:3px solid var(--accent); background:var(--accent-soft); border-radius:0 10px 10px 0; font-size:13.5px; line-height:1.5; }
+.rf-ric-tel .da { display:block; margin-top:6px; font-size:10.5px; color:var(--text-3); }
+.rf-ric-nuovo { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.rf-ric-nuovo .input { flex:1 1 200px; min-width:0; }
+@media (max-width:980px) { .rf-ric { grid-template-columns:minmax(0,1fr); } }
+`; document.head.appendChild(st); })();
+
+if (typeof NAV_META !== 'undefined') NAV_META.richiami = ['Richiami', 'clock'];
+if (typeof NAV !== 'undefined') for (const r of ['secretary', 'assistant', 'doctor', 'org_admin']) { const n = NAV[r]; if (n && !n.includes('richiami')) n.splice(n.indexOf('agenda') + 1, 0, 'richiami'); }
+RF.ric = null; RF.ricGiorni = 7; RF.ricAlt = null; RF.ricTel = null; RF.ricMsg = null;
+
+async function rfRicCarica(rendi = true) {
+  try {
+    const r = await fetch(`/api/prototipo/richiami?giorni=${RF.ricGiorni}`, { credentials: 'include', cache: 'no-store' });
+    RF.ric = r.ok ? await r.json() : { buchi: [], candidati: [], proposte: [], chiamate: [] };
+  } catch { RF.ric = { buchi: [], candidati: [], proposte: [], chiamate: [] }; }
+  if (rendi && state.route === 'richiami') render();
+}
+async function rfRicAzione(corpo, messaggio) {
+  RF.ricMsg = null;
+  try {
+    const r = await fetch('/api/prototipo/richiami', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+    const j = await r.json().catch(() => ({}));
+    RF.ricMsg = (r.ok && j.ok) ? { tipo: 'ok', testo: messaggio } : { tipo: 'male', testo: j.errore || 'Non riuscito.' };
+    return j;
+  } catch { RF.ricMsg = { tipo: 'male', testo: 'La piattaforma non risponde.' }; return null; }
+}
+async function rfRicFatto(id) { await rfRicAzione({ azione: 'fatto', id }, 'Richiamo chiuso.'); RF.ricAlt = null; await rfRicCarica(); }
+async function rfRicRimanda(id, mesi) { await rfRicAzione({ azione: 'rimanda', id, mesi }, `Rimandato di ${mesi} ${mesi === 1 ? 'mese' : 'mesi'}.`); await rfRicCarica(); }
+// «Ho chiamato»: vale per la proposta che è aperta in quel momento — quella
+// di cui si sta leggendo la frase al telefono.
+async function rfRicChiamato(esito) {
+  const p = RF.ricTel && RF.ricTel.proposta;
+  if (!p) return;
+  await rfRicAzione({ azione: 'chiamato', id: p.candidato.id, esito, patient_id: p.candidato.patientId || null,
+    giorno: p.buco.giorno, dalle: p.buco.dalle, medico: p.buco.medico },
+    esito === 'fissato' ? 'Appuntamento fissato: il richiamo è chiuso.' : 'Telefonata segnata.');
+  RF.ricAlt = null; RF.ricTel = null; await rfRicCarica();
+}
+// Le alternative, dai due lati: da una proposta o da un buco vuoto si chiede
+// «chi altro», da un paziente in attesa si chiede «dove».
+async function rfRicAlternative(chiave, tipo, rif) {
+  if (RF.ricAlt && RF.ricAlt.chiave === chiave) { RF.ricAlt = null; render(); return; }
+  RF.ricAlt = { chiave, lista: null }; RF.ricTel = null; render();
+  let corpo = null;
+  if (tipo === 'buco') { const p = rfRicPresa('prop', rif); corpo = p ? { buco: p.buco } : null; }
+  else if (tipo === 'vuoto') { const [giorno, dalle, medico] = String(rif).split('|'); corpo = { buco: { giorno, dalle: Number(dalle), medico } }; }
+  else corpo = { id: rif };
+  if (!corpo) { RF.ricAlt = null; render(); return; }
+  const j = await rfRicAzione({ azione: 'alternative', giorni: RF.ricGiorni, ...corpo }, null);
+  RF.ricAlt = { chiave, lista: (j && j.alternative) || [] }; RF.ricMsg = null; render();
+}
+async function rfRicTelefonata(fonte, i, chiave) {
+  const p = rfRicPresa(fonte, i);
+  if (!p) return;
+  RF.ricTel = { chiave, proposta: p, testo: null }; render();
+  const j = await rfRicAzione({ azione: 'telefonata', proposta: p }, null);
+  RF.ricTel = { chiave, proposta: p, testo: (j && j.testo) || null, causa: j && j.causa }; RF.ricMsg = null; render();
+}
+async function rfRicNuovo() {
+  const et = (document.getElementById('rf-ric-paz') || {}).value || '';
+  const mesi = Number((document.getElementById('rf-ric-mesi') || {}).value || 6);
+  const paz = rfModPazienti();
+  const pid = paz.mappa.get(et.trim());
+  if (!pid) { RF.ricMsg = { tipo: 'male', testo: 'Scegli il paziente dall’elenco della cartella.' }; render(); return; }
+  await rfRicAzione({ azione: 'nuovo', patient_id: pid, mesi }, `Richiamo creato: fra ${mesi} ${mesi === 1 ? 'mese' : 'mesi'}.`);
+  await rfRicCarica();
+}
+function rfRicGiorni(n) { RF.ricGiorni = n; RF.ricAlt = null; RF.ric = null; render(); void rfRicCarica(); }
+
+const rfRicOra = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+const RF_RIC_GIORNI = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato'];
+function rfRicGiorno(iso) {
+  const d = new Date(`${iso}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return iso;
+  const oggi = (RF.data && RF.data.today) || new Date().toISOString().slice(0, 10);
+  const domani = new Date(`${oggi}T12:00:00`); domani.setDate(domani.getDate() + 1);
+  if (iso === oggi) return 'oggi';
+  if (iso === domani.toISOString().slice(0, 10)) return 'domani';
+  return `${RF_RIC_GIORNI[d.getDay()]} ${d.getDate()}`;
+}
+function rfRicProposta(p, i) {
+  const chiave = `p${i}`;
+  const alt = RF.ricAlt && RF.ricAlt.chiave === chiave ? RF.ricAlt : null;
+  const tel = RF.ricTel && RF.ricTel.chiave === chiave ? RF.ricTel : null;
+  return `<div class="rf-ric-p${p.buco.pausa ? ' pausa' : ''}">
+    <div>
+      <div class="quando"><b>${rfEsc(rfRicGiorno(p.buco.giorno))} ${rfRicOra(p.buco.dalle)}–${rfRicOra(p.buco.alle)}</b> · ${rfEsc(rfNomeCorto(p.buco.medico))} · ${p.buco.minuti} min liberi</div>
+      <div class="chi">${rfEsc(p.candidato.paziente)}${p.candidato.prestazione ? ` <span class="caption">${rfEsc(p.candidato.prestazione)} · ${p.candidato.durata} min</span>` : ''}</div>
+      <div class="perche">${rfEsc(p.perche.join(' · '))}</div>
+    </div>
+    <div class="az">
+      <button class="btn sm primary" onclick="rfRicTelefonata('prop', ${i}, '${chiave}')">${ICONS.phone || ''} Chiama</button>
+      <button class="btn sm ghost" onclick="rfRicAlternative('${chiave}', 'buco', ${i})">Chi altro?</button>
+    </div>
+    ${tel ? `<div class="rf-ric-tel">${tel.testo ? rfEsc(tel.testo).replace(/\n/g, '<br>') : (tel.causa ? `${rfEsc((tel.proposta && tel.proposta.frase) || p.frase)}<span class="da">Il modello locale non ha risposto (${rfEsc(tel.causa)}): questa è la frase del codice.</span>` : 'Scrivo che cosa dire…')}
+      ${tel.testo || tel.causa ? `<div class="row mt-8" style="gap:6px;flex-wrap:wrap">
+        <button class="btn sm primary" onclick="rfRicChiamato('fissato')">Ha detto di sì</button>
+        <button class="btn sm" onclick="rfRicChiamato('non risponde')">Non risponde</button>
+        <button class="btn sm ghost" onclick="rfRicChiamato('rifiutato')">Non gli va bene</button></div>` : ''}
+      ${tel.testo ? `<span class="da">Scritta dal modello locale, su questo computer. La prenotazione la fa una persona sull’agenda.</span>` : ''}</div>` : ''}
+    ${alt ? `<div class="rf-ric-alt"><div class="t">Chi altro entrerebbe in questo buco</div>
+      ${alt.lista === null ? '<span class="caption">Guardo…</span>' : (alt.lista.length ? alt.lista.map((x, j) => `<button type="button" class="scelta" onclick="rfRicTelefonata('alt', ${j}, '${chiave}')"><b>${rfEsc(x.candidato.paziente)}</b> <span class="caption">${rfEsc(x.perche.join(' · '))}</span></button>`).join('') : '<span class="caption">Nessun altro ci sta dentro.</span>')}</div>` : ''}
+  </div>`;
+}
+/* Niente oggetti dentro gli onclick: si passa da dove stanno già (RF), con
+   un indice. Un JSON dentro un attributo HTML è una citazione dentro una
+   citazione dentro una citazione, e prima o poi si rompe su un apostrofo. */
+function rfRicPresa(fonte, i) {
+  if (fonte === 'alt') return (RF.ricAlt && RF.ricAlt.lista && RF.ricAlt.lista[i]) || null;
+  return (RF.ric && RF.ric.proposte && RF.ric.proposte[i]) || null;
+}
+
+PAGES.richiami = () => {
+  if (!RF.live) return rfPaginaPiattaforma('Richiami', 'Chi va richiamato, e dove metterlo');
+  if (RF.ric === null) { void rfRicCarica(); return `<div class="page-head"><div><h2 class="page-title">Richiami</h2></div></div><div class="card"><p class="meta" style="margin:0">Guardo i richiami e i buchi in agenda…</p></div>`; }
+  const d = RF.ric;
+  const senzaProposta = d.buchi.filter((b) => !d.proposte.some((p) => p.buco.giorno === b.giorno && p.buco.dalle === b.dalle && p.buco.medico === b.medico));
+  const scaduti = d.candidati.filter((c) => c.giorniDiRitardo > 0);
+  const paz = typeof rfModPazienti === 'function' ? rfModPazienti() : { html: '' };
+  return `<div class="page-head"><div><h2 class="page-title">Richiami</h2>
+      <div class="page-sub">${d.candidati.length} da rivedere${scaduti.length ? ` · <b>${scaduti.length} in ritardo</b>` : ''} · ${d.buchi.length} ${d.buchi.length === 1 ? 'buco' : 'buchi'} nei prossimi ${d.giorni} giorni</div></div>
+    <div class="actions"><div class="seg">${[3, 7, 14].map((n) => `<button class="${RF.ricGiorni === n ? 'active' : ''}" onclick="rfRicGiorni(${n})">${n} giorni</button>`).join('')}</div></div></div>
+    ${RF.ricMsg ? `<div class="rf-or-msg ${RF.ricMsg.tipo === 'ok' ? 'ok' : ''}">${rfEsc(RF.ricMsg.testo)}</div>` : ''}
+    <div class="rf-ric">
+      <div class="card">
+        <div class="card-head"><span class="section-title">Da chiamare adesso</span><span class="caption">${d.proposte.length} ${d.proposte.length === 1 ? 'proposta' : 'proposte'}</span></div>
+        ${d.proposte.length ? `<div class="rf-ric-prop">${d.proposte.map(rfRicProposta).join('')}</div>`
+          : `<p class="meta" style="margin:0;line-height:1.55">Nessun accostamento da proporre: ${d.buchi.length ? 'i buchi ci sono, ma nessuno di chi aspetta ci starebbe dentro (durata, medico o prestazione).' : 'nei prossimi giorni l’agenda non ha buchi.'}</p>`}
+      </div>
+      <div class="stack" style="display:flex;flex-direction:column;gap:14px">
+        <div class="card">
+          <div class="card-head"><span class="section-title">Chi aspetta</span><span class="caption">${d.candidati.length}</span></div>
+          ${d.candidati.length ? `<div class="rf-ric-el">${d.candidati.slice(0, 12).map((c) => {
+            const chiave = `c${c.id}`;
+            const alt = RF.ricAlt && RF.ricAlt.chiave === chiave ? RF.ricAlt : null;
+            return `<div class="rf-ric-r">
+              <div><div class="n">${rfEsc(c.paziente)}</div>
+                <div class="s${c.giorniDiRitardo > 0 ? ' tardi' : ''}">${c.tipo === 'da_prenotare' ? 'da prenotare' : (c.giorniDiRitardo > 0 ? `in ritardo di ${c.giorniDiRitardo} giorni` : `entro il ${rfEsc(c.scadenza || '')}`)}${c.prestazione ? ` · ${rfEsc(c.prestazione)}` : ''}${c.medico ? ` · ${rfEsc(rfNomeCorto(c.medico))}` : ''}</div></div>
+              <div class="row" style="gap:6px">
+                <button class="btn sm" onclick="rfRicAlternative('${chiave}', 'candidato', '${rfEsc(c.id)}')">Dove?</button>
+                <button class="btn sm ghost" onclick="rfRicFatto('${rfEsc(c.id)}')" title="Toglilo dalla lista">Fatto</button>
+              </div>
+              ${alt ? `<div class="rf-ric-alt"><div class="t">Dove potrebbe entrare</div>
+                ${alt.lista === null ? '<span class="caption">Guardo…</span>' : (alt.lista.length ? alt.lista.map((x, j) => `<button type="button" class="scelta" onclick="rfRicTelefonata('alt', ${j}, '${chiave}')"><b>${rfEsc(rfRicGiorno(x.buco.giorno))} ${rfRicOra(x.buco.dalle)}</b> · ${rfEsc(rfNomeCorto(x.buco.medico))} <span class="caption">${x.buco.minuti} min</span></button>`).join('') : '<span class="caption">Nessun buco adatto nei prossimi giorni.</span>')}</div>` : ''}
+              ${RF.ricTel && RF.ricTel.chiave === chiave ? `<div class="rf-ric-tel">${RF.ricTel.testo ? rfEsc(RF.ricTel.testo).replace(/\n/g, '<br>') : 'Scrivo che cosa dire…'}</div>` : ''}
+            </div>`;
+          }).join('')}</div>${d.candidati.length > 12 ? `<div class="caption mt-8">e altri ${d.candidati.length - 12}.</div>` : ''}`
+            : '<p class="meta" style="margin:0">Nessuno in attesa di essere richiamato.</p>'}
+        </div>
+        <div class="card">
+          <div class="card-head"><span class="section-title">Buchi senza nessuno</span><span class="caption">${senzaProposta.length}</span></div>
+          ${senzaProposta.length ? `<div class="rf-ric-el">${senzaProposta.slice(0, 8).map((b) => `<div class="rf-ric-r">
+              <div><div class="n">${rfEsc(rfRicGiorno(b.giorno))} ${rfRicOra(b.dalle)}–${rfRicOra(b.alle)}</div>
+                <div class="s">${rfEsc(rfNomeCorto(b.medico))} · ${b.minuti} min${b.pausa ? ' · ora di pranzo' : ''}</div></div>
+              <div class="row"><button class="btn sm ghost" onclick="rfRicAlternative('b${rfEsc(b.giorno)}${b.dalle}', 'vuoto', '${rfEsc(b.giorno)}|${b.dalle}|${rfEsc(b.medico)}')">Chi?</button></div>
+              ${RF.ricAlt && RF.ricAlt.chiave === `b${b.giorno}${b.dalle}` ? `<div class="rf-ric-alt"><div class="t">Chi entrerebbe</div>${RF.ricAlt.lista === null ? '<span class="caption">Guardo…</span>' : (RF.ricAlt.lista.length ? RF.ricAlt.lista.map((x, j) => `<button type="button" class="scelta" onclick="rfRicTelefonata('alt', ${j}, 'b${rfEsc(b.giorno)}${b.dalle}')"><b>${rfEsc(x.candidato.paziente)}</b> <span class="caption">${rfEsc(x.perche.join(' · '))}</span></button>`).join('') : '<span class="caption">Nessuno: o non ci sta, o non è il suo medico.</span>')}</div>` : ''}
+            </div>`).join('')}</div>` : '<p class="meta" style="margin:0">Tutti i buchi hanno un nome accanto.</p>'}
+        </div>
+        <div class="card">
+          <div class="card-head"><span class="section-title">Nuovo richiamo</span></div>
+          <div class="rf-ric-nuovo">
+            <input class="input" id="rf-ric-paz" list="rf-mod-paz-list" placeholder="Cognome Nome…" autocomplete="off">${paz.html || ''}
+            <select class="input" id="rf-ric-mesi" style="max-width:130px">${[1, 3, 6, 12, 24].map((m) => `<option value="${m}"${m === 6 ? ' selected' : ''}>fra ${m} ${m === 1 ? 'mese' : 'mesi'}</option>`).join('')}</select>
+            <button class="btn primary" onclick="rfRicNuovo()">Crea</button>
+          </div>
+          <div class="caption mt-8">Nasce come appuntamento da fissare: comparirà qui a sinistra quando sarà il momento, e nei buchi di quei giorni.</div>
+        </div>
+      </div>
+    </div>`;
+};
