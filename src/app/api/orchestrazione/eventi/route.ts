@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { sessioneStudio, senzaCache } from '../_comune';
-import { registraEvento } from '@/lib/orchestrazione/orchestratore';
+import { correggiStato, registraEvento } from '@/lib/orchestrazione/orchestratore';
 export const dynamic = 'force-dynamic';
 const TIPI = new Set(['paziente_arrivato', 'paziente_accolto', 'paziente_in_ritardo', 'paziente_assente', 'paziente_chiamato', 'paziente_richiamato', 'preparazione_iniziata', 'pronto', 'visita_iniziata', 'visita_quasi_finita', 'visita_finita', 'dimesso', 'medico_in_ritardo', 'sala_libera', 'sala_occupata', 'sala_fuori_servizio', 'sala_ripristinata', 'apparecchio_indisponibile', 'urgenza', 'appuntamento_aggiunto', 'appuntamento_annullato']);
 const FONTI = new Set(['ui', 'tablet', 'stanza', 'cleo']);
@@ -10,6 +10,12 @@ export async function POST(req: NextRequest) {
   const a = await sessioneStudio(); if ('r' in a) return a.r;
   const c = await req.json().catch(() => null);
   const tipo = String(c?.tipo ?? '');
+  // La correzione di uno stato messo per sbaglio: la fa solo una persona, e
+  // resta scritta come correzione (§3.4).
+  if (tipo === 'correzione') {
+    const esito = await correggiStato(a.s.studioId, String(c?.appointment_id ?? ''), String(c?.stato ?? '') as never, a.s.id);
+    return NextResponse.json(esito, { ...senzaCache, status: esito.ok ? 200 : 400 });
+  }
   if (!TIPI.has(tipo)) return NextResponse.json({ errore: 'tipo di evento sconosciuto' }, { status: 400 });
   const fonte = FONTI.has(String(c?.fonte)) ? String(c.fonte) : 'ui';
   const esito = await registraEvento(a.s.studioId, {

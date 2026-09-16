@@ -230,6 +230,8 @@ stateDiagram-v2
 
 La freccia `chiamato → in_attesa` esiste, ma la può tirare solo una persona: il sistema non richiama mai un paziente che ha già chiamato.
 
+**Correggere un tasto premuto per sbaglio** (16.9.2026 sera). La macchina a stati non torna indietro da sola, ed è giusto: un sistema che disfa i propri passi non è più una traccia di quel che è successo. Ma chi ha premuto «finito» sul paziente sbagliato deve poter rimediare, e la pagina «Visita» ha una riga discreta — *«Stato sbagliato? Rimetti in atteso · in sala d'attesa · pronto · in visita»*. La correzione riporta lo stato indietro, **azzera le ore che vengono dopo** (chi torna in attesa non ha più un'ora d'inizio né una stanza) e **toglie la durata che quel tasto aveva misurato**: senza, la previsione imparerebbe da un errore — il 16.9 una visita cardiologica di Marco Moccetti risultava durata un minuto. Resta scritta come correzione negli eventi, non fatta sparire. Per questo `durate_osservate` porta l'`appointment_id` (migrazione 061): senza, la misura sbagliata non era rintracciabile.
+
 ## 4. Il piano del mattino
 
 Alle 06:30, dopo il giro del robot che ha letto l'agenda di oggi, il sistema costruisce la **baseline**: un piano intero della giornata, versione 0, con tutti i campi del §2 riempiti per ogni appuntamento.

@@ -5,7 +5,7 @@ import { query } from '@/lib/db';
 import { generaOllamaEsito } from '@/lib/ollama';
 import { PARAMETRI_DEFAULT, fondiParametri, type Parametri } from './parametri';
 import { costruisciGrafo, distanzaSecondi, entraNelPiano, prestazioneDi, salaPreferita, salePossibili, stessaPersona, type Grafo } from './grafo';
-import { RIPIANIFICA, TRANSIZIONE_DI_EVENTO, rigidita, ritardoMedico, statoSala, transizioneAmmessa, type Fonte, type StatoPaziente, type TipoEvento } from './stato';
+import { RIPIANIFICA, STATI_PAZIENTE, TRANSIZIONE_DI_EVENTO, rigidita, ritardoMedico, statoSala, transizioneAmmessa, type Fonte, type StatoPaziente, type TipoEvento } from './stato';
 import { stimaDurata, type Fissata, type Osservazione } from './previsione';
 import { misura, pianifica, type ApparecchioDisp, type AssistenteDisp, type MedicoDisp, type Piano, type Pianificata, type StanzaDisp, type VisitaDaPianificare } from './riparatore';
 import { decidiIngresso, dentroOrizzonte, hm, ritardoDaRipianificare, ritardoResiduo, spostaABlocco } from './orizzonte';
@@ -326,8 +326,8 @@ export async function registraEvento(studioId: string, ev: EventoIn) {
       set('fine_reale', g.adesso);
       const inizio = st.inizio_reale;
       if (inizio != null && g.adesso > inizio && a.prestazione) {
-        await query(`insert into durate_osservate (studio_id, prestazione, medico, giorno, ora, minuti) values ($1,$2,$3,$4::date,$5,$6)`,
-          [studioId, a.prestazione, a.medico, g.giorno, inizio, g.adesso - inizio]);
+        await query(`insert into durate_osservate (studio_id, prestazione, medico, giorno, ora, minuti, appointment_id) values ($1,$2,$3,$4::date,$5,$6,$7)`,
+          [studioId, a.prestazione, a.medico, g.giorno, inizio, g.adesso - inizio, appId]);
       }
     }
     if (nuovoStato === 'in_attesa' && st.stato === 'chiamato') set('sala', null);
@@ -365,6 +365,40 @@ function causaDi(ev: EventoIn, g: Giornata): Causa {
     case 'urgenza': case 'appuntamento_aggiunto': return { tipo: 'urgenza' };
     default: return { tipo: 'altro' };
   }
+}
+
+// ---------- correggere uno stato messo per sbaglio (16.9.2026) ----------
+//
+// La macchina a stati non torna indietro da sola, ed è giusto così: un
+// sistema che disfa i propri passi non è più una traccia di quel che è
+// successo. Ma una persona che ha premuto il tasto sbagliato deve poter
+// correggere, e la correzione dev'essere scritta come tale — non fatta
+// sparire. Qui si riporta lo stato indietro, si azzerano le ore che vengono
+// dopo, e si toglie la durata che quel tasto aveva misurato: altrimenti la
+// previsione impara da un errore.
+export async function correggiStato(studioId: string, appointmentId: string, nuovo: StatoPaziente, userId: string | null) {
+  const g = await caricaGiornata(studioId);
+  const st = g.stati.get(appointmentId);
+  if (!st) return { ok: false, errore: 'appuntamento non di oggi' };
+  if (!STATI_PAZIENTE.includes(nuovo)) return { ok: false, errore: 'stato sconosciuto' };
+  const quando: Record<string, string[]> = {
+    atteso: ['arrivo', 'chiamato_a', 'inizio_reale', 'fine_reale', 'sala'],
+    arrivato: ['chiamato_a', 'inizio_reale', 'fine_reale', 'sala'],
+    in_attesa: ['chiamato_a', 'inizio_reale', 'fine_reale', 'sala'],
+    chiamato: ['inizio_reale', 'fine_reale'],
+    in_preparazione: ['inizio_reale', 'fine_reale'],
+    pronto: ['inizio_reale', 'fine_reale'],
+    in_visita: ['fine_reale'],
+  };
+  const azzera = (quando[nuovo] ?? []).map((c) => `${c} = null`).join(', ');
+  await query(`update orchestrazione_stato set stato = $3${azzera ? ', ' + azzera : ''}, updated_at = now() where appointment_id = $1 and studio_id = $2`,
+    [appointmentId, studioId, nuovo]);
+  // La durata misurata da quel tasto non vale più.
+  const tolte = await query<{ minuti: number }>('delete from durate_osservate where studio_id = $1 and appointment_id = $2 returning minuti', [studioId, appointmentId]);
+  await scrivi(g, { tipo: 'anomalia', testo: `correzione: da ${st.stato} a ${nuovo}${tolte.length ? `, tolta una durata di ${tolte[0].minuti} min` : ''}`, fonte: 'ui', user_id: userId }, appointmentId, 'correzione');
+  const e = await eseguiPiano(await caricaGiornata(studioId), 'correzione', { tipo: 'comando' }, { orizzonte: true, conCuscinetti: false, limiteMs: g.p.limite_solver_ms });
+  log(`correzione: ${st.stato} → ${nuovo}${tolte.length ? `, tolta durata ${tolte[0].minuti} min` : ''}`);
+  return { ok: true, da: st.stato, a: nuovo, durateTolte: tolte.length, versione: e.versione };
 }
 
 // ---------- il battito: eventi derivati (§7) ----------

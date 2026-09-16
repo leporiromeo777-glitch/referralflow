@@ -4705,6 +4705,9 @@ window.addEventListener('resize', () => { try { rfOrAltezzaAccoglienza(); } catc
 .rf-vis-riga { display:grid; grid-template-columns:130px minmax(0,1fr); gap:10px; padding:8px 0; border-top:1px solid var(--border); font-size:13.5px; align-items:baseline; }
 .rf-vis-riga .e { color:var(--text-3); font-size:12.5px; }
 .rf-vis-scorciatoie { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:18px; }
+.rf-vis-corr { margin-top:16px; font-size:11.5px; color:var(--text-3); text-align:center; }
+.rf-vis-corr button { border:0; background:none; font:inherit; color:var(--accent); cursor:pointer; padding:2px 3px; border-radius:4px; }
+.rf-vis-corr button:hover { background:var(--accent-soft); }
 .rf-vis-strum { text-align:left; margin-top:22px; padding-top:18px; border-top:1px solid var(--border); }
 .rf-vis-azioni { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
 .rf-vis-azioni .btn { padding:10px 16px; }
@@ -4814,6 +4817,29 @@ function rfVisCronometro() {
   tic(); RF.visitaCrono = setInterval(tic, 1000);
 }
 async function rfVisEvento(tipo, extra) { await rfOrchEvento(tipo, extra, 'stanza'); }
+/* Correggere uno stato messo per sbaglio: lo può fare solo una persona, resta
+   scritto come correzione, e toglie la durata che quel tasto aveva misurato —
+   altrimenti la previsione impara da un errore. */
+const RF_VIS_ORDINE = ['atteso', 'arrivato', 'in_attesa', 'chiamato', 'in_preparazione', 'pronto', 'in_visita', 'visita_finita', 'dimesso'];
+async function rfVisCorreggi(id, stato) {
+  RF.orchMsg = null;
+  try {
+    const r = await fetch('/api/orchestrazione/eventi', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tipo: 'correzione', appointment_id: id, stato }) });
+    const j = await r.json().catch(() => ({}));
+    RF.orchMsg = (r.ok && j.ok)
+      ? { tipo: 'ok', testo: `Rimesso in «${rfOrStato(j.a)}»${j.durateTolte ? ', e la durata misurata per sbaglio è stata tolta' : ''}.` }
+      : { tipo: 'male', testo: j.errore || 'Non riuscito.' };
+  } catch { RF.orchMsg = { tipo: 'male', testo: 'La piattaforma non risponde.' }; }
+  await rfOrchCarica();
+}
+function rfVisCorrettore(sel) {
+  const i = RF_VIS_ORDINE.indexOf(sel.stato);
+  if (i <= 0) return '';
+  const prima = RF_VIS_ORDINE.slice(0, i).filter(x => ['atteso', 'in_attesa', 'pronto', 'in_visita'].includes(x));
+  if (!prima.length) return '';
+  return `<div class="rf-vis-corr">Stato sbagliato? Rimetti in ${prima.map(x => `<button type="button" onclick="rfVisCorreggi('${rfEsc(sel.id)}','${x}')">${rfEsc(rfOrStato(x))}</button>`).join(' · ')}</div>`;
+}
 
 /* Quel che serve al medico mentre ha il paziente davanti (16.9.2026 sera).
    Solo roba che la piattaforma sa già: niente campi da riempire. Ogni
@@ -4939,6 +4965,7 @@ PAGES.visite = () => {
 
         ${dopo ? `<div class="rf-vis-dopo">Dopo di lui: <b>${rfEsc(dopo.etichetta)}</b> alle ${rfOrHm(dopo.inizio ?? dopo.teorica)}${dopo.sala ? ` in ${rfEsc(dopo.sala)}` : ''} · <a href="#" onclick="event.preventDefault();rfVisApri('${rfEsc(dopo.id)}')">apri</a></div>` : ''}
       </div>
+      ${rfVisCorrettore(sel)}
       ${rfVisStrumenti(sel, pid)}
       <div class="rf-vis-righe">
         ${riga('In agenda', `<b>${rfOrHm(sel.teorica)}</b>${sel.inizio != null && sel.inizio > sel.teorica + 4 ? ` <span class="caption">· il piano la sposta alle ${rfOrHm(sel.inizio)}</span>` : ''}`)}
