@@ -1,13 +1,28 @@
 ---
 tipo: piattaforma
 aggiornata: 2026-09-16
-stato: progetto approvato in linea di principio dallo studio il 16.9.2026, da costruire per fasi
+stato: costruito in prima versione il 16.9.2026 (tutte le fasi hanno codice); i criteri di uscita delle fasi si misurano nelle settimane che vengono
 ---
 # Orchestrazione di sale, medici e pazienti
 
 Il piano operativo per passare dal «piano delle sale» di oggi — una stanza per medico — a un sistema in cui **la stanza si assegna al paziente e il medico si sposta**. Un gemello digitale dello studio: chi è dove adesso, chi entra dopo, di quanto è in ritardo chi, e che cosa cambia nei prossimi sessanta minuti.
 
 Il documento è un piano di sviluppo, non una descrizione: entità, stati, eventi, vincoli, funzione obiettivo, motore, orizzonte mobile, ritardi, previsione delle durate, ruolo dei due modelli, controllo umano, interfaccia, API, pseudocodice, una giornata d'esempio con otto medici, e le fasi di costruzione. Riprende tutto quello che nella pagina [[Medici/Sale]] è già deciso e lo trasforma in vincoli del nuovo motore.
+
+## Stato di costruzione (16.9.2026)
+
+Tutte e sei le fasi hanno il loro codice, scritto in un giorno su richiesta dello studio («fai tutte le fasi senza fermarti»). **Quello che non si può fare in un giorno sono i criteri di uscita**, che sono misure su settimane di giornate vere: restano scritti nel §15 e vanno misurati prima di fidarsi di ciascuna fase. In pratica:
+
+| Fase | Che cosa c'è | Che cosa manca per dirla chiusa |
+|---|---|---|
+| 0 · vedere | eventi e stati (`stato.ts`, tabelle 058), tablet **Accoglienza** e pagina **Stanza** nel prototipo, il segnale dal dettato (`referti/upload` → `visita_finita`), mappa in tempo reale | utenti veri al posto di `admin@demo.ch`; una settimana di eventi registrati dal personale e confrontati con l'orologio |
+| 1 · misurare e riparare | `durate_osservate` scritte a ogni visita finita, stimatore (`previsione.ts`), riparatore (`riparatore.ts`, 9 prove), spiegazioni da frasi fisse (`spiega.ts`), avvisi | una settimana di durate vere per dire se l'ingresso stimato batte l'ora teorica |
+| 2 · il piano del mattino | grafo (`grafo.ts`) da [[Medici/Sale]] e [[Medici/Prestazioni e sale]], servizio **CP-SAT** (`solver-sale/`, launchd su :8711), baseline dal cron dell'agenda e dal pulsante; la sera il confronto è nelle versioni del piano | la pagina delle prestazioni è una proposta: lo studio la deve correggere; 20 giornate senza violazioni; il giudizio del personale |
+| 3 · l'orizzonte mobile | ripianificazione a ogni evento sull'orizzonte di 90 min, congelamento per stato e per vicinanza, soglie di comunicazione, comandi (blocca, non spostare, sala fuori servizio, medico resta, priorità, forza, visita breve, ripristina), movimento dei medici, ingresso intelligente | due settimane di misura: attesa mediana in calo e meno di 10 modifiche comunicate al giorno |
+| 4 · escalation | il piccolo interpreta il testo dell'accoglienza e verifica contro l'elenco di oggi; il grande, asincrono, propone una strategia in forma fissa che il solver ricalcola; proposte da confermare | proposte vere da giudicare: nessuna ancora, perché nessun ritardo ha superato la soglia |
+| 5 · prevedere | fattore d'ora (si accende da 30 casi per fascia), prima visita, `npm run banco-durate` che confronta mediana e regressione a uno fuori | il banco dice «troppo poche osservazioni»: il predittivo resta spento finché non batte la mediana di un minuto |
+
+Prima misura, sulla giornata vera del 16.9: **56 visite, baseline in 1,45 s con CP-SAT (ottimo), 0 senza sala**, 5 appuntamenti con colore senza prestazione (durata dal catalogo di base). Le ripianificazioni in giornata rispondono in 10-25 ms. I dettagli in [[Misure/Banchi]].
 
 ## 0. Che cosa cambia e che cosa resta
 

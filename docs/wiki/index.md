@@ -27,7 +27,7 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 - [[Piattaforma/Moduli]] — i moduli dello studio in versione digitale (letti a runtime: compilazione, dossier, stampa)
 - [[Piattaforma/Organizzazione dello studio]] — ruoli, responsabilità, servizi: il grafo organizzativo letto dalla piattaforma (solo ruoli, mai nomi)
 - [[Piattaforma/AI locale dell'app]] — l'assistente dentro la piattaforma: modello, configurazione, perché a volte non risponde
-- [[Piattaforma/Orchestrazione sale]] — il progetto del gemello digitale: la stanza al paziente, il medico mobile, solver CP-SAT, orizzonte mobile, ritardi, due modelli, fasi
+- [[Piattaforma/Orchestrazione sale]] — il gemello digitale: la stanza al paziente, il medico mobile, solver CP-SAT, orizzonte mobile, ritardi, due modelli, fasi — costruito il 16.9, da misurare
 
 ## Per chi usa la piattaforma
 - [[Procedure/Segretaria]] — dal dettato alla lettera, passo per passo
@@ -59,6 +59,7 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 - [[Agenti/Correttore]], [[Agenti/Arbitro]], [[Agenti/Omissioni]], [[Agenti/Terapia]], [[Agenti/Coerenza]] — attenzioni ed esempi finti con la risposta giusta
 
 ## Medici
+- [[Medici/Prestazioni e sale]] — per ogni prestazione: durata, preparazione, in quali stanze, con quali apparecchi, chi è abilitato (letta a runtime dall'orchestrazione)
 - [[Medici/Moccetti]]
 - [[Medici/Moschovitis]]
 - [[Medici/Percorsi]] — sequenze standard per indicazione, lette dalla piattaforma (voce «Percorsi» dell'interfaccia nuova); stato «proposta» finché il medico non valida

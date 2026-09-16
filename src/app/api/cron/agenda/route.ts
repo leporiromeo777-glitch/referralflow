@@ -32,6 +32,11 @@ export async function GET(req: NextRequest) {
   void fetch(`${req.nextUrl.origin}/api/cron/piano-sale?key=${encodeURIComponent(key ?? '')}`, {
     signal: AbortSignal.timeout(180_000),
   }).catch(() => {});
+  // E la baseline dell'orchestrazione (16.9.2026, Piattaforma/Orchestrazione
+  // sale §4): una volta al giorno, poi si riusa.
+  void fetch(`${req.nextUrl.origin}/api/cron/orchestrazione?key=${encodeURIComponent(key ?? '')}`, {
+    signal: AbortSignal.timeout(180_000),
+  }).catch(() => {});
 
   return NextResponse.json({ feeds: feeds.length, ok, errori });
 }

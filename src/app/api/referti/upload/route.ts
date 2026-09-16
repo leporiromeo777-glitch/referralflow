@@ -76,5 +76,17 @@ export async function POST(req: NextRequest) {
     [session.studioId, file.name.slice(0, 200), key, TIPI[ext], session.id, tipo, ids.has(medico) ? medico : null]
   );
 
+  // L'arrivo di un dettato è «visita finita» per quel medico (16.9.2026,
+  // Piattaforma/Orchestrazione sale §7): un segnale che esisteva già e nessuno
+  // usava. Best-effort, e senza nome del paziente: solo il medico.
+  if (ids.has(medico)) {
+    const nomeMedico = (await mediciDelloStudio(session.studioId)).find((m) => m.id === medico)?.nome;
+    if (nomeMedico) {
+      void import('@/lib/orchestrazione/orchestratore')
+        .then((o) => o.registraEvento(session.studioId!, { tipo: 'visita_finita', medico: nomeMedico, fonte: 'dettato', user_id: session.id }))
+        .catch((e) => console.log(`[orchestrazione] dettato: ${(e as Error).message}`));
+    }
+  }
+
   return NextResponse.json({ ok: true, id: row.id }, { status: 201 });
 }

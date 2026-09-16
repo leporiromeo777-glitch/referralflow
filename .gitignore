@@ -39,3 +39,6 @@ vocabolario-locali.txt
 
 # Calendario scritto dal robot dell'agenda (dati pazienti: mai nel repo)
 agenda-locale
+
+# Solver delle sale: ambiente Python isolato
+solver-sale/.venv

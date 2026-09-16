@@ -1050,3 +1050,204 @@ create table if not exists ricerche_cliniche (
 create index if not exists ricerche_cliniche_studio_idx on ricerche_cliniche (studio_id, created_at desc);
 create index if not exists ricerche_cliniche_paziente_idx on ricerche_cliniche (patient_id, created_at desc);
 
+-- Orchestrazione di sale, medici e pazienti — il grafo dello studio (16.9.2026).
+--
+-- Il grafo dà contesto, non decide: chi può fare cosa, dove, con che cosa,
+-- insieme a chi ([[Piattaforma/Orchestrazione sale]] §1). Le regole in
+-- italiano stanno nelle pagine wiki (Medici/Sale, Medici/Prestazioni e sale)
+-- e vengono lette a runtime; queste tabelle tengono quel che una pagina non
+-- sa dire bene — distanze in secondi, stato operativo di una stanza — e
+-- fanno da cache dell'ultima lettura per chi interroga il DB direttamente.
+alter table studio_risorse add column if not exists funzione       text;
+alter table studio_risorse add column if not exists mobile         boolean not null default false;
+alter table studio_risorse add column if not exists ripristino_min int not null default 0;
+alter table studio_risorse add column if not exists stato          text not null default 'libera';
+
+-- Secondi di spostamento fra due stanze. Assente = default dei parametri.
+create table if not exists distanze_sale (
+  studio_id  uuid not null references studios(id) on delete cascade,
+  da         text not null,
+  a          text not null,
+  secondi    int  not null check (secondi >= 0),
+  primary key (studio_id, da, a)
+);
+
+-- Chi può sostituire chi, e per quali prestazioni. Vuota per default: la
+-- sostituzione non esiste finché lo studio non la scrive, per coppia.
+create table if not exists medici_sostituibili (
+  studio_id      uuid not null references studios(id) on delete cascade,
+  medico         text not null,
+  sostituto      text not null,
+  prestazioni    text[] not null default '{}',   -- vuoto = tutte quelle che il sostituto sa fare
+  primary key (studio_id, medico, sostituto)
+);
+
+-- I piani della giornata, versionati (16.9.2026, §2 e §4).
+--
+-- Una riga per versione: la 0 è la baseline del mattino e resta per sempre,
+-- le altre nascono a ogni ripianificazione che cambia qualcosa. Una sola è
+-- «corrente»; «comunicata_at» segna la versione contro cui si misurano le
+-- modifiche (la stabilità è un termine dell'obiettivo, §6).
+create table if not exists piani_giornata (
+  id             uuid primary key default gen_random_uuid(),
+  studio_id      uuid not null references studios(id) on delete cascade,
+  giorno         date not null,
+  versione       int  not null,
+  motivo         text not null default '',       -- 'mattino' | 'evento:<tipo>' | 'comando' | 'proposta'
+  corrente       boolean not null default true,
+  comunicata_at  timestamptz,
+  costo          jsonb not null default '{}'::jsonb,
+  motore         text not null default 'riparatore',   -- 'cp-sat' | 'riparatore'
+  ms             int,
+  created_at     timestamptz not null default now(),
+  unique (studio_id, giorno, versione)
+);
+create index if not exists piani_giornata_corrente on piani_giornata (studio_id, giorno) where corrente;
+
+-- Una riga per appuntamento per versione del piano. Le tre ore non si
+-- confondono: teorica (l'agenda, non cambia mai), ingresso (quando il
+-- paziente entra in stanza), inizio (quando il medico ci arriva).
+create table if not exists piano_visite (
+  id                 uuid primary key default gen_random_uuid(),
+  piano_id           uuid not null references piani_giornata(id) on delete cascade,
+  appointment_id     uuid not null,
+  medico             text not null default '',
+  prestazione        text not null default '',
+  durata_prevista    int not null,
+  durata_stimata     int not null,
+  ora_teorica        int not null,               -- minuti dalla mezzanotte, come in tutto il motore
+  ingresso_previsto  int,
+  inizio_stimato     int,
+  fine_stimata       int,
+  sala               text,
+  apparecchi         text[] not null default '{}',
+  assistente         text,
+  preparazione_min   int not null default 0,
+  ripristino_min     int not null default 0,
+  priorita           smallint not null default 0,
+  rigidita           smallint not null default 0,
+  perche             jsonb not null default '{}'::jsonb,
+  unique (piano_id, appointment_id)
+);
+create index if not exists piano_visite_piano on piano_visite (piano_id);
+
+-- Lo stato operativo e gli eventi (16.9.2026, §3 e §7).
+--
+-- `orchestrazione_stato` è lo stato di adesso di ogni appuntamento del
+-- giorno: si aggiorna. `orchestrazione_eventi` è solo inserimenti, come le
+-- tabelle audit: quel che è successo non si riscrive. `orchestrazione_comandi`
+-- sono i vincoli che una persona ha imposto, con autore e scadenza.
+create table if not exists orchestrazione_stato (
+  appointment_id  uuid primary key,
+  studio_id       uuid not null references studios(id) on delete cascade,
+  giorno          date not null,
+  stato           text not null default 'atteso',
+  sala            text,
+  arrivo          int,            -- minuti dalla mezzanotte
+  chiamato_a      int,
+  inizio_reale    int,
+  fine_reale      int,
+  rigidita        smallint not null default 0,
+  updated_at      timestamptz not null default now()
+);
+create index if not exists orchestrazione_stato_giorno on orchestrazione_stato (studio_id, giorno);
+
+create table if not exists orchestrazione_eventi (
+  id              bigserial primary key,
+  studio_id       uuid not null references studios(id) on delete cascade,
+  giorno          date not null,
+  tipo            text not null,
+  appointment_id  uuid,
+  sala            text,
+  medico          text,
+  minuti          int,
+  testo           text,           -- il testo libero della segreteria, MAI un dato clinico
+  fonte           text not null default 'ui',   -- 'ui' | 'tablet' | 'stanza' | 'dettato' | 'robot' | 'derivato' | 'cleo'
+  user_id         uuid,
+  at              timestamptz not null default now()
+);
+create index if not exists orchestrazione_eventi_giorno on orchestrazione_eventi (studio_id, giorno, at);
+
+create table if not exists orchestrazione_comandi (
+  id              uuid primary key default gen_random_uuid(),
+  studio_id       uuid not null references studios(id) on delete cascade,
+  giorno          date not null,
+  comando         text not null,
+  parametri       jsonb not null default '{}'::jsonb,
+  user_id         uuid,
+  valido_da       timestamptz not null default now(),
+  valido_a        timestamptz,
+  ritirato_at     timestamptz
+);
+create index if not exists orchestrazione_comandi_giorno on orchestrazione_comandi (studio_id, giorno);
+
+-- Le proposte del modello grande, da confermare (§10.2): mai applicate da sole.
+create table if not exists orchestrazione_proposte (
+  id              uuid primary key default gen_random_uuid(),
+  studio_id       uuid not null references studios(id) on delete cascade,
+  giorno          date not null,
+  versione_stato  int not null,
+  strategia       jsonb not null,
+  piano           jsonb not null,
+  perche          text not null default '',
+  modello         text,
+  stato           text not null default 'aperta',   -- aperta | accettata | ignorata | scaduta
+  decisa_da       uuid,
+  decisa_at       timestamptz,
+  created_at      timestamptz not null default now()
+);
+
+-- Le durate osservate e le spiegazioni (16.9.2026, §9 e §13).
+--
+-- Niente di clinico: prestazione, medico, ora, e due flag strutturali. Le
+-- mediane si ricalcolano di notte e si vedono; `durate_fissate` è la parola
+-- dello studio che vince sulla misura. Nessun addestramento automatico.
+create table if not exists durate_osservate (
+  id               bigserial primary key,
+  studio_id        uuid not null references studios(id) on delete cascade,
+  prestazione      text not null,
+  medico           text not null,
+  giorno           date not null,
+  ora              smallint not null,
+  prima_visita     boolean not null default false,
+  mobilita_ridotta boolean not null default false,
+  minuti           int not null check (minuti > 0 and minuti < 600)
+);
+create index if not exists durate_osservate_chiave on durate_osservate (studio_id, prestazione, medico);
+
+create table if not exists durate_fissate (
+  studio_id    uuid not null references studios(id) on delete cascade,
+  prestazione  text not null,
+  medico       text not null default '',     -- '' = per tutti i medici
+  minuti       int not null check (minuti > 0),
+  user_id      uuid,
+  at           timestamptz not null default now(),
+  primary key (studio_id, prestazione, medico)
+);
+
+create table if not exists orchestrazione_spiegazioni (
+  id              bigserial primary key,
+  studio_id       uuid not null references studios(id) on delete cascade,
+  giorno          date not null,
+  piano_id        uuid,
+  appointment_id  uuid,
+  livello         text not null default 'mappa',   -- 'silenzio' | 'mappa' | 'accoglienza' | 'segreteria'
+  perche          jsonb not null default '{}'::jsonb,
+  testo           text not null,
+  scritto_da      text not null default 'codice',  -- 'codice' | modello
+  at              timestamptz not null default now()
+);
+create index if not exists orchestrazione_spiegazioni_giorno on orchestrazione_spiegazioni (studio_id, giorno, at desc);
+
+-- I pesi e le soglie dell'orchestrazione (16.9.2026, §6 e §8).
+-- Una riga per chiave; i default stanno nel codice (`parametri.ts`) e qui
+-- entra solo quel che lo studio cambia dalla pagina Studio.
+create table if not exists orchestrazione_parametri (
+  studio_id  uuid not null references studios(id) on delete cascade,
+  chiave     text not null,
+  valore     jsonb not null,
+  user_id    uuid,
+  at         timestamptz not null default now(),
+  primary key (studio_id, chiave)
+);
+
