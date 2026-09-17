@@ -3281,7 +3281,13 @@ const rfAgendaOrig = PAGES.agenda;
 PAGES.agenda = () => {
   if (!RF.live) return rfAgendaOrig();
   const oggi = (RF.data && RF.data.today) || new Date().toISOString().slice(0, 10);
-  if (!state.agendaGiorno) state.agendaGiorno = oggi;
+  // Il giorno scelto resta finché non lo si cambia — ma «oggi» a un certo
+  // punto diventa domani. Se la pagina è rimasta aperta oltre la mezzanotte
+  // (17.9.2026: l'agenda mostrava ancora il giorno prima), chi era fermo sul
+  // giorno corrente si ritrova sul nuovo; chi si era spostato a mano no,
+  // altrimenti gli si sposterebbe l'agenda sotto le mani.
+  if (!state.agendaGiorno || (state.agendaOggi && state.agendaOggi !== oggi && state.agendaGiorno === state.agendaOggi)) state.agendaGiorno = oggi;
+  state.agendaOggi = oggi;
   const giorno = state.agendaGiorno;
   const filtroTipo = state.agendaTipo || '';
   const periodo = state.agendaPeriodo === 'settimana' ? 'settimana' : 'giorno';
