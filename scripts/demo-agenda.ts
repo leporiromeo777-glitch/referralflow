@@ -48,6 +48,26 @@ function alle(giorno: string, hhmm: string): Date {
   return d;
 }
 
+// Lo «specchio»: la demo copia la FORMA della giornata vera — quanti
+// appuntamenti, a che ora, con quale medico, di quale prestazione — e ci
+// mette dentro nomi inventati. Nessun dato di persona vera attraversa il
+// confine: passano solo orari, medici e prestazioni, che sono come è fatto
+// lo studio, non chi ci viene. Serve a far vedere la piattaforma su una
+// giornata credibile invece che su una inventata a tavolino.
+async function specchio(giorno: string) {
+  const pg = await import('pg');
+  const Pool = (pg as any).default?.Pool ?? (pg as any).Pool;
+  const vero = new Pool({ connectionString: process.env.DATABASE_URL_VERO || 'postgres://centrocardiologicoticino@localhost:5432/referralflow' });
+  const { rows } = await vero.query(
+    `select to_char(a.starts_at at time zone 'Europe/Zurich', 'HH24:MI') as ora,
+            coalesce(round(extract(epoch from (a.ends_at - a.starts_at)) / 60)::int, 30) as durata,
+            p.nome as medico, a.motivo, a.colore
+       from appointments a left join providers p on p.id = a.provider_id
+      where a.starts_at::date = current_date order by a.starts_at`);
+  await vero.end();
+  return rows as { ora: string; durata: number; medico: string | null; motivo: string | null; colore: string | null }[];
+}
+
 async function main() {
   const [studio] = await query<{ id: string; nome: string }>(`select id, nome from studios where slug = 'demo'`);
   if (!studio) throw new Error('studio «demo» non trovato: crealo prima con create-studio');
@@ -68,6 +88,38 @@ async function main() {
   if (via.length) console.log(`tolti ${via.length} appuntamenti della demo precedente`);
 
   let n = 0; let iGente = 0; let iCartella = 0;
+
+  // Con «--specchio» la giornata ricalca quella vera di oggi.
+  if (process.argv.includes('--specchio')) {
+    const forma = await specchio(oggi);
+    for (const f of forma) {
+      const m = medici.find((x) => x.nome === f.medico);
+      let nomeAgenda: string;
+      if (n % 3 === 0 && iCartella < IN_CARTELLA.length) { const [cog, nom] = IN_CARTELLA[iCartella++]; nomeAgenda = `${cog} ${nom}`; }
+      else { const [cog, nom, nato] = GENTE[iGente++ % GENTE.length]; nomeAgenda = `${cog} ${nom} (${nato.split('-').reverse().join('.')} / N° ${900000 + iGente})`; }
+      const inizio = alle(oggi, f.ora);
+      const fine = new Date(inizio.getTime() + Math.max(5, f.durata) * 60000);
+      // Nell'agenda vera il motivo quasi non c'è mai (la prestazione si
+      // indovina dal colore). Nella demo lo scriviamo, se no si vede una
+      // giornata di appuntamenti senza nome: dal colore quando c'è, se no
+      // dalla prestazione che quel medico fa di solito.
+      const daColore = f.colore ? catalogo.find((c) => c.colore && c.colore.toLowerCase() === f.colore!.toLowerCase())?.nome : null;
+      const solita = GIORNATA.find((g) => g.medico === f.medico)?.prestazione;
+      const motivo = f.motivo || daColore || solita || 'Visita cardiologica';
+      await query(
+        `insert into appointments (studio_id, provider_id, starts_at, ends_at, titolo, paziente_nome, motivo, colore, external_uid, stato_medionline)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,'fissato')`,
+        [studio.id, m?.id ?? null, inizio.toISOString(), fine.toISOString(), nomeAgenda, nomeAgenda, motivo, f.colore, `demo-${oggi}-${n}`]);
+      n++;
+    }
+    console.log(`giornata a specchio: ${n} appuntamenti di oggi (${oggi}), stessa forma di quella vera, nomi inventati`);
+    const conta = await query<{ medico: string; quanti: string }>(
+      `select coalesce(p.nome, 'senza medico') as medico, count(*)::text as quanti from appointments a left join providers p on p.id = a.provider_id
+        where a.studio_id = $1 and a.starts_at::date = $2::date group by 1 order by 1`, [studio.id, oggi]);
+    for (const r of conta) console.log(`  ${r.medico}: ${r.quanti}`);
+    return;
+  }
+
   for (const blocco of GIORNATA) {
     const m = medici.find((x) => x.nome === blocco.medico);
     if (!m) { console.log(`medico non trovato, salto: ${blocco.medico}`); continue; }
