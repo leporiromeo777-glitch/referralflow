@@ -461,6 +461,9 @@ PERCORSO_VOCABOLARIO_LOCALI = Path(
 # whisper accetta un prompt lungo al più ~224 token (n_text_ctx/2): teniamo un
 # margine di sicurezza in caratteri per non farlo troncare a metà parola.
 VOCAB_MAX_CHARS = 1000
+# Dalla riga che comincia così, un file di vocabolario non alimenta più il
+# prompt di whisper ma solo l'aggancio fonetico delle riparazioni.
+MARCATORE_SOLO_GLOSSARIO = "// solo aggancio fonetico"
 
 # ── LLM locale via Ollama (SPEC §4, §6, §7.3) ───────────────────────────────
 OLLAMA_URL = os.environ.get("REFERTI_OLLAMA", "http://localhost:11434")
@@ -1214,14 +1217,26 @@ def carica_vocabolario(medico: str | None = None) -> str:
     dati di pazienti. Con `medico` i termini del suo vocabolario e del suo
     dizionario (vocabolario-<id>.txt, correzioni-<id>.json) vanno IN TESTA:
     sono i più specifici, il tetto taglia la coda."""
-    def da_file(p: Path) -> list[str]:
+    # Il prompt di whisper ha un tetto (~1000 caratteri) e la testa del
+    # vocabolario base è già più lunga: ogni termine aggiunto prima ne spinge
+    # fuori uno collaudato. Per questo un file di vocabolario può dichiarare
+    # dove finisce ciò che va nel prompt: dalla riga MARCATORE_SOLO_GLOSSARIO
+    # in giù i termini servono SOLO all'aggancio fonetico (riparazioni_glossario,
+    # che legge tutto il file e non ha tetto). Così lo studio può elencare
+    # duecento nomi commerciali senza toccare il prompt collaudato
+    # (2026-09-01: una testa tutta farmaci faceva collassare il dettato lungo).
+    def da_file(p: Path, solo_prompt: bool = False) -> list[str]:
         if not p.is_file():
             return []
         try:
-            return [
-                r.strip() for r in p.read_text(encoding="utf-8").splitlines()
-                if r.strip() and not r.strip().startswith("#")
-            ]
+            fuori: list[str] = []
+            for r in p.read_text(encoding="utf-8").splitlines():
+                r = r.strip()
+                if solo_prompt and r.startswith(MARCATORE_SOLO_GLOSSARIO):
+                    break
+                if r and not r.startswith("#"):
+                    fuori.append(r)
+            return fuori
         except OSError:
             return []
 
@@ -1248,10 +1263,10 @@ def carica_vocabolario(medico: str | None = None) -> str:
     diz_medico = _file_medico(medico, "correzioni")
     termini: list[str] = (
         (da_dizionario(diz_medico) if diz_medico else [])
-        + (da_file(voc_medico) if voc_medico else [])
+        + (da_file(voc_medico, solo_prompt=True) if voc_medico else [])
         + da_dizionario(PERCORSO_CORREZIONI_LOCALI)
-        + da_file(PERCORSO_VOCABOLARIO_LOCALI)
-        + da_file(PERCORSO_VOCABOLARIO)
+        + da_file(PERCORSO_VOCABOLARIO_LOCALI, solo_prompt=True)
+        + da_file(PERCORSO_VOCABOLARIO, solo_prompt=True)
         + da_dizionario(PERCORSO_CORREZIONI)
     )
     # dedup senza distinzione di maiuscole, saltando i numeri puri.
