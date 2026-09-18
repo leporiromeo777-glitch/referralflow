@@ -1,0 +1,205 @@
+#!/usr/bin/env python3
+"""Lettore DICOM della piattaforma (18.9.2026).
+
+ReferralFlow non manda le immagini da nessuna parte: i file restano sul Mac
+dello studio, e questo strumento è l'unico che li apre. Fa due cose sole, e le
+fa in un processo separato che muore subito dopo — così un file malformato
+rovina al massimo la sua richiesta:
+
+    leggi-dicom.py meta <file>                        → JSON dei campi utili
+    leggi-dicom.py png <file> --frame N --out f.png   → un fotogramma in PNG
+
+Regole:
+- **Non stampa mai nulla su stderr che contenga dati del paziente.** I campi
+  anagrafici escono solo nel JSON di `meta`, che è il valore di ritorno verso
+  la piattaforma (serve ad agganciare l'esame alla cartella), mai nei log.
+- Errori: JSON `{"errore": "..."}` con codice d'uscita 1. Mai un traceback in
+  faccia all'utente.
+- Nessuna rete, nessuna scrittura fuori dal file `--out` richiesto.
+
+Ambiente: il venv in ~/.referralflow-imaging (pydicom, pillow, numpy). Le
+versioni sono quelle collaudate dal progetto imaging-server.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+MAX_LATO = 2048          # oltre questo il PNG si rimpicciolisce: nessuno guarda 8k su uno schermo
+ANTEPRIMA_LATO = 320
+
+
+def _uscita(dati: dict, codice: int = 0) -> int:
+    json.dump(dati, sys.stdout, ensure_ascii=False)
+    sys.stdout.write("\n")
+    return codice
+
+
+def _testo(ds, chiave: str, massimo: int = 200) -> str:
+    v = getattr(ds, chiave, None)
+    if v is None:
+        return ""
+    return str(v).strip()[:massimo]
+
+
+def _data_dicom(v: str) -> str:
+    """AAAAMMGG → AAAA-MM-GG; tutto il resto → stringa vuota."""
+    v = (v or "").strip()
+    if len(v) == 8 and v.isdigit():
+        return f"{v[0:4]}-{v[4:6]}-{v[6:8]}"
+    return ""
+
+
+def _nome_persona(v: str) -> str:
+    """«ROSSI^MARIO^^^» → «Rossi Mario». Il DICOM usa ^ fra i componenti."""
+    pezzi = [p.strip() for p in str(v or "").split("^") if p.strip()]
+    if not pezzi:
+        return ""
+    return " ".join(p.capitalize() if p.isupper() else p for p in pezzi[:2])[:120]
+
+
+def comando_meta(percorso: Path) -> int:
+    import pydicom
+
+    try:
+        ds = pydicom.dcmread(str(percorso), stop_before_pixels=True, force=False)
+    except Exception as e:  # noqa: BLE001 — qualunque file non DICOM finisce qui
+        return _uscita({"errore": "non_dicom", "tipo": type(e).__name__}, 1)
+
+    sop_class = str(getattr(ds, "SOPClassUID", "") or "")
+    righe = int(getattr(ds, "Rows", 0) or 0)
+    colonne = int(getattr(ds, "Columns", 0) or 0)
+    frame = int(getattr(ds, "NumberOfFrames", 1) or 1)
+    # Un DICOM può non essere un'immagine: referti strutturati, PDF incapsulati,
+    # modelli STL. Vanno archiviati lo stesso, ma non si disegnano.
+    immagine = righe > 0 and colonne > 0
+
+    centro, ampiezza = getattr(ds, "WindowCenter", None), getattr(ds, "WindowWidth", None)
+    def _primo(x):
+        try:
+            return float(x[0]) if isinstance(x, (list, tuple)) or hasattr(x, "__getitem__") and not isinstance(x, (str, bytes)) else float(x)
+        except Exception:  # noqa: BLE001
+            return None
+
+    return _uscita({
+        "study_uid": _testo(ds, "StudyInstanceUID", 128),
+        "series_uid": _testo(ds, "SeriesInstanceUID", 128),
+        "sop_uid": _testo(ds, "SOPInstanceUID", 128),
+        "sop_class": sop_class,
+        "modalita": _testo(ds, "Modality", 16).upper(),
+        "data_esame": _data_dicom(_testo(ds, "StudyDate", 16)),
+        "ora_esame": _testo(ds, "StudyTime", 16)[:6],
+        "descrizione_esame": _testo(ds, "StudyDescription", 200),
+        "descrizione_serie": _testo(ds, "SeriesDescription", 200),
+        "numero_serie": int(getattr(ds, "SeriesNumber", 0) or 0),
+        "numero_immagine": int(getattr(ds, "InstanceNumber", 0) or 0),
+        "parte_corpo": _testo(ds, "BodyPartExamined", 64),
+        "accession": _testo(ds, "AccessionNumber", 64),
+        "istituto": _testo(ds, "InstitutionName", 120),
+        "inviante": _nome_persona(_testo(ds, "ReferringPhysicianName", 120)),
+        "paziente_nome": _nome_persona(_testo(ds, "PatientName", 120)),
+        "paziente_nascita": _data_dicom(_testo(ds, "PatientBirthDate", 16)),
+        "paziente_id": _testo(ds, "PatientID", 64),
+        "paziente_sesso": _testo(ds, "PatientSex", 4).upper(),
+        "righe": righe, "colonne": colonne, "frame": max(1, frame),
+        "immagine": immagine,
+        "ww": _primo(ampiezza), "wl": _primo(centro),
+        "trasferimento": str(getattr(getattr(ds, "file_meta", None), "TransferSyntaxUID", "") or ""),
+    })
+
+
+def comando_png(percorso: Path, frame: int, ww: float | None, wl: float | None,
+                lato: int, uscita: Path) -> int:
+    import numpy as np
+    import pydicom
+    from PIL import Image
+    from pydicom.pixels import apply_modality_lut, apply_voi_lut
+
+    try:
+        ds = pydicom.dcmread(str(percorso), force=False)
+    except Exception as e:  # noqa: BLE001
+        return _uscita({"errore": "non_dicom", "tipo": type(e).__name__}, 1)
+    if not int(getattr(ds, "Rows", 0) or 0):
+        return _uscita({"errore": "non_immagine"}, 1)
+
+    try:
+        pixel = ds.pixel_array
+    except Exception as e:  # noqa: BLE001 — sintassi di trasferimento non supportata, file troncato…
+        return _uscita({"errore": "pixel_non_leggibili", "tipo": type(e).__name__}, 1)
+
+    n_frame = int(getattr(ds, "NumberOfFrames", 1) or 1)
+    if n_frame > 1 and pixel.ndim >= 3:
+        frame = max(0, min(frame, n_frame - 1))
+        pixel = pixel[frame]
+
+    colore = getattr(ds, "SamplesPerPixel", 1) and int(ds.SamplesPerPixel) == 3
+    if colore:
+        arr = np.asarray(pixel)
+        if arr.dtype != np.uint8:
+            arr = (arr.astype(np.float32) / max(1.0, float(arr.max())) * 255).astype(np.uint8)
+        img = Image.fromarray(arr, mode="RGB")
+    else:
+        # L'ordine è quello del DICOM e non è opinabile: prima la LUT di
+        # modalità (che porta i numeri grezzi in unità vere — gli HU di una
+        # TAC), poi la finestra, che È ESPRESSA IN QUELLE UNITÀ. Applicare la
+        # finestra ai numeri grezzi dava un'immagine tutta di un colore.
+        arr = apply_modality_lut(pixel, ds).astype(np.float32)
+        if ww is not None and wl is not None and ww > 0:
+            basso, alto = wl - ww / 2.0, wl + ww / 2.0
+        else:
+            # Senza finestra scelta: quella del file, se c'è; se no tutta la
+            # dinamica. Mai un'immagine nera perché nessuno ha scelto.
+            try:
+                arr = apply_voi_lut(arr, ds).astype(np.float32)
+            except Exception:  # noqa: BLE001
+                pass
+            basso, alto = float(np.min(arr)), float(np.max(arr))
+        if alto <= basso:
+            alto = basso + 1.0
+        arr = np.clip((arr - basso) / (alto - basso), 0.0, 1.0) * 255.0
+        if str(getattr(ds, "PhotometricInterpretation", "")).upper() == "MONOCHROME1":
+            arr = 255.0 - arr          # in MONOCHROME1 il bianco è lo zero
+        img = Image.fromarray(arr.astype(np.uint8), mode="L")
+
+    larghezza, altezza = img.size
+    tetto = max(1, min(lato, MAX_LATO))
+    if max(larghezza, altezza) > tetto:
+        scala = tetto / float(max(larghezza, altezza))
+        img = img.resize((max(1, int(larghezza * scala)), max(1, int(altezza * scala))), Image.LANCZOS)
+
+    uscita.parent.mkdir(parents=True, exist_ok=True)
+    img.save(str(uscita), format="PNG", optimize=False, compress_level=3)
+    return _uscita({"ok": True, "larghezza": img.size[0], "altezza": img.size[1],
+                    "frame": frame, "frame_totali": n_frame})
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(add_help=True)
+    sub = ap.add_subparsers(dest="comando", required=True)
+    m = sub.add_parser("meta"); m.add_argument("file")
+    p = sub.add_parser("png")
+    p.add_argument("file"); p.add_argument("--frame", type=int, default=0)
+    p.add_argument("--ww", type=float, default=None); p.add_argument("--wl", type=float, default=None)
+    p.add_argument("--lato", type=int, default=MAX_LATO)
+    p.add_argument("--anteprima", action="store_true")
+    p.add_argument("--out", required=True)
+    a = ap.parse_args()
+
+    percorso = Path(a.file)
+    if not percorso.is_file():
+        return _uscita({"errore": "file_assente"}, 1)
+    if a.comando == "meta":
+        return comando_meta(percorso)
+    return comando_png(percorso, a.frame, a.ww, a.wl,
+                       ANTEPRIMA_LATO if a.anteprima else a.lato, Path(a.out))
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except BrokenPipeError:
+        sys.exit(0)
+    except Exception as e:  # noqa: BLE001 — mai un traceback verso la piattaforma
+        sys.exit(_uscita({"errore": "imprevisto", "tipo": type(e).__name__}, 1))

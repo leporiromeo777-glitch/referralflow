@@ -23,6 +23,7 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 - [[Piattaforma/Invii e consulti]] — le domande che entrano dagli invianti e i pazienti che escono
 - [[Piattaforma/Automazioni]] — cron, SMS, watchdog, report
 - [[Piattaforma/Robot agenda MediOnline]]
+- [[Piattaforma/Immagini]] — esami per immagini dentro la cartella: DICOM, visore, abbinamento severo al paziente
 - [[Piattaforma/Funzioni fatte]] — tutto ciò che esiste già, in ordine inverso
 - [[Piattaforma/Revisione del 18.9.2026]] — le quattro forme di guasto uscite dalla passata di revisione, e che cosa resta da fare
 - [[Piattaforma/Documenti legali]] — che cosa c'è in docs/legale e a che punto è

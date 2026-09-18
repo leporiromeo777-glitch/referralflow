@@ -3104,7 +3104,7 @@ PAGES.administration = () => {
         <div class="field"><label>Prestazioni offerte</label><input class="input" id="rf-st-spec" value="${rfEsc(st.specialita || '')}" ${admin ? '' : 'disabled'}></div>
       </div>
       <div class="section-title mt-16">Voci del menu che questo studio non usa</div>
-      <div class="row wrap mt-8" style="gap:8px">${['prestazioni', 'invianti', 'percorsi', 'moduli', 'documents', 'dittafono', 'anonymize', 'inbox', 'ai', 'fatturazione', 'statistics', 'communications', 'visits'].map(k => `<label class="chip" style="cursor:pointer"><input type="checkbox" class="rf-mn" value="${k}" ${(RF.data.moduli_nascosti || []).includes(k) ? 'checked' : ''} ${admin ? '' : 'disabled'} style="margin:0 6px 0 0"> nascondi ${rfEsc((NAV_META[k] || [k])[0])}</label>`).join('')}</div>
+      <div class="row wrap mt-8" style="gap:8px">${['prestazioni', 'invianti', 'percorsi', 'moduli', 'documents', 'imaging', 'dittafono', 'anonymize', 'inbox', 'ai', 'fatturazione', 'statistics', 'communications', 'visits'].map(k => `<label class="chip" style="cursor:pointer"><input type="checkbox" class="rf-mn" value="${k}" ${(RF.data.moduli_nascosti || []).includes(k) ? 'checked' : ''} ${admin ? '' : 'disabled'} style="margin:0 6px 0 0"> nascondi ${rfEsc((NAV_META[k] || [k])[0])}</label>`).join('')}</div>
       <div class="caption mt-8">Le voci nascoste spariscono dalla barra e dal menu del telefono per tutti i ruoli; Home e Studio restano sempre.</div>
       ${admin ? `<div class="row mt-16"><button class="btn primary" onclick="rfStudioAzione({ azione: 'studio_aggiorna', nome: rfStudioCampo('#rf-st-nome'), telefono: rfStudioCampo('#rf-st-tel'), notify_email: rfStudioCampo('#rf-st-email'), specialita: rfStudioCampo('#rf-st-spec'), indirizzo: rfStudioCampo('#rf-st-indirizzo') }).then(() => rfStudioAzione({ azione: 'moduli_nascosti', voci: [...document.querySelectorAll('.rf-mn:checked')].map(e => e.value) }))">Salva</button></div>` : ''}</div>`;
   } else if (scheda === 'personale') {
@@ -5865,3 +5865,262 @@ function rfQualitaCorrezioni(c) {
 /* Il contenuto dentro quelle barre non deve stirarle in verticale. */
 @media (max-width: 640px) { .tabs { margin-bottom: 14px; } }
 `; document.head.appendChild(st); })();
+
+/* =====================================================================
+   Immagini diagnostiche (18.9.2026) — [[Piattaforma/Immagini]]
+   =====================================================================
+   Gli esami per immagini erano l'unica parte della cartella che la
+   piattaforma non sapeva tenere: arrivavano su CD e su chiavette, e per
+   guardarli bisognava andare al PC dove era installato il visualizzatore.
+   Qui diventano una voce del menu come le altre — stesso studio, stesso
+   paziente, stessi ruoli, e un registro di chi ha aperto cosa.
+
+   Il DICOM lo apre il server (imaging/leggi-dicom.py) e manda al browser un
+   PNG già finestrato: niente libreria da megabyte, funziona sul telefono, e
+   il file originale non esce mai da qui. */
+if (typeof NAV_META !== 'undefined') NAV_META.imaging = ['Immagini', 'imaging'];
+if (typeof NAV !== 'undefined') for (const r of ['secretary', 'assistant', 'doctor', 'org_admin']) {
+  const n = NAV[r]; if (n && !n.includes('imaging')) n.splice(n.indexOf('documents') + 1, 0, 'imaging');
+}
+(function () { const st = document.createElement('style'); st.textContent = `
+.rf-img-corpo { display:grid; grid-template-columns: 148px 1fr; gap:16px; align-items:start; }
+@media (max-width: 900px) { .rf-img-corpo { grid-template-columns: 1fr; } }
+.rf-img-serie { display:flex; flex-direction:column; gap:8px; max-height:70vh; overflow:auto; padding-right:4px; }
+@media (max-width: 900px) { .rf-img-serie { flex-direction:row; max-height:none; overflow-x:auto; } }
+.rf-img-s { border:1px solid var(--border); border-radius:10px; padding:6px; background:var(--surface); cursor:pointer; text-align:left; min-width:132px; }
+.rf-img-s.active { border-color:var(--cta); box-shadow:0 0 0 1px var(--cta) inset; }
+.rf-img-s img { width:100%; aspect-ratio:1; object-fit:cover; border-radius:6px; background:#000; display:block; }
+.rf-img-s .n { font-size:11px; color:var(--muted); margin-top:4px; line-height:1.3; }
+.rf-img-vista { background:#000; border-radius:12px; display:flex; align-items:center; justify-content:center; min-height:44vh; overflow:hidden; position:relative; }
+.rf-img-vista img { max-width:100%; max-height:70vh; display:block; image-rendering:auto; }
+.rf-img-vista .vuoto { color:#888; font-size:13px; padding:40px; text-align:center; }
+.rf-img-hud { position:absolute; left:10px; top:8px; color:#bbb; font-size:11px; font-variant-numeric:tabular-nums; pointer-events:none; text-shadow:0 1px 2px #000; }
+.rf-img-hud.destra { left:auto; right:10px; text-align:right; }
+.rf-img-barra { display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap; }
+.rf-img-barra input[type=range] { flex:1; min-width:160px; }
+.rf-img-drop { border:1.5px dashed var(--border); border-radius:12px; padding:18px; text-align:center; color:var(--muted); font-size:13px; }
+.rf-img-drop.sopra { border-color:var(--cta); color:var(--cta); }
+`; document.head.appendChild(st); })();
+
+RF.img = { lista: null, conta: {}, errore: null, lettore: true, aperto: null, dati: null, serie: 0, idx: 0, frame: 0, ww: null, wl: null, carico: false, filtro: '' };
+
+async function rfImgCarica(rendi = true) {
+  try {
+    const r = await fetch('/api/prototipo/imaging', { credentials: 'include', cache: 'no-store' });
+    if (!r.ok) { RF.img.errore = r.status === 403 ? 'Le immagini le vede chi cura: il tuo ruolo non ci accede.' : `Non riesco a leggere gli esami (${r.status}).`; if (rendi) render(); return; }
+    const j = await r.json();
+    RF.img.lista = j.esami || []; RF.img.conta = j.conta || {}; RF.img.lettore = j.lettore !== false; RF.img.errore = null;
+  } catch { RF.img.errore = 'Piattaforma non raggiungibile.'; }
+  if (rendi) render();
+}
+
+async function rfImgApri(id) {
+  RF.img.aperto = id; RF.img.dati = null; RF.img.serie = 0; RF.img.idx = 0; RF.img.frame = 0; RF.img.ww = null; RF.img.wl = null;
+  render();
+  try {
+    const r = await fetch(`/api/prototipo/imaging/${id}`, { credentials: 'include', cache: 'no-store' });
+    if (!r.ok) { RF.img.errore = `Esame non leggibile (${r.status}).`; render(); return; }
+    RF.img.dati = await r.json();
+  } catch { RF.img.errore = 'Piattaforma non raggiungibile.'; }
+  render();
+}
+function rfImgChiudi() { RF.img.aperto = null; RF.img.dati = null; render(); void rfImgCarica(); }
+
+function rfImgSerieCorrente() {
+  const d = RF.img.dati; if (!d) return null;
+  return d.serie[Math.min(RF.img.serie, d.serie.length - 1)] || null;
+}
+function rfImgVisibili(s) { return (s && s.immagini ? s.immagini.filter(i => i.immagine) : []); }
+function rfImgCorrente() {
+  const v = rfImgVisibili(rfImgSerieCorrente());
+  return v[Math.min(RF.img.idx, v.length - 1)] || null;
+}
+function rfImgUrl(i, lato, frame) {
+  if (!i) return '';
+  const q = [`lato=${lato}`, `frame=${frame || 0}`];
+  if (RF.img.ww !== null && RF.img.wl !== null) q.push(`ww=${RF.img.ww}`, `wl=${RF.img.wl}`);
+  return `/api/prototipo/imaging/immagine/${i.id}?${q.join('&')}`;
+}
+function rfImgVaiSerie(n) { RF.img.serie = n; RF.img.idx = 0; RF.img.frame = 0; render(); }
+function rfImgScorri(d) {
+  const v = rfImgVisibili(rfImgSerieCorrente()); if (!v.length) return;
+  const i = rfImgCorrente();
+  if (i && i.frame > 1) { RF.img.frame = Math.max(0, Math.min(i.frame - 1, RF.img.frame + d)); render(); return; }
+  RF.img.idx = Math.max(0, Math.min(v.length - 1, RF.img.idx + d)); RF.img.frame = 0; render();
+}
+function rfImgVai(n) { RF.img.idx = Number(n) || 0; RF.img.frame = 0; render(); }
+function rfImgFrame(n) { RF.img.frame = Number(n) || 0; render(); }
+function rfImgFinestra(ww, wl) { RF.img.ww = ww; RF.img.wl = wl; render(); }
+
+async function rfImgAzione(corpo, messaggio) {
+  try {
+    const r = await fetch('/api/prototipo/imaging', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(j.errore || 'Non riuscito'); return false; }
+    if (messaggio) toast(messaggio);
+    return true;
+  } catch { toast('Piattaforma non raggiungibile'); return false; }
+}
+
+function rfImgAbbina(id) {
+  const paz = (RF.data && RF.data.patients ? RF.data.patients : []).filter(p => rfUuid(p.id));
+  const righe = paz.slice(0, 400).map(p => `<option value="${p.id}">${rfEsc(fullName(p))}${p.dob ? ` · ${rfEsc(p.dob)}` : ''}</option>`).join('');
+  openModal('A chi è questo esame', `<div class="field"><label>Paziente della cartella</label><select class="input" id="rf-img-paz"><option value="">— scegli —</option>${righe}</select></div>
+    <p class="caption mt-8">La piattaforma abbina da sola solo quando nome <b>e</b> data di nascita del file combaciano con una persona sola. Un omonimo non si indovina: lo decide chi guarda.</p>`,
+    `<button class="btn" data-close>Annulla</button><button class="btn primary" id="rf-img-ok">Abbina</button>`);
+  document.getElementById('rf-img-ok').onclick = async () => {
+    const pid = document.getElementById('rf-img-paz').value;
+    if (!pid) { toast('Scegli un paziente'); return; }
+    if (await rfImgAzione({ azione: 'abbina', id, patient_id: pid }, 'Esame abbinato')) {
+      closeModal(); if (RF.img.aperto === id) await rfImgApri(id); else await rfImgCarica();
+    }
+  };
+}
+
+async function rfImgImporta(files) {
+  if (!files || !files.length) return;
+  RF.img.carico = true; render();
+  const fd = new FormData();
+  let n = 0;
+  for (const f of files) { if (n >= 300) break; fd.append('file', f); n++; }
+  try {
+    const r = await fetch('/api/prototipo/imaging', { method: 'POST', credentials: 'include', body: fd });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) toast(j.errore || 'Importazione non riuscita');
+    else toast(`${j.immagini} immagini in ${j.esami} ${j.esami === 1 ? 'esame' : 'esami'}${j.scartati ? ` · ${j.scartati} file non DICOM` : ''}`);
+  } catch { toast('Piattaforma non raggiungibile'); }
+  RF.img.carico = false;
+  await rfImgCarica();
+}
+
+function rfImgDrop(e, sopra) { e.preventDefault(); const z = document.getElementById('rf-img-drop'); if (z) z.classList.toggle('sopra', sopra); }
+function rfImgDropFile(e) {
+  e.preventDefault(); rfImgDrop(e, false);
+  const dt = e.dataTransfer; if (!dt) return;
+  void rfImgImporta([...dt.files]);
+}
+
+const RF_IMG_STATO = { da_verificare: ['warning', 'da verificare'], disponibile: ['success', 'in cartella'], nascosto: ['', 'nascosto'] };
+
+PAGES.imaging = () => {
+  if (!RF.live) return '<div class="page"><div class="card"><p class="meta" style="margin:0">Le immagini sono una funzione della piattaforma: qui, fuori, non ci sono dati.</p></div></div>';
+  if (RF.img.lista === null && !RF.img.errore) { void rfImgCarica(); return `<div class="page-head"><div><h2 class="page-title">Immagini</h2></div></div><div class="card"><div class="caption">Carico…</div></div>`; }
+  if (RF.img.aperto) return rfImgDettaglio();
+
+  const l = RF.img.lista || [];
+  const f = RF.img.filtro;
+  const mostrati = f === 'verifica' ? l.filter(e => e.stato === 'da_verificare') : f === 'senza' ? l.filter(e => !e.patient_id) : l;
+  const riga = (e) => {
+    const st = RF_IMG_STATO[e.stato] || ['', e.stato];
+    return `<div class="list-item" style="cursor:pointer" onclick="rfImgApri('${e.id}')">
+      <div class="grow"><div class="name">${rfEsc(e.descrizione || 'Esame')} <span class="badge">${rfEsc(e.modalita || '—')}</span> ${st[1] ? `<span class="badge ${st[0]}">${st[1]}</span>` : ''}</div>
+        <div class="sub">${rfEsc(rfImgData(e.data_esame))}${e.ora_esame ? ` ${rfEsc(e.ora_esame.slice(0, 2))}:${rfEsc(e.ora_esame.slice(2, 4))}` : ''} · ${e.n_serie} ${e.n_serie === 1 ? 'serie' : 'serie'} · ${e.n_immagini} immagini · ${rfImgPeso(e.byte)}${e.istituto ? ` · ${rfEsc(e.istituto)}` : ''}</div></div>
+      <div style="text-align:right"><div class="name">${e.paziente ? rfEsc(e.paziente) : `<span class="meta">${rfEsc(e.paziente_dicom || 'senza nome')}</span>`}</div>
+        <div class="sub">${e.patient_id ? 'in cartella' : 'non abbinato'}</div></div></div>`;
+  };
+  const c = RF.img.conta || {};
+  return `
+    <div class="page-head"><div><h2 class="page-title">Immagini</h2><div class="page-sub">${l.length} esami${c.da_verificare ? ` · ${c.da_verificare} da verificare` : ''}${c.senza_paziente ? ` · ${c.senza_paziente} senza paziente` : ''}</div></div>
+      <div class="actions"><div class="seg"><button class="${!f ? 'active' : ''}" onclick="RF.img.filtro='';render()">Tutti</button><button class="${f === 'verifica' ? 'active' : ''}" onclick="RF.img.filtro='verifica';render()">Da verificare</button><button class="${f === 'senza' ? 'active' : ''}" onclick="RF.img.filtro='senza';render()">Senza paziente</button></div></div></div>
+    ${RF.img.errore ? `<div class="rf-manc mb-16">${rfEsc(RF.img.errore)}</div>` : ''}
+    ${RF.img.lettore ? '' : '<div class="rf-manc mb-16">Il lettore DICOM non è installato su questo server: gli esami si vedono, ma non si importano e non si disegnano.</div>'}
+    <div class="card"><div class="card-head"><span class="section-title">Esami</span><span class="caption">dal più recente</span></div>
+      <div class="list">${mostrati.length ? mostrati.map(riga).join('') : '<div class="caption">Nessun esame.</div>'}</div></div>
+    <div class="card mt-16"><div class="section-title">Portare dentro un esame</div>
+      <div id="rf-img-drop" class="rf-img-drop mt-8" ondragover="rfImgDrop(event, true)" ondragleave="rfImgDrop(event, false)" ondrop="rfImgDropFile(event)">
+        ${RF.img.carico ? 'Leggo i file…' : 'Trascina qui i file di un CD (anche tutta la cartella), oppure scegli'}<br>
+        <div class="row mt-8" style="gap:8px;justify-content:center">
+          <label class="btn sm">File… <input type="file" multiple style="display:none" onchange="rfImgImporta(this.files)"></label>
+          <label class="btn sm">Cartella… <input type="file" webkitdirectory multiple style="display:none" onchange="rfImgImporta(this.files)"></label>
+        </div>
+      </div>
+      <p class="meta" style="margin:10px 0 0;line-height:1.55">I file restano su questo Mac e non escono mai: il browser riceve un'immagine già pronta, non il DICOM. L'esame si aggancia da solo al paziente quando <b>nome e data di nascita</b> del file combaciano con una persona sola della cartella; se no resta «da verificare», e lo abbina qualcuno.</p></div>`;
+};
+
+function rfImgData(iso) {
+  if (!iso) return 'data ignota';
+  const p = String(iso).slice(0, 10).split('-');
+  return p.length === 3 ? `${p[2]}.${p[1]}.${p[0]}` : iso;
+}
+function rfImgPeso(b) {
+  const n = Number(b) || 0;
+  if (n > 1024 * 1024 * 1024) return `${(n / 1024 / 1024 / 1024).toFixed(1).replace('.', ',')} GB`;
+  if (n > 1024 * 1024) return `${Math.round(n / 1024 / 1024)} MB`;
+  return `${Math.max(1, Math.round(n / 1024))} kB`;
+}
+
+function rfImgDettaglio() {
+  const d = RF.img.dati;
+  if (!d) return `<div class="page-head"><div><h2 class="page-title">Immagini</h2></div><div class="actions"><button class="btn" onclick="rfImgChiudi()">Indietro</button></div></div><div class="card"><div class="caption">Apro l'esame…</div></div>`;
+  const e = d.esame;
+  const s = rfImgSerieCorrente();
+  const visibili = rfImgVisibili(s);
+  const i = rfImgCorrente();
+  const nonImmagini = (s && s.immagini ? s.immagini.length - visibili.length : 0);
+  const finestre = d.finestre || [];
+  const anteprima = (ser) => {
+    const prima = (ser.immagini || []).find(x => x.immagine);
+    return prima ? `<img src="/api/prototipo/imaging/immagine/${prima.id}?anteprima=1" alt="" loading="lazy">` : `<div style="aspect-ratio:1;border-radius:6px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px">nessuna<br>immagine</div>`;
+  };
+  return `
+    <div class="page-head"><div><h2 class="page-title">${rfEsc(e.descrizione || 'Esame')}</h2>
+      <div class="page-sub">${rfEsc(rfImgData(e.data_esame))} · ${rfEsc(e.modalita || '—')} · ${e.n_serie} serie · ${e.n_immagini} immagini${e.istituto ? ` · ${rfEsc(e.istituto)}` : ''}</div></div>
+      <div class="actions">
+        ${e.patient_id ? `<button class="btn" data-go="#/patients/${e.patient_id}">Cartella di ${rfEsc(e.paziente || '')}</button>` : `<button class="btn primary" onclick="rfImgAbbina('${e.id}')">Abbina a un paziente</button>`}
+        <button class="btn" onclick="rfImgChiudi()">Indietro</button></div></div>
+
+    ${e.patient_id ? '' : `<div class="rf-manc mb-16"><b>Non abbinato a nessuno.</b> Nel file c'è scritto «${rfEsc(e.paziente_dicom || 'niente')}»${e.paziente_nascita ? `, nato/a ${rfEsc(rfImgData(e.paziente_nascita))}` : ''}: non basta per riconoscerlo senza indovinare.</div>`}
+
+    <div class="rf-img-corpo">
+      <div class="rf-img-serie">
+        ${(d.serie || []).map((x, n) => `<button class="rf-img-s ${n === RF.img.serie ? 'active' : ''}" onclick="rfImgVaiSerie(${n})">
+          ${anteprima(x)}<div class="n"><b>${x.numero || n + 1}</b> · ${rfEsc(x.modalita || '')}<br>${rfEsc((x.descrizione || '').slice(0, 30) || '—')}<br>${x.n_immagini} img</div></button>`).join('')}
+      </div>
+      <div>
+        <div class="rf-img-vista" onwheel="event.preventDefault(); rfImgScorri(event.deltaY > 0 ? 1 : -1)">
+          ${i ? `<img src="${rfImgUrl(i, 1024, RF.img.frame)}" alt="Immagine ${RF.img.idx + 1}">
+            <div class="rf-img-hud">${rfEsc(s.descrizione || s.modalita || '')}<br>${i.colonne || '?'}×${i.righe || '?'}</div>
+            <div class="rf-img-hud destra">${RF.img.idx + 1} / ${visibili.length}${i.frame > 1 ? `<br>fotogramma ${RF.img.frame + 1} / ${i.frame}` : ''}${RF.img.ww !== null ? `<br>W ${RF.img.ww} / L ${RF.img.wl}` : ''}</div>`
+            : `<div class="vuoto">Questa serie non contiene immagini da disegnare${nonImmagini ? ` (${nonImmagini} ${nonImmagini === 1 ? 'oggetto' : 'oggetti'} DICOM non grafici: referti strutturati, PDF o modelli)` : ''}.</div>`}
+        </div>
+        ${i ? `<div class="rf-img-barra">
+          <button class="btn sm" onclick="rfImgScorri(-1)">‹</button>
+          <input type="range" min="0" max="${Math.max(0, visibili.length - 1)}" value="${RF.img.idx}" oninput="rfImgVai(this.value)" aria-label="Immagine della serie">
+          <button class="btn sm" onclick="rfImgScorri(1)">›</button>
+        </div>
+        ${i.frame > 1 ? `<div class="rf-img-barra"><span class="caption">fotogrammi</span><input type="range" min="0" max="${i.frame - 1}" value="${RF.img.frame}" oninput="rfImgFrame(this.value)" aria-label="Fotogramma"></div>` : ''}
+        ${finestre.length ? `<div class="row wrap mt-8" style="gap:6px"><span class="caption" style="align-self:center">finestra</span>
+          <button class="btn sm ${RF.img.ww === null ? 'primary' : ''}" onclick="rfImgFinestra(null, null)">Del file</button>
+          ${finestre.map(f => `<button class="btn sm ${RF.img.ww === f.ww && RF.img.wl === f.wl ? 'primary' : ''}" onclick="rfImgFinestra(${f.ww}, ${f.wl})">${rfEsc(f.nome)}</button>`).join('')}</div>` : ''}` : ''}
+      </div>
+    </div>
+
+    <div class="card mt-16"><div class="card-head"><span class="section-title">Chi ha aperto questo esame</span><span class="caption">ultimi 20</span></div>
+      <div class="list">${(d.accessi || []).map(a => `<div class="list-item"><div class="grow"><div class="name">${rfEsc(a.chi || 'qualcuno')}</div><div class="sub">${rfEsc(a.azione)}</div></div><div class="caption">${rfEsc(rfModQuando(a.quando))}</div></div>`).join('') || '<div class="caption">Nessun accesso registrato.</div>'}</div></div>`;
+}
+
+/* Gli esami per immagini nella scheda del paziente: stanno con gli altri
+   documenti, perché è lì che chi cura li cerca — non in una pagina a parte. */
+RF.imgPaz = {};
+async function rfImgDelPaziente(pid) {
+  if (RF.imgPaz[pid] !== undefined) return;
+  RF.imgPaz[pid] = null;
+  try {
+    const r = await fetch(`/api/prototipo/imaging?paziente=${encodeURIComponent(pid)}`, { credentials: 'include', cache: 'no-store' });
+    RF.imgPaz[pid] = r.ok ? ((await r.json()).esami || []) : [];
+  } catch { RF.imgPaz[pid] = []; }
+  render();
+}
+const rfPatientDocsImg = typeof patientDocs === 'function' ? patientDocs : null;
+if (rfPatientDocsImg) patientDocs = function (p) {
+  const base = rfPatientDocsImg(p);
+  if (!RF.live || !rfUuid(p.id)) return base;
+  const mie = RF.imgPaz[p.id];
+  if (mie === undefined) { void rfImgDelPaziente(p.id); return base; }
+  if (mie === null) return base + '<div class="card mt-16"><div class="section-title">Immagini</div><div class="caption mt-8">Carico…</div></div>';
+  return base + `<div class="card mt-16"><div class="card-head"><span class="section-title">Immagini</span><span class="badge count">${mie.length}</span></div>
+    <div class="list">${mie.length ? mie.map(e => `<div class="list-item" style="cursor:pointer" onclick="go('#/imaging');rfImgApri('${e.id}')">
+      <div class="grow"><div class="name">${rfEsc(e.descrizione || 'Esame')} <span class="badge">${rfEsc(e.modalita || '—')}</span></div>
+        <div class="sub">${rfEsc(rfImgData(e.data_esame))} · ${e.n_immagini} immagini${e.istituto ? ` · ${rfEsc(e.istituto)}` : ''}</div></div>
+      <button class="btn sm ghost">Apri</button></div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessun esame per immagini in cartella.</div>'}</div></div>`;
+};

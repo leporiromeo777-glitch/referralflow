@@ -109,3 +109,12 @@ Una riga per decisione, con la data e il perché. Non si rilitigano senza un dat
 - Conservare l'audio per un LoRA futuro; togliere il denoise se arriva un oro verificato dal medico.
 - Livello 2 del server (dominio, HTTPS) dopo la parte legale.
 - Verificatore su Qwen: sul terzo referto vero 6 frasi «non supportate» su 5 (testo corto): da controllare con «Quale tappa aiuta davvero» se sono falsi allarmi.
+
+## 18.9.2026 — Le immagini entrano nella piattaforma, non accanto
+Esisteva `imaging-server`: un programma a sé (FastAPI, SQLite, Orthanc, visore React) scritto per Windows. La scelta era fra tenerlo accanto — un secondo programma, un secondo accesso, un secondo posto dove cercare — o farne una funzione di ReferralFlow.
+
+**Deciso: una funzione.** Dal progetto a sé si è ripreso il *modello dei dati* (che è il modello del DICOM) e il *lettore dei pixel* (pydicom, la parte difficile e provata); elenco, permessi, abbinamento al paziente e registro degli accessi sono della piattaforma. Il browser riceve un PNG già finestrato, non il DICOM: niente libreria da megabyte, funziona sul telefono, l'anagrafica dentro il file non esce dal Mac.
+
+Conseguenza accettata: **niente MPR né 3D** per ora, e la ricezione diretta dagli apparecchi (C-STORE) resta da fare. Si guadagna che un esame per immagini sta nella cartella del paziente come un referto, e che «chi l'ha visto?» ha una risposta. Dettaglio in [[Piattaforma/Immagini]].
+
+**Abbinamento severo**: un esame si aggancia da solo solo se nome *e* data di nascita combaciano con una persona sola. Un omonimo non si indovina — attaccare le immagini alla cartella sbagliata è il danno peggiore che questa pagina possa fare.
