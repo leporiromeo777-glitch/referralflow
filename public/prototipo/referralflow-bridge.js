@@ -2753,7 +2753,12 @@ renderMobileNav = function () {
   nav.classList.toggle('rf-ai', !!state.aiOpen);
   // Pillola: cinque voci fisse, l'AI e «Altro» (14.9.2026), che apre un
   // foglio con TUTTE le altre pagine del ruolo, a sezioni come la barra laterale.
-  const voci = [['home', 'Oggi', 'home'], ['agenda', 'Agenda', 'agenda'], ['patients', 'Pazienti', 'patients'], ['reports', 'Referti', 'reports'], ['dittafono', 'Dittafono', 'mic'], ['ai', 'Cleo', 'ai'], ['altro', 'Altro', 'moreV']];
+  // Le voci nascoste dallo studio (Studio → moduli nascosti) sparivano dalla
+  // barra laterale ma non da qui: sul telefono la pillola le mostrava lo
+  // stesso. «Oggi», «Altro» e Cleo restano sempre.
+  const nascosti = new Set(Array.isArray(RF.data.moduli_nascosti) ? RF.data.moduli_nascosti : []);
+  const voci = [['home', 'Oggi', 'home'], ['agenda', 'Agenda', 'agenda'], ['patients', 'Pazienti', 'patients'], ['reports', 'Referti', 'reports'], ['dittafono', 'Dittafono', 'mic'], ['ai', 'Cleo', 'ai'], ['altro', 'Altro', 'moreV']]
+    .filter(([k]) => k === 'home' || k === 'altro' || !nascosti.has(k));
   const fisse = new Set(voci.map(v => v[0]));
   const altre = (NAV[state.role] || []).filter(k => !fisse.has(k));
   const attiva = (k) => k === 'ai' ? (state.route === 'ai' || state.aiOpen) : k === 'altro' ? altre.includes(state.route) : (state.route === k || (k === 'patients' && ['patient', 'visit'].includes(state.route)) || (k === 'reports' && ['report', 'review'].includes(state.route)));
