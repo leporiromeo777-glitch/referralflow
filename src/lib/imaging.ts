@@ -100,3 +100,50 @@ export async function fotogrammaPng(
 export function lettoreDisponibile(): Promise<boolean> {
   return fs.access(PY).then(() => true).catch(() => false);
 }
+
+// Lo stato della ricezione dagli apparecchi, per la pagina.
+//
+// La configurazione la scrive lo studio in ~/referti-imaging/ricezione.conf e
+// la legge il servizio Python: qui si rilegge per DIRLA a chi installa
+// l'ecografo — AE Title, porta, indirizzo del Mac, apparecchi ammessi. Il
+// token non esce mai da qui.
+export type StatoRicezione = {
+  attiva: boolean; ae_title: string; porta: number; apparecchi: string[];
+  in_coda: number; indirizzi: string[];
+};
+
+export async function statoRicezione(): Promise<StatoRicezione> {
+  const base = process.env.REFERTI_IMAGING_BASE ?? path.join(os.homedir(), 'referti-imaging');
+  const valori: Record<string, string> = {};
+  try {
+    const testo = await fs.readFile(path.join(base, 'ricezione.conf'), 'utf-8');
+    for (const riga of testo.split('\n')) {
+      const pulita = riga.trim();
+      if (!pulita || pulita.startsWith('#') || !pulita.includes('=')) continue;
+      const [k, ...resto] = pulita.split('=');
+      valori[k.trim().toUpperCase()] = resto.join('=').trim();
+    }
+  } catch { /* non ancora installata */ }
+
+  let inCoda = 0;
+  try {
+    inCoda = (await fs.readdir(path.join(base, 'ingresso'))).filter((n) => n.endsWith('.dcm')).length;
+  } catch { /* nessuno spool */ }
+
+  const reti = os.networkInterfaces();
+  const indirizzi: string[] = [];
+  for (const schede of Object.values(reti)) {
+    for (const s of schede ?? []) {
+      if (s.family === 'IPv4' && !s.internal) indirizzi.push(s.address);
+    }
+  }
+
+  return {
+    attiva: Object.keys(valori).length > 0,
+    ae_title: valori.AE_TITLE || 'REFERRALFLOW',
+    porta: Number(valori.PORTA || 11112),
+    apparecchi: (valori.CONSENTITI || '').split(/[,;]/).map((x) => x.trim()).filter(Boolean),
+    in_coda: inCoda,
+    indirizzi,
+  };
+}

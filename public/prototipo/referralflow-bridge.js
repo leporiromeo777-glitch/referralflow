@@ -5754,7 +5754,8 @@ async function rfImgCarica(rendi = true) {
     const r = await fetch('/api/prototipo/imaging', { credentials: 'include', cache: 'no-store' });
     if (!r.ok) { RF.img.errore = r.status === 403 ? 'Le immagini le vede chi cura: il tuo ruolo non ci accede.' : `Non riesco a leggere gli esami (${r.status}).`; if (rendi) render(); return; }
     const j = await r.json();
-    RF.img.lista = j.esami || []; RF.img.conta = j.conta || {}; RF.img.lettore = j.lettore !== false; RF.img.errore = null;
+    RF.img.lista = j.esami || []; RF.img.conta = j.conta || {}; RF.img.lettore = j.lettore !== false;
+    RF.img.ricezione = j.ricezione || null; RF.img.errore = null;
   } catch { RF.img.errore = 'Piattaforma non raggiungibile.'; }
   if (rendi) render();
 }
@@ -5859,7 +5860,7 @@ PAGES.imaging = () => {
     const st = RF_IMG_STATO[e.stato] || ['', e.stato];
     return `<div class="list-item" style="cursor:pointer" onclick="rfImgApri('${e.id}')">
       <div class="grow"><div class="name">${rfEsc(e.descrizione || 'Esame')} <span class="badge">${rfEsc(e.modalita || '—')}</span> ${st[1] ? `<span class="badge ${st[0]}">${st[1]}</span>` : ''}</div>
-        <div class="sub">${rfEsc(rfImgData(e.data_esame))}${e.ora_esame ? ` ${rfEsc(e.ora_esame.slice(0, 2))}:${rfEsc(e.ora_esame.slice(2, 4))}` : ''} · ${e.n_serie} ${e.n_serie === 1 ? 'serie' : 'serie'} · ${e.n_immagini} immagini · ${rfImgPeso(e.byte)}${e.istituto ? ` · ${rfEsc(e.istituto)}` : ''}</div></div>
+        <div class="sub">${e.origine === 'rete' ? '<span class="badge">dall’apparecchio</span> ' : ''}${rfEsc(rfImgData(e.data_esame))}${e.ora_esame ? ` ${rfEsc(e.ora_esame.slice(0, 2))}:${rfEsc(e.ora_esame.slice(2, 4))}` : ''} · ${e.n_serie} ${e.n_serie === 1 ? 'serie' : 'serie'} · ${e.n_immagini} immagini · ${rfImgPeso(e.byte)}${e.istituto ? ` · ${rfEsc(e.istituto)}` : ''}</div></div>
       <div style="text-align:right"><div class="name">${e.paziente ? rfEsc(e.paziente) : `<span class="meta">${rfEsc(e.paziente_dicom || 'senza nome')}</span>`}</div>
         <div class="sub">${e.patient_id ? 'in cartella' : 'non abbinato'}</div></div></div>`;
   };
@@ -5871,7 +5872,8 @@ PAGES.imaging = () => {
     ${RF.img.lettore ? '' : '<div class="rf-manc mb-16">Il lettore DICOM non è installato su questo server: gli esami si vedono, ma non si importano e non si disegnano.</div>'}
     <div class="card"><div class="card-head"><span class="section-title">Esami</span><span class="caption">dal più recente</span></div>
       <div class="list">${mostrati.length ? mostrati.map(riga).join('') : '<div class="caption">Nessun esame.</div>'}</div></div>
-    <div class="card mt-16"><div class="section-title">Portare dentro un esame</div>
+    ${rfImgRicezione()}
+    <div class="card mt-16"><div class="section-title">Portare dentro un esame a mano</div>
       <div id="rf-img-drop" class="rf-img-drop mt-8" ondragover="rfImgDrop(event, true)" ondragleave="rfImgDrop(event, false)" ondrop="rfImgDropFile(event)">
         ${RF.img.carico ? 'Leggo i file…' : 'Trascina qui i file di un CD (anche tutta la cartella), oppure scegli'}<br>
         <div class="row mt-8" style="gap:8px;justify-content:center">
@@ -5881,6 +5883,27 @@ PAGES.imaging = () => {
       </div>
       <p class="meta" style="margin:10px 0 0;line-height:1.55">I file restano su questo Mac e non escono mai: il browser riceve un'immagine già pronta, non il DICOM. L'esame si aggancia da solo al paziente quando <b>nome e data di nascita</b> del file combaciano con una persona sola della cartella; se no resta «da verificare», e lo abbina qualcuno.</p></div>`;
 };
+
+// «Dagli apparecchi»: quello che serve al tecnico che installa l'ecografo, e
+// nient'altro. Il DICOM è uno standard pubblico dal 1993: l'apparecchio manda
+// a chi risponde, e da oggi risponde la piattaforma.
+function rfImgRicezione() {
+  const r = RF.img.ricezione;
+  if (!r || !r.attiva) {
+    return `<div class="card mt-16"><div class="section-title">Dagli apparecchi (ecografo, RM, TAC)</div>
+      <p class="meta" style="margin:8px 0 0;line-height:1.55">La ricezione diretta non è ancora accesa su questo server. Si accende una volta sola, da Terminale:
+      <br><code>bash mac/installa-ricezione-dicom.sh</code><br>Da lì in poi gli apparecchi mandano gli esami qui dentro da soli, senza CD e senza chiavette.</p></div>`;
+  }
+  const dove = (r.indirizzi || []).length ? r.indirizzi.join(' oppure ') : 'l’indirizzo di questo Mac';
+  return `<div class="card mt-16"><div class="card-head"><span class="section-title">Dagli apparecchi (ecografo, RM, TAC)</span>
+      ${r.in_coda ? `<span class="badge warning">${r.in_coda} in arrivo</span>` : '<span class="badge success">in ascolto</span>'}</div>
+    <p class="meta" style="margin:8px 0 10px;line-height:1.55">Sull'apparecchio si registra una destinazione DICOM con questi tre dati, e gli esami arrivano in cartella da soli.</p>
+    <div class="kv"><b>AE Title di destinazione</b><span class="num">${rfEsc(r.ae_title)}</span><b>Indirizzo</b><span class="num">${rfEsc(dove)}</span><b>Porta</b><span class="num">${r.porta}</span></div>
+    <p class="meta" style="margin:10px 0 0;line-height:1.55">${r.apparecchi.length
+      ? `Apparecchi ammessi: <b>${r.apparecchi.map(rfEsc).join(', ')}</b>. Chi non è in elenco viene rifiutato e annotato.`
+      : '<b>Nessun apparecchio ammesso</b>: finché l’elenco è vuoto non si accetta niente da nessuno. Gli AE Title si aggiungono in <code>~/referti-imaging/ricezione.conf</code>.'}
+      Il tasto «prova connessione» dell'apparecchio (C-ECHO) deve dare esito positivo prima di mandare il primo esame.</p></div>`;
+}
 
 function rfImgData(iso) {
   if (!iso) return 'data ignota';

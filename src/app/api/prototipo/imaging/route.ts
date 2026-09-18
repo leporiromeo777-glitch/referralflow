@@ -1,11 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { query, transazione } from '@/lib/db';
+import { query } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
-import { putFileAtKey } from '@/lib/storage';
-import { leggiMeta, lettoreDisponibile } from '@/lib/imaging';
-import { abbinaPaziente, raggruppa, type MetaMinima } from '@/lib/imaging-ordina';
-import { randomUUID } from 'node:crypto';
+import { lettoreDisponibile, statoRicezione } from '@/lib/imaging';
+import { ingestaDicom } from '@/lib/imaging-ingest';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -34,11 +32,11 @@ export async function GET(req: NextRequest) {
 
   const esami = await query<{
     id: string; data_esame: string | null; ora_esame: string | null; descrizione: string | null; modalita: string;
-    stato: string; n_serie: number; n_immagini: number; byte: string; paziente_dicom: string | null;
+    stato: string; origine: string; n_serie: number; n_immagini: number; byte: string; paziente_dicom: string | null;
     paziente_nascita: string | null; patient_id: string | null; paziente: string | null; istituto: string | null;
     inviante: string | null; accession: string | null; created_at: string;
   }>(
-    `select e.id, e.data_esame::text, e.ora_esame, e.descrizione, e.modalita, e.stato, e.n_serie, e.n_immagini,
+    `select e.id, e.data_esame::text, e.ora_esame, e.descrizione, e.modalita, e.stato, e.origine, e.n_serie, e.n_immagini,
             e.byte::text, e.paziente_dicom, e.paziente_nascita::text, e.patient_id,
             case when p.id is null then null else (p.cognome || ' ' || p.nome) end as paziente,
             e.istituto, e.inviante, e.accession, e.created_at::text
@@ -53,7 +51,9 @@ export async function GET(req: NextRequest) {
             count(*) filter (where patient_id is null)::int as senza_paziente
        from imaging_esami where studio_id = $1 and stato <> 'nascosto'`, [sid]);
 
-  return NextResponse.json({ esami, conta, lettore: await lettoreDisponibile() }, { headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json(
+    { esami, conta, lettore: await lettoreDisponibile(), ricezione: await statoRicezione() },
+    { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function POST(req: NextRequest) {
@@ -106,85 +106,19 @@ export async function POST(req: NextRequest) {
   if (!files.length) return NextResponse.json({ errore: 'Nessun file.' }, { status: 400 });
   if (files.length > MAX_FILE) return NextResponse.json({ errore: `Troppi file in una volta (massimo ${MAX_FILE}).` }, { status: 413 });
 
-  // Si leggono tutti prima di scrivere qualcosa: un CD contiene anche
-  // DICOMDIR, indici e file di servizio, e quelli non sono esami.
-  const lette: { indice: number; meta: MetaMinima }[] = [];
-  const buffer: Buffer[] = [];
-  let scartati = 0; let byteTotali = 0;
+  // Leggere, raggruppare e scrivere lo fa `ingestaDicom`: la stessa strada
+  // dei file che arrivano dall'ecografo con un C-STORE.
+  const file: Buffer[] = [];
+  let byteTotali = 0;
   for (const f of files) {
     const b = Buffer.from(await f.arrayBuffer());
     byteTotali += b.length;
     if (byteTotali > MAX_BYTE) return NextResponse.json({ errore: 'Pacchetto troppo grande (massimo 400 MB per volta).' }, { status: 413 });
-    const meta = await leggiMeta(b);
-    if ('errore' in meta) { scartati++; continue; }
-    lette.push({ indice: buffer.length, meta: meta as unknown as MetaMinima });
-    buffer.push(b);
+    file.push(b);
   }
-  if (!lette.length) return NextResponse.json({ errore: 'Nessun file DICOM riconosciuto.', scartati }, { status: 400 });
+  const r = await ingestaDicom(sid, file, { origine: 'import', userId: session.id });
+  if (!r.esami.length) return NextResponse.json({ errore: 'Nessun file DICOM riconosciuto.', scartati: r.scartati }, { status: 400 });
 
-  const pazienti = await query<{ id: string; cognome: string; nome: string; data_nascita: string | null }>(
-    `select id, cognome, nome, data_nascita::text from patients where studio_id = $1`, [sid]);
-
-  const esami = raggruppa(lette);
-  let nuoviEsami = 0; let nuoveImmagini = 0; const ids: string[] = [];
-
-  for (const e of esami) {
-    const abbinato = abbinaPaziente(e.paziente_nome, e.paziente_nascita, pazienti);
-    // I file su disco PRIMA del database: una riga senza il suo file è un
-    // esame che non si apre; un file senza riga è solo spazio occupato, e la
-    // reimportazione lo ritrova.
-    const chiavi = new Map<string, string>();
-    for (const s of e.serie) {
-      for (const i of s.immagini) {
-        const key = `imaging/${sid}/${e.study_uid.replace(/[^0-9.]/g, '').slice(0, 64) || randomUUID()}/${randomUUID()}.dcm`;
-        await putFileAtKey(key, buffer[i.indice], 'application/dicom');
-        chiavi.set(i.sop_uid, key);
-      }
-    }
-
-    const fatto = await transazione(async (q) => {
-      const [esame] = await q<{ id: string; nuovo: boolean }>(
-        `insert into imaging_esami (studio_id, patient_id, study_uid, accession, data_esame, ora_esame, descrizione,
-                                    modalita, istituto, inviante, paziente_dicom, paziente_nascita, paziente_id_dicom,
-                                    stato, origine, caricato_da)
-         values ($1,$2,$3,nullif($4,''),nullif($5,'')::date,nullif($6,''),nullif($7,''),$8,nullif($9,''),nullif($10,''),
-                 nullif($11,''),nullif($12,'')::date,nullif($13,''),$14,'import',$15)
-         on conflict (studio_id, study_uid) do update set updated_at = now()
-         returning id, (xmax = 0) as nuovo`,
-        [sid, abbinato.id, e.study_uid, e.accession, e.data_esame, e.ora_esame, e.descrizione, e.modalita,
-         e.istituto, e.inviante, e.paziente_nome, e.paziente_nascita, e.paziente_id,
-         abbinato.id ? 'disponibile' : 'da_verificare', session.id]);
-      if (esame.nuovo) nuoviEsami++;
-      for (const s of e.serie) {
-        const [serie] = await q<{ id: string }>(
-          `insert into imaging_serie (esame_id, serie_uid, modalita, descrizione, numero, parte_corpo)
-           values ($1,$2,nullif($3,''),nullif($4,''),$5,nullif($6,''))
-           on conflict (esame_id, serie_uid) do update set descrizione = coalesce(nullif(excluded.descrizione,''), imaging_serie.descrizione)
-           returning id`, [esame.id, s.serie_uid, s.modalita, s.descrizione, s.numero || null, s.parte_corpo]);
-        for (const i of s.immagini) {
-          const [img] = await q<{ id: string }>(
-            `insert into imaging_immagini (serie_id, sop_uid, numero, frame, righe, colonne, ww, wl, immagine, sop_class, storage_key, byte)
-             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,nullif($10,''),$11,$12)
-             on conflict (serie_id, sop_uid) do nothing returning id`,
-            [serie.id, i.sop_uid, i.numero || null, i.frame, i.righe || null, i.colonne || null, i.ww, i.wl,
-             i.immagine, i.sop_class, chiavi.get(i.sop_uid)!, buffer[i.indice].length]);
-          if (img) nuoveImmagini++;
-        }
-        await q(`update imaging_serie set n_immagini = (select count(*) from imaging_immagini where serie_id = $1) where id = $1`, [serie.id]);
-      }
-      await q(
-        `update imaging_esami set
-           n_serie = (select count(*) from imaging_serie where esame_id = $1),
-           n_immagini = (select coalesce(sum(n_immagini), 0) from imaging_serie where esame_id = $1),
-           byte = (select coalesce(sum(i.byte), 0) from imaging_immagini i join imaging_serie s on s.id = i.serie_id where s.esame_id = $1),
-           updated_at = now()
-         where id = $1`, [esame.id]);
-      return esame.id;
-    });
-    ids.push(fatto);
-    await registra(sid, fatto, session.id, 'importato');
-  }
-
-  console.log(`[imaging] import esami=${esami.length} nuovi=${nuoviEsami} immagini=${nuoveImmagini} scartati=${scartati}`);
-  return NextResponse.json({ ok: true, esami: ids.length, nuovi: nuoviEsami, immagini: nuoveImmagini, scartati });
+  console.log(`[imaging] import esami=${r.esami.length} nuovi=${r.nuovi} immagini=${r.immagini} scartati=${r.scartati}`);
+  return NextResponse.json({ ok: true, esami: r.esami.length, nuovi: r.nuovi, immagini: r.immagini, scartati: r.scartati });
 }

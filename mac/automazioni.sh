@@ -34,6 +34,9 @@ chiama() {
 }
 
 chiama cron/agenda
+# Le immagini arrivate dagli apparecchi: il servizio di ricezione chiama da sé
+# appena finisce di ricevere, ma un avviso può perdersi e un esame no.
+chiama cron/imaging
 
 # Una sola volta l'ora / al giorno / al mese: passa di qui ogni quarto d'ora,
 # quindi il giro col minuto sotto i 15 è quello «in punto».

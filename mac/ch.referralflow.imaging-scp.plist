@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>ch.referralflow.imaging-scp</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOME__/.referralflow-imaging/bin/python</string>
+    <string>__QUI__/imaging/ricevi-dicom.py</string>
+  </array>
+  <key>WorkingDirectory</key><string>__QUI__</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/ReferralFlow/imaging-scp.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/ReferralFlow/imaging-scp.log</string>
+</dict>
+</plist>
