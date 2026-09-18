@@ -1286,3 +1286,81 @@ create index if not exists richiami_telefonate_origine_idx on richiami_telefonat
 -- sapeva distinguere chi fosse.
 alter type user_role add value if not exists 'assistente';
 alter type user_role add value if not exists 'tecnico';
+
+-- ── 18.9.2026: quattro migrazioni che non erano mai state appese qui ──────
+-- schema.sql è l'installatore di un database nuovo. Le migrazioni 025, 028,
+-- 029 e 030 erano state scritte in db/migrations/ e applicate al database
+-- dello studio, ma non copiate qui: un'installazione nuova nasceva senza
+-- referti_eventi (e quindi ogni conferma di referto esplodeva), senza
+-- referti_confronti e senza riassunto_ai. Il database della demo, che da
+-- questo file è nato, era privo esattamente di quei quattro oggetti.
+
+-- da db/migrations/025_ai_locale.sql
+-- Funzioni dell'AI locale (Ollama sul Mac dello studio, come per i referti):
+-- riassunto pre-visita sulla referral e controllo nel tempo sul paziente.
+-- Solo testi generati e rivisti in loco: nessun dato esce dallo studio.
+
+alter table referrals add column if not exists riassunto_ai text;
+alter table referrals add column if not exists riassunto_ai_at timestamptz;
+
+alter table patients add column if not exists controllo_ai text;
+alter table patients add column if not exists controllo_ai_at timestamptz;
+
+-- da db/migrations/028_confronti_referti.sql
+-- Confronto cieco tra due versioni della catena sullo stesso dettato
+-- (2026-09-06, analisi dei concorrenti: Abridge non manda in produzione una
+-- versione senza test A/B cieco). La pipeline in modalità «ombra»
+-- (REFERTI_OMBRA=1) consegna una seconda bozza con file_id suffisso «-ombra»;
+-- la pagina /referti/confronto mostra le due bozze affiancate senza dire
+-- quale sia la nuova, e registra la preferenza del medico.
+create table if not exists referti_confronti (
+  id uuid primary key default gen_random_uuid(),
+  studio_id uuid not null references studios(id) on delete cascade,
+  bozza_a uuid not null references referti_bozze(id) on delete cascade,
+  bozza_b uuid not null references referti_bozze(id) on delete cascade,
+  scelta text check (scelta in ('a', 'b', 'pari')),
+  motivo text,
+  deciso_da uuid references users(id),
+  deciso_at timestamptz,
+  created_at timestamptz not null default now(),
+  unique (bozza_a, bozza_b)
+);
+create index if not exists referti_confronti_studio on referti_confronti (studio_id, created_at desc);
+
+-- da db/migrations/029_suggerimenti_tipo.sql
+-- Tre memorie del medico (2026-09-06): i suggerimenti imparati dalle
+-- conferme portano il tipo — «parola» (memoria fonetica/terminologica:
+-- una parola storpiata → forma giusta) oppure «stile» (formulazione
+-- preferita, applicata a fine catena, mai su numeri/negazioni/lateralità).
+alter table referti_suggerimenti add column if not exists tipo text not null default 'parola'
+  check (tipo in ('parola', 'stile'));
+
+-- da db/migrations/030_referti_eventi.sql
+-- Registro degli eventi sui referti (2026-09-06, Ricerca 17 §17.7): append-only,
+-- senza testo clinico — solo azione, attore, momento, versione e dettagli
+-- numerici o impronte (hash). Le referral hanno già referral_status_history;
+-- i referti dettati non avevano nulla di equivalente.
+create table if not exists referti_eventi (
+  id bigserial primary key,
+  studio_id uuid not null references studios(id) on delete cascade,
+  bozza_id uuid,                       -- non FK: l'evento sopravvive alla cancellazione della bozza
+  azione text not null,
+  attore uuid references users(id),
+  dettagli jsonb not null default '{}'::jsonb,
+  versione text,
+  created_at timestamptz not null default now()
+);
+create index if not exists referti_eventi_bozza on referti_eventi (bozza_id, created_at);
+create index if not exists referti_eventi_studio on referti_eventi (studio_id, created_at desc);
+
+-- da db/migrations/064_suggerimenti_unico_per_tipo.sql
+-- 18.9.2026 — la stessa coppia «da → a» può essere una parola o uno stile.
+--
+-- La chiave unica era (studio_id, da, a) e la 029 ha aggiunto `tipo` senza
+-- estenderla: chi arrivava secondo non cambiava il tipo, si limitava ad
+-- alzare il conteggio del primo. Così una riformulazione di stile poteva
+-- restare marchiata «parola» e tornare alla catena come sostituzione da
+-- dizionario, cioè applicata nel punto sbagliato.
+alter table referti_suggerimenti drop constraint if exists referti_suggerimenti_studio_id_da_a_key;
+create unique index if not exists referti_suggerimenti_studio_da_a_tipo
+  on referti_suggerimenti (studio_id, da, a, tipo);

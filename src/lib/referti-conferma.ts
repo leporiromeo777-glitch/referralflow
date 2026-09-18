@@ -113,7 +113,7 @@ export async function confermaBozzaCore(a: {
           await query(
             `insert into referti_suggerimenti (studio_id, da, a, tipo)
              values ($1, $2, $3, 'stile')
-             on conflict (studio_id, da, a) do update
+             on conflict (studio_id, da, a, tipo) do update
                set conteggio = referti_suggerimenti.conteggio + 1, updated_at = now(), ignorato = false`,
             [a.studioId, np.slice(0, 200), nd.slice(0, 200)]
           );
@@ -129,8 +129,8 @@ export async function confermaBozzaCore(a: {
       const sost = estraiSostituzioni(row.ai_text, testo).slice(0, MAX_SUGGERIMENTI);
       for (const s of sost) {
         await query(
-          `insert into referti_suggerimenti (studio_id, da, a) values ($1, $2, $3)
-           on conflict (studio_id, da, a) do update set conteggio = referti_suggerimenti.conteggio + 1, updated_at = now(), ignorato = false`,
+          `insert into referti_suggerimenti (studio_id, da, a, tipo) values ($1, $2, $3, 'parola')
+           on conflict (studio_id, da, a, tipo) do update set conteggio = referti_suggerimenti.conteggio + 1, updated_at = now(), ignorato = false`,
           [a.studioId, s.da, s.a]
         );
       }

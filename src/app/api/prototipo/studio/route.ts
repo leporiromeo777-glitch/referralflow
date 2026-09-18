@@ -8,6 +8,12 @@ import { syncFeed, riabbinaCodici } from '@/lib/agenda-sync';
 
 export const dynamic = 'force-dynamic';
 
+// Chi tiene un'agenda non è per forza un medico: l'ecografista e la dietista
+// sono «collaboratori», e le loro prestazioni si fatturano sotto chi le
+// supervisiona, non sotto il loro nome (migrazione 048). Il campo esisteva ma
+// non era scrivibile: ogni persona creata dall'app restava «medico» per sempre.
+const ruoloProvider = (v: unknown) => (String(v ?? '') === 'collaboratore' ? 'collaboratore' : 'medico');
+
 // Pagina «Studio» dell'interfaccia nuova (14.9.2026): dati dello studio,
 // personale (utenti con ruolo e accesso), medici dell'agenda (providers),
 // sale e apparecchi (studio_risorse). Tutti leggono; solo l'amministratore
@@ -24,8 +30,8 @@ async function leggi(studioId: string) {
     `select nome, telefono, notify_email, specialita, indirizzo, moduli_nascosti from studios where id = $1`, [studioId]);
   const personale = await query<{ id: string; email: string; role: string; attivo: boolean; totp: boolean; created_at: string }>(
     `select id, email, role::text, attivo, totp_enabled_at is not null as totp, created_at::text from users where studio_id = $1 order by attivo desc, role, email`, [studioId]);
-  const medici = await query<{ id: string; nome: string; aliases: string[]; attivo: boolean; user_id: string | null; gln: string | null; rcc: string | null; colore: string | null }>(
-    `select id, nome, aliases, attivo, user_id, gln, rcc, colore from providers where studio_id = $1 order by attivo desc, nome`, [studioId]);
+  const medici = await query<{ id: string; nome: string; aliases: string[]; attivo: boolean; user_id: string | null; gln: string | null; rcc: string | null; colore: string | null; ruolo: string; professione: string | null }>(
+    `select id, nome, aliases, attivo, user_id, gln, rcc, colore, ruolo, professione from providers where studio_id = $1 order by attivo desc, nome`, [studioId]);
   const personaleSenzaAccesso = await query<{ id: string; nome: string; ruolo: string; percentuale: number | null; colore: string | null; attivo: boolean }>(
     `select id, nome, ruolo, percentuale, colore, attivo from studio_personale where studio_id = $1 order by attivo desc, nome`, [studioId]);
   const risorse = await query<{ id: string; tipo: string; nome: string; descrizione: string | null; attivo: boolean; posti: number }>(
@@ -37,7 +43,7 @@ async function leggi(studioId: string) {
     `select coalesce(nullif(trim(luogo), ''), '(vuoto)') as codice, count(*)::int as n, max(starts_at)::date::text as ultimo
        from appointments where studio_id = $1 and provider_id is null and starts_at >= current_date - 60
       group by 1 order by 2 desc limit 30`, [studioId]);
-  const catalogo = await query<{ id: string; nome: string; tipo: string; durata_min: number; sala: string | null; parole_chiave: string[]; attivo: boolean; codice_tariffa: string | null }>(
+  const catalogo = await query<{ id: string; nome: string; tipo: string; durata_min: number; sala: string | null; parole_chiave: string[]; attivo: boolean; codice_tariffa: string | null; colore: string | null }>(
     `select id, nome, tipo, durata_min, sala, parole_chiave, attivo, codice_tariffa, colore from prestazioni_catalogo where studio_id = $1 order by attivo desc, tipo, nome`, [studioId]);
   const nomiRisorse = new Set(risorse.map((r) => r.nome.toLowerCase()));
   return { studio, personale, personale_senza_accesso: personaleSenzaAccesso, medici, catalogo, sale: risorse.filter((r) => r.tipo === 'sala'), apparecchi: risorse.filter((r) => r.tipo === 'apparecchio'), codici_agenda: codici.map((c) => ({ ...c, risorsa: nomiRisorse.has(c.codice.toLowerCase()) })) };
@@ -193,7 +199,7 @@ export async function POST(req: NextRequest) {
     } else if (azione === 'medico_crea') {
       const nome = s(c.nome, 120); if (!nome) return NextResponse.json({ errore: 'Il nome è obbligatorio.' }, { status: 400 });
       const aliases = Array.isArray(c.aliases) ? c.aliases.map((x: unknown) => s(x, 80)).filter(Boolean).slice(0, 10) : String(c.aliases ?? '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 10);
-      await query(`insert into providers (studio_id, nome, aliases) values ($1, $2, $3)`, [sid, nome, aliases]);
+      await query(`insert into providers (studio_id, nome, aliases, ruolo, professione) values ($1, $2, $3, $4, nullif($5, ''))`, [sid, nome, aliases, ruoloProvider(c.ruolo), s(c.professione, 80)]);
       // Un alias scritto a mano vale come un codice abbinato dall'elenco: gli
       // appuntamenti già importati con quel codice tornano nella sua colonna.
       const r = await riabbinaCodici(sid);
@@ -204,7 +210,7 @@ export async function POST(req: NextRequest) {
       const aliases = String(c.aliases ?? '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 10);
       const userId = isUuid(s(c.user_id)) ? s(c.user_id) : null;
       const colore = /^#[0-9a-f]{6}$/i.test(s(c.colore, 7)) ? s(c.colore, 7) : null;
-      await query(`update providers set nome = $3, aliases = $4, user_id = $5, gln = nullif($6, ''), rcc = nullif($7, ''), colore = $8 where id = $1 and studio_id = $2`, [id, sid, nome, aliases, userId, s(c.gln, 20).replace(/\D/g, ''), s(c.rcc, 20).toUpperCase(), colore]);
+      await query(`update providers set nome = $3, aliases = $4, user_id = $5, gln = nullif($6, ''), rcc = nullif($7, ''), colore = $8, ruolo = $9, professione = nullif($10, '') where id = $1 and studio_id = $2`, [id, sid, nome, aliases, userId, s(c.gln, 20).replace(/\D/g, ''), s(c.rcc, 20).toUpperCase(), colore, ruoloProvider(c.ruolo), s(c.professione, 80)]);
       const r = await riabbinaCodici(sid);
       if (r.abbinati) console.log(`[studio] medico_aggiorna → riabbinati ${r.abbinati} appuntamenti (${r.codici.join(', ')})`);
     } else if (azione === 'medico_attivo') {
@@ -216,8 +222,20 @@ export async function POST(req: NextRequest) {
       const parole = String(c.parole_chiave ?? '').split(/[,;]/).map((x) => x.trim().toLowerCase()).filter(Boolean).slice(0, 12);
       if (!nome) return NextResponse.json({ errore: 'Il nome è obbligatorio.' }, { status: 400 });
       const codice = s(c.codice_tariffa, 60);
-      if (azione === 'prestazione_crea') await query(`insert into prestazioni_catalogo (studio_id, nome, tipo, durata_min, sala, parole_chiave, codice_tariffa) values ($1, $2, $3, $4, nullif($5, ''), $6, nullif($7, ''))`, [sid, nome, tipo, durata, s(c.sala, 80), parole, codice]);
-      else { const id = s(c.id); if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 }); await query(`update prestazioni_catalogo set nome = $3, tipo = $4, durata_min = $5, sala = nullif($6, ''), parole_chiave = $7, codice_tariffa = nullif($8, ''), updated_at = now() where id = $1 and studio_id = $2`, [id, sid, nome, tipo, durata, s(c.sala, 80), parole, codice]); }
+      // Il colore dell'agenda è il modo in cui una visita prende la sua
+      // prestazione (e quindi la sua durata): la colonna esisteva dalla 047,
+      // ma non era scrivibile da nessuna parte e chi non lo sapeva vedeva
+      // «Da fatturare» senza prestazione e l'orchestrazione senza durate.
+      const colore = /^#[0-9a-f]{6}$/i.test(s(c.colore, 7)) ? s(c.colore, 7).toLowerCase() : null;
+      try {
+        if (azione === 'prestazione_crea') await query(`insert into prestazioni_catalogo (studio_id, nome, tipo, durata_min, sala, parole_chiave, codice_tariffa, colore) values ($1, $2, $3, $4, nullif($5, ''), $6, nullif($7, ''), $8)`, [sid, nome, tipo, durata, s(c.sala, 80), parole, codice, colore]);
+        else { const id = s(c.id); if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 }); await query(`update prestazioni_catalogo set nome = $3, tipo = $4, durata_min = $5, sala = nullif($6, ''), parole_chiave = $7, codice_tariffa = nullif($8, ''), colore = $9, updated_at = now() where id = $1 and studio_id = $2`, [id, sid, nome, tipo, durata, s(c.sala, 80), parole, codice, colore]); }
+      } catch (e: any) {
+        // Un colore per prestazione: l'indice unico lo impone, e un 500 non
+        // direbbe quale delle due voci lo sta già usando.
+        if (e?.code === '23505') return NextResponse.json({ errore: 'Quel colore dell’agenda è già di un’altra prestazione.' }, { status: 409 });
+        throw e;
+      }
     } else if (azione === 'prestazione_attivo') {
       const id = s(c.id); if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 });
       await query('update prestazioni_catalogo set attivo = not attivo, updated_at = now() where id = $1 and studio_id = $2', [id, sid]);

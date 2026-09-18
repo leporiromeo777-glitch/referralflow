@@ -92,8 +92,12 @@ else
   # Database già esistente da un avvio precedente: applica le migrazioni
   # recenti (dalla 019 in poi sono tutte «if not exists», rieseguibili).
   echo "Aggiorno le tabelle del database…"
-  for m in db/migrations/019_*.sql db/migrations/02*.sql; do
-    [ -f "$m" ] && psql referralflow -q -f "$m" > /dev/null 2>&1 || true
+  # Il glob si fermava alla 029: dalla 030 in poi non veniva applicata
+  # nessuna migrazione, e il Mac partiva con l'app nuova su un database
+  # vecchio. Il gemello server-avvio.sh era già stato corretto, questo no.
+  # Gli errori ora si vedono: una migrazione fallita in silenzio è peggio.
+  for m in db/migrations/019_*.sql db/migrations/0[2-9]*.sql; do
+    [ -f "$m" ] && psql referralflow -q -f "$m" > /dev/null || true
   done
 fi
 

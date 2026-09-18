@@ -328,9 +328,15 @@ export async function registraEvento(studioId: string, ev: EventoIn) {
     if (nuovoStato === 'visita_finita' || (nuovoStato === 'dimesso' && st.fine_reale == null)) {
       set('fine_reale', g.adesso);
       const inizio = st.inizio_reale;
-      if (inizio != null && g.adesso > inizio && a.prestazione) {
+      // Una visita lasciata aperta fino a sera dà una durata assurda, che il
+      // vincolo della tabella rifiuta (minuti < 600): l'eccezione faceva
+      // saltare anche l'update dello stato qui sotto, e il paziente restava
+      // «in visita» per sempre, con ogni nuovo tentativo che rifalliva.
+      // Una durata così non va imparata comunque: si scrive lo stato e basta.
+      const durata = inizio != null ? g.adesso - inizio : 0;
+      if (inizio != null && durata > 0 && durata < 600 && a.prestazione) {
         await query(`insert into durate_osservate (studio_id, prestazione, medico, giorno, ora, minuti, appointment_id) values ($1,$2,$3,$4::date,$5,$6,$7)`,
-          [studioId, a.prestazione, a.medico, g.giorno, inizio, g.adesso - inizio, appId]);
+          [studioId, a.prestazione, a.medico, g.giorno, inizio, durata, appId]);
       }
     }
     if (nuovoStato === 'in_attesa' && st.stato === 'chiamato') set('sala', null);
