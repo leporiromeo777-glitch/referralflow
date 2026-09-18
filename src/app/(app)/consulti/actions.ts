@@ -2,10 +2,12 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { query } from '@/lib/db';
+import { query, transazione } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
 import { notifyConsultoRisposta } from '@/lib/notify';
+
+const URGENZE = new Set(['urgente', 'normale', 'programmabile']);
 
 // Risposta scritta dello specialista: chiude il consulto (stato 'risposto')
 // e avvisa l'inviante con email neutra — la risposta si legge solo dal portale.
@@ -53,7 +55,11 @@ export async function convertiConsulto(formData: FormData) {
 
   const dataNascita = String(formData.get('data_nascita') ?? '') || null;
   const telefono = String(formData.get('telefono') ?? '').trim() || null;
-  const urgenza = String(formData.get('urgenza') ?? 'normale');
+  // L'urgenza finisce in un enum di Postgres: un valore fuori elenco faceva
+  // esplodere l'insert della referral DOPO che il paziente era già stato
+  // creato, e lasciava in cartella un doppione senza referral.
+  const urg = String(formData.get('urgenza') ?? 'normale');
+  const urgenza = URGENZE.has(urg) ? urg : 'normale';
 
   const [consulto] = await query<{
     id: string; domanda: string; referring_doctor_id: string;
@@ -64,34 +70,38 @@ export async function convertiConsulto(formData: FormData) {
   );
   if (!consulto) redirect('/consulti');
 
-  const [patient] = await query<{ id: string }>(
-    `insert into patients (studio_id, cognome, nome, data_nascita, telefono)
-     values ($1,$2,$3,$4,$5) returning id`,
-    [session.studioId, cognome, nome, dataNascita, telefono]
-  );
-  const [ref] = await query<{ id: string }>(
-    `insert into referrals (studio_id, patient_id, referring_doctor_id, quesito, urgenza, status, canale)
-     values ($1,$2,$3,$4,$5::urgenza,'ricevuta'::referral_status,'consulto') returning id`,
-    [session.studioId, patient.id, consulto.referring_doctor_id, consulto.domanda, urgenza]
-  );
-  await query(
-    `insert into referral_status_history (referral_id, to_status, changed_by, nota)
-     values ($1,'ricevuta'::referral_status,$2,$3)`,
-    [ref.id, session.id, 'Creata da un consulto rapido']
-  );
-
-  // Gli allegati del consulto seguono la referral (stesso storage_key).
-  await query(
-    `insert into attachments (referral_id, filename, storage_key)
-     select $1, filename, storage_key from consulto_attachments where consulto_id = $2`,
-    [ref.id, id]
-  );
-
-  await query(
-    `update consulti set stato = 'convertito', converted_referral_id = $3
-      where id = $1 and studio_id = $2`,
-    [id, session.studioId, ref.id]
-  );
+  // Paziente, referral, storico, allegati e chiusura del consulto sono un
+  // gesto solo: se si rompe a metà restano un paziente orfano e un consulto
+  // ancora aperto, e chi riclicca «Serve una visita» crea il doppione.
+  const ref = await transazione(async (q) => {
+    const [patient] = await q<{ id: string }>(
+      `insert into patients (studio_id, cognome, nome, data_nascita, telefono)
+       values ($1,$2,$3,$4,$5) returning id`,
+      [session.studioId, cognome, nome, dataNascita, telefono]
+    );
+    const [referral] = await q<{ id: string }>(
+      `insert into referrals (studio_id, patient_id, referring_doctor_id, quesito, urgenza, status, canale)
+       values ($1,$2,$3,$4,$5::urgenza,'ricevuta'::referral_status,'consulto') returning id`,
+      [session.studioId, patient.id, consulto.referring_doctor_id, consulto.domanda, urgenza]
+    );
+    await q(
+      `insert into referral_status_history (referral_id, to_status, changed_by, nota)
+       values ($1,'ricevuta'::referral_status,$2,$3)`,
+      [referral.id, session.id, 'Creata da un consulto rapido']
+    );
+    // Gli allegati del consulto seguono la referral (stesso storage_key).
+    await q(
+      `insert into attachments (referral_id, filename, storage_key)
+       select $1, filename, storage_key from consulto_attachments where consulto_id = $2`,
+      [referral.id, id]
+    );
+    await q(
+      `update consulti set stato = 'convertito', converted_referral_id = $3
+        where id = $1 and studio_id = $2`,
+      [id, session.studioId, referral.id]
+    );
+    return referral;
+  });
 
   revalidatePath('/consulti');
   redirect(`/referral/${ref.id}`);

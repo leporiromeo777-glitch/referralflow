@@ -10,12 +10,19 @@ export const dynamic = 'force-dynamic';
 // testo ricomposto entra in `testo_finale` della bozza (working draft, come
 // «Inserisci nel referto» del wizard), con un evento; la CONFERMA resta nella
 // piattaforma, col suo gate.
+// Chi può riscrivere il testo di una bozza è chi lo può confermare: la
+// segretaria che lo rivede, il medico che lo firma, l'amministrazione. Dal
+// 16.9 esistono anche `assistente` e `tecnico` ([[Piattaforma/Accessi e
+// ruoli]]) e qui mancava il cancello che i due fratelli — conferma e
+// richiamo — hanno sempre avuto.
+const RUOLI_AMMESSI = new Set(['segretaria', 'medico', 'admin']);
 const MAX_TESTO = 200_000;
 const MAX_STATO = 300_000;
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  if (!RUOLI_AMMESSI.has(session.role)) return NextResponse.json({ errore: 'ruolo_non_ammesso' }, { status: 403 });
   if (!isUuid(params.id)) return NextResponse.json({ errore: 'non_trovato' }, { status: 404 });
   const corpo = await req.json().catch(() => null);
   const testo = String(corpo?.testo ?? '').slice(0, MAX_TESTO).trim();
@@ -29,7 +36,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const campi: Record<string, string> = {};
   if (corpo?.campi && typeof corpo.campi === 'object') for (const [k, v] of Object.entries(corpo.campi as Record<string, unknown>)) if (typeof v === 'string' && /^[a-z_]{1,40}$/.test(k)) campi[k] = v.trim().slice(0, 2000);
   if (Object.keys(campi).length) {
-    await query(`update referti_bozze set campi_confermati = coalesce(campi_confermati, '{}'::jsonb) || $3::jsonb where id = $1 and studio_id = $2 and stato = 'bozza'`, [params.id, session.studioId, JSON.stringify(campi)]);
+    // Se la bozza non è più una bozza (confermata o scartata da un collega
+    // mentre la si correggeva) l'update non tocca niente: dirlo, invece di
+    // rispondere «salvato» e lasciare il nome sbagliato sul referto.
+    const [agg] = await query<{ id: string }>(
+      `update referti_bozze set campi_confermati = coalesce(campi_confermati, '{}'::jsonb) || $3::jsonb where id = $1 and studio_id = $2 and stato = 'bozza' returning id`,
+      [params.id, session.studioId, JSON.stringify(campi)]);
+    if (!agg) return NextResponse.json({ errore: 'non_bozza' }, { status: 409 });
     if (!testo && !statoJson) return NextResponse.json({ ok: true, solo_campi: true });
   }
   if (!testo && !statoJson) return NextResponse.json({ errore: 'testo_vuoto' }, { status: 400 });

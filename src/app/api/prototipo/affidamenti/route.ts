@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { query } from '@/lib/db';
+import { query, transazione } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
 import { notifyConsultoRisposta } from '@/lib/notify';
 
@@ -108,17 +108,22 @@ export async function POST(req: NextRequest) {
       `select id, domanda, referring_doctor_id from consulti where id = $1 and studio_id = $2 and stato in ('aperto','risposto')`, [id, sid]);
     if (!consulto) return NextResponse.json({ errore: 'Consulto non trovato.' }, { status: 404 });
     const urgenza = ['urgente', 'normale', 'programmabile'].includes(String(c?.urgenza)) ? String(c.urgenza) : 'normale';
-    const [patient] = await query<{ id: string }>(
-      `insert into patients (studio_id, cognome, nome, data_nascita, telefono) values ($1,$2,$3,$4,$5) returning id`,
-      [sid, cognome, nome, testo(c?.data_nascita, 10) || null, testo(c?.telefono, 40) || null]);
-    const [ref] = await query<{ id: string }>(
-      `insert into referrals (studio_id, patient_id, referring_doctor_id, quesito, urgenza, status, canale)
-       values ($1,$2,$3,$4,$5::urgenza,'ricevuta'::referral_status,'consulto') returning id`,
-      [sid, patient.id, consulto.referring_doctor_id, consulto.domanda, urgenza]);
-    await query(`insert into referral_status_history (referral_id, to_status, changed_by, nota) values ($1,'ricevuta'::referral_status,$2,'Creata da un consulto rapido')`, [ref.id, session.id]);
-    await query(`insert into attachments (referral_id, filename, storage_key) select $1, filename, storage_key from consulto_attachments where consulto_id = $2`, [ref.id, id]);
-    await query(`update consulti set stato = 'convertito', converted_referral_id = $3 where id = $1 and studio_id = $2`, [id, sid, ref.id]);
-    return NextResponse.json({ ok: true, referral_id: ref.id, patient_id: patient.id });
+    // Cinque scritture, un gesto solo: a metà strada resterebbero un paziente
+    // orfano e un consulto ancora aperto, e il secondo clic farebbe il doppione.
+    const fatto = await transazione(async (q) => {
+      const [patient] = await q<{ id: string }>(
+        `insert into patients (studio_id, cognome, nome, data_nascita, telefono) values ($1,$2,$3,$4,$5) returning id`,
+        [sid, cognome, nome, testo(c?.data_nascita, 10) || null, testo(c?.telefono, 40) || null]);
+      const [ref] = await q<{ id: string }>(
+        `insert into referrals (studio_id, patient_id, referring_doctor_id, quesito, urgenza, status, canale)
+         values ($1,$2,$3,$4,$5::urgenza,'ricevuta'::referral_status,'consulto') returning id`,
+        [sid, patient.id, consulto.referring_doctor_id, consulto.domanda, urgenza]);
+      await q(`insert into referral_status_history (referral_id, to_status, changed_by, nota) values ($1,'ricevuta'::referral_status,$2,'Creata da un consulto rapido')`, [ref.id, session.id]);
+      await q(`insert into attachments (referral_id, filename, storage_key) select $1, filename, storage_key from consulto_attachments where consulto_id = $2`, [ref.id, id]);
+      await q(`update consulti set stato = 'convertito', converted_referral_id = $3 where id = $1 and studio_id = $2`, [id, sid, ref.id]);
+      return { referral_id: ref.id, patient_id: patient.id };
+    });
+    return NextResponse.json({ ok: true, ...fatto });
   }
 
   return NextResponse.json({ errore: 'azione_sconosciuta' }, { status: 400 });

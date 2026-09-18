@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createHash } from 'crypto';
 import { getSession } from '@/lib/auth';
-import { query } from '@/lib/db';
+import { query, transazione } from '@/lib/db';
 import { controlloFatturazione, csvPrestazioni, nomeFileCsv, periodoMese, riepilogoPrestazioni, type RigaFattura } from '@/lib/fatturazione';
 import { abbinaPrestazioneAgenda, type VoceCatalogo } from '@/lib/prestazioni';
 
@@ -63,9 +63,16 @@ async function righeDelMese(studioId: string, dal: string, al: string): Promise<
   });
 }
 
+// Chi tocca la fatturazione. Era scritto al contrario — «tutti tranne il
+// medico» — e i ruoli nati dopo (assistente, tecnico) ci passavano in mezzo:
+// il CSV porta AVS e numero d'assicurato di tutti i pazienti del mese.
+const RUOLI_VEDONO = new Set(['segretaria', 'admin', 'medico']);
+const RUOLI_ESPORTANO = new Set(['segretaria', 'admin']);
+
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  if (!RUOLI_VEDONO.has(session.role)) return NextResponse.json({ errore: 'ruolo_non_ammesso' }, { status: 403 });
   const per = periodoMese(req.nextUrl.searchParams.get('mese')) ?? periodoMese(new Date().toISOString().slice(0, 7))!;
   const righe = await righeDelMese(session.studioId, per.dal, per.al);
   const esportazioni = await query<{ dal: string; al: string; righe: number; da: string | null; at: string }>(
@@ -73,7 +80,7 @@ export async function GET(req: NextRequest) {
       where e.studio_id = $1 order by e.created_at desc limit 12`, [session.studioId]);
   const controllo = controlloFatturazione(righe);
   return NextResponse.json(
-    { periodo: per, righe, riepilogo: riepilogoPrestazioni(righe), controllo, esportazioni, puo_esportare: session.role !== 'medico' },
+    { periodo: per, righe, riepilogo: riepilogoPrestazioni(righe), controllo, esportazioni, puo_esportare: RUOLI_ESPORTANO.has(session.role) },
     { headers: { 'Cache-Control': 'no-store' } }
   );
 }
@@ -81,7 +88,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
-  if (session.role === 'medico') return NextResponse.json({ errore: 'L’esportazione la fa la segreteria o l’amministratore.' }, { status: 403 });
+  if (!RUOLI_ESPORTANO.has(session.role)) return NextResponse.json({ errore: 'L’esportazione la fa la segreteria o l’amministratore.' }, { status: 403 });
   const c = await req.json().catch(() => null);
   const per = periodoMese(String(c?.mese ?? ''));
   if (!per) return NextResponse.json({ errore: 'Mese non valido (AAAA-MM).' }, { status: 400 });
@@ -90,8 +97,14 @@ export async function POST(req: NextRequest) {
   if (!righe.length) return NextResponse.json({ errore: 'Nessuna prestazione da esportare in questo mese.' }, { status: 404 });
   const csv = csvPrestazioni(righe);
   const impronta = createHash('sha256').update(csv).digest('hex').slice(0, 16);
-  await query(`update appointments set fatturazione_esportato_at = now() where studio_id = $1 and id = any($2::uuid[]) and fatturazione_esportato_at is null`, [session.studioId, righe.map((r) => r.id)]);
-  await query(`insert into fatturazione_esportazioni (studio_id, dal, al, righe, user_id, impronta) values ($1, $2, $3, $4, $5, $6)`, [session.studioId, per.dal, per.al, righe.length, session.id, impronta]);
+  // Segnare le righe e registrare l'esportazione sono una cosa sola: se la
+  // seconda fallisse da sola, quelle prestazioni risulterebbero esportate da
+  // un'esportazione che non esiste e il mese dopo non ricomparirebbero
+  // nell'elenco — erogate e mai fatturate, senza traccia di chi.
+  await transazione(async (q) => {
+    await q(`update appointments set fatturazione_esportato_at = now() where studio_id = $1 and id = any($2::uuid[]) and fatturazione_esportato_at is null`, [session.studioId, righe.map((r) => r.id)]);
+    await q(`insert into fatturazione_esportazioni (studio_id, dal, al, righe, user_id, impronta) values ($1, $2, $3, $4, $5, $6)`, [session.studioId, per.dal, per.al, righe.length, session.id, impronta]);
+  });
   console.log(`[fatturazione] esportazione ${per.dal}..${per.al} righe=${righe.length} impronta=${impronta}`);
   return new Response(csv, { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${nomeFileCsv(per.dal, per.al)}"`, 'Cache-Control': 'no-store' } });
 }

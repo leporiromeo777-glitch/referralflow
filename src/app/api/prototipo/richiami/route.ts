@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { getSession } from '@/lib/auth';
-import { query } from '@/lib/db';
+import { query, transazione } from '@/lib/db';
+import { isUuid } from '@/lib/cartella';
 import { abbina, buchi, frase, giornoItaliano as giornoTesto, hm as oraTesto, perQuestoBuco, perQuestoPaziente, type Appunt, type Candidato } from '@/lib/agenda-buchi';
 import { medicoAbilitato, costruisciGrafo } from '@/lib/orchestrazione/grafo';
 
@@ -145,12 +146,23 @@ export async function POST(req: NextRequest) {
   if (azione === 'fatto' || azione === 'rimanda') {
     const rif = String(c?.id ?? '');
     const [tipo, id] = rif.includes(':') ? rif.split(':') : ['richiamo', rif];
-    if (!id) return NextResponse.json({ errore: 'id mancante' }, { status: 400 });
+    // Il prefisso dice se è un richiamo o un «da prenotare», non da quale
+    // tabella viene: le due si provano tutte e due. Ma l'id deve essere un
+    // uuid, se no Postgres risponde 22P02 e il pulsante «È fatto» muore con
+    // un 500 che non spiega niente.
+    if (!isUuid(id)) return NextResponse.json({ errore: 'id non valido' }, { status: 400 });
     const mesi = Math.min(24, Math.max(1, Number(c?.mesi ?? 1)));
-    for (const tab of ['referrals', 'appointments']) {
-      if (azione === 'fatto') await query(`update ${tab} set follow_up_done_at = now() where id = $1 and studio_id = $2`, [id, sid]);
-      else await query(`update ${tab} set follow_up_due = coalesce(follow_up_due, current_date) + ($3::int || ' months')::interval where id = $1 and studio_id = $2`, [id, sid, mesi]);
-    }
+    const tocchi = await transazione(async (q) => {
+      let n = 0;
+      for (const tab of ['referrals', 'appointments']) {
+        const righe = azione === 'fatto'
+          ? await q<{ id: string }>(`update ${tab} set follow_up_done_at = now() where id = $1 and studio_id = $2 returning id`, [id, sid])
+          : await q<{ id: string }>(`update ${tab} set follow_up_due = coalesce(follow_up_due, current_date) + ($3::int || ' months')::interval where id = $1 and studio_id = $2 returning id`, [id, sid, mesi]);
+        n += righe.length;
+      }
+      return n;
+    });
+    if (!tocchi) return NextResponse.json({ errore: 'Richiamo non trovato.' }, { status: 404 });
     return NextResponse.json({ ok: true, tipo });
   }
 
@@ -176,14 +188,26 @@ export async function POST(req: NextRequest) {
   if (azione === 'chiamato') {
     const rif = String(c?.id ?? '');
     const [origine, id] = rif.includes(':') ? rif.split(':') : ['richiamo', rif];
+    const rifId = isUuid(id) ? id : null;
     const esito = ['chiamato', 'fissato', 'non risponde', 'rifiutato'].includes(String(c?.esito)) ? String(c.esito) : 'chiamato';
+    // Il paziente della telefonata dev'essere di QUESTO studio: le chiavi
+    // esterne sono globali, e un id di un altro studio aggancerebbe un dato
+    // sanitario a una persona che qui non c'entra.
+    const pazId = String(c?.patient_id ?? '');
+    let patientId: string | null = null;
+    if (pazId) {
+      if (!isUuid(pazId)) return NextResponse.json({ errore: 'paziente non valido' }, { status: 400 });
+      const [paz] = await query<{ id: string }>(`select id from patients where id = $1 and studio_id = $2`, [pazId, sid]);
+      if (!paz) return NextResponse.json({ errore: 'paziente non trovato' }, { status: 404 });
+      patientId = paz.id;
+    }
     await query(
       `insert into richiami_telefonate (studio_id, patient_id, origine, origine_id, buco_giorno, buco_dalle, buco_medico, esito, nota, user_id)
        values ($1,$2,$3,$4,$5::date,$6,$7,$8,$9,$10)`,
-      [sid, c?.patient_id || null, origine, id || null, c?.giorno || null, c?.dalle ?? null, c?.medico || null, esito, String(c?.nota ?? '').slice(0, 500) || null, session.id]);
+      [sid, patientId, origine, rifId, c?.giorno || null, c?.dalle ?? null, c?.medico || null, esito, String(c?.nota ?? '').slice(0, 500) || null, session.id]);
     // Se l'appuntamento è stato fissato, il richiamo è chiuso.
-    if (esito === 'fissato' && id) {
-      for (const tab of ['referrals', 'appointments']) await query(`update ${tab} set follow_up_done_at = now() where id = $1 and studio_id = $2`, [id, sid]);
+    if (esito === 'fissato' && rifId) {
+      for (const tab of ['referrals', 'appointments']) await query(`update ${tab} set follow_up_done_at = now() where id = $1 and studio_id = $2`, [rifId, sid]);
     }
     return NextResponse.json({ ok: true });
   }
