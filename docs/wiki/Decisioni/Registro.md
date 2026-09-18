@@ -127,3 +127,12 @@ Tolta la pagina e tutto ciò che la teneva in piedi: la voce del menu, la rotta 
 **Perché anche il portale**: lasciare il modulo di invio senza una pagina dove rispondere sarebbe stata una trappola — le domande sarebbero arrivate e nessuno le avrebbe viste. Una funzione si toglie da tutte e due le parti o non si toglie.
 
 **Le tabelle restano** (`consulti`, `consulto_attachments`, `external_studios`, `studio_partners`): le migrazioni vanno solo in avanti e cancellare tabelle è irreversibile. Sono vuote e non le legge più nessuno. Resta anche `referrals.canale = 'consulto'`, che è storia di come una referral è nata.
+
+## 18.9.2026 — Il PACS non si compra: si risponde
+Il concorrente paga **35.000 CHF l'anno** per un visualizzatore Philips monoutente. Guardando che cosa si paga davvero: non il protocollo — DICOM è pubblico dal 1993 e chiunque può scrivere un SCP che riceve — ma la licenza del visualizzatore e del PACS che lo accompagna.
+
+**Deciso**: la piattaforma risponde da sé al C-STORE degli apparecchi (`imaging/ricevi-dicom.py`, pynetdicom, gratuito), e le immagini arrivano nella cartella del paziente senza passare da nessun prodotto di terzi. Niente Orthanc, niente licenze: lo spool è una cartella, l'archivio è il disco del Mac, l'indice è PostgreSQL.
+
+**Il rischio che ci si prende**: quello che si compra con una licenza non è solo il codice, è la **responsabilità** — conformità dichiarata, aggiornamenti, e qualcuno da chiamare. Il README di `imaging-server` lo dice già: sistema destinato alla diagnosi, non validato, dispositivo medico da qualificare. Finché quel percorso non è fatto, **le immagini si guardano, le decisioni cliniche si prendono sul referto**. Questo vale quanto il codice e va ripetuto a chi installa.
+
+Vedi [[Piattaforma/Immagini]].

@@ -32,9 +32,27 @@ Segreteria, medico, aiuto medico, amministrazione. **Il tecnico no**, come per l
 
 Ogni apertura di un esame finisce in `imaging_accessi` e si legge in fondo alla pagina dell'esame. Alla domanda «chi l'ha visto?» c'è una risposta.
 
+## Dagli apparecchi, senza PACS (18.9.2026)
+
+**Il punto non era vedere le immagini: era smettere di pagare per farsele mandare.** Un ecografo, una RM, una TAC non «esportano file»: parlano DICOM in rete e spediscono a chi risponde. Il pezzo che risponde si chiama **SCP**, è nello standard pubblico dal 1993 e non costa niente. Quello che il concorrente paga **35.000 franchi l'anno** è il visualizzatore con la sua licenza, non il protocollo — e il visualizzatore ce l'abbiamo.
+
+`imaging/ricevi-dicom.py` (pynetdicom) fa due cose sole:
+
+- **C-ECHO** — «ci sei?». È il tasto «prova connessione» che il tecnico preme sull'apparecchio: senza, l'installazione è alla cieca.
+- **C-STORE** — riceve l'immagine e la scrive nello spool. Risponde *Success* **solo dopo** `fsync` e `rename`: se rispondesse prima, l'apparecchio cancellerebbe la sua copia di una cosa che non abbiamo. I byte si scrivono **come arrivano**, senza decodificare e ricodificare — un file DICOM è anche un documento legale, e rigenerarlo significa cambiarlo.
+
+**Chi può mandare**: solo gli AE Title scritti in `~/referti-imaging/ricezione.conf`, e con `@indirizzo` solo da quell'indirizzo. **Elenco vuoto = nessuno**, che è il punto di partenza giusto. Chi non è in elenco riceve un rifiuto (`0x0124`) e finisce nel log — dove entrano AE Title, indirizzo e conteggi, mai niente del paziente.
+
+Finita la trasmissione il servizio chiama `POST /api/cron/imaging`, che svuota lo spool e mette gli esami in cartella; `mac/automazioni.sh` la richiama ogni quarto d'ora, perché **un avviso può perdersi e un esame no**. I file si cancellano solo dopo che l'esame è dentro; quelli illeggibili vanno in `scartati/`, non nel cestino: un file che l'apparecchio ci ha mandato è roba di un paziente.
+
+Si accende una volta sola con `bash mac/installa-ricezione-dicom.sh`, e la pagina Immagini mostra i tre dati da scrivere sull'apparecchio (AE Title, indirizzo del Mac, porta 11112).
+
+**Provato** il 18.9.2026 con un apparecchio simulato: C-ECHO da un AE in elenco → `0x0000`; da uno sconosciuto → `0x0124` rifiutato; sette immagini su sette accettate (RLE e deflated comprese), spool svuotato, due esami in cartella e il fotogramma disegnato. Poi cancellato tutto: era roba sintetica su un database vero.
+
+Quello che la ricezione **non** fa ancora: **MPPS** (l'apparecchio che dichiara inizio e fine dell'esame), **Storage Commitment** (la conferma formale che ce lo siamo tenuto, dopo la quale la modalità può cancellare), **TLS con certificato** — oggi la rete degli apparecchi si assume segmentata — e la **worklist** (DICOM MWL: l'apparecchio che chiede «chi ho in lista oggi?»). Sono in `imaging-server` e sono il passo dopo: la worklist in particolare toglierebbe la digitazione del nome sull'ecografo, che è dove nascono gli omonimi.
+
 ## Quello che ancora non c'è
 
-- **La ricezione dagli apparecchi** (DICOM C-STORE): oggi gli esami entrano trascinando i file o la cartella di un CD. Far arrivare le immagini da sole dall'ecografo è il passo successivo, e cambia il modo di lavorare più di tutto il resto.
 - **ZIP e DICOMDIR**: si trascinano i file, non l'archivio compresso. Gli ZIP vanno aperti prima — anche perché uno ZIP ostile è un modo noto di riempire un disco.
 - **MPR e 3D**: il visore mostra le immagini come sono. La ricostruzione su altri piani e il rendering volumetrico esistono in `imaging-server` e qui non sono stati portati.
 - **Misure e annotazioni** sull'immagine.
