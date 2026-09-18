@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { query } from '@/lib/db';
 import { preparaPianoSale } from '@/lib/piano-sale';
+import { chiaveCronValida } from '@/lib/cron-chiave';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,8 +11,7 @@ export const dynamic = 'force-dynamic';
 // `src/lib/piano-sale.ts`, perché lo chiede anche il pulsante nella pagina
 // Sale e dev'essere lo stesso lavoro.
 export async function GET(req: NextRequest) {
-  const secret = process.env.REMINDER_SECRET;
-  if (!secret || req.nextUrl.searchParams.get('key') !== secret) {
+  if (!chiaveCronValida(req)) {
     return new NextResponse('Not found', { status: 404 });
   }
   const forza = req.nextUrl.searchParams.get('forza') === '1';

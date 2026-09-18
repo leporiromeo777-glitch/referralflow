@@ -43,6 +43,7 @@ import errno
 import hashlib
 import json
 import logging
+import logging.handlers
 import os
 import re
 import shutil
@@ -412,7 +413,7 @@ WHISPER_TIMEOUT_S = 1800
 # VAD — rilevatore di voce (Silero, incorporato in whisper.cpp): dove c'è
 # silenzio whisper NON trascrive. È l'antidoto principale alle frasi
 # «inventate» nelle pause di riflessione del dettato. Si accende da solo
-# appena il modellino è presente (lo scarica aggiorna.sh); REFERTI_VAD=0 lo
+# appena il modellino è presente (lo copia distribuisci.sh); REFERTI_VAD=0 lo
 # spegne. Il padding largo (120 ms) evita di tagliare i bordi di parola.
 # Vale per ENTRAMBE le passate: così il confronto A/B resta coerente.
 PERCORSO_VAD = Path(
@@ -445,7 +446,7 @@ TRONC_GAP_FRAZ = float(os.environ.get("REFERTI_TRONC_FRAZ", "0.06"))
 # così whisper sbaglia meno proprio sulle parole difficili. È SEPARATO dai
 # prompt LLM di SPEC §6 (quelli non si toccano): qui condizioniamo solo la
 # trascrizione. Il file base sta nel repo; vocabolario-locali.txt è dello studio
-# (una parola per riga, aggiunto dal pannello) e aggiorna.sh non lo tocca.
+# (una parola per riga, aggiunto dal pannello) e distribuisci.sh non lo tocca.
 PERCORSO_VOCABOLARIO = Path(
     os.environ.get(
         "REFERTI_VOCABOLARIO",
@@ -960,7 +961,7 @@ PERCORSO_CORREZIONI = Path(
     )
 )
 # Voci aggiunte dallo studio dal pannello locale: vivono in un file a parte
-# che aggiorna.sh non tocca mai; a parità di chiave vincono sulle voci del
+# che distribuisci.sh non tocca mai; a parità di chiave vincono sulle voci del
 # repo. Il servizio le ricarica a ogni giro: niente riavvii.
 PERCORSO_CORREZIONI_LOCALI = Path(
     os.environ.get(
@@ -2597,17 +2598,24 @@ def rifinisci_tempi(originale: Path, wav_naturale: Path,
             json.dump(parole, f, ensure_ascii=False)
             dentro = Path(f.name)
         fuori = dentro.with_suffix(".out.json")
-        esito = subprocess.run(
-            [str(VOXTRAL_VENV_PY), str(script), str(wav_naturale),
-             str(dentro), str(fuori)],
-            capture_output=True, timeout=900)
-        if esito.returncode != 0 or not fuori.is_file():
-            log.warning("fase=tempi motore=aligner esito=saltato codice=%d file=%s",
-                        esito.returncode, file_id)
-            return parole
-        rifinite = json.loads(fuori.read_text(encoding="utf-8"))
-        dentro.unlink(missing_ok=True)
-        fuori.unlink(missing_ok=True)
+        # Dentro quei due file c'è il TESTO del referto parola per parola:
+        # vanno via sempre, non solo quando tutto è andato bene. Prima, se
+        # l'aligner falliva, restavano in $TMPDIR — fuori da ~/referti (0700),
+        # fuori dalla cancellazione a 7 giorni e fuori dal ciclo di vita
+        # dichiarato in docs/legale/ciclo-vita-dati.md.
+        try:
+            esito = subprocess.run(
+                [str(VOXTRAL_VENV_PY), str(script), str(wav_naturale),
+                 str(dentro), str(fuori)],
+                capture_output=True, timeout=900)
+            if esito.returncode != 0 or not fuori.is_file():
+                log.warning("fase=tempi motore=aligner esito=saltato codice=%d file=%s",
+                            esito.returncode, file_id)
+                return parole
+            rifinite = json.loads(fuori.read_text(encoding="utf-8"))
+        finally:
+            dentro.unlink(missing_ok=True)
+            fuori.unlink(missing_ok=True)
     except (subprocess.SubprocessError, OSError, json.JSONDecodeError):
         log.warning("fase=tempi motore=aligner esito=saltato motivo=eccezione file=%s",
                     file_id)
@@ -2656,7 +2664,10 @@ def controllo_cifre_parakeet(originale: Path, wav_naturale: Path,
             [str(OPENASR_BIN), "transcribe", str(wav_naturale),
              "--model", PARAKEET_MODELLO, "-f", "text", "--offline"],
             capture_output=True, text=True, timeout=900)
-    except subprocess.SubprocessError:
+    except (subprocess.SubprocessError, OSError):
+        # Il «terzo orecchio» è facoltativo: qualunque intoppo vale «nessun
+        # avviso». Senza OSError, un openasr presente ma non eseguibile
+        # mandava in errori/ un referto vero.
         return []
     if esito.returncode != 0 or not esito.stdout.strip():
         log.warning("fase=controllo_cifre file=%s esito=saltato codice=%d",
@@ -6995,14 +7006,8 @@ def pulizia_residui() -> None:
                     n += 1
             if n:
                 log.info("fase=ciclo_vita residui_cancellati=%d", n)
-        registro = Path.home() / "referti" / "log" / "servizio.log"
-        if registro.is_file() and registro.stat().st_size > 20 * 1024 * 1024:
-            for k in (2, 1):
-                v = registro.with_suffix(f".log.{k}")
-                if v.exists():
-                    v.replace(registro.with_suffix(f".log.{k + 1}"))
-            registro.replace(registro.with_suffix(".log.1"))
-            log.info("fase=ciclo_vita log_ruotato=1")
+        # (la rotazione del registro la fa il RotatingFileHandler del servizio:
+        # farla qui, rinominando il file sotto uno stream aperto, lo perdeva)
     except OSError:
         pass
 
@@ -7227,7 +7232,15 @@ def _gettoni_contenuto(frase: str) -> set[str]:
     return {p.strip("'-") for p in parole if len(p.strip("'-")) >= 3 and p.strip("'-") not in _STOP_DOPPIONI}
 
 
-def _norma_frase(frase: str) -> str:
+def _norma_frase_doppioni(frase: str) -> str:
+    """Normalizzazione per togli_doppioni: cancella OGNI simbolo.
+
+    Si chiamava anche questa `_norma_frase` e, essendo definita dopo, vinceva
+    per tutti: l'anti-loop girava con questa invece che con la sua (riga
+    ~2246, che tiene virgole, percentuali e apostrofi). Effetto: «Frazione
+    d'eiezione 55%, nei limiti» e «Frazione d eiezione 55 nei limiti»
+    risultavano la stessa frase, e il passo 1 di deduplica_loop — che non ha
+    la guardia sui numeri — ne cancellava una delle due."""
     return re.sub(r"[^\w]+", " ", frase.lower()).strip()
 
 
@@ -7306,7 +7319,7 @@ def togli_doppioni(testo: str, file_id: str, usa_ai: bool = True) -> tuple[str, 
         return testo, tolti_subito, []
     gettoni = [_gettoni_contenuto(f) for f in pulite]
     protetti = [_oggetti_protetti(f) for f in pulite]
-    norme = [_norma_frase(f) for f in pulite]
+    norme = [_norma_frase_doppioni(f) for f in pulite]
     tolti: list[dict] = list(tolti_subito)
     dubbi: list[dict] = []
     rimuovi: set[int] = set()
@@ -8732,6 +8745,26 @@ def _processa_uno(audio: Path, cartelle: dict, sostituzioni, controlli) -> None:
         log.error(
             "fase=servizio file=%s esito=errore fase_fallita=%s", e.file_id or "?", e.fase
         )
+    except Exception as e:  # noqa: BLE001
+        # Tutto ciò che NON è ErroreElaborazione: la scrittura del payload, lo
+        # spostamento in archivio_temp, un disco pieno. Prima risaliva al ciclo
+        # del servizio, che logga e va avanti — ma l'audio restava in
+        # lavorazione/, che il ciclo non riscansiona mai: nessun file in
+        # errori/, nessun avviso al medico, e dopo sette giorni la pulizia lo
+        # cancellava. Meglio in errori/, dove qualcuno lo vede.
+        try:
+            if lavoro.is_file():
+                shutil.move(str(lavoro), str(cartelle["errori"] / lavoro.name))
+                (cartelle["errori"] / (lavoro.name + ".log")).write_text(
+                    f"{datetime.now(timezone.utc).isoformat(timespec='seconds')} "
+                    f"file_id=? fase=consegna tipo={type(e).__name__}\n",
+                    encoding="utf-8",
+                )
+        except OSError:
+            pass
+        _ = notifica and notifica("errore")
+        log.error("fase=servizio file=? esito=errore fase_fallita=consegna tipo=%s",
+                  type(e).__name__)
 
 
 def invia_bozze(cartelle: dict) -> None:
@@ -8828,7 +8861,14 @@ def servizio(sostituzioni, controlli) -> int:
         os.chmod(c, 0o700)  # solo l'utente proprietario (SPEC §5)
     # Registro anche su file (già pulito by design, §2.2): lo leggono il
     # pannello locale e launchd.
-    su_file = logging.FileHandler(base / "log" / "servizio.log", encoding="utf-8")
+    # Ruota da sé (20 MB × 3). Prima la rotazione la faceva a mano
+    # `pulizia_residui` rinominando il file sotto uno stream aperto: dopo il
+    # primo giro il servizio scriveva per sempre dentro servizio.log.1, senza
+    # più alcun tetto, e `servizio.log` non esisteva più — il pannello mostrava
+    # un registro vuoto e distribuisci.sh perdeva in silenzio la guardia
+    # «fusione in corso», che si regge sull'esistenza di quel file.
+    su_file = logging.handlers.RotatingFileHandler(
+        base / "log" / "servizio.log", maxBytes=20 * 1024 * 1024, backupCount=3, encoding="utf-8")
     su_file.setFormatter(logging.Formatter(
         "%(asctime)s %(levelname)s %(message)s", datefmt="%Y-%m-%dT%H:%M:%S"))
     log.addHandler(su_file)

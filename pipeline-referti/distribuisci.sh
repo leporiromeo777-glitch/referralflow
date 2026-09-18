@@ -60,6 +60,18 @@ fi
 
 echo "3/3 · copia e riavvio"
 mkdir -p "$DEST"
+# Il modellino del VAD, una volta sola: era l'unica cosa utile che faceva
+# aggiorna.sh, cancellato il 18.9.2026 perché scavalcava tutte le guardie qui
+# sopra. Scarica in un file .parziale e rinomina: una connessione che cade non
+# lascia un modello troncato. Se non arriva, la catena continua senza VAD.
+if [ ! -f "$DEST/modelli/ggml-silero-v5.1.2.bin" ]; then
+  mkdir -p "$DEST/modelli"
+  echo "  scarico il modello del VAD (una volta sola)…"
+  curl -fsSL "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin" \
+    -o "$DEST/modelli/ggml-silero-v5.1.2.bin.parziale" \
+    && mv "$DEST/modelli/ggml-silero-v5.1.2.bin.parziale" "$DEST/modelli/ggml-silero-v5.1.2.bin" \
+    || { rm -f "$DEST/modelli/ggml-silero-v5.1.2.bin.parziale"; echo "  (VAD non scaricato: la catena continua senza)"; }
+fi
 n=0
 for f in pipeline.py profilo-cardiologia.json allinea-tempi.py trascrivi-voxtral.py pannello.py \
          palestra.py suite-cattiva.py banco-audio.py esporta-oro.sh prove-catastrofiche.py \

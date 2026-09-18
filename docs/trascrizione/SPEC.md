@@ -148,7 +148,7 @@ identica catena.
 divergenze):** rilevatore di voce Silero v5.1.2 incorporato in whisper.cpp
 (`--vad`), attivo su ENTRAMBE le passate (così il confronto A/B resta
 coerente) appena `modelli/ggml-silero-v5.1.2.bin` è presente (lo scarica
-aggiorna.sh; spegnibile con `REFERTI_VAD=0`). Padding 120 ms
+distribuisci.sh; spegnibile con `REFERTI_VAD=0`). Padding 120 ms
 (`REFERTI_VAD_PAD_MS`) per non tagliare i bordi di parola. Scopo: dove c'è
 silenzio whisper non trascrive — è l'antidoto principale alle frasi
 allucinate nelle pause di riflessione del dettato.

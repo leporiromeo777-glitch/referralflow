@@ -85,9 +85,17 @@ export async function radiografiaPagina(page) {
           let r = '  '.repeat(prof) + tag;
           if (el.id) r += '#' + el.id;
           if (el.classList && el.classList.length) r += '.' + [...el.classList].join('.');
-          for (const a of ['name', 'type', 'role', 'colspan', 'rowspan', 'href', 'onclick', 'title', 'alt', 'style']) {
+          for (const a of ['name', 'type', 'role', 'colspan', 'rowspan', 'href', 'onclick', 'style']) {
             const v = el.getAttribute && el.getAttribute(a);
             if (v) r += `[${a}≈${v.length > 60 ? v.slice(0, 60) + '…' : v.replace(/[0-9]{4,}/g, 'NNNN')}]`;
+          }
+          // `title` e `alt` di una cella d'agenda possono contenere il nome
+          // del paziente: di qui esce solo se ci sono e quanto sono lunghi.
+          // La funzione promette che il contenuto delle celle non esce mai, e
+          // il file prodotto si incolla in chat.
+          for (const a of ['title', 'alt']) {
+            const v = el.getAttribute && el.getAttribute(a);
+            if (v) r += `[${a}:${v.length} caratteri]`;
           }
           // Delle immagini interessa QUALE icona è (moneta, visto…): si tiene
           // solo il nome del file, non l'URL con la sessione dentro.
@@ -104,7 +112,9 @@ export async function radiografiaPagina(page) {
             .join(' ')
             .trim();
           if (testo) {
-            const uiChrome = ['th', 'button', 'label', 'option', 'a', 'legend', 'h1', 'h2', 'h3'].includes(tag);
+            // `a` non è più fra questi: nella griglia di MediOnline il testo
+            // di un link è il riquadro dell'appuntamento, cioè un paziente.
+            const uiChrome = ['th', 'button', 'label', 'option', 'legend', 'h1', 'h2', 'h3'].includes(tag);
             if (/^[\d.:\/\s\-–]+$/.test(testo)) {
               r += ` {num:«${testo.replace(/\d/g, 'N').slice(0, 20)}»}`;   // orari/date: solo il formato
             } else if (uiChrome) {

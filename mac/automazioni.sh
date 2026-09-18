@@ -21,10 +21,16 @@ MINUTO="$(date +%M)"
 ORA="$(date +%H)"
 GIORNO="$(date +%d)"
 
+# Il segreto va nell'intestazione, non nell'URL: nella riga di comando lo
+# vedrebbe chiunque guardi la tabella dei processi. E un 500 ripetuto per
+# giorni aveva la stessa faccia di un successo nel registro: ora si legge.
 chiama() {
   local codice
-  codice="$(curl -s -o /dev/null -w '%{http_code}' --max-time 180 "$BASE/api/$1?key=$SECRET" || echo rete)"
-  echo "$(date '+%F %H:%M') $1 → $codice"
+  codice="$(curl -s -o /dev/null -w '%{http_code}' --max-time 180 -H "Authorization: Bearer $SECRET" "$BASE/api/$1" || echo rete)"
+  case "$codice" in
+    2*) echo "$(date '+%F %H:%M') $1 → $codice" ;;
+    *)  echo "$(date '+%F %H:%M') $1 → $codice  ATTENZIONE: non ha funzionato" ;;
+  esac
 }
 
 chiama cron/agenda

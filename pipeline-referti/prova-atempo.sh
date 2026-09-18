@@ -22,6 +22,8 @@
 # dettato lungo può volerci mezz'ora per valore. Conviene lanciarla quando il
 # Mac non sta lavorando altri dettati, ad esempio:
 #   nohup bash prova-atempo.sh … > ~/referti/log/prova-atempo.log 2>&1 &
+# Non è più solo un consiglio: lo script si blocca da sé se la catena sta
+# lavorando (PROVA_FORZA=1 per passare lo stesso).
 #
 # Non stampa mai contenuti: solo le righe di log della catena (fasi, conteggi,
 # durate) e, alla fine, una tabella dei numeri utili al confronto per ogni
@@ -85,6 +87,28 @@ trap 'rm -rf "$LAVORO"' EXIT
 EXT="${AUDIO##*.}"
 FID=$("$PY" -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest()[:16])' "$AUDIO")
 OUT="${REFERTI_BASE:-$HOME/referti}/output"
+
+# La prova lancia N catene complete (due passate di whisper large-v3 più le
+# fasi locali): se parte mentre il servizio sta trascrivendo un dettato vero,
+# i 24 GB del Mac non bastano per due whisper e un modello locale insieme, e
+# il SIGABRT se lo prende il REFERTO, non il banco. Stesse guardie di
+# distribuisci.sh. Con PROVA_FORZA=1 si passa lo stesso, a ragion veduta.
+if [ "${PROVA_FORZA:-0}" != "1" ]; then
+  ING="${REFERTI_INGRESSO:-$HOME/referti/ingresso}"
+  LAV="${REFERTI_LAVORAZIONE:-$HOME/referti/lavorazione}"
+  if [ -d "$ING" ] && [ -n "$(ls -A "$ING" 2>/dev/null)" ]; then
+    echo "BLOCCO: ci sono dettati in ingresso ($ING): aspetta che la catena li lavori." >&2
+    exit 1
+  fi
+  if [ -d "$LAV" ] && [ -n "$(find "$LAV" -type f -mmin -30 2>/dev/null | head -1)" ]; then
+    echo "BLOCCO: lavorazione attiva negli ultimi 30 minuti ($LAV)." >&2
+    exit 1
+  fi
+  if pgrep -f "whisper-cli|trascrivi-voxtral.py|allinea-tempi.py" >/dev/null 2>&1; then
+    echo "BLOCCO: una trascrizione è in corso: la prova le toglierebbe la memoria." >&2
+    exit 1
+  fi
+fi
 
 echo "prova di rallentamento · medico=$MEDICO · valori: ${ATEMPI[*]} (bozze «ombra»: si confrontano in /referti/confronto)"
 RIEPILOGO="$LAVORO/riepilogo.txt"

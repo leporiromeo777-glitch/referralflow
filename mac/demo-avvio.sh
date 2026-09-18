@@ -3,7 +3,9 @@
 # suo e dati tutti inventati, sulla porta 3100, per farla vedere fuori dallo
 # studio con un link. Il database dello studio non è raggiungibile da qui.
 #
-# Installa il servizio:  bash mac/installa-demo.sh
+# Il servizio è ch.referralflow.demo (LaunchAgent che lancia questo script);
+# si riavvia con:  launchctl kickstart -k gui/$(id -u)/ch.referralflow.demo
+# («mac/installa-demo.sh», citato qui prima, non è mai esistito)
 # Dati della giornata:   cd ~/referralflow-demo && NODE_OPTIONS=--conditions=react-server npx tsx --env-file=.env scripts/demo-agenda.ts
 set -euo pipefail
 

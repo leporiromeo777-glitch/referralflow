@@ -24,6 +24,14 @@ while IFS='|' read -r fid testo_b64; do
     dss|DSS) [ -f "$ORO/$fid.wav" ] || ffmpeg -hide_banner -loglevel error -y -f dss -i "$src" -ar 16000 -ac 1 "$ORO/$fid.wav" ;;
     *)       [ -f "$ORO/$fid.wav" ] || ffmpeg -hide_banner -loglevel error -y -i "$src" -ar 16000 -ac 1 "$ORO/$fid.wav" ;;
   esac
+  # Il banco vuole COPPIE: se la decodifica è fallita, lo stato d'uscita del
+  # gruppo qui sopra è quello di `rm -f` (cioè 0) e `set -e` non scatta —
+  # prima si scriveva il .txt lo stesso e il conteggio dell'oro si gonfiava
+  # di referti senza audio.
+  if [ ! -f "$ORO/$fid.wav" ]; then
+    echo "  audio non decodificato, salto: $fid" >&2
+    senza_audio=$((senza_audio+1)); continue
+  fi
   printf '%s' "$testo_b64" | base64 -d > "$ORO/$fid.txt"
   n=$((n+1))
 done < <(psql "$DATABASE_URL" -At -F'|' -c "select payload->>'file_id', encode(convert_to(testo_finale,'UTF8'),'base64') from referti_bozze where stato='confermata' and testo_finale is not null and coalesce((payload->>'ombra')::boolean,false)=false")

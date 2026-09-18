@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { sendSms } from '@/lib/sms';
+import { chiaveCronValida } from '@/lib/cron-chiave';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,9 +25,7 @@ function dataOraCH(d: string): string {
 }
 
 export async function GET(req: NextRequest) {
-  const secret = process.env.REMINDER_SECRET;
-  const key = req.nextUrl.searchParams.get('key');
-  if (!secret || key !== secret) {
+  if (!chiaveCronValida(req)) {
     return new NextResponse('Not found', { status: 404 });
   }
 

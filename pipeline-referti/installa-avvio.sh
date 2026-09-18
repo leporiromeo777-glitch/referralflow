@@ -22,7 +22,11 @@ mkdir -p "$AGENTS" "$LOGDIR"
 ENV_EXTRA=""
 if [ -f "$DEST/invio.conf" ]; then
   chmod 600 "$DEST/invio.conf"
-  while IFS='=' read -r chiave valore; do
+  # `|| [ -n "$chiave" ]`: se il file non finisce con un a capo, `read` torna
+  # non-zero e l'ULTIMA riga si perdeva — cioè proprio REFERTI_FLOW_TOKEN, e
+  # il servizio trascriveva senza mai consegnare niente alla piattaforma,
+  # dicendo «invio configurato».
+  while IFS='=' read -r chiave valore || [ -n "$chiave" ]; do
     case "$chiave" in
       REFERTI_*) ENV_EXTRA="$ENV_EXTRA
     <key>$chiave</key><string>$valore</string>" ;;

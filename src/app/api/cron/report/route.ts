@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { sendPlain } from '@/lib/notify';
+import { chiaveCronValida } from '@/lib/cron-chiave';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,9 +26,7 @@ type Statistiche = {
 };
 
 export async function GET(req: NextRequest) {
-  const secret = process.env.REMINDER_SECRET;
-  const key = req.nextUrl.searchParams.get('key');
-  if (!secret || key !== secret) {
+  if (!chiaveCronValida(req)) {
     return new NextResponse('Not found', { status: 404 });
   }
 

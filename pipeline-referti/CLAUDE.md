@@ -13,7 +13,7 @@ Tutto ciò che leggi in questa sessione viaggia verso il cloud. Quindi:
   pazienti e dati clinici. Nemmeno «solo un pezzetto», nemmeno per debug.
 - Puoi leggere e mostrare: i **log della pipeline** (sono progettati per non
   contenere mai contenuti clinici: solo id file, fasi, esiti, durate),
-  `pipeline.py`, `correzioni.json`, `aggiorna.sh`, `*.scarto_ai.json`
+  `pipeline.py`, `correzioni.json`, `*.scarto_ai.json`
   (solo numeri nudi, senza contesto) e questo file.
 - ECCEZIONE UNICA (collaudo correzione esterna, SPEC §6.1h): i file
   `~/referti/scambio-esterno/*.anon.txt` sono ANONIMIZZATI PER COSTRUZIONE
@@ -29,7 +29,12 @@ Tutto ciò che leggi in questa sessione viaggia verso il cloud. Quindi:
 
 ## Cosa puoi fare
 
-- `bash ~/referti-pipeline/aggiorna.sh` — aggiorna la pipeline dal repo
+- `bash pipeline-referti/distribuisci.sh` — l'UNICA via per aggiornare la
+  catena sul Mac: esegue la suite catastrofica, si blocca se c'è un dettato in
+  lavorazione o una fusione in corso, copia tutti i file che la catena legge a
+  runtime e riavvia il servizio. (`aggiorna.sh` è stato cancellato il
+  18.9.2026: scaricava otto file su una catena che ne legge molti di più,
+  senza nessuna di quelle guardie e scrivendo pipeline.py in posto.)
 - `python3.14 ~/referti-pipeline/pipeline.py <file_audio>` — elabora un
   dettato; riporta all'utente le righe di log così come sono
 - diagnosi da log (esiti, durate, conteggi), gestione di Ollama/whisper/

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { syncFeed } from '@/lib/agenda-sync';
+import { chiaveCronValida } from '@/lib/cron-chiave';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,9 +9,7 @@ export const dynamic = 'force-dynamic';
 // Sincronizza tutti i feed attivi di tutti gli studi (il pulsante
 // «Sincronizza ora» resta come aggiornamento immediato).
 export async function GET(req: NextRequest) {
-  const secret = process.env.REMINDER_SECRET;
-  const key = req.nextUrl.searchParams.get('key');
-  if (!secret || key !== secret) {
+  if (!chiaveCronValida(req)) {
     return new NextResponse('Not found', { status: 404 });
   }
 
@@ -32,7 +31,9 @@ export async function GET(req: NextRequest) {
   // (cron/piano-sale, con la proposta notturna del modello) non si chiama più:
   // la Home e la pagina Sale leggono il gemello. La rotta resta per chi la
   // volesse a mano.
-  void fetch(`${req.nextUrl.origin}/api/cron/orchestrazione?key=${encodeURIComponent(key ?? '')}`, {
+  // La chiave passa nell'intestazione, non nell'URL.
+  void fetch(`${req.nextUrl.origin}/api/cron/orchestrazione`, {
+    headers: { authorization: `Bearer ${process.env.REMINDER_SECRET ?? ''}` },
     signal: AbortSignal.timeout(180_000),
   }).catch(() => {});
 
