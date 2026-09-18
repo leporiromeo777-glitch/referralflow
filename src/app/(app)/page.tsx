@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 
 // «Oggi»: la schermata che si apre al mattino. Una sola lista di cose da fare,
 // già in ordine di priorità, che unisce ciò che prima era sparso su più pagine
-// (nuove richieste, prenotazioni, disdette, follow-up, consulti, bozze di
+// (nuove richieste, prenotazioni, disdette, follow-up, bozze di
 // referto) — e a fianco il programma del giorno. Il dettaglio di ogni area
 // resta nelle sue pagine, raggiungibili dalla barra laterale.
 
@@ -66,15 +66,6 @@ export default async function Oggi() {
       where r.studio_id = $1 and r.status = 'prenotata'
         and r.appt_response = 'disdetta_da_confermare'
       order by r.appuntamento_at asc`,
-    [sid]
-  );
-
-  // Consulti rapidi in attesa di risposta.
-  const cons = await query<{ id: string; medico: string; created_at: string }>(
-    `select c.id, d.nome as medico, c.created_at::text
-       from consulti c join referring_doctors d on d.id = c.referring_doctor_id
-      where c.studio_id = $1 and c.stato = 'aperto'
-      order by c.created_at asc`,
     [sid]
   );
 
@@ -214,15 +205,6 @@ export default async function Oggi() {
     });
   }
 
-  for (const c2 of cons) {
-    tasks.push({
-      key: `cons-${c2.id}`, prio: 2, tone: 'accent', tag: 'consulto',
-      titolo: c2.medico,
-      sub: `Consulto rapido in attesa di risposta · da ${giorniDa(c2.created_at)} g`,
-      href: '/consulti', azione: 'Rispondi',
-    });
-  }
-
   for (const f of fups) {
     tasks.push({
       key: `fup-${f.k}-${f.id}`, prio: 5, tone: 'warn', tag: 'richiamo',
@@ -238,7 +220,6 @@ export default async function Oggi() {
   const chips = [
     { label: 'urgenti', value: nUrgenti, tone: 'danger' as const },
     { label: 'da prenotare', value: c?.da_prenotare ?? 0, tone: 'warn' as const },
-    { label: 'consulti', value: cons.length, tone: 'accent' as const },
     { label: 'bozze referto', value: boz.length, tone: 'accent' as const },
     { label: 'disdette', value: disd.length, tone: 'warn' as const },
     { label: 'visite oggi', value: oggi.length, tone: 'ok' as const },
@@ -276,7 +257,7 @@ export default async function Oggi() {
       <div className="oggi-stat">
         {chips.map((ch) => {
           const href = ch.label === 'urgenti' ? '/coda' : ch.label === 'da prenotare' ? '/coda?stato=da_prenotare'
-            : ch.label === 'consulti' ? '/consulti' : ch.label === 'bozze referto' ? '/referti'
+            : ch.label === 'bozze referto' ? '/referti'
             : ch.label === 'disdette' ? '/?vista=disdette' : '/programma';
           return (
             <Link key={ch.label} href={href} className={`ostat${ch.value > 0 ? ` ostat-${ch.tone}` : ''}`}>

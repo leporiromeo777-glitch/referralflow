@@ -118,3 +118,12 @@ Esisteva `imaging-server`: un programma a sé (FastAPI, SQLite, Orthanc, visore 
 Conseguenza accettata: **niente MPR né 3D** per ora, e la ricezione diretta dagli apparecchi (C-STORE) resta da fare. Si guadagna che un esame per immagini sta nella cartella del paziente come un referto, e che «chi l'ha visto?» ha una risposta. Dettaglio in [[Piattaforma/Immagini]].
 
 **Abbinamento severo**: un esame si aggancia da solo solo se nome *e* data di nascita combaciano con una persona sola. Un omonimo non si indovina — attaccare le immagini alla cartella sbagliata è il danno peggiore che questa pagina possa fare.
+
+## 18.9.2026 — Via «Invii e consulti»
+Tolta la pagina e tutto ciò che la teneva in piedi: la voce del menu, la rotta `api/prototipo/affidamenti`, le pagine vecchie `(app)/consulti`, la scheda «Consulto rapido» del portale dei medici invianti con la sua azione, gli avvisi e-mail, la statistica a 12 mesi e le «cose da fare» che ne nascevano.
+
+**Perché si poteva**: `consulti` e `external_studios` avevano **0 righe**. La funzione era stata costruita il 16.9 e non è mai stata usata da nessuno.
+
+**Perché anche il portale**: lasciare il modulo di invio senza una pagina dove rispondere sarebbe stata una trappola — le domande sarebbero arrivate e nessuno le avrebbe viste. Una funzione si toglie da tutte e due le parti o non si toglie.
+
+**Le tabelle restano** (`consulti`, `consulto_attachments`, `external_studios`, `studio_partners`): le migrazioni vanno solo in avanti e cancellare tabelle è irreversibile. Sono vuote e non le legge più nessuno. Resta anche `referrals.canale = 'consulto'`, che è storia di come una referral è nata.

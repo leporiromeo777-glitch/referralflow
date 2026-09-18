@@ -13,7 +13,6 @@ export type AggregatiStudio = {
   top_invianti_12_mesi: { medico: string; invii: number }[];
   tempo_medio_giorni_ricevuta_prenotata_90g: number | null;
   visite_per_medico_6_mesi: { medico: string; visite: number }[];
-  consulti_12_mesi: { aperti: number; risposti: number; convertiti: number };
   follow_up_scaduti: number;
   disdette_90_giorni: number;
   referti_dettati_30_giorni: number;
@@ -60,14 +59,6 @@ export async function aggregatiStudio(studioId: string): Promise<AggregatiStudio
     [studioId]
   );
 
-  const [consulti] = await query<{ aperti: number; risposti: number; convertiti: number }>(
-    `select count(*) filter (where stato = 'aperto')::int as aperti,
-            count(*) filter (where stato = 'risposto')::int as risposti,
-            count(*) filter (where stato = 'convertito')::int as convertiti
-       from consulti where studio_id = $1 and created_at > now() - interval '12 months'`,
-    [studioId]
-  );
-
   const [fup] = await query<{ n: number }>(
     `select (
        (select count(*) from referrals where studio_id = $1
@@ -98,7 +89,6 @@ export async function aggregatiStudio(studioId: string): Promise<AggregatiStudio
     top_invianti_12_mesi: invianti,
     tempo_medio_giorni_ricevuta_prenotata_90g: tempi?.media ?? null,
     visite_per_medico_6_mesi: visite,
-    consulti_12_mesi: consulti ?? { aperti: 0, risposti: 0, convertiti: 0 },
     follow_up_scaduti: fup?.n ?? 0,
     disdette_90_giorni: disd?.n ?? 0,
     referti_dettati_30_giorni: referti?.n ?? 0,

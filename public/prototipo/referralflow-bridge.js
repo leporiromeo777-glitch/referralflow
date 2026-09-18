@@ -67,7 +67,7 @@ async function rfCaricaDati() {
   for (const nome of ['ARCHIVE', 'AUDIT', 'AIJOBS', 'KNOWLEDGE', 'INVOICES']) { try { if (Array.isArray(window[nome])) rfSvuota(window[nome]); } catch { /* assente */ } }
   // Voci per ruolo (14.9.2026: Percorsi, Moduli, Da fatturare). Questa riga
   // vince su qualunque aggiunta fatta al caricamento dello script.
-  const nav = ['home', 'agenda', 'visite', 'richiami', 'sale', 'prestazioni', 'patients', 'invianti', 'consulti', 'percorsi', 'reports', 'dittafono', 'documents', 'moduli', 'anonymize', 'inbox', 'ai', 'fatturazione', 'administration'];
+  const nav = ['home', 'agenda', 'visite', 'richiami', 'sale', 'prestazioni', 'patients', 'invianti', 'percorsi', 'reports', 'dittafono', 'documents', 'moduli', 'anonymize', 'inbox', 'ai', 'fatturazione', 'administration'];
   const nascosti = new Set(Array.isArray(RF.data.moduli_nascosti) ? RF.data.moduli_nascosti : []);
   for (const k of Object.keys(NAV)) NAV[k] = nav.filter(v => (v !== 'fatturazione' || ['secretary', 'org_admin'].includes(k)) && (!nascosti.has(v) || v === 'home' || v === 'administration'));
   render();
@@ -195,7 +195,7 @@ const rfRenderSidebarOrig = renderSidebar;
 // raggruppate con un'etichetta; una voce fuori da ogni gruppo finisce in coda.
 const RF_NAV_GRUPPI = [
   ['Operatività', ['home', 'agenda', 'visite', 'richiami', 'sale', 'prestazioni', 'inbox']],
-  ['Clinico', ['patients', 'invianti', 'consulti', 'percorsi', 'visits', 'reports', 'dittafono', 'documents', 'moduli']],
+  ['Clinico', ['patients', 'invianti', 'percorsi', 'visits', 'reports', 'dittafono', 'documents', 'moduli']],
   ['AI', ['ai', 'anonymize']],
   ['Amministrazione', ['fatturazione', 'communications', 'statistics', 'administration', 'system']],
 ];
@@ -840,7 +840,7 @@ const rfOrig = {};
 for (const [k, titolo, testo, href] of [
 
   ['system', 'Sistema', 'Utenti, sicurezza, modelli', '/impostazioni/utenti'],
-  ['communications', 'Comunicazioni', 'Telefonate, e-mail, consulti', '/consulti'],
+  ['communications', 'Comunicazioni', 'Telefonate ed e-mail', '/comunicazioni'],
   ['visits', 'Visite', 'Visite registrate', '/visite'],
   ['knowledge', 'Knowledge', 'La conoscenza degli agenti sta nella wiki', '/referti/qualita'],
 ]) {
@@ -5619,166 +5619,6 @@ function rfStudioStatistiche(d) {
     </div>`;
 }
 
-
-/* =====================================================================
-   «Invii e consulti» (16.9.2026): le due direzioni in cui un paziente
-   attraversa il confine dello studio.
-   - un CONSULTO è una domanda scritta che entra: un medico inviante
-     chiede, lo specialista risponde, e spesso la visita non serve più.
-     Quando serve, il consulto diventa una referral con i suoi allegati.
-   - un AFFIDAMENTO è un paziente che esce: verso uno studio della
-     piattaforma o verso uno che sulla piattaforma non c'è (la rubrica).
-   Venivano da due pagine diverse della piattaforma vecchia; stanno bene
-   insieme perché chi fa una cosa fa anche l'altra.
-   ===================================================================== */
-(function () { const st = document.createElement('style'); st.textContent = `
-.rf-con-el { display:flex; flex-direction:column; border-top:1px solid var(--border); }
-.rf-con-r { padding:13px 2px; border-bottom:1px solid var(--border); }
-.rf-con-r .t { display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }
-.rf-con-r .t b { font-size:14.5px; }
-.rf-con-r .d { font-size:14px; line-height:1.5; margin-top:6px; }
-.rf-con-r .q { font-size:12px; color:var(--text-3); }
-.rf-con-r .risp { margin-top:8px; padding:9px 12px; background:var(--surface-2); border-left:3px solid var(--accent); border-radius:0 8px 8px 0; font-size:13.5px; line-height:1.5; }
-.rf-con-form { margin-top:10px; display:flex; flex-direction:column; gap:8px; }
-.rf-con-form textarea { width:100%; min-height:90px; border:1px solid var(--border-2); border-radius:10px; padding:10px 12px; font:inherit; font-size:13.5px; background:var(--surface); color:var(--text); resize:vertical; }
-.rf-con-form textarea:focus { outline:2px solid var(--accent); outline-offset:-1px; border-color:transparent; }
-.rf-con-form .riga { display:flex; flex-wrap:wrap; gap:8px; }
-.rf-con-form .riga .input { flex:1 1 140px; min-width:0; }
-.rf-stu-r { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; padding:11px 2px; border-bottom:1px solid var(--border); align-items:center; }
-.rf-stu-r .n { font-size:14px; font-weight:600; }
-.rf-stu-r .s { font-size:12px; color:var(--text-3); margin-top:2px; }
-.rf-stu-amico { color:var(--accent); font-size:11.5px; font-weight:600; }
-`; document.head.appendChild(st); })();
-
-if (typeof NAV_META !== 'undefined') NAV_META.consulti = ['Invii e consulti', 'comms'];
-RF.con = null; RF.conScheda = 'consulti'; RF.conAperto = null; RF.conMsg = null; RF.conConverti = null;
-
-async function rfConCarica(rendi = true) {
-  try {
-    const r = await fetch('/api/prototipo/affidamenti', { credentials: 'include', cache: 'no-store' });
-    RF.con = r.ok ? await r.json() : { consulti: [], studi: [], esterni: [] };
-  } catch { RF.con = { consulti: [], studi: [], esterni: [] }; }
-  if (rendi && state.route === 'consulti') render();
-}
-async function rfConAzione(corpo, ok) {
-  RF.conMsg = null;
-  try {
-    const r = await fetch('/api/prototipo/affidamenti', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
-    const j = await r.json().catch(() => ({}));
-    RF.conMsg = (r.ok && j.ok) ? { tipo: 'ok', testo: ok } : { tipo: 'male', testo: j.errore || 'Non riuscito.' };
-    return j;
-  } catch { RF.conMsg = { tipo: 'male', testo: 'La piattaforma non risponde.' }; return null; }
-}
-function rfConApri(id) { RF.conAperto = RF.conAperto === id ? null : id; RF.conConverti = null; render(); }
-async function rfConRispondi(id) {
-  const t = document.getElementById(`rf-con-risp-${id}`);
-  const risposta = t ? t.value : '';
-  if (!risposta.trim()) { RF.conMsg = { tipo: 'male', testo: 'Scrivi la risposta.' }; render(); return; }
-  const j = await rfConAzione({ azione: 'consulto_rispondi', id, risposta }, j2 => '');
-  if (j && j.ok) RF.conMsg = { tipo: 'ok', testo: j.primo ? 'Risposta inviata: il medico inviante è stato avvisato.' : 'Risposta aggiornata.' };
-  RF.conAperto = null; await rfConCarica();
-}
-function rfConConverti(id) { RF.conConverti = RF.conConverti === id ? null : id; render(); }
-async function rfConConvertiFai(id) {
-  const v = (k) => (document.getElementById(`rf-con-${k}-${id}`) || {}).value || '';
-  const j = await rfConAzione({ azione: 'consulto_converti', id, cognome: v('cognome'), nome: v('nome'), data_nascita: v('nascita'), telefono: v('tel'), urgenza: v('urg') }, 'Referral creata dal consulto.');
-  if (j && j.ok) { RF.conConverti = null; await rfConCarica(); }
-  else render();
-}
-async function rfConAmico(id, on) { await rfConAzione({ azione: 'amico', id, on }, on ? 'Aggiunto agli studi con cui lavorate spesso.' : 'Tolto.'); await rfConCarica(); }
-async function rfConEsternoAttivo(id) { await rfConAzione({ azione: 'esterno_attivo', id }, 'Rubrica aggiornata.'); await rfConCarica(); }
-async function rfConEsternoCrea() {
-  const v = (k) => (document.getElementById(`rf-con-e-${k}`) || {}).value || '';
-  const j = await rfConAzione({ azione: 'esterno_crea', nome: v('nome'), specialita: v('spec'), email: v('email'), telefono: v('tel') }, 'Studio aggiunto alla rubrica.');
-  if (j && j.ok) await rfConCarica();
-  else render();
-}
-
-function rfConConsulto(c) {
-  const aperto = RF.conAperto === c.id;
-  const conv = RF.conConverti === c.id;
-  const stato = { aperto: '<span class="badge warning">da rispondere</span>', risposto: '<span class="badge success">risposto</span>', convertito: '<span class="badge">diventato referral</span>' }[c.stato] || rfEsc(c.stato);
-  return `<div class="rf-con-r">
-    <div class="t"><b>${rfEsc(c.medico)}</b>${c.medico_studio ? `<span class="q">${rfEsc(c.medico_studio)}</span>` : ''}${stato}<span class="q">${rfEsc((c.created_at || '').slice(0, 10).split('-').reverse().join('.'))}</span>${c.n_allegati ? `<span class="q">${c.n_allegati} allegati</span>` : ''}</div>
-    <div class="d">${rfEsc(c.domanda)}</div>
-    ${c.risposta ? `<div class="risp">${rfEsc(c.risposta)}</div>` : ''}
-    ${c.stato !== 'convertito' ? `<div class="row mt-8" style="gap:8px;flex-wrap:wrap">
-      <button class="btn sm${c.stato === 'aperto' ? ' primary' : ''}" onclick="rfConApri('${rfEsc(c.id)}')">${c.risposta ? 'Correggi la risposta' : 'Rispondi'}</button>
-      <button class="btn sm ghost" onclick="rfConConverti('${rfEsc(c.id)}')">Serve una visita</button>
-    </div>` : (c.referral_id ? `<div class="row mt-8"><a class="btn sm ghost" href="/referral/${rfEsc(c.referral_id)}" target="_blank" rel="noopener">Apri la referral</a></div>` : '')}
-    ${aperto ? `<div class="rf-con-form">
-      <textarea id="rf-con-risp-${rfEsc(c.id)}" placeholder="La risposta che leggerà il medico inviante…">${rfEsc(c.risposta || '')}</textarea>
-      <div class="riga"><button class="btn primary sm" onclick="rfConRispondi('${rfEsc(c.id)}')">Invia la risposta</button>
-        <button class="btn sm ghost" onclick="rfConApri('${rfEsc(c.id)}')">Annulla</button>
-        <span class="caption" style="align-self:center">Alla prima risposta parte l&rsquo;avviso all&rsquo;inviante.</span></div>
-    </div>` : ''}
-    ${conv ? `<div class="rf-con-form">
-      <div class="caption">Il consulto diventa una referral: la domanda diventa il quesito e gli allegati la seguono. Serve il nome del paziente, che nel consulto non c&rsquo;è.</div>
-      <div class="riga">
-        <input class="input" id="rf-con-cognome-${rfEsc(c.id)}" placeholder="Cognome">
-        <input class="input" id="rf-con-nome-${rfEsc(c.id)}" placeholder="Nome">
-        <input class="input" id="rf-con-nascita-${rfEsc(c.id)}" type="date" style="max-width:170px">
-        <input class="input" id="rf-con-tel-${rfEsc(c.id)}" placeholder="Telefono">
-        <select class="input" id="rf-con-urg-${rfEsc(c.id)}" style="max-width:160px"><option value="normale">normale</option><option value="urgente">urgente</option><option value="programmabile">programmabile</option></select>
-      </div>
-      <div class="riga"><button class="btn primary sm" onclick="rfConConvertiFai('${rfEsc(c.id)}')">Crea la referral</button>
-        <button class="btn sm ghost" onclick="rfConConverti('${rfEsc(c.id)}')">Annulla</button></div>
-    </div>` : ''}
-  </div>`;
-}
-
-PAGES.consulti = () => {
-  if (!RF.live) return rfPaginaPiattaforma('Invii e consulti', 'Le domande che entrano e i pazienti che escono');
-  if (RF.con === null) { void rfConCarica(); return `<div class="page-head"><div><h2 class="page-title">Invii e consulti</h2></div></div><div class="card"><div class="caption">Carico…</div></div>`; }
-  const d = RF.con;
-  const aperti = d.consulti.filter(c => c.stato === 'aperto');
-  const tab = (k, l, n) => `<button class="tab ${RF.conScheda === k ? 'active' : ''}" onclick="RF.conScheda='${k}';render()">${l}${n != null ? ` <span class="badge">${n}</span>` : ''}</button>`;
-  let corpo;
-  if (RF.conScheda === 'consulti') {
-    corpo = `<div class="card">
-      <div class="card-head"><span class="section-title">Consulti</span><span class="caption">${aperti.length} da rispondere · ${d.consulti.length} in tutto</span></div>
-      ${d.consulti.length ? `<div class="rf-con-el">${d.consulti.map(rfConConsulto).join('')}</div>`
-        : `<p class="meta" style="margin:0;line-height:1.55">Nessun consulto. Sono le domande cliniche scritte che arrivano dai medici invianti: il modulo è quello pubblico che si manda con il link dello studio, e la risposta dello specialista spesso evita una visita.</p>`}
-    </div>`;
-  } else {
-    const amici = d.studi.filter(s => s.amico);
-    const altri = d.studi.filter(s => !s.amico);
-    const riga = (s) => `<div class="rf-stu-r">
-      <div><div class="n">${rfEsc(s.nome)}${s.amico ? ' <span class="rf-stu-amico">· con cui lavorate spesso</span>' : ''}</div>
-        <div class="s">${rfEsc(s.specialita || 'specialità non indicata')}${s.n_inviate ? ` · ${s.n_inviate} pazienti affidati` : ''}</div></div>
-      <div class="row" style="gap:6px">
-        <button class="btn sm ghost" onclick="rfConAmico('${rfEsc(s.id)}', ${s.amico ? 'false' : 'true'})">${s.amico ? 'Togli' : 'Segna'}</button>
-        <a class="btn sm" href="/invia?studio=${rfEsc(s.id)}" target="_blank" rel="noopener">Affida un paziente</a>
-      </div></div>`;
-    corpo = `<div class="card">
-        <div class="card-head"><span class="section-title">Studi della piattaforma</span><span class="caption">${d.studi.length}</span></div>
-        ${d.studi.length ? `<div class="rf-con-el">${[...amici, ...altri].map(riga).join('')}</div>`
-          : '<p class="meta" style="margin:0">Per ora sulla piattaforma c’è solo questo studio: quando ce ne saranno altri, compariranno qui e si potrà affidare un paziente in due clic.</p>'}
-      </div>
-      <div class="card mt-16">
-        <div class="card-head"><span class="section-title">Rubrica degli studi fuori dalla piattaforma</span><span class="caption">${d.esterni.length}</span></div>
-        ${d.esterni.length ? `<div class="rf-con-el">${d.esterni.map(e => `<div class="rf-stu-r">
-            <div><div class="n"${e.attivo ? '' : ' style="opacity:.55"'}>${rfEsc(e.nome)}</div>
-              <div class="s">${[e.specialita, e.email, e.telefono].filter(Boolean).map(rfEsc).join(' · ') || 'nessun recapito'}</div></div>
-            <div class="row"><button class="btn sm ghost" onclick="rfConEsternoAttivo('${rfEsc(e.id)}')">${e.attivo ? 'Archivia' : 'Riattiva'}</button></div>
-          </div>`).join('')}</div>` : '<p class="meta" style="margin:0 0 12px">Nessuno studio in rubrica.</p>'}
-        <div class="rf-con-form" style="margin-top:12px">
-          <div class="riga">
-            <input class="input" id="rf-con-e-nome" placeholder="Nome dello studio">
-            <input class="input" id="rf-con-e-spec" placeholder="Specialità">
-            <input class="input" id="rf-con-e-email" placeholder="E-mail">
-            <input class="input" id="rf-con-e-tel" placeholder="Telefono">
-            <button class="btn primary" onclick="rfConEsternoCrea()">Aggiungi</button>
-          </div>
-        </div>
-      </div>`;
-  }
-  return `<div class="page-head"><div><h2 class="page-title">Invii e consulti</h2>
-      <div class="page-sub">Le domande che entrano dai medici invianti, e i pazienti che affidate a un altro studio</div></div></div>
-    ${RF.conMsg ? `<div class="rf-or-msg ${RF.conMsg.tipo === 'ok' ? 'ok' : ''}">${rfEsc(RF.conMsg.testo)}</div>` : ''}
-    <div class="tabs">${tab('consulti', 'Consulti', aperti.length || null)}${tab('affida', 'Affidare a un altro studio')}</div>
-    ${corpo}`;
-};
 
 /* «Statistiche» non è più una pagina a sé: sta nello Studio, con la qualità
    della catena. Il vecchio indirizzo porta lì invece di mostrare i numeri

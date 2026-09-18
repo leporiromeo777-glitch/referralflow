@@ -244,9 +244,6 @@ export async function GET() {
     const paz = P.get(d.patient_id);
     tasks.push({ id: `disd-${d.id}`, title: `Disdetta da confermare: ${paz ? `${paz.last} ${paz.first}` : 'paziente'} (${dCh(d.appuntamento_at)} ${ora(d.appuntamento_at)})`, p: paz?.id ?? null, assignee: 'secretary', prio: 'high', status: 'TODO', due: 'oggi', cat: 'call', src: 'automation', href: `/referral/${d.id}` });
   }
-  const cons = await query<{ id: string; medico: string; created_at: string }>(
-    `select c.id, d.nome as medico, c.created_at::text from consulti c join referring_doctors d on d.id = c.referring_doctor_id where c.studio_id = $1 and c.stato = 'aperto' order by c.created_at`, [sid]);
-  for (const c of cons) tasks.push({ id: `cons-${c.id}`, title: `Consulto rapido da rispondere: ${c.medico}`, p: null, assignee: 'doctor', prio: 'normal', status: 'TODO', due: `da ${Math.round((adesso - new Date(c.created_at).getTime()) / 86400000)} g`, cat: 'clinical_check', src: 'automation', href: '/consulti' });
   const fups = await query<{ k: string; id: string; patient_id: string | null; nome: string | null; due: string }>(
     `select 'ref' as k, r.id, r.patient_id, null as nome, r.follow_up_due::text as due from referrals r where r.studio_id = $1 and r.follow_up_due <= current_date and r.follow_up_done_at is null
      union all select 'app' as k, a.id, null as patient_id, a.paziente_nome as nome, a.follow_up_due::text as due from appointments a where a.studio_id = $1 and a.referral_id is null and a.follow_up_due <= current_date and a.follow_up_done_at is null
@@ -470,7 +467,7 @@ export async function GET() {
     medici_oggi: [...new Set(apptsOggi.map((a) => a.doc).filter((d) => d && d !== 'studio'))].length,
     bozze_da_rivedere: reports.filter((r) => r.status !== 'APPROVED').length, referti_confermati_30g: reports.filter((r) => r.status === 'APPROVED').length,
     referral_aperte: refs.filter((r) => r.status !== 'chiusa').length, urgenti: refs.filter((r) => r.urgenza === 'urgente' && !['chiusa', 'vista'].includes(r.status)).length,
-    da_prenotare: refs.filter((r) => r.status === 'da_prenotare').length, disdette: disd.length, consulti_aperti: cons.length, richiami_scaduti: fups.length,
+    da_prenotare: refs.filter((r) => r.status === 'da_prenotare').length, disdette: disd.length, richiami_scaduti: fups.length,
     pazienti: pazienti.length, documenti: docs.length, audio_in_coda: audio.length,
   };
   // Il tecnico tiene in piedi il sistema, non cura nessuno: a lui le schede

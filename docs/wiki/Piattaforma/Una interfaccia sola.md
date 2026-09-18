@@ -26,7 +26,7 @@ Sono ancora raggiungibili scrivendo l'indirizzo, e nessun collegamento ci porta 
 
 | era solo nelle pagine vecchie | adesso |
 |---|---|
-| Consulti rapidi | scheda «Consulti» di [[Piattaforma/Invii e consulti]] |
+| Consulti rapidi | **tolti il 18.9.2026** (vedi [[Decisioni/Registro]]): mai usati, 0 righe |
 | Affidamento a un altro studio | scheda «Affidare a un altro studio» della stessa pagina |
 | Richiami | [[Piattaforma/Richiami e buchi]], con i buchi in agenda accanto |
 | Impostazioni → utenti | scheda «Personale» dello Studio (c'era già) |

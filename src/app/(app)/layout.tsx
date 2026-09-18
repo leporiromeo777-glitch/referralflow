@@ -23,19 +23,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   let richiamiScaduti = 0;
   let refertiBozze = 0;
   let refertiAttivi = false;
-  let consultiAperti = 0;
   let oggiCount = 0;
   if (full) {
     const [c] = await query<{
       nuove: number; richiami: number; referti: number; referti_attivi: boolean;
-      consulti: number; da_prenotare: number; disdette: number;
+      da_prenotare: number; disdette: number;
     }>(
       `select
          (select count(*) from referrals where status = 'ricevuta' and studio_id = $1)::int as nuove,
          (select count(*) from referti_bozze where studio_id = $1 and stato = 'bozza'
             and coalesce((payload->>'ombra')::boolean, false) = false)::int as referti,
          (select referti_token_set_at is not null from studios where id = $1) as referti_attivi,
-         (select count(*) from consulti where studio_id = $1 and stato = 'aperto')::int as consulti,
          (select count(*) from referrals where studio_id = $1 and status = 'da_prenotare')::int as da_prenotare,
          (select count(*) from referrals where studio_id = $1 and status = 'prenotata'
             and appt_response in ('disdetto','disdetta_da_confermare'))::int as disdette,
@@ -52,9 +50,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     richiamiScaduti = c?.richiami ?? 0;
     refertiBozze = c?.referti ?? 0;
     refertiAttivi = c?.referti_attivi ?? false;
-    consultiAperti = c?.consulti ?? 0;
     // «Oggi» raccoglie tutto ciò che è azionabile: badge complessivo.
-    oggiCount = nuove + (c?.da_prenotare ?? 0) + (c?.disdette ?? 0) + richiamiScaduti + consultiAperti + refertiBozze;
+    oggiCount = nuove + (c?.da_prenotare ?? 0) + (c?.disdette ?? 0) + richiamiScaduti + refertiBozze;
   }
 
   const supportEmail = process.env.SUPPORT_EMAIL;
@@ -81,7 +78,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     { label: 'Coda', href: '/coda' },
     { label: 'Programma', href: '/programma' },
     { label: 'Follow-up', href: '/richiami', badge: richiamiScaduti },
-    { label: 'Consulti', href: '/consulti', badge: consultiAperti },
     // Sempre visibile: da qui si caricano i dettati (drag & drop) anche se il
     // Mac della trascrizione non è ancora configurato.
     { label: 'Referti', href: '/referti', badge: refertiBozze },
