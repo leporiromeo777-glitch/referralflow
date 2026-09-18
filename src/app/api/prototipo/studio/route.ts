@@ -4,7 +4,7 @@ import { query } from '@/lib/db';
 import { catalogoDaPercorsi } from '@/lib/prestazioni';
 import { caricaPercorsi } from '@/lib/percorsi';
 import { isUuid } from '@/lib/cartella';
-import { syncFeed } from '@/lib/agenda-sync';
+import { syncFeed, riabbinaCodici } from '@/lib/agenda-sync';
 
 export const dynamic = 'force-dynamic';
 
@@ -194,6 +194,10 @@ export async function POST(req: NextRequest) {
       const nome = s(c.nome, 120); if (!nome) return NextResponse.json({ errore: 'Il nome è obbligatorio.' }, { status: 400 });
       const aliases = Array.isArray(c.aliases) ? c.aliases.map((x: unknown) => s(x, 80)).filter(Boolean).slice(0, 10) : String(c.aliases ?? '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 10);
       await query(`insert into providers (studio_id, nome, aliases) values ($1, $2, $3)`, [sid, nome, aliases]);
+      // Un alias scritto a mano vale come un codice abbinato dall'elenco: gli
+      // appuntamenti già importati con quel codice tornano nella sua colonna.
+      const r = await riabbinaCodici(sid);
+      if (r.abbinati) console.log(`[studio] medico_crea → riabbinati ${r.abbinati} appuntamenti (${r.codici.join(', ')})`);
     } else if (azione === 'medico_aggiorna') {
       const id = s(c.id); if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 });
       const nome = s(c.nome, 120); if (!nome) return NextResponse.json({ errore: 'Il nome è obbligatorio.' }, { status: 400 });
@@ -201,6 +205,8 @@ export async function POST(req: NextRequest) {
       const userId = isUuid(s(c.user_id)) ? s(c.user_id) : null;
       const colore = /^#[0-9a-f]{6}$/i.test(s(c.colore, 7)) ? s(c.colore, 7) : null;
       await query(`update providers set nome = $3, aliases = $4, user_id = $5, gln = nullif($6, ''), rcc = nullif($7, ''), colore = $8 where id = $1 and studio_id = $2`, [id, sid, nome, aliases, userId, s(c.gln, 20).replace(/\D/g, ''), s(c.rcc, 20).toUpperCase(), colore]);
+      const r = await riabbinaCodici(sid);
+      if (r.abbinati) console.log(`[studio] medico_aggiorna → riabbinati ${r.abbinati} appuntamenti (${r.codici.join(', ')})`);
     } else if (azione === 'medico_attivo') {
       const id = s(c.id); if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 });
       await query('update providers set attivo = not attivo where id = $1 and studio_id = $2', [id, sid]);

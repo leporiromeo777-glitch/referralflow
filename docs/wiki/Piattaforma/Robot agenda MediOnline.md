@@ -1,6 +1,6 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-09-14
+aggiornata: 2026-09-18
 ---
 # Robot agenda MediOnline (operativo dal 2026-08-14)
 
@@ -72,5 +72,12 @@ Una colonna di MediOnline non è un luogo: è un'agenda, e lo studio le usa per 
 | `RIA` | **Andrea Bronz, fisioterapista** — riabilitazione |
 | `Labor` `Appar` | **gli unici due luoghi**: laboratorio (aiuto medici) e sala apparecchi (Paiocchi) |
 | `ASM` | **amministrativo** — non è un luogo, disattivata dalle sale |
+
+## Gli alias non guardavano indietro (18.9.2026)
+Le sigle di `DC`, `RIA`, `SF`, `P-E V` sono diventate alias il 15.9, quando abbiamo capito che cosa fossero quelle colonne. Da lì in avanti gli appuntamenti finivano nella colonna giusta — ma i **vecchi** no: `syncFeed` riscrive solo gli eventi ancora dentro la finestra del calendario (`AGENDA_GIORNI`), e il passato non ci rientra più. Risultato: **311 appuntamenti** (DC 217, RIA 60, SF 24, P-E V 10) stavano in una colonna che non esiste, «senza medico», mentre la persona che li aveva fatti era lì in elenco.
+
+Ora `riabbinaCodici(studioId)` in `src/lib/agenda-sync.ts` ripassa il passato con gli alias di oggi. Abbina per **codice intero** e non per pezzo di parola come l'import (un `SF` dentro «Sala SF» sarebbe un errore scritto nel passato), non tocca chi un medico ce l'ha già, ed è rieseguibile. La chiamano da sole `medico_crea`, `medico_aggiorna` e `codice_medico` della pagina Studio: chi aggiunge un alias non deve sapere che esiste un passato da sistemare. Una volta sola, a mano, per gli studi già pieni: `NODE_OPTIONS=--conditions=react-server npx tsx --env-file=.env scripts/agenda-riabbina.ts`.
+
+Restano senza medico, e devono restarci: `Labor`, `Appar` (sono luoghi) e `ASM` (amministrativo).
 
 Come si riconosce una colonna senza sapere cosa sia: si guarda **se i suoi appuntamenti arrivano prima o dopo quelli di un medico, per lo stesso paziente nello stesso giorno**. `DC` veniva prima 271 volte su 294 (in media 34 minuti): è il primo tempo della visita, cioè l'ecografia. `Appar` viene dopo 81 volte su 99 (48 minuti): è dove si mette l'Holter finita la visita. È la prova più utile che abbiamo trovato per capire una colonna senza leggere un solo nome di paziente.

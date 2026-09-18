@@ -230,3 +230,32 @@ export async function syncFeed(feedId: string): Promise<SyncResult> {
 
   return { ok: true, total, mapped, unassigned, matchedReferral };
 }
+
+// Riabbinare i codici già importati (18.9.2026)
+//
+// Il campo «luogo» dell'agenda MediOnline non porta il nome del medico ma il
+// suo codice: M.M., vpaio, DC. L'abbinamento avviene mentre si importa, e chi
+// aggiunge un alias DOPO si trova i vecchi appuntamenti senza medico per
+// sempre: la sincronizzazione riscrive solo gli eventi ancora dentro la
+// finestra del calendario, il passato non torna più. Il 18.9.2026 erano 279
+// appuntamenti in una colonna che non esiste — DC, RIA, SF, P-E V — tutti
+// importati prima che il loro codice diventasse un alias.
+//
+// Questa funzione ripassa il passato con gli alias di oggi. L'abbinamento è
+// per codice INTERO (non per pezzo di parola, come durante l'import): qui non
+// c'è un evento da interpretare, c'è un codice già scritto in colonna, e un
+// «SF» dentro «Sala SF» sarebbe un abbinamento sbagliato scritto nel passato.
+// Non tocca mai chi un medico ce l'ha già: è rieseguibile.
+export async function riabbinaCodici(studioId: string): Promise<{ abbinati: number; codici: string[] }> {
+  const righe = await query<{ codice: string; n: number }>(
+    `with u as (
+       update appointments a set provider_id = p.id
+         from providers p
+        where a.studio_id = $1 and a.provider_id is null and a.luogo is not null
+          and p.studio_id = a.studio_id and p.attivo
+          and lower(trim(a.luogo)) = any (select lower(trim(x)) from unnest(p.aliases) x)
+        returning trim(a.luogo) as codice
+     )
+     select codice, count(*)::int as n from u group by codice order by n desc`, [studioId]);
+  return { abbinati: righe.reduce((s, r) => s + r.n, 0), codici: righe.map((r) => `${r.codice} ${r.n}`) };
+}
