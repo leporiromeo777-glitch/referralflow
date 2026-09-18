@@ -73,7 +73,9 @@ export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
   if (!RUOLI_VEDONO.has(session.role)) return NextResponse.json({ errore: 'ruolo_non_ammesso' }, { status: 403 });
-  const per = periodoMese(req.nextUrl.searchParams.get('mese')) ?? periodoMese(new Date().toISOString().slice(0, 7))!;
+  // All'01:30 del 1° ottobre `toISOString()` dice ancora settembre: il mese
+  // predefinito si prende dall'orologio di Zurigo.
+  const per = periodoMese(req.nextUrl.searchParams.get('mese')) ?? periodoMese(new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Zurich' }).slice(0, 7))!;
   const righe = await righeDelMese(session.studioId, per.dal, per.al);
   const esportazioni = await query<{ dal: string; al: string; righe: number; da: string | null; at: string }>(
     `select e.dal::text, e.al::text, e.righe, split_part(u.email, '@', 1) as da, e.created_at::text as at from fatturazione_esportazioni e left join users u on u.id = e.user_id

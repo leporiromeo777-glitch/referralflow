@@ -19,6 +19,18 @@ export async function POST(req: NextRequest) {
   const id = (v: unknown) => (typeof v === 'string' && isUuid(v) ? v : null);
   const appointmentId = id(c?.appointment_id), referralId = id(c?.referral_id), patientId = id(c?.patient_id);
   if (!appointmentId && !referralId && !patientId) return NextResponse.json({ errore: 'Serve un appuntamento, una referral o un paziente.' }, { status: 400 });
+  // Un id ben formato non è un id di QUESTO studio: le chiavi esterne di
+  // preparazione_chiamate sono globali. Senza questo controllo si poteva
+  // agganciare una chiamata — che è un dato sanitario — a una persona di un
+  // altro studio. Stesso cancello già messo in `richiami`.
+  const nostro = async (tabella: 'appointments' | 'referrals' | 'patients', v: string | null) => {
+    if (!v) return true;
+    const [riga] = await query<{ id: string }>(`select id from ${tabella} where id = $1 and studio_id = $2`, [v, session.studioId]);
+    return !!riga;
+  };
+  if (!(await nostro('appointments', appointmentId)) || !(await nostro('referrals', referralId)) || !(await nostro('patients', patientId))) {
+    return NextResponse.json({ errore: 'Non trovato in questo studio.' }, { status: 404 });
+  }
   const nota = String(c?.nota ?? '').trim().slice(0, 200);
   const [r] = await query<{ id: string }>(
     `insert into preparazione_chiamate (studio_id, appointment_id, referral_id, patient_id, user_id, esito, nota) values ($1, $2, $3, $4, $5, $6, nullif($7, '')) returning id`,
