@@ -67,9 +67,14 @@ async function rfCaricaDati() {
   for (const nome of ['ARCHIVE', 'AUDIT', 'AIJOBS', 'KNOWLEDGE', 'INVOICES']) { try { if (Array.isArray(window[nome])) rfSvuota(window[nome]); } catch { /* assente */ } }
   // Voci per ruolo (14.9.2026: Percorsi, Moduli, Da fatturare). Questa riga
   // vince su qualunque aggiunta fatta al caricamento dello script.
-  const nav = ['home', 'agenda', 'visite', 'richiami', 'sale', 'prestazioni', 'patients', 'invianti', 'percorsi', 'reports', 'dittafono', 'documents', 'moduli', 'anonymize', 'inbox', 'ai', 'fatturazione', 'administration'];
+  const nav = ['home', 'agenda', 'visite', 'richiami', 'sale', 'prestazioni', 'patients', 'invianti', 'percorsi', 'reports', 'dittafono', 'documents', 'imaging', 'moduli', 'anonymize', 'inbox', 'ai', 'fatturazione', 'administration'];
   const nascosti = new Set(Array.isArray(RF.data.moduli_nascosti) ? RF.data.moduli_nascosti : []);
-  for (const k of Object.keys(NAV)) NAV[k] = nav.filter(v => (v !== 'fatturazione' || ['secretary', 'org_admin'].includes(k)) && (!nascosti.has(v) || v === 'home' || v === 'administration'));
+  // Chi vede che cosa: «Da fatturare» è di segreteria e amministrazione; le
+  // immagini sono dati sanitari e le vede chi cura, non il tecnico — come per
+  // la scheda del paziente. La rotta dice già di no, ma una voce di menu che
+  // risponde «non ti è permesso» è una voce di menu scritta male.
+  const soloRuoli = { fatturazione: ['secretary', 'org_admin'], imaging: ['secretary', 'assistant', 'doctor', 'org_admin'] };
+  for (const k of Object.keys(NAV)) NAV[k] = nav.filter(v => (!soloRuoli[v] || soloRuoli[v].includes(k)) && (!nascosti.has(v) || v === 'home' || v === 'administration'));
   render();
 }
 
@@ -195,7 +200,7 @@ const rfRenderSidebarOrig = renderSidebar;
 // raggruppate con un'etichetta; una voce fuori da ogni gruppo finisce in coda.
 const RF_NAV_GRUPPI = [
   ['Operatività', ['home', 'agenda', 'visite', 'richiami', 'sale', 'prestazioni', 'inbox']],
-  ['Clinico', ['patients', 'invianti', 'percorsi', 'visits', 'reports', 'dittafono', 'documents', 'moduli']],
+  ['Clinico', ['patients', 'invianti', 'percorsi', 'visits', 'reports', 'dittafono', 'documents', 'imaging', 'moduli']],
   ['AI', ['ai', 'anonymize']],
   ['Amministrazione', ['fatturazione', 'communications', 'statistics', 'administration', 'system']],
 ];
