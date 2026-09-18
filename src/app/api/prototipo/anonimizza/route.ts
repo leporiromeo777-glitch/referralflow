@@ -71,6 +71,7 @@ export async function POST(req: NextRequest) {
     const esito = await anonimizza(testo);
     const ms = Date.now() - t0;
     console.log(`[anonimizza] prototipo origine=${origine} caratteri=${testo.length} sostituzioni=${esito.sostituzioni.length} modello=${esito.modello} ${ms}ms`);
+    let registro = true;
     const perTipo: Record<string, number> = {};
     for (const x of esito.sostituzioni) {
       const k = String(x.segnaposto ?? '').replace(/[[\]_\d]/g, '').trim() || 'altro';
@@ -90,8 +91,11 @@ export async function POST(req: NextRequest) {
             and id not in (select id from anonimizzazioni where studio_id = $1 and testo is not null order by created_at desc limit $2)`,
         [session.studioId, QUANTI_TESTI]
       );
-    } catch (e) { console.warn(`[anonimizza] registro non scritto: ${(e as Error).message}`); }
-    return NextResponse.json({ ok: true, originale: testo, testo: esito.testo, sostituzioni: esito.sostituzioni, modello: esito.modello, ms }, { headers: { 'Cache-Control': 'no-store' } });
+    } catch (e) { registro = false; console.warn(`[anonimizza] registro non scritto: ${(e as Error).message}`); }
+    // `registro: false` non blocca l'anonimizzazione, ma la pagina lo dice:
+    // il file in testa promette «resta una riga di registro (chi, quando, da
+    // dove)», e se quella riga non c'è nessuno deve scoprirlo dai log.
+    return NextResponse.json({ ok: true, registro, originale: testo, testo: esito.testo, sostituzioni: esito.sostituzioni, modello: esito.modello, ms }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (e) {
     console.error(`[anonimizza] prototipo fallita: ${(e as Error)?.message ?? e}`);
     return NextResponse.json({ errore: 'Il modello locale non ha risposto: riprova tra un minuto.' }, { status: 503 });

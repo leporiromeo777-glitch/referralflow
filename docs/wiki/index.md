@@ -24,6 +24,7 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 - [[Piattaforma/Automazioni]] — cron, SMS, watchdog, report
 - [[Piattaforma/Robot agenda MediOnline]]
 - [[Piattaforma/Funzioni fatte]] — tutto ciò che esiste già, in ordine inverso
+- [[Piattaforma/Revisione del 18.9.2026]] — le quattro forme di guasto uscite dalla passata di revisione, e che cosa resta da fare
 - [[Piattaforma/Documenti legali]] — che cosa c'è in docs/legale e a che punto è
 - [[Piattaforma/Prossimi lavori]] e [[Piattaforma/Visione]]
 - [[Piattaforma/Prototipo stack]] — l'interfaccia nuova, oggi operativa su cct.referralflow.ch/prototipo (dati veri, bot locale, procedure con traccia); la copia con dati finti resta su :8765

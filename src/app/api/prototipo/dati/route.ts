@@ -473,9 +473,20 @@ export async function GET() {
     da_prenotare: refs.filter((r) => r.status === 'da_prenotare').length, disdette: disd.length, consulti_aperti: cons.length, richiami_scaduti: fups.length,
     pazienti: pazienti.length, documenti: docs.length, audio_in_coda: audio.length,
   };
+  // Il tecnico tiene in piedi il sistema, non cura nessuno: a lui le schede
+  // arrivano senza terapia, fatti clinici, quesiti, AVS e numero d'assicurato.
+  // Questa GET consegnava a chiunque avesse una sessione l'anagrafica clinica
+  // di 500 pazienti — mentre a quello stesso tecnico la rotta «procedura»
+  // nega il briefing di UN paziente solo.
+  const clinico = session.role !== 'tecnico';
+  const pazientiFuori = clinico ? patients : patients.map((p) => ({
+    ...p, avs: '', n_assicurato: '', terapia: [], terapiaDa: '', fatti: [], indicazione: '',
+    referrals: (p.referrals ?? []).map((r: any) => ({ ...r, quesito: '' })),
+  }));
+
   return NextResponse.json({
     utente: { role: RUOLO[session.role] ?? 'secretary', name: nome, initials: iniz, studio: session.studioNome, email: session.email },
-    today, doctors, patients, appts: apptsOggi, agenda, tasks, reports, documents, inbox, audioInbox, stats, sale, agendeMedico, ruoliMedici, pianoSale: piano, capienzaSale: { ...cap, stanze: sale.length },
+    today, doctors, patients: pazientiFuori, appts: apptsOggi, agenda, tasks, reports, documents, inbox, audioInbox, stats, sale, agendeMedico, ruoliMedici, pianoSale: piano, capienzaSale: { ...cap, stanze: sale.length },
     risorse: risorse.map((r) => ({ id: r.id, tipo: r.tipo, nome: r.nome, posti: r.posti })),
     catalogo, coloriMedici, daChiamare, moduli_nascosti: stud?.moduli_nascosti ?? [],
   });

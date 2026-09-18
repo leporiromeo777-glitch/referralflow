@@ -2964,6 +2964,7 @@ PAGES.anonymize = () => {
     <div class="card tight mb-16 row wrap" style="gap:10px">
       <span class="badge success">${ICONS.check || ''} ${a.esito.sostituzioni.length} sostituzioni</span>
       ${tipi(a.esito.sostituzioni).map(([k, n]) => `<span class="badge">${rfEsc(k)} · ${n}</span>`).join('')}
+      ${a.esito.registro === false ? '<span class="badge warning">questa anonimizzazione non è finita nel registro</span>' : ''}
       <span class="caption">${rfEsc(a.esito.modello)} · ${(a.esito.ms / 1000).toFixed(1)} s</span>
       <span class="right row" style="gap:6px"><button class="btn sm" onclick="rfAnonCopia()">${ICONS.copy || ''} Copia</button><button class="btn sm" onclick="rfAnonScarica()">Scarica</button></span>
     </div>
