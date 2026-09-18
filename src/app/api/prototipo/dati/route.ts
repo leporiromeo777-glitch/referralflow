@@ -288,13 +288,17 @@ export async function GET() {
     const docId = typeof p.medico?.id === 'string' ? p.medico.id : 'studio';
     if (!doctors[docId] && typeof p.medico?.nome === 'string') doctors[docId] = p.medico.nome;
     const d = new Date(p.dettato_il ?? b.created_at);
-    for (const t of tasks) if (t.id === `boz-${b.id}`) break;
-    if (b.stato === 'bozza') tasks.push({ id: `boz-${b.id}`, title: `Bozza di referto da rivedere: ${nomePaz || 'paziente non indicato'}${rev.riepilogo.crit ? ` · ${rev.riepilogo.crit} critiche` : ''}`, p: pid, assignee: 'secretary', prio: rev.riepilogo.crit ? 'high' : 'normal', status: 'TODO', due: dCh(b.created_at), cat: 'send', src: 'automation', href: `/referti/${b.id}` });
+    // (il doppione della stessa bozza non va aggiunto due volte: prima qui
+    // c'era un ciclo che non faceva niente)
+    if (b.stato === 'bozza' && !tasks.some((t) => t.id === `boz-${b.id}`)) tasks.push({ id: `boz-${b.id}`, title: `Bozza di referto da rivedere: ${nomePaz || 'paziente non indicato'}${rev.riepilogo.crit ? ` · ${rev.riepilogo.crit} critiche` : ''}`, p: pid, assignee: 'secretary', prio: rev.riepilogo.crit ? 'high' : 'normal', status: 'TODO', due: dCh(b.created_at), cat: 'send', src: 'automation', href: `/referti/${b.id}` });
     return {
       id: b.id, p: pid, doc: docId, date: dCh(b.created_at), type: b.tipo === 'visita' ? 'Visita registrata' : p.medico?.formato === 'lettera' ? 'Lettera al collega' : 'Rapporto',
       status: b.stato === 'confermata' ? 'APPROVED' : 'READY_FOR_FORMAL_REVIEW', version: b.stato === 'confermata' ? 'FINAL' : rivisto ? 'v2 rivisto' : 'v1 AI', rivisto,
       alerts: rev.riepilogo.crit, queue: rev.riepilogo.est,
       at: `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')} · ${ora(d.toISOString())}`,
+      // L'etichetta `at` è per gli occhi: ordinarci sopra metteva 31.08 dopo
+      // 01.09. Per ordinare serve una chiave ordinabile.
+      atIso: d.toISOString(),
       audio: rev.audio.label, fiducia: p.fiducia?.punteggio ?? null, ...rev.riepilogo,
     };
   });

@@ -5,7 +5,10 @@ const state = {
   aiRunning: 2, reportChoice: null, proposalsDone: false,
 };
 const $ = (s, el = document) => el.querySelector(s);
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// L'apostrofo va escapato come il resto: decine di `onclick` mettono i dati
+// dentro stringhe JS fra apici singoli, e un nome come Dell'Orto chiudeva la
+// stringa — il pulsante smetteva di funzionare e basta, senza dire niente.
+const esc = s => String(s ?? '').replace(/[&<>"'`]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' }[c]));
 
 /* ---------- Theme ---------- */
 function applyTheme() {
@@ -187,7 +190,13 @@ function closeSheet() { $('#sheet').classList.remove('show'); $('#sheet-overlay'
 function openModal(title, body, actions) {
   $('#modal').innerHTML = `<h3>${title}</h3><div class="m-body">${body}</div><div class="m-actions">${actions}</div>`;
   $('#modal-overlay').classList.add('show');
-  $('#modal').querySelectorAll('[data-close]').forEach(b => b.onclick = closeModal);
+  // `data-close` chiude la finestra, ma non deve mangiarsi quello che il
+  // bottone doveva fare: prima l'assegnazione cancellava l'onclick inline e
+  // «Torna ai referti», «Approva» e «Scarta» chiudevano e basta.
+  $('#modal').querySelectorAll('[data-close]').forEach(b => {
+    const suo = b.onclick;
+    b.onclick = function (e) { if (suo) suo.call(this, e); closeModal(); };
+  });
   bindCommon($('#modal'));
 }
 function closeModal() { $('#modal-overlay').classList.remove('show'); }

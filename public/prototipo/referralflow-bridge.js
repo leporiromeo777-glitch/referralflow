@@ -14,9 +14,20 @@
    - la Guided Review lavora sulla bozza vera con l'audio vero e «Termina
      revisione» salva il testo nella piattaforma (la conferma resta lì).
    Fuori dalla piattaforma (porta 8765) il ponte è inerte: restano i dati finti. */
-const RF = { live: false, data: null, queue: [], loaded: null, loading: null, meta: null, audioEl: null, medici: [], caricato: false, nonAutorizzato: false, procedure: [], org: null };
+const RF = { live: false, erroreCarico: null, data: null, queue: [], loaded: null, loading: null, meta: null, audioEl: null, medici: [], caricato: false, nonAutorizzato: false, procedure: [], org: null };
 function rfDentro() { return /\/prototipo\//.test(location.pathname); }
 const rfEsc = (s) => (typeof esc === 'function' ? esc(String(s ?? '')) : String(s ?? ''));
+/* Il nome di chi sta in un riquadro dell'agenda. Non tutti gli appuntamenti
+   hanno un paziente in cartella: l'agenda dello studio contiene anche blocchi
+   («pausa pranzo», «ecg 14h», un trattino), e per quelli il campo `p` è vuoto.
+   Prima bastava uno di questi perché `fullName(undefined)` lanciasse: la Home
+   restava bianca e ogni domanda a Cleo moriva prima di partire, con la bolla
+   «Chiedo al modello locale…» ferma per sempre. */
+/* Il giorno di oggi a Zurigo. `toISOString()` è UTC: fra mezzanotte e le
+   01:00/02:00 locali dava IERI, e la pagina si apriva sul giorno sbagliato
+   (o Cleo rispondeva sulla giornata sbagliata) proprio nelle ore di guardia. */
+const rfOggi = () => new Date().toLocaleDateString('sv-SE');
+function rfNomeAppt(a) { const paz = a && P[a.p]; return paz ? fullName(paz) : ((a && (a.nomeBreve || a.nome)) || 'Appuntamento'); }
 
 /* ---------- caricamento dei dati veri ---------- */
 function rfSvuota(arr) { arr.length = 0; }
@@ -25,11 +36,11 @@ function rfRimpiazzaOggetto(obj, nuovo) { for (const k of Object.keys(obj)) dele
 async function rfCaricaDati() {
   if (!rfDentro()) return;
   let r;
-  try { r = await fetch('/api/prototipo/dati', { credentials: 'include' }); } catch (e) { return; }
+  try { r = await fetch('/api/prototipo/dati', { credentials: 'include' }); } catch (e) { RF.erroreCarico = 'La piattaforma non risponde.'; if (!RF.caricato) rfPaginaCarico(); return; }
   if (r.status === 401) { RF.nonAutorizzato = true; rfPaginaAccesso({ passo: 'credenziali', errore: null, lavora: false }); return; }
-  if (!r.ok) return;
+  if (!r.ok) { RF.erroreCarico = `La piattaforma ha risposto ${r.status}.`; if (!RF.caricato) rfPaginaCarico(); return; }
   const d = await r.json();
-  RF.data = d; RF.live = true; RF.caricato = true;
+  RF.data = d; RF.live = true; RF.caricato = true; RF.erroreCarico = null;
   const ruolo = ['secretary', 'doctor', 'org_admin', 'assistant', 'tech_admin'].includes(d.utente.role) ? d.utente.role : 'secretary';
   for (const k of Object.keys(ROLES)) ROLES[k] = { ...ROLES[k], name: d.utente.name, initials: d.utente.initials, greet: `Buongiorno, ${d.utente.name}` };
   ROLES[ruolo].greet = `${new Date().getHours() < 13 ? 'Buongiorno' : 'Buonasera'}, ${d.utente.name}`;
@@ -258,6 +269,7 @@ PAGES.home = () => {
   const appts = [...APPTS].sort((a, b) => a.start.localeCompare(b.start));
   const now = new Date(); const hm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const next = appts.find(a => a.status !== 'COMPLETED' && a.start >= hm) || appts.find(a => a.status !== 'COMPLETED');
+  const pazNext = next ? P[next.p] : null;
   const stat = (v, l, go, d = '', warn = false) => `<div class="card tight clickable stat" data-go="${go}"><span class="value num">${v}</span><span class="label">${l}</span>${d ? `<span class="delta${warn ? ' warn' : ''}">${d}</span>` : ''}</div>`;
   const data = now.toLocaleDateString('it-CH', { weekday: 'long', day: 'numeric', month: 'long' });
   const mediciOggi = [...new Set(appts.map(a => a.doc).filter(d => d && d !== 'studio'))];
@@ -287,10 +299,10 @@ PAGES.home = () => {
       <div class="row between"><span class="section-title">Prossimo paziente</span><span class="status"><i class="dot ${next.late ? 'danger' : 'success'}"></i>${next.late ? 'In ritardo' : STATUS_LABEL[next.status] || ''}</span></div>
       <div class="row mt-16" style="gap:16px;align-items:flex-start">
         <div class="num" style="font-size:40px;font-weight:700;letter-spacing:-.03em;line-height:1">${next.start}</div>
-        <div class="grow"><div style="font-size:20px;font-weight:650">${rfEsc(fullName(P[next.p]))}${P[next.p].age ? ` <span class="meta">· ${P[next.p].age} anni</span>` : ''}</div><div class="meta">${rfEsc(next.reason)} · ${rfEsc(DOCTORS[next.doc] || '')}${next.room ? ` · ${rfEsc(next.room)}` : ''}</div>
-          <div class="row wrap mt-8">${P[next.p].docs && P[next.p].docs.length ? `<span class="badge accent">${P[next.p].docs.length} documenti in cartella</span>` : ''}${P[next.p].referrals && P[next.p].referrals.length ? `<span class="badge">${P[next.p].referrals.length} referral</span>` : ''}</div></div>
+        <div class="grow"><div style="font-size:20px;font-weight:650">${rfEsc(rfNomeAppt(next))}${pazNext && pazNext.age ? ` <span class="meta">· ${pazNext.age} anni</span>` : ''}</div><div class="meta">${rfEsc(next.reason)} · ${rfEsc(DOCTORS[next.doc] || '')}${next.room ? ` · ${rfEsc(next.room)}` : ''}</div>
+          <div class="row wrap mt-8">${pazNext && pazNext.docs && pazNext.docs.length ? `<span class="badge accent">${pazNext.docs.length} documenti in cartella</span>` : ''}${pazNext && pazNext.referrals && pazNext.referrals.length ? `<span class="badge">${pazNext.referrals.length} referral</span>` : ''}</div></div>
       </div>
-      <div class="row mt-24"><button class="btn primary lg" data-go="#/patients/${next.p}">Scheda paziente</button>${rfUuid(next.p) ? `<button class="btn lg ai" data-ai="Briefing pre-visita di ${rfEsc(fullName(P[next.p]))}">${ICONS.ai} Briefing pre-visita</button>` : ''}<button class="btn lg" data-go="#/agenda">Agenda di oggi</button></div>
+      <div class="row mt-24"><button class="btn primary lg" data-go="#/patients/${next.p}">Scheda paziente</button>${rfUuid(next.p) ? `<button class="btn lg ai" data-ai="Briefing pre-visita di ${rfEsc(rfNomeAppt(next))}">${ICONS.ai} Briefing pre-visita</button>` : ''}<button class="btn lg" data-go="#/agenda">Agenda di oggi</button></div>
     </div>` : ''}
     <div class="grid grid-main-side mt-16">
       <div class="stack rf-home-sx">
@@ -374,7 +386,7 @@ if (typeof NAV !== 'undefined') for (const r of ['secretary', 'assistant', 'doct
 .rf-mod-sino { display:flex; gap:6px; }
 .rf-mod-sino button.active { background:var(--accent-soft); border-color:var(--accent); color:var(--accent-text); }
 #rf-print { display:none; }
-@media print { body > *:not(#rf-print) { display:none !important; } #rf-print { display:block; font:12pt/1.45 -apple-system, "Helvetica Neue", Arial, sans-serif; color:#000; padding:0; } #rf-print h1 { font-size:16pt; margin:0 0 2pt; } #rf-print .meta { color:#333; font-size:10.5pt; margin-bottom:12pt; } #rf-print table { width:100%; border-collapse:collapse; } #rf-print td { border-bottom:1px solid #999; padding:6pt 4pt; vertical-align:top; } #rf-print td:first-child { width:38%; color:#333; } #rf-print .firma { margin-top:28pt; display:flex; justify-content:space-between; } #rf-print .firma span { border-top:1px solid #000; padding-top:4pt; width:40%; font-size:10pt; } }
+@media print { body.rf-stampa > *:not(#rf-print) { display:none !important; } body.rf-stampa #rf-print { display:block; font:12pt/1.45 -apple-system, "Helvetica Neue", Arial, sans-serif; color:#000; padding:0; } #rf-print h1 { font-size:16pt; margin:0 0 2pt; } #rf-print .meta { color:#333; font-size:10.5pt; margin-bottom:12pt; } #rf-print table { width:100%; border-collapse:collapse; } #rf-print td { border-bottom:1px solid #999; padding:6pt 4pt; vertical-align:top; } #rf-print td:first-child { width:38%; color:#333; } #rf-print .firma { margin-top:28pt; display:flex; justify-content:space-between; } #rf-print .firma span { border-top:1px solid #000; padding-top:4pt; width:40%; font-size:10pt; } }
 `; document.head.appendChild(st); })();
 RF.moduli = null;
 async function rfCaricaModuli(rendi = true) {
@@ -466,6 +478,22 @@ async function rfModuloApri(id) {
     } catch { toast('Piattaforma non raggiungibile'); }
   };
 }
+// I codici di recupero su carta. Prima questo pulsante chiamava window.print()
+// e usciva un foglio bianco: la regola di stampa dei moduli nasconde tutto
+// quello che non è il foglio nascosto, e i codici non ci sono mai entrati.
+function rfStampaCodici() {
+  const p = RF.sic; if (!p || !p.codici) return;
+  let box = document.getElementById('rf-print'); if (!box) { box = document.createElement('div'); box.id = 'rf-print'; document.body.appendChild(box); }
+  const studio = (RF.data && RF.data.utente && RF.data.utente.studio) || 'ReferralFlow';
+  const chi = (RF.data && RF.data.utente && RF.data.utente.name) || '';
+  box.innerHTML = `<h1>Codici di recupero</h1><div class="meta">${rfEsc(studio)}${chi ? ` · ${rfEsc(chi)}` : ''} · ${rfEsc(new Date().toLocaleDateString('it-CH'))}</div>
+    <table>${p.codici.map((c, i) => `<tr><td>${i + 1}.</td><td>${rfEsc(c)}</td></tr>`).join('')}</table>
+    <div class="meta" style="margin-top:12pt">Ognuno vale una volta sola. Tienili dove tieni le cose importanti.</div>`;
+  document.body.classList.add('rf-stampa');
+  const pulisci = () => { document.body.classList.remove('rf-stampa'); box.innerHTML = ''; window.removeEventListener('afterprint', pulisci); };
+  window.addEventListener('afterprint', pulisci);
+  setTimeout(() => { window.print(); setTimeout(pulisci, 2000); }, 50);
+}
 function rfModuloStampa(c, campi, dati) {
   let box = document.getElementById('rf-print'); if (!box) { box = document.createElement('div'); box.id = 'rf-print'; document.body.appendChild(box); }
   const studio = (RF.data && RF.data.utente && RF.data.utente.studio) || 'ReferralFlow';
@@ -473,7 +501,13 @@ function rfModuloStampa(c, campi, dati) {
     <table>${campi.map(x => `<tr><td>${x.n}. ${rfEsc(x.etichetta)}</td><td>${rfEsc(dati[x.chiave] || '')}</td></tr>`).join('')}</table>
     <div class="firma"><span>Data</span><span>Firma</span></div>`;
   fetch(`/api/prototipo/moduli/${c.id}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'stampa' }) }).catch(() => {});
-  setTimeout(() => window.print(), 50);
+  // Il foglio nascosto resta nel documento finché non si stampa, e va svuotato
+  // subito dopo: se no la stampa successiva — anche un Cmd-P qualunque, anche
+  // dei codici di recupero — rifà uscire il modulo di quel paziente.
+  document.body.classList.add('rf-stampa');
+  const pulisci = () => { document.body.classList.remove('rf-stampa'); box.innerHTML = ''; window.removeEventListener('afterprint', pulisci); };
+  window.addEventListener('afterprint', pulisci);
+  setTimeout(() => { window.print(); setTimeout(pulisci, 2000); }, 50);
 }
 // Scheda paziente → Documenti: i moduli compilati per questo paziente.
 const rfPatientDocsOrig = typeof patientDocs === 'function' ? patientDocs : null;
@@ -518,7 +552,7 @@ async function rfFattEsporta() {
 }
 PAGES.fatturazione = () => {
   if (!RF.live) return rfPaginaPiattaforma('Da fatturare', 'Prestazioni erogate e loro stato nella Cassa dei Medici');
-  const oggi = (RF.data && RF.data.today) || new Date().toISOString().slice(0, 10);
+  const oggi = (RF.data && RF.data.today) || rfOggi();
   if (!state.fattMese) state.fattMese = oggi.slice(0, 7);
   const mese = state.fattMese;
   if (!RF.fatt || RF.fatt.mese !== mese) { void rfCaricaFatt(mese); return `<div class="page-head"><div><h2 class="page-title">Da fatturare</h2><div class="page-sub">Prestazioni erogate e loro stato nella Cassa dei Medici</div></div></div><div class="card"><p class="meta" style="margin:0">Raccolgo le prestazioni del mese…</p></div>`; }
@@ -707,7 +741,7 @@ document.addEventListener('change', (e) => { if (e.target && e.target.id && e.ta
 PAGES.prestazioni = () => {
   if (!RF.live) return rfPaginaPiattaforma('Prestazioni', 'Tutte le prestazioni a calendario');
   const f = state.prestFiltri || {};
-  const oggi = (RF.data && RF.data.today) || new Date().toISOString().slice(0, 10);
+  const oggi = (RF.data && RF.data.today) || rfOggi();
   const tutte = (RF.agenda || []).slice().sort((a, b) => (b.d + b.start).localeCompare(a.d + a.start));
   const settimana = (() => { const d = new Date(`${oggi}T12:00:00`); const a = new Date(d); a.setDate(d.getDate() - ((d.getDay() + 6) % 7)); const b = new Date(a); b.setDate(a.getDate() + 6); return [a.toISOString().slice(0, 10), b.toISOString().slice(0, 10)]; })();
   const periodo = f.periodo || 'settimana';
@@ -1403,7 +1437,7 @@ reportsQueue = function () {
   const chiusi = RV_QUEUE.filter(r => r.status === 'APPROVED');
   const ordina = (l) => [...l].sort((a, b) => {
     if (sort === 'priority') return rank[a.state] - rank[b.state] || b.crit - a.crit;
-    if (sort === 'time') return b.at.localeCompare(a.at);
+    if (sort === 'time') return String(b.atIso || b.at).localeCompare(String(a.atIso || a.at));
     if (sort === 'doctor') return (DOCTORS[a.doc] || '').localeCompare(DOCTORS[b.doc] || '');
     return fullName(P[a.p]).localeCompare(fullName(P[b.p]));
   });
@@ -2160,12 +2194,12 @@ function rfContestoBot() {
   const s = RF.data ? RF.data.stats : {};
   const p = state.patientCtx ? P[state.patientCtx] : null;
   return {
-    oggi: new Date().toISOString().slice(0, 10), ruolo: state.role, pagina: state.route,
+    oggi: (RF.data && RF.data.today) || rfOggi(), ruolo: state.role, pagina: state.route,
     documento_aperto: DV.open && DV.item && DV.item.live ? { titolo: DV.item.title, paziente: DV.item.p && P[DV.item.p] ? fullName(P[DV.item.p]) : null, data: DV.item.date } : null,
     numeri: s,
-    agenda_oggi: APPTS.map(a => ({ ora: a.start, paziente: fullName(P[a.p]), medico: DOCTORS[a.doc], motivo: a.reason, stato: STATUS_LABEL[a.status] || a.status, in_ritardo: !!a.late })),
+    agenda_oggi: APPTS.map(a => ({ ora: a.start, paziente: rfNomeAppt(a), medico: DOCTORS[a.doc], motivo: a.reason, stato: STATUS_LABEL[a.status] || a.status, in_ritardo: !!a.late })),
     attivita: TASKS.slice(0, 25).map(t => ({ titolo: t.title, scadenza: t.due, priorita: t.prio })),
-    referti: RF.queue.slice(0, 15).map(r => ({ paziente: fullName(P[r.p]), medico: DOCTORS[r.doc], stato: r.status === 'APPROVED' ? 'confermato' : 'da controllare', verifiche: r.issues, critiche: r.crit, nota: r.note, quando: r.at })),
+    referti: RF.queue.slice(0, 15).map(r => ({ paziente: rfNomeAppt(r), medico: DOCTORS[r.doc], stato: r.status === 'APPROVED' ? 'confermato' : 'da controllare', verifiche: r.issues, critiche: r.crit, nota: r.note, quando: r.at })),
     documenti_recenti: DOCUMENTS.slice(0, 15).map(d => ({ titolo: d.t, paziente: P[d.p] ? fullName(P[d.p]) : null, tipo: DOC_TYPE[d.type] || d.type, data: d.date })),
     paziente_aperto: p ? { nome: fullName(p), nascita: p.dob, referral: p.referrals || [], documenti: (p.docs || []).map(d => ({ titolo: d.t, data: d.d })), prossimo: p.next, ultima_visita: p.lastVisit, medico_inviante: p.gp } : null,
   };
@@ -2275,16 +2309,16 @@ function rfRispostaImmediata(q) {
   const next = appts.find(a => a.status !== 'COMPLETED' && a.start >= hm) || appts.find(a => a.status !== 'COMPLETED');
   const riga = (t) => rfEsc(t);
   if (/prossim[oa] (paziente|appuntamento)|chi (è|e) il prossimo|dopo chi/.test(ql)) {
-    return next ? `<b>Prossimo paziente</b><br>${next.start} · ${riga(fullName(P[next.p]))} · ${riga(next.reason)} · ${riga(DOCTORS[next.doc] || '')}${next.late ? ' · <span class="badge danger">in ritardo</span>' : ''}` : 'Nessun altro appuntamento oggi.';
+    return next ? `<b>Prossimo paziente</b><br>${next.start} · ${riga(rfNomeAppt(next))} · ${riga(next.reason)} · ${riga(DOCTORS[next.doc] || '')}${next.late ? ' · <span class="badge danger">in ritardo</span>' : ''}` : 'Nessun altro appuntamento oggi.';
   }
   if (/quanti (appuntamenti|pazienti)|appuntamenti (ci sono )?oggi|agenda di oggi|riassum/.test(ql)) {
     const primo = appts[0]; const ultimo = appts[appts.length - 1];
     const medici = [...new Set(appts.map(a => DOCTORS[a.doc]).filter(Boolean))];
-    return `<b>Oggi</b><br>• ${appts.length} appuntamenti${appts.length ? ` dalle ${primo.start} alle ${ultimo.start}` : ''}${medici.length ? ` · ${medici.join(', ')}` : ''}<br>• ${s.visti_oggi || 0} già visti${next ? `, prossimo ${next.start} ${riga(fullName(P[next.p]))}` : ''}<br>• ${s.bozze_da_rivedere || 0} referti da controllare · ${s.urgenti || 0} referral urgenti · ${s.da_prenotare || 0} da prenotare · ${s.richiami_scaduti || 0} richiami scaduti<br>• ${TASKS.length} cose da fare in tutto`;
+    return `<b>Oggi</b><br>• ${appts.length} appuntamenti${appts.length ? ` dalle ${primo.start} alle ${ultimo.start}` : ''}${medici.length ? ` · ${medici.join(', ')}` : ''}<br>• ${s.visti_oggi || 0} già visti${next ? `, prossimo ${next.start} ${riga(rfNomeAppt(next))}` : ''}<br>• ${s.bozze_da_rivedere || 0} referti da controllare · ${s.urgenti || 0} referral urgenti · ${s.da_prenotare || 0} da prenotare · ${s.richiami_scaduti || 0} richiami scaduti<br>• ${TASKS.length} cose da fare in tutto`;
   }
   if (/referti (da )?(controllare|rivedere|approvare)|bozze/.test(ql)) {
     const aperti = RF.queue.filter(r => r.status !== 'APPROVED');
-    return aperti.length ? `<b>Referti da controllare (${aperti.length})</b><br>${aperti.slice(0, 6).map(r => `• ${riga(fullName(P[r.p]))} · ${riga(r.note)} · ${r.crit} critiche`).join('<br>')}` : 'Nessun referto da controllare.';
+    return aperti.length ? `<b>Referti da controllare (${aperti.length})</b><br>${aperti.slice(0, 6).map(r => `• ${riga(rfNomeAppt(r))} · ${riga(r.note)} · ${r.crit} critiche`).join('<br>')}` : 'Nessun referto da controllare.';
   }
   if (/urgent/.test(ql)) return `<b>Referral urgenti aperte</b>: ${s.urgenti || 0}${TASKS.filter(t => t.prio === 'urgent').length ? '<br>' + TASKS.filter(t => t.prio === 'urgent').slice(0, 6).map(t => `• ${riga(t.title)}`).join('<br>') : ''}`;
   if (/richiam|follow.?up/.test(ql)) { const l = TASKS.filter(t => t.cat === 'followup'); return l.length ? `<b>Richiami scaduti (${l.length})</b><br>${l.slice(0, 8).map(t => `• ${riga(t.title)}`).join('<br>')}` : 'Nessun richiamo scaduto.'; }
@@ -3019,8 +3053,9 @@ async function rfStudioCarica(extra) {
   // scheda è aperta; il resto viene sempre.
   try {
     const r = await fetch(`/api/prototipo/studio${extra ? `?extra=${extra}` : ''}`, { credentials: 'include', cache: 'no-store' });
-    if (r.ok) { RF.studio.dati = Object.assign(RF.studio.dati || {}, await r.json()); render(); }
-  } catch { /* riprova al prossimo giro */ }
+    if (r.ok) { RF.studio.dati = Object.assign(RF.studio.dati || {}, await r.json()); RF.studio.errore = null; render(); }
+    else { RF.studio.errore = `Non riesco a leggere i dati dello studio (${r.status}).`; render(); }
+  } catch { RF.studio.errore = 'Piattaforma non raggiungibile.'; render(); }
 }
 async function rfStudioAzione(corpo) {
   RF.studio.errore = null; RF.studio.ok = null;
@@ -3037,7 +3072,14 @@ const rfAdminPageOrig = PAGES.administration;
 PAGES.administration = () => {
   if (!RF.live) return rfAdminPageOrig ? rfAdminPageOrig() : '';
   const d = RF.studio.dati;
-  if (!d) { void rfStudioCarica(); return `<div class="page-head"><div><h2 class="page-title">Studio</h2></div></div><div class="card"><div class="caption">Carico…</div></div>`; }
+  if (!d) {
+    // Se la lettura fallisce si dice perché e si lascia un «Riprova»: prima
+    // restava «Carico…» per sempre, con una richiesta nuova a ogni ridisegno.
+    if (!RF.studio.errore) void rfStudioCarica();
+    return `<div class="page-head"><div><h2 class="page-title">Studio</h2></div></div><div class="card">${RF.studio.errore
+      ? `<div class="rf-manc">${rfEsc(RF.studio.errore)}</div><div class="row mt-16"><button class="btn" onclick="RF.studio.errore=null;render()">Riprova</button></div>`
+      : '<div class="caption">Carico…</div>'}</div>`;
+  }
   const admin = !!d.admin;
   const scheda = RF.studio.scheda;
   const tab = (k, l, n) => `<button class="tab ${scheda === k ? 'active' : ''}" onclick="RF.studio.scheda='${k}';render()">${l}${n != null ? ` <span class="badge">${n}</span>` : ''}</button>`;
@@ -3149,7 +3191,11 @@ function rfStudioRisorsa(id) {
 /* ---------- profilo: la propria password e la 2FA ---------- */
 RF.profilo = { dati: null, errore: null, codici: null };
 async function rfProfiloCarica() {
-  try { const r = await fetch('/api/prototipo/profilo', { credentials: 'include' }); if (r.ok) { RF.profilo.dati = await r.json(); render(); } } catch { /* al prossimo */ }
+  try {
+    const r = await fetch('/api/prototipo/profilo', { credentials: 'include' });
+    if (r.ok) { RF.profilo.dati = await r.json(); RF.profilo.errore = null; render(); }
+    else { RF.profilo.errore = `Non riesco a leggere il tuo profilo (${r.status}).`; render(); }
+  } catch { RF.profilo.errore = 'Piattaforma non raggiungibile.'; render(); }
 }
 async function rfProfiloAzione(corpo) {
   RF.profilo.errore = null;
@@ -3165,7 +3211,12 @@ const rfProfileOrig = PAGES.profile;
 PAGES.profile = () => {
   if (!RF.live) return rfProfileOrig ? rfProfileOrig() : '';
   const d = RF.profilo.dati;
-  if (!d) { void rfProfiloCarica(); return `<div class="page-head"><div><h2 class="page-title">Profilo</h2></div></div><div class="card"><div class="caption">Carico…</div></div>`; }
+  if (!d) {
+    if (!RF.profilo.errore) void rfProfiloCarica();
+    return `<div class="page-head"><div><h2 class="page-title">Profilo</h2></div></div><div class="card">${RF.profilo.errore
+      ? `<div class="rf-manc">${rfEsc(RF.profilo.errore)}</div><div class="row mt-16"><button class="btn" onclick="RF.profilo.errore=null;render()">Riprova</button></div>`
+      : '<div class="caption">Carico…</div>'}</div>`;
+  }
   const ruoloIt = { medico: 'Medico', assistente: 'Aiuto medico', segretaria: 'Segreteria', admin: 'Amministrazione', tecnico: 'Tecnico' };
   const err = RF.profilo.errore ? `<div class="rf-manc mb-16">${rfEsc(RF.profilo.errore)}</div>` : '';
   let due = '';
@@ -3280,7 +3331,7 @@ function rfEtichettaRuolo(id) { const r = rfRuoloDi(id); return r ? ` <span clas
 const rfAgendaOrig = PAGES.agenda;
 PAGES.agenda = () => {
   if (!RF.live) return rfAgendaOrig();
-  const oggi = (RF.data && RF.data.today) || new Date().toISOString().slice(0, 10);
+  const oggi = (RF.data && RF.data.today) || rfOggi();
   // Il giorno scelto resta finché non lo si cambia — ma «oggi» a un certo
   // punto diventa domani. Se la pagina è rimasta aperta oltre la mezzanotte
   // (17.9.2026: l'agenda mostrava ancora il giorno prima), chi era fermo sul
@@ -3431,8 +3482,14 @@ PAGES.agenda = () => {
 
 /* ---------- avvio: dentro la piattaforma niente demo, mai ---------- */
 function rfPaginaCarico() {
+  // Se il primo caricamento fallisce (riavvio del server, un blip di rete, un
+  // 500) prima si restava su «Carico…» per sempre: il ritentativo periodico
+  // era dietro `RF.live`, che diventa vero solo dopo il primo successo.
   const c = document.getElementById('content');
-  if (c) c.innerHTML = `<div class="page"><div class="card" style="max-width:520px;margin:40px auto;text-align:center"><h2 class="page-title">ReferralFlow</h2><p class="meta">Carico i dati della piattaforma…</p></div></div>`;
+  const err = RF.erroreCarico;
+  if (c) c.innerHTML = `<div class="page"><div class="card" style="max-width:520px;margin:40px auto;text-align:center"><h2 class="page-title">ReferralFlow</h2>${err
+    ? `<p class="meta">${rfEsc(err)}</p><div class="row mt-16" style="justify-content:center"><button class="btn primary" onclick="RF.erroreCarico=null;rfPaginaCarico();void rfCaricaDati()">Riprova</button></div>`
+    : '<p class="meta">Carico i dati della piattaforma…</p>'}</div></div>`;
   const sb = document.getElementById('sidebar'); if (sb) sb.innerHTML = '';
 }
 if (rfDentro()) {
@@ -3464,7 +3521,9 @@ window.addEventListener('load', () => {
   void rfCaricaMedici();
   void rfCaricaProcedure();
   void rfCaricaDati();
-  setInterval(() => { if (RF.live && state.route !== 'review') void rfCaricaDati(); }, 120000);
+  // Anche quando il primo caricamento non è mai riuscito: se no chi ha aperto
+  // la pagina nel momento sbagliato resta bloccato finché non ricarica a mano.
+  setInterval(() => { if (RF.nonAutorizzato) return; if ((RF.live || RF.erroreCarico) && state.route !== 'review') void rfCaricaDati(); }, 120000);
 });
 
 /* ---------- Sale e medici (15.9.2026) ---------- */
@@ -5058,6 +5117,11 @@ PAGES.visite = () => {
     </div>`;
   }
   const sel = rfVAperta();
+  // `onRoute` azzera il contesto paziente a ogni cambio di rotta, e «visite»
+  // non è fra le rotte che lo tengono: ricaricando con la visita aperta, la
+  // colonna clinica mostrava il paziente giusto ma Cleo non sapeva di chi si
+  // stesse parlando. Qui glielo si rimette.
+  if (sel) { const c = rfVCartella(sel); if (c.pid) state.patientCtx = c.pid; }
   return `${rfOrMsg()}${sel ? rfVVisita(sel) : rfVElenco()}`;
 };
 
@@ -5336,10 +5400,10 @@ const RF_RIC_GIORNI = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'gioved�
 function rfRicGiorno(iso) {
   const d = new Date(`${iso}T12:00:00`);
   if (Number.isNaN(d.getTime())) return iso;
-  const oggi = (RF.data && RF.data.today) || new Date().toISOString().slice(0, 10);
+  const oggi = (RF.data && RF.data.today) || rfOggi();
   const domani = new Date(`${oggi}T12:00:00`); domani.setDate(domani.getDate() + 1);
   if (iso === oggi) return 'oggi';
-  if (iso === domani.toISOString().slice(0, 10)) return 'domani';
+  if (iso === domani.toLocaleDateString('sv-SE')) return 'domani';
   return `${RF_RIC_GIORNI[d.getDay()]} ${d.getDate()}`;
 }
 function rfRicProposta(p, i) {
@@ -5472,7 +5536,7 @@ function rfStudioSicurezza(d) {
       <p class="meta" style="margin:0 0 12px;line-height:1.55">La verifica in due passi è <b>attiva</b>. Questi codici servono se perdi il telefono: si vedono <b>una volta sola</b>. Stampali o mettili dove tieni le cose importanti — ognuno vale una volta.</p>
       <div class="rf-codici">${p.codici.map(c => `<code>${rfEsc(c)}</code>`).join('')}</div>
       <div class="row mt-16"><button class="btn primary" onclick="RF.sic=null;render()">Li ho messi al sicuro</button>
-        <button class="btn ghost" onclick="window.print()">${ICONS.print || ''} Stampa</button></div></div>`;
+        <button class="btn ghost" onclick="rfStampaCodici()">${ICONS.print || ''} Stampa</button></div></div>`;
   }
   if (p && p.passo === 'qr') {
     return `<div class="card"><div class="card-head"><span class="section-title">Attivare la verifica in due passi</span></div>
