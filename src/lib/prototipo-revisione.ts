@@ -51,7 +51,7 @@ export type Revisione = {
 const NEGAZIONI = new Set(['non', 'nega', 'negato', 'negata', 'senza', 'assenza', 'assente', 'mai', 'negativo', 'negativa', 'nessun', 'nessuna', 'nessuno']);
 
 function norma(s: string): string {
-  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9àèéìòù'\s/.,-]/g, ' ').replace(/\s+/g, ' ').trim();
+  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9àèéìòù'\s/.,-]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 function gettoni(s: string): string[] {
   return (norma(s).match(/[a-z0-9][a-z0-9'.,/-]*/g) ?? []).map((w) => w.replace(/^[.,'/-]+|[.,'/-]+$/g, '')).filter((w) => w.length >= 3);

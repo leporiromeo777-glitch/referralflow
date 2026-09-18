@@ -39,7 +39,11 @@ export type Pacchetto = { contesto: string; domanda: string };
 // contesto e la domanda resta vuota: meglio vuota che inventata.
 export function separaContesto(grezzo: string): Pacchetto {
   const testo = String(grezzo ?? '').replace(/\*\*/g, '').trim();
-  const m = /CONTESTO\s*:?\s*([\s\S]*?)\s*DOMANDA\s*:?\s*([\s\S]*)$/i.exec(testo);
+  // Le due etichette si riconoscono solo a inizio riga: con la vecchia regola
+  // bastava la parola «domanda» dentro una frase del contesto («La domanda
+  // riguarda l'aggiustamento della dose») perché il taglio cadesse lì, e il
+  // contesto perdesse metà dei dati che determinano la risposta.
+  const m = /^[ \t]*CONTESTO[ \t]*:?[ \t]*([\s\S]*?)^[ \t]*DOMANDA[ \t]*:?[ \t]*([\s\S]*)$/im.exec(testo);
   if (!m) return { contesto: testo, domanda: '' };
   return { contesto: m[1].trim(), domanda: m[2].trim() };
 }

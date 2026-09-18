@@ -116,7 +116,7 @@ export async function preparazioneGiornata(studioId: string, userId?: string | n
       order by a.starts_at`,
     [studioId, data]);
   const pazienti = await query<{ id: string; cognome: string; nome: string }>(`select id, cognome, nome from patients where studio_id = $1`, [studioId]);
-  const slug = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const slug = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   const perNome = new Map<string, string>();
   for (const p of pazienti) { perNome.set(slug(`${p.cognome} ${p.nome}`), p.id); perNome.set(slug(`${p.nome} ${p.cognome}`), p.id); }
   const voci = [];

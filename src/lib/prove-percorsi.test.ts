@@ -62,5 +62,20 @@ test('percorsi: la pagina vera si legge, ogni percorso ha indicazione, almeno 3 
 test('percorsi: trovaPercorso riconosce il nome nella domanda e non sceglie se ambiguo', () => {
   const p = analizzaPercorsi(MD);
   assert.equal(trovaPercorso(p, 'che percorso per la prova urgente?')?.id, 'prova-urgente');
+  // nessuno corrisponde: «prova» da sola non nomina né l'uno né l'altro
   assert.equal(trovaPercorso(p, 'prova'), null);
+  // e QUESTO è il caso ambiguo, che prima nessun test toccava: la domanda
+  // nomina due percorsi, e allora non se ne sceglie nessuno.
+  const due = analizzaPercorsi(`# Percorsi\n\n## Sincope\n- Indicazione: a\n- Prestazioni:\n  1. Visita\n\n## Sincope riflessa\n- Indicazione: b\n- Prestazioni:\n  1. Visita\n`);
+  assert.equal(due.length, 2);
+  assert.equal(trovaPercorso(due, 'che percorso per una sincope riflessa?'), null);
+});
+
+// Le pagine le scrive un medico: un elenco numerato a colonna 0 è Markdown
+// valido, e prima lasciava il percorso con la sequenza vuota.
+test('percorsi: un elenco di prestazioni non indentato vale come uno indentato', () => {
+  const senzaSpazi = MD.split('\n').map((r) => r.replace(/^ {2}(\d+\. )/, '$1')).join('\n');
+  const p = analizzaPercorsi(senzaSpazi);
+  assert.equal(p.length, 2);
+  assert.deepEqual(p[0].prestazioni.map((x) => x.n), analizzaPercorsi(MD)[0].prestazioni.map((x) => x.n));
 });

@@ -15,7 +15,7 @@ export type Percorso = {
 };
 
 function slug(s: string): string {
-  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
 function sezioni(md: string): { titolo: string; corpo: string }[] {
@@ -36,7 +36,10 @@ export function analizzaPercorsi(md: string): Percorso[] {
     for (const riga of corpo.split('\n')) {
       const c = /^\s*-\s+([A-Za-zÀ-ÿ]+)\s*:\s*(.*)$/.exec(riga);
       if (c) { campi[c[1].toLowerCase()] = c[2].trim(); continue; }
-      const p = /^\s+(\d+)\.\s+(.+?)(?:\s+—\s+(.*))?$/.exec(riga);
+      // Le pagine le scrive un medico: un elenco numerato a colonna 0 è
+      // Markdown valido, ed è quello che produce qualunque editor che non
+      // indenti le liste. Prima `^\s+` lo faceva sparire in silenzio.
+      const p = /^[ \t]*(\d+)[.)]\s+(.+?)(?:\s+—\s+(.*))?$/.exec(riga);
       if (p) {
         const nome = p[2].trim();
         prestazioni.push({ n: Number(p[1]), nome, condizione: (p[3] ?? '').trim(), esterna: /\(estern[ao]\)/i.test(nome) });

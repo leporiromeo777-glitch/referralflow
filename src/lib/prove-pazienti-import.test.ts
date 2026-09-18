@@ -35,3 +35,14 @@ test('csv pazienti: separatore virgola e tabulazione riconosciuti', () => {
   assert.equal(analizzaCsvPazienti('nome,cognome\nA,B').righe[0].dati.cognome, 'B');
   assert.equal(analizzaCsvPazienti('nome\tcognome\nA\tB').righe[0].dati.cognome, 'B');
 });
+
+// Il 31 febbraio non esiste: prima passava, e l'insert su una colonna `date`
+// faceva saltare l'import a metà file senza dire quale riga.
+test('anagrafica: una data impossibile non è una data', () => {
+  assert.equal(normalizzaData('31.02.1950'), null);
+  assert.equal(normalizzaData('45.13.1950'), null);
+  assert.equal(normalizzaData('29.02.2023'), null);
+  assert.equal(normalizzaData('29.02.2024'), '2024-02-29');
+  // Excel in locale americano: mese e giorno scambiati, meglio niente che il 31° mese
+  assert.equal(normalizzaData('12/31/1950'), null);
+});

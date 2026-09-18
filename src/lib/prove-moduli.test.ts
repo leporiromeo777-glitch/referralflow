@@ -44,6 +44,31 @@ test('moduli: validazione segnala obbligatori mancanti, numeri e scelte sbagliat
   assert.deepEqual(e2.errori, {});
 });
 
+// Un sì/no che non si capisce non diventa «sì». Prima «mai» alla domanda sul
+// fumo finiva in cartella come «sì», e il record si scriveva lo stesso.
+test('moduli: una risposta sì/no non riconosciuta è un errore, non un «sì»', () => {
+  const [m] = analizzaModuli(MD);
+  for (const risposta of ['mai', 'nessuno', 'ho smesso', 'forse']) {
+    const e = validaCompilazione(m, { c1: 'x', c4: risposta });
+    assert.equal(e.errori.c4, 'Serve sì o no.', `«${risposta}» doveva essere un errore`);
+    assert.equal('c4' in e.dati, false, `«${risposta}» non deve finire nei dati`);
+  }
+  // le forme corte invece si capiscono
+  assert.equal(validaCompilazione(m, { c1: 'x', c4: 's' }).dati.c4, 'sì');
+  assert.equal(validaCompilazione(m, { c1: 'x', c4: 'N' }).dati.c4, 'no');
+  // e un numero sbagliato non entra nei dati insieme al suo errore
+  assert.equal('c2' in validaCompilazione(m, { c1: 'x', c4: 'no', c2: 'ottanta' }).dati, false);
+});
+
+// Le pagine dei moduli le scrive un medico: un elenco numerato a colonna 0 è
+// Markdown valido, e prima faceva sparire l'intero modulo senza un avviso.
+test('moduli: un elenco numerato non indentato vale come uno indentato', () => {
+  const senzaSpazi = MD.split('\n').map((r) => r.replace(/^ {2}(\d+\. )/, '$1')).join('\n');
+  const m = analizzaModuli(senzaSpazi);
+  assert.equal(m.length, 1);
+  assert.equal(m[0].campi.length, analizzaModuli(MD)[0].campi.length);
+});
+
 test('moduli: la pagina vera si legge e ogni modulo ha codice, chi compila e almeno 5 campi con almeno un obbligatorio', () => {
   assert.ok(fs.existsSync(PAGINA_MODULI));
   const m = caricaModuli();

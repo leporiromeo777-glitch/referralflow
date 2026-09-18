@@ -222,7 +222,7 @@ export function titolare(
 }
 
 function uguali(a: string, b: string): boolean {
-  const n = (x: string) => x.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\b(dr|dr\.ssa|prof|med|ssa)\b\.?/g, '').replace(/[^a-z ]/g, ' ').split(/\s+/).filter((w) => w.length > 2).sort().join(' ');
+  const n = (x: string) => x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\b(dr|dr\.ssa|prof|med|ssa)\b\.?/g, '').replace(/[^a-z ]/g, ' ').split(/\s+/).filter((w) => w.length > 2).sort().join(' ');
   const x = n(a), y = n(b);
   if (!x || !y) return false;
   return x === y || x.includes(y) || y.includes(x);
@@ -679,17 +679,30 @@ export type FasciaLibera = { stanza: string; di: string; dalle: string; alle: st
 // far finta di no sarebbe comodo e falso.
 export type Presa = { stanza: string; chi: string; dalle: string; alle: string; perche: string; manuale?: boolean; fonte?: 'mano' | 'ai' };
 
+const minuti = (t: string) => { const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
+
 export function prese(righe: RigaPiano[], visite: Record<string, VisitaSala[]>): Record<string, Presa[]> {
   const fuori: Record<string, Presa[]> = {};
   for (const r of righe ?? []) {
     const dentro = visite?.[r.stanza] ?? [];
     fuori[r.stanza] = [];
     for (const s of r.segmenti ?? []) {
-      const sue = dentro.filter((v) => v.inizio >= s.dalle && v.inizio < s.alle);
+      const sue = dentro.filter((v) => v.inizio >= s.dalle && v.inizio < s.alle)
+        .sort((a, b) => a.inizio.localeCompare(b.inizio));
       if (!sue.length) continue;
-      let dalle = sue[0].inizio, alle = sue[0].fine;
-      for (const v of sue) { if (v.inizio < dalle) dalle = v.inizio; if (v.fine > alle) alle = v.fine; }
-      fuori[r.stanza].push({ stanza: r.stanza, chi: s.chi, dalle, alle, perche: s.perche, manuale: s.manuale, fonte: s.fonte });
+      // Una presa per gruppo di visite vicine, non una sola dalla prima
+      // all'ultima: chi ha una visita alle 08:00 e una alle 18:00 teneva la
+      // stanza per dieci ore, e quelle dieci ore sparivano dalle fasce libere
+      // — nessuno poteva proporle. Due visite si fondono solo se fra l'una e
+      // l'altra non ci sta niente (meno di MINIMA minuti).
+      for (const v of sue) {
+        const ultima = fuori[r.stanza][fuori[r.stanza].length - 1];
+        if (ultima && ultima.chi === s.chi && ultima.perche === s.perche && minuti(v.inizio) - minuti(ultima.alle) < MINIMA) {
+          if (v.fine > ultima.alle) ultima.alle = v.fine;
+        } else {
+          fuori[r.stanza].push({ stanza: r.stanza, chi: s.chi, dalle: v.inizio, alle: v.fine, perche: s.perche, manuale: s.manuale, fonte: s.fonte });
+        }
+      }
     }
   }
   return fuori;
@@ -711,13 +724,19 @@ export function fasceLibere(righe: RigaPiano[], visite: Record<string, VisitaSal
         fuori.push({ stanza: r.stanza, di: s.chi, dalle: s.dalle, alle: s.alle, ultima: r.ultima });
         continue;
       }
-      // Quel che resta della fascia attorno alla presa: prima e dopo.
-      const presa = dentro[0];
-      if (min(presa.dalle) - min(s.dalle) >= MINIMA) {
-        fuori.push({ stanza: r.stanza, di: s.chi, dalle: s.dalle, alle: presa.dalle, ultima: r.ultima });
+      // Quel che resta della fascia: prima della prima presa, FRA una presa e
+      // la successiva, e dopo l'ultima. Prima si guardava solo `dentro[0]` e
+      // il vuoto in mezzo alla giornata non compariva da nessuna parte.
+      const ordinate = [...dentro].sort((a, b) => a.dalle.localeCompare(b.dalle));
+      let cursore = s.dalle;
+      for (const presa of ordinate) {
+        if (min(presa.dalle) - min(cursore) >= MINIMA) {
+          fuori.push({ stanza: r.stanza, di: s.chi, dalle: cursore, alle: presa.dalle, ultima: r.ultima });
+        }
+        if (presa.alle > cursore) cursore = presa.alle;
       }
-      if (min(s.alle) - min(presa.alle) >= MINIMA) {
-        fuori.push({ stanza: r.stanza, di: s.chi, dalle: presa.alle, alle: s.alle, ultima: r.ultima });
+      if (min(s.alle) - min(cursore) >= MINIMA) {
+        fuori.push({ stanza: r.stanza, di: s.chi, dalle: cursore, alle: s.alle, ultima: r.ultima });
       }
     }
   }

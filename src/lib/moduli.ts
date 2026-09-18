@@ -12,7 +12,7 @@ export type CampoModulo = { chiave: string; n: number; etichetta: string; tipo: 
 export type Modulo = { id: string; codice: string; titolo: string; chi: string; quando: string; nota: string; campi: CampoModulo[] };
 
 function slug(s: string): string {
-  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
 const TIPI: [RegExp, TipoCampo][] = [
@@ -36,7 +36,10 @@ export function analizzaModuli(md: string): Modulo[] {
     for (const riga of corpo.split('\n')) {
       const c = /^\s*-\s+([A-Za-zÀ-ÿ ]+?)\s*:\s*(.*)$/.exec(riga);
       if (c) { campiTesto[c[1].toLowerCase().trim()] = c[2].trim(); continue; }
-      const q = /^\s+(\d+)\.\s+(.+)$/.exec(riga);
+      // Come nei percorsi: un elenco a colonna 0 è valido. Prima l'intera
+      // sezione veniva scartata e il modulo spariva dalla piattaforma senza
+      // dire niente.
+      const q = /^[ \t]*(\d+)[.)]\s+(.+)$/.exec(riga);
       if (!q) continue;
       const parti = q[2].split(/\s+—\s+/).map((x) => x.trim());
       const etichetta = parti[0];
@@ -63,9 +66,14 @@ export function validaCompilazione(modulo: Modulo, dati: Record<string, unknown>
     if (v) {
       if (c.tipo === 'numero' && !/^-?\d+([.,]\d+)?$/.test(v)) errori[c.chiave] = 'Serve un numero.';
       else if (c.tipo === 'data' && !/^\d{4}-\d{2}-\d{2}$/.test(v)) errori[c.chiave] = 'Serve una data.';
-      else if (c.tipo === 'si_no' && !/^(sì|si|no)$/i.test(v)) errori[c.chiave] = 'Serve sì o no.';
+      else if (c.tipo === 'si_no' && !/^(sì|si|s|no|n)$/i.test(v)) errori[c.chiave] = 'Serve sì o no.';
       else if (c.tipo === 'scelta' && !c.opzioni.includes(v)) errori[c.chiave] = 'Valore fuori dall’elenco.';
-      puliti[c.chiave] = c.tipo === 'si_no' ? (/^no$/i.test(v) ? 'no' : 'sì') : v;
+      // Una risposta sì/no non riconosciuta NON diventa «sì». Prima
+      // «mai», «nessuno», «ho smesso» finivano tutte in «sì» — e il
+      // record veniva scritto lo stesso, incompleto ma con dentro una
+      // risposta che il paziente non ha dato.
+      if (c.tipo === 'si_no') { if (/^(sì|si|s)$/i.test(v)) puliti[c.chiave] = 'sì'; else if (/^(no|n)$/i.test(v)) puliti[c.chiave] = 'no'; }
+      else if (!errori[c.chiave]) puliti[c.chiave] = v;
     } else if (c.obbligatorio) errori[c.chiave] = 'Obbligatorio.';
   }
   const completo = Object.keys(errori).length === 0;

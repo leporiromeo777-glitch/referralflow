@@ -6,7 +6,7 @@ export type TipoPrestazione = 'visita' | 'esame' | 'procedura';
 export type VoceCatalogo = { id: string; nome: string; tipo: TipoPrestazione; durata_min: number; sala: string | null; parole_chiave: string[]; attivo: boolean; codice_tariffa?: string | null; colore?: string | null };
 
 export function normalizza(s: string): string {
-  return (s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  return (s ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
 // Tipo stimato dal testo: esami strumentali, procedure, altrimenti visita.

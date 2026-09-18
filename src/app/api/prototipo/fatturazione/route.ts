@@ -22,7 +22,7 @@ function dCh(iso: string | null | undefined): string {
   return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
 }
 function ora(iso: string): string { const d = new Date(iso); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
-function slug(s: string): string { return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
+function slug(s: string): string { return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
 
 async function righeDelMese(studioId: string, dal: string, al: string): Promise<RigaFattura[]> {
   const appts = await query<{ id: string; starts_at: string; ends_at: string | null; paziente_nome: string | null; titolo: string | null; motivo: string | null; luogo: string | null; completed_at: string | null; colore: string | null; esportato: string | null; stato: string | null; stato_visto: string | null; medico: string | null; ruolo: string | null; gln: string | null; rcc: string | null; patient_id: string | null; inviante: string | null; referto: boolean }>(

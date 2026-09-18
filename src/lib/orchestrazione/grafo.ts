@@ -138,7 +138,7 @@ export function costruisciGrafo(opz: {
 // Confronto di nomi come nel resto del file sale.ts: senza titoli, senza
 // accenti, nome e cognome in qualsiasi ordine, e un pezzo che contiene l'altro.
 export function stessaPersona(a: string, b: string): boolean {
-  const n = (x: string) => String(x ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  const n = (x: string) => String(x ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/\b(dr|dr\.ssa|prof|med|ssa)\b\.?/g, '').replace(/[^a-z ]/g, ' ').split(/\s+/).filter((w) => w.length > 2).sort().join(' ');
   const x = n(a), y = n(b);
   if (!x || !y) return false;

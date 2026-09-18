@@ -53,3 +53,17 @@ test('la domanda che punta a una persona, e l’età esatta, non passano', () =>
   assert.equal(eta.etaEsatta, '78 anni');
   assert.ok(!eta.ok);
 });
+
+// La parola «domanda» dentro una frase del contesto non è il separatore: il
+// taglio cadeva lì, il contesto perdeva metà dei dati e la domanda partiva
+// monca verso il modello esterno.
+test('separaContesto taglia sull’etichetta a inizio riga, non sulla parola «domanda»', () => {
+  const grezzo = [
+    'CONTESTO: uomo sui settant’anni, funzione renale ridotta, in terapia',
+    'anticoagulante. La domanda riguarda l’aggiustamento della dose.',
+    'DOMANDA: come si aggiusta la dose dell’anticoagulante orale diretto?',
+  ].join('\n');
+  const p = separaContesto(grezzo);
+  assert.ok(p.contesto.endsWith('della dose.'), `contesto troncato: ${p.contesto}`);
+  assert.equal(p.domanda, 'come si aggiusta la dose dell’anticoagulante orale diretto?');
+});

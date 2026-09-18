@@ -560,13 +560,40 @@ test('la stanza si prende per il tempo delle visite, non per tutto il giorno', (
   assert.ok((visite['Sala 3'] ?? []).length > 0, 'la stanza ha visite, ma non nella prima fascia');
 });
 
-test('un buco più corto di mezz’ora fra due visite non è una stanza libera', () => {
+test('il residuo più corto di mezz’ora all’inizio della fascia non è una stanza libera', () => {
   const md = `## Sala 9\n- Di: François Rego\n- Stato: proposta\n`;
   const piano = pianoDelGiorno(leggiSale(md), ['François Rego'], 'mar');
   // una visita alle 07:10: i dieci minuti prima non si annunciano come liberi
   const v = assegnaVisite(piano.righe, [{ id: 'a', chi: 'François Rego', start: '07:10', dur: 30 }]);
   const libere = fasceLibere(piano.righe, v);
   assert.deepEqual(libere.map((x) => `${x.dalle}-${x.alle}`), ['07:40-19:30']);
+});
+
+// Il caso che il test qui sopra dichiarava di provare e non provava: due
+// visite lontane. La stanza risultava presa dalle 08:00 alle 18:30 e le nove
+// ore e mezza in mezzo sparivano — né presa, né libera, né proponibile.
+test('due visite lontane non tengono la stanza tutto il giorno: il vuoto in mezzo è libero', () => {
+  const md = `## Sala 9\n- Di: François Rego\n- Stato: proposta\n`;
+  const piano = pianoDelGiorno(leggiSale(md), ['François Rego'], 'mar');
+  const v = assegnaVisite(piano.righe, [
+    { id: 'a', chi: 'François Rego', start: '08:00', dur: 30 },
+    { id: 'b', chi: 'François Rego', start: '18:00', dur: 30 },
+  ]);
+  assert.deepEqual(prese(piano.righe, v)['Sala 9'].map((x) => `${x.dalle}-${x.alle}`), ['08:00-08:30', '18:00-18:30']);
+  assert.deepEqual(fasceLibere(piano.righe, v).map((x) => `${x.dalle}-${x.alle}`), ['07:00-08:00', '08:30-18:00', '18:30-19:30']);
+});
+
+// Due visite attaccate restano una presa sola: fra l'una e l'altra non ci sta
+// niente, e annunciare quel quarto d'ora come libero riempirebbe l'elenco di
+// righe che nessuno può usare.
+test('due visite di fila sono una presa sola', () => {
+  const md = `## Sala 9\n- Di: François Rego\n- Stato: proposta\n`;
+  const piano = pianoDelGiorno(leggiSale(md), ['François Rego'], 'mar');
+  const v = assegnaVisite(piano.righe, [
+    { id: 'a', chi: 'François Rego', start: '09:00', dur: 30 },
+    { id: 'b', chi: 'François Rego', start: '09:45', dur: 30 },
+  ]);
+  assert.deepEqual(prese(piano.righe, v)['Sala 9'].map((x) => `${x.dalle}-${x.alle}`), ['09:00-10:15']);
 });
 
 test('le sale «ultime» si riempiono solo quando le altre non bastano', () => {

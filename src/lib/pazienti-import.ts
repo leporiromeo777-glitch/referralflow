@@ -14,10 +14,18 @@ const s = (v: unknown, max = 120) => String(v ?? '').trim().replace(/\s+/g, ' ')
 export function normalizzaData(v: unknown): string | null {
   const t = s(v, 20);
   if (!t) return null;
+  // Il 31 febbraio non esiste. Senza questo controllo «31.02.1950» passava
+  // come data valida e l'insert su una colonna `date` faceva saltare l'import
+  // a metà file, senza dire quale riga.
+  const vera = (a: number, me: number, g: number) => {
+    const d = new Date(Date.UTC(a, me - 1, g));
+    return d.getUTCFullYear() === a && d.getUTCMonth() === me - 1 && d.getUTCDate() === g
+      ? `${a}-${String(me).padStart(2, '0')}-${String(g).padStart(2, '0')}` : null;
+  };
   let m = /^(\d{1,2})[./](\d{1,2})[./](\d{4})$/.exec(t);
-  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  if (m) return vera(Number(m[3]), Number(m[2]), Number(m[1]));
   m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
-  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  if (m) return vera(Number(m[1]), Number(m[2]), Number(m[3]));
   return null;
 }
 // AVS svizzero: 13 cifre che iniziano con 756, scritto 756.1234.5678.97.
@@ -59,7 +67,7 @@ const INTESTAZIONI: [RegExp, keyof Anagrafica][] = [
   [/^(n\.? ?assicurato|numero assicurato|veka|versichertennummer|tessera)$/, 'n_assicurato'], [/^(indicazione|diagnosi|indicazione clinica)$/, 'indicazione'], [/^(percorso|percorso id)$/, 'percorso_id'],
 ];
 function chiave(h: string): keyof Anagrafica | null {
-  const k = h.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[«»"']/g, '').trim();
+  const k = h.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[«»"']/g, '').trim();
   for (const [r, c] of INTESTAZIONI) if (r.test(k)) return c;
   return null;
 }

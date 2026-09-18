@@ -114,7 +114,12 @@ export function costruisciBriefing(i: IngressoBriefing): Briefing {
 
   // 4. Esami in cartella: gli ultimi 24 mesi per tipo, con le condizioni
   //    «ECG negli ultimi 12 mesi» e «ecocardiogramma negli ultimi 24 mesi».
-  const recenti = i.documenti.filter((d) => new Date(d.uploaded_at).getTime() >= mesiFa(i.oggi, MESI_DOCUMENTI_RECENTI)).sort((a, b) => b.uploaded_at.localeCompare(a.uploaded_at));
+  // Dal più recente, una volta sola: «ultimo del …» qui sotto prende il primo
+  // della lista, e prima dipendeva dall'ordine con cui il chiamante passava i
+  // documenti — bastava cambiare un `order by` per far dire al briefing che
+  // l'ultimo ECG era di otto mesi fa.
+  const documenti = [...i.documenti].sort((a, b) => b.uploaded_at.localeCompare(a.uploaded_at));
+  const recenti = documenti.filter((d) => new Date(d.uploaded_at).getTime() >= mesiFa(i.oggi, MESI_DOCUMENTI_RECENTI));
   const esami = recenti.filter((d) => tipoEsame(d) !== 'lettera');
   sezioni.push({
     chiave: 'esami', titolo: `Esami in cartella (ultimi ${MESI_DOCUMENTI_RECENTI} mesi)`,
@@ -122,14 +127,14 @@ export function costruisciBriefing(i: IngressoBriefing): Briefing {
   });
   passi.push({ passo: `Documenti degli ultimi ${MESI_DOCUMENTI_RECENTI} mesi`, esito: esami.length ? 'ok' : 'vuoto', fonti: esami.map((d) => d.id) });
 
-  const ecg = i.documenti.filter((d) => tipoEsame(d) === 'ecg' && new Date(d.uploaded_at).getTime() >= mesiFa(i.oggi, MESI_ECG));
+  const ecg = documenti.filter((d) => tipoEsame(d) === 'ecg' && new Date(d.uploaded_at).getTime() >= mesiFa(i.oggi, MESI_ECG));
   if (ecg.length) {
     passi.push({ passo: `ECG negli ultimi ${MESI_ECG} mesi`, esito: 'ok', fonti: ecg.map((d) => d.id), nota: `ultimo del ${dataCh(ecg[0].uploaded_at)}` });
   } else {
     mancanti.push({ controllo: 'ecg_12_mesi', testo: `Nessun ECG negli ultimi ${MESI_ECG} mesi in cartella: da fare o da chiedere.` });
     passi.push({ passo: `ECG negli ultimi ${MESI_ECG} mesi`, esito: 'mancante', fonti: [] });
   }
-  const eco = i.documenti.filter((d) => tipoEsame(d) === 'eco' && new Date(d.uploaded_at).getTime() >= mesiFa(i.oggi, MESI_ECO));
+  const eco = documenti.filter((d) => tipoEsame(d) === 'eco' && new Date(d.uploaded_at).getTime() >= mesiFa(i.oggi, MESI_ECO));
   if (eco.length) {
     passi.push({ passo: `Ecocardiogramma negli ultimi ${MESI_ECO} mesi`, esito: 'ok', fonti: eco.map((d) => d.id), nota: `ultimo del ${dataCh(eco[0].uploaded_at)}` });
   } else {

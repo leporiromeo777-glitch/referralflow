@@ -88,9 +88,14 @@ function tzOffsetMs(timeZone: string, date: Date): number {
 function wallTimeToUtc(
   y: number, mo: number, d: number, h: number, mi: number, s: number, timeZone: string
 ): Date {
+  // Due campionamenti, non uno: l'offset preso sull'istante «naive» al cambio
+  // d'ora sta dall'altra parte della transizione. Il 25.10.2026 all'01:30 —
+  // ora valida e non ambigua — l'appuntamento entrava in agenda spostato di
+  // un'ora. Il secondo campionamento lo prende sull'istante vero.
   const naiveUtc = Date.UTC(y, mo - 1, d, h, mi, s);
-  const offset = tzOffsetMs(timeZone, new Date(naiveUtc));
-  return new Date(naiveUtc + offset);
+  const primo = tzOffsetMs(timeZone, new Date(naiveUtc));
+  const secondo = tzOffsetMs(timeZone, new Date(naiveUtc + primo));
+  return new Date(naiveUtc + secondo);
 }
 
 function parseDate(prop: RawProp): { date: Date; allDay: boolean } | null {

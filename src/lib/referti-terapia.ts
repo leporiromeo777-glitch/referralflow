@@ -76,7 +76,7 @@ export function unitaInSigle(testo: string): string {
 // lettere (ASPIRIN/ASPIRINA, XARELTO/XARELTO): i nomi dettati e quelli
 // scritti dalla segretaria non coincidono sempre alla lettera.
 export function chiaveFarmaco(s: string): string {
-  const prima = String(s ?? '').trim().normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().split(/\s+/)[0] ?? '';
+  const prima = String(s ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().split(/\s+/)[0] ?? '';
   return prima.replace(/[^A-Z]/g, '');
 }
 

@@ -183,6 +183,6 @@ export function nomeCorto(n: string): string {
   return String(n || '').replace(/^(Prof\.|Dr\.ssa|Dr\.|Dott\.ssa|Dott\.)\s*/i, '').replace(/^med\.\s*/i, '').trim() || n;
 }
 function stessoNome(a: string, b: string): boolean {
-  const n = (s: string) => nomeCorto(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z ]/g, '').trim();
+  const n = (s: string) => nomeCorto(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z ]/g, '').trim();
   return !!a && !!b && n(a) === n(b);
 }

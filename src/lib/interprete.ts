@@ -30,7 +30,7 @@ export type Interpretazione = {
 };
 
 export function normalizza(s: string): string {
-  return String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/['’`´]/g, ' ').replace(/[^a-z0-9\s/.-]/g, ' ').replace(/\s+/g, ' ').trim();
+  return String(s ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/['’`´]/g, ' ').replace(/[^a-z0-9\s/.-]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 export function gettoni(s: string): string[] {

@@ -101,8 +101,13 @@ export async function preparaPianoSale(
   opzioni: { forza?: boolean } = {}
 ): Promise<{ ok: boolean; stato: string }> {
   if (lavori.get(studioId)?.attivo) return { ok: false, stato: 'già in corso' };
-  const oggi = new Date();
-  const giornoIso = oggi.toISOString().slice(0, 10);
+  // Il giorno e il giorno della settimana devono venire dallo stesso orologio:
+  // `toISOString()` è UTC, `getDay()` è locale, e fra mezzanotte e le 2 a
+  // Zurigo davano due giorni diversi — il piano leggeva gli appuntamenti di
+  // ieri, applicava le regole di oggi e riscriveva la riga di ieri, azzerando
+  // un piano già accettato. È l'ora in cui gira il cron notturno.
+  const oggi = new Date(new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Zurich' }));
+  const giornoIso = `${oggi.getFullYear()}-${String(oggi.getMonth() + 1).padStart(2, '0')}-${String(oggi.getDate()).padStart(2, '0')}`;
   const giorno = GG[oggi.getDay()];
 
   const [ultimo] = await query<{ ms: number | null }>(
