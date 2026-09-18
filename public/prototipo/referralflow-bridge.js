@@ -6081,7 +6081,7 @@ function rfImgDettaglio() {
           ${i ? `<img src="${rfImgUrl(i, 1024, RF.img.frame)}" alt="Immagine ${RF.img.idx + 1}">
             <div class="rf-img-hud">${rfEsc(s.descrizione || s.modalita || '')}<br>${i.colonne || '?'}×${i.righe || '?'}</div>
             <div class="rf-img-hud destra">${RF.img.idx + 1} / ${visibili.length}${i.frame > 1 ? `<br>fotogramma ${RF.img.frame + 1} / ${i.frame}` : ''}${RF.img.ww !== null ? `<br>W ${RF.img.ww} / L ${RF.img.wl}` : ''}</div>`
-            : `<div class="vuoto">Questa serie non contiene immagini da disegnare${nonImmagini ? ` (${nonImmagini} ${nonImmagini === 1 ? 'oggetto' : 'oggetti'} DICOM non grafici: referti strutturati, PDF o modelli)` : ''}.</div>`}
+            : `<div class="vuoto">Questa serie non contiene immagini da disegnare${nonImmagini ? ` (${nonImmagini} ${nonImmagini === 1 ? 'oggetto DICOM non grafico' : 'oggetti DICOM non grafici'}: referti strutturati, PDF o modelli)` : ''}.</div>`}
         </div>
         ${i ? `<div class="rf-img-barra">
           <button class="btn sm" onclick="rfImgScorri(-1)">‹</button>
