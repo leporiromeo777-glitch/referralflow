@@ -164,6 +164,36 @@ export async function statisticheRoi(key: string, frame: number, tipo: string, p
   });
 }
 
+// Ricostruzione multiplanare (MSE fase 9): un piano sagittale o coronale di
+// una serie, in PNG, dal volume che imaging/mpr.py costruisce una volta e
+// tiene in cache. I file si passano nell'ordine della geometria di serie.
+export type EsitoMpr = { ok: true; piano: string; indice: number; righe_virtuali: number; colonne_virtuali: number; sp_x: number; sp_y: number; larghezza: number; altezza: number; capovolto: boolean; n_sagittale: number; n_coronale: number; n_fette: number } | { errore: string };
+export async function mprPng(keys: string[], piano: 'sagittale' | 'coronale', indice: number, sp: [number, number], d: number, ww: number | null, wl: number | null): Promise<{ png: Buffer; info: EsitoMpr } | { errore: string }> {
+  const percorsi: string[] = [];
+  for (const k of keys) {
+    const locale = path.join(LOCALE, k);
+    try { await fs.access(locale); percorsi.push(locale); } catch { return { errore: 'file_non_locale' }; }
+  }
+  const chiave = keys.join('\n');
+  const nome = `mpr-${require('node:crypto').createHash('sha256').update(chiave).digest('hex').slice(0, 24)}-${piano}-${indice}-${ww ?? 'x'}-${wl ?? 'x'}.png`;
+  const inCache = path.join(CACHE, nome);
+  const infoCache = inCache + '.json';
+  try {
+    const [png, info] = await Promise.all([fs.readFile(inCache), fs.readFile(infoCache, 'utf-8')]);
+    return { png, info: JSON.parse(info) as EsitoMpr };
+  } catch { /* si ricostruisce */ }
+  await fs.mkdir(CACHE, { recursive: true });
+  const uscita = await new Promise<string>((risolvi) => {
+    const figlio = execFile(PY, [path.join(process.cwd(), 'imaging', 'mpr.py')], { timeout: 180_000, maxBuffer: 4 * 1024 * 1024 }, (_e, stdout) => risolvi(String(stdout ?? '')));
+    figlio.stdin?.end(JSON.stringify({ file: percorsi, piano, indice, out: inCache, cache: path.join(CACHE, 'volumi'), sp, d, ww, wl }));
+  });
+  let j: any = {};
+  try { j = JSON.parse(uscita || '{}'); } catch { /* illeggibile */ }
+  if (!j?.ok) return { errore: String(j?.errore ?? 'ricostruzione_fallita') };
+  await fs.writeFile(infoCache, JSON.stringify(j));
+  return { png: await fs.readFile(inCache), info: j as EsitoMpr };
+}
+
 export function lettoreDisponibile(): Promise<boolean> {
   return fs.access(PY).then(() => true).catch(() => false);
 }

@@ -119,7 +119,7 @@ def _lunghezza(mm, chiusa: bool) -> float:
     return tot
 
 
-def calcola(cal: dict, punti: list, algoritmo: str = "distanza") -> dict:
+def calcola(cal: dict, punti: list, algoritmo: str = "distanza", contesto: dict | None = None) -> dict:
     import numpy as np
 
     if algoritmo == "distanza":
@@ -166,7 +166,60 @@ def calcola(cal: dict, punti: list, algoritmo: str = "distanza") -> dict:
         mm, err = _in_mm(cal, punti, 1, 1)
         if err: return err
         return {"stato": "ok", "mm": float(mm[0][0]), "y_mm": float(mm[0][1])}
+    if algoritmo == "distanza_3d":
+        return _distanza_3d(punti, (contesto or {}).get("geometrie") or {})
+    if algoritmo == "volume":
+        return _volume((contesto or {}).get("volume") or {})
     return {"stato": "algoritmo_sconosciuto"}
+
+
+def _paziente(g: dict, p: dict):
+    """Pixel → paziente (PS3.3 C.7.6.2.1.1), scritto a parte da mse/serie.js."""
+    import numpy as np
+    sp = (g or {}).get("spazio") or {}
+    iop, ipp = sp.get("iop"), sp.get("ipp")
+    s = (g or {}).get("spaziatura") or {}
+    if not sp: return None, "spazio_assente"
+    if not iop or len(iop) != 6: return None, "orientamento_assente"
+    if not ipp or len(ipp) != 3: return None, "posizione_assente"
+    r, c = np.array(iop[:3], dtype=np.float64), np.array(iop[3:], dtype=np.float64)
+    if abs(np.linalg.norm(r) - 1) > 1e-3 or abs(np.linalg.norm(c) - 1) > 1e-3 or abs(float(np.dot(r, c))) > 1e-3: return None, "orientamento_non_ortonormale"
+    if not _finito(s.get("dx_mm")) or not _finito(s.get("dy_mm")) or s["dx_mm"] <= 0 or s["dy_mm"] <= 0 or s.get("per_frame"): return None, "spaziatura_assente"
+    if s.get("fonte") == "ImagerPixelSpacing": return None, "rivelatore"
+    if not _finito(p.get("x")) or not _finito(p.get("y")): return None, "punti_non_validi"
+    px = (g or {}).get("pixel") or {}
+    if _finito(px.get("colonne")) and _finito(px.get("righe")) and px["colonne"] > 0 and px["righe"] > 0 and not (0 <= p["x"] <= px["colonne"] and 0 <= p["y"] <= px["righe"]):
+        return None, "fuori_immagine"
+    return np.array(ipp, dtype=np.float64) + r * (p["x"] * s["dx_mm"]) + c * (p["y"] * s["dy_mm"]), None
+
+
+def _distanza_3d(punti: list, geometrie: dict) -> dict:
+    import numpy as np
+    if not isinstance(punti, list) or len(punti) != 2: return {"stato": "punti_non_validi"}
+    ga, gb = geometrie.get(str(punti[0].get("immagine_id"))), geometrie.get(str(punti[1].get("immagine_id")))
+    if not ga or not gb: return {"stato": "geometria_immagine_assente"}
+    a, e = _paziente(ga, punti[0])
+    if e: return {"stato": e}
+    b, e = _paziente(gb, punti[1])
+    if e: return {"stato": e}
+    fa, fb = (ga.get("spazio") or {}).get("frame_of_reference"), (gb.get("spazio") or {}).get("frame_of_reference")
+    if not fa or not fb or fa != fb: return {"stato": "frame_of_reference_diversi"}
+    d = float(np.linalg.norm(b - a))
+    if d == 0: return {"stato": "punti_uguali"}
+    return _fine(d)
+
+
+def _volume(v: dict) -> dict:
+    import numpy as np
+    aree, idx, d = v.get("aree_mm2"), v.get("indici"), v.get("d_mm")
+    if not isinstance(aree, list) or not isinstance(idx, list) or len(aree) != len(idx): return {"stato": "volume_contesto_assente"}
+    if len(aree) < 2: return {"stato": "volume_poche_fette"}
+    if not _finito(d) or d <= 0 or v.get("uniforme") is False: return {"stato": "fette_non_uniformi"}
+    s = sorted(idx)
+    if any(s[i] != s[i - 1] + 1 for i in range(1, len(s))): return {"stato": "poligoni_non_consecutivi"}
+    a = np.array(aree, dtype=np.float64)
+    if not np.all(np.isfinite(a)) or np.any(a <= 0): return {"stato": "area_nulla"}
+    return _fine(float(np.sum(a) * d))
 
 
 def _fine(v: float) -> dict:
@@ -182,7 +235,7 @@ def main() -> int:
         dati = json.load(sys.stdin)
     except Exception:  # noqa: BLE001
         json.dump({"stato": "ingresso_non_valido"}, sys.stdout); return 1
-    json.dump(calcola(dati.get("calibrazione"), dati.get("punti"), str(dati.get("algoritmo") or "distanza")), sys.stdout)
+    json.dump(calcola(dati.get("calibrazione"), dati.get("punti"), str(dati.get("algoritmo") or "distanza"), dati.get("contesto")), sys.stdout)
     sys.stdout.write("\n")
     return 0
 

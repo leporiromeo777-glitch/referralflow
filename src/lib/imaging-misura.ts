@@ -56,15 +56,22 @@ export type EsitoGate = {
   dx_mm: number | null; dy_mm: number | null; regione: number | null;
   algoritmo: string | null; versione_algoritmo: string | null; versione_gate: string;
 };
-type ContestoGate = { cal: Calibrazione | null; geometria?: Geometria | null; frame?: number; frameTotali?: number; punti?: Punto[]; algoritmo?: string; cautionValidati?: string[]; modalita?: string | null };
+type ContestoGate = { cal: Calibrazione | null; geometria?: Geometria | null; frame?: number; frameTotali?: number; punti?: (Punto & { immagine_id?: string })[]; algoritmo?: string; cautionValidati?: string[]; modalita?: string | null; geometrie?: Record<string, Geometria | null>; volume?: { aree_mm2: number[]; indici: number[]; d_mm: number | null; uniforme: boolean; misure?: string[] } };
 type Mse = {
   geometria: { VERSIONE: string; versoImmagine: (p: Punto, M: number[][]) => Punto | null; matriceViewer: (v: Record<string, number>) => number[][]; mmPerPixel: (cal: Calibrazione | null, p: Punto) => { stato: string; sx?: number; sy?: number } };
   misure: { VERSIONE: string; ALGORITMI: Record<string, { nome: string; versione: string; unita: string; equazione: string; punti: [number, number]; gesto: string; calcola: (cal: Calibrazione | null, punti: Punto[]) => EsitoMisura }>; formattaMm: (mm: number) => string; formattaValore: (v: number | null, unita: string, extra?: unknown) => string; motivo: (stato: string) => string };
   validazione: { VERSIONE: string; statoImmagine: (ctx: ContestoGate) => Pick<EsitoGate, 'stato' | 'motivi' | 'avvisi' | 'testi'>; valuta: (ctx: ContestoGate) => EsitoGate; testo: (codice: string) => string };
+  serie: { VERSIONE: string; analizzaSerie: (immagini: { id: string; geometria: Geometria | null }[]) => GeometriaSerie; versoPaziente: (g: Geometria, p: Punto) => { stato: string; xyz?: number[] } };
+};
+export type GeometriaSerie = {
+  versione: string; stato: string; n: number; senza_spazio: number; avvisi: string[];
+  normale?: number[]; orientamento?: string; righe?: number; colonne?: number; sx?: number; sy?: number; frame_of_reference?: string | null;
+  ordine?: string[]; posizioni?: number[]; distanza_media_mm?: number | null; distanza_min_mm?: number | null; distanza_max_mm?: number | null;
+  uniforme?: boolean; volume_possibile?: boolean;
 };
 
 // I moduli, nell'ordine in cui il browser li carica (index.html).
-export const MODULI_MSE = ['mse/geometria.js', 'mse/misure.js', 'mse/validazione.js'];
+export const MODULI_MSE = ['mse/geometria.js', 'mse/misure.js', 'mse/validazione.js', 'mse/serie.js'];
 
 // I casi CAUTION in cui si può misurare: li decide il piano di V&V, non il
 // codice (imaging/caution-validati.json). Lista vuota = ogni avviso blocca.
@@ -91,7 +98,7 @@ export function versioneSoftware(): string {
 // Doppio controllo: la distanza ricalcolata da un'implementazione separata
 // (imaging/verifica-indipendente.py, numpy). Torna il valore B e lo stato.
 const PY = process.env.IMAGING_PYTHON ?? path.join(os.homedir(), '.referralflow-imaging', 'bin', 'python');
-export function verificaIndipendente(cal: Calibrazione | null, punti: Punto[], algoritmo = 'distanza'): Promise<{ stato: string; mm?: number; y_mm?: number }> {
+export function verificaIndipendente(cal: Calibrazione | null, punti: Punto[], algoritmo = 'distanza', contesto?: unknown): Promise<{ stato: string; mm?: number; y_mm?: number }> {
   return new Promise((risolvi) => {
     const figlio = execFile(PY, [path.join(process.cwd(), 'imaging', 'verifica-indipendente.py')], { timeout: 15_000 },
       (errore, stdout) => {
@@ -100,7 +107,7 @@ export function verificaIndipendente(cal: Calibrazione | null, punti: Punto[], a
           risolvi(j && typeof j.stato === 'string' ? j : { stato: 'verificatore_non_disponibile' });
         } catch { risolvi({ stato: errore ? 'verificatore_non_disponibile' : 'uscita_illeggibile' }); }
       });
-    figlio.stdin?.end(JSON.stringify({ calibrazione: cal, punti, algoritmo }));
+    figlio.stdin?.end(JSON.stringify({ calibrazione: cal, punti, algoritmo, contesto: contesto ?? null }));
   });
 }
 // Tolleranza tecnica del doppio controllo: un miliardesimo relativo (o

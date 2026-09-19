@@ -54,7 +54,10 @@ Versione 1.1 · 19.9.2026 sera (Measurement Safety Engine, fasi 1-5-7-8; la 1.0 
 | Ingestione | `src/lib/imaging-ingest.ts`, `src/lib/imaging-ordina.ts` | geometria, calibrazione e sha256 entrano con l'immagine |
 | E. Viewer | `public/prototipo/referralflow-bridge.js` (`rfMis*`, `rfImgMisureManuali`) | gesto, disegno, indicatore, dettagli, storia, nome, rifai; nessun calcolo proprio |
 | F. Storage/audit | `db/migrations/068…`, `069_imaging_geometria.sql`, `070_imaging_misure_provenienza.sql` | `imaging_immagini.geometria/sha256`, `imaging_misure_manuali` con provenienza, `imaging_misure_eventi` |
-| Regressione | `scripts/misure-regressione.ts` (chiamato da `mac/aggiorna-server.sh`) | un aggiornamento che cambia numeri salvati non si distribuisce |
+| Statistiche (fase 4) | `imaging/statistiche.py`, comando `statistiche`, azione `statistiche` | maschera sui centri dei pixel, modality LUT, HU/a.u., doppio calcolo numpy + stdlib |
+| Spazio paziente e serie (fase 9) | `public/prototipo/mse/serie.js` (`RFMSE.serie` 1.0), `src/lib/imaging-serie.ts` | pixel → paziente, geometria di serie (`imaging_serie.geometria`), griglia virtuale MPR decisa dal server |
+| Ricostruzione MPR (fase 9) | `imaging/mpr.py`, `mprPng`, rotta `…/serie/[id]/mpr` | volume in cache (.npy, chiave sha256 dei file), piani sagittale/coronale, PNG isotropo + griglia virtuale dichiarata |
+| Regressione | `scripts/misure-regressione.ts` (chiamato da `mac/aggiorna-server.sh`) | un aggiornamento che cambia numeri salvati non si distribuisce; le misure composte (3D, volume) si rifanno da `extra` |
 | Riferimento | `scripts/tabella-riferimento.py` | tabella Test/Ground truth/Risultato/Errori/PASS-FAIL con soglie passate, mai scelte dal codice |
 
 ## 3. Software di terzi (SOUP) e versioni al 19.9.2026
@@ -70,8 +73,10 @@ Versione 1.1 · 19.9.2026 sera (Measurement Safety Engine, fasi 1-5-7-8; la 1.0 
 | PostgreSQL | 16.14 | archivio delle misure | R15 (transazioni) |
 | Browser | Safari/Chrome/Firefox correnti | canvas, eventi pointer | R7–R8 |
 
-Nessuna libreria di terzi partecipa al **calcolo** A della distanza; numpy
-(`hypot`) partecipa solo al calcolo B, il controllo indipendente.
+Nessuna libreria di terzi partecipa al **calcolo** A delle misure
+geometriche; numpy partecipa al calcolo B (controllo indipendente), alle
+statistiche (con il doppio calcolo in libreria standard) e alla
+ricostruzione MPR (taglio del volume, senza interpolazione fra fette).
 
 ## 4. Dati e tracciabilità
 

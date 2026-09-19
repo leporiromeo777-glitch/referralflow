@@ -17,6 +17,13 @@ Versione 1.0 · 19.9.2026.
 | fase 3 — `imaging/prova-doppio-controllo.py` | 3000 casi casuali su tutti gli strumenti, A contro B, stati e valori | | 1204 misure + 1796 rifiuti coincidenti, 0 divergenze |
 | fase 3 — `scripts/prova-righello-e2e.py` | dal server: polilinea 100 mm, angolo 90°, rettangolo 12,50 cm² con perimetro, ellisse 6,28 cm² con semiassi, poligono 25,00 cm², perimetro 80 mm, punto (40; 60 mm); intrecciato, vertice fuori regione, punti insufficienti, algoritmo sconosciuto, CR → rifiuti; tipi/unità/extra nel dettaglio e nel CSV | | 37/37 |
 | fase 3 — browser | selettore degli 8 strumenti, poligono per vertici con anteprima e chiusura, ellisse trascinata, angolo a tre tocchi, punto a un tocco: tutti salvati col valore atteso | | ok |
+| fase 4 — `imaging/prova-statistiche.py` | HU su TAC sintetica (n, min, max, media, deviazione noti), doppio calcolo, maschere (ellisse ≈ πab, triangolo 4950 esatti), RM in a.u., TAC senza Rescale o con RescaleType diverso rifiutata, ecografia e colore rifiutate, multiframe sul fotogramma giusto, ROI vuota, comando | `~/.referralflow-imaging/bin/python imaging/prova-statistiche.py` | 17/17 |
+| fase 6 — node | calibrazione effettiva per fotogramma, Gate con CAUTION `spacing_per_frame_variabile`, fotogramma senza valore → assente | `npm run test:app` | in 59/59 |
+| fase 9 — node | pixel → paziente (IOP/IPP/spaziatura), obliquo, distanza 3D fra fette, FoR diversi, fuori immagine, serie ordinate lungo la normale con passo reale, non uniformi/doppie/dimensioni/FoR, volume (somma, salti, passo, poche fette, CAUTION), strumenti 3D nel Gate | `npm run test:app` | in 59/59 |
+| fase 9 — `imaging/prova-mpr.py` | volume sintetico 8 × 64 × 64: sagittale e coronale con la struttura dove attesa, griglia virtuale e spaziature dichiarate, PNG isotropo, cache, indice fuori, meno di 3 fette | `~/.referralflow-imaging/bin/python imaging/prova-mpr.py` | 9/9 |
+| fasi 4-6-9 — `imaging/prova-doppio-controllo.py` | 3000 casi, ora con distanza 3D (FoR, IPP assenti) e volume (salti, passo nullo) | | 0 divergenze |
+| fase 9 — `scripts/prova-righello-serie-e2e.py` (DB demo) | serie di 8 fette: geometria (passo 2 reale contro 3 dichiarati, ordine indipendente da InstanceNumber), MPR dichiarato, distanza 3D 30,594 mm col doppio controllo, fuori immagine, tre poligoni → volume bloccato dalla CAUTION, salto di fetta, una sola ROI, MPR info/PNG/intestazione, misura su MPR bloccata dalla CAUTION, indice fuori, 3D su MPR rifiutata | | 20/20 |
+| fase 9 — browser | piani Nativo/Sagittale/Coronale con slider, PNG 64×32, ✕ con motivo sull'MPR, distanza 3D a due tocchi su fette diverse (la bozza sopravvive al cambio di fetta) | | ok |
 
 ## 2. Verifica del software (a ogni distribuzione)
 
@@ -52,7 +59,14 @@ immagini dello studio, nelle mani di chi lo userà.
   maggiore dei due (proposta: le aree dipendono molto dal tracciato a mano);
 - angoli: il 95% entro **±2°**;
 - rettangolo, perimetro, punto: **nessun uso clinico previsto** finché un
-  medico non ne chiede uno; restano strumenti di lavoro non validati.
+  medico non ne chiede uno; restano strumenti di lavoro non validati;
+- statistiche HU: confronto con la console TAC su ≥ 20 ROI (media entro
+  **±2 HU**, deviazione entro ±10 %) o fantoccio di densità;
+- distanza 3D: confronto con la console su ≥ 20 coppie (**±1 mm o ±2 %**);
+- volume: confronto con il volume della console sugli stessi contorni (**±5 %**)
+  e prova su fantoccio di volume noto; resta CAUTION fino alla firma;
+- misure su MPR: solo dopo validazione con fantoccio nelle tre direzioni
+  (**±1 mm** lungo le fette, con passo ≤ 2 mm); resta CAUTION fino alla firma.
 
 **Ogni strumento si valida da sé.** La validazione della distanza non copre
 l'area: per ogni strumento che si vuole usare sui pazienti servono le sue

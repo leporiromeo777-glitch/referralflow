@@ -5928,6 +5928,8 @@ RF.img = { lista: null, conta: {}, errore: null, lettore: true, aperto: null, da
    matematica sta in misura.js, uguale per browser e server; qui c'è solo il
    gesto — due punti trascinati sull'immagine — e il disegno. */
 RF.mis = { attiva: false, bozza: null, esito: null, trascina: false, chieste: {}, strumento: 'distanza', cursore: null };
+/* Piani ricostruiti (fase 9): null = immagine nativa; altrimenti { tipo, indice } */
+RF.mpr = { piano: null, indice: 0 };
 
 async function rfImgCarica(rendi = true) {
   try {
@@ -5941,7 +5943,7 @@ async function rfImgCarica(rendi = true) {
 }
 
 async function rfImgApri(id) {
-  RF.img.aperto = id; RF.img.dati = null; RF.img.serie = 0; RF.img.idx = 0; RF.img.frame = 0; RF.img.ww = null; RF.img.wl = null;
+  RF.img.aperto = id; RF.img.dati = null; RF.img.serie = 0; RF.img.idx = 0; RF.img.frame = 0; RF.img.ww = null; RF.img.wl = null; RF.mpr.piano = null; RF.mpr.indice = 0;
   render();
   try {
     const r = await fetch(`/api/prototipo/imaging/${id}`, { credentials: 'include', cache: 'no-store' });
@@ -5967,7 +5969,7 @@ function rfImgUrl(i, lato, frame) {
   if (RF.img.ww !== null && RF.img.wl !== null) q.push(`ww=${RF.img.ww}`, `wl=${RF.img.wl}`);
   return `/api/prototipo/imaging/immagine/${i.id}?${q.join('&')}`;
 }
-function rfImgVaiSerie(n) { RF.img.serie = n; RF.img.idx = 0; RF.img.frame = 0; render(); }
+function rfImgVaiSerie(n) { RF.img.serie = n; RF.img.idx = 0; RF.img.frame = 0; RF.mpr.piano = null; RF.mpr.indice = 0; render(); }
 function rfImgScorri(d) {
   const v = rfImgVisibili(rfImgSerieCorrente()); if (!v.length) return;
   const i = rfImgCorrente();
@@ -6052,11 +6054,29 @@ function rfMisCal(i) {
 // che conta lo rifà il server prima di salvare.
 function rfMisContesto(i, punti) {
   const d = RF.img.dati || {};
+  const geometrie = {};
+  for (const sr of (d.serie || [])) for (const im of (sr.immagini || [])) if (im.geometria) geometrie[im.id] = im.geometria;
+  const v = rfMprVirtuale();
+  if (v) return { cal: v.calibrazione, geometria: v.geometria, frame: 0, frameTotali: 1, punti, algoritmo: RF.mis.strumento || 'distanza', cautionValidati: (d.mse && d.mse.caution_validati) || [], modalita: (d.esame && d.esame.modalita) || null, geometrie };
   return { cal: rfMisCal(i), geometria: i ? (i.geometria || null) : null, frame: RF.img.frame, frameTotali: i ? Math.max(1, i.frame) : 1,
-    punti, algoritmo: RF.mis.strumento || 'distanza', cautionValidati: (d.mse && d.mse.caution_validati) || [], modalita: (d.esame && d.esame.modalita) || null };
+    punti, algoritmo: RF.mis.strumento || 'distanza', cautionValidati: (d.mse && d.mse.caution_validati) || [], modalita: (d.esame && d.esame.modalita) || null, geometrie };
+}
+/* MPR: la griglia virtuale del piano corrente, come la dichiara il server nel dettaglio (serie.mpr) */
+function rfMprVirtuale() {
+  if (!RF.mpr.piano) return null;
+  const sr = rfImgSerieCorrente(); if (!sr || !sr.mpr || !sr.mpr[RF.mpr.piano]) return null;
+  return sr.mpr[RF.mpr.piano];
+}
+function rfMprVai(piano) { RF.mpr.piano = piano; const v = piano ? rfMprVirtuale() : null; RF.mpr.indice = v ? Math.floor(v.n_indici / 2) : 0; RF.mis.bozza = null; RF.mis.esito = null; render(); }
+function rfMprIndice(n) { RF.mpr.indice = Number(n) || 0; RF.mis.bozza = null; RF.mis.esito = null; render(); }
+function rfMprUrl(sr) {
+  const q = [`piano=${RF.mpr.piano}`, `indice=${RF.mpr.indice}`];
+  if (RF.img.ww !== null && RF.img.wl !== null) q.push(`ww=${RF.img.ww}`, `wl=${RF.img.wl}`);
+  return `/api/prototipo/imaging/serie/${sr.id}/mpr?${q.join('&')}`;
 }
 function rfMisStatoImmagine(i) {
   if (!i) return null;
+  if (rfMprVirtuale()) return RFMSE.validazione.statoImmagine(rfMisContesto(i));
   if (i.calibrazione === null || i.calibrazione === undefined) return { stato: 'ATTESA', motivi: [], avvisi: [], testi: ['Leggo la calibrazione dal file…'] };
   return RFMSE.validazione.statoImmagine(rfMisContesto(i));
 }
@@ -6096,7 +6116,7 @@ function rfMisDettagli() {
 }
 const RF_MIS_STRUMENTI = [
   ['distanza', 'Distanza'], ['polilinea', 'Polilinea'], ['angolo', 'Angolo'], ['rettangolo', 'Rettangolo'],
-  ['ellisse', 'Ellisse'], ['poligono', 'Poligono'], ['perimetro', 'Perimetro'], ['punto', 'Punto'],
+  ['ellisse', 'Ellisse'], ['poligono', 'Poligono'], ['perimetro', 'Perimetro'], ['punto', 'Punto'], ['distanza_3d', 'Distanza 3D'],
 ];
 function rfMisAlg() { return RFMSE.misure.ALGORITMI[RF.mis.strumento] || RFMSE.misure.ALGORITMI.distanza; }
 function rfMisStrumento(nome) {
@@ -6110,6 +6130,7 @@ function rfMisIstruzione() {
   var g = rfMisAlg().gesto;
   if (g === 'trascina') return 'trascina fra due punti';
   if (g === 'punto') return 'tocca un punto';
+  if (g === 'punti_3d') return RF.mis.bozza && RF.mis.bozza.punti && RF.mis.bozza.punti.length ? 'ora scorri alla seconda fetta e tocca il secondo punto · Esc annulla' : 'tocca il primo punto, poi scorri a un’altra fetta e tocca il secondo';
   if (RF.mis.strumento === 'angolo') return 'tocca il primo braccio, il vertice, il secondo braccio';
   return 'tocca i vertici; doppio clic, Invio o «Chiudi» per finire · Esc annulla';
 }
@@ -6141,10 +6162,18 @@ window.addEventListener('keydown', function (e) {
 });
 function rfMisPunto(e) {
   const cv = e.currentTarget; const r = cv.getBoundingClientRect();
-  const i = rfImgCorrente(); if (!i || !r.width) return null;
-  const scala = (i.colonne || 1) / r.width;
+  const i = rfImgCorrente(); if (!i || !r.width || !r.height) return null;
+  const v = rfMprVirtuale();
+  const colonne = v ? v.colonne : (i.colonne || 1), righe = v ? v.righe : (i.righe || 1);
+  // dallo schermo alla griglia (nativa o virtuale) con una scala per asse: il
+  // PNG dell'MPR è ricampionato a pixel isotropi, la griglia no
+  const M = RFMSE.geometria.matriceViewer({ scalaX: r.width / colonne, scalaY: r.height / righe });
   const x = Math.max(0, Math.min(r.width, e.clientX - r.left)), y = Math.max(0, Math.min(r.height, e.clientY - r.top));
-  return RFMisura.versoNativo({ x, y }, scala);
+  const p = RFMSE.geometria.versoImmagine({ x, y }, M);
+  if (!p) return null;
+  if (v) { p.y = righe - p.y; }           // il PNG dell'MPR è capovolto (prima fetta in basso)
+  if (RF.mis.strumento === 'distanza_3d') p.immagine_id = i.id;
+  return p;
 }
 function rfMisGiu(e) {
   if (!RF.mis.attiva) return;
@@ -6159,6 +6188,13 @@ function rfMisGiu(e) {
   if (g === 'punto') {
     RF.mis.bozza = { immagine_id: i.id, frame: RF.img.frame, punti: [p], p1: p, p2: p };
     rfMisChiudi(); return;
+  }
+  if (g === 'punti_3d') {
+    if (rfMprVirtuale()) { toast('La distanza 3D si prende sulle immagini native, non sui piani ricostruiti'); return; }
+    if (!RF.mis.bozza || !RF.mis.bozza.tridimensionale) RF.mis.bozza = { immagine_id: i.id, frame: RF.img.frame, punti: [], tridimensionale: true };
+    RF.mis.bozza.punti.push(p);
+    if (RF.mis.bozza.punti.length >= 2) { RF.mis.bozza.p1 = RF.mis.bozza.punti[0]; RF.mis.bozza.p2 = RF.mis.bozza.punti[1]; rfMisChiudi(); return; }
+    rfMisAggiorna(RF.mis.bozza.punti); render(); return;
   }
   // un clic per vertice
   if (!RF.mis.bozza || !RF.mis.bozza.punti || RF.mis.bozza.immagine_id !== i.id || RF.mis.bozza.frame !== RF.img.frame) {
@@ -6207,8 +6243,9 @@ function rfMisDisegna() {
   cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.width = `${w}px`; cv.style.height = `${h}px`;
   const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
   const i = rfImgCorrente(); if (!i) return;
-  const scala = (i.colonne || img.naturalWidth || w) / w;
-  const S = p => ({ x: p.x / scala, y: p.y / scala });
+  const vg = rfMprVirtuale();
+  const scalaX = (vg ? vg.colonne : (i.colonne || img.naturalWidth || w)) / w, scalaY = (vg ? vg.righe : (i.righe || img.naturalHeight || h)) / h;
+  const S = p => ({ x: p.x / scalaX, y: (vg ? (vg.righe - p.y) : p.y) / scalaY });
   const linea = (a, b, testo, colore) => {
     const A = S(a), B = S(b);
     ctx.lineWidth = 2; ctx.strokeStyle = colore; ctx.fillStyle = colore; ctx.lineCap = 'round';
@@ -6261,13 +6298,29 @@ function rfMisDisegna() {
     etichetta(mid, testo, colore);
   };
   const d = RF.img.dati || {};
+  const vmpr = rfMprVirtuale();
   for (const m of (d.misure_manuali || [])) {
-    if (m.immagine_id !== i.id || m.frame !== RF.img.frame || m.annullata_at) continue;
+    if (m.annullata_at) continue;
+    const testo = `${m.etichetta ? m.etichetta + ' ' : ''}${m.valore_mostrato || RFMisura.formattaMm(m.valore)}`;
+    if (m.tipo === 'distanza_3d') {
+      if (vmpr) continue;
+      for (const q of (m.punti || [])) if (q.immagine_id === i.id) { punto(S(q), '#7fd8b6', 5); etichetta({ x: S(q).x + 8, y: S(q).y - 8 }, testo, '#7fd8b6'); }
+      continue;
+    }
+    if (vmpr) {
+      if (!m.piano || m.piano.piano !== RF.mpr.piano || m.piano.indice !== RF.mpr.indice) continue;
+      const pt = (m.punti || []);
+      if (pt.length) figura(m.tipo || 'distanza', pt, testo, '#7fd8b6', false);
+      continue;
+    }
+    if (m.piano || m.immagine_id !== i.id || m.frame !== RF.img.frame) continue;
     const pt = Array.isArray(m.punti) ? m.punti : [];
-    if (pt.length) figura(m.tipo || 'distanza', pt, `${m.etichetta ? m.etichetta + ' ' : ''}${m.valore_mostrato || RFMisura.formattaMm(m.valore)}`, '#7fd8b6', false);
+    if (pt.length) figura(m.tipo || 'distanza', pt, testo, '#7fd8b6', false);
   }
   const b = RF.mis.bozza;
-  if (b && b.immagine_id === i.id && b.frame === RF.img.frame) {
+  if (b && b.tridimensionale) {
+    for (const q of b.punti) if (q.immagine_id === i.id) punto(S(q), '#ffd166', 5);
+  } else if (b && b.immagine_id === i.id && b.frame === RF.img.frame) {
     const es = RF.mis.esito || {};
     const ok = !!es.ok && es.stato !== 'NOT_MEASURABLE';
     const pt = b.punti ? (RF.mis.trascina && RF.mis.cursore && b.punti.length ? b.punti.concat([RF.mis.cursore]) : b.punti) : [b.p1, b.p2];
@@ -6294,7 +6347,7 @@ function rfMisSalvaModal() {
 async function rfMisSalva() {
   const b = RF.mis.bozza; if (!b) return;
   const et = document.getElementById('rf-mis-et'); const rif = document.getElementById('rf-mis-rif');
-  const corpo = { immagine_id: b.immagine_id, frame: b.frame, algoritmo: RF.mis.strumento, punti: b.punti ? b.punti : [b.p1, b.p2], etichetta: et ? et.value : '', riferimento_misura_id: rif && rif.value ? rif.value : null, sostituisce_id: RF.mis.sostituisce || null };
+  const corpo = { immagine_id: b.immagine_id, frame: b.frame, algoritmo: RF.mis.strumento, punti: b.punti ? b.punti : [b.p1, b.p2], etichetta: et ? et.value : '', riferimento_misura_id: rif && rif.value ? rif.value : null, sostituisce_id: RF.mis.sostituisce || null, piano: RF.mpr.piano ? { tipo: RF.mpr.piano, indice: RF.mpr.indice } : null };
   try {
     const r = await fetch('/api/prototipo/imaging/misure', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
     const j = await r.json().catch(() => ({}));
@@ -6360,6 +6413,22 @@ function rfMisStatTesto(st) {
   const n = (v) => String(Math.round(v * 10) / 10).replace('.', ',');
   return `${n(st.media)} ± ${n(st.deviazione)} ${st.unita} (min ${n(st.min)}, max ${n(st.max)}, n ${st.n})${st.verifica && st.verifica.coincide ? ' ✓' : ''}`;
 }
+// Volume dai poligoni della serie corrente su fette consecutive (fase 9).
+async function rfMisVolume() {
+  const d = RF.img.dati || {}; const sr = rfImgSerieCorrente(); if (!sr) return;
+  const ids = new Set((sr.immagini || []).map(x => x.id));
+  const roi = (d.misure_manuali || []).filter(m => !m.annullata_at && !m.piano && ['poligono', 'ellisse', 'rettangolo'].includes(m.tipo) && ids.has(m.immagine_id));
+  if (roi.length < 2) { toast('Servono ROI (poligoni, ellissi o rettangoli) su almeno due fette consecutive di questa serie'); return; }
+  const nome = prompt(`Volume da ${roi.length} ROI di questa serie. Nome (facoltativo):`, '');
+  if (nome === null) return;
+  try {
+    const r = await fetch('/api/prototipo/imaging/misure', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'volume', misure: roi.map(m => m.id), etichetta: nome }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(j.motivo || (j.testi && j.testi[0]) || j.errore || 'Volume non calcolabile'); return; }
+    toast(`Volume: ${j.testo}${j.stato === 'CAUTION' ? ' (con limitazioni)' : ''}`);
+    await rfImgRicarica();
+  } catch { toast('Piattaforma non raggiungibile'); }
+}
 async function rfMisEtichetta(id, attuale) {
   const nuova = prompt('Che cosa hai misurato?', attuale || '');
   if (nuova === null) return;
@@ -6404,7 +6473,7 @@ function rfImgMisureManuali(d, i) {
   return `<div class="card mt-16"><div class="card-head"><span class="section-title">Misure col righello</span>
       <span class="caption">${tutte.length} in questo esame${confrontate ? ` · ${confrontate} confrontate con l'apparecchio` : ''} · <a href="/api/prototipo/imaging/misure?formato=csv">validazione (CSV)</a></span></div>
     <div class="list">${tutte.map(m => `<div class="list-item rf-mis-riga ${m.annullata_at ? 'annullata' : ''} ${i && m.immagine_id === i.id && m.frame === RF.img.frame ? 'qui' : ''}">
-        <div class="grow"><div class="name">${rfEsc(m.etichetta || (RF_MIS_STRUMENTI.find(x => x[0] === m.tipo) || ['', 'Distanza'])[1])} · ${rfEsc(m.valore_mostrato || RFMisura.formattaMm(m.valore))}${m.tipo && m.tipo !== 'distanza' && m.etichetta ? ` <span class="caption">${rfEsc(m.tipo)}</span>` : ''}${m.stato_validazione ? `<span class="rf-mis-stato st-${m.stato_validazione}" title="${rfEsc(((m.avvisi || []).map(a => RFMSE.validazione.testo(a))).join(' ') || 'Calibrazione verificata')}">${RFMSE.validazione.SEGNI[m.stato_validazione]}</span>` : ''}${m.verifica_ok === false ? ' <span class="rf-mis-stato" style="color:#8a1f1f" title="doppio controllo non riuscito">✕</span>' : ''}${m.sostituisce_id ? ' <span class="caption">(rifatta)</span>' : ''}</div>
+        <div class="grow"><div class="name">${rfEsc(m.etichetta || (RF_MIS_STRUMENTI.find(x => x[0] === m.tipo) || ['', 'Distanza'])[1])} · ${rfEsc(m.valore_mostrato || RFMisura.formattaMm(m.valore))}${m.tipo && m.tipo !== 'distanza' && m.etichetta ? ` <span class="caption">${rfEsc(m.tipo)}</span>` : ''}${m.stato_validazione ? `<span class="rf-mis-stato st-${m.stato_validazione}" title="${rfEsc(((m.avvisi || []).map(a => RFMSE.validazione.testo(a))).join(' ') || 'Calibrazione verificata')}">${RFMSE.validazione.SEGNI[m.stato_validazione]}</span>` : ''}${m.verifica_ok === false ? ' <span class="rf-mis-stato" style="color:#8a1f1f" title="doppio controllo non riuscito">✕</span>' : ''}${m.sostituisce_id ? ' <span class="caption">(rifatta)</span>' : ''}${m.piano ? ` <span class="caption">${rfEsc(m.piano.piano)} ${m.piano.indice + 1}</span>` : ''}</div>
           <div class="sub">${rfEsc(m.chi || 'qualcuno')} · ${rfEsc(rfModQuando(m.quando))}${m.frame ? ` · fotogramma ${m.frame + 1}` : ''}${m.annullata_at ? ` · <b>annullata</b> da ${rfEsc(m.annullata_da || 'qualcuno')} ${rfEsc(rfModQuando(m.annullata_at))}` : scarto(m)}${m.extra && m.extra.statistiche ? `<br><b>Pixel:</b> ${rfEsc(rfMisStatTesto(m.extra.statistiche))}` : ''}</div></div>
         ${!m.annullata_at && puo ? `<div class="row" style="gap:6px">${rif.length ? `<select class="input sm" onchange="rfMisRiferimento('${m.id}', this.value)" title="Confronta con la misura dell'apparecchio"><option value="">confronta con…</option>${rif.map(r => `<option value="${r.id}" ${m.riferimento_misura_id === r.id ? 'selected' : ''}>${rfEsc(r.gruppo ? r.gruppo + ' · ' : '')}${rfEsc(r.nome)}</option>`).join('')}</select>` : ''}
           ${['rettangolo', 'ellisse', 'poligono'].includes(m.tipo) && ['CT', 'MR'].includes(String((d.esame || {}).modalita || '').toUpperCase()) ? `<button class="btn sm" onclick="rfMisStatistiche('${m.id}')" title="Valori dei pixel dentro la ROI (HU per la TAC)">${String((d.esame || {}).modalita).toUpperCase() === 'CT' ? 'HU' : 'Valori'}</button>` : ''}
@@ -6537,9 +6606,9 @@ function rfImgDettaglio() {
       </div>
       <div>
         <div class="rf-img-vista" onwheel="event.preventDefault(); rfImgScorri(event.deltaY > 0 ? 1 : -1)">
-          ${i ? `<div class="rf-mis-tela ${RF.mis.attiva ? 'attiva' : ''}"><img id="rf-img-main" src="${rfImgUrl(i, 1024, RF.img.frame)}" alt="Immagine ${RF.img.idx + 1}" onload="rfMisDisegna()" draggable="false">
+          ${i ? `<div class="rf-mis-tela ${RF.mis.attiva ? 'attiva' : ''}"><img id="rf-img-main" src="${RF.mpr.piano && rfMprVirtuale() ? rfMprUrl(s) : rfImgUrl(i, 1024, RF.img.frame)}" alt="Immagine ${RF.img.idx + 1}" onload="rfMisDisegna()" draggable="false">
               <canvas id="rf-mis-canvas" onpointerdown="rfMisGiu(event)" onpointermove="rfMisMuovi(event)" onpointerup="rfMisSu(event)" onpointercancel="rfMisSu(event)" ondblclick="rfMisDoppio(event)"></canvas></div>
-            <div class="rf-img-hud">${rfEsc(s.descrizione || s.modalita || '')}<br>${i.colonne || '?'}×${i.righe || '?'}<br>${rfEsc(cal === null ? 'calibrazione: leggo…' : RFMisura.descriviCalibrazione(cal))}</div>
+            <div class="rf-img-hud">${rfEsc(s.descrizione || s.modalita || '')}<br>${RF.mpr.piano && rfMprVirtuale() ? `${rfEsc(RF.mpr.piano)} ${RF.mpr.indice + 1} / ${rfMprVirtuale().n_indici} · griglia ${rfMprVirtuale().colonne}×${rfMprVirtuale().righe} · ${String(rfMprVirtuale().sp_x).replace('.', ',')} × ${String(Math.round(rfMprVirtuale().sp_y * 1000) / 1000).replace('.', ',')} mm/px · ricostruita` : `${i.colonne || '?'}×${i.righe || '?'}<br>${rfEsc(cal === null ? 'calibrazione: leggo…' : RFMSE.geometria.descriviCalibrazione(cal))}`}${s.geometria && s.geometria.stato === 'ok' ? `<br>serie ${rfEsc(s.geometria.orientamento || '')} · ${s.geometria.n} fette${s.geometria.distanza_media_mm ? ` · passo ${String(Math.round(s.geometria.distanza_media_mm * 100) / 100).replace('.', ',')} mm${s.geometria.uniforme ? '' : ' (non uniforme)'}` : ''}` : ''}</div>
             <div class="rf-img-hud destra">${RF.img.idx + 1} / ${visibili.length}${i.frame > 1 ? `<br>fotogramma ${RF.img.frame + 1} / ${i.frame}` : ''}${RF.img.ww !== null ? `<br>W ${RF.img.ww} / L ${RF.img.wl}` : ''}</div>
             <div class="limite">${RF.mis.attiva ? `${rfEsc((RF_MIS_STRUMENTI.find(x => x[0] === RF.mis.strumento) || ['', ''])[1])}: ${rfEsc(rfMisIstruzione())}` : 'Consultazione e misure — la diagnosi è del medico'}</div>`
             : `<div class="vuoto">Questa serie non contiene immagini da disegnare${nonImmagini ? ` (${nonImmagini} ${nonImmagini === 1 ? 'oggetto DICOM non grafico' : 'oggetti DICOM non grafici'}: referti strutturati, PDF o modelli)` : ''}.</div>`}
@@ -6547,12 +6616,15 @@ function rfImgDettaglio() {
         ${i ? `<div class="rf-img-barra">
           ${(() => { const st = rfMisStatoImmagine(i); if (!rfMisPuo() || !st) return ''; if (st.stato === 'NOT_MEASURABLE') return `<span class="rf-mis-motivo"><b>Misurazione non disponibile.</b> ${rfEsc(st.testi[0] || '')}</span>`; if (st.stato === 'ATTESA') return ''; return `<button class="btn sm ${RF.mis.attiva ? 'primary' : ''}" onclick="rfMisAttiva()" title="Misura una distanza fra due punti">Misura</button>`; })()}
           ${rfMisIndicatore(i)}
+          ${s && s.mpr ? `<span class="seg"><button class="${!RF.mpr.piano ? 'active' : ''}" onclick="rfMprVai(null)">Nativo</button><button class="${RF.mpr.piano === 'sagittale' ? 'active' : ''}" onclick="rfMprVai('sagittale')">Sagittale</button><button class="${RF.mpr.piano === 'coronale' ? 'active' : ''}" onclick="rfMprVai('coronale')">Coronale</button></span>` : ''}
+          ${rfMisPuo() && s && s.geometria && s.geometria.volume_possibile && !RF.mpr.piano ? `<button class="btn sm" onclick="rfMisVolume()" title="Volume dalle ROI su fette consecutive">Volume</button>` : ''}
           ${RF.mis.attiva && rfMisPuo() ? `<span class="rf-mis-str">${RF_MIS_STRUMENTI.map(([k, n]) => `<button class="btn sm ${RF.mis.strumento === k ? 'attivo' : ''}" onclick="rfMisStrumento('${k}')">${n}</button>`).join('')}${rfMisAlg().gesto === 'punti_chiusi' || rfMisAlg().gesto === 'punti' ? `<button class="btn sm" onclick="rfMisChiudi()" title="Termina la figura">Chiudi</button>` : ''}</span>` : ''}
           <button class="btn sm" onclick="rfImgScorri(-1)">‹</button>
           <input type="range" min="0" max="${Math.max(0, visibili.length - 1)}" value="${RF.img.idx}" oninput="rfImgVai(this.value)" aria-label="Immagine della serie">
           <button class="btn sm" onclick="rfImgScorri(1)">›</button>
         </div>
         ${i.frame > 1 ? `<div class="rf-img-barra"><span class="caption">fotogrammi</span><input type="range" min="0" max="${i.frame - 1}" value="${RF.img.frame}" oninput="rfImgFrame(this.value)" aria-label="Fotogramma"></div>` : ''}
+        ${RF.mpr.piano && rfMprVirtuale() ? `<div class="rf-img-barra"><span class="caption">${rfEsc(RF.mpr.piano)}</span><input type="range" min="0" max="${rfMprVirtuale().n_indici - 1}" value="${RF.mpr.indice}" oninput="rfMprIndice(this.value)" aria-label="Piano ricostruito"></div>` : ''}
         ${finestre.length ? `<div class="row wrap mt-8" style="gap:6px"><span class="caption" style="align-self:center">finestra</span>
           <button class="btn sm ${RF.img.ww === null ? 'primary' : ''}" onclick="rfImgFinestra(null, null)">Del file</button>
           ${finestre.map(f => `<button class="btn sm ${RF.img.ww === f.ww && RF.img.wl === f.wl ? 'primary' : ''}" onclick="rfImgFinestra(${f.ww}, ${f.wl})">${rfEsc(f.nome)}</button>`).join('')}</div>` : ''}` : ''}

@@ -190,8 +190,63 @@
         var e = esito(b, null, 'mm', { x_mm: b.mm[0].x, y_mm: b.mm[0].y, x_px: punti[0].x, y_px: punti[0].y });
         return e;
       }
+    },
+    // Fase 9: due punti su fette diverse (o uguali) della stessa serie, nello
+    // spazio paziente. Ogni punto porta la SUA immagine; le geometrie le
+    // passa il contesto (ctx.geometrie[immagine_id]). Il Frame of Reference
+    // deve essere lo stesso.
+    distanza_3d: {
+      nome: 'distanza_3d', versione: '1.0', unita: 'mm', punti: [2, 2], gesto: 'punti_3d',
+      equazione: 'd = |P(B) − P(A)| con P(p) = IPP + r·x·sx + c·y·sy (C.7.6.2.1.1)',
+      calcola: function (cal, punti, ctx) {
+        var SR = root.RFMSE.serie;
+        if (!SR) return { stato: 'modulo_serie_assente' };
+        if (!Array.isArray(punti) || punti.length !== 2 || !G.puntoValido(punti[0]) || !G.puntoValido(punti[1])) return { stato: 'punti_non_validi' };
+        var geometrie = (ctx && ctx.geometrie) || {};
+        var gA = geometrie[punti[0].immagine_id], gB = geometrie[punti[1].immagine_id];
+        if (!gA || !gB) return { stato: 'geometria_immagine_assente' };
+        var d = SR.distanza3d(gA, punti[0], gB, punti[1]);
+        if (d.stato !== 'ok') return { stato: d.stato };
+        return { stato: 'ok', valore: d.mm, mm: d.mm, unita: 'mm', extra: { xyz_a: d.xyz_a, xyz_b: d.xyz_b, immagine_a: punti[0].immagine_id, immagine_b: punti[1].immagine_id, frame_of_reference: gA.spazio.frame_of_reference },
+                 dx_mm: null, dy_mm: null, regione: null, avvisi: [], punti_fisici: [{ x: d.xyz_a[0], y: d.xyz_a[1], z: d.xyz_a[2] }, { x: d.xyz_b[0], y: d.xyz_b[1], z: d.xyz_b[2] }] };
+      }
+    },
+    // Fase 9: volume da poligoni su fette consecutive: V = Σ area_i × d, con d
+    // la distanza REALE fra le fette (uniforme, dalla geometria di serie), mai
+    // Slice Thickness. Il contesto porta aree (mm²), indici di fetta e d.
+    volume: {
+      nome: 'volume', versione: '1.0', unita: 'mm³', punti: [0, 0], gesto: 'composto',
+      equazione: 'V = Σ_i A_i · d, d = distanza uniforme fra fette adiacenti (dalle IPP)',
+      calcola: function (cal, punti, ctx) {
+        var v = ctx && ctx.volume;
+        if (!v || !Array.isArray(v.aree_mm2) || !Array.isArray(v.indici) || v.aree_mm2.length !== v.indici.length) return { stato: 'volume_contesto_assente' };
+        if (v.aree_mm2.length < 2) return { stato: 'volume_poche_fette' };
+        if (!G.finito(v.d_mm) || v.d_mm <= 0) return { stato: 'fette_non_uniformi' };
+        if (v.uniforme === false) return { stato: 'fette_non_uniformi' };
+        var idx = v.indici.slice().sort(function (a, b) { return a - b; });
+        for (var i = 1; i < idx.length; i++) if (idx[i] !== idx[i - 1] + 1) return { stato: 'poligoni_non_consecutivi' };
+        var tot = 0;
+        for (var k = 0; k < v.aree_mm2.length; k++) { if (!G.finito(v.aree_mm2[k]) || v.aree_mm2[k] <= 0) return { stato: 'area_nulla' }; tot += v.aree_mm2[k] * v.d_mm; }
+        if (!G.finito(tot)) return { stato: 'calcolo_non_finito' };
+        return { stato: 'ok', valore: tot, mm: tot, unita: 'mm³', extra: { aree_mm2: v.aree_mm2.slice(), indici: v.indici.slice(), d_mm: v.d_mm, n: v.aree_mm2.length, misure: v.misure ? v.misure.slice() : null, metodo: 'somma_aree_per_distanza' },
+                 dx_mm: null, dy_mm: null, regione: null, avvisi: ['volume_per_somma_di_fette'], punti_fisici: [] };
+      }
     }
   };
+
+  // Per il banco di regressione: le misure composte si rifanno da ciò che
+  // hanno salvato in `extra`, senza rileggere immagini.
+  function ricalcolaDaExtra(tipo, extra) {
+    if (!extra) return null;
+    if (tipo === 'distanza_3d' && Array.isArray(extra.xyz_a) && Array.isArray(extra.xyz_b)) {
+      var d = [extra.xyz_b[0] - extra.xyz_a[0], extra.xyz_b[1] - extra.xyz_a[1], extra.xyz_b[2] - extra.xyz_a[2]];
+      return Math.sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    }
+    if (tipo === 'volume' && Array.isArray(extra.aree_mm2) && G.finito(extra.d_mm)) {
+      var t = 0; for (var i = 0; i < extra.aree_mm2.length; i++) t += extra.aree_mm2[i] * extra.d_mm; return t;
+    }
+    return null;
+  }
 
   // «12,3 mm»: un decimale, virgola svizzera. L'arrotondamento è SOLO qui.
   function formattaMm(mm) {
@@ -201,6 +256,7 @@
   // Il valore mostrato per ogni unità: mm con un decimale; le aree in cm² con
   // due decimali (è l'unità dei referti ecocardiografici); gradi con uno.
   function formattaValore(valore, unita, extra) {
+    if (unita === 'mm³') return G.finito(valore) ? (Math.round(valore / 1000 * 100) / 100).toFixed(2).replace('.', ',') + ' mL' : '—';
     if (unita === 'mm²') return G.finito(valore) ? (Math.round(valore / 100 * 100) / 100).toFixed(2).replace('.', ',') + ' cm²' : '—';
     if (unita === '°') return G.finito(valore) ? (Math.round(valore * 10) / 10).toFixed(1).replace('.', ',') + '°' : '—';
     if (valore === null && extra && G.finito(extra.x_mm)) return '(' + formattaMm(extra.x_mm).replace(' mm', '') + '; ' + formattaMm(extra.y_mm) + ')';
@@ -223,7 +279,7 @@
 
   function distanzaMm(cal, p1, p2) { return ALGORITMI.distanza.calcola(cal, [p1, p2]); }
 
-  root.RFMSE.misure = { VERSIONE: '1.1', ALGORITMI: ALGORITMI, formattaMm: formattaMm, formattaValore: formattaValore, motivo: motivo, MOTIVI: MOTIVI, autointersecante: autointersecante, areaPoligono: areaPoligono };
+  root.RFMSE.misure = { VERSIONE: '1.2', ALGORITMI: ALGORITMI, formattaMm: formattaMm, formattaValore: formattaValore, motivo: motivo, MOTIVI: MOTIVI, autointersecante: autointersecante, areaPoligono: areaPoligono, ricalcolaDaExtra: ricalcolaDaExtra };
 
   // API del righello v1, invariata.
   var api = {

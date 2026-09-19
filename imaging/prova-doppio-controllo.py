@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import math
 import random
 import subprocess
 import sys
@@ -25,9 +26,9 @@ verifica = importlib.util.module_from_spec(spec); spec.loader.exec_module(verifi
 NODE = """
 const fs = require('fs'), vm = require('vm'), path = require('path');
 const c = {};
-for (const m of ['mse/geometria.js', 'mse/misure.js', 'mse/validazione.js']) vm.runInNewContext(fs.readFileSync(path.join(process.cwd(), 'public', 'prototipo', m), 'utf-8'), c, { filename: m });
+for (const m of ['mse/geometria.js', 'mse/misure.js', 'mse/validazione.js', 'mse/serie.js']) vm.runInNewContext(fs.readFileSync(path.join(process.cwd(), 'public', 'prototipo', m), 'utf-8'), c, { filename: m });
 const casi = JSON.parse(fs.readFileSync(0, 'utf-8'));
-const out = casi.map(k => { const e = c.RFMSE.misure.ALGORITMI[k.algoritmo].calcola(k.calibrazione, k.punti); return { stato: e.stato, mm: e.stato === 'ok' ? (k.algoritmo === 'punto' ? e.extra.x_mm : e.valore) : null }; });
+const out = casi.map(k => { const e = c.RFMSE.misure.ALGORITMI[k.algoritmo].calcola(k.calibrazione, k.punti, k.contesto || {}); return { stato: e.stato, mm: e.stato === 'ok' ? (k.algoritmo === 'punto' ? e.extra.x_mm : e.valore) : null }; });
 process.stdout.write(JSON.stringify(out));
 """
 
@@ -66,6 +67,21 @@ def caso(rng: random.Random) -> dict:
     punti = [gen() for _ in range(quanti)]
     if rng.random() < 0.03 and quanti > 1:
         punti[1] = dict(punti[0])
+    if rng.random() < 0.12:
+        # fase 9: distanza 3D fra due fette (a volte con FoR diverso o senza IPP)
+        def geo(z, forr="F1", ipp=True):
+            th = rng.choice([0.0, 0.3, 1.1])
+            iop = [math.cos(th), math.sin(th), 0.0, -math.sin(th), math.cos(th), 0.0]
+            return {"versione": 1, "identita": {"modalita": "CT", "frame_totali": 1}, "pixel": {"righe": righe, "colonne": colonne},
+                    "spaziatura": {"fonte": "PixelSpacing", "dx_mm": 0.5, "dy_mm": 0.75, "per_frame": False},
+                    "spazio": {"iop": iop, "ipp": [rng.uniform(-100, 100), rng.uniform(-100, 100), z] if ipp else None, "frame_of_reference": forr}}
+        ga, gb = geo(0.0), geo(rng.uniform(1, 50), forr=rng.choice(["F1", "F1", "F2"]), ipp=rng.random() < 0.9)
+        return {"calibrazione": cal, "algoritmo": "distanza_3d", "punti": [{**punto(), "immagine_id": "a"}, {**punto(), "immagine_id": "b"}], "contesto": {"geometrie": {"a": ga, "b": gb}}}
+    if rng.random() < 0.05:
+        n = rng.randint(1, 5); start = rng.randint(0, 10)
+        idx = [start + i for i in range(n)]
+        if rng.random() < 0.2 and n > 1: idx[-1] += 1
+        return {"calibrazione": cal, "algoritmo": "volume", "punti": [], "contesto": {"volume": {"aree_mm2": [rng.uniform(1, 5000) for _ in range(n)], "indici": idx, "d_mm": rng.choice([0.0, 1.25, 2.5, 5.0]), "uniforme": rng.random() < 0.9}}}
     return {"calibrazione": cal, "punti": punti, "algoritmo": algoritmo}
 
 
@@ -78,7 +94,7 @@ def main() -> int:
     a = json.loads(out.stdout)
     diversi = 0; ok = 0; rifiuti = 0
     for k, ra in zip(casi, a):
-        rb = verifica.calcola(k["calibrazione"], k["punti"], k["algoritmo"])
+        rb = verifica.calcola(k["calibrazione"], k["punti"], k["algoritmo"], k.get("contesto"))
         if ra["stato"] != rb["stato"]:
             diversi += 1
             if diversi <= 5: print("  stato diverso:", ra, rb, json.dumps(k)[:200])

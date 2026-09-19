@@ -256,7 +256,7 @@ test('gate: valuta — i rifiuti del calcolo diventano motivi, senza valore', ()
   const e = V.valuta({ cal: eco, punti: [{ x: 50, y: 100 }, { x: 200, y: 300 }] });
   assert.equal(e.stato, 'NOT_MEASURABLE'); assert.equal(e.valore, null); assert.ok(j(e.motivi).includes('fuori_regione'));
   assert.ok(j(V.valuta({ cal: ct, punti: [{ x: 1, y: 1 }, { x: 1, y: 1 }] }).motivi).includes('punti_uguali'));
-  assert.ok(j(V.valuta({ cal: ct, punti: [{ x: 1, y: 1 }, { x: 2, y: 2 }], algoritmo: 'volume' }).motivi).includes('algoritmo_sconosciuto'));
+  assert.ok(j(V.valuta({ cal: ct, punti: [{ x: 1, y: 1 }, { x: 2, y: 2 }], algoritmo: 'cubo' }).motivi).includes('algoritmo_sconosciuto'));
 });
 
 test('gate: valuta — regioni sovrapposte discordanti: CAUTION solo se validato, altrimenti blocca', () => {
@@ -453,4 +453,88 @@ test('fotogrammi: il Gate usa il fotogramma, e la variabilità è una CAUTION da
   const f2 = V.valuta({ cal: perFrame, frame: 2, frameTotali: 3, punti, cautionValidati: ['spacing_per_frame_variabile'] });
   assert.equal(f2.stato, 'NOT_MEASURABLE'); assert.ok(j(f2.motivi).includes('calibrazione_assente'));
   assert.match(G.descriviCalibrazione(perFrame), /per fotogramma/);
+});
+
+// ── Fase 9: spazio paziente e geometria di serie ──
+vm.runInNewContext(readFileSync(path.join(process.cwd(), 'public', 'prototipo', 'mse', 'serie.js'), 'utf-8'), contesto, { filename: 'mse/serie.js' });
+const SR = contesto.RFMSE.serie;
+const gAx = (z: number, id = 'a') => ({ versione: 1, identita: { modalita: 'CT', frame_totali: 1 }, pixel: { righe: 512, colonne: 512 }, spaziatura: { fonte: 'PixelSpacing', dx_mm: 0.5, dy_mm: 0.5, per_frame: false }, regioni_us: [], spazio: { iop: [1, 0, 0, 0, 1, 0], ipp: [-100, -120, z], frame_of_reference: 'FOR1', spessore_mm: 3, distanza_slice_dichiarata_mm: null }, derivata: false, image_type: [], avvisi_lettura: [], id });
+
+test('spazio paziente: pixel → mm con IOP/IPP/spaziatura, e senza uno dei tre non si va', () => {
+  const p = SR.versoPaziente(gAx(30), { x: 10, y: 20 });
+  assert.equal(p.stato, 'ok'); assert.deepEqual(j(p.xyz), [-95, -110, 30]);
+  assert.equal(SR.versoPaziente({ ...gAx(0), spazio: null }, { x: 0, y: 0 }).stato, 'spazio_assente');
+  assert.equal(SR.versoPaziente({ ...gAx(0), spazio: { iop: [1, 0, 0, 0, 1, 0], ipp: null } }, { x: 0, y: 0 }).stato, 'posizione_assente');
+  assert.equal(SR.versoPaziente({ ...gAx(0), spazio: { iop: null, ipp: [0, 0, 0] } }, { x: 0, y: 0 }).stato, 'orientamento_assente');
+  assert.equal(SR.versoPaziente({ ...gAx(0), spazio: { iop: [1, 0, 0, 1, 0, 0], ipp: [0, 0, 0] } }, { x: 0, y: 0 }).stato, 'orientamento_non_ortonormale');
+  assert.equal(SR.versoPaziente({ ...gAx(0), spaziatura: { fonte: null, dx_mm: null, dy_mm: null, per_frame: false } }, { x: 0, y: 0 }).stato, 'spaziatura_assente');
+});
+
+test('spazio paziente: la distanza in piano coincide con quella 2D anche su un piano obliquo', () => {
+  const s = Math.SQRT1_2;
+  const gObl = { ...gAx(0), spazio: { iop: [s, s, 0, -s, s, 0], ipp: [10, 20, 30], frame_of_reference: 'F' } };
+  const a = { x: 3, y: 4 }, b = { x: 103, y: 4 };
+  const d3 = SR.distanza3d(gObl, a, gObl, b);
+  assert.equal(d3.stato, 'ok'); assert.ok(quasi(d3.mm, 50));       // 100 px × 0,5 mm
+  assert.ok(quasi(V.valuta({ cal: ct, punti: [a, b] }).valore / 0.7 * 0.5, 50));
+  assert.equal(SR.orientamento([0, 0, 1]), 'assiale'); assert.equal(SR.orientamento([0, 1, 0]), 'coronale'); assert.equal(SR.orientamento([1, 0, 0]), 'sagittale'); assert.equal(SR.orientamento([0.7, 0.7, 0.14]), 'obliquo');
+});
+
+test('distanza 3D: fra due fette, con Frame of Reference uguale; diverso → rifiuto', () => {
+  const d = SR.distanza3d(gAx(0), { x: 0, y: 0 }, gAx(30), { x: 80, y: 0 });   // 40 mm in piano, 30 mm fra fette → 50
+  assert.equal(d.stato, 'ok'); assert.ok(quasi(d.mm, 50));
+  const altro = { ...gAx(30), spazio: { ...gAx(30).spazio, frame_of_reference: 'FOR2' } };
+  assert.equal(SR.distanza3d(gAx(0), { x: 0, y: 0 }, altro, { x: 80, y: 0 }).stato, 'frame_of_reference_diversi');
+  assert.equal(SR.distanza3d(gAx(0), { x: 1, y: 1 }, gAx(0), { x: 1, y: 1 }).stato, 'punti_uguali');
+  assert.equal(SR.distanza3d(gAx(0), { x: 1, y: 1 }, gAx(0), { x: 600, y: 1 }).stato, 'fuori_immagine');
+});
+
+test('serie: fette ordinate lungo la normale, distanza reale dalle posizioni (non da Slice Thickness), uniformità', () => {
+  const imgs = [gAx(60, 'c'), gAx(0, 'a'), gAx(30, 'b'), gAx(90, 'd')];
+  const s = SR.analizzaSerie(imgs.map((g) => ({ id: g.id, geometria: g })));
+  assert.equal(s.stato, 'ok'); assert.deepEqual(j(s.ordine), ['a', 'b', 'c', 'd']);
+  assert.ok(quasi(s.distanza_media_mm, 30)); assert.equal(s.uniforme, true); assert.equal(s.volume_possibile, true);
+  assert.equal(s.orientamento, 'assiale'); assert.equal(s.n, 4); assert.equal(s.frame_of_reference, 'FOR1');
+  // Slice Thickness diceva 3 mm: non conta
+  assert.ok(Math.abs(s.distanza_media_mm - 3) > 1);
+});
+
+test('serie: distanze non uniformi, fette doppie, dimensioni diverse, FoR diversi → niente volume, con avvisi', () => {
+  const nu = SR.analizzaSerie([gAx(0, 'a'), gAx(30, 'b'), gAx(75, 'c')].map((g) => ({ id: g.id, geometria: g })));
+  assert.equal(nu.uniforme, false); assert.equal(nu.volume_possibile, false); assert.ok(j(nu.avvisi).includes('distanza_fette_non_uniforme'));
+  const dop = SR.analizzaSerie([gAx(0, 'a'), gAx(0, 'b'), gAx(30, 'c')].map((g) => ({ id: g.id, geometria: g })));
+  assert.ok(j(dop.avvisi).includes('fette_sovrapposte')); assert.equal(dop.volume_possibile, false);
+  const dim = SR.analizzaSerie([gAx(0, 'a'), { ...gAx(30, 'b'), pixel: { righe: 256, colonne: 256 } }, gAx(60, 'c')].map((g: any) => ({ id: g.id, geometria: g })));
+  assert.ok(j(dim.avvisi).includes('dimensioni_diverse')); assert.equal(dim.volume_possibile, false);
+  const f2 = { ...gAx(60, 'c'), spazio: { ...gAx(60).spazio, frame_of_reference: 'X' } };
+  const fr = SR.analizzaSerie([gAx(0, 'a'), gAx(30, 'b'), f2].map((g: any) => ({ id: g.id, geometria: g })));
+  assert.ok(j(fr.avvisi).includes('frame_of_reference_diversi')); assert.equal(fr.volume_possibile, false);
+  const senza = SR.analizzaSerie([{ id: 'x', geometria: { ...gAx(0), spazio: null } }]);
+  assert.equal(senza.stato, 'senza_spazio'); assert.equal(senza.senza_spazio, 1);
+  const due = SR.analizzaSerie([gAx(0, 'a'), gAx(30, 'b')].map((g) => ({ id: g.id, geometria: g })));
+  assert.equal(due.uniforme, true); assert.equal(due.volume_possibile, false);   // servono almeno 3 fette
+});
+
+test('distanza 3D come strumento: passa dal Gate con le geometrie del contesto', () => {
+  const geometrie = { a: gAx(0, 'a'), b: gAx(30, 'b') };
+  const e = V.valuta({ cal: ct, geometria: gAx(0), frame: 0, frameTotali: 1, algoritmo: 'distanza_3d', punti: [{ x: 0, y: 0, immagine_id: 'a' }, { x: 80, y: 0, immagine_id: 'b' }], geometrie });
+  assert.equal(e.stato, 'VALIDATED'); assert.ok(quasi(e.valore, 50)); assert.equal(e.valore_mostrato, '50,0 mm'); assert.equal(e.extra.immagine_b, 'b');
+  assert.ok(quasi(contesto.RFMSE.misure.ricalcolaDaExtra('distanza_3d', e.extra), 50));
+  const ko = V.valuta({ cal: ct, algoritmo: 'distanza_3d', punti: [{ x: 0, y: 0, immagine_id: 'a' }, { x: 80, y: 0, immagine_id: 'z' }], geometrie });
+  assert.equal(ko.stato, 'NOT_MEASURABLE'); assert.ok(j(ko.motivi).includes('geometria_immagine_assente'));
+  // senza calibrazione 2D ma con spazio: la distanza 3D è possibile lo stesso
+  const senzaCal = V.valuta({ cal: { tipo: 'nessuna', righe: 512, colonne: 512, regioni: [], spacing: null }, algoritmo: 'distanza_3d', punti: [{ x: 0, y: 0, immagine_id: 'a' }, { x: 80, y: 0, immagine_id: 'b' }], geometrie });
+  assert.equal(senzaCal.stato, 'VALIDATED');
+});
+
+test('volume: somma delle aree per la distanza reale fra fette consecutive; salti e passo non uniforme rifiutati', () => {
+  const v = V.valuta({ cal: ct, algoritmo: 'volume', punti: [], volume: { aree_mm2: [1000, 1200, 800], indici: [4, 5, 6], d_mm: 2.5, uniforme: true, misure: ['m1', 'm2', 'm3'] }, cautionValidati: ['volume_per_somma_di_fette'] });
+  assert.equal(v.stato, 'CAUTION'); assert.ok(quasi(v.valore, 7500)); assert.equal(v.valore_mostrato, '7,50 mL'); assert.equal(v.unita, 'mm³');
+  assert.ok(quasi(contesto.RFMSE.misure.ricalcolaDaExtra('volume', v.extra), 7500));
+  const bloccato = V.valuta({ cal: ct, algoritmo: 'volume', punti: [], volume: { aree_mm2: [1000, 1200], indici: [4, 5], d_mm: 2.5, uniforme: true } });
+  assert.equal(bloccato.stato, 'NOT_MEASURABLE'); assert.ok(j(bloccato.motivi).includes('caution_non_validata:volume_per_somma_di_fette'));
+  assert.ok(j(V.valuta({ cal: ct, algoritmo: 'volume', punti: [], volume: { aree_mm2: [1000, 1200], indici: [4, 6], d_mm: 2.5, uniforme: true } }).motivi).includes('poligoni_non_consecutivi'));
+  assert.ok(j(V.valuta({ cal: ct, algoritmo: 'volume', punti: [], volume: { aree_mm2: [1000, 1200], indici: [4, 5], d_mm: 2.5, uniforme: false } }).motivi).includes('fette_non_uniformi'));
+  assert.ok(j(V.valuta({ cal: ct, algoritmo: 'volume', punti: [], volume: { aree_mm2: [1000], indici: [4], d_mm: 2.5, uniforme: true } }).motivi).includes('volume_poche_fette'));
+  assert.equal(contesto.RFMSE.misure.formattaValore(123456, 'mm³'), '123,46 mL');
 });

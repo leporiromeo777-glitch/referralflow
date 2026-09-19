@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { query, transazione } from '@/lib/db';
 import { statisticheRoi } from '@/lib/imaging';
+import { pianoVirtuale } from '@/lib/imaging-serie';
+import type { GeometriaSerie } from '@/lib/imaging-misura';
 import { isUuid } from '@/lib/cartella';
 import { mse, puntoValido, cautionValidati, versioneSoftware, verificaIndipendente, tolleranzaVerifica, type Calibrazione, type Geometria, type Punto } from '@/lib/imaging-misura';
 
@@ -97,6 +99,52 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, statistiche });
   }
 
+  if (corpo.azione === 'volume') {
+    // Fase 9: il volume dai poligoni già salvati su fette consecutive della
+    // stessa serie: V = Σ area × distanza reale fra le fette (dalla geometria
+    // di serie, uniforme). Il server sceglie i dati, il motore calcola, il
+    // verificatore ricalcola, e il volume diventa una misura come le altre.
+    const ids: string[] = Array.isArray(corpo.misure) ? corpo.misure.filter((x: unknown) => typeof x === 'string' && isUuid(x)) : [];
+    if (ids.length < 2) return NextResponse.json({ errore: 'volume_poche_fette', motivo: mse().validazione.testo('volume_poche_fette') }, { status: 422 });
+    const pol = await query<{ id: string; immagine_id: string; serie_id: string; esame_id: string; valore: number; tipo: string; etichetta: string | null }>(
+      `select m.id, m.immagine_id, i.serie_id, m.esame_id, m.valore, m.tipo, m.etichetta
+         from imaging_misure_manuali m join imaging_immagini i on i.id = m.immagine_id
+        where m.id = any($1::uuid[]) and m.studio_id = $2 and m.annullata_at is null and m.piano is null`, [ids, sid]);
+    if (pol.length !== ids.length) return NextResponse.json({ errore: 'non_trovato', motivo: 'Una delle misure non esiste, è annullata o è su un piano ricostruito.' }, { status: 404 });
+    if (pol.some((m) => m.tipo !== 'poligono' && m.tipo !== 'ellisse' && m.tipo !== 'rettangolo')) return NextResponse.json({ errore: 'roi_non_supportata', motivo: 'Il volume si calcola da poligoni, ellissi o rettangoli.' }, { status: 422 });
+    if (new Set(pol.map((m) => m.serie_id)).size !== 1) return NextResponse.json({ errore: 'serie_diverse', motivo: 'Le ROI devono stare nella stessa serie.' }, { status: 422 });
+    const [serie] = await query<{ geometria: GeometriaSerie | null }>(`select geometria from imaging_serie where id = $1`, [pol[0].serie_id]);
+    const g = serie?.geometria;
+    const ordine = g?.ordine ?? [];
+    const indici = pol.map((m) => ordine.indexOf(m.immagine_id));
+    if (indici.some((i) => i < 0)) return NextResponse.json({ errore: 'spazio_assente', motivo: mse().validazione.testo('spazio_assente') }, { status: 422 });
+    if (new Set(pol.map((m) => m.immagine_id)).size !== pol.length) return NextResponse.json({ errore: 'poligoni_non_consecutivi', motivo: 'Una sola ROI per fetta.' }, { status: 422 });
+    const ctxVolume = { aree_mm2: pol.map((m) => Number(m.valore)), indici, d_mm: g?.distanza_media_mm ?? null, uniforme: !!g?.uniforme, misure: pol.map((m) => m.id) };
+    const M = mse();
+    const esitoV = M.validazione.valuta({ cal: null, geometria: null, frame: 0, frameTotali: 1, punti: [], algoritmo: 'volume', volume: ctxVolume, cautionValidati: cautionValidati() });
+    if (esitoV.stato === 'NOT_MEASURABLE' || !esitoV.ok) {
+      return NextResponse.json({ errore: esitoV.motivi[0] ?? 'non_misurabile', stato: esitoV.stato, motivi: esitoV.motivi, avvisi: esitoV.avvisi, testi: esitoV.testi, motivo: esitoV.testi[0] ?? '' }, { status: 422 });
+    }
+    const bV = await verificaIndipendente(null, [], 'volume', { volume: ctxVolume });
+    const tolV = tolleranzaVerifica(esitoV.valore as number);
+    const scartoV = bV.stato === 'ok' && typeof bV.mm === 'number' ? Math.abs(bV.mm - (esitoV.valore as number)) : null;
+    const verificaV = { metodo: 'imaging/verifica-indipendente.py (numpy)', algoritmo: 'volume', valore_a: esitoV.valore, valore_b: bV.mm ?? null, stato_b: bV.stato, scarto: scartoV, tolleranza: tolV, esito: scartoV !== null && scartoV <= tolV ? 'ok' : 'fallita' };
+    if (verificaV.esito !== 'ok') return NextResponse.json({ errore: 'verifica_indipendente_fallita', motivo: M.validazione.testo('verifica_indipendente_fallita'), verifica: verificaV }, { status: 422 });
+    const primo = pol.slice().sort((a, b) => indici[pol.indexOf(a)] - indici[pol.indexOf(b)])[0];
+    const riga = await transazione(async (q) => {
+      const [nuova] = await q<{ id: string; quando: string }>(
+        `insert into imaging_misure_manuali (studio_id, esame_id, immagine_id, frame, user_id, tipo, punti, valore, unita, calibrazione, versione_calcolo, etichetta,
+                                            punti_fisici, valore_mostrato, algoritmo, versione_gate, versione_software, stato_validazione, avvisi, verifica_indipendente, geometria, extra)
+         values ($1,$2,$3,0,$4,'volume','[]'::jsonb,$5,$6,$7,$8,nullif($9,''),'[]'::jsonb,$10,'volume',$11,$12,$13,$14,$15,$16,$17) returning id, created_at::text as quando`,
+        [sid, primo.esame_id, primo.immagine_id, session.id, esitoV.valore, esitoV.unita, JSON.stringify({ tipo: 'serie', distanza_fette_mm: g?.distanza_media_mm, uniforme: g?.uniforme }),
+         esitoV.versione_algoritmo, typeof corpo.etichetta === 'string' ? corpo.etichetta.trim().slice(0, 80) : '', esitoV.valore_mostrato, esitoV.versione_gate, versioneSoftware(), esitoV.stato,
+         JSON.stringify(esitoV.avvisi), JSON.stringify(verificaV), JSON.stringify(g), JSON.stringify(esitoV.extra)]);
+      await evento(q, nuova.id, 'creata', null, { tipo: 'volume', valore: esitoV.valore, unita: esitoV.unita, valore_mostrato: esitoV.valore_mostrato, extra: esitoV.extra, stato: esitoV.stato, avvisi: esitoV.avvisi });
+      return nuova;
+    });
+    return NextResponse.json({ ok: true, id: riga.id, tipo: 'volume', valore: esitoV.valore, unita: esitoV.unita, extra: esitoV.extra, testo: esitoV.valore_mostrato, stato: esitoV.stato, avvisi: esitoV.avvisi, verifica: verificaV }, { status: 201 });
+  }
+
   if (corpo.azione === 'riferimento') {
     // Per la validazione: lega la misura a quella dell'apparecchio sullo stesso esame.
     if (!isUuid(corpo.id)) return NextResponse.json({ errore: 'non_trovato' }, { status: 404 });
@@ -129,7 +177,7 @@ export async function POST(req: NextRequest) {
   if (punti.length < alg.punti[0] || punti.length > alg.punti[1] || !punti.every((p: unknown) => puntoValido(p))) {
     return NextResponse.json({ errore: 'punti_non_validi' }, { status: 400 });
   }
-  const frame = Number.isInteger(corpo.frame) && corpo.frame >= 0 ? Number(corpo.frame) : 0;
+  const frame = Number.isInteger(corpo.frame) && corpo.frame >= 0 ? Number(corpo.frame) : 0;   // per i piani MPR si azzera più sotto
   const etichetta = typeof corpo.etichetta === 'string' ? corpo.etichetta.trim().slice(0, 80) : '';
   const rif = corpo.riferimento_misura_id;
   if (rif && !isUuid(rif)) return NextResponse.json({ errore: 'riferimento_non_valido' }, { status: 400 });
@@ -137,27 +185,53 @@ export async function POST(req: NextRequest) {
   const sostituisce = corpo.sostituisce_id;
   if (sostituisce && !isUuid(sostituisce)) return NextResponse.json({ errore: 'sostituisce_non_valido' }, { status: 400 });
 
-  const [img] = await query<{ id: string; esame_id: string; immagine: boolean; calibrazione: Calibrazione | null; geometria: Geometria | null; frame: number; sha256: string | null }>(
-    `select i.id, s.esame_id, i.immagine, i.calibrazione, i.geometria, i.frame, i.sha256
+  const [img] = await query<{ id: string; esame_id: string; serie_id: string; immagine: boolean; calibrazione: Calibrazione | null; geometria: Geometria | null; frame: number; sha256: string | null; geometria_serie: GeometriaSerie | null }>(
+    `select i.id, s.esame_id, s.id as serie_id, i.immagine, i.calibrazione, i.geometria, i.frame, i.sha256, s.geometria as geometria_serie
        from imaging_immagini i join imaging_serie s on s.id = i.serie_id join imaging_esami e on e.id = s.esame_id
       where i.id = $1 and e.studio_id = $2`, [immagineId, sid]);
   if (!img) return NextResponse.json({ errore: 'non_trovato' }, { status: 404 });
   if (!img.immagine) return NextResponse.json({ errore: 'non_immagine' }, { status: 415 });
 
   const M = mse();
-  const pts: Punto[] = punti.map((p: Punto) => ({ x: Number(p.x), y: Number(p.y) }));
+  // Misura su un piano ricostruito (MPR): la griglia virtuale e la sua
+  // calibrazione le decide il SERVER dalla geometria di serie, non il browser.
+  let piano: { piano: 'sagittale' | 'coronale'; indice: number } | null = null;
+  let calBase = img.calibrazione, geoBase = img.geometria, frameTot = Math.max(1, img.frame), frameUso = frame;
+  let virt: ReturnType<typeof pianoVirtuale> = null;
+  if (corpo.piano && typeof corpo.piano === 'object') {
+    const tipoPiano = corpo.piano.tipo === 'coronale' ? 'coronale' : corpo.piano.tipo === 'sagittale' ? 'sagittale' : null;
+    if (!tipoPiano || !Number.isInteger(corpo.piano.indice)) return NextResponse.json({ errore: 'piano_non_valido' }, { status: 400 });
+    virt = img.geometria_serie ? pianoVirtuale(img.geometria_serie, tipoPiano) : null;
+    if (!virt) return NextResponse.json({ errore: 'serie_non_ricostruibile', motivo: 'Questa serie non si ricostruisce: fette non uniformi o geometria assente.' }, { status: 422 });
+    if (corpo.piano.indice < 0 || corpo.piano.indice >= virt.n_indici) return NextResponse.json({ errore: 'piano_non_valido' }, { status: 400 });
+    piano = { piano: tipoPiano, indice: Number(corpo.piano.indice) };
+    calBase = virt.calibrazione as Calibrazione; geoBase = virt.geometria; frameTot = 1; frameUso = 0;
+    if (algoritmo === 'distanza_3d' || algoritmo === 'volume') return NextResponse.json({ errore: 'algoritmo_non_su_mpr' }, { status: 400 });
+  }
+  const pts: (Punto & { immagine_id?: string })[] = punti.map((p: Punto & { immagine_id?: string }) => ({ x: Number(p.x), y: Number(p.y), ...(typeof p.immagine_id === 'string' ? { immagine_id: p.immagine_id } : {}) }));
+  // Distanza 3D: ogni punto porta la sua immagine; le geometrie le carica il server (stessa serie, stesso studio).
+  let geometrie: Record<string, Geometria | null> | undefined;
+  if (algoritmo === 'distanza_3d') {
+    const idsImg = pts.map((p) => p.immagine_id ?? img.id);
+    if (!idsImg.every((x) => isUuid(x))) return NextResponse.json({ errore: 'punti_non_validi' }, { status: 400 });
+    const righeG = await query<{ id: string; geometria: Geometria | null }>(
+      `select i.id, i.geometria from imaging_immagini i join imaging_serie s on s.id = i.serie_id join imaging_esami e on e.id = s.esame_id
+        where i.id = any($1::uuid[]) and e.studio_id = $2 and s.id = $3`, [idsImg, sid, img.serie_id]);
+    geometrie = Object.fromEntries(righeG.map((r) => [r.id, r.geometria]));
+    pts.forEach((p, k) => { p.immagine_id = idsImg[k]; });
+  }
   // Il Validation Gate, rifatto qui: lo stato lo decide il server.
   const esito = M.validazione.valuta({
-    cal: img.calibrazione, geometria: img.geometria, frame, frameTotali: Math.max(1, img.frame),
-    punti: pts, algoritmo, cautionValidati: cautionValidati(),
+    cal: calBase, geometria: geoBase, frame: frameUso, frameTotali: frameTot,
+    punti: pts, algoritmo, cautionValidati: cautionValidati(), geometrie,
   });
   if (esito.stato === 'NOT_MEASURABLE' || !esito.ok) {
     return NextResponse.json({ errore: esito.motivi[0] ?? 'non_misurabile', stato: esito.stato, motivi: esito.motivi, avvisi: esito.avvisi, testi: esito.testi, motivo: esito.testi[0] ?? '' }, { status: 422 });
   }
   // Doppio controllo: un'implementazione separata deve dare lo stesso numero
   // (per il punto: le due coordinate).
-  const calEff = (esito as unknown as { cal: Calibrazione | null }).cal ?? img.calibrazione;
-  const b = await verificaIndipendente(calEff, pts, algoritmo);
+  const calEff = (esito as unknown as { cal: Calibrazione | null }).cal ?? calBase;
+  const b = await verificaIndipendente(calEff, pts, algoritmo, geometrie ? { geometrie } : undefined);
   const valoreA = algoritmo === 'punto' ? Number(esito.extra?.x_mm) : (esito.valore as number);
   const tolleranza = tolleranzaVerifica(valoreA);
   let scarto: number | null = b.stato === 'ok' && typeof b.mm === 'number' ? Math.abs(b.mm - valoreA) : null;
@@ -180,14 +254,15 @@ export async function POST(req: NextRequest) {
     }
     const [nuova] = await q<{ id: string; quando: string }>(
       `insert into imaging_misure_manuali (studio_id, esame_id, immagine_id, frame, user_id, tipo, punti, valore, unita, calibrazione, versione_calcolo, etichetta, riferimento_misura_id,
-                                          punti_fisici, valore_mostrato, algoritmo, versione_gate, versione_software, stato_validazione, avvisi, verifica_indipendente, geometria, sostituisce_id, extra)
-       values ($1,$2,$3,$4,$5,$23,$6,$7,$8,$9,$10,nullif($11,''),$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$24) returning id, created_at::text as quando`,
-      [sid, img.esame_id, img.id, frame, session.id, JSON.stringify(pts), esito.valore, esito.unita, JSON.stringify(calEff),
+                                          punti_fisici, valore_mostrato, algoritmo, versione_gate, versione_software, stato_validazione, avvisi, verifica_indipendente, geometria, sostituisce_id, extra, piano)
+       values ($1,$2,$3,$4,$5,$23,$6,$7,$8,$9,$10,nullif($11,''),$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$24,$25) returning id, created_at::text as quando`,
+      [sid, img.esame_id, img.id, frameUso, session.id, JSON.stringify(pts), esito.valore, esito.unita, JSON.stringify(calEff),
        esito.versione_algoritmo, etichetta, rif || null,
        JSON.stringify(esito.punti_fisici), esito.valore_mostrato, esito.algoritmo, esito.versione_gate, versioneSoftware(), esito.stato,
-       JSON.stringify(esito.avvisi), JSON.stringify(verifica), img.geometria ? JSON.stringify(img.geometria) : null, sostituisce || null,
-       algoritmo, esito.extra ? JSON.stringify(esito.extra) : null]);
-    await evento(q, nuova.id, 'creata', null, { tipo: algoritmo, valore: esito.valore, unita: esito.unita, valore_mostrato: esito.valore_mostrato, extra: esito.extra, stato: esito.stato, avvisi: esito.avvisi, etichetta: etichetta || null, punti: pts, frame, sha256_file: img.sha256, sostituisce_id: sostituisce || null });
+       JSON.stringify(esito.avvisi), JSON.stringify(verifica), geoBase ? JSON.stringify(geoBase) : null, sostituisce || null,
+       algoritmo, esito.extra ? JSON.stringify(esito.extra) : null,
+       piano ? JSON.stringify({ ...piano, colonne: virt!.colonne, righe: virt!.righe, sp_x: virt!.sp_x, sp_y: virt!.sp_y, serie_id: img.serie_id }) : null]);
+    await evento(q, nuova.id, 'creata', null, { tipo: algoritmo, valore: esito.valore, unita: esito.unita, valore_mostrato: esito.valore_mostrato, extra: esito.extra, stato: esito.stato, avvisi: esito.avvisi, etichetta: etichetta || null, punti: pts, frame: frameUso, piano, sha256_file: img.sha256, sostituisce_id: sostituisce || null });
     if (sostituisce) {
       await q(`update imaging_misure_manuali set annullata_at = now(), annullata_da = $3 where id = $1 and studio_id = $2`, [sostituisce, sid, session.id]);
       await evento(q, sostituisce, 'sostituita', { annullata_at: null }, { sostituita_da: nuova.id });

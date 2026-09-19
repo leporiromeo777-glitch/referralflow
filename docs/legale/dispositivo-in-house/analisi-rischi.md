@@ -44,6 +44,18 @@ riconoscibile che entra in una decisione). Probabilità: 1 rara, 2 possibile,
 | R33 | Rettangolo/ellisse ruotati rispetto agli assi dell'immagine | l'operatore crede di misurare una figura inclinata | B | 2 | gli strumenti sono dichiarati allineati agli assi (destinazione d'uso); per figure inclinate c'è il poligono | B | destinazione d'uso |
 | R34 | Figura chiusa con troppo pochi punti o degenere (allineati) | area nulla presentata | B | 1 | `area_nulla`; minimo 3 vertici per poligono/perimetro | A | test «poligono» (allineati) |
 | R35 | Chiusura del poligono al vertice sbagliato (doppio clic che aggiunge un vertice doppio) | un lato in più di lunghezza zero | A | 3 | il doppio clic toglie il vertice ripetuto; i vertici coincidenti sono `punti_uguali` | A | codice; prova nel browser |
+| R36 | HU calcolate senza Rescale o con Rescale non in HU | numeri spacciati per Hounsfield | C | 2 | HU solo se `Modality=CT`, Rescale presente, `RescaleType` assente o HU; altrimenti `hu_non_disponibili` | A | `prova-statistiche.py` 10-11 |
+| R37 | Statistiche su ecografie, immagini a colori, secondarie | livelli di grigio letti come dato clinico | B | 2 | `statistiche_non_applicabili` per tutto ciò che non è CT/MR monocromatico | A | `prova-statistiche.py` 12-13; e2e |
+| R38 | Maschera della ROI sbagliata (bordi, poligono concavo) | media su pixel sbagliati | B | 2 | maschera sui centri dei pixel; ellisse per disuguaglianza; poligono pari/dispari; conteggi verificati contro l'area geometrica | A | `prova-statistiche.py` 6-8 |
+| R39 | Un solo calcolo statistico | errore numerico non visto | B | 1 | numpy e libreria standard devono coincidere entro 1e-9; se no `verifica_indipendente_fallita` | A | `prova-statistiche.py` 2 |
+| R40 | Multiframe con spaziatura diversa per fotogramma misurato con quella di un altro | misura sbagliata | C | 1 | calibrazione effettiva costruita dal fotogramma corrente; senza valore → `calibrazione_assente`; variabilità = CAUTION da validare | A | test «fotogrammi»; `prova-geometria.py` 12 |
+| R41 | Distanza fra fette presa da Slice Thickness | passo sbagliato (spesso lo è) | C | 3 | il passo si calcola dalle IPP proiettate sulla normale; Slice Thickness si legge e si ignora | A | test «serie» (3 dichiarati, 30 reali); e2e serie |
+| R42 | Serie con fette non uniformi, doppie, dimensioni o orientamento diversi, FoR diversi | volume e MPR su un volume che non è tale | C | 2 | `analizzaSerie` → `volume_possibile=false` con avvisi; volume e MPR rifiutati | A | test «serie» ×5; e2e |
+| R43 | Punti 3D su immagini con Frame of Reference diverso | coordinate non confrontabili | C | 1 | `frame_of_reference_diversi`; stessa serie e stesso studio richiesti dal server | A | test; doppio controllo 3000 casi |
+| R44 | Volume da ROI non consecutive, o una fetta con due ROI | somma su un insieme che non è un volume | B | 2 | `poligoni_non_consecutivi`; una sola ROI per fetta; CAUTION «somma di fette» finché non validata | A | test «volume»; e2e |
+| R45 | Misura su un piano MPR con la calibrazione mandata dal browser | griglia virtuale manomessa o sbagliata | C | 1 | la griglia e la calibrazione virtuale le costruisce il SERVER dalla geometria di serie; il browser manda piano e indice; CAUTION «immagine ricostruita» | A | e2e (misura su MPR bloccata; indice fuori → 400) |
+| R46 | PNG dell'MPR ricampionato a pixel isotropi letto come griglia nativa | scala sbagliata lungo le fette | C | 2 | scala PER ASSE dallo schermo alla griglia virtuale (matrice affine), y capovolta dichiarata | A | `prova-mpr.py` 1-2; codice `rfMisPunto` |
+| R47 | Cache del volume MPR non aggiornata dopo un cambio dei file | ricostruzione di un volume vecchio | A | 1 | i file non si riscrivono mai; chiave della cache = sha256 dell'elenco dei file | A | `prova-mpr.py` 7 |
 
 ## Rischio complessivo
 
@@ -54,7 +66,7 @@ destinazione d'uso dichiarata (supporto, non sostituzione della console).
 
 ## Che cosa riapre questa analisi
 
-Un nuovo tipo di misura (area, angolo), un nuovo tipo di immagine (multiframe
-enhanced con spacing per fotogramma), un cambio del lettore DICOM o del Gate,
+Un nuovo tipo di misura, un piano MPR obliquo, un volume interpolato, un
+cambio del lettore DICOM, del ricostruttore o del Gate,
 l'aggiunta di un codice a `caution-validati.json`, una segnalazione di misura
 sbagliata dall'uso clinico.

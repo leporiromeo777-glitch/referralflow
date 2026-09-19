@@ -1,6 +1,6 @@
 # Destinazione d'uso — Righello ReferralFlow
 
-Versione 1.1 · 20 settembre 2026 · bozza per il titolare dello studio. **La 1.1 estende la 1.0** (sola distanza) agli strumenti della fase 3; ogni strumento nuovo entra in uso clinico solo dopo la sua validazione (piano §3).
+Versione 1.2 · 20 settembre 2026 · bozza per il titolare dello studio. **La 1.1 estende la 1.0** (sola distanza) agli strumenti della fase 3; **la 1.2** aggiunge le statistiche dei pixel (HU), i multiframe con spaziatura per fotogramma, la distanza 3D fra fette, il volume per somma di fette e i piani ricostruiti (MPR). Ogni funzione nuova entra in uso clinico solo dopo la sua validazione (piano §3); quelle della 1.2 nascono come CAUTION bloccate.
 
 ## Nome e identificazione
 
@@ -28,7 +28,7 @@ Versione 1.1 · 20 settembre 2026 · bozza per il titolare dello studio. **La 1.
 
 | Voce | Contenuto |
 |---|---|
-| Funzione | **distanza** (mm, un decimale); **polilinea** (mm); **angolo** (gradi, un decimale, calcolato sui millimetri); **rettangolo** ed **ellisse** con lati/assi lungo gli assi dell'immagine (area in cm² con due decimali, perimetro in mm; per l'ellisse il perimetro è dichiarato approssimato, formula di Ramanujan); **poligono** chiuso tracciato per vertici (area cm², perimetro mm; un contorno che si incrocia si rifiuta); **perimetro** di un contorno chiuso (mm); **punto** (coordinate in mm) |
+| Funzione | **distanza** (mm, un decimale); **polilinea** (mm); **angolo** (gradi, un decimale, calcolato sui millimetri); **rettangolo** ed **ellisse** con lati/assi lungo gli assi dell'immagine (area in cm² con due decimali, perimetro in mm; per l'ellisse il perimetro è dichiarato approssimato, formula di Ramanujan); **poligono** chiuso tracciato per vertici (area cm², perimetro mm; un contorno che si incrocia si rifiuta); **perimetro** di un contorno chiuso (mm); **punto** (coordinate in mm); **statistiche dei pixel** dentro rettangolo/ellisse/poligono (min, max, media, deviazione standard: in HU solo per TAC con Rescale in HU, in unità arbitrarie per la RM, mai per ecografie o immagini a colori); **distanza 3D** fra due punti su fette diverse della stessa serie, nello spazio paziente (IOP/IPP), stesso Frame of Reference; **volume** per somma delle aree di ROI su fette consecutive per la distanza reale fra le fette (mL, due decimali; CAUTION); **piani ricostruiti** sagittale e coronale da una serie a fette uniformi, su cui gli strumenti 2D misurano con la griglia virtuale dichiarata dal server (CAUTION «immagine ricostruita») |
 | Immagini | DICOM ricevuti dagli apparecchi dello studio o importati da supporto; ecografie con `SequenceOfUltrasoundRegions`, TAC/RM con `PixelSpacing` |
 | Utilizzatori | medici e aiuto medici dello studio (ruoli medico, aiuto medico, amministrazione); la segreteria vede le immagini ma non misura |
 | Pazienti | i pazienti dello studio, adulti, in ambito cardiologico ambulatoriale |
@@ -42,9 +42,12 @@ Versione 1.1 · 20 settembre 2026 · bozza per il titolare dello studio. **La 1.
   Doppler (l'asse X è tempo o velocità), radiografie (spaziatura del
   rivelatore, non del paziente), fotogrammi esportati in JPEG/PNG. In tutti
   questi casi il software rifiuta la misura e spiega perché.
-- Non calcola volumi, frazioni, velocità, gradienti; non traccia contorni
+- Non calcola frazioni di eiezione, velocità, gradienti; non traccia contorni
   da solo; le figure regolari (rettangolo, ellisse) sono allineate agli assi
-  dell'immagine, non ruotabili.
+  dell'immagine, non ruotabili; il volume è una somma di fette (nessuna
+  interpolazione, nessun modello); i piani ricostruiti sono ortogonali agli
+  assi del volume (nessun piano obliquo, nessun rendering 3D); la distanza
+  fra le fette viene dalle posizioni, mai da Slice Thickness.
 - Non confronta esami, non segnala «cosa è cambiato», non propone diagnosi.
 - Non sostituisce le misure fatte dall'ecografista sulla console durante
   l'esame, che restano la misura di riferimento.
@@ -75,3 +78,8 @@ generali di sicurezza e prestazione (MDR allegato I), coperti in
    salva, con lo stesso codice, e un secondo calcolo indipendente coincide.
 6. **Tutti i vertici nella stessa calibrazione**: per le ecografie ogni
    punto di una figura sta nella stessa regione, o la misura non esiste.
+7. **Spazio paziente solo dai tag**: IOP, IPP, spaziatura e Frame of
+   Reference; fette ordinate lungo la normale, distanza dalle posizioni;
+   serie non uniformi → niente volume, niente MPR.
+8. **Statistiche solo dove hanno senso**: HU con Rescale in HU, due calcoli
+   che coincidono, altrimenti nessun numero.

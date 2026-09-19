@@ -15,7 +15,7 @@ import { Pool } from 'pg';
 
 async function main() {
   const c: any = {};
-  for (const m of ['mse/geometria.js', 'mse/misure.js', 'mse/validazione.js']) {
+  for (const m of ['mse/geometria.js', 'mse/misure.js', 'mse/validazione.js', 'mse/serie.js']) {
     vm.runInNewContext(readFileSync(path.join(process.cwd(), 'public', 'prototipo', m), 'utf-8'), c, { filename: m });
   }
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -23,11 +23,15 @@ async function main() {
     `select id, tipo, punti, valore, extra, calibrazione, versione_calcolo, stato_validazione, avvisi from imaging_misure_manuali where annullata_at is null order by created_at`);
   let uguali = 0; const diverse: string[] = [];
   for (const r of rows) {
-    const e = c.RFMSE.validazione.valuta({ cal: r.calibrazione, punti: r.punti, algoritmo: r.tipo || 'distanza', cautionValidati: Array.isArray(r.avvisi) ? r.avvisi : [] });   // gli avvisi accettati allora restano accettati ora
+    let v: number | null;
+    if (r.tipo === 'distanza_3d' || r.tipo === 'volume') v = c.RFMSE.misure.ricalcolaDaExtra(r.tipo, r.extra);
+    else {
+      const e = c.RFMSE.validazione.valuta({ cal: r.calibrazione, punti: r.punti, algoritmo: r.tipo || 'distanza', cautionValidati: Array.isArray(r.avvisi) ? r.avvisi : [] });   // gli avvisi accettati allora restano accettati ora
+      v = e.ok ? (r.tipo === 'punto' ? Number(e.extra?.x_mm) : e.valore) : null;
+    }
     const salvato = r.tipo === 'punto' ? Number(r.extra?.x_mm) : Number(r.valore);
-    const v = e.ok ? (r.tipo === 'punto' ? Number(e.extra?.x_mm) : e.valore) : null;
     const tol = 1e-9 * Math.max(1, Math.abs(salvato));
-    if (v === null || Math.abs(v - salvato) > tol) diverse.push(`${r.id.slice(0, 8)} ${r.tipo} salvato=${salvato} (v${r.versione_calcolo}) attuale=${v ?? e.motivi.join(',')}`);
+    if (v === null || Math.abs(v - salvato) > tol) diverse.push(`${r.id.slice(0, 8)} ${r.tipo} salvato=${salvato} (v${r.versione_calcolo}) attuale=${v ?? 'non ricalcolabile'}`);
     else uguali++;
   }
   await pool.end();

@@ -39,6 +39,17 @@
     calcolo_non_finito: 'Il calcolo non ha dato un numero finito.',
     area_nulla: 'La figura non ha area: due lati coincidono o i punti sono allineati.',
     poligono_intrecciato: 'Il contorno si incrocia: un poligono intrecciato non ha un’area.',
+    spazio_assente: 'Il file non dichiara la posizione del piano nel paziente (IOP/IPP): niente spazio 3D.',
+    orientamento_assente: 'Manca Image Orientation Patient.', posizione_assente: 'Manca Image Position Patient.',
+    spaziatura_assente: 'Manca la spaziatura dei pixel nel paziente.',
+    frame_of_reference_diversi: 'Le due immagini non condividono lo stesso Frame of Reference: le coordinate non sono confrontabili.',
+    geometria_immagine_assente: 'Geometria di una delle immagini non disponibile.',
+    modulo_serie_assente: 'Modulo dello spazio paziente non caricato.',
+    volume_contesto_assente: 'Per il volume servono i poligoni sulle fette e la distanza fra le fette.',
+    volume_poche_fette: 'Per un volume servono poligoni su almeno due fette consecutive.',
+    fette_non_uniformi: 'La distanza fra le fette non è uniforme (o non è nota): il volume per somma di fette non è valido.',
+    poligoni_non_consecutivi: 'I poligoni devono stare su fette consecutive, senza salti.',
+    volume_per_somma_di_fette: 'Volume stimato come somma delle aree per la distanza fra le fette: dipende dal tracciato e dal passo.',
     algoritmo_sconosciuto: 'Strumento di misura non riconosciuto.',
     verifica_indipendente_fallita: 'Il secondo calcolo indipendente non coincide con il primo: misura non validata.',
     caution_non_validata: 'Situazione con limitazioni non ancora validata nel piano di V&V.',
@@ -46,6 +57,7 @@
     pixel_spacing_e_regioni_discordanti: 'Il file dichiara due calibrazioni (PixelSpacing e regioni ecografiche) che non concordano: si usano le regioni.',
     calibrazione_geometry: 'Pixel Spacing corretto per un ingrandimento assunto (GEOMETRY): la profondità non è nota.',
     immagine_derivata: 'Immagine derivata o secondaria (ImageType): non è l’acquisizione originale.',
+    immagine_ricostruita: 'Piano ricostruito (MPR) dalla serie: la misura lungo le fette vale quanto il passo fra le fette.',
     pixel_non_quadrati: 'Pixel non quadrati (Pixel Aspect Ratio): la vista può essere distorta; la misura usa la scala per asse.',
     regioni_sovrapposte_discordanti: 'Il punto cade in più regioni ecografiche con scale diverse: si è usata quella prioritaria.',
     spacing_per_frame_uniforme: 'Spaziatura dichiarata per fotogramma, uguale su tutti.',
@@ -96,7 +108,7 @@
     var letti = (geo && geo.avvisi_lettura) || (cal && cal.avvisi) || [];
     for (var k = 0; k < letti.length; k++) {
       var a = letti[k];
-      if (a === 'pixel_spacing_e_regioni_discordanti' || a === 'immagine_derivata' || a === 'pixel_non_quadrati' || a === 'spacing_per_frame_uniforme' || a === 'us_solo_pixel_spacing' || a === 'orientamento_non_ortonormale' || a === 'pixel_spacing_calibrato_senza_tipo') {
+      if (a === 'pixel_spacing_e_regioni_discordanti' || a === 'immagine_derivata' || a === 'immagine_ricostruita' || a === 'pixel_non_quadrati' || a === 'spacing_per_frame_uniforme' || a === 'us_solo_pixel_spacing' || a === 'orientamento_non_ortonormale' || a === 'pixel_spacing_calibrato_senza_tipo') {
         if (avvisi.indexOf(a) < 0) avvisi.push(a);
       }
     }
@@ -131,8 +143,17 @@
     if (!alg) motivi.push('algoritmo_sconosciuto');
     var esito = null;
     var calEff = pre.cal || ctx.cal;
-    if (alg && calEff) {
-      esito = alg.calcola(calEff, ctx.punti);
+    var tridimensionale = alg && (alg.gesto === 'punti_3d' || alg.gesto === 'composto');
+    if (tridimensionale) {
+      // qui la calibrazione 2D dell'immagine corrente non decide: decidono le
+      // geometrie nello spazio paziente (o il contesto del volume); i motivi
+      // «di immagine» restano validi (fotogramma, modalità, geometria letta)
+      motivi = motivi.filter(function (m) { return m !== 'calibrazione_assente' && m !== 'rivelatore' && m !== 'calibrazione_non_valida' && m !== 'spacing_per_frame'; });
+      esito = alg.calcola(calEff, ctx.punti, ctx);
+      if (esito.stato !== 'ok') { if (motivi.indexOf(esito.stato) < 0) motivi.push(esito.stato); }
+      else for (var i3 = 0; i3 < (esito.avvisi || []).length; i3++) if (avvisi.indexOf(esito.avvisi[i3]) < 0) avvisi.push(esito.avvisi[i3]);
+    } else if (alg && calEff) {
+      esito = alg.calcola(calEff, ctx.punti, ctx);
       if (esito.stato !== 'ok') { if (motivi.indexOf(esito.stato) < 0) motivi.push(esito.stato); }
       else for (var i = 0; i < (esito.avvisi || []).length; i++) if (avvisi.indexOf(esito.avvisi[i]) < 0) avvisi.push(esito.avvisi[i]);
     }

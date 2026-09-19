@@ -167,3 +167,12 @@ Su richiesta esplicita dello studio si sono aggiunti **polilinea, angolo, rettan
 **Conseguenza sul fascicolo**: destinazione d'uso 1.1, otto rischi in più (R29–R35), criteri di validazione per strumento (aree ±0,5 cm² o ±5 %, angoli ±2°, proposte). **Ogni strumento si valida da sé**: la validazione della distanza non copre l'area. Rettangolo, perimetro e punto restano strumenti di lavoro senza uso clinico previsto finché un medico non lo chiede.
 
 **Numeri**: node 50/50, doppio controllo 3000 casi senza divergenze, e2e 37/37, browser ok per poligono a vertici, ellisse, angolo e punto. Vedi [[Piattaforma/Immagini]].
+
+## 20.9.2026 — MSE fasi 4, 6 e 9: HU, fotogrammi, serie, distanza 3D, volume, MPR
+Su richiesta «fai tutto», le tre fasi rimaste del [[Proposte/Measurement Safety Engine]], con le stesse regole: fail closed, un codice per browser e server, doppio controllo, provenienza, eventi, banchi.
+
+**Fase 4** — statistiche dei pixel dentro una ROI: HU solo per TAC con Rescale in HU, unità arbitrarie per la RM, rifiuto per ecografie e colore; maschera sui centri dei pixel; due calcoli (numpy, libreria standard) che devono coincidere. **Fase 6** — spaziatura per fotogramma: calibrazione effettiva del fotogramma, CAUTION da validare. **Fase 9** — spazio paziente da IOP/IPP/spaziatura; geometria di serie con fette ordinate lungo la normale e **passo reale dalle posizioni** (Slice Thickness si legge e si ignora: nella serie di prova dichiarava 3 mm e il passo era 2); distanza 3D fra fette con lo stesso Frame of Reference; volume per somma di ROI su fette consecutive per il passo (CAUTION); piani sagittale e coronale ricostruiti dal volume in cache, con la **griglia virtuale decisa dal server** e le misure su di essi in CAUTION «immagine ricostruita».
+
+**Scelte**: niente interpolazione fra fette, niente piani obliqui, niente rendering 3D: il volume è una somma, l'MPR un taglio; tutto ciò che è nuovo nasce bloccato (`caution-validati.json` vuoto) e si sblocca solo con la firma del validatore; le misure composte (3D, volume) si rifanno nel banco di regressione da ciò che hanno salvato in `extra`; il PNG dell'MPR è ricampionato per lo schermo, ma si misura sulla griglia non ricampionata con una scala per asse.
+
+**Fascicolo**: destinazione d'uso 1.2, rischi R36–R47, criteri di validazione per HU, 3D, volume e MPR (proposte). **Numeri**: node 59/59, statistiche 17/17, MPR 9/9, doppio controllo 3000 casi senza divergenze, e2e 41/41 + 20/20, browser ok. Vedi [[Piattaforma/Immagini]].

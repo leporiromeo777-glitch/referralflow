@@ -4,6 +4,7 @@ import { query } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
 import { finestreDi } from '@/lib/imaging-ordina';
 import { cautionValidati, versioneSoftware, mse } from '@/lib/imaging-misura';
+import { aggiornaGeometriaSerie, pianoVirtuale } from '@/lib/imaging-serie';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,8 +34,13 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       where e.id = $1 and e.studio_id = $2`, [params.id, sid]);
   if (!esame) return NextResponse.json({ errore: 'non_trovato' }, { status: 404 });
 
-  const serie = await query<{ id: string; modalita: string | null; descrizione: string | null; numero: number | null; parte_corpo: string | null; n_immagini: number }>(
-    `select id, modalita, descrizione, numero, parte_corpo, n_immagini from imaging_serie where esame_id = $1 order by numero nulls last, id`, [params.id]);
+  const serie = await query<{ id: string; modalita: string | null; descrizione: string | null; numero: number | null; parte_corpo: string | null; n_immagini: number; geometria: any }>(
+    `select id, modalita, descrizione, numero, parte_corpo, n_immagini, geometria from imaging_serie where esame_id = $1 order by numero nulls last, id`, [params.id]);
+  for (const s of serie) {
+    if (!s.geometria) { try { s.geometria = await aggiornaGeometriaSerie(s.id); } catch { s.geometria = null; } }
+    // che cosa si può ricostruire: lo dice il server, con le dimensioni delle griglie virtuali
+    (s as any).mpr = s.geometria && s.geometria.volume_possibile ? { sagittale: pianoVirtuale(s.geometria, 'sagittale'), coronale: pianoVirtuale(s.geometria, 'coronale') } : null;
+  }
 
   const immagini = await query<{ id: string; serie_id: string; numero: number | null; frame: number; righe: number | null; colonne: number | null; ww: number | null; wl: number | null; immagine: boolean; sop_class: string | null; calibrazione: unknown; geometria: unknown }>(
     `select i.id, i.serie_id, i.numero, i.frame, i.righe, i.colonne, i.ww, i.wl, i.immagine, i.sop_class, i.calibrazione, i.geometria
@@ -45,12 +51,12 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   // studio, docs/legale/dispositivo-in-house/): anche quelle annullate, perché
   // l'annullamento è parte della storia della misura.
   const misureManuali = await query<{
-    id: string; immagine_id: string; frame: number; valore: number | null; unita: string; etichetta: string | null; tipo: string; extra: unknown;
+    id: string; immagine_id: string; frame: number; valore: number | null; unita: string; etichetta: string | null; tipo: string; extra: unknown; piano: unknown;
     punti: unknown; chi: string | null; quando: string; annullata_at: string | null; annullata_da: string | null;
     stato_validazione: string | null; avvisi: unknown; verifica_ok: boolean | null; sostituisce_id: string | null; valore_mostrato: string | null;
     riferimento_misura_id: string | null; riferimento_nome: string | null; riferimento_valore: number | null; riferimento_unita: string | null;
   }>(
-    `select m.id, m.immagine_id, m.frame, m.valore, m.unita, m.etichetta, m.tipo, m.extra, m.punti, split_part(u.email, '@', 1) as chi,
+    `select m.id, m.immagine_id, m.frame, m.valore, m.unita, m.etichetta, m.tipo, m.extra, m.piano, m.punti, split_part(u.email, '@', 1) as chi,
             m.created_at::text as quando, m.annullata_at::text, split_part(ua.email, '@', 1) as annullata_da,
             m.stato_validazione, m.avvisi, (m.verifica_indipendente->>'esito' = 'ok') as verifica_ok, m.sostituisce_id, m.valore_mostrato,
             m.riferimento_misura_id, r.nome as riferimento_nome, r.valore as riferimento_valore, r.unita as riferimento_unita

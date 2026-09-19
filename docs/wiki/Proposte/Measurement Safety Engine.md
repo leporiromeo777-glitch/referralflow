@@ -1,7 +1,7 @@
 ---
 tipo: proposta
 aggiornata: 2026-09-19
-stato: fasi 1, 5, 7, 8 fatte il 19.9.2026, fase 3 il 20.9.2026 (Decisioni/Registro); 4, 6-Enhanced, 9 aperte
+stato: tutte le fasi fatte (1-5-7-8 il 19.9.2026; 3, 4, 6, 9 il 20.9.2026); ogni funzione nuova è in validazione
 ---
 # Measurement Safety Engine — analisi, architettura, piano
 
@@ -177,7 +177,7 @@ Resta da spostare `misura.js` in `mse/misure.js` senza cambiare il calcolo (la v
 - **Failure mode**: area su regioni US diverse; poligono aperto; angolo con vertici coincidenti; ellisse fuori immagine.
 - **Accettazione**: **riapre il fascicolo** — nuova destinazione d'uso, rischi per strumento, validazione clinica per strumento. Da fare solo se il medico chiede davvero aree e angoli (in ecocardiografia: area atriale, angoli quasi mai).
 
-### Fase 4 — Valori CT (HU) e statistiche ROI
+### Fase 4 — Valori CT (HU) e statistiche ROI — **fatta il 20.9.2026**
 - **Crea** comando `statistiche` in Python (numpy su pixel originali con Rescale; HU solo se `Modality = CT` e `RescaleType` assente o HU); risposta con min/max/media/deviazione standard, numero di pixel, e la maschera usata.
 - **Failure mode**: Rescale mancante; ROI a cavallo del bordo; MR presentata come HU; immagine derivata.
 - **Accettazione**: fantoccio di densità o confronto con la console TAC; **riapre il fascicolo**. Per uno studio di cardiologia senza TAC propria: bassa priorità.
@@ -188,7 +188,7 @@ Resta da spostare `misura.js` in `mse/misure.js` senza cambiare il calcolo (la v
 - **Failure mode**: punto su regione color flow con delta diversi dal tessuto; regione grafica scambiata per tessuto.
 - **Accettazione**: dentro il fascicolo attuale (è la distanza, fatta meglio); la validazione clinica del piano §3 vale come prova.
 
-### Fase 6 — Multiframe / cine
+### Fase 6 — Multiframe / cine — **fatta il 20.9.2026** (spaziatura per fotogramma come CAUTION da validare)
 - **Modifica** viewer (scorrimento fotogrammi già c'è) e Gate (fotogramma esistente; spacing per fotogramma → NOT_MEASURABLE finché non validato); misure legate al fotogramma (già così).
 - **Prove**: US cine 60 fotogrammi, misura sul 37; Enhanced con Per-Frame Pixel Measures diversi → rifiuto.
 - **Accettazione**: dentro il fascicolo per US cine (stessa calibrazione su tutti i fotogrammi); Enhanced per-frame resta rifiutato.
@@ -203,7 +203,7 @@ Resta da spostare `misura.js` in `mse/misure.js` senza cambiare il calcolo (la v
 - **Modifica** rotta misure (eventi a ogni azione), scheda misure (storia di una misura).
 - **Accettazione**: per ogni misura salvata si ricostruisce il numero da soli dati in tabella; nessun aggiornamento del software cambia un numero salvato (il banco di regressione lo dimostra e blocca la distribuzione se no).
 
-### Fase 9 — MPR / 3D / volumi — dopo, e solo se serve
+### Fase 9 — MPR / 3D / volumi — **fatta il 20.9.2026** (geometria di serie, distanza 3D, volume per somma di fette, piani sagittale/coronale; niente obliqui né rendering)
 Spazio paziente (IOP/IPP/FoR), distanza fra fette da IPP adiacenti, volumi mai da area × Slice Thickness. Per questo studio oggi non c'è il caso d'uso.
 
 ## 7. Ordine consigliato, e perché

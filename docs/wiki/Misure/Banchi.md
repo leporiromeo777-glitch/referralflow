@@ -165,3 +165,16 @@ Da ricordare più del risultato: **il primo punteggio assolveva tutti e tre**, p
 | `scripts/prova-righello-e2e.py` (DB demo) | 7 strumenti dal server con valori noti e doppio controllo, 5 rifiuti, dettaglio/CSV con tipo e unità | 37/37 |
 | browser (server di prova) | selettore, poligono per vertici (anteprima 2,00 cm² a tre vertici, 4,00 cm² salvati), ellisse 6,28 cm² con semiassi, angolo 90,0°, punto (50,0; 30,0 mm) | ok |
 | `scripts/misure-regressione.ts` (DB demo, 9 misure di 6 strumenti) | ricalcolo col motore attuale | 0 differenze |
+
+## MSE fasi 4, 6, 9 — 20.9.2026
+
+| Banco | Che cosa | Esito |
+|---|---|---|
+| `imaging/prova-statistiche.py` | HU su TAC sintetica, doppio calcolo, maschere, RM a.u., rifiuti (senza Rescale, RescaleType ≠ HU, eco, colore), multiframe, ROI vuota, comando | 17/17 |
+| `src/lib/prove-imaging-misura.test.ts` | + fotogrammi con spaziatura propria (2), spazio paziente e serie (5), distanza 3D e volume nel Gate (2) | 59/59 |
+| `imaging/prova-mpr.py` | volume sintetico, sagittale/coronale con struttura attesa, griglia e spaziature, PNG isotropo, cache, rifiuti | 9/9 |
+| `imaging/prova-doppio-controllo.py` | 3000 casi con distanza 3D e volume | 1248 misure + 1752 rifiuti coincidenti, 0 divergenze |
+| `scripts/prova-righello-e2e.py` (DB demo) | + statistiche HU, roi non supportata, eco rifiutata | 41/41 |
+| `scripts/prova-righello-serie-e2e.py` (DB demo) | serie 8 fette, passo reale, ordine, MPR, distanza 3D, fuori immagine, volume bloccato/salti/poche fette, MPR PNG e intestazione, misura su MPR bloccata, indice fuori, 3D su MPR | 20/20 |
+| browser | piani con slider (PNG 64×32), ✕ con motivo sull'MPR, distanza 3D a due tocchi su fette diverse | ok |
+| `scripts/misure-regressione.ts` (DB demo, misure di tutti i tipi) | | 0 differenze |

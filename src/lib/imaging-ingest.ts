@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { query, transazione } from './db';
 import { putFileAtKey } from './storage';
 import { leggiMeta, leggiMisure } from './imaging';
+import { aggiornaGeometriaSerie } from './imaging-serie';
 import { abbinaPaziente, raggruppa, type MetaMinima } from './imaging-ordina';
 import type { MisuraDicom } from './imaging';
 
@@ -58,6 +59,7 @@ export async function ingestaDicom(
       }
     }
 
+    const serieToccate: string[] = [];
     const id = await transazione(async (q) => {
       const [esame] = await q<{ id: string; nuovo: boolean }>(
         `insert into imaging_esami (studio_id, patient_id, study_uid, accession, data_esame, ora_esame, descrizione,
@@ -92,6 +94,7 @@ export async function ingestaDicom(
           if (img) immagini++;
         }
         await q(`update imaging_serie set n_immagini = (select count(*) from imaging_immagini where serie_id = $1) where id = $1`, [serie.id]);
+        serieToccate.push(serie.id);
       }
       await q(
         `update imaging_esami set
@@ -102,6 +105,11 @@ export async function ingestaDicom(
          where id = $1`, [esame.id]);
       return esame.id;
     });
+    // La geometria di serie (fase 9) si calcola dopo, fuori dalla transazione:
+    // se fallisce, l'esame è dentro lo stesso e la si rifà alla prima apertura.
+    for (const sid2 of serieToccate) {
+      try { await aggiornaGeometriaSerie(sid2); } catch (e) { console.error(`[imaging] geometria di serie: ${(e as Error)?.message ?? e}`); }
+    }
     // Le misure fatte dall'apparecchio, dai suoi referti strutturati. Si
     // riscrivono ogni volta: se l'esame viene reimportato, valgono le ultime.
     const conSr = e.serie.flatMap((s) => s.immagini.filter((i) => SOP_SR.some((p) => (i.sop_class || '').startsWith(p))));
