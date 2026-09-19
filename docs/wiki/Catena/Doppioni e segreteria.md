@@ -18,3 +18,6 @@ Quando la regia non ha la forma «…e scrive:» (qui: «Lettera al dottor Y, ca
 
 ## Schede senza testo (7.9.2026)
 Una riga di sola punteggiatura («,» da un «virgola» dettato a inizio segmento) diventava una «frase» del wizard, ridotta a nulla da `normalizza()` si agganciava a QUALSIASI citazione. Ora `ricuci_punteggiatura_orfana()` nella catena attacca quelle righe alla riga prima (caso 22) e `trovaIndice` non aggancia mai una frase < 8 caratteri; le segnalazioni senza frase citata sono scartate da catena e pagina. La ricucitura NON si fa lato pagina: cambierebbe gli indici delle frasi e butterebbe via le revisioni in corso.
+
+## «Rimetti nel referto» (19.9.2026)
+La catena a volte scambia una frase clinica per un'istruzione alla segretaria, e finiva nella barra gialla senza modo di tornare indietro. Ora ogni nota ha **«Rimetti»**: si sceglie la parte del referto (di default l'ultima) e la nota diventa una frase aggiunta a mano in coda a quella — entra nel testo ricomposto, nel salvataggio e nel Word come ogni altra aggiunta, e nel testo si vede evidenziata. Gli indici delle note rimesse stanno in `revisione_prototipo.note_rimesse`: alla riapertura la barra non le mostra più (il testo le ha già). Solo su bozze aperte.

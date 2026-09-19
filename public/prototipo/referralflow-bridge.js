@@ -1556,7 +1556,12 @@ PAGES.review = () => {
     : `<button class="btn sm ghost" onclick="rfDuplica('${id}')" title="Anche da un referto già confermato: la copia riparte dal dettato della catena, da tagliare per il secondo paziente">Duplica</button><button class="btn sm ghost" onclick="rfWord('${id}')">Word</button>`;
   html = html.replace('<div class="rv-top-r">', `<div class="rv-top-r">${bottoni}`);
   const note = Array.isArray(m.note_segreteria) ? m.note_segreteria.filter(n => typeof n === 'string' && n.trim()) : [];
-  if (note.length) html = html.replace('<div class="rv-grid', `<div class="rf-note-seg">${ICONS.tasks || ''}<b>Note per la segreteria (${note.length})</b>${note.map(n => `<span class="badge">${rfEsc(n)}</span>`).join('')}<span class="caption">Istruzioni dettate dal medico, tolte dal testo del referto.</span></div><div class="rv-grid`);
+  // Ogni nota ha «Rimetti»: la catena a volte scambia una frase clinica per
+  // un'istruzione alla segretaria, e prima non c'era modo di riportarla nel
+  // referto (19.9.2026). Le note già rimesse non si mostrano più.
+  const rimesse = RF.noteRimesse || new Set();
+  const daMostrare = note.map((n, k) => ({ n, k })).filter(x => !rimesse.has(x.k));
+  if (daMostrare.length) html = html.replace('<div class="rv-grid', `<div class="rf-note-seg">${ICONS.tasks || ''}<b>Note per la segreteria (${daMostrare.length})</b>${daMostrare.map(x => `<span class="badge" style="display:inline-flex;gap:6px;align-items:center">${rfEsc(x.n)}${m.stato === 'bozza' ? `<button class="btn sm ghost" style="padding:0 6px;height:20px" onclick="rfNotaRimetti(${x.k})" title="Riporta questa frase nel testo del referto">Rimetti</button>` : ''}</span>`).join('')}<span class="caption">Istruzioni dettate dal medico, tolte dal testo del referto.${rimesse.size ? ` ${rimesse.size === 1 ? 'Una rimessa' : `${rimesse.size} rimesse`} nel referto.` : ''}</span></div><div class="rv-grid`);
   return html;
 };
 async function rfCaricaRevisione(id) {
@@ -1574,8 +1579,10 @@ async function rfCaricaRevisione(id) {
     // chiuse, correzioni per frase, frasi tolte o aggiunte).
     RF.campi = Object.assign({}, j.campi || {});
     RF.motivazioni = {};
+    RF.noteRimesse = new Set();
     if (j.revisione_prototipo && typeof j.revisione_prototipo === 'object') {
       const rp = j.revisione_prototipo;
+      (Array.isArray(rp.note_rimesse) ? rp.note_rimesse : []).forEach(k => { if (Number.isInteger(k)) RF.noteRimesse.add(k); });
       RF.motivazioni = rp.motivazioni && typeof rp.motivazioni === 'object' ? rp.motivazioni : {};
       const testoDi = (sp) => { const p = RV_REPORT.flatMap(x => x.parts).find(x => x.id === sp); return p ? p.t : ''; };
       const esiti = (rp.issues || []).filter(x => {
@@ -1707,7 +1714,7 @@ function rfStatoRevisione() {
   // Ogni esito porta anche categoria e inizio della frase: se il testo cambia
   // (Edita, impaginazione) gli id delle segnalazioni si rinumerano, e un esito
   // si riapplica solo alla stessa segnalazione, non a un'altra con lo stesso numero.
-  return { issues: RV.issues.map(i => ({ id: i.id, status: i.status, resolution: i.resolution, cat: i.cat, testo: String((i.span && RV.text[i.span]) || i.now || '').slice(0, 60) })), metrics: RV.metrics, log: (RV.log || []).slice(-200), cur: RV.cur, t: RV.t, motivazioni: RF.motivazioni || {}, tolte };
+  return { note_rimesse: [...(RF.noteRimesse || [])], issues: RV.issues.map(i => ({ id: i.id, status: i.status, resolution: i.resolution, cat: i.cat, testo: String((i.span && RV.text[i.span]) || i.now || '').slice(0, 60) })), metrics: RV.metrics, log: (RV.log || []).slice(-200), cur: RV.cur, t: RV.t, motivazioni: RF.motivazioni || {}, tolte };
 }
 
 
@@ -1809,6 +1816,35 @@ async function rfImpagina() {
   finally { RF.impaginando = null; }
 }
 
+
+/* ---------- note alla segretaria: «Rimetti nel referto» (19.9.2026) ---------- */
+// Si sceglie la sezione (la frase va in coda a quella), e la nota diventa una
+// frase aggiunta: entra nel testo ricomposto, nel salvataggio e nel Word come
+// le altre aggiunte. Nel testo si vede evidenziata come «aggiunta a mano».
+function rfNotaRimetti(k) {
+  const m = RF.meta || {};
+  const note = Array.isArray(m.note_segreteria) ? m.note_segreteria.filter(n => typeof n === 'string' && n.trim()) : [];
+  const testo = note[k]; if (!testo) return;
+  if (m.stato !== 'bozza') { toast('Il referto è già confermato'); return; }
+  const sezioni = (typeof RV_REPORT !== 'undefined' ? RV_REPORT : []).map(sz => ({ code: sz.code, label: sz.label }));
+  if (!sezioni.length) { toast('Nessuna sezione in cui rimetterla'); return; }
+  const ultima = sezioni[sezioni.length - 1].code;
+  openModal('Rimetti nel referto', `<p style="margin:0 0 10px">${rfEsc(testo)}</p>
+    <div class="field"><label>In quale parte del referto</label><select class="input" id="rf-nota-sez">${sezioni.map(sz => `<option value="${rfEsc(sz.code)}" ${sz.code === ultima ? 'selected' : ''}>${rfEsc(sz.label)}</option>`).join('')}</select></div>
+    <p class="caption mt-8">La frase va in coda alla parte scelta, evidenziata come aggiunta a mano: da lì si può correggere o togliere come ogni altra.</p>`,
+    `<button class="btn" data-close>Annulla</button><button class="btn primary" id="rf-nota-ok">Rimetti</button>`);
+  document.getElementById('rf-nota-ok').onclick = () => {
+    const sez = document.getElementById('rf-nota-sez').value || ultima;
+    RV.added = RV.added || [];
+    RV.added.push({ id: `nota-${k}-${Date.now()}`, section: sez, text: testo });
+    RF.noteRimesse = RF.noteRimesse || new Set(); RF.noteRimesse.add(k);
+    rvLog('NOTE_RESTORED', `nota ${k + 1} rimessa in ${sez}`);
+    closeModal(); rvSave(); rvAfterRender();
+    // la barra delle note sta fuori dal testo: si ridisegna la pagina
+    render();
+    toast('Frase rimessa nel referto');
+  };
+}
 
 /* ---------- frasi tolte barrate e tasto «Edita» (14.9.2026) ---------- */
 /* Durante la correzione una frase tolta resta nel testo centrale, barrata a
