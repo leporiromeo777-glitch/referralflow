@@ -12,9 +12,15 @@ export const dynamic = 'force-dynamic';
 // COPIA della bozza — stesso testo, stesso audio da riascoltare, stesso
 // medico — e la copia si taglia a mano per il secondo paziente.
 //
-// La copia nasce senza campi confermati (il paziente è un altro) e con
-// il proprio file_id («<originale>#2», «#3»…): unica per studio, e si vede
-// da dove viene. L'originale non viene toccato.
+// La copia riparte dalle CONDIZIONI ORIGINALI della catena: il testo
+// consegnato, nessuna correzione a mano, nessuna verifica chiusa, nessun
+// campo confermato (il paziente è un altro). Le correzioni fatte sul primo
+// paziente non servono al secondo, che va tagliato da capo. Ha il proprio
+// file_id («<originale>#2», «#3»…) e una riga audio sua, sullo stesso file:
+// il riascolto va sulla bozza, e la copia deve poter riascoltare la seconda
+// metà. L'originale non viene toccato — anche se è già confermato, che è
+// il caso più comune: ci si accorge del secondo paziente dopo aver
+// firmato il primo.
 const RUOLI_AMMESSI = new Set(['segretaria', 'medico', 'admin']);
 
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
@@ -37,10 +43,17 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     const [copia] = await q<{ id: string }>(
       `insert into referti_bozze (studio_id, file_id, payload, stato, testo_finale, campi_confermati, tipo, medico)
        select studio_id, $3,
-              payload || jsonb_build_object('duplicato_da', id, 'duplicato_il', now()::text, 'file_id', $3::text),
-              'bozza', testo_finale, null, tipo, medico
+              (payload - 'revisione_prototipo' - 'revisione' - 'riorganizzazione')
+                || jsonb_build_object('duplicato_da', id, 'duplicato_il', now()::text, 'file_id', $3::text),
+              'bozza', null, null, tipo, medico
          from referti_bozze where id = $1 and studio_id = $2
        returning id`, [orig.id, sid, nuovoFileId]);
+    // L'audio: una riga per la copia, stesso file. Il riascolto cerca l'audio
+    // per bozza, e senza questa riga la copia sarebbe muta.
+    await q(
+      `insert into referti_audio (studio_id, filename, storage_key, content_type, uploaded_by, tipo, medico, stato, bozza_id)
+       select studio_id, filename, storage_key, content_type, uploaded_by, tipo, medico, 'fatto', $2
+         from referti_audio where bozza_id = $1 order by created_at desc limit 1`, [orig.id, copia.id]);
     return { originale: orig.id, copia: copia.id, fileId: nuovoFileId };
   });
   if (!esito) return NextResponse.json({ errore: 'non_trovato' }, { status: 404 });
