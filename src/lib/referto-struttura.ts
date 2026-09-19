@@ -260,6 +260,22 @@ export type EsitoStruttura =
 // piattaforma: è lo stesso modello e lo stesso prompt, è la guardia che parla.
 export type DettaglioNumeri = { mancanti: string[]; in_piu: string[]; misure: string[] };
 
+// Il testo senza le righe che sono solo titoli di sezione: righe corte (fino a
+// sei parole) tutte maiuscole o che finiscono con i due punti, e righe vuote.
+// Serve alla guardia «troppo corto» per confrontare contenuto con contenuto.
+export function contenutoSenzaIntestazioni(testo: string): string {
+  return testo.split('\n')
+    .map((r) => r.trim())
+    .filter((r) => {
+      if (!r) return false;
+      const parole = r.split(/\s+/);
+      if (parole.length > 6) return true;
+      const soloMaiuscole = /^[A-ZÀ-Ý0-9 .,'’()/-]+:?$/.test(r) && /[A-ZÀ-Ý]/.test(r);
+      return !(soloMaiuscole || r.endsWith(':'));
+    })
+    .join('\n');
+}
+
 export function differenzeNumeriche(originale: string, risposta: string): DettaglioNumeri {
   const conta = (t: string) => { const m = new Map<string, number>(); for (const v of vociNumeriche(t)) m.set(v, (m.get(v) ?? 0) + 1); return m; };
   const a = conta(originale), b = conta(risposta);
@@ -344,8 +360,12 @@ export async function riorganizzaReferto(
     console.warn(`[struttura] proposta scartata: valori scambiati tra misure (${dettaglio.misure.length})`);
     return { ok: false, motivo: 'numeri', dettaglio };
   }
-  // Un risultato molto più corto dell'originale = contenuto perso.
-  if (risposta.length < originale.length * 0.6) {
+  // Un risultato molto più corto dell'originale = contenuto perso. Ma si
+  // misura il CONTENUTO, non l'impalcatura: un rapporto a sezioni impaginato
+  // come lettera perde le intestazioni («ANAMNESI:», «CONCLUSIONI») e i vuoti
+  // di riga, e tornava sotto il 60 % pur avendo dentro tutto — il 19.9.2026
+  // tre impaginazioni giuste sono state scartate così.
+  if (risposta.length < contenutoSenzaIntestazioni(originale).length * 0.6) {
     return { ok: false, motivo: 'troppo_corto' };
   }
   // Parole di contenuto che nel dettato non c'erano: se pesano sul senso

@@ -35,3 +35,6 @@ Prova FATTA sul terzo referto vero (12.9.2026, notte): paziente creato in cartel
 
 ## Forma della segretaria (dai cinque confronti catena vs segretaria, 7-8.9.2026)
 Contenuto clinico identico nei confronti; le differenze erano di forma: firma su tre righe, saluto a parte, spazio in più, «Gentile Signora», date in cifre, corpo in minuscolo, «in quanto già presente». Il blocco dell'ecocardiogramma e la terapia della segretaria NON erano nel dettato (referti strumentali). Un Word scaricato prima di «Impagina come lettera» è il testo della revisione, non una lettera.
+
+## La guardia «troppo corto» misura il contenuto (19.9.2026)
+Le impaginazioni scartano una proposta più corta del 60 % dell'originale: contenuto perso. Ma se l'originale è un **rapporto a sezioni** (perché prima si era premuto «Riorganizza») e lo si impagina come lettera, la lettera perde titoli e righe vuote, non frasi — e finiva sotto la soglia pur avendo dentro tutto. Il 19.9 tre impaginazioni giuste sono state scartate così (in 997 byte di rapporto, lettera < 598). Ora il confronto è con `contenutoSenzaIntestazioni(originale)`: via le righe corte tutte maiuscole o che finiscono con i due punti, e i vuoti. Le guardie sui numeri restano prima e intatte.

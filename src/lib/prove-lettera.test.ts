@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { promptPer, unParagrafo } from './referto-struttura';
+import { contenutoSenzaIntestazioni, promptPer, unParagrafo } from './referto-struttura';
 
 // Dati INVENTATI: nessun testo di pazienti veri.
 const CHIUSURA = 'Cordiali saluti,';
@@ -41,4 +41,20 @@ test('il prompt chiede un paragrafo solo quando il profilo lo vuole, altrimenti 
   // il rapporto a sezioni non è toccato
   assert.ok(!/{corpo}/.test(promptPer('rapporto', {})));
   assert.ok(!/{corpo}/.test(uno));
+});
+
+// La guardia «troppo corto» misura il contenuto, non l'impalcatura: un
+// rapporto a sezioni rifatto come lettera perde i titoli, non le frasi.
+test('contenutoSenzaIntestazioni: via i titoli di sezione e le righe vuote, le frasi restano', () => {
+  const rapporto = 'ANAMNESI:\nIl paziente riferisce dispnea da sforzo da tre mesi.\n\nESAME OBIETTIVO\nToni validi, nessun soffio.\n\nCONCLUSIONI:\nQuadro compatibile con scompenso lieve.\n';
+  const c = contenutoSenzaIntestazioni(rapporto);
+  assert.ok(!/ANAMNESI|ESAME OBIETTIVO|CONCLUSIONI/.test(c));
+  assert.equal(c.split('\n').length, 3);
+  assert.ok(c.includes('dispnea da sforzo'));
+  // un testo senza intestazioni non cambia (a parte i vuoti)
+  const dettato = 'Gentile collega,\nle scrivo per il paziente visto oggi.\nCordiali saluti';
+  assert.equal(contenutoSenzaIntestazioni(dettato), dettato);
+  // una riga lunga in maiuscolo è contenuto, non un titolo
+  const urlo = 'IL PAZIENTE HA AVUTO UN EPISODIO SINCOPALE DURANTE LA NOTTE DI IERI';
+  assert.equal(contenutoSenzaIntestazioni(urlo), urlo);
 });
