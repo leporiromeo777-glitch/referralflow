@@ -1465,6 +1465,29 @@ reportsQueue = function () {
   };
   const tot = aperti.reduce((s, r) => s + r.issues, 0), crit = aperti.reduce((s, r) => s + r.crit, 0);
   const inCoda = (typeof AUDIO_INBOX !== 'undefined' ? AUDIO_INBOX : []);
+  // Un audio appena caricato sta nella coda come le bozze, non in un elenco a
+  // parte sotto il modulo (19.9.2026, richiesta utente): finché la catena
+  // lavora è una scheda «in elaborazione» senza numeri; quando la bozza
+  // arriva, la scheda è la bozza stessa. Restano schede solo i casi che
+  // chiedono attenzione: la catena che non consegna, e il «già dettato».
+  const rigaAudio = (a) => {
+    const quando = a.at ? ` · ${a.at}` : '';
+    const chi = rfEsc(a.medico ? (DOCTORS[a.medico] || a.medico) : '');
+    if (a.state === 'duplicate') return `<div class="card q lavoro">
+      <div class="row wrap" style="gap:12px"><div class="avatar-sm">${initials({ first: 'Già', last: 'dettato' })}</div>
+        <div class="grow" style="min-width:220px"><div class="row" style="gap:8px"><b>Già dettato${a.paziente ? ` · ${rfEsc(a.paziente)}` : ''}</b><span class="badge warning">stesso audio</span></div>
+          <div class="caption">${chi}${quando} · stesso audio di un referto del ${rfEsc(a.bozzaData || '')}: nessuna bozza nuova</div></div>
+        <button class="btn" data-go="#/review/${a.bozza}">Apri quello</button></div></div>`;
+    if (a.state === 'failed') return `<div class="card q lavoro">
+      <div class="row wrap" style="gap:12px"><div class="avatar-sm">!</div>
+        <div class="grow" style="min-width:220px"><div class="row" style="gap:8px"><b>Elaborazione senza bozza</b><span class="badge danger">da guardare</span></div>
+          <div class="caption">${chi}${quando} · la catena non ha consegnato niente: il file è in errori/ sul Mac</div></div></div></div>`;
+    return `<div class="card q lavoro">
+      <div class="row wrap" style="gap:12px"><div class="avatar-sm"><span class="spinner"></span></div>
+        <div class="grow" style="min-width:220px"><div class="row" style="gap:8px"><b>${a.fase === 'in_coda' ? 'In coda' : 'In elaborazione'}</b><span class="badge">${a.fase && a.fase !== 'in_coda' && a.fase !== 'elaborazione' ? rfEsc(a.fase) : 'catena'}</span></div>
+          <div class="caption">${chi}${quando} · la catena impiega 4-10 minuti; la scheda diventa la bozza da sola</div></div>
+        <div class="qm"><span class="v num">…</span><span class="l">verifiche</span></div><div class="qm"><span class="v num">…</span><span class="l">critiche</span></div></div></div>`;
+  };
   const medici = RF.medici.length ? RF.medici : Object.entries(DOCTORS).map(([id, nome]) => ({ id, nome }));
   return `
     <div class="page-head"><div><h2 class="page-title">Referti</h2><div class="page-sub">${aperti.length} da controllare · ${tot} verifiche · ${crit} critiche · ${chiusi.length} confermati negli ultimi 30 giorni</div></div>
@@ -1478,15 +1501,8 @@ reportsQueue = function () {
         <button class="btn primary" id="rf-intake-invia">Invia alla catena</button>
         <span class="caption" id="rf-intake-esito"></span>
       </div>
-      ${inCoda.length ? `<div class="list mt-8">${inCoda.map(a => {
-        const quando = a.at ? ` · ${a.at}` : '';
-        if (a.state === 'ready') return `<div class="list-item"><i class="dot success"></i><div class="grow"><div class="name" style="font-size:13px">Bozza pronta${a.paziente ? ` · ${rfEsc(a.paziente)}` : ''}</div><div class="sub">${rfEsc(a.medico || '')}${quando} · dettato arrivato dalla catena</div></div><button class="btn sm" data-go="#/review/${a.bozza}">${a.bozzaStato === 'confermata' ? 'Rileggi' : 'Apri revisione'}</button></div>`;
-        if (a.state === 'duplicate') return `<div class="list-item"><i class="dot warning"></i><div class="grow"><div class="name" style="font-size:13px">Già dettato: stesso audio di un referto del ${a.bozzaData}${a.paziente ? ` (${rfEsc(a.paziente)})` : ''}</div><div class="sub">${rfEsc(a.medico || '')}${quando} · la catena l'ha elaborato e la piattaforma ha riconosciuto il duplicato: nessuna bozza nuova</div></div><button class="btn sm ghost" data-go="#/review/${a.bozza}">Apri quello</button></div>`;
-        if (a.state === 'failed') return `<div class="list-item"><i class="dot danger"></i><div class="grow"><div class="name" style="font-size:13px">Elaborazione senza bozza</div><div class="sub">${rfEsc(a.medico || '')}${quando} · la catena non ha consegnato un referto per questo audio</div></div></div>`;
-        return `<div class="list-item"><i class="dot accent"></i><div class="grow"><div class="name" style="font-size:13px">${a.fase === 'in_coda' ? 'In coda' : 'In elaborazione'}${a.fase && a.fase !== 'in_coda' && a.fase !== 'elaborazione' ? ` · ${rfEsc(a.fase)}` : ''}</div><div class="sub">${rfEsc(a.medico || '')}${quando} · la catena impiega 4-10 minuti; la pagina si aggiorna da sola</div></div><span class="badge">…</span></div>`;
-      }).join('')}</div>` : '<div class="caption mt-8">Nessun audio caricato nelle ultime 24 ore.</div>'}
     </div>
-    <div class="stack">${ordina(aperti).map(riga).join('') || '<div class="card"><div class="caption">Nessuna bozza da controllare.</div></div>'}</div>
+    <div class="stack">${[...inCoda.filter(a => a.state !== 'ready').map(rigaAudio), ...ordina(aperti).map(riga)].join('') || '<div class="card"><div class="caption">Nessuna bozza da controllare.</div></div>'}</div>
     ${chiusi.length ? `<div class="caption mt-16" style="margin-bottom:8px">Confermati</div><div class="stack">${ordina(chiusi).slice(0, 10).map(riga).join('')}</div>` : ''}`;
 };
 document.addEventListener('click', async (e) => {
@@ -1802,6 +1818,8 @@ async function rfImpagina() {
    si ricalcola sul nuovo testo, riapplicando gli esiti alle segnalazioni che
    coincidono. */
 (function () { const st = document.createElement('style'); st.textContent = `
+  .card.q.lavoro { border-left-color: var(--border-2); opacity: .92; }
+  .card.q.lavoro .spinner { width: 14px; height: 14px; }
   .rv-span.rf-tolta { text-decoration: line-through; text-decoration-style: dashed; text-decoration-thickness: 1.5px; text-decoration-color: var(--danger); color: var(--text-3); cursor: pointer; }
   .rv-span.rf-tolta:hover { background: var(--danger-soft); border-radius: 4px; }
   .rv.read .rv-span.rf-tolta { display: none; }
