@@ -428,12 +428,27 @@ export async function POST(req: NextRequest) {
   // finiscono al primo 2xx) — la bozza torna tra le «da rivedere», e con la
   // NUOVA lavorazione: la pipeline potrebbe essere migliorata nel frattempo,
   // il vecchio risultato di una bozza rifiutata non ha nulla da difendere.
-  const [esistente] = await query<{ id: string; stato: string }>(
-    'select id, stato from referti_bozze where studio_id = $1 and file_id = $2',
+  //
+  // Secondo caso (19.9.2026): lo stesso audio torna con un MEDICO DIVERSO —
+  // tipicamente perché la prima volta era entrato senza (il formato di
+  // default è il rapporto, e il medico che detta lettere si è visto un
+  // referto «impaginato come un altro»). Se la bozza è ancora una bozza e
+  // nessuno ci ha messo mano, la nuova lavorazione col medico giusto la
+  // sostituisce; se qualcuno l'ha già corretta, si tiene la sua e si dice.
+  const [esistente] = await query<{ id: string; stato: string; medico: string | null; toccata: boolean }>(
+    `select id, stato, medico,
+            (testo_finale is not null or payload ? 'revisione_prototipo' or payload ? 'revisione') as toccata
+       from referti_bozze where studio_id = $1 and file_id = $2`,
     [studio.id, fileId]
   );
   if (esistente) {
-    if (esistente.stato === 'scartata') {
+    const medicoCambiato = (medicoId ?? '') !== (esistente.medico ?? '') && !!medicoId;
+    const rifaiBozza = esistente.stato === 'bozza' && medicoCambiato && !esistente.toccata;
+    if (esistente.stato === 'bozza' && medicoCambiato && esistente.toccata) {
+      console.log(`[bozza] stesso audio con medico diverso (${esistente.medico ?? '-'} → ${medicoId}), ma la bozza è già stata corretta a mano: tenuta quella`);
+    }
+    if (esistente.stato === 'scartata' || rifaiBozza) {
+      if (rifaiBozza) console.log(`[bozza] stesso audio, medico ${esistente.medico ?? '-'} → ${medicoId}: bozza rifatta con la nuova lavorazione`);
       await query(
         `update referti_bozze
             set stato = 'bozza', payload = $3, tipo = $4, medico = $5,
@@ -445,6 +460,7 @@ export async function POST(req: NextRequest) {
       );
       await fusioneAutomatica(esistente.id);
       await registraAudit(esistente.id);
+      await registraEvento(studio.id, esistente.id, 'bozza_rifatta', null, { motivo: rifaiBozza ? 'medico_cambiato' : 'scartata_ricaricata', medico: medicoId ?? '' });
     }
     await collega(esistente.id);
   }

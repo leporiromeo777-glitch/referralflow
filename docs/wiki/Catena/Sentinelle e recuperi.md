@@ -1,6 +1,7 @@
 ---
 tipo: tappa
-aggiornata: 2026-09-11
+aggiornata: 2026-09-19
+#aggiornata-prima: 2026-09-11
 ---
 # Sentinelle e recuperi della trascrizione
 
@@ -24,3 +25,5 @@ Dopo tre collassi in tre giorni il banco VAD su 6 dettati veri ha dato 3 a 3 (ac
 
 ## Altre barriere
 `payload.manifesto` (livello pieno/ridotto/minimo, testimoni, trasporti, conteggi), gate pre-firma nel wizard con presa d'atto registrata (`override_critici`), guardia d'identità e gate temporale sulla fusione, lucchetto delle relazioni (`src/lib/referti-misure-cliniche.ts`). La rilavorazione di una bozza scartata azzera anche `revisione_stato`.
+
+**Stesso audio, medico diverso (19.9.2026).** Il `file_id` è l'impronta dell'audio: ricaricare lo stesso dettato dà lo stesso id, e prima la piattaforma rispondeva «200 duplicato» e buttava via la nuova lavorazione. Il caso vero: un dettato entrato **senza medico** (il formato di default è il *rapporto*) e ricaricato dal medico scegliendo il proprio profilo (*lettera*) — la seconda corsa, quella giusta, spariva, e il referto restava impaginato come quello di un altro. Ora, se la bozza è ancora `bozza` e **nessuno l'ha toccata** (niente `testo_finale`, niente revisione), la nuova lavorazione col medico giusto la sostituisce, con evento `bozza_rifatta` (`motivo: medico_cambiato`). Se qualcuno l'aveva già corretta a mano, si tiene la sua e si scrive nel log.
