@@ -1,6 +1,6 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-09-18
+aggiornata: 2026-09-19
 ---
 # Immagini diagnostiche
 
@@ -28,7 +28,26 @@ Non è prudenza formale. Attaccare le immagini di qualcuno alla cartella di qual
 
 ## Che cos'è, e che cosa non è
 
-Le immagini qui si **consultano**: ritrovare l'esame giusto della persona giusta e guardarlo nel contesto della cartella. **La diagnosi si fa sulla console dell'apparecchio o su un visualizzatore certificato**, e il referto nasce dal dettato come sempre. Tre scelte tengono in piedi questa dichiarazione e vanno difese: **niente misure**, niente elaborazione presentata come diagnostica, e l'avviso visibile dove si guardano le immagini. Il giorno che si aggiunge un righello, ReferralFlow diventa un dispositivo medico di classe IIa. Il documento è `docs/legale/destinazione-uso-immagini.md`.
+La pagina ha due parti, e la legge le tratta in modo diverso (`docs/legale/destinazione-uso-immagini.md`):
+
+- **Consultare** — ricevere, archiviare, abbinare, guardare, e mostrare le misure che l'apparecchio ha già fatto. Non produce un numero clinico e resta fuori dal perimetro del dispositivo medico.
+- **Il righello** (dal 19.9.2026) — misura la distanza fra due punti con la calibrazione scritta nel file. Produce un numero clinico: è un **dispositivo medico di classe IIa fabbricato e usato dentro lo studio** (ODmed art. 9, notifica art. 18), senza CE, con lo studio come fabbricante. Il fascicolo è in `docs/legale/dispositivo-in-house/`.
+
+Il referto nasce dal dettato come sempre: **la misura non vi entra da sola**, la cita il medico.
+
+## Il righello (19.9.2026)
+
+**Come si usa.** Nell'esame aperto, «Misura» accanto alle frecce; poi si trascina fra due punti dell'immagine. Il numero compare mentre si trascina; al rilascio si dà un nome (IVSd, aorta…), eventualmente si sceglie la misura dell'apparecchio con cui confrontarla, e si salva. Le misure salvate restano disegnate sul fotogramma e in elenco sotto l'immagine, con chi e quando. Una misura sbagliata **si annulla, non si cancella**: resta barrata, con chi l'ha annullata.
+
+**Chi misura**: medico, aiuto medico, amministrazione. La segreteria vede e non misura; il tecnico non vede.
+
+**Da dove viene il numero.** Solo dal file: per le ecografie dalle *regioni* (`SequenceOfUltrasoundRegions`, cm per pixel, solo le regioni 2D), per TAC e RM da `PixelSpacing` (riga → Y, colonna → X). Senza calibrazione non si misura; nelle radiografie la spaziatura è quella del rivelatore, non del paziente, e il righello si rifiuta. Se i due punti stanno in regioni diverse, o uno è fuori dall'area calibrata, niente numero. Questo lo dice la riga in alto a sinistra sull'immagine («calibrata 0,2 × 0,2 mm/px» o «non calibrata»).
+
+**Un codice solo.** La matematica sta in `public/prototipo/misura.js`: la esegue il browser mentre si trascina e la riesegue il server prima di salvare, con la calibrazione in tabella — il browser manda i due punti, non il risultato. Ogni misura salva punti, calibrazione usata e versione del calcolo: si può rifare fra dieci anni.
+
+**Validazione.** Prima dell'uso sui pazienti un medico ripete almeno 30 misure su almeno 10 ecocardiogrammi e le lega a quelle dell'apparecchio (menu «confronta con…»); il CSV («validazione (CSV)» nella scheda) va nel fascicolo. Criteri e procedura in `docs/legale/dispositivo-in-house/piano-validazione.md`. Fino ad allora il righello è **in validazione**.
+
+**Quello che il righello non fa, e non va aggiunto senza riaprire il fascicolo**: aree, angoli, volumi, Doppler, confronti fra esami.
 
 ## Chi la vede
 
@@ -59,10 +78,9 @@ Quello che la ricezione **non** fa ancora: **MPPS** (l'apparecchio che dichiara 
 
 - **ZIP e DICOMDIR**: si trascinano i file, non l'archivio compresso. Gli ZIP vanno aperti prima — anche perché uno ZIP ostile è un modo noto di riempire un disco.
 - **MPR e 3D**: il visore mostra le immagini come sono. La ricostruzione su altri piani e il rendering volumetrico esistono in `imaging-server` e qui non sono stati portati.
-- **Misure e annotazioni** sull'immagine.
 - **Referto sull'esame**: oggi il referto nasce dal dettato ([[Catena/Revisione guidata]]); legare un referto a un esame per immagini è un lavoro a sé.
 - **S3**: se le immagini finissero su un bucket, ogni disegno le riscaricherebbe. Finché stanno sul Mac va bene così.
 
 ## Le prove
 
-`src/lib/prove-imaging.test.ts` — 8 casi sul raggruppamento, sui doppioni, sull'abbinamento severo e sulle finestre. Il lettore è stato passato su **153 file DICOM sintetici** generati da `imaging-server/scripts/gen_synthetic.py`: 57 immagini disegnate su 57, due oggetti non grafici riconosciuti come tali, e l'unico errore è il file deliberatamente troncato della cartella `90_anomalie` — cioè esattamente quello che doveva fallire.
+`src/lib/prove-imaging.test.ts` — 8 casi sul raggruppamento, sui doppioni, sull'abbinamento severo e sulle finestre. `src/lib/prove-imaging-misura.test.ts` — 13 casi sul righello, eseguiti sul file `misura.js` vero. `imaging/prova-calibrazione.py` — 9 controlli del lettore di calibrazione su DICOM sintetici. Il 19.9.2026 la prova end-to-end sul database demo (server di prova, due esami sintetici) ha dato 18/18: 100 px → 20,0 mm sull'eco e 50,0 mm sulla TAC calcolati dal server, rifiuti giusti, annullamento tracciato, CSV, segreteria respinta. Il lettore è stato passato su **153 file DICOM sintetici** generati da `imaging-server/scripts/gen_synthetic.py`: 57 immagini disegnate su 57, due oggetti non grafici riconosciuti come tali, e l'unico errore è il file deliberatamente troncato della cartella `90_anomalie` — cioè esattamente quello che doveva fallire.

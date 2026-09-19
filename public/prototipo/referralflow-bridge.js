@@ -5905,9 +5905,19 @@ if (typeof NAV !== 'undefined') for (const r of ['secretary', 'assistant', 'doct
 .rf-img-drop.sopra { border-color:var(--cta); color:var(--cta); }
 .rf-img-limite { font-size:12px; line-height:1.5; color:var(--muted); border-left:3px solid var(--border); padding:2px 0 2px 10px; margin:12px 0 0; }
 .rf-img-vista .limite { position:absolute; left:0; right:0; bottom:0; background:rgba(0,0,0,.55); color:#ddd; font-size:11px; padding:5px 10px; text-align:center; pointer-events:none; }
+.rf-mis-tela { position:relative; max-width:100%; line-height:0; }
+.rf-mis-tela canvas { position:absolute; left:0; top:0; pointer-events:none; touch-action:none; }
+.rf-mis-tela.attiva canvas { pointer-events:auto; cursor:crosshair; }
+.rf-mis-riga.annullata .name { text-decoration:line-through; color:var(--muted); }
+.rf-mis-riga.qui { border-left:3px solid var(--cta); padding-left:9px; }
 `; document.head.appendChild(st); })();
 
 RF.img = { lista: null, conta: {}, errore: null, lettore: true, aperto: null, dati: null, serie: 0, idx: 0, frame: 0, ww: null, wl: null, carico: false, filtro: '' };
+/* Il righello (19.9.2026): è la parte della piattaforma che è un dispositivo
+   medico in-house dello studio (docs/legale/dispositivo-in-house/). La
+   matematica sta in misura.js, uguale per browser e server; qui c'è solo il
+   gesto — due punti trascinati sull'immagine — e il disegno. */
+RF.mis = { attiva: false, bozza: null, esito: null, trascina: false, chieste: {} };
 
 async function rfImgCarica(rendi = true) {
   try {
@@ -6008,6 +6018,163 @@ function rfImgDropFile(e) {
 
 const RF_IMG_STATO = { da_verificare: ['warning', 'da verificare'], disponibile: ['success', 'in cartella'], nascosto: ['', 'nascosto'] };
 
+function rfMisPuo() { return ['doctor', 'assistant', 'org_admin'].includes(state.role); }
+function rfMisAttiva() {
+  if (!rfMisPuo()) { toast('Misura chi cura: il tuo ruolo vede le immagini, non le misura'); return; }
+  RF.mis.attiva = !RF.mis.attiva; RF.mis.bozza = null; RF.mis.esito = null; render();
+}
+// La calibrazione dell'immagine. Quelle entrate dal 19.9.2026 ce l'hanno con
+// sé; per le altre si chiede una volta al server, che la legge dal DICOM.
+function rfMisCal(i) {
+  if (!i) return null;
+  if (i.calibrazione !== null && i.calibrazione !== undefined) return i.calibrazione;
+  if (!RF.mis.chieste[i.id]) {
+    RF.mis.chieste[i.id] = true;
+    fetch(`/api/prototipo/imaging/immagine/${i.id}/calibrazione`, { credentials: 'include', cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null).then(j => { if (j && j.calibrazione) { i.calibrazione = j.calibrazione; render(); } }).catch(() => {});
+  }
+  return null;
+}
+function rfMisPunto(e) {
+  const cv = e.currentTarget; const r = cv.getBoundingClientRect();
+  const i = rfImgCorrente(); if (!i || !r.width) return null;
+  const scala = (i.colonne || 1) / r.width;
+  const x = Math.max(0, Math.min(r.width, e.clientX - r.left)), y = Math.max(0, Math.min(r.height, e.clientY - r.top));
+  return RFMisura.versoNativo({ x, y }, scala);
+}
+function rfMisGiu(e) {
+  if (!RF.mis.attiva) return;
+  const i = rfImgCorrente(); const p = rfMisPunto(e); if (!i || !p) return;
+  e.preventDefault(); try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) { /* niente */ }
+  RF.mis.bozza = { immagine_id: i.id, frame: RF.img.frame, p1: p, p2: p }; RF.mis.trascina = true;
+  RF.mis.esito = RFMisura.distanzaMm(rfMisCal(i), p, p); rfMisDisegna();
+}
+function rfMisMuovi(e) {
+  if (!RF.mis.trascina || !RF.mis.bozza) return;
+  const p = rfMisPunto(e); if (!p) return;
+  RF.mis.bozza.p2 = p; RF.mis.esito = RFMisura.distanzaMm(rfMisCal(rfImgCorrente()), RF.mis.bozza.p1, p); rfMisDisegna();
+}
+function rfMisSu(e) {
+  if (!RF.mis.trascina) return;
+  RF.mis.trascina = false;
+  const b = RF.mis.bozza, es = RF.mis.esito;
+  if (!b || !es) return;
+  if (es.stato !== 'ok') { toast(RFMisura.motivo(es.stato)); RF.mis.bozza = null; RF.mis.esito = null; rfMisDisegna(); return; }
+  rfMisSalvaModal();
+}
+// Disegna le misure salvate dell'immagine e del fotogramma correnti, più
+// quella in corso. Si richiama a ogni render, al caricamento dell'immagine e
+// al ridimensionamento: il canvas segue l'immagine mostrata.
+function rfMisDisegna() {
+  const img = document.getElementById('rf-img-main'); const cv = document.getElementById('rf-mis-canvas');
+  if (!img || !cv) return;
+  const w = img.clientWidth, h = img.clientHeight; if (!w || !h) return;
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); cv.style.width = `${w}px`; cv.style.height = `${h}px`;
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+  const i = rfImgCorrente(); if (!i) return;
+  const scala = (i.colonne || img.naturalWidth || w) / w;
+  const S = p => ({ x: p.x / scala, y: p.y / scala });
+  const linea = (a, b, testo, colore) => {
+    const A = S(a), B = S(b);
+    ctx.lineWidth = 2; ctx.strokeStyle = colore; ctx.fillStyle = colore; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); ctx.stroke();
+    for (const P of [A, B]) { ctx.beginPath(); ctx.arc(P.x, P.y, 3.5, 0, Math.PI * 2); ctx.fill(); }
+    if (testo) {
+      ctx.font = '600 12px -apple-system, "IBM Plex Sans", system-ui, sans-serif';
+      const mx = (A.x + B.x) / 2 + 8, my = (A.y + B.y) / 2 - 8;
+      const tw = ctx.measureText(testo).width;
+      ctx.fillStyle = 'rgba(0,0,0,.65)'; ctx.fillRect(mx - 4, my - 13, tw + 8, 18);
+      ctx.fillStyle = colore; ctx.fillText(testo, mx, my);
+    }
+  };
+  const d = RF.img.dati || {};
+  for (const m of (d.misure_manuali || [])) {
+    if (m.immagine_id !== i.id || m.frame !== RF.img.frame || m.annullata_at) continue;
+    const pt = Array.isArray(m.punti) ? m.punti : [];
+    if (pt.length === 2) linea(pt[0], pt[1], `${m.etichetta ? m.etichetta + ' ' : ''}${RFMisura.formattaMm(m.valore)}`, '#7fd8b6');
+  }
+  const b = RF.mis.bozza;
+  if (b && b.immagine_id === i.id && b.frame === RF.img.frame) {
+    const es = RF.mis.esito || {};
+    linea(b.p1, b.p2, es.stato === 'ok' ? RFMisura.formattaMm(es.mm) : (es.stato === 'punti_uguali' ? '' : '—'), es.stato === 'ok' ? '#ffd166' : '#ff8a80');
+  }
+}
+window.addEventListener('resize', () => { if (RF.img.aperto) rfMisDisegna(); });
+
+function rfMisSalvaModal() {
+  const b = RF.mis.bozza, es = RF.mis.esito, d = RF.img.dati || {};
+  if (!b || !es || es.stato !== 'ok') return;
+  const rif = (d.misure || []).map(m => `<option value="${m.id}">${rfEsc(m.gruppo ? m.gruppo + ' · ' : '')}${rfEsc(m.nome)} · ${String(Math.round(Number(m.valore) * 100) / 100).replace('.', ',')}${m.unita ? ' ' + rfEsc(m.unita) : ''}</option>`).join('');
+  openModal(`Misura: ${rfEsc(RFMisura.formattaMm(es.mm))}`, `
+    <div class="field"><label>Che cosa hai misurato (facoltativo)</label><input class="input" id="rf-mis-et" maxlength="80" placeholder="IVSd, aorta ascendente, diametro VS…"></div>
+    ${rif ? `<div class="field mt-8"><label>Confronta con la misura dell'apparecchio (per la validazione)</label><select class="input" id="rf-mis-rif"><option value="">— nessuna —</option>${rif}</select></div>` : ''}
+    <p class="caption mt-8">Il numero lo ricalcola il server dagli stessi due punti, con la calibrazione scritta nel file dell'apparecchio. Resta registrato chi ha misurato e quando; una misura sbagliata si annulla, non si cancella.</p>`,
+    `<button class="btn" data-close onclick="RF.mis.bozza=null;RF.mis.esito=null;rfMisDisegna()">Scarta</button><button class="btn primary" id="rf-mis-ok">Salva</button>`);
+  document.getElementById('rf-mis-ok').onclick = () => { void rfMisSalva(); };
+}
+async function rfMisSalva() {
+  const b = RF.mis.bozza; if (!b) return;
+  const et = document.getElementById('rf-mis-et'); const rif = document.getElementById('rf-mis-rif');
+  const corpo = { immagine_id: b.immagine_id, frame: b.frame, punti: [b.p1, b.p2], etichetta: et ? et.value : '', riferimento_misura_id: rif && rif.value ? rif.value : null };
+  try {
+    const r = await fetch('/api/prototipo/imaging/misure', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(j.motivo || j.errore || 'Misura non salvata'); return; }
+    closeModal(); RF.mis.bozza = null; RF.mis.esito = null;
+    toast(`Misura salvata: ${j.testo}`);
+    await rfImgRicarica();
+  } catch { toast('Piattaforma non raggiungibile'); }
+}
+async function rfMisAnnulla(id) {
+  if (!confirm('Annullare questa misura? Resta nel registro come annullata.')) return;
+  try {
+    const r = await fetch('/api/prototipo/imaging/misure', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'annulla', id }) });
+    if (!r.ok) { toast('Non riuscito'); return; }
+    await rfImgRicarica();
+  } catch { toast('Piattaforma non raggiungibile'); }
+}
+async function rfMisRiferimento(id, rifId) {
+  try {
+    const r = await fetch('/api/prototipo/imaging/misure', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'riferimento', id, riferimento_misura_id: rifId || null }) });
+    if (!r.ok) { toast('Non riuscito'); return; }
+    await rfImgRicarica();
+  } catch { toast('Piattaforma non raggiungibile'); }
+}
+// Ricarica l'esame aperto senza perdere serie, immagine e fotogramma.
+async function rfImgRicarica() {
+  const id = RF.img.aperto; if (!id) return;
+  try {
+    const r = await fetch(`/api/prototipo/imaging/${id}`, { credentials: 'include', cache: 'no-store' });
+    if (r.ok) RF.img.dati = await r.json();
+  } catch { /* si resta su quel che c'è */ }
+  render();
+}
+function rfImgMisureManuali(d, i) {
+  const tutte = d.misure_manuali || [];
+  const puo = rfMisPuo();
+  if (!tutte.length && !puo) return '';
+  const rif = (d.misure || []);
+  const scarto = (m) => {
+    if (!m.riferimento_misura_id || m.riferimento_valore === null || m.riferimento_valore === undefined) return '';
+    const u = String(m.riferimento_unita || 'mm').toLowerCase();
+    const mm = u === 'cm' ? m.riferimento_valore * 10 : u === 'mm' ? m.riferimento_valore : null;
+    if (mm === null) return ` · apparecchio ${rfEsc(String(m.riferimento_valore))} ${rfEsc(m.riferimento_unita || '')}`;
+    const dlt = m.valore - mm;
+    return ` · apparecchio ${RFMisura.formattaMm(mm)} · scarto ${dlt >= 0 ? '+' : '−'}${RFMisura.formattaMm(Math.abs(dlt))}`;
+  };
+  const confrontate = tutte.filter(m => !m.annullata_at && m.riferimento_misura_id).length;
+  return `<div class="card mt-16"><div class="card-head"><span class="section-title">Misure col righello</span>
+      <span class="caption">${tutte.length} in questo esame${confrontate ? ` · ${confrontate} confrontate con l'apparecchio` : ''} · <a href="/api/prototipo/imaging/misure?formato=csv">validazione (CSV)</a></span></div>
+    <div class="list">${tutte.map(m => `<div class="list-item rf-mis-riga ${m.annullata_at ? 'annullata' : ''} ${i && m.immagine_id === i.id && m.frame === RF.img.frame ? 'qui' : ''}">
+        <div class="grow"><div class="name">${rfEsc(m.etichetta || 'Distanza')} · ${rfEsc(RFMisura.formattaMm(m.valore))}</div>
+          <div class="sub">${rfEsc(m.chi || 'qualcuno')} · ${rfEsc(rfModQuando(m.quando))}${m.frame ? ` · fotogramma ${m.frame + 1}` : ''}${m.annullata_at ? ` · <b>annullata</b> da ${rfEsc(m.annullata_da || 'qualcuno')} ${rfEsc(rfModQuando(m.annullata_at))}` : scarto(m)}</div></div>
+        ${!m.annullata_at && puo ? `<div class="row" style="gap:6px">${rif.length ? `<select class="input sm" onchange="rfMisRiferimento('${m.id}', this.value)" title="Confronta con la misura dell'apparecchio"><option value="">confronta con…</option>${rif.map(r => `<option value="${r.id}" ${m.riferimento_misura_id === r.id ? 'selected' : ''}>${rfEsc(r.gruppo ? r.gruppo + ' · ' : '')}${rfEsc(r.nome)}</option>`).join('')}</select>` : ''}
+          <button class="btn sm" onclick="rfMisAnnulla('${m.id}')">Annulla</button></div>` : ''}
+      </div>`).join('') || '<div class="caption">Nessuna misura. Premi «Misura» e trascina fra due punti dell’immagine.</div>'}</div>
+    <p class="rf-img-limite">Il righello misura <b>distanze</b> con la calibrazione scritta dall'apparecchio nel file DICOM; senza calibrazione non misura. È un dispositivo medico <b>fabbricato e usato dentro lo studio</b> (ODmed art. 9 e 18): il fascicolo, il piano di validazione e la notifica a Swissmedic sono in <code>docs/legale/dispositivo-in-house/</code>. La misura è del medico che la fa; il numero non entra nel referto da solo.</p></div>`;
+}
+
 PAGES.imaging = () => {
   if (!RF.live) return '<div class="page"><div class="card"><p class="meta" style="margin:0">Le immagini sono una funzione della piattaforma: qui, fuori, non ci sono dati.</p></div></div>';
   if (RF.img.lista === null && !RF.img.errore) { void rfImgCarica(); return `<div class="page-head"><div><h2 class="page-title">Immagini</h2></div></div><div class="card"><div class="caption">Carico…</div></div>`; }
@@ -6030,7 +6197,7 @@ PAGES.imaging = () => {
       <div class="actions"><div class="seg"><button class="${!f ? 'active' : ''}" onclick="RF.img.filtro='';render()">Tutti</button><button class="${f === 'verifica' ? 'active' : ''}" onclick="RF.img.filtro='verifica';render()">Da verificare</button><button class="${f === 'senza' ? 'active' : ''}" onclick="RF.img.filtro='senza';render()">Senza paziente</button></div></div></div>
     ${RF.img.errore ? `<div class="rf-manc mb-16">${rfEsc(RF.img.errore)}</div>` : ''}
     ${RF.img.lettore ? '' : '<div class="rf-manc mb-16">Il lettore DICOM non è installato su questo server: gli esami si vedono, ma non si importano e non si disegnano.</div>'}
-    <p class="rf-img-limite">Queste immagini si <b>consultano</b>: servono a ritrovare l'esame giusto della persona giusta e a guardarlo nel contesto della cartella. <b>La diagnosi si fa sulla console dell'apparecchio o su un visualizzatore certificato</b>, e il referto nasce dal dettato come sempre. Non ci sono misure, e non devono essercene.</p>
+    <p class="rf-img-limite">Le immagini si <b>consultano</b> nel contesto della cartella e si <b>misurano col righello</b> (distanze, dalla calibrazione scritta nel file dall'apparecchio). Il righello è un dispositivo medico fabbricato e usato dentro lo studio (ODmed art. 9 e 18): fascicolo, validazione e notifica sono in <code>docs/legale/dispositivo-in-house/</code>. La diagnosi resta del medico, e il referto nasce dal dettato come sempre.</p>
     <div class="card mt-16"><div class="card-head"><span class="section-title">Esami</span><span class="caption">dal più recente</span></div>
       <div class="list">${mostrati.length ? mostrati.map(riga).join('') : '<div class="caption">Nessun esame.</div>'}</div></div>
     ${rfImgRicezione()}
@@ -6083,7 +6250,7 @@ function rfImgMisure(misure) {
   return `<div class="card mt-16"><div class="card-head"><span class="section-title">Misure dell'apparecchio</span><span class="badge">${misure.length}</span></div>
     ${gruppi.map(g => `<div class="mt-8"><div class="caption" style="text-transform:uppercase;letter-spacing:.04em">${rfEsc(g.nome)}</div>
       <div class="kv">${g.voci.map(v => `<b>${rfEsc(v.nome)}</b><span class="num">${numero(v.valore)}${v.unita ? ` ${rfEsc(v.unita)}` : ''}</span>`).join('')}</div></div>`).join('')}
-    <p class="rf-img-limite">Misurate <b>dall'apparecchio</b> al momento dell'esame e lette dal suo referto strutturato: la piattaforma le mostra, non le calcola e non le rifà. Se una misura va ripetuta, si ripete sulla console.</p></div>`;
+    <p class="rf-img-limite">Misurate <b>dall'apparecchio</b> al momento dell'esame e lette dal suo referto strutturato: la piattaforma le mostra così come sono. Sono anche il riferimento con cui si confronta il righello nella validazione.</p></div>`;
 }
 
 function rfImgData(iso) {
@@ -6107,6 +6274,8 @@ function rfImgDettaglio() {
   const i = rfImgCorrente();
   const nonImmagini = (s && s.immagini ? s.immagini.length - visibili.length : 0);
   const finestre = d.finestre || [];
+  const cal = rfMisCal(i);
+  setTimeout(rfMisDisegna, 0);
   const anteprima = (ser) => {
     const prima = (ser.immagini || []).find(x => x.immagine);
     return prima ? `<img src="/api/prototipo/imaging/immagine/${prima.id}?anteprima=1" alt="" loading="lazy">` : `<div style="aspect-ratio:1;border-radius:6px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px">nessuna<br>immagine</div>`;
@@ -6127,13 +6296,15 @@ function rfImgDettaglio() {
       </div>
       <div>
         <div class="rf-img-vista" onwheel="event.preventDefault(); rfImgScorri(event.deltaY > 0 ? 1 : -1)">
-          ${i ? `<img src="${rfImgUrl(i, 1024, RF.img.frame)}" alt="Immagine ${RF.img.idx + 1}">
-            <div class="rf-img-hud">${rfEsc(s.descrizione || s.modalita || '')}<br>${i.colonne || '?'}×${i.righe || '?'}</div>
+          ${i ? `<div class="rf-mis-tela ${RF.mis.attiva ? 'attiva' : ''}"><img id="rf-img-main" src="${rfImgUrl(i, 1024, RF.img.frame)}" alt="Immagine ${RF.img.idx + 1}" onload="rfMisDisegna()" draggable="false">
+              <canvas id="rf-mis-canvas" onpointerdown="rfMisGiu(event)" onpointermove="rfMisMuovi(event)" onpointerup="rfMisSu(event)" onpointercancel="rfMisSu(event)"></canvas></div>
+            <div class="rf-img-hud">${rfEsc(s.descrizione || s.modalita || '')}<br>${i.colonne || '?'}×${i.righe || '?'}<br>${rfEsc(cal === null ? 'calibrazione: leggo…' : RFMisura.descriviCalibrazione(cal))}</div>
             <div class="rf-img-hud destra">${RF.img.idx + 1} / ${visibili.length}${i.frame > 1 ? `<br>fotogramma ${RF.img.frame + 1} / ${i.frame}` : ''}${RF.img.ww !== null ? `<br>W ${RF.img.ww} / L ${RF.img.wl}` : ''}</div>
-            <div class="limite">Consultazione — la diagnosi si fa sulla console dell'apparecchio o su un visualizzatore certificato</div>`
+            <div class="limite">${RF.mis.attiva ? 'Righello: trascina fra due punti' : 'Consultazione e misura di distanze — la diagnosi è del medico'}</div>`
             : `<div class="vuoto">Questa serie non contiene immagini da disegnare${nonImmagini ? ` (${nonImmagini} ${nonImmagini === 1 ? 'oggetto DICOM non grafico' : 'oggetti DICOM non grafici'}: referti strutturati, PDF o modelli)` : ''}.</div>`}
         </div>
         ${i ? `<div class="rf-img-barra">
+          ${rfMisPuo() ? `<button class="btn sm ${RF.mis.attiva ? 'primary' : ''}" onclick="rfMisAttiva()" title="Misura una distanza fra due punti">Misura</button>` : ''}
           <button class="btn sm" onclick="rfImgScorri(-1)">‹</button>
           <input type="range" min="0" max="${Math.max(0, visibili.length - 1)}" value="${RF.img.idx}" oninput="rfImgVai(this.value)" aria-label="Immagine della serie">
           <button class="btn sm" onclick="rfImgScorri(1)">›</button>
@@ -6145,6 +6316,7 @@ function rfImgDettaglio() {
       </div>
     </div>
 
+    ${rfImgMisureManuali(d, i)}
     ${rfImgMisure(d.misure)}
 
     <div class="card mt-16"><div class="card-head"><span class="section-title">Chi ha aperto questo esame</span><span class="caption">ultimi 20</span></div>

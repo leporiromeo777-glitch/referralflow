@@ -9,6 +9,7 @@ rovina al massimo la sua richiesta:
     leggi-dicom.py meta <file>                        → JSON dei campi utili
     leggi-dicom.py png <file> --frame N --out f.png   → un fotogramma in PNG
     leggi-dicom.py misure <file>                      → le misure FATTE DALL'APPARECCHIO
+    leggi-dicom.py calibrazione <file>                → mm per pixel, per misurare sull'immagine
 
 Regole:
 - **Non stampa mai nulla su stderr che contenga dati del paziente.** I campi
@@ -61,6 +62,96 @@ def _nome_persona(v: str) -> str:
     return " ".join(p.capitalize() if p.isupper() else p for p in pezzi[:2])[:120]
 
 
+def calibrazione_di(ds) -> dict:
+    """Quanti millimetri vale un pixel, e dove.
+
+    È il dato su cui si regge il righello (19.9.2026, dispositivo in-house
+    dello studio: docs/legale/dispositivo-in-house/). Viene SOLO dal file
+    dell'apparecchio, mai da una stima: se il file non lo dice, la risposta è
+    «nessuna» e sull'immagine non si misura.
+
+    Tre casi, in ordine di precedenza:
+    - **Ecografia**: SequenceOfUltrasoundRegions. Ogni regione ha il suo
+      rettangolo di pixel e i suoi cm per pixel (PhysicalDeltaX/Y). Si tengono
+      solo le regioni 2D con unità cm su entrambi gli assi: in M-mode e
+      Doppler l'asse X è tempo, e una «distanza» non vuol dire niente.
+    - **TAC, RM, ecografie con PixelSpacing**: PixelSpacing = [riga, colonna]
+      in mm — attenzione all'ordine, il DICOM mette prima lo spazio fra le
+      righe (asse Y). Anche dentro SharedFunctionalGroups dei multiframe.
+    - **ImagerPixelSpacing** (radiografie): spazio sul rivelatore, non sul
+      paziente — con l'ingrandimento geometrico una misura sarebbe sbagliata
+      di un 5-10%. Si riporta ma NON si dichiara calibrata.
+    """
+    righe = int(getattr(ds, "Rows", 0) or 0)
+    colonne = int(getattr(ds, "Columns", 0) or 0)
+    fuori: dict = {"tipo": "nessuna", "righe": righe, "colonne": colonne, "regioni": [], "spacing": None}
+
+    regioni = getattr(ds, "SequenceOfUltrasoundRegions", None)
+    if regioni:
+        for r in regioni:
+            try:
+                ux = int(getattr(r, "PhysicalUnitsXDirection", 0) or 0)
+                uy = int(getattr(r, "PhysicalUnitsYDirection", 0) or 0)
+                formato = int(getattr(r, "RegionSpatialFormat", 0) or 0)
+                dx = abs(float(getattr(r, "PhysicalDeltaX", 0) or 0))
+                dy = abs(float(getattr(r, "PhysicalDeltaY", 0) or 0))
+                x0 = int(r.RegionLocationMinX0); y0 = int(r.RegionLocationMinY0)
+                x1 = int(r.RegionLocationMaxX1); y1 = int(r.RegionLocationMaxY1)
+            except (AttributeError, TypeError, ValueError):
+                continue
+            # 3 = cm su entrambi gli assi, formato 1 = immagine 2D
+            if ux != 3 or uy != 3 or formato != 1 or dx <= 0 or dy <= 0:
+                continue
+            if x1 <= x0 or y1 <= y0:
+                continue
+            fuori["regioni"].append({
+                "x0": x0, "y0": y0, "x1": x1, "y1": y1,
+                "dx_mm": round(dx * 10.0, 6), "dy_mm": round(dy * 10.0, 6),
+                "tipo_dati": int(getattr(r, "RegionDataType", 0) or 0),
+            })
+        if fuori["regioni"]:
+            fuori["tipo"] = "us_regioni"
+            return fuori
+
+    def _coppia(v):
+        try:
+            a, b = float(v[0]), float(v[1])
+        except (TypeError, ValueError, IndexError):
+            return None
+        return (a, b) if a > 0 and b > 0 else None
+
+    ps = _coppia(getattr(ds, "PixelSpacing", None))
+    if ps is None:
+        # multiframe «enhanced»: lo spacing sta nei gruppi funzionali condivisi
+        try:
+            gruppi = ds.SharedFunctionalGroupsSequence[0].PixelMeasuresSequence[0]
+            ps = _coppia(getattr(gruppi, "PixelSpacing", None))
+        except (AttributeError, IndexError, TypeError):
+            ps = None
+    if ps is not None:
+        fuori["tipo"] = "pixel_spacing"
+        fuori["spacing"] = {"dy_mm": round(ps[0], 6), "dx_mm": round(ps[1], 6), "origine": "PixelSpacing",
+                            "taratura": _testo(ds, "PixelSpacingCalibrationType", 32)}
+        return fuori
+
+    ips = _coppia(getattr(ds, "ImagerPixelSpacing", None))
+    if ips is not None:
+        fuori["tipo"] = "imager_pixel_spacing"
+        fuori["spacing"] = {"dy_mm": round(ips[0], 6), "dx_mm": round(ips[1], 6), "origine": "ImagerPixelSpacing",
+                            "taratura": ""}
+    return fuori
+
+
+def comando_calibrazione(percorso: Path) -> int:
+    import pydicom
+
+    try:
+        ds = pydicom.dcmread(str(percorso), stop_before_pixels=True, force=False)
+    except Exception as e:  # noqa: BLE001
+        return _uscita({"errore": "non_dicom", "tipo": type(e).__name__}, 1)
+    return _uscita(calibrazione_di(ds))
+
+
 def comando_meta(percorso: Path) -> int:
     import pydicom
 
@@ -108,6 +199,7 @@ def comando_meta(percorso: Path) -> int:
         "immagine": immagine,
         "ww": _primo(ampiezza), "wl": _primo(centro),
         "trasferimento": str(getattr(getattr(ds, "file_meta", None), "TransferSyntaxUID", "") or ""),
+        "calibrazione": calibrazione_di(ds) if immagine else None,
     })
 
 
@@ -240,6 +332,7 @@ def main() -> int:
     sub = ap.add_subparsers(dest="comando", required=True)
     m = sub.add_parser("meta"); m.add_argument("file")
     mi = sub.add_parser("misure"); mi.add_argument("file")
+    c = sub.add_parser("calibrazione"); c.add_argument("file")
     p = sub.add_parser("png")
     p.add_argument("file"); p.add_argument("--frame", type=int, default=0)
     p.add_argument("--ww", type=float, default=None); p.add_argument("--wl", type=float, default=None)
@@ -255,6 +348,8 @@ def main() -> int:
         return comando_meta(percorso)
     if a.comando == "misure":
         return comando_misure(percorso)
+    if a.comando == "calibrazione":
+        return comando_calibrazione(percorso)
     return comando_png(percorso, a.frame, a.ww, a.wl,
                        ANTEPRIMA_LATO if a.anteprima else a.lato, Path(a.out))
 

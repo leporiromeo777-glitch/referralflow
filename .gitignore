@@ -42,3 +42,4 @@ agenda-locale
 
 # Solver delle sale: ambiente Python isolato
 solver-sale/.venv
+__pycache__/

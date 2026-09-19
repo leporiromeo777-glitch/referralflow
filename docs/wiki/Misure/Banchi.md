@@ -133,3 +133,13 @@ Due **cartelle inventate** (scompenso + rene, fibrillazione + endoscopia) con de
 
 Da ricordare più del risultato: **il primo punteggio assolveva tutti e tre**, perché guardava solo identificatori e fatti. Leggendo le risposte, medgemma ricopiava la domanda del medico parola per parola («in questo paziente») e scriveva «donna di 78 anni», e nemotron aveva perso la fibrillazione atriale — cioè il motivo per cui la paziente prende l'anticoagulante. I due controlli mancanti sono stati aggiunti al banco e poi al prodotto.
 
+
+## Righello (immagini) — 19.9.2026
+
+| Banco | Che cosa | Esito |
+|---|---|---|
+| `imaging/prova-calibrazione.py` | lettore di calibrazione su DICOM sintetici: PixelSpacing riga/colonna, RM enhanced, regioni eco (M-mode scartata), delta negativo, ImagerPixelSpacing distinto, assenza, spacing nullo, comando e campo in `meta` | 9/9 |
+| `src/lib/prove-imaging-misura.test.ts` | il calcolo sul file `misura.js` vero: isotropo, anisotropo, simmetria, regioni, bordi, rifiuti, scala schermo→nativo, formato, motivi | 13/13 |
+| end-to-end sul DB demo (server di prova, due esami sintetici) | importazione con calibrazione; 100 px → 20,0 mm (eco) e 50,0 mm (TAC) dal server; 200 px verticali → 40,0 mm; rifiuti; registro «misurato»; annullamento tracciato; CSV; segreteria 403 | 18/18 + 403 |
+| browser (server di prova) | tasto Misura, trascinamento 200 px sulla barra verticale → «Misura: 40,0 mm», salvataggio, disegno sul fotogramma, elenco con annullata barrata | ok |
+| `npm run test:app` | tutta l'app | 212/212 |

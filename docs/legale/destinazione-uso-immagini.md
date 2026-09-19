@@ -1,75 +1,72 @@
 # Destinazione d'uso delle immagini diagnostiche in ReferralFlow
 
-Stato: bozza di lavoro, 19 settembre 2026. Da far validare dallo stesso
-incarico regolatorio di [destinazione-uso-ai.md](destinazione-uso-ai.md).
-**Non è un parere legale né regolatorio.**
+Stato: bozza di lavoro, aggiornata il **19 settembre 2026** (prima stesura
+18.9.2026). Da far validare dallo stesso incarico regolatorio di
+[destinazione-uso-ai.md](destinazione-uso-ai.md). **Non è un parere legale
+né regolatorio.**
 
 ## Perché questa pagina esiste
 
 Il 18.9.2026 la funzione «Immagini» è entrata in ReferralFlow riprendendo il
-modello dei dati e il lettore DICOM dal progetto a sé `imaging-server`. Quel
-progetto ha una destinazione d'uso **dichiaratamente diagnostica** («il medico
-riceve, consulta e misura le immagini in questo sistema e vi redige e firma il
-referto») e quindi un percorso da **classe IIa con organismo notificato**.
+modello dei dati e il lettore DICOM dal progetto a sé `imaging-server`. Il
+19.9.2026 lo studio ha deciso di aggiungere un **righello** (distanze fra due
+punti) e di percorrere per quella sola funzione la strada del **dispositivo
+fabbricato e usato dentro lo studio** (ODmed art. 9, notifica art. 18).
+Questa pagina divide in due la funzione Immagini: ciò che resta fuori dal
+perimetro del dispositivo medico, e ciò che ci entra.
 
-ReferralFlow ha la strategia opposta, scritta e motivata: restare **fuori** dal
-perimetro dispositivo medico. Le due cose non possono convivere nello stesso
-prodotto. Questa pagina fissa quale delle due vale **dentro ReferralFlow**.
-
-## La destinazione d'uso, in una frase
+## Parte 1 — fuori dal perimetro: ricevere, archiviare, consultare
 
 > La funzione Immagini di ReferralFlow **riceve, archivia, organizza e mostra**
-> gli esami per immagini di un paziente. Serve a **ritrovare e consultare** un
-> esame nel contesto della sua cartella. **Non è lo strumento su cui si formula
-> la diagnosi**: la lettura diagnostica avviene sulla console dell'apparecchio
-> o su un visualizzatore certificato, e il referto nasce dal dettato del medico
-> come tutti gli altri referti della piattaforma.
+> gli esami per immagini di un paziente e **presenta** le misure che
+> l'apparecchio ha già fatto. Serve a **ritrovare e consultare** un esame nel
+> contesto della sua cartella. Il referto nasce dal dettato del medico come
+> tutti gli altri referti della piattaforma.
 
 | Voce | Contenuto |
 |---|---|
-| Funzione | ricezione DICOM (C-STORE), archiviazione, indicizzazione, abbinamento al paziente, visualizzazione per consultazione |
-| Uso previsto | ritrovare l'esame giusto della persona giusta; guardarlo mentre si parla con il paziente o si prepara la visita; sapere che esiste |
-| **Non** previsto | refertazione primaria sull'immagine; misure a scopo diagnostico; confronto quantitativo; screening; qualunque decisione clinica presa guardando questo schermo |
-| Utilizzatori | medici, aiuto medici, segreteria, amministrazione dello studio (mai il ruolo tecnico) |
+| Funzione | ricezione DICOM (C-STORE), archiviazione, indicizzazione, abbinamento al paziente, visualizzazione, lettura delle misure dal referto strutturato dell'apparecchio |
 | Prestazioni essenziali | integrità (i byte archiviati sono i byte ricevuti), **corretta associazione immagine–paziente**, tracciabilità di chi ha aperto cosa |
+| Non produce | nessun valore clinico derivato dai pixel; le finestre (mediastino, polmone, osso) sono presentazione, non analisi |
 
-## Le tre cose che tengono in piedi questa dichiarazione
+Questa parte **non è un dispositivo medico** e non lo diventa finché non
+elabora né misura. Restano fuori, senza una Regulatory Opinion: confronto
+automatico fra esami, qualunque analisi o AI sulle immagini, MPR/3D presentati
+come diagnostici.
 
-Una destinazione d'uso vale quanto quello che il prodotto fa davvero. Tre
-scelte la rendono vera, e vanno difese:
+## Parte 2 — dentro il perimetro: il Righello
 
-1. **Niente misure.** Nessuno strumento di misura sull'immagine, nessuna
-   calibrazione dichiarata, nessun valore numerico derivato dai pixel. Il
-   giorno che si aggiunge un righello, questa pagina non vale più.
-2. **Niente elaborazione presentata come diagnostica.** Le finestre
-   (mediastino, polmone, osso) sono presentazione, non analisi. MPR, 3D e
-   qualunque calcolo automatico restano fuori.
-3. **L'avviso a schermo**, visibile dove si guardano le immagini: *«Consultazione:
-   la diagnosi si fa sulla console dell'apparecchio o su un visualizzatore
-   certificato»*. Non è burocrazia — è ciò che rende la dichiarazione onesta
-   davanti a chi lavora.
+> Il Righello misura la **distanza lineare** fra due punti scelti dal medico
+> su un'immagine DICOM, con la calibrazione scritta nel file dall'apparecchio.
+> È un **dispositivo medico di classe IIa (regola 11) fabbricato e usato
+> esclusivamente nello studio**, senza marcatura CE, ai sensi dell'art. 9 ODmed
+> / art. 5 par. 5 MDR, con lo studio come fabbricante.
 
-## Che cosa NON si può aggiungere senza una Regulatory Opinion
+Tutto il fascicolo — destinazione d'uso di dettaglio, giustificazione
+dell'assenza di equivalenti, analisi dei rischi, piano di validazione,
+descrizione tecnica, notifica a Swissmedic, dichiarazione pubblica — è in
+[dispositivo-in-house/](dispositivo-in-house/README.md). Le condizioni che
+lo tengono in piedi:
 
-- Misure, ROI, angoli, calibrazione del monitor.
-- Confronto automatico con esami precedenti, o qualunque evidenziazione di
-  «cosa è cambiato».
-- Qualunque analisi automatica o AI sulle immagini (rilevazione, segmentazione,
-  punteggi), anche solo «come proposta».
-- Presentare la piattaforma come PACS diagnostico in un'offerta commerciale.
+1. **Il fabbricante è lo studio**, e lo dichiara: firma, notifica, riesame.
+2. **Nessuna cessione**: il Righello non esce dallo studio. Il giorno che
+   ReferralFlow entra in un secondo studio, lì il Righello è spento, oppure si
+   certifica.
+3. **Solo distanze, solo con calibrazione del file**: niente aree, angoli,
+   Doppler, radiografie, immagini esportate. Il software rifiuta, non stima.
+4. **Validato prima dell'uso** e rivalidato a ogni modifica del calcolo.
+5. **La misura non entra da sola nel referto**: la cita il medico, nel dettato.
 
-## Se un giorno si vuole la strada diagnostica
+## L'avviso a schermo
+
+Dove si guardano le immagini resta scritto: *«Consultazione e misura di
+distanze — la diagnosi è del medico»*. Non è burocrazia: è ciò che rende
+oneste entrambe le parti di questa pagina davanti a chi lavora.
+
+## Se un giorno si vuole la strada commerciale
 
 Allora vale il percorso di `imaging-server/docs/DESTINAZIONE_D_USO.md`: classe
-IIa (da confermare), organismo notificato, ISO 13485, ISO 14971, IEC 62304,
-IEC 62366-1, IEC 81001-5-1, valutazione clinica, sorveglianza post-vendita,
-PRRC, UDI, registrazione Swissmedic. È una decisione d'impresa, non una
-funzione da aggiungere: si comincia dal sistema qualità, non dal codice.
-
-Esiste una terza via per il **solo uso interno** (MDR art. 5(5) / ODmed art. 9,
-dispositivi fabbricati e usati nella stessa istituzione sanitaria): niente
-marcatura CE, ma sistema qualità, fascicolo, dichiarazione pubblica e revisione
-dell'esperienza d'uso — e soprattutto **il divieto di cederlo ad altri** e
-l'obbligo di giustificare che nessun dispositivo equivalente sul mercato copre
-il bisogno *al livello di prestazione adeguato*. Il prezzo di un concorrente
-**non è** una giustificazione ammessa.
+IIa, organismo notificato, ISO 13485, ISO 14971, IEC 62304, IEC 62366-1,
+IEC 81001-5-1, valutazione clinica, sorveglianza post-vendita, PRRC, UDI,
+registrazione Swissmedic. Il fascicolo in-house è il primo mattone di quel
+percorso, non un'alternativa.

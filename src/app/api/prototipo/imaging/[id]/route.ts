@@ -35,14 +35,31 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const serie = await query<{ id: string; modalita: string | null; descrizione: string | null; numero: number | null; parte_corpo: string | null; n_immagini: number }>(
     `select id, modalita, descrizione, numero, parte_corpo, n_immagini from imaging_serie where esame_id = $1 order by numero nulls last, id`, [params.id]);
 
-  const immagini = await query<{ id: string; serie_id: string; numero: number | null; frame: number; righe: number | null; colonne: number | null; ww: number | null; wl: number | null; immagine: boolean; sop_class: string | null }>(
-    `select i.id, i.serie_id, i.numero, i.frame, i.righe, i.colonne, i.ww, i.wl, i.immagine, i.sop_class
+  const immagini = await query<{ id: string; serie_id: string; numero: number | null; frame: number; righe: number | null; colonne: number | null; ww: number | null; wl: number | null; immagine: boolean; sop_class: string | null; calibrazione: unknown }>(
+    `select i.id, i.serie_id, i.numero, i.frame, i.righe, i.colonne, i.ww, i.wl, i.immagine, i.sop_class, i.calibrazione
        from imaging_immagini i join imaging_serie s on s.id = i.serie_id
       where s.esame_id = $1 order by s.numero nulls last, i.numero nulls last, i.id`, [params.id]);
 
+  // Le misure fatte da una persona col righello (dispositivo in-house dello
+  // studio, docs/legale/dispositivo-in-house/): anche quelle annullate, perché
+  // l'annullamento è parte della storia della misura.
+  const misureManuali = await query<{
+    id: string; immagine_id: string; frame: number; valore: number; unita: string; etichetta: string | null;
+    punti: unknown; chi: string | null; quando: string; annullata_at: string | null; annullata_da: string | null;
+    riferimento_misura_id: string | null; riferimento_nome: string | null; riferimento_valore: number | null; riferimento_unita: string | null;
+  }>(
+    `select m.id, m.immagine_id, m.frame, m.valore, m.unita, m.etichetta, m.punti, split_part(u.email, '@', 1) as chi,
+            m.created_at::text as quando, m.annullata_at::text, split_part(ua.email, '@', 1) as annullata_da,
+            m.riferimento_misura_id, r.nome as riferimento_nome, r.valore as riferimento_valore, r.unita as riferimento_unita
+       from imaging_misure_manuali m
+       left join users u on u.id = m.user_id
+       left join users ua on ua.id = m.annullata_da
+       left join imaging_misure r on r.id = m.riferimento_misura_id
+      where m.esame_id = $1 order by m.created_at`, [params.id]);
+
   // Le misure fatte DALL'APPARECCHIO, lette dal suo referto strutturato.
-  const misure = await query<{ gruppo: string | null; nome: string; valore: number; unita: string | null }>(
-    `select gruppo, nome, valore, unita from imaging_misure where esame_id = $1 order by ordine`, [params.id]);
+  const misure = await query<{ id: string; gruppo: string | null; nome: string; valore: number; unita: string | null }>(
+    `select id, gruppo, nome, valore, unita from imaging_misure where esame_id = $1 order by ordine`, [params.id]);
 
   try {
     await query(`insert into imaging_accessi (studio_id, esame_id, user_id, azione) values ($1,$2,$3,'aperto')`,
@@ -55,6 +72,6 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       where a.esame_id = $1 order by a.created_at desc limit 20`, [params.id]);
 
   return NextResponse.json(
-    { esame, serie: serie.map((s) => ({ ...s, immagini: immagini.filter((i) => i.serie_id === s.id) })), finestre: finestreDi(esame.modalita), misure, accessi },
+    { esame, serie: serie.map((s) => ({ ...s, immagini: immagini.filter((i) => i.serie_id === s.id) })), finestre: finestreDi(esame.modalita), misure, misure_manuali: misureManuali, accessi },
     { headers: { 'Cache-Control': 'no-store' } });
 }

@@ -136,3 +136,14 @@ Il concorrente paga **35.000 CHF l'anno** per un visualizzatore Philips monouten
 **Il rischio che ci si prende**: quello che si compra con una licenza non è solo il codice, è la **responsabilità** — conformità dichiarata, aggiornamenti, e qualcuno da chiamare. Il README di `imaging-server` lo dice già: sistema destinato alla diagnosi, non validato, dispositivo medico da qualificare. Finché quel percorso non è fatto, **le immagini si guardano, le decisioni cliniche si prendono sul referto**. Questo vale quanto il codice e va ripetuto a chi installa.
 
 Vedi [[Piattaforma/Immagini]].
+
+## 19.9.2026 — Il righello: dispositivo fabbricato e usato nello studio
+Il 18.9 la pagina Immagini era nata **senza misure**, apposta: un righello fa di ReferralFlow un dispositivo medico di classe IIa (regola 11), e certificarlo costa 60–300 mila franchi. Il 19.9 lo studio ha chiesto le misure per sé, non per venderle.
+
+**Deciso**: la sola funzione «Misura» (distanza fra due punti) è un **dispositivo fabbricato e usato dentro lo studio** ai sensi dell'art. 9 ODmed (condizioni dell'art. 5 par. 5 MDR) con notifica a Swissmedic ai sensi dell'art. 18 (modulo BW630_30_027i_FO, verificato sul sito di Swissmedic il 19.9). Lo studio è il **fabbricante**; chi sviluppa lavora per suo conto. Il fascicolo (`docs/legale/dispositivo-in-house/`) copre condizione per condizione: destinazione d'uso, giustificazione dell'assenza di equivalenti, analisi dei rischi (20 voci), piano di validazione, descrizione tecnica con SOUP, notifica, dichiarazione pubblica.
+
+**Il punto debole, detto**: OsiriX MD esiste a 800–1000 CHF l'anno, e «costa meno» non è una giustificazione. La giustificazione scritta sta nel *bisogno* (misurare dentro il flusso della visita, su qualunque dispositivo, con tracciabilità e confronto con l'apparecchio) e la firma il titolare, dopo un'ora di consulente regolatorio. Se non regge, resta l'opzione di prima: misure dell'apparecchio importate, OsiriX MD accanto.
+
+**Scelte tecniche che sono anche regolatorie**: un solo file di calcolo (`misura.js`) per browser e server, e il server ricalcola — il browser manda i punti, non il numero; la calibrazione viene solo dal file (regioni eco in cm, PixelSpacing riga/colonna), mai da stime; radiografie e immagini senza calibrazione si rifiutano; le misure si annullano e non si cancellano; la calibrazione usata e la versione del calcolo si copiano dentro ogni misura. Niente Cornerstone3D: per un dispositivo da validare, 120 righe proprie e provate valgono più di una libreria da megabyte da documentare come SOUP.
+
+**Fino alla fine della lista di controllo del README** (validazione clinica, consulente, notifica, dichiarazione), il righello è **in validazione**: si usa per raccogliere le coppie di confronto, non per decidere di un paziente. Vedi [[Piattaforma/Immagini]].

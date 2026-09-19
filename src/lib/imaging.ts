@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { getFile } from './storage';
+import type { Calibrazione } from './imaging-misura';
 
 // Il lato piattaforma delle immagini diagnostiche (18.9.2026).
 //
@@ -29,6 +30,7 @@ export type MetaDicom = {
   paziente_nome: string; paziente_nascita: string; paziente_id: string; paziente_sesso: string;
   righe: number; colonne: number; frame: number; immagine: boolean;
   ww: number | null; wl: number | null; trasferimento: string;
+  calibrazione: Calibrazione | null;
 };
 
 function esegui(args: string[]): Promise<{ uscita: string; codice: number }> {
@@ -114,6 +116,19 @@ export async function leggiMisure(buffer: Buffer): Promise<MisuraDicom[]> {
   } finally {
     await fs.rm(tmp, { force: true });
   }
+}
+
+// La calibrazione di un file già archiviato (le immagini entrate prima del
+// 19.9.2026 non l'hanno in tabella): si legge dal DICOM originale, una volta,
+// e chi chiama la scrive in imaging_immagini.calibrazione.
+export async function leggiCalibrazione(key: string): Promise<Calibrazione | null> {
+  return conFile(key, async (percorso) => {
+    const { uscita } = await esegui(['calibrazione', percorso]);
+    try {
+      const j = JSON.parse(uscita || '{}');
+      return j?.errore || !j?.tipo ? null : (j as Calibrazione);
+    } catch { return null; }
+  });
 }
 
 export function lettoreDisponibile(): Promise<boolean> {
