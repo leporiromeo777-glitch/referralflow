@@ -310,3 +310,123 @@ test('invarianza: la vecchia scala uniforme (versoNativo) e la matrice danno lo 
   const b = G.versoImmagine({ x: 100.5, y: 40.25 }, G.matriceViewer({ scalaX: 1 / scala }));
   assert.ok(Math.abs(a.x - b.x) < 1e-12 && Math.abs(a.y - b.y) < 1e-12);
 });
+
+// ── Fase 3: gli altri strumenti, con valori noti ──
+const A = contesto.RFMSE.misure.ALGORITMI;
+const FV = contesto.RFMSE.misure.formattaValore;
+const quasi = (a: number, b: number, tol = 1e-9) => Math.abs(a - b) <= tol * Math.max(1, Math.abs(b));
+
+test('polilinea: somma dei segmenti in mm (anisotropia rispettata)', () => {
+  // 30 px x (0,5) = 15 ; 80 px y (0,25) = 20 → 25 ; poi 40 px x = 20 → 45
+  const e = A.polilinea.calcola(anisotropa, [{ x: 0, y: 0 }, { x: 30, y: 80 }, { x: 70, y: 80 }]);
+  assert.equal(e.stato, 'ok'); assert.ok(quasi(e.valore, 45)); assert.equal(e.extra.segmenti, 2); assert.equal(e.unita, 'mm');
+  assert.equal(A.polilinea.calcola(anisotropa, [{ x: 0, y: 0 }]).stato, 'punti_non_validi');
+  assert.equal(A.polilinea.calcola(anisotropa, [{ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 5, y: 5 }]).stato, 'punti_uguali');
+});
+
+test('angolo: 90° sui millimetri, non sui pixel', () => {
+  // in pixel anisotropi (0,5 × 0,25): A=(100,0) V=(0,0) B=(0,100) → in mm (50,0) e (0,25): ancora 90°
+  const e = A.angolo.calcola(anisotropa, [{ x: 100, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 100 }]);
+  assert.equal(e.stato, 'ok'); assert.ok(quasi(e.valore, 90)); assert.equal(e.unita, '°');
+  // 45° in pixel isotropi
+  assert.ok(quasi(A.angolo.calcola(ct, [{ x: 100, y: 0 }, { x: 0, y: 0 }, { x: 100, y: 100 }]).valore, 45));
+  // ma con pixel anisotropi 0,5 × 0,25 lo stesso disegno vale atan(25/50) = 26,565°
+  assert.ok(quasi(A.angolo.calcola(anisotropa, [{ x: 100, y: 0 }, { x: 0, y: 0 }, { x: 100, y: 100 }]).valore, 26.56505117707799));
+  assert.ok(quasi(A.angolo.calcola(ct, [{ x: 100, y: 0 }, { x: 0, y: 0 }, { x: 200, y: 0 }]).valore, 0));
+  assert.ok(quasi(A.angolo.calcola(ct, [{ x: 100, y: 0 }, { x: 0, y: 0 }, { x: -100, y: 0 }].map(p => ({ x: p.x + 200, y: p.y + 10 }))).valore, 180));
+  assert.equal(A.angolo.calcola(ct, [{ x: 1, y: 1 }, { x: 1, y: 1 }, { x: 5, y: 5 }]).stato, 'punti_uguali');
+  assert.equal(A.angolo.calcola(ct, [{ x: 1, y: 1 }, { x: 2, y: 2 }]).stato, 'punti_non_validi');
+});
+
+test('rettangolo: area e perimetro dai due angoli, qualunque verso', () => {
+  const e = A.rettangolo.calcola(ct, [{ x: 110, y: 60 }, { x: 10, y: 10 }]);   // 100 × 50 px × 0,7 = 70 × 35 mm
+  assert.equal(e.stato, 'ok'); assert.ok(quasi(e.valore, 2450)); assert.equal(e.unita, 'mm²');
+  assert.ok(quasi(e.extra.perimetro_mm, 210)); assert.ok(quasi(e.extra.larghezza_mm, 70));
+  assert.equal(A.rettangolo.calcola(ct, [{ x: 10, y: 10 }, { x: 10, y: 60 }]).stato, 'area_nulla');
+});
+
+test('ellisse: area πab esatta, perimetro dichiarato approssimato', () => {
+  const e = A.ellisse.calcola(eco, [{ x: 200, y: 100 }, { x: 400, y: 200 }]);   // 200 × 100 px × 0,2 → a = 20, b = 10
+  assert.equal(e.stato, 'ok'); assert.ok(quasi(e.valore, Math.PI * 200)); assert.ok(quasi(e.extra.semiasse_a_mm, 20));
+  // cerchio: perimetro di Ramanujan = 2πr esatto
+  const c = A.ellisse.calcola(ct, [{ x: 0, y: 0 }, { x: 100, y: 100 }]);   // r = 35 mm
+  assert.ok(quasi(c.extra.perimetro_mm_approssimato, 2 * Math.PI * 35, 1e-12));
+  assert.equal(A.ellisse.calcola(ct, [{ x: 0, y: 0 }, { x: 100, y: 0 }]).stato, 'area_nulla');
+});
+
+test('poligono: formula del poligono sui mm, concavo compreso; intrecciato rifiutato', () => {
+  const quadrato = A.poligono.calcola(ct, [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }]);   // 70 × 70
+  assert.equal(quadrato.stato, 'ok'); assert.ok(quasi(quadrato.valore, 4900)); assert.ok(quasi(quadrato.extra.perimetro_mm, 280)); assert.equal(quadrato.extra.vertici, 4);
+  // stesso quadrato in senso antiorario: stessa area
+  assert.ok(quasi(A.poligono.calcola(ct, [{ x: 0, y: 0 }, { x: 0, y: 100 }, { x: 100, y: 100 }, { x: 100, y: 0 }]).valore, 4900));
+  // L concava: 100×100 meno 50×50 → 7500 px² × 0,49
+  const elle = A.poligono.calcola(ct, [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 50 }, { x: 50, y: 50 }, { x: 50, y: 100 }, { x: 0, y: 100 }]);
+  assert.ok(quasi(elle.valore, 7500 * 0.49));
+  // anisotropia: 100 × 100 px con 0,5 × 0,25 → 50 × 25 mm
+  assert.ok(quasi(A.poligono.calcola(anisotropa, [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }]).valore, 1250));
+  // farfalla: si incrocia
+  assert.equal(A.poligono.calcola(ct, [{ x: 0, y: 0 }, { x: 100, y: 100 }, { x: 100, y: 0 }, { x: 0, y: 100 }]).stato, 'poligono_intrecciato');
+  // tre punti allineati: area nulla
+  assert.equal(A.poligono.calcola(ct, [{ x: 0, y: 0 }, { x: 50, y: 50 }, { x: 100, y: 100 }]).stato, 'area_nulla');
+  assert.equal(A.poligono.calcola(ct, [{ x: 0, y: 0 }, { x: 1, y: 1 }]).stato, 'punti_non_validi');
+});
+
+test('poligono in ecografia: tutti i vertici nella stessa regione, o niente', () => {
+  assert.equal(A.poligono.calcola(eco, [{ x: 200, y: 100 }, { x: 300, y: 100 }, { x: 300, y: 580 }]).stato, 'regioni_diverse');
+  assert.equal(A.poligono.calcola(eco, [{ x: 200, y: 100 }, { x: 300, y: 100 }, { x: 10, y: 10 }]).stato, 'fuori_regione');
+  const ok = A.poligono.calcola(eco, [{ x: 200, y: 100 }, { x: 300, y: 100 }, { x: 300, y: 200 }, { x: 200, y: 200 }]);
+  assert.ok(quasi(ok.valore, 400));   // 20 × 20 mm
+});
+
+test('perimetro: lunghezza del contorno chiuso', () => {
+  const e = A.perimetro.calcola(ct, [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }]);
+  assert.equal(e.stato, 'ok'); assert.ok(quasi(e.valore, 280)); assert.equal(e.unita, 'mm'); assert.ok(quasi(e.extra.area_mm2, 4900));
+  assert.equal(A.perimetro.calcola(ct, [{ x: 0, y: 0 }, { x: 100, y: 100 }, { x: 100, y: 0 }, { x: 0, y: 100 }]).stato, 'poligono_intrecciato');
+});
+
+test('punto: coordinate fisiche, nessun valore', () => {
+  const e = A.punto.calcola(anisotropa, [{ x: 100, y: 100 }]);
+  assert.equal(e.stato, 'ok'); assert.equal(e.valore, null); assert.ok(quasi(e.extra.x_mm, 50)); assert.ok(quasi(e.extra.y_mm, 25));
+  assert.equal(A.punto.calcola(anisotropa, [{ x: 1, y: 1 }, { x: 2, y: 2 }]).stato, 'punti_non_validi');
+  assert.equal(A.punto.calcola(eco, [{ x: 10, y: 10 }]).stato, 'fuori_regione');
+});
+
+test('valore mostrato: aree in cm² con due decimali, gradi con uno, punto come coppia', () => {
+  assert.equal(FV(2450, 'mm²'), '24,50 cm²');
+  assert.equal(FV(Math.PI * 200, 'mm²'), '6,28 cm²');
+  assert.equal(FV(26.56505, '°'), '26,6°');
+  assert.equal(FV(45, 'mm'), '45,0 mm');
+  assert.equal(FV(null, 'mm', { x_mm: 50, y_mm: 25 }), '(50,0; 25,0 mm)');
+});
+
+test('gate + strumenti: ogni algoritmo passa da valuta con stato, unità, valore mostrato, extra', () => {
+  const casi: [string, any[]][] = [
+    ['polilinea', [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }]],
+    ['angolo', [{ x: 100, y: 0 }, { x: 0, y: 0 }, { x: 0, y: 100 }]],
+    ['rettangolo', [{ x: 0, y: 0 }, { x: 100, y: 50 }]],
+    ['ellisse', [{ x: 0, y: 0 }, { x: 100, y: 50 }]],
+    ['poligono', [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }]],
+    ['perimetro', [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }]],
+    ['punto', [{ x: 10, y: 20 }]],
+  ];
+  for (const [alg, punti] of casi) {
+    const e = V.valuta({ cal: ct, geometria: geoCt, frame: 0, frameTotali: 1, punti, algoritmo: alg });
+    assert.equal(e.stato, 'VALIDATED', alg); assert.equal(e.ok, true, alg); assert.equal(e.algoritmo, alg); assert.equal(e.versione_algoritmo, '1.0');
+    assert.ok(e.valore_mostrato && e.valore_mostrato !== '—', alg); assert.ok(e.extra, alg); assert.ok(e.punti_fisici.length === punti.length, alg);
+  }
+  const ko = V.valuta({ cal: ct, punti: [{ x: 0, y: 0 }, { x: 100, y: 100 }, { x: 100, y: 0 }, { x: 0, y: 100 }], algoritmo: 'poligono' });
+  assert.equal(ko.stato, 'NOT_MEASURABLE'); assert.ok(j(ko.motivi).includes('poligono_intrecciato')); assert.match(ko.testi[0], /incrocia/);
+});
+
+test('invarianza degli strumenti: zoom, rotazione e DPR non cambiano area, angolo e perimetro', () => {
+  const pol = [{ x: 12.5, y: 40 }, { x: 300, y: 55.25 }, { x: 280, y: 400 }, { x: 60, y: 350 }];
+  const base = { poligono: A.poligono.calcola(ct, pol).valore, perimetro: A.perimetro.calcola(ct, pol).valore, angolo: A.angolo.calcola(ct, pol.slice(0, 3)).valore, polilinea: A.polilinea.calcola(ct, pol).valore };
+  for (const scala of [0.3, 1, 2.7]) for (const rot of [0, 90, 33]) for (const dpr of [1, 2]) {
+    const M = G.matriceViewer({ scalaX: scala * dpr, scalaY: scala * dpr, rotazioneGradi: rot, tx: 17, ty: -40 });
+    const indietro = pol.map((p: any) => G.versoImmagine(G.applica(M, p), M));
+    assert.ok(quasi(A.poligono.calcola(ct, indietro).valore, base.poligono, 1e-12));
+    assert.ok(quasi(A.perimetro.calcola(ct, indietro).valore, base.perimetro, 1e-12));
+    assert.ok(quasi(A.angolo.calcola(ct, indietro.slice(0, 3)).valore, base.angolo, 1e-11));
+    assert.ok(quasi(A.polilinea.calcola(ct, indietro).valore, base.polilinea, 1e-12));
+  }
+});

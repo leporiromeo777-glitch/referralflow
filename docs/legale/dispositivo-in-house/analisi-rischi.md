@@ -37,6 +37,13 @@ riconoscibile che entra in una decisione). Probabilità: 1 rara, 2 possibile,
 | R26 | Aggiornamento del software che cambia numeri già salvati | studi vecchi non più confrontabili | B | 2 | `scripts/misure-regressione.ts` ricalcola tutto prima del riavvio e blocca la distribuzione | A | `mac/aggiorna-server.sh` |
 | R27 | CAUTION accettata «a occhio» | uso di una situazione non validata | B | 2 | lista `caution-validati.json`, vuota di default; solo il piano di V&V la riempie | A | test gate «bloccata finché…»; e2e DERIVED |
 | R28 | Viewer con zoom/pan/rotazione che sposta i punti | misura dipendente dalla vista | C | 2 | matrice affine invertibile (`versoImmagine`); 504 combinazioni provate alla 12ª cifra | A | test «invarianza» |
+| R29 | Angolo calcolato sui pixel invece che sui millimetri (pixel non quadrati) | angolo sbagliato di decine di gradi | C | 2 | bracci convertiti in mm prima dell'`atan2`; prova con 0,5 × 0,25 mm/px: 45° in pixel = 26,6° veri | A | test «angolo» |
+| R30 | Poligono che si autointerseca | «area» senza significato | B | 2 | rifiuto `poligono_intrecciato` (controllo di intersezione fra tutti i lati non adiacenti) in A e in B | A | test «poligono»; doppio controllo; e2e |
+| R31 | Figura con vertici in regioni ecografiche diverse | scale mescolate | C | 2 | tutti i vertici nella stessa regione o `regioni_diverse`; ordine dei rifiuti identico in A e B | A | test; doppio controllo 3000 casi |
+| R32 | Perimetro dell'ellisse preso per esatto | errore fino allo 0,04 % (Ramanujan II) | A | 3 | il campo si chiama `perimetro_mm_approssimato`; l'area è esatta | A | test «ellisse» (cerchio esatto) |
+| R33 | Rettangolo/ellisse ruotati rispetto agli assi dell'immagine | l'operatore crede di misurare una figura inclinata | B | 2 | gli strumenti sono dichiarati allineati agli assi (destinazione d'uso); per figure inclinate c'è il poligono | B | destinazione d'uso |
+| R34 | Figura chiusa con troppo pochi punti o degenere (allineati) | area nulla presentata | B | 1 | `area_nulla`; minimo 3 vertici per poligono/perimetro | A | test «poligono» (allineati) |
+| R35 | Chiusura del poligono al vertice sbagliato (doppio clic che aggiunge un vertice doppio) | un lato in più di lunghezza zero | A | 3 | il doppio clic toglie il vertice ripetuto; i vertici coincidenti sono `punti_uguali` | A | codice; prova nel browser |
 
 ## Rischio complessivo
 

@@ -12,7 +12,11 @@ Versione 1.0 · 19.9.2026.
 | `prove-imaging-misura.test.ts` — Gate e invarianza (fase 7) | una prova per riga della tabella del Gate (VALIDATED, calibrazione assente, rivelatore, modalità, fotogramma, per-frame, valori nulli, CAUTION bloccata/ammessa, avvisi con testo, `valuta`); **invarianza**: 504 combinazioni di zoom × rotazione × DPR × pan e scala per asse → stessa misura alla 12ª cifra | `npm run test:app` | 39/39 |
 | `imaging/prova-doppio-controllo.py` | 1000 casi casuali: calcolo A (mse/*.js in Node) e B (numpy) danno lo stesso stato e lo stesso numero entro 1e-9 relativo | `~/.referralflow-imaging/bin/python imaging/prova-doppio-controllo.py` | 441 misure + 559 rifiuti coincidenti, 0 divergenze |
 | `scripts/prova-righello-e2e.py` sul server di prova (DB demo) | importazione con geometria e sha256; 100 px → 20,0 mm (eco) e 50,0 mm (TAC) **calcolati dal server**, VALIDATED con doppio controllo; CR (solo rivelatore) → NOT_MEASURABLE; TAC DERIVED → bloccata finché non nei CAUTION validati; rifiuti; provenienza completa; eventi creata/etichettata/sostituita/annullata; «rifai»; CSV con stato e versioni; segreteria → 403 | `python3 scripts/prova-righello-e2e.py <dicom> <cookie> <url>` | 22/22 + 403 |
-| `scripts/misure-regressione.ts` | tutte le misure salvate ricalcolate col motore attuale | `npm run test:misure-regressione` (e in `mac/aggiorna-server.sh`) | 0 differenze |
+| `scripts/misure-regressione.ts` | tutte le misure salvate ricalcolate col motore attuale, strumento per strumento | `npm run test:misure-regressione` (e in `mac/aggiorna-server.sh`) | 0 differenze |
+| fase 3 (20.9.2026) — `prove-imaging-misura.test.ts` | polilinea (anisotropia), angolo (90°, 45°, 0°, 180°, 26,6° con pixel non quadrati), rettangolo, ellisse (πab esatta, Ramanujan = 2πr sul cerchio), poligono (quadrato, antiorario, L concava, anisotropia, farfalla rifiutata, allineati rifiutati), perimetro, punto, formati (cm², °, coppia), Gate per ogni strumento, invarianza di area/angolo/perimetro | `npm run test:app` | 50/50 |
+| fase 3 — `imaging/prova-doppio-controllo.py` | 3000 casi casuali su tutti gli strumenti, A contro B, stati e valori | | 1204 misure + 1796 rifiuti coincidenti, 0 divergenze |
+| fase 3 — `scripts/prova-righello-e2e.py` | dal server: polilinea 100 mm, angolo 90°, rettangolo 12,50 cm² con perimetro, ellisse 6,28 cm² con semiassi, poligono 25,00 cm², perimetro 80 mm, punto (40; 60 mm); intrecciato, vertice fuori regione, punti insufficienti, algoritmo sconosciuto, CR → rifiuti; tipi/unità/extra nel dettaglio e nel CSV | | 37/37 |
+| fase 3 — browser | selettore degli 8 strumenti, poligono per vertici con anteprima e chiusura, ellisse trascinata, angolo a tre tocchi, punto a un tocco: tutti salvati col valore atteso | | ok |
 
 ## 2. Verifica del software (a ogni distribuzione)
 
@@ -41,11 +45,19 @@ immagini dello studio, nelle mani di chi lo userà.
    questo fascicolo con la data.
 
 **Criteri di accettazione** (proposta; li conferma il medico validatore)
-- scarto assoluto medio ≤ **1,0 mm**;
-- il 95% delle coppie entro **±2 mm o ±5%** del valore dell'apparecchio,
-  il maggiore dei due;
-- nessuno scarto > 4 mm senza spiegazione documentata (punto messo altrove,
-  fotogramma diverso).
+- distanze e polilinee: scarto assoluto medio ≤ **1,0 mm**; il 95% delle
+  coppie entro **±2 mm o ±5%** del valore dell'apparecchio, il maggiore dei
+  due; nessuno scarto > 4 mm senza spiegazione documentata;
+- aree (ellisse, poligono): il 95% delle coppie entro **±0,5 cm² o ±5%**, il
+  maggiore dei due (proposta: le aree dipendono molto dal tracciato a mano);
+- angoli: il 95% entro **±2°**;
+- rettangolo, perimetro, punto: **nessun uso clinico previsto** finché un
+  medico non ne chiede uno; restano strumenti di lavoro non validati.
+
+**Ogni strumento si valida da sé.** La validazione della distanza non copre
+l'area: per ogni strumento che si vuole usare sui pazienti servono le sue
+coppie di confronto (per le aree: area atriale, area valvolare planimetrica
+dall'SR dell'ecografo) e la sua pagina firmata.
 
 Se un criterio non regge: si analizzano le coppie fuori soglia; se la causa
 è del software si corregge e si rivalida; se è del gesto (fotogramma o punto

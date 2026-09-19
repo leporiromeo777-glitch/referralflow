@@ -49,15 +49,15 @@ type Api = {
   motivo: (stato: string) => string;
 };
 export type EsitoGate = {
-  stato: 'VALIDATED' | 'CAUTION' | 'NOT_MEASURABLE'; motivi: string[]; avvisi: string[]; testi: string[];
-  valore: number | null; unita: string | null; valore_mostrato: string | null; punti_fisici: Punto[] | null;
+  stato: 'VALIDATED' | 'CAUTION' | 'NOT_MEASURABLE'; motivi: string[]; avvisi: string[]; testi: string[]; ok: boolean;
+  valore: number | null; unita: string | null; valore_mostrato: string | null; punti_fisici: Punto[] | null; extra: Record<string, number> | null;
   dx_mm: number | null; dy_mm: number | null; regione: number | null;
   algoritmo: string | null; versione_algoritmo: string | null; versione_gate: string;
 };
 type ContestoGate = { cal: Calibrazione | null; geometria?: Geometria | null; frame?: number; frameTotali?: number; punti?: Punto[]; algoritmo?: string; cautionValidati?: string[]; modalita?: string | null };
 type Mse = {
   geometria: { VERSIONE: string; versoImmagine: (p: Punto, M: number[][]) => Punto | null; matriceViewer: (v: Record<string, number>) => number[][]; mmPerPixel: (cal: Calibrazione | null, p: Punto) => { stato: string; sx?: number; sy?: number } };
-  misure: { VERSIONE: string; ALGORITMI: Record<string, { nome: string; versione: string; unita: string; equazione: string; calcola: (cal: Calibrazione | null, punti: Punto[]) => EsitoMisura }>; formattaMm: (mm: number) => string; motivo: (stato: string) => string };
+  misure: { VERSIONE: string; ALGORITMI: Record<string, { nome: string; versione: string; unita: string; equazione: string; punti: [number, number]; gesto: string; calcola: (cal: Calibrazione | null, punti: Punto[]) => EsitoMisura }>; formattaMm: (mm: number) => string; formattaValore: (v: number | null, unita: string, extra?: unknown) => string; motivo: (stato: string) => string };
   validazione: { VERSIONE: string; statoImmagine: (ctx: ContestoGate) => Pick<EsitoGate, 'stato' | 'motivi' | 'avvisi' | 'testi'>; valuta: (ctx: ContestoGate) => EsitoGate; testo: (codice: string) => string };
 };
 
@@ -89,7 +89,7 @@ export function versioneSoftware(): string {
 // Doppio controllo: la distanza ricalcolata da un'implementazione separata
 // (imaging/verifica-indipendente.py, numpy). Torna il valore B e lo stato.
 const PY = process.env.IMAGING_PYTHON ?? path.join(os.homedir(), '.referralflow-imaging', 'bin', 'python');
-export function verificaIndipendente(cal: Calibrazione | null, punti: Punto[]): Promise<{ stato: string; mm?: number }> {
+export function verificaIndipendente(cal: Calibrazione | null, punti: Punto[], algoritmo = 'distanza'): Promise<{ stato: string; mm?: number; y_mm?: number }> {
   return new Promise((risolvi) => {
     const figlio = execFile(PY, [path.join(process.cwd(), 'imaging', 'verifica-indipendente.py')], { timeout: 15_000 },
       (errore, stdout) => {
@@ -98,7 +98,7 @@ export function verificaIndipendente(cal: Calibrazione | null, punti: Punto[]): 
           risolvi(j && typeof j.stato === 'string' ? j : { stato: 'verificatore_non_disponibile' });
         } catch { risolvi({ stato: errore ? 'verificatore_non_disponibile' : 'uscita_illeggibile' }); }
       });
-    figlio.stdin?.end(JSON.stringify({ calibrazione: cal, punti }));
+    figlio.stdin?.end(JSON.stringify({ calibrazione: cal, punti, algoritmo }));
   });
 }
 // Tolleranza tecnica del doppio controllo: un miliardesimo relativo (o

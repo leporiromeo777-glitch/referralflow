@@ -18,7 +18,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
   const [m] = await query<Record<string, unknown>>(
     `select m.id, m.esame_id, m.immagine_id, m.frame, split_part(u.email, '@', 1) as chi, m.created_at::text as quando,
-            m.tipo, m.punti, m.punti_fisici, m.valore, m.valore_mostrato, m.unita, m.etichetta,
+            m.tipo, m.punti, m.punti_fisici, m.valore, m.valore_mostrato, m.unita, m.etichetta, m.extra,
             m.algoritmo, m.versione_calcolo as versione_algoritmo, m.versione_gate, m.versione_software,
             m.stato_validazione, m.avvisi, m.verifica_indipendente, m.calibrazione, m.geometria,
             m.riferimento_misura_id, r.nome as riferimento_nome, r.gruppo as riferimento_gruppo, r.valore as riferimento_valore, r.unita as riferimento_unita,

@@ -36,6 +36,8 @@
     punti_uguali: 'I due punti coincidono.',
     punti_non_validi: 'Punti non validi.',
     calcolo_non_finito: 'Il calcolo non ha dato un numero finito.',
+    area_nulla: 'La figura non ha area: due lati coincidono o i punti sono allineati.',
+    poligono_intrecciato: 'Il contorno si incrocia: un poligono intrecciato non ha un’area.',
     algoritmo_sconosciuto: 'Strumento di misura non riconosciuto.',
     verifica_indipendente_fallita: 'Il secondo calcolo indipendente non coincide con il primo: misura non validata.',
     caution_non_validata: 'Situazione con limitazioni non ancora validata nel piano di V&V.',
@@ -131,8 +133,10 @@
     var ok = fine.stato !== 'NOT_MEASURABLE' && esito && esito.stato === 'ok';
     return {
       stato: fine.stato, motivi: fine.motivi, avvisi: fine.avvisi, testi: fine.testi,
-      valore: ok ? esito.mm : null, unita: alg ? alg.unita : null,
-      valore_mostrato: ok ? MI.formattaMm(esito.mm) : null,
+      ok: ok,
+      valore: ok ? esito.valore : null, unita: alg ? alg.unita : null,
+      valore_mostrato: ok ? MI.formattaValore(esito.valore, alg.unita, esito.extra) : null,
+      extra: ok ? esito.extra : null,
       punti_fisici: ok ? esito.punti_fisici : null,
       dx_mm: ok ? esito.dx_mm : null, dy_mm: ok ? esito.dy_mm : null, regione: ok ? esito.regione : null,
       algoritmo: alg ? alg.nome : null, versione_algoritmo: alg ? alg.versione : null, versione_gate: VERSIONE

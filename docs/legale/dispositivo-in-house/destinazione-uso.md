@@ -1,6 +1,6 @@
 # Destinazione d'uso — Righello ReferralFlow
 
-Versione 1.0 · 19 settembre 2026 · bozza per il titolare dello studio.
+Versione 1.1 · 20 settembre 2026 · bozza per il titolare dello studio. **La 1.1 estende la 1.0** (sola distanza) agli strumenti della fase 3; ogni strumento nuovo entra in uso clinico solo dopo la sua validazione (piano §3).
 
 ## Nome e identificazione
 
@@ -15,17 +15,20 @@ Versione 1.0 · 19 settembre 2026 · bozza per il titolare dello studio.
 
 ## Destinazione d'uso, in una frase
 
-> Il Righello misura la **distanza lineare** fra due punti scelti dall'operatore
-> su un'immagine diagnostica bidimensionale in formato DICOM, applicando la
-> calibrazione (millimetri per pixel) scritta nel file dall'apparecchio che ha
-> acquisito l'immagine. Serve al medico come **supporto alla valutazione** di
-> un esame già acquisito, nel contesto della cartella del paziente.
+> Il Righello misura, su un'immagine diagnostica bidimensionale in formato
+> DICOM e con la calibrazione (millimetri per pixel) scritta nel file
+> dall'apparecchio che l'ha acquisita, **grandezze geometriche nel piano
+> dell'immagine** scelte dall'operatore: distanza fra due punti, lunghezza di
+> una polilinea, angolo fra due bracci, area e perimetro di un rettangolo, di
+> un'ellisse e di un poligono tracciato a mano, coordinate di un punto. Serve
+> al medico come **supporto alla valutazione** di un esame già acquisito, nel
+> contesto della cartella del paziente.
 
 ## Uso previsto
 
 | Voce | Contenuto |
 |---|---|
-| Funzione | distanza fra due punti, in millimetri, con un decimale |
+| Funzione | **distanza** (mm, un decimale); **polilinea** (mm); **angolo** (gradi, un decimale, calcolato sui millimetri); **rettangolo** ed **ellisse** con lati/assi lungo gli assi dell'immagine (area in cm² con due decimali, perimetro in mm; per l'ellisse il perimetro è dichiarato approssimato, formula di Ramanujan); **poligono** chiuso tracciato per vertici (area cm², perimetro mm; un contorno che si incrocia si rifiuta); **perimetro** di un contorno chiuso (mm); **punto** (coordinate in mm) |
 | Immagini | DICOM ricevuti dagli apparecchi dello studio o importati da supporto; ecografie con `SequenceOfUltrasoundRegions`, TAC/RM con `PixelSpacing` |
 | Utilizzatori | medici e aiuto medici dello studio (ruoli medico, aiuto medico, amministrazione); la segreteria vede le immagini ma non misura |
 | Pazienti | i pazienti dello studio, adulti, in ambito cardiologico ambulatoriale |
@@ -39,7 +42,9 @@ Versione 1.0 · 19 settembre 2026 · bozza per il titolare dello studio.
   Doppler (l'asse X è tempo o velocità), radiografie (spaziatura del
   rivelatore, non del paziente), fotogrammi esportati in JPEG/PNG. In tutti
   questi casi il software rifiuta la misura e spiega perché.
-- Non calcola aree, volumi, angoli, frazioni, velocità, gradienti.
+- Non calcola volumi, frazioni, velocità, gradienti; non traccia contorni
+  da solo; le figure regolari (rettangolo, ellisse) sono allineate agli assi
+  dell'immagine, non ruotabili.
 - Non confronta esami, non segnala «cosa è cambiato», non propone diagnosi.
 - Non sostituisce le misure fatte dall'ecografista sulla console durante
   l'esame, che restano la misura di riferimento.
@@ -64,6 +69,9 @@ generali di sicurezza e prestazione (MDR allegato I), coperti in
 3. **Rifiuto quando non si può**: senza calibrazione, fuori dalla regione
    calibrata, fra due regioni diverse, su radiografie → nessun numero.
 4. **Tracciabilità**: chi ha misurato, quando, su quale immagine e
-   fotogramma, con quali punti e quale calibrazione; annullamenti registrati.
+   fotogramma, con quale strumento, quali punti e quale calibrazione;
+   annullamenti e sostituzioni registrati.
 5. **Stesso numero ovunque**: il browser mostra ciò che il server ricalcola e
-   salva, con lo stesso codice.
+   salva, con lo stesso codice, e un secondo calcolo indipendente coincide.
+6. **Tutti i vertici nella stessa calibrazione**: per le ecografie ogni
+   punto di una figura sta nella stessa regione, o la misura non esiste.

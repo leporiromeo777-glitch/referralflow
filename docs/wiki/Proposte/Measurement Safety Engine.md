@@ -1,7 +1,7 @@
 ---
 tipo: proposta
 aggiornata: 2026-09-19
-stato: fasi 1, 5, 7, 8 fatte il 19.9.2026 sera (Decisioni/Registro); 3, 4, 6-Enhanced, 9 aperte
+stato: fasi 1, 5, 7, 8 fatte il 19.9.2026, fase 3 il 20.9.2026 (Decisioni/Registro); 4, 6-Enhanced, 9 aperte
 ---
 # Measurement Safety Engine — analisi, architettura, piano
 
@@ -171,7 +171,7 @@ Per ciascuna: file, architettura, prove, failure mode, accettazione. Il codice s
 ### Fase 2 — Distanza — **fatta il 19.9.2026** (v163)
 Resta da spostare `misura.js` in `mse/misure.js` senza cambiare il calcolo (la versione dell'algoritmo resta 1.0 se il numero non cambia: lo prova il banco di regressione).
 
-### Fase 3 — Polilinea, angolo, ROI rettangolare/ellittica, poligono, perimetro, punto
+### Fase 3 — Polilinea, angolo, ROI rettangolare/ellittica, poligono, perimetro, punto — **fatta il 20.9.2026** (fascicolo riaperto: destinazione d'uso 1.1, rischi R29–R35, validazione per strumento)
 - **Crea** `mse/misure.js` (una funzione per strumento, tutte su coordinate in mm); UI: strumenti nel menu «Misura».
 - **Prove**: valori noti (quadrato 10×10 mm = 100 mm²; ellisse πab; angolo 90°; poligono concavo; poligono autointersecante → rifiuto).
 - **Failure mode**: area su regioni US diverse; poligono aperto; angolo con vertici coincidenti; ellisse fuori immagine.

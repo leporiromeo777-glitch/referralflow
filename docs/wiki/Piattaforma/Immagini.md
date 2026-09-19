@@ -1,6 +1,6 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-09-19
+aggiornata: 2026-09-20
 ---
 # Immagini diagnostiche
 
@@ -37,7 +37,7 @@ Il referto nasce dal dettato come sempre: **la misura non vi entra da sola**, la
 
 ## Il righello (19.9.2026)
 
-**Come si usa.** Nell'esame aperto, «Misura» accanto alle frecce; poi si trascina fra due punti dell'immagine. Il numero compare mentre si trascina; al rilascio si dà un nome (IVSd, aorta…), eventualmente si sceglie la misura dell'apparecchio con cui confrontarla, e si salva. Le misure salvate restano disegnate sul fotogramma e in elenco sotto l'immagine, con chi e quando. Una misura sbagliata **si annulla, non si cancella**: resta barrata, con chi l'ha annullata.
+**Come si usa.** Nell'esame aperto, «Misura» accanto alle frecce, poi si sceglie lo strumento: **Distanza**, **Polilinea**, **Angolo**, **Rettangolo**, **Ellisse**, **Poligono**, **Perimetro**, **Punto** (dal 20.9.2026, fase 3). Distanza, rettangolo ed ellisse si **trascinano**; il punto è un tocco; polilinea, poligono, perimetro e angolo si fanno **un tocco per vertice** (l'angolo si chiude da solo al terzo; gli altri con doppio clic, Invio o «Chiudi»; Esc annulla). Il valore compare mentre si disegna; alla fine si dà un nome (IVSd, area atriale…), eventualmente si sceglie la misura dell'apparecchio con cui confrontarla, e si salva. Le aree si mostrano in cm², gli angoli in gradi, il resto in mm; un poligono che si incrocia non ha un'area e si rifiuta; rettangolo ed ellisse sono allineati agli assi dell'immagine. Le misure salvate restano disegnate sul fotogramma e in elenco sotto l'immagine, con chi e quando. Una misura sbagliata **si annulla, non si cancella**: resta barrata, con chi l'ha annullata.
 
 **Chi misura**: medico, aiuto medico, amministrazione. La segreteria vede e non misura; il tecnico non vede.
 
@@ -51,7 +51,7 @@ Il referto nasce dal dettato come sempre: **la misura non vi entra da sola**, la
 
 **Validazione.** Prima dell'uso sui pazienti un medico ripete almeno 30 misure su almeno 10 ecocardiogrammi e le lega a quelle dell'apparecchio (menu «confronta con…»); il CSV («validazione (CSV)» nella scheda) va nel fascicolo. Criteri e procedura in `docs/legale/dispositivo-in-house/piano-validazione.md`. Fino ad allora il righello è **in validazione**.
 
-**Quello che il righello non fa, e non va aggiunto senza riaprire il fascicolo**: aree, angoli, volumi, Doppler, confronti fra esami.
+**Quello che il righello non fa, e non va aggiunto senza riaprire il fascicolo**: volumi, Doppler, contorni automatici, confronti fra esami. **Ogni strumento si valida da sé** (`docs/legale/dispositivo-in-house/piano-validazione.md`): oggi sono tutti in validazione.
 
 ## Chi la vede
 
@@ -87,4 +87,4 @@ Quello che la ricezione **non** fa ancora: **MPPS** (l'apparecchio che dichiara 
 
 ## Le prove
 
-`src/lib/prove-imaging.test.ts` — 8 casi sul raggruppamento, sui doppioni, sull'abbinamento severo e sulle finestre. `src/lib/prove-imaging-misura.test.ts` — 39 casi sul righello, eseguiti sui file `mse/*.js` veri: calcolo, regioni sovrapposte, Gate riga per riga, invarianza a zoom/rotazione/DPR/pan (504 combinazioni). `imaging/prova-calibrazione.py` (9) e `imaging/prova-geometria.py` (36) — il lettore su DICOM sintetici. `imaging/prova-doppio-controllo.py` — 1000 casi casuali, calcolo A e B coincidenti. `scripts/prova-righello-e2e.py` — la sera del 19.9.2026 sul database demo: 22/22 (geometria e sha256 in tabella, misure VALIDATED col doppio controllo, CR e TAC derivata bloccate col motivo, provenienza, eventi, rifai, CSV, segreteria respinta). Tutto in [[Misure/Banchi]]. Il lettore è stato passato su **153 file DICOM sintetici** generati da `imaging-server/scripts/gen_synthetic.py`: 57 immagini disegnate su 57, due oggetti non grafici riconosciuti come tali, e l'unico errore è il file deliberatamente troncato della cartella `90_anomalie` — cioè esattamente quello che doveva fallire.
+`src/lib/prove-imaging.test.ts` — 8 casi sul raggruppamento, sui doppioni, sull'abbinamento severo e sulle finestre. `src/lib/prove-imaging-misura.test.ts` — 50 casi sul righello, eseguiti sui file `mse/*.js` veri: calcolo, regioni sovrapposte, Gate riga per riga, invarianza a zoom/rotazione/DPR/pan (504 combinazioni), e dal 20.9 gli otto strumenti con valori noti. `imaging/prova-calibrazione.py` (9) e `imaging/prova-geometria.py` (36) — il lettore su DICOM sintetici. `imaging/prova-doppio-controllo.py` — 3000 casi casuali su tutti gli strumenti, calcolo A e B coincidenti. `scripts/prova-righello-e2e.py` — sul database demo: 37/37 il 20.9.2026 (22 della distanza, 15 degli altri strumenti) (geometria e sha256 in tabella, misure VALIDATED col doppio controllo, CR e TAC derivata bloccate col motivo, provenienza, eventi, rifai, CSV, segreteria respinta). Tutto in [[Misure/Banchi]]. Il lettore è stato passato su **153 file DICOM sintetici** generati da `imaging-server/scripts/gen_synthetic.py`: 57 immagini disegnate su 57, due oggetti non grafici riconosciuti come tali, e l'unico errore è il file deliberatamente troncato della cartella `90_anomalie` — cioè esattamente quello che doveva fallire.

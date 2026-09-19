@@ -6,9 +6,11 @@ della notifica. Non contiene dati di pazienti.
 
 ## Di che cosa parla questo fascicolo
 
-Della sola funzione **«Misura»** della pagina Immagini di ReferralFlow: la
-distanza fra due punti su un'immagine DICOM, calcolata con la calibrazione
-scritta nel file dall'apparecchio. Il resto della pagina (ricezione, archivio,
+Della sola funzione **«Misura»** della pagina Immagini di ReferralFlow: le
+grandezze geometriche nel piano di un'immagine DICOM (distanza, polilinea,
+angolo, rettangolo, ellisse, poligono, perimetro, punto — dal 20.9.2026,
+destinazione d'uso 1.1), calcolate con la calibrazione scritta nel file
+dall'apparecchio. Il resto della pagina (ricezione, archivio,
 consultazione, misure dell'apparecchio lette dal referto strutturato) non
 produce informazione clinica e resta fuori dal perimetro, come scritto in
 [destinazione-uso-immagini.md](../destinazione-uso-immagini.md).
@@ -66,7 +68,7 @@ paziente.
 ## Che cosa NON copre
 
 - La vendita o la cessione a un altro studio: lì serve la certificazione piena.
-- Aree, volumi, angoli, frazione di eiezione, Doppler: non esistono nel
-  dispositivo e non si aggiungono senza riaprire il fascicolo.
+- Volumi, frazione di eiezione, Doppler, contorni automatici: non esistono
+  nel dispositivo e non si aggiungono senza riaprire il fascicolo.
 - Radiografie (spaziatura del rivelatore) e immagini senza calibrazione: il
   righello si rifiuta di misurarle.

@@ -85,11 +85,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  // Nuova misura.
+  // Nuova misura: l'algoritmo è uno di quelli dichiarati dal motore, e i
+  // punti sono quanti quell'algoritmo vuole (il motore lo dice, non la rotta).
   const immagineId = String(corpo.immagine_id ?? '');
   if (!isUuid(immagineId)) return NextResponse.json({ errore: 'immagine_non_valida' }, { status: 400 });
+  const algoritmo = typeof corpo.algoritmo === 'string' ? corpo.algoritmo : 'distanza';
+  const alg = mse().misure.ALGORITMI[algoritmo];
+  if (!alg) return NextResponse.json({ errore: 'algoritmo_sconosciuto' }, { status: 400 });
   const punti = Array.isArray(corpo.punti) ? corpo.punti : [];
-  if (punti.length !== 2 || !puntoValido(punti[0]) || !puntoValido(punti[1])) {
+  if (punti.length < alg.punti[0] || punti.length > alg.punti[1] || !punti.every((p: unknown) => puntoValido(p))) {
     return NextResponse.json({ errore: 'punti_non_validi' }, { status: 400 });
   }
   const frame = Number.isInteger(corpo.frame) && corpo.frame >= 0 ? Number(corpo.frame) : 0;
@@ -108,21 +112,23 @@ export async function POST(req: NextRequest) {
   if (!img.immagine) return NextResponse.json({ errore: 'non_immagine' }, { status: 415 });
 
   const M = mse();
-  const p1: Punto = { x: Number(punti[0].x), y: Number(punti[0].y) };
-  const p2: Punto = { x: Number(punti[1].x), y: Number(punti[1].y) };
+  const pts: Punto[] = punti.map((p: Punto) => ({ x: Number(p.x), y: Number(p.y) }));
   // Il Validation Gate, rifatto qui: lo stato lo decide il server.
   const esito = M.validazione.valuta({
     cal: img.calibrazione, geometria: img.geometria, frame, frameTotali: Math.max(1, img.frame),
-    punti: [p1, p2], algoritmo: 'distanza', cautionValidati: cautionValidati(),
+    punti: pts, algoritmo, cautionValidati: cautionValidati(),
   });
-  if (esito.stato === 'NOT_MEASURABLE' || esito.valore === null) {
+  if (esito.stato === 'NOT_MEASURABLE' || !esito.ok) {
     return NextResponse.json({ errore: esito.motivi[0] ?? 'non_misurabile', stato: esito.stato, motivi: esito.motivi, avvisi: esito.avvisi, testi: esito.testi, motivo: esito.testi[0] ?? '' }, { status: 422 });
   }
-  // Doppio controllo: un'implementazione separata deve dare lo stesso numero.
-  const b = await verificaIndipendente(img.calibrazione, [p1, p2]);
-  const tolleranza = tolleranzaVerifica(esito.valore);
-  const scarto = b.stato === 'ok' && typeof b.mm === 'number' ? Math.abs(b.mm - esito.valore) : null;
-  const verifica = { metodo: 'imaging/verifica-indipendente.py (numpy.hypot)', valore_a: esito.valore, valore_b: b.mm ?? null, stato_b: b.stato, scarto, tolleranza, esito: scarto !== null && scarto <= tolleranza ? 'ok' : 'fallita' };
+  // Doppio controllo: un'implementazione separata deve dare lo stesso numero
+  // (per il punto: le due coordinate).
+  const b = await verificaIndipendente(img.calibrazione, pts, algoritmo);
+  const valoreA = algoritmo === 'punto' ? Number(esito.extra?.x_mm) : (esito.valore as number);
+  const tolleranza = tolleranzaVerifica(valoreA);
+  let scarto: number | null = b.stato === 'ok' && typeof b.mm === 'number' ? Math.abs(b.mm - valoreA) : null;
+  if (algoritmo === 'punto' && scarto !== null && typeof b.y_mm === 'number') scarto = Math.max(scarto, Math.abs(b.y_mm - Number(esito.extra?.y_mm)));
+  const verifica = { metodo: 'imaging/verifica-indipendente.py (numpy)', algoritmo, valore_a: valoreA, valore_b: b.mm ?? null, stato_b: b.stato, scarto, tolleranza, esito: scarto !== null && scarto <= tolleranza ? 'ok' : 'fallita' };
   if (verifica.esito !== 'ok') {
     console.error(`[imaging] verifica indipendente fallita: stato_b=${b.stato} scarto=${scarto} tolleranza=${tolleranza} immagine=${img.id}`);
     return NextResponse.json({ errore: 'verifica_indipendente_fallita', stato: 'NOT_MEASURABLE', motivi: ['verifica_indipendente_fallita'], testi: [M.validazione.testo('verifica_indipendente_fallita')], motivo: M.validazione.testo('verifica_indipendente_fallita'), verifica }, { status: 422 });
@@ -140,13 +146,14 @@ export async function POST(req: NextRequest) {
     }
     const [nuova] = await q<{ id: string; quando: string }>(
       `insert into imaging_misure_manuali (studio_id, esame_id, immagine_id, frame, user_id, tipo, punti, valore, unita, calibrazione, versione_calcolo, etichetta, riferimento_misura_id,
-                                          punti_fisici, valore_mostrato, algoritmo, versione_gate, versione_software, stato_validazione, avvisi, verifica_indipendente, geometria, sostituisce_id)
-       values ($1,$2,$3,$4,$5,'distanza',$6,$7,$8,$9,$10,nullif($11,''),$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) returning id, created_at::text as quando`,
-      [sid, img.esame_id, img.id, frame, session.id, JSON.stringify([p1, p2]), esito.valore, esito.unita, JSON.stringify(img.calibrazione),
+                                          punti_fisici, valore_mostrato, algoritmo, versione_gate, versione_software, stato_validazione, avvisi, verifica_indipendente, geometria, sostituisce_id, extra)
+       values ($1,$2,$3,$4,$5,$23,$6,$7,$8,$9,$10,nullif($11,''),$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$24) returning id, created_at::text as quando`,
+      [sid, img.esame_id, img.id, frame, session.id, JSON.stringify(pts), esito.valore, esito.unita, JSON.stringify(img.calibrazione),
        esito.versione_algoritmo, etichetta, rif || null,
        JSON.stringify(esito.punti_fisici), esito.valore_mostrato, esito.algoritmo, esito.versione_gate, versioneSoftware(), esito.stato,
-       JSON.stringify(esito.avvisi), JSON.stringify(verifica), img.geometria ? JSON.stringify(img.geometria) : null, sostituisce || null]);
-    await evento(q, nuova.id, 'creata', null, { valore: esito.valore, valore_mostrato: esito.valore_mostrato, stato: esito.stato, avvisi: esito.avvisi, etichetta: etichetta || null, punti: [p1, p2], frame, sha256_file: img.sha256, sostituisce_id: sostituisce || null });
+       JSON.stringify(esito.avvisi), JSON.stringify(verifica), img.geometria ? JSON.stringify(img.geometria) : null, sostituisce || null,
+       algoritmo, esito.extra ? JSON.stringify(esito.extra) : null]);
+    await evento(q, nuova.id, 'creata', null, { tipo: algoritmo, valore: esito.valore, unita: esito.unita, valore_mostrato: esito.valore_mostrato, extra: esito.extra, stato: esito.stato, avvisi: esito.avvisi, etichetta: etichetta || null, punti: pts, frame, sha256_file: img.sha256, sostituisce_id: sostituisce || null });
     if (sostituisce) {
       await q(`update imaging_misure_manuali set annullata_at = now(), annullata_da = $3 where id = $1 and studio_id = $2`, [sostituisce, sid, session.id]);
       await evento(q, sostituisce, 'sostituita', { annullata_at: null }, { sostituita_da: nuova.id });
@@ -158,7 +165,7 @@ export async function POST(req: NextRequest) {
     await query(`insert into imaging_accessi (studio_id, esame_id, user_id, azione) values ($1,$2,$3,'misurato')`, [sid, img.esame_id, session.id]);
   } catch (e) { console.error(`[imaging] registro accessi: ${(e as Error)?.message ?? e}`); }
 
-  return NextResponse.json({ ok: true, id: riga.id, valore: esito.valore, unita: esito.unita, testo: esito.valore_mostrato, stato: esito.stato, avvisi: esito.avvisi, testi: esito.testi, verifica, quando: riga.quando }, { status: 201 });
+  return NextResponse.json({ ok: true, id: riga.id, tipo: algoritmo, valore: esito.valore, unita: esito.unita, extra: esito.extra, testo: esito.valore_mostrato, stato: esito.stato, avvisi: esito.avvisi, testi: esito.testi, verifica, quando: riga.quando }, { status: 201 });
 }
 
 // La validazione, in numeri: tutte le misure manuali dello studio con la
@@ -171,12 +178,12 @@ export async function GET(req: NextRequest) {
 
   const righe = await query<{
     id: string; quando: string; chi: string | null; esame_id: string; data_esame: string | null; modalita: string;
-    immagine_id: string; frame: number; etichetta: string | null; valore: number; annullata: boolean;
+    immagine_id: string; frame: number; etichetta: string | null; valore: number | null; annullata: boolean; tipo: string; unita: string;
     stato_validazione: string | null; versione_calcolo: string; versione_software: string | null;
     rif_nome: string | null; rif_gruppo: string | null; rif_valore: number | null; rif_unita: string | null;
   }>(
     `select m.id, m.created_at::text as quando, split_part(u.email, '@', 1) as chi, m.esame_id, e.data_esame::text, e.modalita,
-            m.immagine_id, m.frame, m.etichetta, m.valore, (m.annullata_at is not null) as annullata,
+            m.immagine_id, m.frame, m.etichetta, m.valore, (m.annullata_at is not null) as annullata, m.tipo, m.unita,
             m.stato_validazione, m.versione_calcolo, m.versione_software,
             r.nome as rif_nome, r.gruppo as rif_gruppo, r.valore as rif_valore, r.unita as rif_unita
        from imaging_misure_manuali m
@@ -186,10 +193,18 @@ export async function GET(req: NextRequest) {
       where m.studio_id = $1 order by m.created_at`, [session.studioId]);
 
   // Lo scarto si calcola solo quando le unità combaciano (mm/mm, o cm→mm).
-  const inMm = (v: number | null, u: string | null) => v === null ? null : (u || '').toLowerCase() === 'cm' ? v * 10 : (u || 'mm').toLowerCase() === 'mm' ? v : null;
+  // Lo scarto si calcola nell'unità della misura: mm↔mm/cm, mm²↔mm²/cm², gradi↔gradi.
+  const nellaUnita = (v: number | null, u: string | null, unita: string): number | null => {
+    if (v === null) return null;
+    const uu = (u || '').toLowerCase().replace('2', '²');
+    if (unita === 'mm') return uu === 'cm' ? v * 10 : (uu === 'mm' || uu === '') ? v : null;
+    if (unita === 'mm²') return uu === 'cm²' ? v * 100 : uu === 'mm²' ? v : null;
+    if (unita === '°') return (uu === '°' || uu === 'deg' || uu === 'gradi' || uu === '') ? v : null;
+    return null;
+  };
   const dati = righe.map((r) => {
-    const rif = inMm(r.rif_valore, r.rif_unita);
-    return { ...r, rif_mm: rif, scarto_mm: rif === null ? null : r.valore - rif };
+    const rif = nellaUnita(r.rif_valore, r.rif_unita, r.unita);
+    return { ...r, rif_mm: rif, scarto_mm: rif === null || r.valore === null ? null : r.valore - rif };
   });
   const valide = dati.filter((d) => !d.annullata && d.scarto_mm !== null);
   const scarti = valide.map((d) => Math.abs(d.scarto_mm as number));
@@ -203,9 +218,9 @@ export async function GET(req: NextRequest) {
   if (req.nextUrl.searchParams.get('formato') === 'csv') {
     const n = (v: number | null) => v === null ? '' : String(Math.round(v * 100) / 100).replace('.', ',');
     const c = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const testa = ['data_misura', 'chi', 'esame', 'data_esame', 'modalita', 'immagine', 'fotogramma', 'etichetta', 'valore_mm', 'annullata', 'stato', 'versione_algoritmo', 'versione_software', 'riferimento', 'riferimento_mm', 'scarto_mm'];
+    const testa = ['data_misura', 'chi', 'esame', 'data_esame', 'modalita', 'immagine', 'fotogramma', 'strumento', 'etichetta', 'valore', 'unita', 'annullata', 'stato', 'versione_algoritmo', 'versione_software', 'riferimento', 'riferimento_nella_unita', 'scarto'];
     const corpo = dati.map((d) => [c(d.quando.slice(0, 19)), c(d.chi), c(d.esame_id), c(d.data_esame), c(d.modalita), c(d.immagine_id), d.frame + 1,
-      c(d.etichetta), n(d.valore), d.annullata ? 'sì' : 'no', c(d.stato_validazione ?? ''), c(d.versione_calcolo), c(d.versione_software ?? ''),
+      c(d.tipo), c(d.etichetta), n(d.valore), c(d.unita), d.annullata ? 'sì' : 'no', c(d.stato_validazione ?? ''), c(d.versione_calcolo), c(d.versione_software ?? ''),
       c(d.rif_nome ? `${d.rif_gruppo ? d.rif_gruppo + ' · ' : ''}${d.rif_nome}` : ''), n(d.rif_mm), n(d.scarto_mm)].join(';'));
     return new NextResponse('﻿' + [testa.join(';'), ...corpo].join('\r\n'), {
       headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="validazione-righello.csv"', 'Cache-Control': 'no-store' },

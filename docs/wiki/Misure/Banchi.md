@@ -155,3 +155,13 @@ Da ricordare più del risultato: **il primo punteggio assolveva tutti e tre**, p
 | browser (server di prova) | indicatore ✓/✕ con motivo, «Dettagli calibrazione», anteprima 20,0 mm dal Gate, modale con stato, righe con stato/rifatta/annullata, «Storia» con doppio controllo ed eventi | ok |
 | `scripts/misure-regressione.ts` | misure salvate ricalcolate col motore attuale | 0 differenze |
 
+
+## MSE fase 3 — strumenti oltre la distanza — 20.9.2026
+
+| Banco | Che cosa | Esito |
+|---|---|---|
+| `src/lib/prove-imaging-misura.test.ts` | polilinea, angolo (anche con pixel non quadrati), rettangolo, ellisse, poligono (concavo, antiorario, intrecciato rifiutato, allineati rifiutati), perimetro, punto, formati, Gate per strumento, invarianza di area/angolo/perimetro | 50/50 (11 nuovi) |
+| `imaging/prova-doppio-controllo.py` | 3000 casi casuali su tutti gli strumenti, A contro B | 1204 misure + 1796 rifiuti coincidenti, 0 divergenze |
+| `scripts/prova-righello-e2e.py` (DB demo) | 7 strumenti dal server con valori noti e doppio controllo, 5 rifiuti, dettaglio/CSV con tipo e unità | 37/37 |
+| browser (server di prova) | selettore, poligono per vertici (anteprima 2,00 cm² a tre vertici, 4,00 cm² salvati), ellisse 6,28 cm² con semiassi, angolo 90,0°, punto (50,0; 30,0 mm) | ok |
+| `scripts/misure-regressione.ts` (DB demo, 9 misure di 6 strumenti) | ricalcolo col motore attuale | 0 differenze |

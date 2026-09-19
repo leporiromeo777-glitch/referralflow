@@ -158,3 +158,12 @@ Dalla specifica «fail closed» del pomeriggio ([[Proposte/Measurement Safety En
 **Non fatto, apposta**: fasi 3 (aree, angoli, ROI), 4 (HU), 6-Enhanced per-frame, 9 (MPR/3D): riaprono destinazione d'uso e validazione. Si decidono una per una quando un medico le chiede.
 
 **Numeri**: geometria 36/36, node 39/39, doppio controllo 1000 casi senza divergenze, e2e 22/22, app 212+ prove. Vedi [[Piattaforma/Immagini]] e `docs/legale/dispositivo-in-house/`.
+
+## 20.9.2026 — MSE fase 3: gli strumenti oltre la distanza
+Su richiesta esplicita dello studio si sono aggiunti **polilinea, angolo, rettangolo, ellisse, poligono, perimetro e punto**, tutti nel motore `mse/misure.js` (algoritmo = nome, versione, unità, equazione, gesto, numero di punti) e tutti con doppio controllo in numpy, Gate, provenienza ed eventi come la distanza. La distanza resta all'algoritmo 1.0: il banco di regressione lo dimostra.
+
+**Scelte**: tutto sui millimetri prima di calcolare (l'angolo sui pixel con pixel non quadrati sarebbe sbagliato di decine di gradi: provato); tutti i vertici nella stessa regione ecografica o niente, con lo stesso ordine dei rifiuti nelle due implementazioni; il poligono che si incrocia non ha area e si rifiuta; rettangolo ed ellisse allineati agli assi dell'immagine (per le figure inclinate c'è il poligono); il perimetro dell'ellisse è dichiarato approssimato; le aree si mostrano in cm² con due decimali, come nei referti; il punto non ha un «valore» e `valore` è diventato nullo (migrazione 071, con `extra` per perimetri, semiassi, bracci, coordinate).
+
+**Conseguenza sul fascicolo**: destinazione d'uso 1.1, otto rischi in più (R29–R35), criteri di validazione per strumento (aree ±0,5 cm² o ±5 %, angoli ±2°, proposte). **Ogni strumento si valida da sé**: la validazione della distanza non copre l'area. Rettangolo, perimetro e punto restano strumenti di lavoro senza uso clinico previsto finché un medico non lo chiede.
+
+**Numeri**: node 50/50, doppio controllo 3000 casi senza divergenze, e2e 37/37, browser ok per poligono a vertici, ellisse, angolo e punto. Vedi [[Piattaforma/Immagini]].

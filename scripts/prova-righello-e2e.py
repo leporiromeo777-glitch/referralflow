@@ -97,5 +97,41 @@ csv = curl(f"{U}/misure?formato=csv")
 check("CSV con stato e versioni", isinstance(csv, str) and ";stato;versione_algoritmo;versione_software;" in csv and csv.count("\n") >= 4, str(csv)[:200])
 j = curl(f"{U}/misure")
 check("riepilogo JSON", isinstance(j, dict) and j["riepilogo"]["totale"] >= 4 and j["riepilogo"]["annullate"] >= 2, j.get("riepilogo"))
+
+# ── fase 3: gli altri strumenti, con valori noti, calcolati dal server e verificati da numpy ──
+import math
+def strumento(nome, img, punti, atteso, unita, tol=1e-9, extra_chiave=None, extra_atteso=None):
+    r = post({"immagine_id": img["id"], "frame": 0, "algoritmo": nome, "punti": punti, "etichetta": f"prova {nome}"})
+    ok = isinstance(r, dict) and r.get("ok") and r.get("tipo") == nome and r.get("unita") == unita and r["stato"] == "VALIDATED" and r["verifica"]["esito"] == "ok"
+    if ok and atteso is not None:
+        ok = abs(r["valore"] - atteso) <= tol * max(1, abs(atteso))
+    if ok and extra_chiave:
+        ok = abs(r["extra"][extra_chiave] - extra_atteso) <= 1e-9 * max(1, abs(extra_atteso))
+    check(f"{nome}: {r.get('testo') if isinstance(r, dict) else ''} atteso {atteso} {unita}", ok, r)
+    return r
+strumento("polilinea", ct, [{"x": 0, "y": 0}, {"x": 100, "y": 0}, {"x": 100, "y": 100}], 100.0, "mm")                 # 50 + 50
+strumento("angolo", ct, [{"x": 100, "y": 0}, {"x": 0, "y": 0}, {"x": 0, "y": 100}], 90.0, "°")
+strumento("rettangolo", ct, [{"x": 10, "y": 10}, {"x": 110, "y": 60}], 1250.0, "mm²", extra_chiave="perimetro_mm", extra_atteso=150.0)   # 50 × 25
+strumento("ellisse", us, [{"x": 200, "y": 100}, {"x": 400, "y": 200}], math.pi * 200, "mm²", extra_chiave="semiasse_a_mm", extra_atteso=20.0)
+strumento("poligono", ct, [{"x": 0, "y": 0}, {"x": 100, "y": 0}, {"x": 100, "y": 100}, {"x": 0, "y": 100}], 2500.0, "mm²", extra_chiave="perimetro_mm", extra_atteso=200.0)
+strumento("perimetro", us, [{"x": 200, "y": 100}, {"x": 300, "y": 100}, {"x": 300, "y": 200}, {"x": 200, "y": 200}], 80.0, "mm")
+rp = strumento("punto", us, [{"x": 200, "y": 300}], None, "mm")
+check("punto: coordinate in extra, valore nullo, mostrato come coppia", isinstance(rp, dict) and rp.get("valore") is None and abs(rp["extra"]["x_mm"] - 40) < 1e-9 and abs(rp["extra"]["y_mm"] - 60) < 1e-9 and rp.get("testo") == "(40,0; 60,0 mm)", rp)
+r = post({"immagine_id": ct["id"], "frame": 0, "algoritmo": "poligono", "punti": [{"x": 0, "y": 0}, {"x": 100, "y": 100}, {"x": 100, "y": 0}, {"x": 0, "y": 100}]})
+check("poligono intrecciato → 422 con testo", isinstance(r, dict) and r.get("errore") == "poligono_intrecciato" and "incrocia" in r.get("motivo", ""), r)
+r = post({"immagine_id": us["id"], "frame": 0, "algoritmo": "poligono", "punti": [{"x": 200, "y": 100}, {"x": 300, "y": 100}, {"x": 10, "y": 10}]})
+check("poligono con un vertice fuori regione → 422", isinstance(r, dict) and r.get("errore") == "fuori_regione", r)
+r = post({"immagine_id": ct["id"], "frame": 0, "algoritmo": "angolo", "punti": [{"x": 0, "y": 0}, {"x": 1, "y": 1}]})
+check("angolo con due punti → 400 punti_non_validi", isinstance(r, dict) and r.get("errore") == "punti_non_validi", r)
+r = post({"immagine_id": ct["id"], "frame": 0, "algoritmo": "volume", "punti": [{"x": 0, "y": 0}, {"x": 1, "y": 1}]})
+check("algoritmo sconosciuto → 400", isinstance(r, dict) and r.get("errore") == "algoritmo_sconosciuto", r)
+r = post({"immagine_id": cr["id"], "frame": 0, "algoritmo": "ellisse", "punti": [{"x": 10, "y": 10}, {"x": 110, "y": 60}]})
+check("ellisse su CR → NOT_MEASURABLE come la distanza", isinstance(r, dict) and r.get("stato") == "NOT_MEASURABLE", r)
+dd = curl(f"{U}/{dCT['esame']['id']}")
+tipi = sorted(set(m["tipo"] for m in dd["misure_manuali"]))
+check("dettaglio: tipi e unità nelle misure, extra presente", tipi == ["angolo", "distanza", "poligono", "polilinea", "rettangolo"] and all(m.get("unita") for m in dd["misure_manuali"]) and any(m.get("extra") for m in dd["misure_manuali"]), tipi)
+check("strumenti dichiarati dal server nel contesto MSE", len(dd["mse"]["strumenti"]) == 8 and all(k in [x["nome"] for x in dd["mse"]["strumenti"]] for k in ["distanza", "polilinea", "angolo", "rettangolo", "ellisse", "poligono", "perimetro", "punto"]), dd["mse"].get("strumenti"))
+csv = curl(f"{U}/misure?formato=csv")
+check("CSV con strumento e unità", isinstance(csv, str) and ";strumento;etichetta;valore;unita;" in csv and "poligono" in csv and "mm²" in csv, str(csv)[:300])
 print("TUTTO OK" if ok_tot else "CI SONO ERRORI")
 sys.exit(0 if ok_tot else 1)

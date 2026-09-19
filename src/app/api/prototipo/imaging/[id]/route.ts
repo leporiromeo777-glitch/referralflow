@@ -3,7 +3,7 @@ import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
 import { finestreDi } from '@/lib/imaging-ordina';
-import { cautionValidati, versioneSoftware } from '@/lib/imaging-misura';
+import { cautionValidati, versioneSoftware, mse } from '@/lib/imaging-misura';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,12 +45,12 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   // studio, docs/legale/dispositivo-in-house/): anche quelle annullate, perché
   // l'annullamento è parte della storia della misura.
   const misureManuali = await query<{
-    id: string; immagine_id: string; frame: number; valore: number; unita: string; etichetta: string | null;
+    id: string; immagine_id: string; frame: number; valore: number | null; unita: string; etichetta: string | null; tipo: string; extra: unknown;
     punti: unknown; chi: string | null; quando: string; annullata_at: string | null; annullata_da: string | null;
     stato_validazione: string | null; avvisi: unknown; verifica_ok: boolean | null; sostituisce_id: string | null; valore_mostrato: string | null;
     riferimento_misura_id: string | null; riferimento_nome: string | null; riferimento_valore: number | null; riferimento_unita: string | null;
   }>(
-    `select m.id, m.immagine_id, m.frame, m.valore, m.unita, m.etichetta, m.punti, split_part(u.email, '@', 1) as chi,
+    `select m.id, m.immagine_id, m.frame, m.valore, m.unita, m.etichetta, m.tipo, m.extra, m.punti, split_part(u.email, '@', 1) as chi,
             m.created_at::text as quando, m.annullata_at::text, split_part(ua.email, '@', 1) as annullata_da,
             m.stato_validazione, m.avvisi, (m.verifica_indipendente->>'esito' = 'ok') as verifica_ok, m.sostituisce_id, m.valore_mostrato,
             m.riferimento_misura_id, r.nome as riferimento_nome, r.valore as riferimento_valore, r.unita as riferimento_unita
@@ -76,6 +76,6 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
   return NextResponse.json(
     { esame, serie: serie.map((s) => ({ ...s, immagini: immagini.filter((i) => i.serie_id === s.id) })), finestre: finestreDi(esame.modalita), misure, misure_manuali: misureManuali, accessi,
-      mse: { caution_validati: cautionValidati(), versione_software: versioneSoftware(), puo_misurare: ['medico', 'admin', 'assistente'].includes(session.role) } },
+      mse: { caution_validati: cautionValidati(), versione_software: versioneSoftware(), puo_misurare: ['medico', 'admin', 'assistente'].includes(session.role), strumenti: Object.values(mse().misure.ALGORITMI).map((a) => ({ nome: a.nome, versione: a.versione, unita: a.unita, punti: a.punti, gesto: a.gesto })) } },
     { headers: { 'Cache-Control': 'no-store' } });
 }
