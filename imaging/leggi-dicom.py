@@ -8,6 +8,7 @@ rovina al massimo la sua richiesta:
 
     leggi-dicom.py meta <file>                        → JSON dei campi utili
     leggi-dicom.py png <file> --frame N --out f.png   → un fotogramma in PNG
+    leggi-dicom.py misure <file>                      → le misure FATTE DALL'APPARECCHIO
 
 Regole:
 - **Non stampa mai nulla su stderr che contenga dati del paziente.** I campi
@@ -110,6 +111,65 @@ def comando_meta(percorso: Path) -> int:
     })
 
 
+def comando_misure(percorso: Path) -> int:
+    """Le misure che l'apparecchio ha già fatto, dentro il suo referto
+    strutturato (SR).
+
+    ReferralFlow non misura e non deve misurare: una misura fatta dopo, su un
+    fotogramma esportato e su uno schermo non tarato, è peggiore di quella che
+    l'ecografista ha preso con la sonda in mano sulla console. Ma quella misura
+    ESISTE già — viaggia dentro il DICOM e finora la buttavamo via. Qui si
+    legge e basta: presentare non è produrre.
+
+    Struttura: l'SR è un albero di CONTAINER; le misure sono i nodi NUM, con
+    nome (ConceptNameCodeSequence), valore e unità (MeasuredValueSequence).
+    Si tiene anche il contenitore che le raggruppa, perché «Diametro» da solo
+    non vuol dire niente e «Aorta ascendente · Diametro» sì."""
+    import pydicom
+
+    try:
+        ds = pydicom.dcmread(str(percorso), stop_before_pixels=True, force=False)
+    except Exception as e:  # noqa: BLE001
+        return _uscita({"errore": "non_dicom", "tipo": type(e).__name__}, 1)
+
+    fuori: list[dict] = []
+
+    def nome_di(item) -> str:
+        seq = getattr(item, "ConceptNameCodeSequence", None)
+        if not seq:
+            return ""
+        return str(getattr(seq[0], "CodeMeaning", "") or "").strip()[:120]
+
+    def cammina(sequenza, gruppo: str, profondita: int = 0) -> None:
+        if profondita > 12 or not sequenza:
+            return
+        for item in sequenza:
+            tipo = str(getattr(item, "ValueType", "") or "").upper()
+            nome = nome_di(item)
+            if tipo == "NUM":
+                mv = getattr(item, "MeasuredValueSequence", None)
+                if mv:
+                    unita_seq = getattr(mv[0], "MeasurementUnitsCodeSequence", None)
+                    unita = str(getattr(unita_seq[0], "CodeValue", "") or "").strip() if unita_seq else ""
+                    valore = getattr(mv[0], "NumericValue", None)
+                    try:
+                        valore = float(valore)
+                    except (TypeError, ValueError):
+                        valore = None
+                    if nome and valore is not None:
+                        fuori.append({"gruppo": gruppo[:120], "nome": nome,
+                                      "valore": valore, "unita": unita[:24]})
+            figli = getattr(item, "ContentSequence", None)
+            if figli:
+                cammina(figli, nome if tipo == "CONTAINER" and nome else gruppo, profondita + 1)
+
+    cammina(getattr(ds, "ContentSequence", None), nome_di(ds))
+    # Un apparecchio ripete la stessa misura su battiti diversi: si tengono
+    # tutte, nell'ordine dell'SR, che è l'ordine in cui le ha prese.
+    return _uscita({"misure": fuori[:400], "modalita": _testo(ds, "Modality", 16).upper(),
+                    "sop_class": str(getattr(ds, "SOPClassUID", "") or "")})
+
+
 def comando_png(percorso: Path, frame: int, ww: float | None, wl: float | None,
                 lato: int, uscita: Path) -> int:
     import numpy as np
@@ -179,6 +239,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(add_help=True)
     sub = ap.add_subparsers(dest="comando", required=True)
     m = sub.add_parser("meta"); m.add_argument("file")
+    mi = sub.add_parser("misure"); mi.add_argument("file")
     p = sub.add_parser("png")
     p.add_argument("file"); p.add_argument("--frame", type=int, default=0)
     p.add_argument("--ww", type=float, default=None); p.add_argument("--wl", type=float, default=None)
@@ -192,6 +253,8 @@ def main() -> int:
         return _uscita({"errore": "file_assente"}, 1)
     if a.comando == "meta":
         return comando_meta(percorso)
+    if a.comando == "misure":
+        return comando_misure(percorso)
     return comando_png(percorso, a.frame, a.ww, a.wl,
                        ANTEPRIMA_LATO if a.anteprima else a.lato, Path(a.out))
 

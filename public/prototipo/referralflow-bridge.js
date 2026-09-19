@@ -5908,6 +5908,26 @@ function rfImgRicezione() {
       Il tasto «prova connessione» dell'apparecchio (C-ECHO) deve dare esito positivo prima di mandare il primo esame.</p></div>`;
 }
 
+// Le misure dell'apparecchio. Non le fa la piattaforma e non le può fare: è
+// scritto in destinazione-uso-immagini.md, e la riga sotto la tabella lo dice
+// anche a chi guarda — perché un numero senza provenienza è un numero di cui
+// qualcuno si prenderà la responsabilità per sbaglio.
+function rfImgMisure(misure) {
+  if (!misure || !misure.length) return '';
+  const gruppi = [];
+  for (const m of misure) {
+    const g = m.gruppo || 'Misure';
+    let riga = gruppi.find(x => x.nome === g);
+    if (!riga) { riga = { nome: g, voci: [] }; gruppi.push(riga); }
+    riga.voci.push(m);
+  }
+  const numero = (v) => String(Math.round(Number(v) * 100) / 100).replace('.', ',');
+  return `<div class="card mt-16"><div class="card-head"><span class="section-title">Misure dell'apparecchio</span><span class="badge">${misure.length}</span></div>
+    ${gruppi.map(g => `<div class="mt-8"><div class="caption" style="text-transform:uppercase;letter-spacing:.04em">${rfEsc(g.nome)}</div>
+      <div class="kv">${g.voci.map(v => `<b>${rfEsc(v.nome)}</b><span class="num">${numero(v.valore)}${v.unita ? ` ${rfEsc(v.unita)}` : ''}</span>`).join('')}</div></div>`).join('')}
+    <p class="rf-img-limite">Misurate <b>dall'apparecchio</b> al momento dell'esame e lette dal suo referto strutturato: la piattaforma le mostra, non le calcola e non le rifà. Se una misura va ripetuta, si ripete sulla console.</p></div>`;
+}
+
 function rfImgData(iso) {
   if (!iso) return 'data ignota';
   const p = String(iso).slice(0, 10).split('-');
@@ -5966,6 +5986,8 @@ function rfImgDettaglio() {
           ${finestre.map(f => `<button class="btn sm ${RF.img.ww === f.ww && RF.img.wl === f.wl ? 'primary' : ''}" onclick="rfImgFinestra(${f.ww}, ${f.wl})">${rfEsc(f.nome)}</button>`).join('')}</div>` : ''}` : ''}
       </div>
     </div>
+
+    ${rfImgMisure(d.misure)}
 
     <div class="card mt-16"><div class="card-head"><span class="section-title">Chi ha aperto questo esame</span><span class="caption">ultimi 20</span></div>
       <div class="list">${(d.accessi || []).map(a => `<div class="list-item"><div class="grow"><div class="name">${rfEsc(a.chi || 'qualcuno')}</div><div class="sub">${rfEsc(a.azione)}</div></div><div class="caption">${rfEsc(rfModQuando(a.quando))}</div></div>`).join('') || '<div class="caption">Nessun accesso registrato.</div>'}</div></div>`;

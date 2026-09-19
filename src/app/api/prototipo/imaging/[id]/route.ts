@@ -40,6 +40,10 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
        from imaging_immagini i join imaging_serie s on s.id = i.serie_id
       where s.esame_id = $1 order by s.numero nulls last, i.numero nulls last, i.id`, [params.id]);
 
+  // Le misure fatte DALL'APPARECCHIO, lette dal suo referto strutturato.
+  const misure = await query<{ gruppo: string | null; nome: string; valore: number; unita: string | null }>(
+    `select gruppo, nome, valore, unita from imaging_misure where esame_id = $1 order by ordine`, [params.id]);
+
   try {
     await query(`insert into imaging_accessi (studio_id, esame_id, user_id, azione) values ($1,$2,$3,'aperto')`,
       [sid, params.id, session.id]);
@@ -51,6 +55,6 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       where a.esame_id = $1 order by a.created_at desc limit 20`, [params.id]);
 
   return NextResponse.json(
-    { esame, serie: serie.map((s) => ({ ...s, immagini: immagini.filter((i) => i.serie_id === s.id) })), finestre: finestreDi(esame.modalita), accessi },
+    { esame, serie: serie.map((s) => ({ ...s, immagini: immagini.filter((i) => i.serie_id === s.id) })), finestre: finestreDi(esame.modalita), misure, accessi },
     { headers: { 'Cache-Control': 'no-store' } });
 }

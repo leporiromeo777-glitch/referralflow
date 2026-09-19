@@ -97,6 +97,25 @@ export async function fotogrammaPng(
   });
 }
 
+// Le misure dentro un referto strutturato. Si chiede solo per i file che
+// possono averle (SR): aprire un processo per ogni immagine di una TAC
+// sarebbe tempo buttato.
+export type MisuraDicom = { gruppo: string; nome: string; valore: number; unita: string };
+
+export async function leggiMisure(buffer: Buffer): Promise<MisuraDicom[]> {
+  const tmp = path.join(os.tmpdir(), `rf-dicom-${randomUUID()}.dcm`);
+  await fs.writeFile(tmp, buffer);
+  try {
+    const { uscita } = await esegui(['misure', tmp]);
+    const j = JSON.parse(uscita || '{}');
+    return Array.isArray(j?.misure) ? (j.misure as MisuraDicom[]) : [];
+  } catch {
+    return [];
+  } finally {
+    await fs.rm(tmp, { force: true });
+  }
+}
+
 export function lettoreDisponibile(): Promise<boolean> {
   return fs.access(PY).then(() => true).catch(() => false);
 }

@@ -2,8 +2,13 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { query, transazione } from './db';
 import { putFileAtKey } from './storage';
-import { leggiMeta } from './imaging';
+import { leggiMeta, leggiMisure } from './imaging';
 import { abbinaPaziente, raggruppa, type MetaMinima } from './imaging-ordina';
+import type { MisuraDicom } from './imaging';
+
+// I referti strutturati: è lì che l'apparecchio scrive le misure.
+// 1.2.840.10008.5.1.4.1.1.88.* = la famiglia degli Structured Report.
+const SOP_SR = ['1.2.840.10008.5.1.4.1.1.88'];
 
 // Far entrare le immagini, da qualunque parte arrivino (18.9.2026).
 //
@@ -92,6 +97,24 @@ export async function ingestaDicom(
          where id = $1`, [esame.id]);
       return esame.id;
     });
+    // Le misure fatte dall'apparecchio, dai suoi referti strutturati. Si
+    // riscrivono ogni volta: se l'esame viene reimportato, valgono le ultime.
+    const conSr = e.serie.flatMap((s) => s.immagini.filter((i) => SOP_SR.some((p) => (i.sop_class || '').startsWith(p))));
+    if (conSr.length) {
+      const misure: { m: MisuraDicom; ordine: number }[] = [];
+      for (const i of conSr) {
+        for (const m of await leggiMisure(buoni[i.indice])) misure.push({ m, ordine: misure.length });
+      }
+      if (misure.length) {
+        await transazione(async (q) => {
+          await q(`delete from imaging_misure where esame_id = $1`, [id]);
+          for (const { m, ordine } of misure) {
+            await q(`insert into imaging_misure (esame_id, gruppo, nome, valore, unita, ordine) values ($1,nullif($2,''),$3,$4,nullif($5,''),$6)`,
+              [id, m.gruppo, m.nome, m.valore, m.unita, ordine]);
+          }
+        });
+      }
+    }
     ids.push(id);
     try {
       await query(`insert into imaging_accessi (studio_id, esame_id, user_id, azione) values ($1,$2,$3,$4)`,
