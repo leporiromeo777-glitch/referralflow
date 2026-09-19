@@ -80,6 +80,12 @@ export type FormatoReferto = 'rapporto' | 'lettera';
 // saluto fisso, righe di firma, blocco terapia da riprendere (dalla lettera
 // precedente, quando il dettato dice che la terapia è invariata).
 export type OpzioniLettera = {
+  // Lunghezza del DETTATO corretto (19.9.2026): la guardia «troppo corto» si
+  // misura sul contenuto vero, non sul testo di partenza. Se prima si era
+  // premuto «Riorganizza», il testo di partenza è un rapporto gonfiato dal
+  // modello (574 byte di dettato → 994 di rapporto): una lettera fedele
+  // tornava sotto il 60 % del rapporto pur dicendo tutto quello che c'era.
+  riferimento?: number;
   chiusura?: string;
   firma?: string[];
   terapia?: string[];
@@ -365,7 +371,10 @@ export async function riorganizzaReferto(
   // come lettera perde le intestazioni («ANAMNESI:», «CONCLUSIONI») e i vuoti
   // di riga, e tornava sotto il 60 % pur avendo dentro tutto — il 19.9.2026
   // tre impaginazioni giuste sono state scartate così.
-  if (risposta.length < contenutoSenzaIntestazioni(originale).length * 0.6) {
+  const contenuto = contenutoSenzaIntestazioni(originale).length;
+  const base = opzioni.riferimento && opzioni.riferimento > 0 ? Math.min(contenuto, opzioni.riferimento) : contenuto;
+  if (risposta.length < base * 0.6) {
+    console.warn(`[struttura] proposta scartata: troppo corta (risposta=${risposta.length} base=${base} originale=${originale.length} riferimento=${opzioni.riferimento ?? '-'})`);
     return { ok: false, motivo: 'troppo_corto' };
   }
   // Parole di contenuto che nel dettato non c'erano: se pesano sul senso

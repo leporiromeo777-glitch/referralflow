@@ -20,9 +20,13 @@ export async function opzioniRiorganizzazione(
 ): Promise<{ formato: FormatoReferto; opzioni: OpzioniLettera; terapiaRipresa: boolean; terapia: TerapiaFusa | null }> {
   const medico = payload?.medico ?? null;
   const formato = await formatoPerBozza(studioId, medico);
-  if (formato !== 'lettera') return { formato, opzioni: {}, terapiaRipresa: false, terapia: null };
+  // Il dettato corretto dalla catena è il metro del contenuto: vale per
+  // tutti e due i formati (vedi OpzioniLettera.riferimento).
+  const riferimento = String(payload?.testo_corretto ?? '').length || undefined;
+  if (formato !== 'lettera') return { formato, opzioni: { riferimento }, terapiaRipresa: false, terapia: null };
   const profilo = await profiloMedico(studioId, medico?.id);
   const opzioni: OpzioniLettera = {
+    riferimento,
     chiusura: profilo?.chiusura || undefined,
     // Corpo in un solo paragrafo se il profilo del medico lo chiede.
     corpoUnico: profilo?.corpo === 'unico',
