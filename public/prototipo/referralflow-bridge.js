@@ -1809,6 +1809,7 @@ async function rfImpagina() {
   .rf-edita { width: 100%; min-height: 55vh; height: auto; padding: 10px 12px; border-radius: var(--r-input); border: 1px solid var(--border); background: var(--surface-2); resize: vertical; line-height: 1.55; font: inherit; font-size: 14px; }
   .rf-edita:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); background: var(--surface); }
   @media (max-width: 767px) { .rf-edita { min-height: 50vh; } }
+  .rf-edita-inline .rf-edita { min-height: 240px; }
 `; document.head.appendChild(st); })();
 const rfPartHtmlOrig = rvPartHtml;
 rvPartHtml = function (p, secCode) {
@@ -1847,45 +1848,99 @@ rvRenderReport = function () {
     const lettura = Array.from(top.querySelectorAll('button')).find(x => /Lettura pulita|Torna alle verifiche/.test(x.textContent || ''));
     top.insertBefore(b, lettura || null);
   }
+  if (top && !document.getElementById('rf-vtutto-btn')) {
+    // «Verifica tutto» (19.9.2026): chi preferisce ascoltarsi l'audio intero
+    // una volta, correggere a mano e poi chiudere le verifiche in un colpo.
+    const b = document.createElement('button'); b.id = 'rf-vtutto-btn'; b.className = 'btn sm'; b.type = 'button';
+    b.title = 'Segna come verificate tutte le segnalazioni ancora aperte, senza cambiare il testo';
+    b.innerHTML = `${(typeof ICONS !== 'undefined' && ICONS.check) || ''} Verifica tutto`; b.onclick = rfVerificaTutto;
+    top.insertBefore(b, document.getElementById('rf-edita-btn') ? document.getElementById('rf-edita-btn').nextSibling : null);
+  }
   if (top && !document.getElementById('rf-pennello-btn')) {
     const b = document.createElement('button'); b.id = 'rf-pennello-btn'; b.className = 'btn sm'; b.type = 'button'; b.title = 'Pennello: evidenzia il testo da togliere dal referto';
     b.innerHTML = `${RF_PENNELLO_ICONA} Nascondi`; b.onclick = () => rfPennello(!RF.pennello);
     top.insertBefore(b, document.getElementById('rf-edita-btn') || null);
   }
-  const eb = document.getElementById('rf-edita-btn'); if (eb) eb.hidden = RV.mode === 'read';
-  const pb = document.getElementById('rf-pennello-btn'); if (pb) { pb.hidden = RV.mode === 'read'; pb.classList.toggle('primary', !!RF.pennello); }
+  const eb = document.getElementById('rf-edita-btn'); if (eb) { eb.hidden = RV.mode === 'read'; eb.classList.toggle('primary', !!RF.editaInline); eb.innerHTML = RF.editaInline ? 'Chiudi modifica' : `${(typeof ICONS !== 'undefined' && ICONS.edit) || ''} Edita`; }
+  const vb = document.getElementById('rf-vtutto-btn'); if (vb) vb.hidden = RV.mode === 'read' || !!RF.editaInline || !(typeof rvOpen === 'function' && rvOpen().length);
+  const pb = document.getElementById('rf-pennello-btn'); if (pb) { pb.hidden = RV.mode === 'read' || !!RF.editaInline; pb.classList.toggle('primary', !!RF.pennello); }
   rfPennelloApplicaStato();
+  rfEditaInlineApplica();
   const leg = document.querySelector('#rv-main .rv-legend');
   if (leg && !leg.querySelector('.lg.tolta')) { const sp = document.createElement('span'); sp.className = 'lg tolta'; sp.textContent = 'Tolta dal referto'; leg.appendChild(sp); }
 };
 function rfEdita() {
   const id = RF.loaded; if (!id) return;
   if (RF.meta && RF.meta.stato !== 'bozza') { toast('Il referto è già confermato: non si modifica più'); return; }
-  const testo = rfTestoRicomposto();
+  // Interruttore, come «Nascondi»: acceso, il testo centrale diventa una sola
+  // area di scrittura al suo posto; spento senza salvare, torna com'era.
+  if (RF.editaInline) { RF.editaInline = false; RF.editaTesto = null; rvRenderReport(); return; }
+  if (RF.pennello) rfPennello(false);
+  RF.editaInline = true; RF.editaTesto = rfTestoRicomposto();
+  rvRenderReport();
+}
+// Disegna (o toglie) l'area di scrittura al posto del testo con le
+// segnalazioni. Si richiama a ogni ridisegno: il testo scritto finora sta in
+// RF.editaTesto, così un ridisegno nel mezzo non lo perde.
+function rfEditaInlineApplica() {
+  const doc = document.querySelector('#rv-main .rv-doc'); if (!doc) return;
+  if (!RF.editaInline) return;
   const n = Object.keys(RV.removed).filter(k => RV.removed[k]).length;
-  openModal('Edita il testo completo', `<textarea class="rf-edita" id="rf-edita-testo" spellcheck="true">${esc(testo)}</textarea>
-    <p class="caption mt-8">È il testo pulito${n ? `, senza ${n === 1 ? 'la frase tolta' : `le ${n} frasi tolte`}` : ''}. Salvando, la revisione si ricalcola sul nuovo testo: le verifiche già chiuse restano chiuse dove le frasi coincidono, le altre si riaprono. La modifica a mano resta registrata.</p>`,
-    `<button class="btn" data-close>Annulla</button><button class="btn primary" id="rf-edita-ok">Salva</button>`);
-  setTimeout(() => { const t = document.getElementById('rf-edita-testo'); if (t) t.focus(); }, 60);
-  document.getElementById('rf-edita-ok').onclick = async () => {
-    const box = document.getElementById('rf-edita-testo');
-    const nuovo = (box ? box.value : '').replace(/\r\n/g, '\n').trim();
-    if (!nuovo) { toast('Il testo non può essere vuoto'); return; }
-    if (nuovo === testo.trim()) { closeModal(); return; }
-    const btn = document.getElementById('rf-edita-ok'); btn.disabled = true; btn.textContent = 'Salvo…';
-    clearTimeout(rvSave._rf);
-    rvLog('CORRECTION', 'testo completo modificato a mano (Edita)');
-    RV.metrics.corrections = (RV.metrics.corrections || 0) + 1;
-    try {
-      const r = await fetch(`/api/prototipo/referti/${id}/testo`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ testo: nuovo, stato: rfStatoRevisione(), correzioni: RV.metrics.corrections, verifiche: rvDone() }) });
-      if (!r.ok) throw new Error('salvataggio');
-    } catch { btn.disabled = false; btn.textContent = 'Salva'; toast('Non riesco a salvare nella piattaforma'); return; }
-    closeModal();
-    localStorage.removeItem(RV_KEY);
-    RF.loaded = null; RF.loading = null;
-    render();
-    toast('Testo salvato · revisione ricalcolata');
-  };
+  doc.innerHTML = `<div class="rf-edita-inline">
+    <textarea class="rf-edita" id="rf-edita-testo" spellcheck="true"></textarea>
+    <div class="row mt-8" style="gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn primary" id="rf-edita-ok">Salva</button>
+      <button class="btn" onclick="rfEdita()">Annulla</button>
+      <span class="caption">È il testo pulito${n ? `, senza ${n === 1 ? 'la frase tolta' : `le ${n} frasi tolte`}` : ''}. Salvando, la revisione si ricalcola sul nuovo testo: le verifiche già chiuse restano chiuse dove le frasi coincidono.</span>
+    </div></div>`;
+  const box = document.getElementById('rf-edita-testo');
+  box.value = RF.editaTesto || '';
+  box.oninput = () => { RF.editaTesto = box.value; };
+  box.style.height = 'auto'; box.style.height = Math.max(240, box.scrollHeight + 8) + 'px';
+  document.getElementById('rf-edita-ok').onclick = () => rfEditaSalva(box.value);
+  const leg = document.querySelector('#rv-main .rv-legend'); if (leg) leg.hidden = true;
+  setTimeout(() => box.focus(), 40);
+}
+async function rfEditaSalva(valore) {
+  const id = RF.loaded; if (!id) return;
+  const originale = rfTestoRicomposto();
+  const nuovo = String(valore || '').replace(/\r\n/g, '\n').trim();
+  if (!nuovo) { toast('Il testo non può essere vuoto'); return; }
+  if (nuovo === originale.trim()) { RF.editaInline = false; RF.editaTesto = null; rvRenderReport(); return; }
+  const btn = document.getElementById('rf-edita-ok'); if (btn) { btn.disabled = true; btn.textContent = 'Salvo…'; }
+  clearTimeout(rvSave._rf);
+  rvLog('CORRECTION', 'testo completo modificato a mano (Edita)');
+  RV.metrics.corrections = (RV.metrics.corrections || 0) + 1;
+  try {
+    const r = await fetch(`/api/prototipo/referti/${id}/testo`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ testo: nuovo, stato: rfStatoRevisione(), correzioni: RV.metrics.corrections, verifiche: rvDone() }) });
+    if (!r.ok) throw new Error('salvataggio');
+  } catch { if (btn) { btn.disabled = false; btn.textContent = 'Salva'; } toast('Non riesco a salvare nella piattaforma'); return; }
+  RF.editaInline = false; RF.editaTesto = null;
+  localStorage.removeItem(RV_KEY);
+  RF.loaded = null; RF.loading = null;
+  render();
+  toast('Testo salvato · revisione ricalcolata');
+}
+
+/* «Verifica tutto» (19.9.2026). Segna come verificate le segnalazioni ancora
+   aperte, in un colpo, con due conferme. NON applica le proposte e NON conta
+   come correzioni: le correzioni restano quelle fatte a mano (ogni frase
+   cambiata nel testo si conta da sé, e l'audit confronta comunque il testo
+   confermato con quello della catena). Quante ne sono state chiuse così
+   finisce in metrics.verificate_in_blocco: nel cruscotto si distingue
+   «verificate una per una» da «verificate in blocco». */
+function rfVerificaTutto() {
+  if (RF.meta && RF.meta.stato !== 'bozza') { toast('Il referto è già confermato'); return; }
+  const aperte = (typeof rvOpen === 'function' ? rvOpen() : []).filter(i => i.status === 'open');
+  if (!aperte.length) { toast('Nessuna verifica aperta'); return; }
+  const critiche = aperte.filter(i => i.sev === 'critical' || i.cat === 'NO_SOURCE').length;
+  if (!confirm(`Segno come verificate ${aperte.length === 1 ? 'la verifica ancora aperta' : `le ${aperte.length} verifiche ancora aperte`}${critiche ? `, ${critiche} ${critiche === 1 ? 'critica compresa' : 'critiche comprese'}` : ''}. Il testo non cambia: le proposte NON vengono applicate. Continuo?`)) return;
+  if (!confirm(`Seconda conferma: hai riascoltato l'audio e il testo è quello giusto? ${aperte.length === 1 ? 'La verifica viene chiusa' : `Le ${aperte.length} verifiche vengono chiuse`} senza essere passate una per una.`)) return;
+  for (const i of aperte) { i.status = 'verified'; i.resolution = 'verificata in blocco'; }
+  RV.metrics.verificate_in_blocco = (RV.metrics.verificate_in_blocco || 0) + aperte.length;
+  rvLog('VERIFIED_ALL', `${aperte.length} verifiche chiuse in blocco`);
+  rvSave(); rvRenderNav(); rvRenderReport(); if (typeof rvCount === 'function') rvCount(); if (typeof rvRenderSource === 'function') rvRenderSource();
+  toast(`${aperte.length} ${aperte.length === 1 ? 'verifica segnata' : 'verifiche segnate'} come verificate · il testo non è cambiato`);
 }
 
 
