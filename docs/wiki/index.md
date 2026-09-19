@@ -75,6 +75,7 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 - [[Decisioni/Registro]]
 
 ## Proposte del consolidatore notturno (da approvare a mano)
+- [[Proposte/Measurement Safety Engine]] — 19.9.2026: analisi della base di codice, sei strati, Gate VALIDATED/CAUTION/NOT_MEASURABLE, matrice DICOM per modalità, piano di test, nove fasi con ordine consigliato 1-5-7-8; nessun codice scritto
 - [[Proposte/CardioOS confronto per funzione]] — la demo concorrente (14.9.2026): come ha strutturato ogni funzione, cosa abbiamo, cosa portare e cosa no, piano in 8 punti
 - [[Proposte/Ultime]] — andamento, tappe da guardare, dizionario, frasi fisse; una pagina per data nella stessa cartella
 
