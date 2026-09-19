@@ -200,8 +200,8 @@ const rfRenderSidebarOrig = renderSidebar;
 // raggruppate con un'etichetta; una voce fuori da ogni gruppo finisce in coda.
 const RF_NAV_GRUPPI = [
   ['Operatività', ['home', 'agenda', 'visite', 'richiami', 'sale', 'prestazioni', 'inbox']],
-  ['Clinico', ['patients', 'invianti', 'percorsi', 'visits', 'reports', 'dittafono', 'converti', 'documents', 'imaging', 'moduli']],
-  ['AI', ['anonymize', 'ai']],   // Cleo sotto Anonimizzazione (19.9.2026, richiesta utente)
+  ['Clinico', ['patients', 'invianti', 'percorsi', 'visits', 'reports', 'dittafono', 'documents', 'imaging', 'moduli']],
+  ['AI', ['ai', 'anonymize', 'converti']],   // Converti audio sotto Anonimizzazione; Cleo resta prima (19.9.2026, richiesta utente)
   ['Amministrazione', ['fatturazione', 'communications', 'statistics', 'administration', 'system']],
 ];
 function rfNavGruppi(chiavi, item) {
