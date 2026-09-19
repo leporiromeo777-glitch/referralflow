@@ -26,6 +26,10 @@ Un esame si aggancia da solo a una persona della cartella **solo se nome e data 
 
 Non è prudenza formale. Attaccare le immagini di qualcuno alla cartella di qualcun altro è il danno peggiore che questa pagina possa fare, e il generatore di prova contiene apposta due «Rossi Mario» con date diverse.
 
+## Che cos'è, e che cosa non è
+
+Le immagini qui si **consultano**: ritrovare l'esame giusto della persona giusta e guardarlo nel contesto della cartella. **La diagnosi si fa sulla console dell'apparecchio o su un visualizzatore certificato**, e il referto nasce dal dettato come sempre. Tre scelte tengono in piedi questa dichiarazione e vanno difese: **niente misure**, niente elaborazione presentata come diagnostica, e l'avviso visibile dove si guardano le immagini. Il giorno che si aggiunge un righello, ReferralFlow diventa un dispositivo medico di classe IIa. Il documento è `docs/legale/destinazione-uso-immagini.md`.
+
 ## Chi la vede
 
 Segreteria, medico, aiuto medico, amministrazione. **Il tecnico no**, come per la scheda del paziente ([[Piattaforma/Revisione del 18.9.2026]]): le immagini sono dati sanitari, le vede chi cura.

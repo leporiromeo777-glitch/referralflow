@@ -5745,6 +5745,8 @@ if (typeof NAV !== 'undefined') for (const r of ['secretary', 'assistant', 'doct
 .rf-img-barra input[type=range] { flex:1; min-width:160px; }
 .rf-img-drop { border:1.5px dashed var(--border); border-radius:12px; padding:18px; text-align:center; color:var(--muted); font-size:13px; }
 .rf-img-drop.sopra { border-color:var(--cta); color:var(--cta); }
+.rf-img-limite { font-size:12px; line-height:1.5; color:var(--muted); border-left:3px solid var(--border); padding:2px 0 2px 10px; margin:12px 0 0; }
+.rf-img-vista .limite { position:absolute; left:0; right:0; bottom:0; background:rgba(0,0,0,.55); color:#ddd; font-size:11px; padding:5px 10px; text-align:center; pointer-events:none; }
 `; document.head.appendChild(st); })();
 
 RF.img = { lista: null, conta: {}, errore: null, lettore: true, aperto: null, dati: null, serie: 0, idx: 0, frame: 0, ww: null, wl: null, carico: false, filtro: '' };
@@ -5870,7 +5872,8 @@ PAGES.imaging = () => {
       <div class="actions"><div class="seg"><button class="${!f ? 'active' : ''}" onclick="RF.img.filtro='';render()">Tutti</button><button class="${f === 'verifica' ? 'active' : ''}" onclick="RF.img.filtro='verifica';render()">Da verificare</button><button class="${f === 'senza' ? 'active' : ''}" onclick="RF.img.filtro='senza';render()">Senza paziente</button></div></div></div>
     ${RF.img.errore ? `<div class="rf-manc mb-16">${rfEsc(RF.img.errore)}</div>` : ''}
     ${RF.img.lettore ? '' : '<div class="rf-manc mb-16">Il lettore DICOM non è installato su questo server: gli esami si vedono, ma non si importano e non si disegnano.</div>'}
-    <div class="card"><div class="card-head"><span class="section-title">Esami</span><span class="caption">dal più recente</span></div>
+    <p class="rf-img-limite">Queste immagini si <b>consultano</b>: servono a ritrovare l'esame giusto della persona giusta e a guardarlo nel contesto della cartella. <b>La diagnosi si fa sulla console dell'apparecchio o su un visualizzatore certificato</b>, e il referto nasce dal dettato come sempre. Non ci sono misure, e non devono essercene.</p>
+    <div class="card mt-16"><div class="card-head"><span class="section-title">Esami</span><span class="caption">dal più recente</span></div>
       <div class="list">${mostrati.length ? mostrati.map(riga).join('') : '<div class="caption">Nessun esame.</div>'}</div></div>
     ${rfImgRicezione()}
     <div class="card mt-16"><div class="section-title">Portare dentro un esame a mano</div>
@@ -5948,7 +5951,8 @@ function rfImgDettaglio() {
         <div class="rf-img-vista" onwheel="event.preventDefault(); rfImgScorri(event.deltaY > 0 ? 1 : -1)">
           ${i ? `<img src="${rfImgUrl(i, 1024, RF.img.frame)}" alt="Immagine ${RF.img.idx + 1}">
             <div class="rf-img-hud">${rfEsc(s.descrizione || s.modalita || '')}<br>${i.colonne || '?'}×${i.righe || '?'}</div>
-            <div class="rf-img-hud destra">${RF.img.idx + 1} / ${visibili.length}${i.frame > 1 ? `<br>fotogramma ${RF.img.frame + 1} / ${i.frame}` : ''}${RF.img.ww !== null ? `<br>W ${RF.img.ww} / L ${RF.img.wl}` : ''}</div>`
+            <div class="rf-img-hud destra">${RF.img.idx + 1} / ${visibili.length}${i.frame > 1 ? `<br>fotogramma ${RF.img.frame + 1} / ${i.frame}` : ''}${RF.img.ww !== null ? `<br>W ${RF.img.ww} / L ${RF.img.wl}` : ''}</div>
+            <div class="limite">Consultazione — la diagnosi si fa sulla console dell'apparecchio o su un visualizzatore certificato</div>`
             : `<div class="vuoto">Questa serie non contiene immagini da disegnare${nonImmagini ? ` (${nonImmagini} ${nonImmagini === 1 ? 'oggetto DICOM non grafico' : 'oggetti DICOM non grafici'}: referti strutturati, PDF o modelli)` : ''}.</div>`}
         </div>
         ${i ? `<div class="rf-img-barra">
