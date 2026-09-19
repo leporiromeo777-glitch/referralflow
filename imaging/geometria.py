@@ -289,7 +289,11 @@ def calibrazione_da(g: dict) -> dict:
             continue
         fuori["regioni"].append({"x0": r["x0"], "y0": r["y0"], "x1": r["x1"], "y1": r["y1"],
                                  "dx_mm": round(abs(r["delta_x"]) * 10.0, 6), "dy_mm": round(abs(r["delta_y"]) * 10.0, 6),
-                                 "tipo_dati": 1 if r["tipo_dati"] == "tessuto" else 2 if r["tipo_dati"] == "color_flow" else 0})
+                                 "tipo_dati": 1 if r["tipo_dati"] == "tessuto" else 2 if r["tipo_dati"] == "color_flow" else 0,
+                                 # fase 5: per scegliere fra regioni sovrapposte (PS3.3 C.8.5.5.1.14, bit 0)
+                                 "indice": r["indice"], "tipo": r["tipo_dati"],
+                                 "priorita_alta": True if r["flags"] is None else r["flags"]["priorita_alta"]})
+    fuori["avvisi"] = list(g.get("avvisi_lettura", []))
     if fuori["regioni"]:
         fuori["tipo"] = "us_regioni"
         return fuori

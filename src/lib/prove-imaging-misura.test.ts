@@ -141,3 +141,44 @@ test('misure: ogni algoritmo dichiara nome, versione, unità ed equazione', () =
   assert.equal(e.stato, 'ok');
   assert.deepEqual(JSON.parse(JSON.stringify(e.punti_fisici)), [{ x: 0, y: 0 }, { x: 70, y: 0 }]);
 });
+
+// Fase 5: regioni sovrapposte.
+const ecoSovrapposte = {
+  tipo: 'us_regioni', righe: 600, colonne: 800, spacing: null,
+  regioni: [
+    { indice: 0, x0: 0, y0: 0, x1: 799, y1: 599, dx_mm: 0.2, dy_mm: 0.2, tipo: 'tessuto', priorita_alta: false },     // B-mode, bassa priorità
+    { indice: 1, x0: 200, y0: 100, x1: 600, y1: 400, dx_mm: 0.2, dy_mm: 0.2, tipo: 'color_flow', priorita_alta: true }, // box colore sopra, stessa scala
+    { indice: 2, x0: 700, y0: 500, x1: 799, y1: 599, dx_mm: 0.05, dy_mm: 0.05, tipo: 'tessuto', priorita_alta: true },  // zoom con scala diversa
+  ],
+};
+
+test('regioni: nel box colore vince la priorità alta dichiarata dall’apparecchio', () => {
+  assert.equal(G.regioniPer(ecoSovrapposte, { x: 300, y: 200 }).length, 2);
+  assert.equal(G.regionePer(ecoSovrapposte, { x: 300, y: 200 }).indice, 1);
+});
+
+test('regioni: sovrapposte con la STESSA scala → misura ok senza avviso', () => {
+  const e = M.distanzaMm(ecoSovrapposte, { x: 300, y: 200 }, { x: 400, y: 200 });
+  assert.equal(e.stato, 'ok'); assert.ok(Math.abs(e.mm - 20) < 1e-9); assert.deepEqual(JSON.parse(JSON.stringify(e.avvisi)), []);
+});
+
+test('regioni: sovrapposte con scala DIVERSA → misura con la prioritaria e avviso per il Gate', () => {
+  const e = M.distanzaMm(ecoSovrapposte, { x: 720, y: 520 }, { x: 740, y: 520 });
+  assert.equal(e.stato, 'ok'); assert.ok(Math.abs(e.mm - 1) < 1e-9);
+  assert.deepEqual(JSON.parse(JSON.stringify(e.avvisi)), ['regioni_sovrapposte_discordanti']);   // array di un altro contesto vm
+  assert.equal(e.regione, 2);
+});
+
+test('regioni: un punto nel box colore e uno fuori sono regioni diverse solo se la regione scelta cambia', () => {
+  // dentro il box → regione 1; fuori → regione 0: due calibrazioni «diverse» per il righello, anche se uguali in mm
+  assert.equal(M.distanzaMm(ecoSovrapposte, { x: 300, y: 200 }, { x: 100, y: 50 }).stato, 'regioni_diverse');
+});
+
+test('regioni: a parità di priorità vince il tessuto sul flusso, poi la prima del file', () => {
+  const c = { tipo: 'us_regioni', righe: 10, colonne: 10, spacing: null, regioni: [
+    { indice: 0, x0: 0, y0: 0, x1: 9, y1: 9, dx_mm: 1, dy_mm: 1, tipo: 'color_flow' },
+    { indice: 1, x0: 0, y0: 0, x1: 9, y1: 9, dx_mm: 1, dy_mm: 1, tipo: 'tessuto' },
+    { indice: 2, x0: 0, y0: 0, x1: 9, y1: 9, dx_mm: 1, dy_mm: 1, tipo: 'tessuto' },
+  ] };
+  assert.equal(G.regionePer(c, { x: 5, y: 5 }).indice, 1);
+});

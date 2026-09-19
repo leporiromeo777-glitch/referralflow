@@ -140,6 +140,8 @@ def main() -> int:
     check("17 reference pixel e valore fisico letti", r[0]["rif_x0"] == 10 and r[0]["rif_y0"] == 20 and r[0]["rif_fisico_x"] == 0.0)
     c = calibrazione_da(g)
     check("18 proiezione: solo le 2 regioni 2D in cm, mm/px ×10, |delta|", c["tipo"] == "us_regioni" and len(c["regioni"]) == 2 and c["regioni"][0]["dx_mm"] == 0.2 and c["regioni"][1]["dy_mm"] == 0.1, c)
+    check("18b proiezione: indice, tipo e priorità per le sovrapposizioni (fase 5)", c["regioni"][0]["indice"] == 0 and c["regioni"][0]["tipo"] == "tessuto" and c["regioni"][0]["priorita_alta"] is True and c["regioni"][1]["tipo"] == "color_flow" and c["regioni"][1]["priorita_alta"] is False, c["regioni"])
+    check("18c proiezione: senza flags → priorità alta (default dello standard)", calibrazione_da(geometria_di(us2 if False else us))["regioni"][0]["priorita_alta"] is True)
 
     us2 = base("US", 600, 800); us2.PixelSpacing = [0.2, 0.2]
     us2.SequenceOfUltrasoundRegions = Sequence([regione(0, 0, 799, 599, 0.02, 0.02)])

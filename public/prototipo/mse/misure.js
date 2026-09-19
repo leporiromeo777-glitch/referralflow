@@ -36,7 +36,10 @@
         if (a.regione !== b.regione) return { stato: 'regioni_diverse' };
         var mm = Math.sqrt(dxPx * a.sx * dxPx * a.sx + dyPx * a.sy * dyPx * a.sy);
         if (!G.finito(mm)) return { stato: 'calcolo_non_finito' };
-        return { stato: 'ok', mm: mm, dx_mm: a.sx, dy_mm: a.sy,
+        var avvisi = [];
+        if (a.discordanti || b.discordanti) avvisi.push('regioni_sovrapposte_discordanti');
+        return { stato: 'ok', mm: mm, dx_mm: a.sx, dy_mm: a.sy, avvisi: avvisi,
+                 regione: a.regione ? a.regione.indice : null,
                  punti_fisici: [{ x: p1.x * a.sx, y: p1.y * a.sy }, { x: p2.x * a.sx, y: p2.y * a.sy }] };
       }
     }

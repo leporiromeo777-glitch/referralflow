@@ -78,23 +78,46 @@
   }
 
   /* ── dai pixel ai millimetri ── */
-  function regionePer(cal, p) {
-    if (!cal || cal.tipo !== 'us_regioni' || !Array.isArray(cal.regioni) || !puntoValido(p)) return null;
+  // Tutte le regioni calibrate (2D, cm/cm) che contengono il punto, bordi inclusi.
+  function regioniPer(cal, p) {
+    if (!cal || cal.tipo !== 'us_regioni' || !Array.isArray(cal.regioni) || !puntoValido(p)) return [];
+    var out = [];
     for (var i = 0; i < cal.regioni.length; i++) {
       var r = cal.regioni[i];
-      if (p.x >= r.x0 && p.x <= r.x1 && p.y >= r.y0 && p.y <= r.y1) return r;
+      if (p.x >= r.x0 && p.x <= r.x1 && p.y >= r.y0 && p.y <= r.y1) out.push(r);
     }
-    return null;
+    return out;
+  }
+  // La regione da usare in p. Le regioni possono sovrapporsi (una color-flow
+  // sopra il B-mode, una barra sopra tutto): vince, nell'ordine, la priorità
+  // alta dichiarata dall'apparecchio (Region Flags bit 0), poi il tessuto sul
+  // flusso, poi la prima nel file. Se le candidate hanno calibrazioni diverse
+  // lo si dice (`discordanti`): il Gate ne fa una CAUTION.
+  function regionePer(cal, p) {
+    var c = regioniPer(cal, p);
+    if (!c.length) return null;
+    if (c.length === 1) return c[0];
+    var peso = function (r) { return (r.priorita_alta === false ? 0 : 2) + (r.tipo === 'tessuto' || r.tipo_dati === 1 ? 1 : 0); };
+    var best = c[0];
+    for (var i = 1; i < c.length; i++) if (peso(c[i]) > peso(best)) best = c[i];
+    return best;
+  }
+  function regioniDiscordanti(c) {
+    for (var i = 1; i < c.length; i++) {
+      if (Math.abs(c[i].dx_mm - c[0].dx_mm) > 1e-9 || Math.abs(c[i].dy_mm - c[0].dy_mm) > 1e-9) return true;
+    }
+    return false;
   }
   // Quanti mm vale un pixel in p (per asse), o perché non si sa.
   function mmPerPixel(cal, p) {
     if (!puntoValido(p)) return { stato: 'punti_non_validi' };
     if (!cal || !cal.tipo) return { stato: 'non_calibrata' };
     if (cal.tipo === 'us_regioni') {
+      var c = regioniPer(cal, p);
       var r = regionePer(cal, p);
       if (!r) return { stato: 'fuori_regione' };
       if (!finito(r.dx_mm) || !finito(r.dy_mm) || r.dx_mm <= 0 || r.dy_mm <= 0) return { stato: 'non_calibrata' };
-      return { stato: 'ok', sx: r.dx_mm, sy: r.dy_mm, regione: r };
+      return { stato: 'ok', sx: r.dx_mm, sy: r.dy_mm, regione: r, discordanti: regioniDiscordanti(c) };
     }
     if (cal.tipo === 'pixel_spacing') {
       if (!cal.spacing || !finito(cal.spacing.dx_mm) || !finito(cal.spacing.dy_mm) || cal.spacing.dx_mm <= 0 || cal.spacing.dy_mm <= 0) return { stato: 'non_calibrata' };
@@ -127,7 +150,7 @@
     VERSIONE: VERSIONE, finito: finito, puntoValido: puntoValido,
     identita: identita, matriceValida: matriceValida, componi: componi, inversa: inversa, applica: applica,
     matriceViewer: matriceViewer, versoImmagine: versoImmagine, versoNativo: versoNativo,
-    regionePer: regionePer, mmPerPixel: mmPerPixel, dentroImmagine: dentroImmagine,
+    regioniPer: regioniPer, regionePer: regionePer, mmPerPixel: mmPerPixel, dentroImmagine: dentroImmagine,
     descriviCalibrazione: descriviCalibrazione
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
