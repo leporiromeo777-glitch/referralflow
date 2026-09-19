@@ -201,7 +201,7 @@ const rfRenderSidebarOrig = renderSidebar;
 const RF_NAV_GRUPPI = [
   ['Operatività', ['home', 'agenda', 'visite', 'richiami', 'sale', 'prestazioni', 'inbox']],
   ['Clinico', ['patients', 'invianti', 'percorsi', 'visits', 'reports', 'dittafono', 'converti', 'documents', 'imaging', 'moduli']],
-  ['AI', ['ai', 'anonymize']],
+  ['AI', ['anonymize', 'ai']],   // Cleo sotto Anonimizzazione (19.9.2026, richiesta utente)
   ['Amministrazione', ['fatturazione', 'communications', 'statistics', 'administration', 'system']],
 ];
 function rfNavGruppi(chiavi, item) {
