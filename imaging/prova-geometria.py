@@ -121,7 +121,10 @@ def main() -> int:
     mr3 = base("MR", 64, 64, frame=3); gruppi(mr3, per_frame=[[1.0, 1.0], [1.5, 1.0], [1.0, 1.0]])
     g = geometria_di(mr3)
     check("12 Enhanced: per-frame NON uniforme → per_frame true, nessun mm, avviso", g["spaziatura"]["per_frame"] and g["spaziatura"]["dx_mm"] is None and "spacing_per_frame_non_uniforme" in g["avvisi_lettura"], g["spaziatura"])
-    check("12b proiezione: per-frame non uniforme → nessuna", calibrazione_da(g)["tipo"] == "nessuna")
+    check("12b proiezione: per-frame non uniforme → pixel_spacing_per_frame con i valori [dx, dy] di ogni fotogramma (fase 6)", calibrazione_da(g)["tipo"] == "pixel_spacing_per_frame" and calibrazione_da(g)["per_frame"] == [[1.0, 1.0], [1.0, 1.5], [1.0, 1.0]], calibrazione_da(g))
+    mr4 = base("MR", 64, 64, frame=3); gruppi(mr4, per_frame=[[1.0, 1.0], None, [2.0, 2.0]])
+    c4 = calibrazione_da(geometria_di(mr4))
+    check("12c per-frame con un fotogramma senza spacing → null in quella posizione", c4["tipo"] == "pixel_spacing_per_frame" and c4["per_frame"][1] is None and c4["per_frame"][2] == [2.0, 2.0], c4)
 
     # ── regioni ecografiche ──
     us = base("US", 600, 800)

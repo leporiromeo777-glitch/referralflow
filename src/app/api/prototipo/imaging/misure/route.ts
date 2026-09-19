@@ -123,7 +123,8 @@ export async function POST(req: NextRequest) {
   }
   // Doppio controllo: un'implementazione separata deve dare lo stesso numero
   // (per il punto: le due coordinate).
-  const b = await verificaIndipendente(img.calibrazione, pts, algoritmo);
+  const calEff = (esito as unknown as { cal: Calibrazione | null }).cal ?? img.calibrazione;
+  const b = await verificaIndipendente(calEff, pts, algoritmo);
   const valoreA = algoritmo === 'punto' ? Number(esito.extra?.x_mm) : (esito.valore as number);
   const tolleranza = tolleranzaVerifica(valoreA);
   let scarto: number | null = b.stato === 'ok' && typeof b.mm === 'number' ? Math.abs(b.mm - valoreA) : null;
@@ -148,7 +149,7 @@ export async function POST(req: NextRequest) {
       `insert into imaging_misure_manuali (studio_id, esame_id, immagine_id, frame, user_id, tipo, punti, valore, unita, calibrazione, versione_calcolo, etichetta, riferimento_misura_id,
                                           punti_fisici, valore_mostrato, algoritmo, versione_gate, versione_software, stato_validazione, avvisi, verifica_indipendente, geometria, sostituisce_id, extra)
        values ($1,$2,$3,$4,$5,$23,$6,$7,$8,$9,$10,nullif($11,''),$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$24) returning id, created_at::text as quando`,
-      [sid, img.esame_id, img.id, frame, session.id, JSON.stringify(pts), esito.valore, esito.unita, JSON.stringify(img.calibrazione),
+      [sid, img.esame_id, img.id, frame, session.id, JSON.stringify(pts), esito.valore, esito.unita, JSON.stringify(calEff),
        esito.versione_algoritmo, etichetta, rif || null,
        JSON.stringify(esito.punti_fisici), esito.valore_mostrato, esito.algoritmo, esito.versione_gate, versioneSoftware(), esito.stato,
        JSON.stringify(esito.avvisi), JSON.stringify(verifica), img.geometria ? JSON.stringify(img.geometria) : null, sostituisce || null,

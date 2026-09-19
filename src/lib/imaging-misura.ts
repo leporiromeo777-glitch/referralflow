@@ -17,7 +17,9 @@ import vm from 'node:vm';
 export type Punto = { x: number; y: number };
 export type RegioneUs = { x0: number; y0: number; x1: number; y1: number; dx_mm: number; dy_mm: number; tipo_dati?: number };
 export type Calibrazione = {
-  tipo: 'us_regioni' | 'pixel_spacing' | 'imager_pixel_spacing' | 'nessuna';
+  tipo: 'us_regioni' | 'pixel_spacing' | 'imager_pixel_spacing' | 'pixel_spacing_per_frame' | 'nessuna';
+  per_frame?: ([number, number] | null)[];
+  avvisi?: string[];
   righe: number; colonne: number;
   regioni: RegioneUs[];
   spacing: { dx_mm: number; dy_mm: number; origine: string; taratura: string } | null;
@@ -130,5 +132,6 @@ export function puntoValido(p: unknown): p is Punto {
 export function calibrata(cal: Calibrazione | null | undefined): boolean {
   if (!cal) return false;
   if (cal.tipo === 'us_regioni') return Array.isArray(cal.regioni) && cal.regioni.length > 0;
+  if (cal.tipo === 'pixel_spacing_per_frame') return Array.isArray(cal.per_frame) && cal.per_frame.some((v) => !!v);
   return cal.tipo === 'pixel_spacing' && !!cal.spacing;
 }

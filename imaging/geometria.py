@@ -131,7 +131,7 @@ def _spaziatura(ds, avvisi: list[str]) -> dict:
     """
     fuori = {"fonte": None, "dy_mm": None, "dx_mm": None, "per_frame": False,
              "calibrazione_tipo": None, "calibrazione_descrizione": "",
-             "imager_dy_mm": None, "imager_dx_mm": None}
+             "imager_dy_mm": None, "imager_dx_mm": None, "per_frame_valori": None}
     ps = _coppia(getattr(ds, "PixelSpacing", None))
     if getattr(ds, "PixelSpacing", None) is not None and ps is None:
         avvisi.append("pixel_spacing_non_valido")
@@ -174,6 +174,9 @@ def _spaziatura(ds, avvisi: list[str]) -> dict:
             fuori.update({"dy_mm": validi[0][0], "dx_mm": validi[0][1], "per_frame": False})
             avvisi.append("spacing_per_frame_uniforme")
         else:
+            # fase 6: si conservano i valori di OGNI fotogramma ([dy, dx] o null),
+            # e chi misura usa quello del fotogramma su cui misura
+            fuori["per_frame_valori"] = [[p[0], p[1]] if p else None for p in per_frame[:4096]]
             avvisi.append("spacing_per_frame_non_uniforme")
         return fuori
     if ips:
@@ -298,6 +301,10 @@ def calibrazione_da(g: dict) -> dict:
         fuori["tipo"] = "us_regioni"
         return fuori
     s = g["spaziatura"]
+    if s["per_frame"] and s.get("per_frame_valori"):
+        fuori["tipo"] = "pixel_spacing_per_frame"
+        fuori["per_frame"] = [[round(v[1], 6), round(v[0], 6)] if v else None for v in s["per_frame_valori"]]   # [dx, dy] per fotogramma
+        return fuori
     if s["fonte"] in ("PixelSpacing", "FunctionalGroups") and s["dx_mm"] and s["dy_mm"] and not s["per_frame"]:
         fuori["tipo"] = "pixel_spacing"
         fuori["spacing"] = {"dy_mm": round(s["dy_mm"], 6), "dx_mm": round(s["dx_mm"], 6), "origine": "PixelSpacing",

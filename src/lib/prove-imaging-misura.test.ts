@@ -430,3 +430,27 @@ test('invarianza degli strumenti: zoom, rotazione e DPR non cambiano area, angol
     assert.ok(quasi(A.polilinea.calcola(ct, indietro).valore, base.polilinea, 1e-12));
   }
 });
+
+// ── Fase 6: spaziatura per fotogramma ──
+const perFrame = { tipo: 'pixel_spacing_per_frame', righe: 64, colonne: 64, regioni: [], spacing: null, per_frame: [[1, 1], [1, 1.5], null], avvisi: ['spacing_per_frame_non_uniforme'] };
+
+test('fotogrammi: la calibrazione effettiva è quella del fotogramma su cui si misura', () => {
+  const c0 = G.calibrazionePerFrame(perFrame, 0), c1 = G.calibrazionePerFrame(perFrame, 1), c2 = G.calibrazionePerFrame(perFrame, 2);
+  assert.equal(c0.tipo, 'pixel_spacing'); assert.equal(c0.spacing.dy_mm, 1);
+  assert.equal(c1.spacing.dy_mm, 1.5); assert.equal(c1.spacing.origine, 'PerFrameFunctionalGroups');
+  assert.equal(c2.tipo, 'nessuna');
+  assert.equal(G.calibrazionePerFrame(ct, 3), ct);   // le altre calibrazioni passano invariate
+});
+
+test('fotogrammi: il Gate usa il fotogramma, e la variabilità è una CAUTION da validare', () => {
+  const punti = [{ x: 0, y: 0 }, { x: 0, y: 10 }];
+  const bloccata = V.valuta({ cal: perFrame, frame: 1, frameTotali: 3, punti });
+  assert.equal(bloccata.stato, 'NOT_MEASURABLE'); assert.ok(j(bloccata.motivi).includes('caution_non_validata:spacing_per_frame_variabile'));
+  const f0 = V.valuta({ cal: perFrame, frame: 0, frameTotali: 3, punti, cautionValidati: ['spacing_per_frame_variabile'] });
+  const f1 = V.valuta({ cal: perFrame, frame: 1, frameTotali: 3, punti, cautionValidati: ['spacing_per_frame_variabile'] });
+  assert.equal(f0.stato, 'CAUTION'); assert.ok(quasi(f0.valore, 10)); assert.ok(quasi(f1.valore, 15));
+  assert.equal(f0.cal.spacing.dy_mm, 1); assert.equal(f1.cal.spacing.dy_mm, 1.5);
+  const f2 = V.valuta({ cal: perFrame, frame: 2, frameTotali: 3, punti, cautionValidati: ['spacing_per_frame_variabile'] });
+  assert.equal(f2.stato, 'NOT_MEASURABLE'); assert.ok(j(f2.motivi).includes('calibrazione_assente'));
+  assert.match(G.descriviCalibrazione(perFrame), /per fotogramma/);
+});

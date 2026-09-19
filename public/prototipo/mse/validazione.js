@@ -29,7 +29,8 @@
     calibrazione_assente: 'Calibrazione fisica non verificabile per questa immagine: il file non dichiara la dimensione del pixel.',
     calibrazione_non_valida: 'Calibrazione dichiarata ma non valida (zero, negativa o non numerica).',
     rivelatore: 'Radiografia: la spaziatura è quella del rivelatore, non del paziente. Qui non si misura.',
-    spacing_per_frame: 'Spaziatura diversa da un fotogramma all’altro: non validata.',
+    spacing_per_frame: 'Spaziatura diversa da un fotogramma all’altro e nessun valore per questo fotogramma.',
+    spacing_per_frame_variabile: 'Spaziatura diversa da un fotogramma all’altro: si usa quella dichiarata per questo fotogramma.',
     fuori_regione: 'Entrambi i punti devono stare dentro l’area ecografica calibrata.',
     regioni_diverse: 'I due punti stanno in due aree con calibrazioni diverse.',
     fuori_immagine: 'Un punto è fuori dall’immagine.',
@@ -62,8 +63,12 @@
   // che l'indicatore (✓ ⚠ ✕) e il tasto mostrano.
   function statoImmagine(ctx) {
     ctx = ctx || {};
-    var cal = ctx.cal || null, geo = ctx.geometria || null;
+    var geo = ctx.geometria || null;
+    // fase 6: la calibrazione effettiva del fotogramma su cui si misura
+    var perFrame = !!(ctx.cal && ctx.cal.tipo === 'pixel_spacing_per_frame');
+    var cal = perFrame ? G.calibrazionePerFrame(ctx.cal, ctx.frame) : (ctx.cal || null);
     var motivi = [], avvisi = [];
+    if (perFrame) avvisi.push('spacing_per_frame_variabile');
     if (!cal && !geo) motivi.push('geometria_assente');
     if (geo && geo.versione !== 1) motivi.push('geometria_versione');
     var righe = geo && geo.pixel ? geo.pixel.righe : cal ? cal.righe : null;
@@ -72,7 +77,7 @@
     var modalita = geo && geo.identita ? geo.identita.modalita : (ctx.modalita || null);
     if (modalita && !MODALITA_VALIDATE[modalita]) motivi.push('modalita_non_validata');
     if (G.finito(ctx.frame) && G.finito(ctx.frameTotali) && (ctx.frame < 0 || ctx.frame >= Math.max(1, ctx.frameTotali))) motivi.push('fotogramma_non_valido');
-    if (geo && geo.spaziatura && geo.spaziatura.per_frame) motivi.push('spacing_per_frame');
+    if (geo && geo.spaziatura && geo.spaziatura.per_frame && !perFrame) motivi.push('spacing_per_frame');
     if (cal) {
       if (!cal.tipo || cal.tipo === 'nessuna') motivi.push('calibrazione_assente');
       else if (cal.tipo === 'imager_pixel_spacing') motivi.push('rivelatore');
@@ -96,7 +101,9 @@
       }
     }
     if (geo && geo.spaziatura && geo.spaziatura.calibrazione_tipo === 'GEOMETRY' && cal && cal.tipo === 'pixel_spacing') avvisi.push('calibrazione_geometry');
-    return chiudi(motivi, avvisi, ctx.cautionValidati);
+    var fine = chiudi(motivi, avvisi, ctx.cautionValidati);
+    fine.cal = cal;      // la calibrazione effettiva usata (per fotogramma, se serve)
+    return fine;
   }
 
   // Lo stato finale: motivi → NOT_MEASURABLE; avvisi → CAUTION, ma solo se
@@ -123,8 +130,9 @@
     var alg = MI.ALGORITMI[ctx.algoritmo || 'distanza'];
     if (!alg) motivi.push('algoritmo_sconosciuto');
     var esito = null;
-    if (alg && ctx.cal) {
-      esito = alg.calcola(ctx.cal, ctx.punti);
+    var calEff = pre.cal || ctx.cal;
+    if (alg && calEff) {
+      esito = alg.calcola(calEff, ctx.punti);
       if (esito.stato !== 'ok') { if (motivi.indexOf(esito.stato) < 0) motivi.push(esito.stato); }
       else for (var i = 0; i < (esito.avvisi || []).length; i++) if (avvisi.indexOf(esito.avvisi[i]) < 0) avvisi.push(esito.avvisi[i]);
     }
@@ -139,7 +147,8 @@
       extra: ok ? esito.extra : null,
       punti_fisici: ok ? esito.punti_fisici : null,
       dx_mm: ok ? esito.dx_mm : null, dy_mm: ok ? esito.dy_mm : null, regione: ok ? esito.regione : null,
-      algoritmo: alg ? alg.nome : null, versione_algoritmo: alg ? alg.versione : null, versione_gate: VERSIONE
+      algoritmo: alg ? alg.nome : null, versione_algoritmo: alg ? alg.versione : null, versione_gate: VERSIONE,
+      cal: calEff
     };
   }
 

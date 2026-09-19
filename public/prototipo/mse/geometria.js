@@ -126,6 +126,21 @@
     if (cal.tipo === 'imager_pixel_spacing') return { stato: 'rivelatore' };
     return { stato: 'non_calibrata' };
   }
+  // Fase 6: nei multiframe «enhanced» la spaziatura può cambiare da un
+  // fotogramma all'altro. La calibrazione compatta la porta per fotogramma
+  // ([dx, dy] o null); qui diventa la calibrazione EFFETTIVA di quel
+  // fotogramma, che è quella che si copia dentro la misura. Senza il valore
+  // di quel fotogramma: «nessuna».
+  function calibrazionePerFrame(cal, frame) {
+    if (!cal || cal.tipo !== 'pixel_spacing_per_frame') return cal;
+    var f = finito(frame) ? Math.round(frame) : 0;
+    var v = Array.isArray(cal.per_frame) ? cal.per_frame[f] : null;
+    var base = { tipo: 'nessuna', righe: cal.righe, colonne: cal.colonne, regioni: [], spacing: null, avvisi: cal.avvisi || [], frame: f, da_per_frame: true };
+    if (!v || !finito(v[0]) || !finito(v[1]) || v[0] <= 0 || v[1] <= 0) return base;
+    base.tipo = 'pixel_spacing';
+    base.spacing = { dx_mm: v[0], dy_mm: v[1], origine: 'PerFrameFunctionalGroups', taratura: '' };
+    return base;
+  }
   function dentroImmagine(cal, p) {
     if (!cal || !finito(cal.colonne) || !finito(cal.righe) || cal.colonne <= 0 || cal.righe <= 0) return true;
     return p.x >= 0 && p.x <= cal.colonne && p.y >= 0 && p.y <= cal.righe;
@@ -133,6 +148,7 @@
 
   function formattaSpazio(mm) { return (Math.round(mm * 1000) / 1000).toString().replace('.', ','); }
   function descriviCalibrazione(cal) {
+    if (cal && cal.tipo === 'pixel_spacing_per_frame') return 'calibrata per fotogramma (' + (cal.per_frame ? cal.per_frame.filter(function (v) { return !!v; }).length : 0) + ' fotogrammi con spaziatura)';
     if (!cal || !cal.tipo || cal.tipo === 'nessuna') return 'non calibrata: il file non dichiara la dimensione del pixel';
     if (cal.tipo === 'imager_pixel_spacing') return 'spaziatura del rivelatore, non del paziente: non si misura';
     if (cal.tipo === 'pixel_spacing' && cal.spacing) return 'calibrata ' + formattaSpazio(cal.spacing.dx_mm) + ' × ' + formattaSpazio(cal.spacing.dy_mm) + ' mm/px';
@@ -150,7 +166,7 @@
     VERSIONE: VERSIONE, finito: finito, puntoValido: puntoValido,
     identita: identita, matriceValida: matriceValida, componi: componi, inversa: inversa, applica: applica,
     matriceViewer: matriceViewer, versoImmagine: versoImmagine, versoNativo: versoNativo,
-    regioniPer: regioniPer, regionePer: regionePer, mmPerPixel: mmPerPixel, dentroImmagine: dentroImmagine,
+    regioniPer: regioniPer, regionePer: regionePer, mmPerPixel: mmPerPixel, dentroImmagine: dentroImmagine, calibrazionePerFrame: calibrazionePerFrame,
     descriviCalibrazione: descriviCalibrazione
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
