@@ -399,6 +399,53 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Seconda traccia (19.9.2026): l'audio dichiarava a quale bozza si aggiunge.
+  // Allora non si apre un referto nuovo: il testo va in fondo a quello, le
+  // parole con i tempi spostati dopo la prima traccia (così il riascolto è
+  // una linea sola), e l'audio si collega alla stessa bozza. Solo se la
+  // bozza è ancora una bozza; se nel frattempo è stata confermata, la
+  // seconda traccia diventa un referto a sé, come prima, e lo si dice.
+  if (audioId && !payload.ombra) {
+    const [ag] = await query<{ aggiunge_a: string | null }>('select aggiunge_a from referti_audio where id = $1 and studio_id = $2', [audioId, studio.id]);
+    if (ag?.aggiunge_a) {
+      const [dest] = await query<{ id: string; stato: string; payload: any; testo_finale: string | null }>(
+        'select id, stato, payload, testo_finale from referti_bozze where id = $1 and studio_id = $2', [ag.aggiunge_a, studio.id]);
+      if (dest && dest.stato === 'bozza') {
+        const pd = dest.payload ?? {};
+        const paroleDest: any[] = Array.isArray(pd.parole) ? pd.parole : [];
+        const tempo = (w: any): number => Array.isArray(w) ? Number(w[1]) || 0 : Number(w?.t ?? w?.e ?? w?.s) || 0;
+        const fine = paroleDest.reduce((m, w) => Math.max(m, tempo(w)), 0);
+        const offset = fine > 0 ? fine + 1 : 0;
+        const sposta = (w: any) => {
+          if (Array.isArray(w)) return [w[0], (Number(w[1]) || 0) + offset];
+          if (w && typeof w === 'object') { const c = { ...w }; for (const k of ['t', 's', 'e']) if (typeof c[k] === 'number') c[k] += offset; return c; }
+          return w;
+        };
+        const nuoveParole = (Array.isArray(payload.parole) ? payload.parole : []).map(sposta);
+        const testoNuovo = String(payload.testo_corretto ?? '').trim();
+        const concat = (a: unknown, b: string) => { const x = typeof a === 'string' ? a.trim() : ''; return x && b ? `${x}\n\n${b}` : (x || b); };
+        const tracce = Array.isArray(pd.tracce) ? pd.tracce : [];
+        const payloadUnito = {
+          ...pd,
+          testo_corretto: concat(pd.testo_corretto, testoNuovo),
+          testo_grezzo: concat(pd.testo_grezzo, String(payload.testo_grezzo ?? '').trim()),
+          parole: [...paroleDest, ...nuoveParole],
+          segmenti_dubbi: [...(Array.isArray(pd.segmenti_dubbi) ? pd.segmenti_dubbi : []), ...(Array.isArray(payload.segmenti_dubbi) ? payload.segmenti_dubbi.map(sposta) : [])],
+          tracce: [...tracce, { audio_id: audioId, file_id: fileId, offset, dettato_il: payload.dettato_il ?? null, caratteri: testoNuovo.length }],
+        };
+        await query(
+          `update referti_bozze set payload = $3::jsonb, testo_finale = case when testo_finale is null then null else $4 end where id = $1 and studio_id = $2`,
+          [dest.id, studio.id, JSON.stringify(payloadUnito), concat(dest.testo_finale, testoNuovo)]);
+        await collega(dest.id);
+        try { await registraCorsa(studio.id, dest.id, payload, { audioStorage: (await query<{ storage_key: string }>('select storage_key from referti_audio where id = $1', [audioId]))[0]?.storage_key ?? null }); } catch (e: any) { console.error('audit corsa (traccia):', e?.message || e); }
+        await registraEvento(studio.id, dest.id, 'traccia_aggiunta', null, { audio_id: audioId, file_id: fileId, offset, caratteri: testoNuovo.length, parole: nuoveParole.length });
+        console.log(`[bozza] seconda traccia accodata a ${dest.id.slice(0, 8)}: +${testoNuovo.length} caratteri, +${nuoveParole.length} parole, offset ${offset}s`);
+        return NextResponse.json({ id: dest.id, traccia: true }, { status: 201 });
+      }
+      if (dest) console.log(`[bozza] la seconda traccia trova la bozza ${dest.id.slice(0, 8)} già ${dest.stato}: diventa un referto a sé`);
+    }
+  }
+
   const [inserita] = await query<{ id: string }>(
     `insert into referti_bozze (studio_id, file_id, payload, tipo, medico)
        values ($1, $2, $3, $4, $5)

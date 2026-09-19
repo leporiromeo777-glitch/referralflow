@@ -1484,7 +1484,7 @@ reportsQueue = function () {
           <div class="caption">${chi}${quando} · la catena non ha consegnato niente: il file è in errori/ sul Mac</div></div></div></div>`;
     return `<div class="card q lavoro">
       <div class="row wrap" style="gap:12px"><div class="avatar-sm"><span class="spinner"></span></div>
-        <div class="grow" style="min-width:220px"><div class="row" style="gap:8px"><b>${a.fase === 'in_coda' ? 'In coda' : 'In elaborazione'}</b><span class="badge">${a.fase && a.fase !== 'in_coda' && a.fase !== 'elaborazione' ? rfEsc(a.fase) : 'catena'}</span></div>
+        <div class="grow" style="min-width:220px"><div class="row" style="gap:8px"><b>${a.aggiunge_a ? 'Seconda traccia' : a.fase === 'in_coda' ? 'In coda' : 'In elaborazione'}</b>${a.aggiunge_a ? `<span class="badge">si aggiunge a ${rfEsc(a.paziente || 'un referto')}</span>` : ''}<span class="badge">${a.fase && a.fase !== 'in_coda' && a.fase !== 'elaborazione' ? rfEsc(a.fase) : 'catena'}</span></div>
           <div class="caption">${chi}${quando} · la catena impiega 4-10 minuti; la scheda diventa la bozza da sola</div></div>
         <div class="qm"><span class="v num">…</span><span class="l">verifiche</span></div><div class="qm"><span class="v num">…</span><span class="l">critiche</span></div></div></div>`;
   };
@@ -1552,7 +1552,7 @@ PAGES.review = () => {
   html = html.replace(/<div class="rv-pat">[\s\S]*?<\/div>/, testata);
   // Impaginazione nel formato del medico e Word: stessi motori della piattaforma.
   const bottoni = m.stato === 'bozza'
-    ? `<button class="btn sm ghost" onclick="rfImpagina()" title="${m.formato === 'lettera' ? 'Formato del medico: lettera al collega («Caro …,», corpo, saluto, terapia dalla lettera precedente)' : 'Formato del medico: rapporto a sezioni'}">${ICONS.ai || ''} ${m.formato === 'lettera' ? 'Impagina come lettera' : 'Riorganizza nel formato'}</button><button class="btn sm ghost" onclick="rfDuplica('${id}')" title="Quando in un solo audio ci sono due referti di due pazienti: crea una copia di questa bozza, con lo stesso audio, da tagliare per il secondo">Duplica</button><button class="btn sm ghost" onclick="rfWord('${id}')" title="Word con la carta intestata del medico, dal testo salvato">Word</button>`
+    ? `<button class="btn sm ghost" onclick="rfImpagina()" title="${m.formato === 'lettera' ? 'Formato del medico: lettera al collega («Caro …,», corpo, saluto, terapia dalla lettera precedente)' : 'Formato del medico: rapporto a sezioni'}">${ICONS.ai || ''} ${m.formato === 'lettera' ? 'Impagina come lettera' : 'Riorganizza nel formato'}</button><button class="btn sm ghost" onclick="rfDuplica('${id}')" title="Quando in un solo audio ci sono due referti di due pazienti: crea una copia di questa bozza, con lo stesso audio, da tagliare per il secondo">Duplica</button><label class="btn sm ghost" title="Quando il medico ha spezzato il dettato in due file: il secondo si aggiunge in fondo a questo referto, e nel riascolto le due tracce sono una sola">${m.tracce_in_arrivo ? 'Traccia in arrivo…' : 'Aggiungi traccia audio'}<input type="file" accept=".ds2,.dss,.m4a,.mp3,.wav,.aac,.ogg,.flac,.caf,.mp4" style="display:none" ${m.tracce_in_arrivo ? 'disabled' : ''} onchange="rfTracciaAggiungi('${id}', this)"></label><button class="btn sm ghost" onclick="rfWord('${id}')" title="Word con la carta intestata del medico, dal testo salvato">Word</button>`
     : `<button class="btn sm ghost" onclick="rfDuplica('${id}')" title="Anche da un referto già confermato: la copia riparte dal dettato della catena, da tagliare per il secondo paziente">Duplica</button><button class="btn sm ghost" onclick="rfWord('${id}')">Word</button>`;
   html = html.replace('<div class="rv-top-r">', `<div class="rv-top-r">${bottoni}`);
   const note = Array.isArray(m.note_segreteria) ? m.note_segreteria.filter(n => typeof n === 'string' && n.trim()) : [];
@@ -1602,7 +1602,7 @@ async function rfCaricaRevisione(id) {
       localStorage.setItem(RV_KEY, JSON.stringify({ issues: esiti, metrics: rp.metrics || {}, log: rp.log || [], cur: Math.min(rp.cur || 0, Math.max(0, RV_ISSUES.length - 1)), t: 0, removed }));
     } else localStorage.removeItem(RV_KEY);
     RV.issues = [];
-    rfAudioSetup(j.audio.url);
+    rfAudioSetup(j.audio.url, j.tracce);
     render();
   } catch (e) { RF.loading = null; toast('Bozza non disponibile'); }
 }
@@ -1816,6 +1816,26 @@ async function rfImpagina() {
   finally { RF.impaginando = null; }
 }
 
+
+/* ---------- seconda traccia audio (19.9.2026) ---------- */
+// Il secondo file di un dettato spezzato in due va nella stessa coda della
+// catena, ma dichiarando a quale bozza si aggiunge. Alla consegna il testo
+// finisce in fondo a questo referto e le due tracce si riascoltano di seguito.
+async function rfTracciaAggiungi(id, input) {
+  const f = input && input.files && input.files[0]; if (!f) return;
+  if (!confirm(`Aggiungo «${f.name}» come seconda traccia di questo referto: la catena la trascrive (4-10 minuti) e il testo si aggiunge in fondo. Continuo?`)) { input.value = ''; return; }
+  const fd = new FormData(); fd.append('audio', f);
+  toast('Invio la traccia…');
+  try {
+    const r = await fetch(`/api/prototipo/referti/${id}/audio`, { method: 'POST', credentials: 'include', body: fd });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(j.errore || 'Invio non riuscito'); input.value = ''; return; }
+    toast('Traccia in coda: il testo si aggiunge da solo quando la catena finisce');
+    if (RF.meta) RF.meta.tracce_in_arrivo = (RF.meta.tracce_in_arrivo || 0) + 1;
+    render();
+  } catch { toast('Piattaforma non raggiungibile'); }
+  input.value = '';
+}
 
 /* ---------- note alla segretaria: «Rimetti nel referto» (19.9.2026) ---------- */
 // Si sceglie la sezione (la frase va in coda a quella), e la nota diventa una
@@ -2234,36 +2254,62 @@ rvRenderSource = function () {
 })();
 
 /* audio vero al posto dell'orologio simulato: stesse funzioni, stesso stato RV */
-function rfAudioSetup(url) {
+function rfAudioSetup(url, tracce) {
+  // Più tracce (19.9.2026): un dettato spezzato in due file. La piattaforma
+  // ha già messo le parole della seconda traccia dopo la prima sulla linea
+  // del tempo; qui i file si suonano di seguito, e RV.t resta UNA sola linea:
+  // t = spostamento della traccia + posizione nel suo file.
   if (RF.audioEl) { RF.audioEl.pause(); RF.audioEl = null; }
-  if (!url) return;
-  const a = new Audio(url); a.preload = 'auto';
-  a.addEventListener('timeupdate', () => {
-    RV.t = a.currentTime;
-    if (RV.stopAt != null && RV.t >= RV.stopAt) { a.pause(); RV.playing = false; RV.stopAt = null; }
-    if (typeof rvTick === 'function') rvTick();
+  RF.tracce = [];
+  const lista = Array.isArray(tracce) && tracce.length ? tracce : (url ? [{ url, offset: 0 }] : []);
+  if (!lista.length) return;
+  lista.forEach((t, k) => {
+    const a = new Audio(t.url); a.preload = k === 0 ? 'auto' : 'metadata';
+    const tr = { el: a, offset: Number(t.offset) || 0, dur: 0 };
+    a.addEventListener('timeupdate', () => {
+      if (RF.audioEl !== a) return;
+      RV.t = tr.offset + a.currentTime;
+      if (RV.stopAt != null && RV.t >= RV.stopAt) { a.pause(); RV.playing = false; RV.stopAt = null; }
+      if (typeof rvTick === 'function') rvTick();
+    });
+    a.addEventListener('ended', () => {
+      if (RF.audioEl !== a) return;
+      const prossima = RF.tracce[k + 1];
+      if (prossima && RV.playing) { RF.audioEl = prossima.el; prossima.el.playbackRate = RV.speed || 1; try { prossima.el.currentTime = 0; } catch (e) { /* metadati */ } prossima.el.play().catch(() => { RV.playing = false; rvTick(); }); return; }
+      RV.playing = false; if (typeof rvTick === 'function') rvTick();
+    });
+    a.addEventListener('loadedmetadata', () => {
+      if (isFinite(a.duration) && a.duration > 0) { tr.dur = a.duration; const tot = RF.tracce.reduce((m, x) => Math.max(m, x.offset + (x.dur || 0)), 0); if (tot > 0) { RV_AUDIO.dur = tot; RV_AUDIO.label = fmt(tot); } }
+    });
+    RF.tracce.push(tr);
   });
-  a.addEventListener('ended', () => { RV.playing = false; if (typeof rvTick === 'function') rvTick(); });
-  a.addEventListener('loadedmetadata', () => { if (isFinite(a.duration) && a.duration > 0) { RV_AUDIO.dur = a.duration; RV_AUDIO.label = fmt(a.duration); } });
-  RF.audioEl = a;
+  RF.audioEl = RF.tracce[0].el;
+}
+// La traccia a cui appartiene un istante della linea unica, e la posizione dentro il suo file.
+function rfTracciaPer(t) {
+  const L = RF.tracce || []; if (!L.length) return null;
+  let k = 0; for (let i = 0; i < L.length; i++) if (t >= L[i].offset) k = i;
+  return { k, el: L[k].el, locale: Math.max(0, t - L[k].offset) };
 }
 const rfPlayOrig = rvPlay, rfPauseOrig = rvPause, rfSeekOrig = rvSeek;
 rvPlay = function (from, to) {
   if (!RF.audioEl) return rfPlayOrig(from, to);
-  if (typeof from === 'number') RV.t = Math.max(0, from);
-  RV.stopAt = typeof to === 'number' ? to : null;
-  RV.playing = true; RV.metrics.plays++; RV.detached = false;
-  rvLog('AUDIO_PLAYED', fmt(RV.t) + (RV.stopAt ? ' → ' + fmt(RV.stopAt) : ''));
+  if (from != null) RV.t = from;
+  RV.stopAt = to != null ? to : null;
+  RV.playing = true; RV.metrics.plays++;
+  const tr = rfTracciaPer(RV.t) || { el: RF.audioEl, locale: RV.t };
+  if (RF.audioEl !== tr.el) { RF.audioEl.pause(); RF.audioEl = tr.el; }
   RF.audioEl.playbackRate = RV.speed || 1;
-  try { RF.audioEl.currentTime = RV.t; } catch (e) { /* metadati non pronti */ }
+  try { RF.audioEl.currentTime = tr.locale; } catch (e) { /* metadati non pronti */ }
   RF.audioEl.play().catch(() => { RV.playing = false; toast('Audio non riproducibile'); rvTick(); });
-  rvTick();
 };
 rvPause = function () { if (!RF.audioEl) return rfPauseOrig(); RF.audioEl.pause(); RV.playing = false; rvTick(); };
 rvSeek = function (t, play) {
   if (!RF.audioEl) return rfSeekOrig(t, play);
-  RV.t = Math.min(RV_AUDIO.dur, Math.max(0, t)); RV.detached = false;
-  try { RF.audioEl.currentTime = RV.t; } catch (e) { /* ignora */ }
+  RV.t = Math.min(RV_AUDIO.dur || t, Math.max(0, t)); RV.detached = false;
+  const tr = rfTracciaPer(RV.t);
+  if (tr && RF.audioEl !== tr.el) { RF.audioEl.pause(); RF.audioEl = tr.el; }
+  try { RF.audioEl.currentTime = tr ? tr.locale : RV.t; } catch (e) { /* metadati non pronti */ }
   if (play) rvPlay(RV.t, null); else rvTick();
 };
 

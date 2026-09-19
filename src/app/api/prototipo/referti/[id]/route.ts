@@ -19,7 +19,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     id: string; stato: string; tipo: string; created_at: string; testo_finale: string | null; payload: any; campi_confermati: any; audio_id: string | null;
   }>(
     `select b.id, b.stato, b.tipo, b.created_at::text, b.testo_finale, b.payload, b.campi_confermati,
-            (select a.id from referti_audio a where a.bozza_id = b.id order by a.created_at desc limit 1) as audio_id
+            (select a.id from referti_audio a where a.bozza_id = b.id and a.aggiunge_a is null order by a.created_at asc limit 1) as audio_id
        from referti_bozze b where b.id = $1 and b.studio_id = $2`,
     [params.id, session.studioId]
   );
@@ -40,10 +40,24 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   // tasto «Impagina» della revisione.
   let formato: 'rapporto' | 'lettera' = 'rapporto';
   try { formato = await formatoPerBozza(session.studioId, p.medico ?? null); } catch { formato = 'rapporto'; }
+  // Le tracce (19.9.2026): la prima è l'audio della bozza, le altre sono
+  // quelle aggiunte dopo, ognuna con lo spostamento sulla linea del tempo.
+  // Il riascolto le suona di seguito come se fossero un file solo.
+  const altre = await query<{ id: string; created_at: string }>(
+    `select id, created_at::text from referti_audio where bozza_id = $1 and aggiunge_a is not null and stato = 'fatto' order by created_at asc`, [b.id]);
+  const spostamenti = new Map<string, number>((Array.isArray(p.tracce) ? p.tracce : []).map((t: any) => [String(t.audio_id), Number(t.offset) || 0]));
+  const tracce = [
+    ...(b.audio_id ? [{ id: b.audio_id, url: `/api/referti/audio/${b.audio_id}`, offset: 0 }] : []),
+    ...altre.filter((a) => spostamenti.has(a.id)).map((a) => ({ id: a.id, url: `/api/referti/audio/${a.id}`, offset: spostamenti.get(a.id) ?? 0 })),
+  ];
+  const [inArrivo] = await query<{ n: number }>(`select count(*)::int as n from referti_audio where aggiunge_a = $1 and stato in ('in_coda', 'elaborazione')`, [b.id]);
+
   return NextResponse.json({
     id: b.id,
     stato: b.stato,
     formato,
+    tracce,
+    tracce_in_arrivo: inArrivo?.n ?? 0,
     campi: { nome_paziente: campo('nome_paziente'), data_nascita: campo('data_nascita'), medico_destinatario: campo('medico_destinatario'), medico_inviante: campo('medico_inviante') },
     richiamo: p.richiamo && typeof p.richiamo === 'object' ? { mesi: Number(p.richiamo.mesi), creato_at: p.richiamo.creato_at ?? null } : null,
     richiamo_proposto: p.richiamo ? null : rilevaRichiamo([(b.testo_finale ?? p.testo_corretto ?? '') as string, ...(Array.isArray(p.note_segreteria) ? p.note_segreteria.filter((n: unknown) => typeof n === 'string') : [])]),
