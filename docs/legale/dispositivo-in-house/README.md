@@ -1,6 +1,6 @@
 # Righello ReferralFlow — dispositivo fabbricato e usato nello studio
 
-Stato: **bozza tecnica, 19 settembre 2026**. Scritta da chi sviluppa; **non è un
+Stato: **bozza tecnica, 19 settembre 2026** (aggiornata la sera con il Measurement Safety Engine, fasi 1-5-7-8: geometria completa, Gate a tre stati, doppio controllo, provenienza ed eventi). Scritta da chi sviluppa; **non è un
 parere legale né regolatorio** e va riletta da un consulente regolatorio prima
 della notifica. Non contiene dati di pazienti.
 

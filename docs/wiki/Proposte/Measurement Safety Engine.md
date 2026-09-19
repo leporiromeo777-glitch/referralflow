@@ -1,7 +1,7 @@
 ---
 tipo: proposta
 aggiornata: 2026-09-19
-stato: analisi e piano — nessun codice scritto per questa proposta
+stato: fasi 1, 5, 7, 8 fatte il 19.9.2026 sera (Decisioni/Registro); 3, 4, 6-Enhanced, 9 aperte
 ---
 # Measurement Safety Engine — analisi, architettura, piano
 
@@ -161,7 +161,7 @@ Regole architetturali, verificabili con un test ciascuna:
 
 Per ciascuna: file, architettura, prove, failure mode, accettazione. Il codice si scrive **una fase alla volta, dopo il via**, e ogni fase finisce con banchi verdi, wiki e Registro aggiornati.
 
-### Fase 1 — DICOM Geometry Engine
+### Fase 1 — DICOM Geometry Engine — **fatta il 19.9.2026**
 - **Crea** `imaging/geometria.py` (funzione `geometria_di(ds)`, chiamata da `meta` e da un comando `geometria`); `db/migrations/069_imaging_geometria.sql` (colonna `geometria`, `sha256`; `calibrazione` resta per compatibilità e si popola da `geometria`); `public/prototipo/mse/geometria.js` (pixel → mm; regioni; matrice viewer → immagine); `src/lib/mse.ts` (caricatore vm dei moduli `mse/`).
 - **Modifica** `leggi-dicom.py` (delega), `imaging-ingest.ts`, `imaging-ordina.ts`, rotta calibrazione (→ geometria).
 - **Prove**: `prova-calibrazione.py` esteso (≥ 25 casi), `prove-mse-geometria.test.ts`.
@@ -182,7 +182,7 @@ Resta da spostare `misura.js` in `mse/misure.js` senza cambiare il calcolo (la v
 - **Failure mode**: Rescale mancante; ROI a cavallo del bordo; MR presentata come HU; immagine derivata.
 - **Accettazione**: fantoccio di densità o confronto con la console TAC; **riapre il fascicolo**. Per uno studio di cardiologia senza TAC propria: bassa priorità.
 
-### Fase 5 — Ultrasound Region Calibration completa
+### Fase 5 — Ultrasound Region Calibration completa — **fatta il 19.9.2026** (tempo/velocità predisposti nei dati, non attivi)
 - **Modifica** `geometria.py` (tutte le regioni con tutti i campi, incluso Reference Pixel e Flags), `mse/geometria.js` (regione per punto; unità per asse; rifiuto M-mode/spettrale per le distanze; predisposizione tempo/velocità senza attivarle), Gate (conflitto PixelSpacing/regioni).
 - **Prove**: regioni sovrapposte con priorità; Delta Y negativo; unità miste (cm/sec); regione 2D dentro una spettrale; file veri dell'ecografo dello studio (senza dati nel repo).
 - **Failure mode**: punto su regione color flow con delta diversi dal tessuto; regione grafica scambiata per tessuto.
@@ -193,12 +193,12 @@ Resta da spostare `misura.js` in `mse/misure.js` senza cambiare il calcolo (la v
 - **Prove**: US cine 60 fotogrammi, misura sul 37; Enhanced con Per-Frame Pixel Measures diversi → rifiuto.
 - **Accettazione**: dentro il fascicolo per US cine (stessa calibrazione su tutti i fotogrammi); Enhanced per-frame resta rifiutato.
 
-### Fase 7 — Validation Suite, Gate, verifica indipendente, invarianza
+### Fase 7 — Validation Suite, Gate, verifica indipendente, invarianza — **fatta il 19.9.2026**
 - **Crea** `mse/validazione.js` (Gate, §4), `imaging/verifica-indipendente.py` (numpy, chiamato dal server a ogni salvataggio), banco di invarianza, tabella di riferimento generata dal CSV, lista «CAUTION validati» nel fascicolo letta dal codice.
 - **Modifica** rotta misure (stato + avvisi + verifica), viewer (indicatore ✓ ⚠ ✕, «Dettagli calibrazione», motivo al posto del tasto spento).
 - **Accettazione**: nessun salvataggio senza esito del Gate e della verifica; ogni riga di §4 provata; invarianza alla 12ª cifra.
 
-### Fase 8 — Audit trail e provenienza
+### Fase 8 — Audit trail e provenienza — **fatta il 19.9.2026**
 - **Crea** `db/migrations/070_imaging_misure_eventi.sql`; `versione_software` (hash git letto a build) e `valore_mostrato`, `algoritmo`, `avvisi`, `sostituisce_id` nelle misure; esportazione della provenienza completa in JSON per misura («da dove arriva questo numero?»).
 - **Modifica** rotta misure (eventi a ogni azione), scheda misure (storia di una misura).
 - **Accettazione**: per ogni misura salvata si ricostruisce il numero da soli dati in tabella; nessun aggiornamento del software cambia un numero salvato (il banco di regressione lo dimostra e blocca la distribuzione se no).

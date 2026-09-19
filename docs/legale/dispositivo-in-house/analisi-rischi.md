@@ -29,6 +29,14 @@ riconoscibile che entra in una decisione). Probabilità: 1 rara, 2 possibile,
 | R18 | File DICOM modificato dopo la misura | calibrazione diversa da quella usata | B | 1 | i file si scrivono una volta e mai si riscrivono; la calibrazione usata è **copiata dentro la misura** | A | ispezione; `imaging_misure_manuali.calibrazione` |
 | R19 | Aggiornamento del software che cambia il calcolo | vecchie e nuove misure non confrontabili | B | 2 | `VERSIONE` del calcolo salvata per misura; ogni cambio a `misura.js` o a `calibrazione_di` richiede rivalidazione (piano §4) | A | controllo delle modifiche |
 | R20 | Lettore Python assente o file illeggibile | nessuna calibrazione | A | 2 | risposta esplicita «leggo…» → «non calibrata»; niente stime | A | codice |
+| R21 | Spaziatura diversa da un fotogramma all'altro (Enhanced per-frame) | si misura col valore di un altro fotogramma | C | 1 | il lettore la segnala (`per_frame`), il Gate blocca (`spacing_per_frame`) | A | `prova-geometria.py` 12; test gate |
+| R22 | Due calibrazioni discordanti nello stesso file (PixelSpacing e regioni US) | si usa quella sbagliata | B | 1 | avviso di lettura → CAUTION, bloccata finché non validata; vincono le regioni | A | `prova-geometria.py` 20; test gate |
+| R23 | Punto in regioni ecografiche sovrapposte con scale diverse | scala sbagliata | B | 2 | scelta per priorità dichiarata (Region Flags bit 0), poi tessuto, poi ordine; avviso → CAUTION | A | test «regioni» ×5; doppio controllo |
+| R24 | Immagine derivata (MPR, secondaria) misurata come originale | ricampionamento non dichiarato | B | 2 | `ImageType` DERIVED/SECONDARY → CAUTION bloccata finché non validata | A | `prova-geometria.py` 32; e2e |
+| R25 | Un solo calcolo, un solo errore | errore sistematico non visto | C | 1 | doppio controllo con implementazione separata (numpy); |A−B| > 1e-9 → non si salva, log | A | `prova-doppio-controllo.py` 1000 casi; e2e |
+| R26 | Aggiornamento del software che cambia numeri già salvati | studi vecchi non più confrontabili | B | 2 | `scripts/misure-regressione.ts` ricalcola tutto prima del riavvio e blocca la distribuzione | A | `mac/aggiorna-server.sh` |
+| R27 | CAUTION accettata «a occhio» | uso di una situazione non validata | B | 2 | lista `caution-validati.json`, vuota di default; solo il piano di V&V la riempie | A | test gate «bloccata finché…»; e2e DERIVED |
+| R28 | Viewer con zoom/pan/rotazione che sposta i punti | misura dipendente dalla vista | C | 2 | matrice affine invertibile (`versoImmagine`); 504 combinazioni provate alla 12ª cifra | A | test «invarianza» |
 
 ## Rischio complessivo
 
@@ -40,5 +48,6 @@ destinazione d'uso dichiarata (supporto, non sostituzione della console).
 ## Che cosa riapre questa analisi
 
 Un nuovo tipo di misura (area, angolo), un nuovo tipo di immagine (multiframe
-enhanced con spacing per fotogramma), un cambio del lettore DICOM, una
-segnalazione di misura sbagliata dall'uso clinico.
+enhanced con spacing per fotogramma), un cambio del lettore DICOM o del Gate,
+l'aggiunta di un codice a `caution-validati.json`, una segnalazione di misura
+sbagliata dall'uso clinico.

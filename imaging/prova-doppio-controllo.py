@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+"""Il doppio controllo del motore, provato (MSE fase 7).
+
+Mille casi casuali (TAC/RM con spacing, ecografie con regioni sovrapposte,
+punti dentro e fuori): il calcolo A (mse/*.js in Node) e il calcolo B
+(verifica-indipendente.py, numpy) devono dare lo stesso stato e, quando ok,
+lo stesso numero entro 1e-9 relativo. Nessun dato di paziente.
+
+    ~/.referralflow-imaging/bin/python imaging/prova-doppio-controllo.py
+"""
+from __future__ import annotations
+
+import importlib.util
+import json
+import random
+import subprocess
+import sys
+from pathlib import Path
+
+QUI = Path(__file__).resolve().parent
+RADICE = QUI.parent
+spec = importlib.util.spec_from_file_location("verifica", QUI / "verifica-indipendente.py")
+verifica = importlib.util.module_from_spec(spec); spec.loader.exec_module(verifica)  # type: ignore[union-attr]
+
+NODE = """
+const fs = require('fs'), vm = require('vm'), path = require('path');
+const c = {};
+for (const m of ['mse/geometria.js', 'mse/misure.js', 'mse/validazione.js']) vm.runInNewContext(fs.readFileSync(path.join(process.cwd(), 'public', 'prototipo', m), 'utf-8'), c, { filename: m });
+const casi = JSON.parse(fs.readFileSync(0, 'utf-8'));
+const out = casi.map(k => { const e = c.RFMisura.distanzaMm(k.calibrazione, k.punti[0], k.punti[1]); return { stato: e.stato, mm: e.mm === undefined ? null : e.mm }; });
+process.stdout.write(JSON.stringify(out));
+"""
+
+
+def caso(rng: random.Random) -> dict:
+    tipo = rng.choice(["ct", "eco", "eco", "nessuna", "rivelatore"])
+    righe, colonne = rng.randint(64, 2048), rng.randint(64, 2048)
+    def punto(dentro=True):
+        if dentro:
+            return {"x": rng.uniform(0, colonne), "y": rng.uniform(0, righe)}
+        return {"x": rng.uniform(-50, colonne + 50), "y": rng.uniform(-50, righe + 50)}
+    if tipo == "ct":
+        cal = {"tipo": "pixel_spacing", "righe": righe, "colonne": colonne, "regioni": [],
+               "spacing": {"dx_mm": rng.uniform(0.05, 3), "dy_mm": rng.uniform(0.05, 3)}}
+    elif tipo == "eco":
+        regioni = []
+        for k in range(rng.randint(1, 4)):
+            x0, y0 = rng.randint(0, colonne - 10), rng.randint(0, righe - 10)
+            regioni.append({"indice": k, "x0": x0, "y0": y0, "x1": rng.randint(x0 + 5, colonne), "y1": rng.randint(y0 + 5, righe),
+                            "dx_mm": rng.choice([0.1, 0.2, 0.25, rng.uniform(0.02, 1)]), "dy_mm": rng.choice([0.1, 0.2, 0.25, rng.uniform(0.02, 1)]),
+                            "tipo": rng.choice(["tessuto", "color_flow"]), "priorita_alta": rng.choice([True, False, True])})
+        cal = {"tipo": "us_regioni", "righe": righe, "colonne": colonne, "regioni": regioni, "spacing": None}
+    elif tipo == "nessuna":
+        cal = {"tipo": "nessuna", "righe": righe, "colonne": colonne, "regioni": [], "spacing": None}
+    else:
+        cal = {"tipo": "imager_pixel_spacing", "righe": righe, "colonne": colonne, "regioni": [], "spacing": {"dx_mm": 0.1, "dy_mm": 0.1}}
+    p1 = punto(rng.random() < 0.9); p2 = punto(rng.random() < 0.9)
+    if tipo == "eco" and rng.random() < 0.7:
+        # quasi sempre dentro la stessa regione: è il caso che conta
+        r = cal["regioni"][0]
+        p1 = {"x": rng.uniform(r["x0"], r["x1"]), "y": rng.uniform(r["y0"], r["y1"])}
+        p2 = {"x": rng.uniform(r["x0"], r["x1"]), "y": rng.uniform(r["y0"], r["y1"])}
+    if rng.random() < 0.03:
+        p2 = dict(p1)
+    return {"calibrazione": cal, "punti": [p1, p2]}
+
+
+def main() -> int:
+    rng = random.Random(20260919)
+    casi = [caso(rng) for _ in range(1000)]
+    out = subprocess.run(["node", "-e", NODE], input=json.dumps(casi), capture_output=True, text=True, cwd=RADICE)
+    if out.returncode != 0:
+        print("node non riuscito:", out.stderr[:400]); return 1
+    a = json.loads(out.stdout)
+    diversi = 0; ok = 0; rifiuti = 0
+    for k, ra in zip(casi, a):
+        rb = verifica.distanza(k["calibrazione"], k["punti"])
+        if ra["stato"] != rb["stato"]:
+            diversi += 1
+            if diversi <= 5: print("  stato diverso:", ra, rb, json.dumps(k)[:200])
+            continue
+        if ra["stato"] == "ok":
+            tol = 1e-9 * max(1.0, abs(ra["mm"]))
+            if abs(ra["mm"] - rb["mm"]) > tol:
+                diversi += 1
+                if diversi <= 5: print("  valore diverso:", ra["mm"], rb["mm"])
+            else:
+                ok += 1
+        else:
+            rifiuti += 1
+    print(f"prova-doppio-controllo: {len(casi)} casi, {ok} misure coincidenti, {rifiuti} rifiuti coincidenti, {diversi} divergenze")
+    print("TUTTO OK" if diversi == 0 and ok > 300 else "CI SONO DIVERGENZE")
+    return 0 if diversi == 0 and ok > 300 else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -15,6 +15,17 @@ if ! launchctl list ch.referralflow.app > /dev/null 2>&1; then
   exit 1
 fi
 
+# Il righello (dispositivo in-house): un aggiornamento non deve cambiare i
+# numeri delle misure già salvate. Si ricalcolano tutte col motore nuovo;
+# se una cambia, NON si riavvia (docs/legale/dispositivo-in-house/piano-validazione.md §4).
+if [ -f .env ] && [ -d node_modules ]; then
+  echo "Regressione delle misure salvate…"
+  if ! npx tsx --env-file=.env scripts/misure-regressione.ts; then
+    echo "FERMO: il motore di misura aggiornato cambia misure già salvate. Non riavvio."
+    exit 1
+  fi
+fi
+
 echo "Riavvio il servizio…"
 launchctl kickstart -k "gui/$(id -u)/ch.referralflow.app"
 

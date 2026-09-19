@@ -1,5 +1,7 @@
 import 'server-only';
+import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
 
@@ -46,13 +48,63 @@ type Api = {
   descriviCalibrazione: (cal: Calibrazione | null) => string;
   motivo: (stato: string) => string;
 };
+export type EsitoGate = {
+  stato: 'VALIDATED' | 'CAUTION' | 'NOT_MEASURABLE'; motivi: string[]; avvisi: string[]; testi: string[];
+  valore: number | null; unita: string | null; valore_mostrato: string | null; punti_fisici: Punto[] | null;
+  dx_mm: number | null; dy_mm: number | null; regione: number | null;
+  algoritmo: string | null; versione_algoritmo: string | null; versione_gate: string;
+};
+type ContestoGate = { cal: Calibrazione | null; geometria?: Geometria | null; frame?: number; frameTotali?: number; punti?: Punto[]; algoritmo?: string; cautionValidati?: string[]; modalita?: string | null };
 type Mse = {
   geometria: { VERSIONE: string; versoImmagine: (p: Punto, M: number[][]) => Punto | null; matriceViewer: (v: Record<string, number>) => number[][]; mmPerPixel: (cal: Calibrazione | null, p: Punto) => { stato: string; sx?: number; sy?: number } };
   misure: { VERSIONE: string; ALGORITMI: Record<string, { nome: string; versione: string; unita: string; equazione: string; calcola: (cal: Calibrazione | null, punti: Punto[]) => EsitoMisura }>; formattaMm: (mm: number) => string; motivo: (stato: string) => string };
+  validazione: { VERSIONE: string; statoImmagine: (ctx: ContestoGate) => Pick<EsitoGate, 'stato' | 'motivi' | 'avvisi' | 'testi'>; valuta: (ctx: ContestoGate) => EsitoGate; testo: (codice: string) => string };
 };
 
 // I moduli, nell'ordine in cui il browser li carica (index.html).
-export const MODULI_MSE = ['mse/geometria.js', 'mse/misure.js'];
+export const MODULI_MSE = ['mse/geometria.js', 'mse/misure.js', 'mse/validazione.js'];
+
+// I casi CAUTION in cui si può misurare: li decide il piano di V&V, non il
+// codice (imaging/caution-validati.json). Lista vuota = ogni avviso blocca.
+let caution: string[] | null = null;
+export function cautionValidati(): string[] {
+  if (caution) return caution;
+  try {
+    const j = JSON.parse(readFileSync(path.join(process.cwd(), 'imaging', 'caution-validati.json'), 'utf-8'));
+    caution = Array.isArray(j?.validati) ? j.validati.filter((x: unknown) => typeof x === 'string') : [];
+  } catch { caution = []; }
+  return caution ?? [];
+}
+
+// La versione del software che ha prodotto la misura: l'hash del commit
+// compilato (mac/aggiorna-server.sh scrive .build-stamp); «sviluppo» altrove.
+let versione: string | null = null;
+export function versioneSoftware(): string {
+  if (versione) return versione;
+  try { versione = readFileSync(path.join(process.cwd(), '.build-stamp'), 'utf-8').trim().slice(0, 12) || 'sviluppo'; }
+  catch { versione = 'sviluppo'; }
+  return versione;
+}
+
+// Doppio controllo: la distanza ricalcolata da un'implementazione separata
+// (imaging/verifica-indipendente.py, numpy). Torna il valore B e lo stato.
+const PY = process.env.IMAGING_PYTHON ?? path.join(os.homedir(), '.referralflow-imaging', 'bin', 'python');
+export function verificaIndipendente(cal: Calibrazione | null, punti: Punto[]): Promise<{ stato: string; mm?: number }> {
+  return new Promise((risolvi) => {
+    const figlio = execFile(PY, [path.join(process.cwd(), 'imaging', 'verifica-indipendente.py')], { timeout: 15_000 },
+      (errore, stdout) => {
+        try {
+          const j = JSON.parse(String(stdout || '{}'));
+          risolvi(j && typeof j.stato === 'string' ? j : { stato: 'verificatore_non_disponibile' });
+        } catch { risolvi({ stato: errore ? 'verificatore_non_disponibile' : 'uscita_illeggibile' }); }
+      });
+    figlio.stdin?.end(JSON.stringify({ calibrazione: cal, punti }));
+  });
+}
+// Tolleranza tecnica del doppio controllo: un miliardesimo relativo (o
+// assoluto sotto 1 mm). Due implementazioni corrette in virgola mobile
+// stanno ben dentro; un errore di unità o di asse sta ben fuori.
+export function tolleranzaVerifica(valore: number): number { return 1e-9 * Math.max(1, Math.abs(valore)); }
 
 let contesto: Record<string, unknown> | null = null;
 

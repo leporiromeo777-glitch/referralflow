@@ -1,0 +1,5 @@
+{
+  "_commento": "Casi CAUTION in cui si può misurare, perché validati nel piano di V&V (docs/legale/dispositivo-in-house/piano-validazione.md). Lista VUOTA = nessun CAUTION è misurabile: ogni avviso blocca. Si aggiunge un codice SOLO con la firma del validatore e la data.",
+  "validati": [],
+  "storia": []
+}

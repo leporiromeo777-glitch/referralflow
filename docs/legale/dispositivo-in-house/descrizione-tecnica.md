@@ -1,41 +1,61 @@
 # Descrizione tecnica — Righello ReferralFlow
 
-Versione 1.0 · 19.9.2026.
+Versione 1.1 · 19.9.2026 sera (Measurement Safety Engine, fasi 1-5-7-8; la 1.0 del mattino era il righello v1).
 
-## 1. Che cosa fa, in cinque passi
+## 1. Che cosa fa, in sette passi
 
 1. L'immagine DICOM arriva dall'apparecchio (C-STORE) o da un supporto e si
-   archivia **senza riscriverla** (`uploads/imaging/…`).
-2. Il lettore `imaging/leggi-dicom.py` (processo separato, pydicom) legge i
-   metadati e la **calibrazione** (`calibrazione_di`): regioni ecografiche in
-   cm → mm/px, oppure `PixelSpacing` riga/colonna, oppure
-   `ImagerPixelSpacing` (segnato come non misurabile). Si salva in
-   `imaging_immagini.calibrazione`.
-3. Il browser mostra un PNG del fotogramma e sopra un `canvas`. Premuto
-   «Misura», l'operatore trascina fra due punti; le coordinate dello schermo
-   diventano pixel nativi (`RFMisura.versoNativo`) e la distanza si calcola
-   subito (`RFMisura.distanzaMm`).
-4. Al rilascio, se il calcolo è possibile, il browser manda al server **i due
-   punti** (non il numero), con immagine, fotogramma, etichetta e l'eventuale
-   misura dell'apparecchio di riferimento.
-5. Il server ricalcola con lo **stesso file** `misura.js` sulla calibrazione in
-   tabella, e salva in `imaging_misure_manuali` punti, valore, calibrazione
-   usata, versione del calcolo, chi e quando. Registra «misurato» negli
-   accessi dell'esame.
+   archivia **senza riscriverla** (`uploads/imaging/…`); se ne calcola
+   l'impronta SHA-256.
+2. Il lettore `imaging/leggi-dicom.py` → `imaging/geometria.py` (processo
+   separato, pydicom) legge **tutta la geometria** (`geometria_di`, versione 1):
+   spaziatura con la sua fonte (`PixelSpacing`, gruppi funzionali condivisi o
+   per fotogramma, `ImagerPixelSpacing`) e il tipo di calibrazione, TUTTE le
+   regioni ecografiche con unità, formato, tipo di dato, flag e reference
+   pixel, aspect ratio, rescale, orientamento e posizione nel paziente, tipo
+   d'immagine, avvisi di lettura. Da lì deriva la **calibrazione compatta**
+   (`calibrazione_da`) usata dal calcolo. Entrambe in `imaging_immagini`.
+3. Il browser mostra un PNG del fotogramma e sopra un `canvas`. Il
+   **Validation Gate** (`mse/validazione.js`, `statoImmagine`) giudica
+   l'immagine prima di qualunque punto: VALIDATED / CAUTION / NOT_MEASURABLE,
+   con motivi e avvisi; l'indicatore ✓ ⚠ ✕ e «Dettagli calibrazione» lo
+   mostrano; se NOT_MEASURABLE il tasto non c'è, c'è il motivo.
+4. Premuto «Misura», l'operatore trascina fra due punti; le coordinate dello
+   schermo diventano pixel nativi (`mse/geometria.js`: `versoNativo`, o la
+   matrice affine `versoImmagine` per un viewer con zoom/pan/rotazione) e il
+   Gate (`valuta`) calcola l'anteprima con l'algoritmo `distanza` 1.0.
+5. Al rilascio, se lo stato non è NOT_MEASURABLE, il browser manda al server
+   **i due punti** (non il numero), con immagine, fotogramma, etichetta,
+   l'eventuale misura dell'apparecchio di riferimento e l'eventuale misura
+   che sta rifacendo.
+6. Il server rifà il Gate con gli **stessi file** `mse/*.js` sulla
+   calibrazione in tabella, poi il **doppio controllo**:
+   `imaging/verifica-indipendente.py` (numpy, implementazione separata)
+   ricalcola; se |A − B| supera 1e-9 relativo, non si salva (422, log di
+   errore).
+7. Si salva in `imaging_misure_manuali` la **provenienza completa** (punti
+   immagine e fisici, valore pieno e mostrato, unità, algoritmo e versioni di
+   algoritmo/gate/software, stato, avvisi, esito del doppio controllo,
+   calibrazione e geometria copiate, misura sostituita) e un **evento**
+   «creata» in `imaging_misure_eventi`. Ogni azione successiva (nome,
+   riferimento, annullamento, sostituzione) è un altro evento con prima e
+   dopo. Registra «misurato» negli accessi dell'esame.
 
 ## 2. Componenti
 
 | Componente | File | Ruolo |
 |---|---|---|
-| Calcolo | `public/prototipo/misura.js` (`RFMisura`, versione 1.0) | unica fonte della matematica; nessuna dipendenza; non tocca il DOM |
-| Lettura calibrazione | `imaging/leggi-dicom.py` → `calibrazione_di`, comando `calibrazione`, campo in `meta` | dal file DICOM, mai da stime |
-| Caricatore lato server | `src/lib/imaging-misura.ts` | carica `misura.js` in un contesto `vm`, espone tipi e `calibrata()` |
-| Rotta di misura | `src/app/api/prototipo/imaging/misure/route.ts` | POST nuova/annulla/riferimento; GET riepilogo e CSV |
-| Rotta calibrazione | `src/app/api/prototipo/imaging/immagine/[id]/calibrazione/route.ts` | per le immagini archiviate prima del 19.9.2026 |
-| Dettaglio esame | `src/app/api/prototipo/imaging/[id]/route.ts` | calibrazione per immagine, misure manuali, misure dell'apparecchio con id |
-| Ingestione | `src/lib/imaging-ingest.ts`, `src/lib/imaging-ordina.ts` | la calibrazione entra con l'immagine |
-| Interfaccia | `public/prototipo/referralflow-bridge.js` (`rfMis*`, `rfImgMisureManuali`) | gesto, disegno, scheda delle misure |
-| Dati | `db/migrations/068_imaging_misure_manuali.sql` | colonna `calibrazione`, tabella `imaging_misure_manuali` |
+| A. DICOM data layer | `imaging/geometria.py` (`geometria_di`, `calibrazione_da`), `imaging/leggi-dicom.py` (comandi `geometria`, `calibrazione`, campo in `meta`) | dal file DICOM, mai da stime; definizioni PS3.3 2026c |
+| B. Geometry engine | `public/prototipo/mse/geometria.js` (`RFMSE.geometria` 1.0) | matrici affini schermo→immagine, regioni (priorità, sovrapposizioni), mm per pixel |
+| C. Measurement engine | `public/prototipo/mse/misure.js` (`RFMSE.misure`, algoritmo `distanza` 1.0, facciata `RFMisura`) | un algoritmo = nome, versione, unità, equazione, `calcola` |
+| D. Validation & safety | `public/prototipo/mse/validazione.js` (`RFMSE.validazione` 1.0), `imaging/verifica-indipendente.py`, `imaging/caution-validati.json` | Gate, testi dei motivi, doppio controllo, casi CAUTION ammessi |
+| Caricatore lato server | `src/lib/imaging-misura.ts` | carica i tre moduli in un contesto `vm`; `cautionValidati`, `versioneSoftware`, `verificaIndipendente`, `tolleranzaVerifica` |
+| Rotte | `src/app/api/prototipo/imaging/misure/route.ts` (POST nuova/annulla/etichetta/riferimento; GET riepilogo e CSV), `…/misure/[id]/route.ts` (provenienza e storia), `…/immagine/[id]/calibrazione/route.ts` (geometria pigra), `…/[id]/route.ts` (dettaglio con geometria e contesto MSE) | |
+| Ingestione | `src/lib/imaging-ingest.ts`, `src/lib/imaging-ordina.ts` | geometria, calibrazione e sha256 entrano con l'immagine |
+| E. Viewer | `public/prototipo/referralflow-bridge.js` (`rfMis*`, `rfImgMisureManuali`) | gesto, disegno, indicatore, dettagli, storia, nome, rifai; nessun calcolo proprio |
+| F. Storage/audit | `db/migrations/068…`, `069_imaging_geometria.sql`, `070_imaging_misure_provenienza.sql` | `imaging_immagini.geometria/sha256`, `imaging_misure_manuali` con provenienza, `imaging_misure_eventi` |
+| Regressione | `scripts/misure-regressione.ts` (chiamato da `mac/aggiorna-server.sh`) | un aggiornamento che cambia numeri salvati non si distribuisce |
+| Riferimento | `scripts/tabella-riferimento.py` | tabella Test/Ground truth/Risultato/Errori/PASS-FAIL con soglie passate, mai scelte dal codice |
 
 ## 3. Software di terzi (SOUP) e versioni al 19.9.2026
 
@@ -50,16 +70,28 @@ Versione 1.0 · 19.9.2026.
 | PostgreSQL | 16.14 | archivio delle misure | R15 (transazioni) |
 | Browser | Safari/Chrome/Firefox correnti | canvas, eventi pointer | R7–R8 |
 
-Nessuna libreria di terzi partecipa al **calcolo** della distanza.
+Nessuna libreria di terzi partecipa al **calcolo** A della distanza; numpy
+(`hypot`) partecipa solo al calcolo B, il controllo indipendente.
 
 ## 4. Dati e tracciabilità
 
 `imaging_misure_manuali`: `studio_id`, `esame_id`, `immagine_id`, `frame`,
-`user_id`, `tipo` (solo `distanza`), `punti` (pixel nativi), `valore` (mm),
-`calibrazione` (copia di quella usata), `versione_calcolo`, `etichetta`,
-`riferimento_misura_id` (la misura dell'apparecchio per la validazione),
-`annullata_at`, `annullata_da`, `created_at`. Nessuna cancellazione fisica dal
-software. Esportazione CSV per il fascicolo.
+`user_id`, `tipo` (solo `distanza`), `punti` (pixel nativi), `punti_fisici`
+(mm), `valore` (pieno), `valore_mostrato`, `unita`, `calibrazione` e
+`geometria` (copie di quelle usate), `algoritmo`, `versione_calcolo`
+(= versione dell'algoritmo), `versione_gate`, `versione_software` (hash del
+commit compilato), `stato_validazione` (VALIDATED | CAUTION), `avvisi`,
+`verifica_indipendente` (metodo, A, B, scarto, tolleranza, esito),
+`etichetta`, `riferimento_misura_id`, `sostituisce_id`, `annullata_at`,
+`annullata_da`, `created_at`. Nessuna cancellazione fisica dal software.
+
+`imaging_misure_eventi` (soli inserimenti): `misura_id`, `evento` (creata,
+etichettata, riferimento, annullata, sostituita), `user_id`, `prima`, `dopo`,
+`versione_software`, `created_at`. La rotta `…/misure/[id]` restituisce
+provenienza e storia insieme; la UI la mostra con «Storia».
+
+`imaging_immagini.sha256`: l'impronta del file archiviato; l'evento «creata»
+la copia, così una misura dice su quali byte è stata presa.
 
 Nessun dato clinico in log, URL o notifiche (nLPD, regole della piattaforma).
 Le immagini non lasciano il Mac; il DICOM non arriva mai al browser.
@@ -73,8 +105,13 @@ Le immagini non lasciano il Mac; il DICOM non arriva mai al browser.
   `calibrazione_di`, alle rotte di misura o alla migrazione passa da: prove
   automatiche verdi → voce in `Decisioni/Registro` → rivalidazione secondo
   [piano-validazione.md](piano-validazione.md) §4 → distribuzione.
-- **Prove**: `prova-calibrazione.py`, `prove-imaging-misura.test.ts`, e2e sul
-  DB demo; i risultati si scrivono in `docs/wiki/Misure/Banchi.md`.
+- **Prove**: `prova-calibrazione.py`, `prova-geometria.py`,
+  `prova-doppio-controllo.py`, `prove-imaging-misura.test.ts` (Gate,
+  invarianza), `scripts/prova-righello-e2e.py` sul DB demo,
+  `scripts/misure-regressione.ts`; i risultati si scrivono in
+  `docs/wiki/Misure/Banchi.md`.
+- **Casi CAUTION ammessi**: solo in `imaging/caution-validati.json`, con firma
+  e data del validatore nella `storia`; lista vuota = ogni avviso blocca.
 - **Documentazione**: questa cartella; la wiki `Piattaforma/Immagini` per
   l'uso; `Decisioni/Registro` per le scelte.
 - **Segnalazioni**: il personale segnala al titolare; il titolare a chi

@@ -5910,6 +5910,14 @@ if (typeof NAV !== 'undefined') for (const r of ['secretary', 'assistant', 'doct
 .rf-mis-tela.attiva canvas { pointer-events:auto; cursor:crosshair; }
 .rf-mis-riga.annullata .name { text-decoration:line-through; color:var(--muted); }
 .rf-mis-riga.qui { border-left:3px solid var(--cta); padding-left:9px; }
+.rf-mis-ind { display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:3px 9px; border-radius:999px; border:1px solid var(--border); background:var(--surface); }
+.rf-mis-ind.st-VALIDATED { color:#0d5c48; border-color:#8fcdb6; }
+.rf-mis-ind.st-CAUTION { color:#8a5a00; border-color:#e6c27a; }
+.rf-mis-ind.st-NOT_MEASURABLE { color:#8a1f1f; border-color:#e5a3a3; }
+.rf-mis-ind button { all:unset; cursor:pointer; text-decoration:underline; font-size:11px; color:var(--muted); }
+.rf-mis-motivo { font-size:12px; color:var(--muted); line-height:1.45; }
+.rf-mis-stato { font-size:11px; margin-left:4px; }
+.rf-mis-stato.st-CAUTION { color:#8a5a00; } .rf-mis-stato.st-VALIDATED { color:#0d5c48; }
 `; document.head.appendChild(st); })();
 
 RF.img = { lista: null, conta: {}, errore: null, lettore: true, aperto: null, dati: null, serie: 0, idx: 0, frame: 0, ww: null, wl: null, carico: false, filtro: '' };
@@ -6019,9 +6027,11 @@ function rfImgDropFile(e) {
 const RF_IMG_STATO = { da_verificare: ['warning', 'da verificare'], disponibile: ['success', 'in cartella'], nascosto: ['', 'nascosto'] };
 
 function rfMisPuo() { return ['doctor', 'assistant', 'org_admin'].includes(state.role); }
-function rfMisAttiva() {
+function rfMisAttiva(sostituisce) {
   if (!rfMisPuo()) { toast('Misura chi cura: il tuo ruolo vede le immagini, non le misura'); return; }
-  RF.mis.attiva = !RF.mis.attiva; RF.mis.bozza = null; RF.mis.esito = null; render();
+  const st = rfMisStatoImmagine(rfImgCorrente());
+  if (!RF.mis.attiva && st && st.stato === 'NOT_MEASURABLE') { toast(st.testi[0] || 'Misurazione non disponibile'); return; }
+  RF.mis.attiva = sostituisce ? true : !RF.mis.attiva; RF.mis.bozza = null; RF.mis.esito = null; RF.mis.sostituisce = sostituisce || null; render();
 }
 // La calibrazione dell'immagine. Quelle entrate dal 19.9.2026 ce l'hanno con
 // sé; per le altre si chiede una volta al server, che la legge dal DICOM.
@@ -6035,6 +6045,53 @@ function rfMisCal(i) {
   }
   return null;
 }
+// Il Validation Gate, lato browser: lo stesso codice del server. Serve per
+// l'indicatore (✓ ⚠ ✕) e per decidere se mostrare lo strumento; il giudizio
+// che conta lo rifà il server prima di salvare.
+function rfMisContesto(i, punti) {
+  const d = RF.img.dati || {};
+  return { cal: rfMisCal(i), geometria: i ? (i.geometria || null) : null, frame: RF.img.frame, frameTotali: i ? Math.max(1, i.frame) : 1,
+    punti, algoritmo: 'distanza', cautionValidati: (d.mse && d.mse.caution_validati) || [], modalita: (d.esame && d.esame.modalita) || null };
+}
+function rfMisStatoImmagine(i) {
+  if (!i) return null;
+  if (i.calibrazione === null || i.calibrazione === undefined) return { stato: 'ATTESA', motivi: [], avvisi: [], testi: ['Leggo la calibrazione dal file…'] };
+  return RFMSE.validazione.statoImmagine(rfMisContesto(i));
+}
+function rfMisIndicatore(i) {
+  const st = rfMisStatoImmagine(i); if (!st) return '';
+  if (st.stato === 'ATTESA') return `<span class="rf-mis-ind">… ${rfEsc(st.testi[0])}</span>`;
+  const V = RFMSE.validazione;
+  return `<span class="rf-mis-ind st-${st.stato}">${V.SEGNI[st.stato]} ${rfEsc(V.ETICHETTE[st.stato])} <button onclick="rfMisDettagli()">Dettagli calibrazione</button></span>`;
+}
+function rfMisDettagli() {
+  const i = rfImgCorrente(); if (!i) return;
+  const V = RFMSE.validazione, G = RFMSE.geometria;
+  const st = rfMisStatoImmagine(i) || { stato: 'ATTESA', testi: [], motivi: [], avvisi: [] };
+  const cal = rfMisCal(i), g = i.geometria || null;
+  const d = RF.img.dati || {};
+  const r = (k, v) => `<b>${rfEsc(k)}</b><span>${v}</span>`;
+  const n = (x) => (x === null || x === undefined) ? '—' : String(Math.round(Number(x) * 1e6) / 1e6).replace('.', ',');
+  const righe = [
+    r('Stato', st.stato === 'ATTESA' ? '…' : `${V.SEGNI[st.stato]} ${rfEsc(V.ETICHETTE[st.stato])}`),
+    r('Modalità', rfEsc((g && g.identita && g.identita.modalita) || (d.esame && d.esame.modalita) || '—')),
+    r('Calibrazione usata', rfEsc(G.descriviCalibrazione(cal))),
+    r('Origine del valore', rfEsc(cal && cal.tipo === 'us_regioni' ? 'Sequence of Ultrasound Regions (cm per pixel)' : (g && g.spaziatura && g.spaziatura.fonte) || (cal && cal.spacing && cal.spacing.origine) || 'nessuna')),
+    r('Unità', 'mm (dal file: cm per le regioni ecografiche, mm per PixelSpacing)'),
+  ];
+  if (g && g.spaziatura && g.spaziatura.fonte) righe.push(r('Pixel Spacing dichiarato', `${n(g.spaziatura.dx_mm)} × ${n(g.spaziatura.dy_mm)} mm (colonna × riga)${g.spaziatura.calibrazione_tipo ? ` · tipo ${rfEsc(g.spaziatura.calibrazione_tipo)}` : ''}${g.spaziatura.calibrazione_descrizione ? ` · ${rfEsc(g.spaziatura.calibrazione_descrizione)}` : ''}${g.spaziatura.per_frame ? ' · per fotogramma' : ''}`));
+  if (g && g.spaziatura && g.spaziatura.imager_dx_mm) righe.push(r('Imager Pixel Spacing', `${n(g.spaziatura.imager_dx_mm)} × ${n(g.spaziatura.imager_dy_mm)} mm (rivelatore, non paziente)`));
+  if (g && g.regioni_us && g.regioni_us.length) righe.push(r('Regioni ecografiche', g.regioni_us.map(x => `${x.indice}: ${rfEsc(x.formato)}/${rfEsc(x.tipo_dati)} · ${rfEsc(x.unita_x)}/${rfEsc(x.unita_y)} · Δ ${n(x.delta_x)} / ${n(x.delta_y)} · [${x.x0},${x.y0}]–[${x.x1},${x.y1}]${x.flags && !x.flags.priorita_alta ? ' · bassa priorità' : ''}`).join('<br>')));
+  if (g && g.pixel) righe.push(r('Pixel', `${g.pixel.colonne} × ${g.pixel.righe}${g.pixel.aspect ? ` · aspect ${g.pixel.aspect[0]}:${g.pixel.aspect[1]}` : ''}${g.pixel.rescale ? ` · rescale ${n(g.pixel.rescale.slope)}·x + ${n(g.pixel.rescale.intercept)} ${rfEsc(g.pixel.rescale.tipo || '')}` : ''}`));
+  if (g && g.spazio) righe.push(r('Piano nel paziente', `${g.spazio.iop ? 'IOP ' + g.spazio.iop.map(n).join(' ') : 'IOP —'}${g.spazio.ipp ? ' · IPP ' + g.spazio.ipp.map(n).join(' ') : ''}${g.spazio.frame_of_reference ? ' · FoR' : ''}${g.spazio.spessore_mm ? ` · spessore ${n(g.spazio.spessore_mm)} mm` : ''} — non usato per la distanza in piano`));
+  if (g) righe.push(r('Tipo immagine', rfEsc((g.image_type || []).join(' / ') || '—') + (g.derivata ? ' · <b>derivata</b>' : '')));
+  if (g && g.sha256_file) righe.push(r('Impronta del file', `<code>${rfEsc(g.sha256_file.slice(0, 16))}…</code> (SHA-256)`));
+  righe.push(r('Versioni', `geometria ${g ? g.versione : '—'} · calcolo ${RFMSE.misure.ALGORITMI.distanza.versione} · gate ${V.VERSIONE} · software ${rfEsc((d.mse && d.mse.versione_software) || '—')}`));
+  const lista = (st.motivi || []).concat(st.avvisi || []);
+  openModal('Dettagli calibrazione', `<div class="kv">${righe.join('')}</div>${lista.length ? `<div class="mt-8"><div class="caption" style="text-transform:uppercase;letter-spacing:.04em">${st.stato === 'NOT_MEASURABLE' ? 'Motivi' : 'Avvisi'}</div><ul class="rf-mis-motivo" style="margin:4px 0 0 18px">${lista.map(c => `<li>${rfEsc(V.testo(c))} <span class="caption">(${rfEsc(c)})</span></li>`).join('')}</ul></div>` : '<p class="caption mt-8">Nessun avviso: la calibrazione viene dal file e non ha limitazioni note.</p>'}
+    <p class="caption mt-8">Il righello non stima mai: tutto ciò che vedi qui è scritto nel file DICOM dall'apparecchio. Fascicolo: <code>docs/legale/dispositivo-in-house/</code>.</p>`,
+    `<button class="btn" data-close>Chiudi</button>`);
+}
 function rfMisPunto(e) {
   const cv = e.currentTarget; const r = cv.getBoundingClientRect();
   const i = rfImgCorrente(); if (!i || !r.width) return null;
@@ -6047,19 +6104,19 @@ function rfMisGiu(e) {
   const i = rfImgCorrente(); const p = rfMisPunto(e); if (!i || !p) return;
   e.preventDefault(); try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) { /* niente */ }
   RF.mis.bozza = { immagine_id: i.id, frame: RF.img.frame, p1: p, p2: p }; RF.mis.trascina = true;
-  RF.mis.esito = RFMisura.distanzaMm(rfMisCal(i), p, p); rfMisDisegna();
+  RF.mis.esito = RFMSE.validazione.valuta(rfMisContesto(i, [p, p])); rfMisDisegna();
 }
 function rfMisMuovi(e) {
   if (!RF.mis.trascina || !RF.mis.bozza) return;
   const p = rfMisPunto(e); if (!p) return;
-  RF.mis.bozza.p2 = p; RF.mis.esito = RFMisura.distanzaMm(rfMisCal(rfImgCorrente()), RF.mis.bozza.p1, p); rfMisDisegna();
+  RF.mis.bozza.p2 = p; RF.mis.esito = RFMSE.validazione.valuta(rfMisContesto(rfImgCorrente(), [RF.mis.bozza.p1, p])); rfMisDisegna();
 }
 function rfMisSu(e) {
   if (!RF.mis.trascina) return;
   RF.mis.trascina = false;
   const b = RF.mis.bozza, es = RF.mis.esito;
   if (!b || !es) return;
-  if (es.stato !== 'ok') { toast(RFMisura.motivo(es.stato)); RF.mis.bozza = null; RF.mis.esito = null; rfMisDisegna(); return; }
+  if (es.stato === 'NOT_MEASURABLE' || es.valore === null) { toast(es.testi[0] || 'Misura non possibile'); RF.mis.bozza = null; RF.mis.esito = null; rfMisDisegna(); return; }
   rfMisSalvaModal();
 }
 // Disegna le misure salvate dell'immagine e del fotogramma correnti, più
@@ -6097,16 +6154,19 @@ function rfMisDisegna() {
   const b = RF.mis.bozza;
   if (b && b.immagine_id === i.id && b.frame === RF.img.frame) {
     const es = RF.mis.esito || {};
-    linea(b.p1, b.p2, es.stato === 'ok' ? RFMisura.formattaMm(es.mm) : (es.stato === 'punti_uguali' ? '' : '—'), es.stato === 'ok' ? '#ffd166' : '#ff8a80');
+    const ok = es.valore !== null && es.valore !== undefined && es.stato !== 'NOT_MEASURABLE';
+    linea(b.p1, b.p2, ok ? (es.stato === 'CAUTION' ? '⚠ ' : '') + es.valore_mostrato : ((es.motivi || [])[0] === 'punti_uguali' ? '' : '—'), ok ? '#ffd166' : '#ff8a80');
   }
 }
 window.addEventListener('resize', () => { if (RF.img.aperto) rfMisDisegna(); });
 
 function rfMisSalvaModal() {
   const b = RF.mis.bozza, es = RF.mis.esito, d = RF.img.dati || {};
-  if (!b || !es || es.stato !== 'ok') return;
+  if (!b || !es || es.valore === null || es.stato === 'NOT_MEASURABLE') return;
   const rif = (d.misure || []).map(m => `<option value="${m.id}">${rfEsc(m.gruppo ? m.gruppo + ' · ' : '')}${rfEsc(m.nome)} · ${String(Math.round(Number(m.valore) * 100) / 100).replace('.', ',')}${m.unita ? ' ' + rfEsc(m.unita) : ''}</option>`).join('');
-  openModal(`Misura: ${rfEsc(RFMisura.formattaMm(es.mm))}`, `
+  const V = RFMSE.validazione;
+  openModal(`Misura: ${rfEsc(es.valore_mostrato)}`, `
+    <div class="mb-8"><span class="rf-mis-ind st-${es.stato}">${V.SEGNI[es.stato]} ${rfEsc(V.ETICHETTE[es.stato])}</span>${es.avvisi.length ? `<div class="rf-mis-motivo mt-8">${es.avvisi.map(a => rfEsc(V.testo(a))).join('<br>')}</div>` : ''}${RF.mis.sostituisce ? '<div class="caption mt-8">Questa misura sostituisce quella che stai rifacendo: la vecchia viene annullata e legata alla nuova.</div>' : ''}</div>
     <div class="field"><label>Che cosa hai misurato (facoltativo)</label><input class="input" id="rf-mis-et" maxlength="80" placeholder="IVSd, aorta ascendente, diametro VS…"></div>
     ${rif ? `<div class="field mt-8"><label>Confronta con la misura dell'apparecchio (per la validazione)</label><select class="input" id="rf-mis-rif"><option value="">— nessuna —</option>${rif}</select></div>` : ''}
     <p class="caption mt-8">Il numero lo ricalcola il server dagli stessi due punti, con la calibrazione scritta nel file dell'apparecchio. Resta registrato chi ha misurato e quando; una misura sbagliata si annulla, non si cancella.</p>`,
@@ -6116,13 +6176,13 @@ function rfMisSalvaModal() {
 async function rfMisSalva() {
   const b = RF.mis.bozza; if (!b) return;
   const et = document.getElementById('rf-mis-et'); const rif = document.getElementById('rf-mis-rif');
-  const corpo = { immagine_id: b.immagine_id, frame: b.frame, punti: [b.p1, b.p2], etichetta: et ? et.value : '', riferimento_misura_id: rif && rif.value ? rif.value : null };
+  const corpo = { immagine_id: b.immagine_id, frame: b.frame, punti: [b.p1, b.p2], etichetta: et ? et.value : '', riferimento_misura_id: rif && rif.value ? rif.value : null, sostituisce_id: RF.mis.sostituisce || null };
   try {
     const r = await fetch('/api/prototipo/imaging/misure', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) { toast(j.motivo || j.errore || 'Misura non salvata'); return; }
-    closeModal(); RF.mis.bozza = null; RF.mis.esito = null;
-    toast(`Misura salvata: ${j.testo}`);
+    if (!r.ok) { toast(j.motivo || (j.testi && j.testi[0]) || j.errore || 'Misura non salvata'); return; }
+    closeModal(); RF.mis.bozza = null; RF.mis.esito = null; RF.mis.sostituisce = null;
+    toast(`Misura salvata: ${j.testo}${j.stato === 'CAUTION' ? ' (con limitazioni)' : ''}`);
     await rfImgRicarica();
   } catch { toast('Piattaforma non raggiungibile'); }
 }
@@ -6140,6 +6200,51 @@ async function rfMisRiferimento(id, rifId) {
     if (!r.ok) { toast('Non riuscito'); return; }
     await rfImgRicarica();
   } catch { toast('Piattaforma non raggiungibile'); }
+}
+async function rfMisStoria(id) {
+  try {
+    const r = await fetch(`/api/prototipo/imaging/misure/${id}`, { credentials: 'include', cache: 'no-store' });
+    if (!r.ok) { toast('Storia non leggibile'); return; }
+    const j = await r.json(); const m = j.misura || {}; const V = RFMSE.validazione;
+    const n = (x) => (x === null || x === undefined) ? '—' : String(x).replace('.', ',');
+    const kv = (k, v) => `<b>${rfEsc(k)}</b><span>${v}</span>`;
+    const ver = m.verifica_indipendente || {};
+    const righe = [
+      kv('Valore', `${rfEsc(m.valore_mostrato || '')} <span class="caption">(pieno: ${n(m.valore)} ${rfEsc(m.unita || '')})</span>`),
+      kv('Stato', m.stato_validazione ? `${V.SEGNI[m.stato_validazione]} ${rfEsc(V.ETICHETTE[m.stato_validazione])}` : '—'),
+      kv('Punti immagine', (m.punti || []).map(p => `(${n(Math.round(p.x * 100) / 100)}; ${n(Math.round(p.y * 100) / 100)})`).join(' → ')),
+      kv('Punti fisici (mm)', (m.punti_fisici || []).map(p => `(${n(Math.round(p.x * 1000) / 1000)}; ${n(Math.round(p.y * 1000) / 1000)})`).join(' → ') || '—'),
+      kv('Calibrazione usata', rfEsc(RFMSE.geometria.descriviCalibrazione(m.calibrazione))),
+      kv('Doppio controllo', ver.esito ? `${ver.esito === 'ok' ? '✓' : '✕'} B = ${n(ver.valore_b)} · scarto ${ver.scarto === 0 ? '0' : Number(ver.scarto).toExponential(1).replace('.', ',')} ≤ ${Number(ver.tolleranza).toExponential(1).replace('.', ',')} mm` : '—'),
+      kv('Algoritmo', `${rfEsc(m.algoritmo || 'distanza')} ${rfEsc(m.versione_algoritmo || '')} · gate ${rfEsc(m.versione_gate || '—')} · software ${rfEsc(m.versione_software || '—')}`),
+      kv('Immagine', `SOP ${rfEsc((m.sop_uid || '').slice(-18))} · fotogramma ${(m.frame || 0) + 1}${m.sha256_file ? ` · <code>${rfEsc(m.sha256_file.slice(0, 12))}…</code>` : ''}`),
+      kv('Fatta da', `${rfEsc(m.chi || 'qualcuno')} · ${rfEsc(rfModQuando(m.quando))}`),
+    ];
+    if (m.riferimento_nome) righe.push(kv('Confronto', `${rfEsc(m.riferimento_gruppo ? m.riferimento_gruppo + ' · ' : '')}${rfEsc(m.riferimento_nome)} = ${n(m.riferimento_valore)} ${rfEsc(m.riferimento_unita || '')}`));
+    if (m.sostituisce_id) righe.push(kv('Sostituisce', `<code>${rfEsc(m.sostituisce_id.slice(0, 8))}</code>`));
+    if (j.sostituita_da && j.sostituita_da.length) righe.push(kv('Sostituita da', j.sostituita_da.map(x => `<code>${rfEsc(x.slice(0, 8))}</code>`).join(', ')));
+    if (m.avvisi && m.avvisi.length) righe.push(kv('Avvisi', m.avvisi.map(a => rfEsc(V.testo(a))).join('<br>')));
+    const eventi = (j.eventi || []).map(e => `<div class="list-item"><div class="grow"><div class="name">${rfEsc(e.evento)}</div><div class="sub">${rfEsc(e.chi || 'qualcuno')} · ${rfEsc(rfModQuando(e.quando))}${e.prima ? ` · prima: <code>${rfEsc(JSON.stringify(e.prima).slice(0, 80))}</code>` : ''}${e.dopo ? ` · dopo: <code>${rfEsc(JSON.stringify(e.dopo).slice(0, 80))}</code>` : ''}</div></div></div>`).join('');
+    openModal('Da dove arriva questo numero', `<div class="kv">${righe.join('')}</div><div class="section-title mt-16">Storia</div><div class="list">${eventi || '<div class="caption">Nessun evento registrato.</div>'}</div>`, `<button class="btn" data-close>Chiudi</button>`);
+  } catch { toast('Piattaforma non raggiungibile'); }
+}
+async function rfMisEtichetta(id, attuale) {
+  const nuova = prompt('Che cosa hai misurato?', attuale || '');
+  if (nuova === null) return;
+  try {
+    const r = await fetch('/api/prototipo/imaging/misure', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'etichetta', id, etichetta: nuova }) });
+    if (!r.ok) { toast('Non riuscito'); return; }
+    await rfImgRicarica();
+  } catch { toast('Piattaforma non raggiungibile'); }
+}
+function rfMisRifai(id) {
+  const m = ((RF.img.dati || {}).misure_manuali || []).find(x => x.id === id); if (!m) return;
+  // ci si mette sull'immagine e sul fotogramma della misura, poi si misura di nuovo
+  const d = RF.img.dati; let trovata = false;
+  (d.serie || []).forEach((s, sn) => rfImgVisibili(s).forEach((i, n) => { if (i.id === m.immagine_id) { RF.img.serie = sn; RF.img.idx = n; RF.img.frame = m.frame; trovata = true; } }));
+  if (!trovata) { toast('Immagine non trovata'); return; }
+  rfMisAttiva(id);
+  toast('Traccia la nuova misura: la vecchia sarà annullata e legata alla nuova');
 }
 // Ricarica l'esame aperto senza perdere serie, immagine e fotogramma.
 async function rfImgRicarica() {
@@ -6167,10 +6272,13 @@ function rfImgMisureManuali(d, i) {
   return `<div class="card mt-16"><div class="card-head"><span class="section-title">Misure col righello</span>
       <span class="caption">${tutte.length} in questo esame${confrontate ? ` · ${confrontate} confrontate con l'apparecchio` : ''} · <a href="/api/prototipo/imaging/misure?formato=csv">validazione (CSV)</a></span></div>
     <div class="list">${tutte.map(m => `<div class="list-item rf-mis-riga ${m.annullata_at ? 'annullata' : ''} ${i && m.immagine_id === i.id && m.frame === RF.img.frame ? 'qui' : ''}">
-        <div class="grow"><div class="name">${rfEsc(m.etichetta || 'Distanza')} · ${rfEsc(RFMisura.formattaMm(m.valore))}</div>
+        <div class="grow"><div class="name">${rfEsc(m.etichetta || 'Distanza')} · ${rfEsc(m.valore_mostrato || RFMisura.formattaMm(m.valore))}${m.stato_validazione ? `<span class="rf-mis-stato st-${m.stato_validazione}" title="${rfEsc(((m.avvisi || []).map(a => RFMSE.validazione.testo(a))).join(' ') || 'Calibrazione verificata')}">${RFMSE.validazione.SEGNI[m.stato_validazione]}</span>` : ''}${m.verifica_ok === false ? ' <span class="rf-mis-stato" style="color:#8a1f1f" title="doppio controllo non riuscito">✕</span>' : ''}${m.sostituisce_id ? ' <span class="caption">(rifatta)</span>' : ''}</div>
           <div class="sub">${rfEsc(m.chi || 'qualcuno')} · ${rfEsc(rfModQuando(m.quando))}${m.frame ? ` · fotogramma ${m.frame + 1}` : ''}${m.annullata_at ? ` · <b>annullata</b> da ${rfEsc(m.annullata_da || 'qualcuno')} ${rfEsc(rfModQuando(m.annullata_at))}` : scarto(m)}</div></div>
         ${!m.annullata_at && puo ? `<div class="row" style="gap:6px">${rif.length ? `<select class="input sm" onchange="rfMisRiferimento('${m.id}', this.value)" title="Confronta con la misura dell'apparecchio"><option value="">confronta con…</option>${rif.map(r => `<option value="${r.id}" ${m.riferimento_misura_id === r.id ? 'selected' : ''}>${rfEsc(r.gruppo ? r.gruppo + ' · ' : '')}${rfEsc(r.nome)}</option>`).join('')}</select>` : ''}
+          <button class="btn sm" onclick="rfMisEtichetta('${m.id}', ${JSON.stringify(m.etichetta || '')})" title="Cambia il nome">Nome</button>
+          <button class="btn sm" onclick="rfMisRifai('${m.id}')" title="Annulla e misura di nuovo">Rifai</button>
           <button class="btn sm" onclick="rfMisAnnulla('${m.id}')">Annulla</button></div>` : ''}
+        <button class="btn sm" onclick="rfMisStoria('${m.id}')" title="Da dove arriva questo numero">Storia</button>
       </div>`).join('') || '<div class="caption">Nessuna misura. Premi «Misura» e trascina fra due punti dell’immagine.</div>'}</div>
     <p class="rf-img-limite">Il righello misura <b>distanze</b> con la calibrazione scritta dall'apparecchio nel file DICOM; senza calibrazione non misura. È un dispositivo medico <b>fabbricato e usato dentro lo studio</b> (ODmed art. 9 e 18): il fascicolo, il piano di validazione e la notifica a Swissmedic sono in <code>docs/legale/dispositivo-in-house/</code>. La misura è del medico che la fa; il numero non entra nel referto da solo.</p></div>`;
 }
@@ -6304,7 +6412,8 @@ function rfImgDettaglio() {
             : `<div class="vuoto">Questa serie non contiene immagini da disegnare${nonImmagini ? ` (${nonImmagini} ${nonImmagini === 1 ? 'oggetto DICOM non grafico' : 'oggetti DICOM non grafici'}: referti strutturati, PDF o modelli)` : ''}.</div>`}
         </div>
         ${i ? `<div class="rf-img-barra">
-          ${rfMisPuo() ? `<button class="btn sm ${RF.mis.attiva ? 'primary' : ''}" onclick="rfMisAttiva()" title="Misura una distanza fra due punti">Misura</button>` : ''}
+          ${(() => { const st = rfMisStatoImmagine(i); if (!rfMisPuo() || !st) return ''; if (st.stato === 'NOT_MEASURABLE') return `<span class="rf-mis-motivo"><b>Misurazione non disponibile.</b> ${rfEsc(st.testi[0] || '')}</span>`; if (st.stato === 'ATTESA') return ''; return `<button class="btn sm ${RF.mis.attiva ? 'primary' : ''}" onclick="rfMisAttiva()" title="Misura una distanza fra due punti">Misura</button>`; })()}
+          ${rfMisIndicatore(i)}
           <button class="btn sm" onclick="rfImgScorri(-1)">‹</button>
           <input type="range" min="0" max="${Math.max(0, visibili.length - 1)}" value="${RF.img.idx}" oninput="rfImgVai(this.value)" aria-label="Immagine della serie">
           <button class="btn sm" onclick="rfImgScorri(1)">›</button>

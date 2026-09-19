@@ -147,3 +147,14 @@ Il 18.9 la pagina Immagini era nata **senza misure**, apposta: un righello fa di
 **Scelte tecniche che sono anche regolatorie**: un solo file di calcolo (`misura.js`) per browser e server, e il server ricalcola — il browser manda i punti, non il numero; la calibrazione viene solo dal file (regioni eco in cm, PixelSpacing riga/colonna), mai da stime; radiografie e immagini senza calibrazione si rifiutano; le misure si annullano e non si cancellano; la calibrazione usata e la versione del calcolo si copiano dentro ogni misura. Niente Cornerstone3D: per un dispositivo da validare, 120 righe proprie e provate valgono più di una libreria da megabyte da documentare come SOUP.
 
 **Fino alla fine della lista di controllo del README** (validazione clinica, consulente, notifica, dichiarazione), il righello è **in validazione**: si usa per raccogliere le coppie di confronto, non per decidere di un paziente. Vedi [[Piattaforma/Immagini]].
+
+## 19.9.2026 (sera) — Measurement Safety Engine, fasi 1-5-7-8
+Dalla specifica «fail closed» del pomeriggio ([[Proposte/Measurement Safety Engine]]) si sono fatte le quattro fasi che restano dentro il fascicolo in-house firmato al mattino — la distanza, fatta come la specifica vuole — e non le altre.
+
+**Fatto**: lettore di geometria completo (`imaging/geometria.py`, versione 1: tutte le regioni US decodificate da PS3.3 C.8.5.5, spaziatura con fonte e tipo, gruppi funzionali, aspect ratio, rescale, IOP/IPP, DERIVED, sha256); calibrazione compatta **derivata** da lì; regioni sovrapposte per priorità dichiarata; moduli `mse/geometria.js`, `mse/misure.js`, `mse/validazione.js` caricati identici da browser e server; **Validation Gate** a tre stati con motivi e avvisi testuali; **doppio controllo** con implementazione separata in numpy (tolleranza 1e-9 relativa, se no non si salva); provenienza completa e **eventi** a soli inserimenti; «Storia», «Nome», «Rifai»; regressione delle misure salvate che blocca `aggiorna-server.sh`; tabella di riferimento con soglie **passate, mai scelte dal codice**.
+
+**Scelte**: la lista dei CAUTION ammessi è un file (`imaging/caution-validati.json`) ed è **vuota**: ogni avviso blocca finché il piano di V&V non lo ammette con firma. Lo spazio paziente (IOP/IPP/FoR) si legge e si mostra ma **non si usa**: la distanza in piano ne è indipendente per definizione del Pixel Spacing; servirà alla fase 9. Nessuna libreria di terzi nel calcolo A.
+
+**Non fatto, apposta**: fasi 3 (aree, angoli, ROI), 4 (HU), 6-Enhanced per-frame, 9 (MPR/3D): riaprono destinazione d'uso e validazione. Si decidono una per una quando un medico le chiede.
+
+**Numeri**: geometria 36/36, node 39/39, doppio controllo 1000 casi senza divergenze, e2e 22/22, app 212+ prove. Vedi [[Piattaforma/Immagini]] e `docs/legale/dispositivo-in-house/`.

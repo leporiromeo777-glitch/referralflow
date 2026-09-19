@@ -9,11 +9,13 @@ import vm from 'node:vm';
 // verifica tecnica del fascicolo (docs/legale/dispositivo-in-house/piano-validazione.md):
 // se uno cambia, cambia il dispositivo.
 const contesto: any = {};
-for (const m of ['mse/geometria.js', 'mse/misure.js']) {
+for (const m of ['mse/geometria.js', 'mse/misure.js', 'mse/validazione.js']) {
   vm.runInNewContext(readFileSync(path.join(process.cwd(), 'public', 'prototipo', m), 'utf-8'), contesto, { filename: m });
 }
 const M = contesto.RFMisura;
 const G = contesto.RFMSE.geometria;
+const V = contesto.RFMSE.validazione;
+const j = (x: unknown) => JSON.parse(JSON.stringify(x));   // oggetti di un altro contesto vm
 
 const ct = { tipo: 'pixel_spacing', righe: 512, colonne: 512, regioni: [], spacing: { dx_mm: 0.7, dy_mm: 0.7, origine: 'PixelSpacing', taratura: '' } };
 const anisotropa = { ...ct, spacing: { dx_mm: 0.5, dy_mm: 0.25, origine: 'PixelSpacing', taratura: '' } };
@@ -181,4 +183,130 @@ test('regioni: a parità di priorità vince il tessuto sul flusso, poi la prima 
     { indice: 2, x0: 0, y0: 0, x1: 9, y1: 9, dx_mm: 1, dy_mm: 1, tipo: 'tessuto' },
   ] };
   assert.equal(G.regionePer(c, { x: 5, y: 5 }).indice, 1);
+});
+
+// ── Fase 7: il Validation Gate, una prova per riga della tabella ──
+const geoCt = { versione: 1, identita: { modalita: 'CT', frame_totali: 1 }, pixel: { righe: 512, colonne: 512 }, spaziatura: { fonte: 'PixelSpacing', dx_mm: 0.7, dy_mm: 0.7, per_frame: false, calibrazione_tipo: null }, regioni_us: [], spazio: null, derivata: false, image_type: ['ORIGINAL', 'PRIMARY'], avvisi_lettura: [] };
+
+test('gate: TAC con PixelSpacing → VALIDATED, nessun motivo', () => {
+  const s = V.statoImmagine({ cal: ct, geometria: geoCt, frame: 0, frameTotali: 1 });
+  assert.equal(s.stato, 'VALIDATED'); assert.deepEqual(j(s.motivi), []); assert.deepEqual(j(s.avvisi), []);
+});
+
+test('gate: senza calibrazione → NOT_MEASURABLE calibrazione_assente', () => {
+  const s = V.statoImmagine({ cal: { tipo: 'nessuna', righe: 10, colonne: 10, regioni: [], spacing: null } });
+  assert.equal(s.stato, 'NOT_MEASURABLE'); assert.ok(j(s.motivi).includes('calibrazione_assente'));
+  assert.match(s.testi[0], /non verificabile/);
+});
+
+test('gate: niente calibrazione né geometria → geometria_assente', () => {
+  assert.ok(j(V.statoImmagine({ cal: null, geometria: null }).motivi).includes('geometria_assente'));
+});
+
+test('gate: radiografia (rivelatore) → NOT_MEASURABLE rivelatore', () => {
+  const cr = { tipo: 'imager_pixel_spacing', righe: 10, colonne: 10, regioni: [], spacing: { dx_mm: 0.1, dy_mm: 0.1 } };
+  assert.ok(j(V.statoImmagine({ cal: cr }).motivi).includes('rivelatore'));
+});
+
+test('gate: modalità non validata (CR, OT) → blocca; CT/MR/US no', () => {
+  assert.ok(j(V.statoImmagine({ cal: ct, geometria: { ...geoCt, identita: { modalita: 'CR', frame_totali: 1 } } }).motivi).includes('modalita_non_validata'));
+  assert.ok(!j(V.statoImmagine({ cal: ct, geometria: { ...geoCt, identita: { modalita: 'MR', frame_totali: 1 } } }).motivi).includes('modalita_non_validata'));
+});
+
+test('gate: fotogramma inesistente → fotogramma_non_valido', () => {
+  assert.ok(j(V.statoImmagine({ cal: ct, frame: 5, frameTotali: 3 }).motivi).includes('fotogramma_non_valido'));
+  assert.ok(!j(V.statoImmagine({ cal: ct, frame: 2, frameTotali: 3 }).motivi).includes('fotogramma_non_valido'));
+});
+
+test('gate: spaziatura per fotogramma non uniforme → spacing_per_frame', () => {
+  const g = { ...geoCt, spaziatura: { ...geoCt.spaziatura, per_frame: true, dx_mm: null, dy_mm: null } };
+  assert.ok(j(V.statoImmagine({ cal: { tipo: 'nessuna', righe: 512, colonne: 512, regioni: [], spacing: null }, geometria: g }).motivi).includes('spacing_per_frame'));
+});
+
+test('gate: calibrazione con zero → calibrazione_non_valida', () => {
+  assert.ok(j(V.statoImmagine({ cal: { ...ct, spacing: { dx_mm: 0, dy_mm: 0.7 } } }).motivi).includes('calibrazione_non_valida'));
+  assert.ok(j(V.statoImmagine({ cal: { ...eco, regioni: [{ ...eco.regioni[0], dy_mm: -1 }] } }).motivi).includes('calibrazione_non_valida'));
+});
+
+test('gate: immagine derivata → CAUTION, ma BLOCCATA finché il caso non è nella lista dei validati', () => {
+  const g = { ...geoCt, derivata: true, avvisi_lettura: ['immagine_derivata'] };
+  const bloccata = V.statoImmagine({ cal: ct, geometria: g, cautionValidati: [] });
+  assert.equal(bloccata.stato, 'NOT_MEASURABLE');
+  assert.ok(j(bloccata.motivi).includes('caution_non_validata:immagine_derivata'));
+  const ammessa = V.statoImmagine({ cal: ct, geometria: g, cautionValidati: ['immagine_derivata'] });
+  assert.equal(ammessa.stato, 'CAUTION'); assert.deepEqual(j(ammessa.avvisi), ['immagine_derivata']); assert.deepEqual(j(ammessa.motivi), []);
+});
+
+test('gate: PixelSpacing GEOMETRY, pixel non quadrati, due calibrazioni discordanti → avvisi con nome', () => {
+  const g = { ...geoCt, spaziatura: { ...geoCt.spaziatura, calibrazione_tipo: 'GEOMETRY' }, avvisi_lettura: ['pixel_non_quadrati', 'pixel_spacing_e_regioni_discordanti'] };
+  const s = V.statoImmagine({ cal: ct, geometria: g, cautionValidati: ['calibrazione_geometry', 'pixel_non_quadrati', 'pixel_spacing_e_regioni_discordanti'] });
+  assert.equal(s.stato, 'CAUTION');
+  assert.deepEqual(j(s.avvisi).sort(), ['calibrazione_geometry', 'pixel_non_quadrati', 'pixel_spacing_e_regioni_discordanti']);
+  for (const a of s.avvisi) assert.ok(V.testo(a).length > 10);
+});
+
+test('gate: valuta — misura VALIDATED con valore, unità, punti fisici, versioni', () => {
+  const e = V.valuta({ cal: ct, geometria: geoCt, frame: 0, frameTotali: 1, punti: [{ x: 10, y: 10 }, { x: 110, y: 10 }], algoritmo: 'distanza' });
+  assert.equal(e.stato, 'VALIDATED'); assert.ok(Math.abs(e.valore - 70) < 1e-9); assert.equal(e.unita, 'mm');
+  assert.equal(e.valore_mostrato, '70,0 mm'); assert.equal(e.algoritmo, 'distanza'); assert.equal(e.versione_algoritmo, '1.0'); assert.equal(e.versione_gate, '1.0');
+  assert.deepEqual(j(e.punti_fisici), [{ x: 7, y: 7 }, { x: 77, y: 7 }]);
+});
+
+test('gate: valuta — i rifiuti del calcolo diventano motivi, senza valore', () => {
+  const e = V.valuta({ cal: eco, punti: [{ x: 50, y: 100 }, { x: 200, y: 300 }] });
+  assert.equal(e.stato, 'NOT_MEASURABLE'); assert.equal(e.valore, null); assert.ok(j(e.motivi).includes('fuori_regione'));
+  assert.ok(j(V.valuta({ cal: ct, punti: [{ x: 1, y: 1 }, { x: 1, y: 1 }] }).motivi).includes('punti_uguali'));
+  assert.ok(j(V.valuta({ cal: ct, punti: [{ x: 1, y: 1 }, { x: 2, y: 2 }], algoritmo: 'volume' }).motivi).includes('algoritmo_sconosciuto'));
+});
+
+test('gate: valuta — regioni sovrapposte discordanti: CAUTION solo se validato, altrimenti blocca', () => {
+  const punti = [{ x: 720, y: 520 }, { x: 740, y: 520 }];
+  const b = V.valuta({ cal: ecoSovrapposte, punti });
+  assert.equal(b.stato, 'NOT_MEASURABLE'); assert.ok(j(b.motivi).includes('caution_non_validata:regioni_sovrapposte_discordanti'));
+  const c = V.valuta({ cal: ecoSovrapposte, punti, cautionValidati: ['regioni_sovrapposte_discordanti'] });
+  assert.equal(c.stato, 'CAUTION'); assert.ok(Math.abs(c.valore - 1) < 1e-9);
+});
+
+test('gate: ogni codice ha un testo e i motivi con parametro lo ritrovano', () => {
+  for (const k of Object.keys(V.TESTI)) assert.ok(V.testo(k).length > 10, k);
+  assert.equal(V.testo('caution_non_validata:immagine_derivata'), V.TESTI.caution_non_validata);
+  assert.match(V.testo('qualcosa_di_nuovo'), /non prevista/);
+});
+
+// ── Fase 7: invarianza — la misura non dipende da come il viewer mostra l’immagine ──
+test('invarianza: zoom, pan, rotazione, DPR e dimensione della finestra non cambiano la misura', () => {
+  const pImg = [{ x: 123.4, y: 45.6 }, { x: 400.25, y: 380.75 }];
+  const base = V.valuta({ cal: ct, punti: pImg }).valore;
+  let casi = 0;
+  for (const scala of [0.25, 0.5, 1, 1.37, 2, 4, 8]) {
+    for (const rot of [0, 90, 180, 270, 37.5, -12]) {
+      for (const dpr of [1, 1.5, 2, 3]) {
+        for (const [tx, ty] of [[0, 0], [300, 40], [-120.5, 999]]) {
+          // il viewer manda a schermo con la sua matrice (scala × DPR, rotazione, pan)
+          const M = G.matriceViewer({ scalaX: scala * dpr, scalaY: scala * dpr, rotazioneGradi: rot, tx, ty });
+          const schermo = pImg.map((p: any) => G.applica(M, p));
+          const indietro = schermo.map((p: any) => G.versoImmagine(p, M));
+          const v = V.valuta({ cal: ct, punti: indietro }).valore;
+          assert.ok(Math.abs(v - base) <= 1e-12 * base, `scala ${scala} rot ${rot} dpr ${dpr} pan ${tx},${ty}: ${v} vs ${base}`);
+          casi++;
+        }
+      }
+    }
+  }
+  assert.equal(casi, 7 * 6 * 4 * 3);
+});
+
+test('invarianza: scala diversa per asse nel viewer (finestra schiacciata) — la misura resta la stessa', () => {
+  const pImg = [{ x: 200, y: 100 }, { x: 200, y: 300 }];
+  const base = V.valuta({ cal: eco, punti: pImg }).valore;
+  const M = G.matriceViewer({ scalaX: 0.31, scalaY: 0.77, rotazioneGradi: 0, tx: 5, ty: 7 });
+  const indietro = pImg.map((p: any) => G.versoImmagine(G.applica(M, p), M));
+  assert.ok(Math.abs(V.valuta({ cal: eco, punti: indietro }).valore - base) <= 1e-12 * base);
+});
+
+test('invarianza: la vecchia scala uniforme (versoNativo) e la matrice danno lo stesso punto', () => {
+  const scala = 800 / 347.2;
+  const a = G.versoNativo({ x: 100.5, y: 40.25 }, scala);
+  const b = G.versoImmagine({ x: 100.5, y: 40.25 }, G.matriceViewer({ scalaX: 1 / scala }));
+  assert.ok(Math.abs(a.x - b.x) < 1e-12 && Math.abs(a.y - b.y) < 1e-12);
 });

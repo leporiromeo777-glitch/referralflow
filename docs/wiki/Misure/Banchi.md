@@ -143,3 +143,15 @@ Da ricordare più del risultato: **il primo punteggio assolveva tutti e tre**, p
 | end-to-end sul DB demo (server di prova, due esami sintetici) | importazione con calibrazione; 100 px → 20,0 mm (eco) e 50,0 mm (TAC) dal server; 200 px verticali → 40,0 mm; rifiuti; registro «misurato»; annullamento tracciato; CSV; segreteria 403 | 18/18 + 403 |
 | browser (server di prova) | tasto Misura, trascinamento 200 px sulla barra verticale → «Misura: 40,0 mm», salvataggio, disegno sul fotogramma, elenco con annullata barrata | ok |
 | `npm run test:app` | tutta l'app | 212/212 |
+
+## Measurement Safety Engine, fasi 1-5-7-8 — 19.9.2026 sera
+
+| Banco | Che cosa | Esito |
+|---|---|---|
+| `imaging/prova-geometria.py` | lettore di geometria completo: spaziatura e fonti, tipo di calibrazione, gruppi funzionali (condivisi, per-frame uniformi e no), tutte le regioni US con codici/flag/reference pixel, discordanze, aspect ratio, rescale, IOP/IPP/FoR, obliqua, DERIVED, sha256, comandi | 36/36 |
+| `src/lib/prove-imaging-misura.test.ts` | calcolo (13), matrici (3), algoritmi (1), regioni sovrapposte (5), Gate (13), invarianza 504 combinazioni + scala per asse + compatibilità (3) | 39/39 |
+| `imaging/prova-doppio-controllo.py` | 1000 casi casuali, A (mse/*.js) contro B (numpy) | 441 misure e 559 rifiuti coincidenti, 0 divergenze |
+| `scripts/prova-righello-e2e.py` (DB demo) | geometria in tabella, VALIDATED col doppio controllo, CR e DERIVED bloccate, rifiuti, provenienza, eventi, etichetta, rifai, annulla, CSV, riepilogo | 22/22 + segreteria 403 |
+| browser (server di prova) | indicatore ✓/✕ con motivo, «Dettagli calibrazione», anteprima 20,0 mm dal Gate, modale con stato, righe con stato/rifatta/annullata, «Storia» con doppio controllo ed eventi | ok |
+| `scripts/misure-regressione.ts` | misure salvate ricalcolate col motore attuale | 0 differenze |
+

@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
 import { finestreDi } from '@/lib/imaging-ordina';
+import { cautionValidati, versioneSoftware } from '@/lib/imaging-misura';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,10 +47,12 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const misureManuali = await query<{
     id: string; immagine_id: string; frame: number; valore: number; unita: string; etichetta: string | null;
     punti: unknown; chi: string | null; quando: string; annullata_at: string | null; annullata_da: string | null;
+    stato_validazione: string | null; avvisi: unknown; verifica_ok: boolean | null; sostituisce_id: string | null; valore_mostrato: string | null;
     riferimento_misura_id: string | null; riferimento_nome: string | null; riferimento_valore: number | null; riferimento_unita: string | null;
   }>(
     `select m.id, m.immagine_id, m.frame, m.valore, m.unita, m.etichetta, m.punti, split_part(u.email, '@', 1) as chi,
             m.created_at::text as quando, m.annullata_at::text, split_part(ua.email, '@', 1) as annullata_da,
+            m.stato_validazione, m.avvisi, (m.verifica_indipendente->>'esito' = 'ok') as verifica_ok, m.sostituisce_id, m.valore_mostrato,
             m.riferimento_misura_id, r.nome as riferimento_nome, r.valore as riferimento_valore, r.unita as riferimento_unita
        from imaging_misure_manuali m
        left join users u on u.id = m.user_id
@@ -72,6 +75,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       where a.esame_id = $1 order by a.created_at desc limit 20`, [params.id]);
 
   return NextResponse.json(
-    { esame, serie: serie.map((s) => ({ ...s, immagini: immagini.filter((i) => i.serie_id === s.id) })), finestre: finestreDi(esame.modalita), misure, misure_manuali: misureManuali, accessi },
+    { esame, serie: serie.map((s) => ({ ...s, immagini: immagini.filter((i) => i.serie_id === s.id) })), finestre: finestreDi(esame.modalita), misure, misure_manuali: misureManuali, accessi,
+      mse: { caution_validati: cautionValidati(), versione_software: versioneSoftware(), puo_misurare: ['medico', 'admin', 'assistente'].includes(session.role) } },
     { headers: { 'Cache-Control': 'no-store' } });
 }
