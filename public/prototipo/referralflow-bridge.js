@@ -6031,7 +6031,7 @@ function rfMisCal(i) {
   if (!RF.mis.chieste[i.id]) {
     RF.mis.chieste[i.id] = true;
     fetch(`/api/prototipo/imaging/immagine/${i.id}/calibrazione`, { credentials: 'include', cache: 'no-store' })
-      .then(r => r.ok ? r.json() : null).then(j => { if (j && j.calibrazione) { i.calibrazione = j.calibrazione; render(); } }).catch(() => {});
+      .then(r => r.ok ? r.json() : null).then(j => { if (j && j.calibrazione) { i.calibrazione = j.calibrazione; i.geometria = j.geometria || i.geometria || null; render(); } }).catch(() => {});
   }
   return null;
 }

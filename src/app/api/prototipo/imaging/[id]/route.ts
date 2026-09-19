@@ -35,8 +35,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const serie = await query<{ id: string; modalita: string | null; descrizione: string | null; numero: number | null; parte_corpo: string | null; n_immagini: number }>(
     `select id, modalita, descrizione, numero, parte_corpo, n_immagini from imaging_serie where esame_id = $1 order by numero nulls last, id`, [params.id]);
 
-  const immagini = await query<{ id: string; serie_id: string; numero: number | null; frame: number; righe: number | null; colonne: number | null; ww: number | null; wl: number | null; immagine: boolean; sop_class: string | null; calibrazione: unknown }>(
-    `select i.id, i.serie_id, i.numero, i.frame, i.righe, i.colonne, i.ww, i.wl, i.immagine, i.sop_class, i.calibrazione
+  const immagini = await query<{ id: string; serie_id: string; numero: number | null; frame: number; righe: number | null; colonne: number | null; ww: number | null; wl: number | null; immagine: boolean; sop_class: string | null; calibrazione: unknown; geometria: unknown }>(
+    `select i.id, i.serie_id, i.numero, i.frame, i.righe, i.colonne, i.ww, i.wl, i.immagine, i.sop_class, i.calibrazione, i.geometria
        from imaging_immagini i join imaging_serie s on s.id = i.serie_id
       where s.esame_id = $1 order by s.numero nulls last, i.numero nulls last, i.id`, [params.id]);
 

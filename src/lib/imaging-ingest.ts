@@ -79,13 +79,16 @@ export async function ingestaDicom(
            returning id`, [esame.id, s.serie_uid, s.modalita, s.descrizione, s.numero || null, s.parte_corpo]);
         for (const i of s.immagini) {
           const [img] = await q<{ id: string }>(
-            `insert into imaging_immagini (serie_id, sop_uid, numero, frame, righe, colonne, ww, wl, immagine, sop_class, storage_key, byte, calibrazione)
-             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,nullif($10,''),$11,$12,$13)
+            `insert into imaging_immagini (serie_id, sop_uid, numero, frame, righe, colonne, ww, wl, immagine, sop_class, storage_key, byte, calibrazione, geometria, sha256)
+             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,nullif($10,''),$11,$12,$13,$14,$15)
              on conflict (serie_id, sop_uid) do nothing returning id`,
             [serie.id, i.sop_uid, i.numero || null, i.frame, i.righe || null, i.colonne || null, i.ww, i.wl,
              i.immagine, i.sop_class, chiavi.get(i.sop_uid)!, buoni[i.indice].length,
              // La calibrazione (mm per pixel) letta dal file, per il righello: senza, non si misura.
-             i.calibrazione ? JSON.stringify(i.calibrazione) : null]);
+             // La geometria completa (MSE fase 1) e l'impronta del file archiviato.
+             i.calibrazione ? JSON.stringify(i.calibrazione) : null,
+             i.geometria ? JSON.stringify(i.geometria) : null,
+             (i.geometria as { sha256_file?: string } | null)?.sha256_file ?? null]);
           if (img) immagini++;
         }
         await q(`update imaging_serie set n_immagini = (select count(*) from imaging_immagini where serie_id = $1) where id = $1`, [serie.id]);

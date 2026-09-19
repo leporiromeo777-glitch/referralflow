@@ -16,9 +16,10 @@ export type MetaMinima = {
   righe: number; colonne: number; frame: number; immagine: boolean;
   ww?: number | null; wl?: number | null; sop_class?: string;
   calibrazione?: unknown;   // mm per pixel, dal file: il righello si regge su questo
+  geometria?: unknown;      // tutta la geometria (MSE fase 1); calibrazione ne è la vista compatta
 };
 
-export type Immagine = { sop_uid: string; numero: number; frame: number; righe: number; colonne: number; ww: number | null; wl: number | null; immagine: boolean; sop_class: string; indice: number; calibrazione: unknown };
+export type Immagine = { sop_uid: string; numero: number; frame: number; righe: number; colonne: number; ww: number | null; wl: number | null; immagine: boolean; sop_class: string; indice: number; calibrazione: unknown; geometria: unknown };
 export type Serie = { serie_uid: string; modalita: string; descrizione: string; numero: number; parte_corpo: string; immagini: Immagine[] };
 export type Esame = {
   study_uid: string; accession: string; data_esame: string; ora_esame: string;
@@ -68,7 +69,7 @@ export function raggruppa(lette: { indice: number; meta: MetaMinima }[]): Esame[
       righe: m.righe || 0, colonne: m.colonne || 0,
       ww: Number.isFinite(m.ww as number) ? Number(m.ww) : null,
       wl: Number.isFinite(m.wl as number) ? Number(m.wl) : null,
-      immagine: !!m.immagine, sop_class: m.sop_class ?? '', indice, calibrazione: m.calibrazione ?? null,
+      immagine: !!m.immagine, sop_class: m.sop_class ?? '', indice, calibrazione: m.calibrazione ?? null, geometria: m.geometria ?? null,
     });
   }
   for (const e of esami.values()) {

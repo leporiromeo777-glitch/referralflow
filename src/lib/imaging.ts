@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { getFile } from './storage';
-import type { Calibrazione } from './imaging-misura';
+import type { Calibrazione, Geometria } from './imaging-misura';
 
 // Il lato piattaforma delle immagini diagnostiche (18.9.2026).
 //
@@ -31,6 +31,7 @@ export type MetaDicom = {
   righe: number; colonne: number; frame: number; immagine: boolean;
   ww: number | null; wl: number | null; trasferimento: string;
   calibrazione: Calibrazione | null;
+  geometria: Geometria | null;
 };
 
 function esegui(args: string[]): Promise<{ uscita: string; codice: number }> {
@@ -127,6 +128,19 @@ export async function leggiCalibrazione(key: string): Promise<Calibrazione | nul
     try {
       const j = JSON.parse(uscita || '{}');
       return j?.errore || !j?.tipo ? null : (j as Calibrazione);
+    } catch { return null; }
+  });
+}
+
+// Tutta la geometria di un file archiviato (MSE fase 1): per le immagini
+// entrate prima del 19.9.2026 sera, che in tabella hanno al più la
+// calibrazione compatta.
+export async function leggiGeometria(key: string): Promise<Geometria | null> {
+  return conFile(key, async (percorso) => {
+    const { uscita } = await esegui(['geometria', percorso]);
+    try {
+      const j = JSON.parse(uscita || '{}');
+      return j?.errore || !j?.versione ? null : (j as Geometria);
     } catch { return null; }
   });
 }
