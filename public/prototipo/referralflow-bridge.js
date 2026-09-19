@@ -1536,7 +1536,7 @@ PAGES.review = () => {
   html = html.replace(/<div class="rv-pat">[\s\S]*?<\/div>/, testata);
   // Impaginazione nel formato del medico e Word: stessi motori della piattaforma.
   const bottoni = m.stato === 'bozza'
-    ? `<button class="btn sm ghost" onclick="rfImpagina()" title="${m.formato === 'lettera' ? 'Formato del medico: lettera al collega («Caro …,», corpo, saluto, terapia dalla lettera precedente)' : 'Formato del medico: rapporto a sezioni'}">${ICONS.ai || ''} ${m.formato === 'lettera' ? 'Impagina come lettera' : 'Riorganizza nel formato'}</button><button class="btn sm ghost" onclick="rfWord('${id}')" title="Word con la carta intestata del medico, dal testo salvato">Word</button>`
+    ? `<button class="btn sm ghost" onclick="rfImpagina()" title="${m.formato === 'lettera' ? 'Formato del medico: lettera al collega («Caro …,», corpo, saluto, terapia dalla lettera precedente)' : 'Formato del medico: rapporto a sezioni'}">${ICONS.ai || ''} ${m.formato === 'lettera' ? 'Impagina come lettera' : 'Riorganizza nel formato'}</button><button class="btn sm ghost" onclick="rfDuplica('${id}')" title="Quando in un solo audio ci sono due referti di due pazienti: crea una copia di questa bozza, con lo stesso audio, da tagliare per il secondo">Duplica</button><button class="btn sm ghost" onclick="rfWord('${id}')" title="Word con la carta intestata del medico, dal testo salvato">Word</button>`
     : `<button class="btn sm ghost" onclick="rfWord('${id}')">Word</button>`;
   html = html.replace('<div class="rv-top-r">', `<div class="rv-top-r">${bottoni}`);
   const note = Array.isArray(m.note_segreteria) ? m.note_segreteria.filter(n => typeof n === 'string' && n.trim()) : [];
@@ -1721,6 +1721,23 @@ function rfImpPill(testo, pct, fine) {
   const f = el.querySelector('.rf-imp-fill'); if (pct != null) f.style.width = `${Math.max(2, Math.min(100, pct))}%`; f.classList.toggle('ferma', !!fine);
   if (fine) setTimeout(() => { const e = document.getElementById('rf-imp-pill'); if (e) e.remove(); }, fine === 'errore' ? 20000 : 2500);
 }
+// «Duplica»: in un solo audio due referti di due pazienti. Ricaricare l'audio
+// non serve — l'impronta è la stessa e torna sulla prima bozza — quindi si
+// copia la bozza e si taglia la copia. Il testo è lo stesso, l'audio pure.
+async function rfDuplica(id) {
+  if (!id) return;
+  if (!confirm('Creo una copia di questo referto, con lo stesso testo e lo stesso audio, da modificare per l’altro paziente. L’originale resta com’è. Continuo?')) return;
+  try {
+    const r = await fetch(`/api/prototipo/referti/${id}/duplica`, { method: 'POST', credentials: 'include' });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.id) { toast(j.errore || 'Duplicazione non riuscita'); return; }
+    toast('Copia creata: sei sulla copia');
+    RF.loaded = null; RF.meta = null; RF.data = null; RF.caricato = false; rfPaginaCarico();
+    await rfCaricaDati();
+    go(`#/review/${j.id}`);
+  } catch { toast('Piattaforma non raggiungibile'); }
+}
+
 async function rfImpagina() {
   const id = RF.loaded; if (!id) return;
   if (RF.impaginando === id) { toast('Impaginazione già in corso'); return; }
