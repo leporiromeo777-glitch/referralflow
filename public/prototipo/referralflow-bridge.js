@@ -1472,7 +1472,7 @@ reportsQueue = function () {
   // chiedono attenzione: la catena che non consegna, e il «già dettato».
   const rigaAudio = (a) => {
     const quando = a.at ? ` · ${a.at}` : '';
-    const chi = rfEsc(a.medico ? (DOCTORS[a.medico] || a.medico) : '');
+    const chi = rfEsc(a.medico ? (DOCTORS[a.medico] || ((RF.medici || []).find(m => m.id === a.medico) || {}).nome || a.medico) : '');
     if (a.state === 'duplicate') return `<div class="card q lavoro">
       <div class="row wrap" style="gap:12px"><div class="avatar-sm">${initials({ first: 'Già', last: 'dettato' })}</div>
         <div class="grow" style="min-width:220px"><div class="row" style="gap:8px"><b>Già dettato${a.paziente ? ` · ${rfEsc(a.paziente)}` : ''}</b><span class="badge warning">stesso audio</span></div>
