@@ -126,3 +126,41 @@ export async function wavDaDittafono(key: string, originale?: Buffer): Promise<A
   inCorso.set(key, lavoro);
   return lavoro;
 }
+
+// Pagina «Converti audio» (19.9.2026): un file del dittafono diventa un MP3
+// che si apre ovunque. Serve a chi deve riascoltare o passare un dettato
+// fuori dalla catena — a un collega, a un player qualunque — senza cercare
+// il software Philips. Tutto sul Mac: il file entra, l'MP3 esce, i file di
+// lavoro spariscono subito dopo. Nei log solo estensione, byte e durata.
+const ESTENSIONI_AUDIO = new Set(['.dss', '.ds2', '.wav', '.m4a', '.mp3', '.aac', '.ogg', '.opus', '.flac', '.wma', '.aiff', '.aif', '.amr', '.3gp', '.mp4', '.mov', '.webm']);
+
+export function estensioneAudioAmmessa(nome: string): boolean {
+  return ESTENSIONI_AUDIO.has(estensioneDi(nome));
+}
+
+export async function convertiInMp3(originale: Buffer, ext: string): Promise<Buffer> {
+  // I file del dittafono passano dal decoder (i .ds2 ffmpeg non li sa
+  // leggere: esce rumore); tutto il resto ffmpeg lo apre da solo.
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'rf-audio-'));
+  const uscita = path.join(dir, 'out.mp3');
+  try {
+    let ingresso: string;
+    if (ESTENSIONI_DITTAFONO.has(ext)) {
+      ingresso = path.join(dir, 'in.wav');
+      await fs.writeFile(ingresso, await convertiInWav(originale, ext), { mode: 0o600 });
+    } else {
+      ingresso = path.join(dir, `in${ext}`);
+      await fs.writeFile(ingresso, originale, { mode: 0o600 });
+    }
+    // Mono a 44,1 kHz, 96 kbit/s: voce, non musica. Si apre su qualunque cosa.
+    await execFileP(
+      process.env.FFMPEG_BIN || 'ffmpeg',
+      ['-hide_banner', '-nostdin', '-loglevel', 'error', '-y', '-i', ingresso, '-vn',
+        '-ac', '1', '-ar', '44100', '-c:a', 'libmp3lame', '-b:a', '96k', '-id3v2_version', '3', uscita],
+      { timeout: 300_000, maxBuffer: 1024 * 1024 }
+    );
+    return await fs.readFile(uscita);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}

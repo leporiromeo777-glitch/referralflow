@@ -67,13 +67,13 @@ async function rfCaricaDati() {
   for (const nome of ['ARCHIVE', 'AUDIT', 'AIJOBS', 'KNOWLEDGE', 'INVOICES']) { try { if (Array.isArray(window[nome])) rfSvuota(window[nome]); } catch { /* assente */ } }
   // Voci per ruolo (14.9.2026: Percorsi, Moduli, Da fatturare). Questa riga
   // vince su qualunque aggiunta fatta al caricamento dello script.
-  const nav = ['home', 'agenda', 'visite', 'richiami', 'sale', 'prestazioni', 'patients', 'invianti', 'percorsi', 'reports', 'dittafono', 'documents', 'imaging', 'moduli', 'anonymize', 'inbox', 'ai', 'fatturazione', 'administration'];
+  const nav = ['home', 'agenda', 'visite', 'richiami', 'sale', 'prestazioni', 'patients', 'invianti', 'percorsi', 'reports', 'dittafono', 'converti', 'documents', 'imaging', 'moduli', 'anonymize', 'inbox', 'ai', 'fatturazione', 'administration'];
   const nascosti = new Set(Array.isArray(RF.data.moduli_nascosti) ? RF.data.moduli_nascosti : []);
   // Chi vede che cosa: «Da fatturare» è di segreteria e amministrazione; le
   // immagini sono dati sanitari e le vede chi cura, non il tecnico — come per
   // la scheda del paziente. La rotta dice già di no, ma una voce di menu che
   // risponde «non ti è permesso» è una voce di menu scritta male.
-  const soloRuoli = { fatturazione: ['secretary', 'org_admin'], imaging: ['secretary', 'assistant', 'doctor', 'org_admin'] };
+  const soloRuoli = { fatturazione: ['secretary', 'org_admin'], imaging: ['secretary', 'assistant', 'doctor', 'org_admin'], converti: ['secretary', 'assistant', 'doctor', 'org_admin'] };
   for (const k of Object.keys(NAV)) NAV[k] = nav.filter(v => (!soloRuoli[v] || soloRuoli[v].includes(k)) && (!nascosti.has(v) || v === 'home' || v === 'administration'));
   render();
 }
@@ -200,7 +200,7 @@ const rfRenderSidebarOrig = renderSidebar;
 // raggruppate con un'etichetta; una voce fuori da ogni gruppo finisce in coda.
 const RF_NAV_GRUPPI = [
   ['Operatività', ['home', 'agenda', 'visite', 'richiami', 'sale', 'prestazioni', 'inbox']],
-  ['Clinico', ['patients', 'invianti', 'percorsi', 'visits', 'reports', 'dittafono', 'documents', 'imaging', 'moduli']],
+  ['Clinico', ['patients', 'invianti', 'percorsi', 'visits', 'reports', 'dittafono', 'converti', 'documents', 'imaging', 'moduli']],
   ['AI', ['ai', 'anonymize']],
   ['Amministrazione', ['fatturazione', 'communications', 'statistics', 'administration', 'system']],
 ];
@@ -3109,7 +3109,7 @@ PAGES.administration = () => {
         <div class="field"><label>Prestazioni offerte</label><input class="input" id="rf-st-spec" value="${rfEsc(st.specialita || '')}" ${admin ? '' : 'disabled'}></div>
       </div>
       <div class="section-title mt-16">Voci del menu che questo studio non usa</div>
-      <div class="row wrap mt-8" style="gap:8px">${['prestazioni', 'invianti', 'percorsi', 'moduli', 'documents', 'imaging', 'dittafono', 'anonymize', 'inbox', 'ai', 'fatturazione', 'statistics', 'communications', 'visits'].map(k => `<label class="chip" style="cursor:pointer"><input type="checkbox" class="rf-mn" value="${k}" ${(RF.data.moduli_nascosti || []).includes(k) ? 'checked' : ''} ${admin ? '' : 'disabled'} style="margin:0 6px 0 0"> nascondi ${rfEsc((NAV_META[k] || [k])[0])}</label>`).join('')}</div>
+      <div class="row wrap mt-8" style="gap:8px">${['prestazioni', 'invianti', 'percorsi', 'moduli', 'documents', 'imaging', 'dittafono', 'converti', 'anonymize', 'inbox', 'ai', 'fatturazione', 'statistics', 'communications', 'visits'].map(k => `<label class="chip" style="cursor:pointer"><input type="checkbox" class="rf-mn" value="${k}" ${(RF.data.moduli_nascosti || []).includes(k) ? 'checked' : ''} ${admin ? '' : 'disabled'} style="margin:0 6px 0 0"> nascondi ${rfEsc((NAV_META[k] || [k])[0])}</label>`).join('')}</div>
       <div class="caption mt-8">Le voci nascoste spariscono dalla barra e dal menu del telefono per tutti i ruoli; Home e Studio restano sempre.</div>
       ${admin ? `<div class="row mt-16"><button class="btn primary" onclick="rfStudioAzione({ azione: 'studio_aggiorna', nome: rfStudioCampo('#rf-st-nome'), telefono: rfStudioCampo('#rf-st-tel'), notify_email: rfStudioCampo('#rf-st-email'), specialita: rfStudioCampo('#rf-st-spec'), indirizzo: rfStudioCampo('#rf-st-indirizzo') }).then(() => rfStudioAzione({ azione: 'moduli_nascosti', voci: [...document.querySelectorAll('.rf-mn:checked')].map(e => e.value) }))">Salva</button></div>` : ''}</div>`;
   } else if (scheda === 'personale') {
@@ -6017,4 +6017,79 @@ if (rfPatientDocsImg) patientDocs = function (p) {
       <div class="grow"><div class="name">${rfEsc(e.descrizione || 'Esame')} <span class="badge">${rfEsc(e.modalita || '—')}</span></div>
         <div class="sub">${rfEsc(rfImgData(e.data_esame))} · ${e.n_immagini} immagini${e.istituto ? ` · ${rfEsc(e.istituto)}` : ''}</div></div>
       <button class="btn sm ghost">Apri</button></div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessun esame per immagini in cartella.</div>'}</div></div>`;
+};
+
+
+/* =====================================================================
+   Converti audio (19.9.2026)
+   =====================================================================
+   Il dittafono Philips scrive .dss e .ds2, e quelli non li apre niente: né
+   un telefono, né un player, né un collega. Qui un file entra e torna un
+   MP3, convertito sul Mac dello studio con lo stesso decoder della catena.
+   Niente si salva: il file va al server, il risultato torna al browser, i
+   file di lavoro spariscono subito. Il download è locale, sul dispositivo
+   di chi lo chiede. */
+if (typeof NAV_META !== 'undefined') NAV_META.converti = ['Converti audio', 'mic'];
+(function () { const st = document.createElement('style'); st.textContent = `
+.rf-cv-drop { border:1.5px dashed var(--border); border-radius:12px; padding:26px 18px; text-align:center; color:var(--muted); font-size:13px; }
+.rf-cv-drop.sopra { border-color:var(--cta); color:var(--cta); }
+.rf-cv-riga { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--border); }
+.rf-cv-riga:last-child { border-bottom:0; }
+.rf-cv-riga .nome { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rf-cv-riga .stato { font-size:12px; color:var(--muted); white-space:nowrap; }
+`; document.head.appendChild(st); })();
+
+RF.cv = { file: [] };
+const RF_CV_ESTENSIONI = ['.dss', '.ds2', '.wav', '.m4a', '.mp3', '.aac', '.ogg', '.opus', '.flac', '.wma', '.aiff', '.aif', '.amr', '.3gp', '.mp4', '.mov', '.webm'];
+
+function rfCvPeso(b) { return b > 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1).replace('.', ',')} MB` : `${Math.max(1, Math.round(b / 1024))} kB`; }
+
+async function rfCvConverti(files) {
+  for (const f of files || []) {
+    const ext = (f.name.match(/\.[^.]+$/) || [''])[0].toLowerCase();
+    const voce = { nome: f.name, byte: f.size, stato: RF_CV_ESTENSIONI.includes(ext) ? 'in coda' : 'formato non riconosciuto', url: null, errore: !RF_CV_ESTENSIONI.includes(ext), file: f };
+    RF.cv.file.unshift(voce);
+  }
+  render();
+  // Uno alla volta: il decoder dei .ds2 vuole tempo (4 s per minuto) e
+  // due decodifiche insieme si rubano la memoria.
+  for (const v of [...RF.cv.file].reverse()) {
+    if (v.stato !== 'in coda') continue;
+    v.stato = 'converto…'; render();
+    try {
+      const fd = new FormData(); fd.append('file', v.file);
+      const r = await fetch('/api/prototipo/converti-audio', { method: 'POST', credentials: 'include', body: fd });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); v.stato = j.errore || `non riuscita (${r.status})`; v.errore = true; }
+      else {
+        const blob = await r.blob();
+        v.url = URL.createObjectURL(blob); v.mp3 = blob.size; v.stato = 'pronto';
+        v.mp3nome = v.nome.replace(/\.[^.]+$/, '') + '.mp3';
+      }
+    } catch { v.stato = 'piattaforma non raggiungibile'; v.errore = true; }
+    v.file = null; render();
+  }
+}
+function rfCvDrop(e, sopra) { e.preventDefault(); const z = document.getElementById('rf-cv-drop'); if (z) z.classList.toggle('sopra', sopra); }
+function rfCvDropFile(e) { e.preventDefault(); rfCvDrop(e, false); if (e.dataTransfer) void rfCvConverti([...e.dataTransfer.files]); }
+function rfCvSvuota() { for (const v of RF.cv.file) if (v.url) URL.revokeObjectURL(v.url); RF.cv.file = []; render(); }
+
+PAGES.converti = () => {
+  if (!RF.live) return rfPaginaPiattaforma('Converti audio', 'Dal dittafono a un MP3 che si apre ovunque');
+  const righe = RF.cv.file.map(v => `<div class="rf-cv-riga">
+      <span class="nome" title="${rfEsc(v.nome)}">${rfEsc(v.nome)} <span class="caption">${rfCvPeso(v.byte)}</span></span>
+      <span class="stato ${v.errore ? 'danger' : ''}">${rfEsc(v.stato)}${v.mp3 ? ` · ${rfCvPeso(v.mp3)}` : ''}</span>
+      ${v.url ? `<a class="btn sm primary" href="${v.url}" download="${rfEsc(v.mp3nome)}">Scarica MP3</a>` : v.stato === 'converto…' ? '<span class="spinner"></span>' : ''}
+    </div>`).join('');
+  return `
+    <div class="page-head"><div><h2 class="page-title">Converti audio</h2><div class="page-sub">Dal dittafono (.dss, .ds2) a un MP3 che si apre ovunque</div></div>
+      ${RF.cv.file.length ? `<div class="actions"><button class="btn" onclick="rfCvSvuota()">Svuota l'elenco</button></div>` : ''}</div>
+    <div class="card">
+      <div id="rf-cv-drop" class="rf-cv-drop" ondragover="rfCvDrop(event, true)" ondragleave="rfCvDrop(event, false)" ondrop="rfCvDropFile(event)">
+        Trascina qui i file del dittafono, oppure<br>
+        <div class="row mt-8" style="justify-content:center"><label class="btn sm">Scegli i file… <input type="file" multiple accept="${RF_CV_ESTENSIONI.join(',')}" style="display:none" onchange="rfCvConverti(this.files); this.value=''"></label></div>
+      </div>
+      ${righe ? `<div class="mt-16">${righe}</div>` : ''}
+      <p class="meta" style="margin:14px 0 0;line-height:1.55">La conversione avviene <b>sul Mac dello studio</b>, con lo stesso decoder che usa la catena dei referti: il file non esce da qui e non viene conservato — entra, si converte, torna a te come MP3 e i file di lavoro spariscono. Va bene anche per wav, m4a, ogg e gli altri formati comuni. Un .ds2 cifrato con password non si lascia aprire.</p>
+      <p class="rf-img-limite">Un dettato è un dato sanitario: l'MP3 che scarichi finisce sul tuo dispositivo, e da lì la responsabilità di dove va è tua — non mandarlo per e-mail o chat.</p>
+    </div>`;
 };
