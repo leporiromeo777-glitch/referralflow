@@ -1827,7 +1827,9 @@ async function rfImpagina() {
   .rf-edita { width: 100%; min-height: 55vh; height: auto; padding: 10px 12px; border-radius: var(--r-input); border: 1px solid var(--border); background: var(--surface-2); resize: vertical; line-height: 1.55; font: inherit; font-size: 14px; }
   .rf-edita:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); background: var(--surface); }
   @media (max-width: 767px) { .rf-edita { min-height: 50vh; } }
-  .rf-edita-inline .rf-edita { min-height: 240px; }
+  .rv-doc.rf-modifica, .rv-doc.rf-modifica .rv-span { cursor: text; }
+  .rv-doc.rf-modifica .rv-sec p { border-radius: 6px; box-shadow: 0 0 0 1px var(--border) inset; padding: 4px 6px; }
+  .rv-doc.rf-modifica .rv-sec p:focus { box-shadow: 0 0 0 2px var(--accent-soft) inset; }
 `; document.head.appendChild(st); })();
 const rfPartHtmlOrig = rvPartHtml;
 rvPartHtml = function (p, secCode) {
@@ -1890,55 +1892,39 @@ rvRenderReport = function () {
 function rfEdita() {
   const id = RF.loaded; if (!id) return;
   if (RF.meta && RF.meta.stato !== 'bozza') { toast('Il referto è già confermato: non si modifica più'); return; }
-  // Interruttore, come «Nascondi»: acceso, il testo centrale diventa una sola
-  // area di scrittura al suo posto; spento senza salvare, torna com'era.
-  if (RF.editaInline) { RF.editaInline = false; RF.editaTesto = null; rvRenderReport(); return; }
+  // Interruttore come «Nascondi», ma il testo NON si muove (19.9.2026,
+  // richiesta utente): niente area a parte, niente ridisegno. Acceso, il
+  // testo che c'è diventa scrivibile al suo posto, come in Word — il clic su
+  // una frase mette il cursore invece di aprire la segnalazione o cercare
+  // l'audio. Ogni frase cambiata si salva da sé (rvHumanEdit), come le
+  // correzioni fatte finora frase per frase.
   if (RF.pennello) rfPennello(false);
-  RF.editaInline = true; RF.editaTesto = rfTestoRicomposto();
-  rvRenderReport();
+  RF.editaInline = !RF.editaInline;
+  rfEditaInlineApplica();
+  const eb = document.getElementById('rf-edita-btn'); if (eb) { eb.classList.toggle('primary', !!RF.editaInline); eb.innerHTML = RF.editaInline ? 'Chiudi modifica' : `${(typeof ICONS !== 'undefined' && ICONS.edit) || ''} Edita`; }
+  const vb = document.getElementById('rf-vtutto-btn'); if (vb) vb.hidden = RV.mode === 'read' || !!RF.editaInline || !(typeof rvOpen === 'function' && rvOpen().length);
+  const pb = document.getElementById('rf-pennello-btn'); if (pb) pb.hidden = RV.mode === 'read' || !!RF.editaInline;
+  toast(RF.editaInline ? 'Modifica accesa: clicca sul testo e scrivi, si salva da sé' : 'Modifica chiusa');
 }
-// Disegna (o toglie) l'area di scrittura al posto del testo con le
-// segnalazioni. Si richiama a ogni ridisegno: il testo scritto finora sta in
-// RF.editaTesto, così un ridisegno nel mezzo non lo perde.
+// Accende o spegne la scrittura sul testo così com'è: solo una classe e
+// contenteditable, nessun ridisegno — il testo resta esattamente dov'era.
 function rfEditaInlineApplica() {
   const doc = document.querySelector('#rv-main .rv-doc'); if (!doc) return;
-  if (!RF.editaInline) return;
-  const n = Object.keys(RV.removed).filter(k => RV.removed[k]).length;
-  doc.innerHTML = `<div class="rf-edita-inline">
-    <textarea class="rf-edita" id="rf-edita-testo" spellcheck="true"></textarea>
-    <div class="row mt-8" style="gap:8px;align-items:center;flex-wrap:wrap">
-      <button class="btn primary" id="rf-edita-ok">Salva</button>
-      <button class="btn" onclick="rfEdita()">Annulla</button>
-      <span class="caption">È il testo pulito${n ? `, senza ${n === 1 ? 'la frase tolta' : `le ${n} frasi tolte`}` : ''}. Salvando, la revisione si ricalcola sul nuovo testo: le verifiche già chiuse restano chiuse dove le frasi coincidono.</span>
-    </div></div>`;
-  const box = document.getElementById('rf-edita-testo');
-  box.value = RF.editaTesto || '';
-  box.oninput = () => { RF.editaTesto = box.value; };
-  box.style.height = 'auto'; box.style.height = Math.max(240, box.scrollHeight + 8) + 'px';
-  document.getElementById('rf-edita-ok').onclick = () => rfEditaSalva(box.value);
-  const leg = document.querySelector('#rv-main .rv-legend'); if (leg) leg.hidden = true;
-  setTimeout(() => box.focus(), 40);
+  doc.classList.toggle('rf-modifica', !!RF.editaInline);
+  doc.querySelectorAll('[data-sec-body]').forEach(p => p.setAttribute('contenteditable', RV.mode === 'read' || RF.pennello ? 'false' : 'true'));
+  document.querySelectorAll('.rv-mini').forEach(x => x.remove());
 }
-async function rfEditaSalva(valore) {
-  const id = RF.loaded; if (!id) return;
-  const originale = rfTestoRicomposto();
-  const nuovo = String(valore || '').replace(/\r\n/g, '\n').trim();
-  if (!nuovo) { toast('Il testo non può essere vuoto'); return; }
-  if (nuovo === originale.trim()) { RF.editaInline = false; RF.editaTesto = null; rvRenderReport(); return; }
-  const btn = document.getElementById('rf-edita-ok'); if (btn) { btn.disabled = true; btn.textContent = 'Salvo…'; }
-  clearTimeout(rvSave._rf);
-  rvLog('CORRECTION', 'testo completo modificato a mano (Edita)');
-  RV.metrics.corrections = (RV.metrics.corrections || 0) + 1;
-  try {
-    const r = await fetch(`/api/prototipo/referti/${id}/testo`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ testo: nuovo, stato: rfStatoRevisione(), correzioni: RV.metrics.corrections, verifiche: rvDone() }) });
-    if (!r.ok) throw new Error('salvataggio');
-  } catch { if (btn) { btn.disabled = false; btn.textContent = 'Salva'; } toast('Non riesco a salvare nella piattaforma'); return; }
-  RF.editaInline = false; RF.editaTesto = null;
-  localStorage.removeItem(RV_KEY);
-  RF.loaded = null; RF.loading = null;
-  render();
-  toast('Testo salvato · revisione ricalcolata');
-}
+const rfSpanClickEdita = rvSpanClick;
+rvSpanClick = function (id) {
+  // In modifica il clic mette il cursore: niente salto alla segnalazione.
+  if (RF.live && RF.editaInline) return;
+  return rfSpanClickEdita(id);
+};
+const rfHoverEdita = rvHover;
+rvHover = function (sp) {
+  if (RF.live && RF.editaInline) return;
+  return rfHoverEdita(sp);
+};
 
 /* «Verifica tutto» (19.9.2026). Segna come verificate le segnalazioni ancora
    aperte, in un colpo, con due conferme. NON applica le proposte e NON conta
