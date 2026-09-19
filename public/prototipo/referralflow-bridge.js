@@ -6347,6 +6347,19 @@ async function rfMisStoria(id) {
     openModal('Da dove arriva questo numero', `<div class="kv">${righe.join('')}</div><div class="section-title mt-16">Storia</div><div class="list">${eventi || '<div class="caption">Nessun evento registrato.</div>'}</div>`, `<button class="btn" data-close>Chiudi</button>`);
   } catch { toast('Piattaforma non raggiungibile'); }
 }
+async function rfMisStatistiche(id) {
+  try {
+    const r = await fetch('/api/prototipo/imaging/misure', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'statistiche', id }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(j.motivo || j.errore || 'Statistiche non disponibili'); return; }
+    await rfImgRicarica();
+  } catch { toast('Piattaforma non raggiungibile'); }
+}
+function rfMisStatTesto(st) {
+  if (!st || typeof st.media !== 'number') return '';
+  const n = (v) => String(Math.round(v * 10) / 10).replace('.', ',');
+  return `${n(st.media)} ± ${n(st.deviazione)} ${st.unita} (min ${n(st.min)}, max ${n(st.max)}, n ${st.n})${st.verifica && st.verifica.coincide ? ' ✓' : ''}`;
+}
 async function rfMisEtichetta(id, attuale) {
   const nuova = prompt('Che cosa hai misurato?', attuale || '');
   if (nuova === null) return;
@@ -6392,8 +6405,9 @@ function rfImgMisureManuali(d, i) {
       <span class="caption">${tutte.length} in questo esame${confrontate ? ` · ${confrontate} confrontate con l'apparecchio` : ''} · <a href="/api/prototipo/imaging/misure?formato=csv">validazione (CSV)</a></span></div>
     <div class="list">${tutte.map(m => `<div class="list-item rf-mis-riga ${m.annullata_at ? 'annullata' : ''} ${i && m.immagine_id === i.id && m.frame === RF.img.frame ? 'qui' : ''}">
         <div class="grow"><div class="name">${rfEsc(m.etichetta || (RF_MIS_STRUMENTI.find(x => x[0] === m.tipo) || ['', 'Distanza'])[1])} · ${rfEsc(m.valore_mostrato || RFMisura.formattaMm(m.valore))}${m.tipo && m.tipo !== 'distanza' && m.etichetta ? ` <span class="caption">${rfEsc(m.tipo)}</span>` : ''}${m.stato_validazione ? `<span class="rf-mis-stato st-${m.stato_validazione}" title="${rfEsc(((m.avvisi || []).map(a => RFMSE.validazione.testo(a))).join(' ') || 'Calibrazione verificata')}">${RFMSE.validazione.SEGNI[m.stato_validazione]}</span>` : ''}${m.verifica_ok === false ? ' <span class="rf-mis-stato" style="color:#8a1f1f" title="doppio controllo non riuscito">✕</span>' : ''}${m.sostituisce_id ? ' <span class="caption">(rifatta)</span>' : ''}</div>
-          <div class="sub">${rfEsc(m.chi || 'qualcuno')} · ${rfEsc(rfModQuando(m.quando))}${m.frame ? ` · fotogramma ${m.frame + 1}` : ''}${m.annullata_at ? ` · <b>annullata</b> da ${rfEsc(m.annullata_da || 'qualcuno')} ${rfEsc(rfModQuando(m.annullata_at))}` : scarto(m)}</div></div>
+          <div class="sub">${rfEsc(m.chi || 'qualcuno')} · ${rfEsc(rfModQuando(m.quando))}${m.frame ? ` · fotogramma ${m.frame + 1}` : ''}${m.annullata_at ? ` · <b>annullata</b> da ${rfEsc(m.annullata_da || 'qualcuno')} ${rfEsc(rfModQuando(m.annullata_at))}` : scarto(m)}${m.extra && m.extra.statistiche ? `<br><b>Pixel:</b> ${rfEsc(rfMisStatTesto(m.extra.statistiche))}` : ''}</div></div>
         ${!m.annullata_at && puo ? `<div class="row" style="gap:6px">${rif.length ? `<select class="input sm" onchange="rfMisRiferimento('${m.id}', this.value)" title="Confronta con la misura dell'apparecchio"><option value="">confronta con…</option>${rif.map(r => `<option value="${r.id}" ${m.riferimento_misura_id === r.id ? 'selected' : ''}>${rfEsc(r.gruppo ? r.gruppo + ' · ' : '')}${rfEsc(r.nome)}</option>`).join('')}</select>` : ''}
+          ${['rettangolo', 'ellisse', 'poligono'].includes(m.tipo) && ['CT', 'MR'].includes(String((d.esame || {}).modalita || '').toUpperCase()) ? `<button class="btn sm" onclick="rfMisStatistiche('${m.id}')" title="Valori dei pixel dentro la ROI (HU per la TAC)">${String((d.esame || {}).modalita).toUpperCase() === 'CT' ? 'HU' : 'Valori'}</button>` : ''}
           <button class="btn sm" onclick="rfMisEtichetta('${m.id}', ${JSON.stringify(m.etichetta || '')})" title="Cambia il nome">Nome</button>
           <button class="btn sm" onclick="rfMisRifai('${m.id}')" title="Annulla e misura di nuovo">Rifai</button>
           <button class="btn sm" onclick="rfMisAnnulla('${m.id}')">Annulla</button></div>` : ''}

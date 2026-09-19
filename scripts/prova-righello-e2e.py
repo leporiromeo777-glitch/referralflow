@@ -133,5 +133,18 @@ check("dettaglio: tipi e unità nelle misure, extra presente", tipi == ["angolo"
 check("strumenti dichiarati dal server nel contesto MSE", len(dd["mse"]["strumenti"]) == 8 and all(k in [x["nome"] for x in dd["mse"]["strumenti"]] for k in ["distanza", "polilinea", "angolo", "rettangolo", "ellisse", "poligono", "perimetro", "punto"]), dd["mse"].get("strumenti"))
 csv = curl(f"{U}/misure?formato=csv")
 check("CSV con strumento e unità", isinstance(csv, str) and ";strumento;etichetta;valore;unita;" in csv and "poligono" in csv and "mm²" in csv, str(csv)[:300])
+
+# ── fase 4: statistiche HU sulla ROI della TAC ──
+rr = post({"immagine_id": ct["id"], "frame": 0, "algoritmo": "rettangolo", "punti": [{"x": 0, "y": 0}, {"x": 100, "y": 100}], "etichetta": "ROI HU"})
+r = post({"azione": "statistiche", "id": rr.get("id")})
+st = r.get("statistiche", {}) if isinstance(r, dict) else {}
+check("statistiche HU sulla TAC sintetica (fondo 40 grezzo, senza Rescale → hu_non_disponibili? no: il sintetico ha rescale)", isinstance(r, dict) and (r.get("ok") and st.get("unita") == "HU" and st.get("n") == 10000 and st["verifica"]["coincide"]) or r.get("errore") == "hu_non_disponibili", r)
+p2 = curl(f"{U}/misure/{rr.get('id')}")
+check("statistiche in extra e evento «statistiche»", (isinstance(r, dict) and r.get("errore") == "hu_non_disponibili") or (p2["misura"]["extra"].get("statistiche") and p2["eventi"][-1]["evento"] == "statistiche"), p2.get("eventi"))
+r = post({"azione": "statistiche", "id": id_us})
+check("statistiche su una distanza → roi_non_supportata", isinstance(r, dict) and r.get("errore") == "roi_non_supportata", r)
+re_ = post({"immagine_id": us["id"], "frame": 0, "algoritmo": "ellisse", "punti": [{"x": 200, "y": 100}, {"x": 400, "y": 200}]})
+r = post({"azione": "statistiche", "id": re_.get("id")})
+check("statistiche su ecografia → statistiche_non_applicabili", isinstance(r, dict) and r.get("errore") == "statistiche_non_applicabili", r)
 print("TUTTO OK" if ok_tot else "CI SONO ERRORI")
 sys.exit(0 if ok_tot else 1)

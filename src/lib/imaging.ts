@@ -145,6 +145,25 @@ export async function leggiGeometria(key: string): Promise<Geometria | null> {
   });
 }
 
+// Statistiche dei pixel dentro una ROI (MSE fase 4): HU per la TAC, unità
+// arbitrarie per la RM, rifiuto per tutto il resto. Le calcola il lettore
+// Python due volte con codice diverso; qui si passa e basta.
+export type StatisticheRoi = {
+  stato: string; unita?: string; modalita?: string; frame?: number; tipo_roi?: string;
+  n?: number; min?: number; max?: number; media?: number; deviazione?: number;
+  verifica?: { metodo: string; n: number; min: number; max: number; media: number; deviazione: number; coincide: boolean };
+  rescale?: { slope: number | null; intercept: number | null; tipo: string | null }; avvisi?: string[]; motivo?: string;
+};
+export async function statisticheRoi(key: string, frame: number, tipo: string, punti: { x: number; y: number }[]): Promise<StatisticheRoi> {
+  return conFile(key, async (percorso) => {
+    const { uscita } = await esegui(['statistiche', percorso, '--frame', String(frame), '--tipo', tipo, '--punti', JSON.stringify(punti)]);
+    try {
+      const j = JSON.parse(uscita || '{}');
+      return j && typeof j.stato === 'string' ? (j as StatisticheRoi) : { stato: 'lettore_non_disponibile' };
+    } catch { return { stato: 'lettore_non_disponibile' }; }
+  });
+}
+
 export function lettoreDisponibile(): Promise<boolean> {
   return fs.access(PY).then(() => true).catch(() => false);
 }

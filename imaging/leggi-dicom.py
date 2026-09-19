@@ -11,6 +11,8 @@ rovina al massimo la sua richiesta:
     leggi-dicom.py misure <file>                      → le misure FATTE DALL'APPARECCHIO
     leggi-dicom.py calibrazione <file>                → mm per pixel, per misurare sull'immagine (vista compatta)
     leggi-dicom.py geometria <file>                   → tutta la geometria (fase 1 MSE), con sha256 del file
+    leggi-dicom.py statistiche <file> --frame N --tipo rettangolo|ellisse|poligono --punti JSON
+                                                      → min/max/media/deviazione dentro la ROI (HU per la TAC), fase 4
 
 Regole:
 - **Non stampa mai nulla su stderr che contenga dati del paziente.** I campi
@@ -96,6 +98,27 @@ def comando_calibrazione(percorso: Path) -> int:
     except Exception as e:  # noqa: BLE001
         return _uscita({"errore": "non_dicom", "tipo": type(e).__name__}, 1)
     return _uscita(calibrazione_di(ds))
+
+
+def comando_statistiche(percorso: Path, frame: int, tipo: str, punti_json: str) -> int:
+    import pydicom
+    from statistiche import statistiche_di
+
+    try:
+        punti = json.loads(punti_json)
+        assert isinstance(punti, list) and all(isinstance(p, dict) for p in punti)
+        punti = [{"x": float(p["x"]), "y": float(p["y"])} for p in punti]
+    except Exception:  # noqa: BLE001
+        return _uscita({"stato": "punti_non_validi"}, 1)
+    try:
+        ds = pydicom.dcmread(str(percorso), force=False)
+    except Exception as e:  # noqa: BLE001
+        return _uscita({"stato": "non_dicom", "tipo": type(e).__name__}, 1)
+    try:
+        esito = statistiche_di(ds, frame, tipo, punti)
+    except ValueError as e:
+        return _uscita({"stato": str(e)}, 1)
+    return _uscita(esito, 0 if esito.get("stato") == "ok" else 1)
 
 
 def comando_meta(percorso: Path) -> int:
@@ -284,6 +307,8 @@ def main() -> int:
     mi = sub.add_parser("misure"); mi.add_argument("file")
     c = sub.add_parser("calibrazione"); c.add_argument("file")
     g = sub.add_parser("geometria"); g.add_argument("file")
+    st = sub.add_parser("statistiche"); st.add_argument("file"); st.add_argument("--frame", type=int, default=0)
+    st.add_argument("--tipo", required=True); st.add_argument("--punti", required=True)
     p = sub.add_parser("png")
     p.add_argument("file"); p.add_argument("--frame", type=int, default=0)
     p.add_argument("--ww", type=float, default=None); p.add_argument("--wl", type=float, default=None)
@@ -303,6 +328,8 @@ def main() -> int:
         return comando_calibrazione(percorso)
     if a.comando == "geometria":
         return comando_geometria(percorso)
+    if a.comando == "statistiche":
+        return comando_statistiche(percorso, a.frame, a.tipo, a.punti)
     return comando_png(percorso, a.frame, a.ww, a.wl,
                        ANTEPRIMA_LATO if a.anteprima else a.lato, Path(a.out))
 

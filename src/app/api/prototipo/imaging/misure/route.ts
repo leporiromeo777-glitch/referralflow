@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { query, transazione } from '@/lib/db';
+import { statisticheRoi } from '@/lib/imaging';
 import { isUuid } from '@/lib/cartella';
 import { mse, puntoValido, cautionValidati, versioneSoftware, verificaIndipendente, tolleranzaVerifica, type Calibrazione, type Geometria, type Punto } from '@/lib/imaging-misura';
 
@@ -62,6 +63,38 @@ export async function POST(req: NextRequest) {
     });
     if (!esito) return NextResponse.json({ errore: 'non_trovato' }, { status: 404 });
     return NextResponse.json({ ok: true });
+  }
+
+  if (corpo.azione === 'statistiche') {
+    // Fase 4: i valori dei pixel dentro una ROI già salvata (rettangolo,
+    // ellisse, poligono). HU solo per la TAC con Rescale; a.u. per la RM;
+    // niente per il resto. Il risultato entra in `extra.statistiche` con il
+    // suo doppio calcolo, e un evento lo registra.
+    if (!isUuid(corpo.id)) return NextResponse.json({ errore: 'non_trovato' }, { status: 404 });
+    const [m] = await query<{ id: string; tipo: string; frame: number; punti: Punto[]; extra: Record<string, unknown> | null; storage_key: string; immagine: boolean; modalita: string }>(
+      `select m.id, m.tipo, m.frame, m.punti, m.extra, i.storage_key, i.immagine, e.modalita
+         from imaging_misure_manuali m join imaging_immagini i on i.id = m.immagine_id join imaging_esami e on e.id = m.esame_id
+        where m.id = $1 and m.studio_id = $2 and m.annullata_at is null`, [corpo.id, sid]);
+    if (!m) return NextResponse.json({ errore: 'non_trovato' }, { status: 404 });
+    if (!['rettangolo', 'ellisse', 'poligono'].includes(m.tipo)) return NextResponse.json({ errore: 'roi_non_supportata', motivo: 'Le statistiche si calcolano su rettangolo, ellisse e poligono.' }, { status: 422 });
+    const st = await statisticheRoi(m.storage_key, m.frame, m.tipo, m.punti);
+    if (st.stato !== 'ok') {
+      const testi: Record<string, string> = {
+        statistiche_non_applicabili: 'Statistiche non applicabili: valgono solo per TAC (HU) e RM (unità arbitrarie), in immagini monocromatiche.',
+        hu_non_disponibili: 'Unità Hounsfield non disponibili: il file non dichiara un Rescale in HU.',
+        roi_vuota: 'La ROI non contiene pixel.', fotogramma_non_valido: 'Fotogramma inesistente.',
+        verifica_indipendente_fallita: 'I due calcoli delle statistiche non coincidono: risultato non validato.',
+        pixel_non_leggibili: 'Pixel non leggibili.', lettore_non_disponibile: 'Lettore DICOM non disponibile.',
+      };
+      console.error(`[imaging] statistiche: ${st.stato} misura=${m.id}`);
+      return NextResponse.json({ errore: st.stato, motivo: testi[st.stato] ?? 'Statistiche non disponibili.' }, { status: 422 });
+    }
+    const statistiche = { unita: st.unita, n: st.n, min: st.min, max: st.max, media: st.media, deviazione: st.deviazione, verifica: st.verifica, rescale: st.rescale, avvisi: st.avvisi, versione_software: versioneSoftware(), quando: new Date().toISOString() };
+    await transazione(async (q) => {
+      await q(`update imaging_misure_manuali set extra = coalesce(extra, '{}'::jsonb) || $3::jsonb where id = $1 and studio_id = $2`, [m.id, sid, JSON.stringify({ statistiche })]);
+      await evento(q, m.id, 'statistiche', m.extra?.statistiche ?? null, statistiche);
+    });
+    return NextResponse.json({ ok: true, statistiche });
   }
 
   if (corpo.azione === 'riferimento') {
