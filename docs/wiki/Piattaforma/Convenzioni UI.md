@@ -44,3 +44,18 @@ Soglia **640 px**: sotto, l'interfaccia cambia forma, non solo dimensione. Sopra
 - **Le barre che scorrono di lato non seguono il dito in su.** Schede dello Studio, segmenti, pastiglie: `touch-action: pan-x` più `overscroll-behavior-x: contain`. Bastava un filo di movimento verticale e partiva anche la pagina, così la barra scappava mentre la si trascinava. Vale **solo per le barre basse**: dentro una tabella o un calendario, che sono alti, bloccare il verticale vorrebbe dire non poter più scorrere la pagina col dito appoggiato sopra.
 
 Misura: sulle 15 pagine raggiungibili, **zero elementi fuori dallo schermo** a 375 px e nessuno scorrimento orizzontale della pagina.
+
+## Giro dell'interfaccia del 22.9.2026: ciò che non si vedeva
+
+Tutte le 34 pagine più revisione, scheda paziente, documento della giornata e finestre, a tre larghezze (375, 820, 1180 px), con un controllo nel browser che cerca ciò che esce dallo schermo, viene tagliato o finisce sotto un elemento fisso. Computer e tablet erano puliti; sul telefono e nel pannello laterale c'erano sei difetti, corretti in `bridge/10-rifiniture.js` e `09-visita.js`:
+
+| Dove | Che cosa succedeva | Correzione |
+|---|---|---|
+| Revisione, telefono | la barra dei tasti era una riga sola larga 889 px: «Nascondi», «Edita», «Verifica tutto», «Lettura pulita», «Termina revisione» fuori dallo schermo, irraggiungibili | la barra va a capo sotto i 1040 px; sul telefono tasti più piccoli e senza icona, «Tasti» (scorciatoie da tastiera) nascosto, una sola freccia «indietro»; da 208 a 119 px |
+| Revisione, telefono | durata e stato («confermato») tagliati nella riga del paziente | la riga va a capo |
+| Finestre alte (es. «Nuovo paziente»: 1094 px su uno schermo da 812) | «Salva» non si raggiungeva | la finestra scorre dentro lo schermo e i tasti restano attaccati in basso |
+| Tutte le schede, telefono | una regola (`.card .num`) portava a 28 px **ogni** cifra dentro una scheda: nella pagina Immagini indirizzo e AE Title uscivano dal bordo | la regola vale solo per i numeri grandi a blocco (`.card > div.num`); nelle coppie etichetta/valore i valori lunghi vanno a capo |
+| Pagina di Cleo, telefono | gli ultimi suggerimenti e la casella finivano sotto il menu a pillola | spazio in fondo |
+| Documento delle procedure nel pannello laterale (290 px) | titolo schiacciato a 100 px, «Stampa» fuori dal bordo | titolo e tasti su due righe quando non c'è spazio |
+
+**Regole che ne escono**: niente selettori larghi come `.card .num` nelle regole per telefono; una barra di tasti deve poter andare a capo; una finestra non è mai più alta dello schermo; ciò che scorre in una pagina a tutta altezza lascia spazio al menu a pillola. Il contenitore che scorre è `main.content`, non la pagina: chi controlla «a fondo pagina» deve scorrere quello.

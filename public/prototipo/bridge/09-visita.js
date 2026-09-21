@@ -609,7 +609,8 @@ function rfAgendaListaHtml(lista, vista) {
   /* le tessere dei numeri: due per riga, tutte della stessa altezza */
   .grid-4, .grid-5 { grid-template-columns:repeat(2, minmax(0,1fr)); }
   .stat .label, .card.tight .label { font-size:10px; line-height:1.3; }
-  .stat .value, .card .num { font-size:28px; }
+  /* solo i numeri grandi a blocco: «.card .num» prendeva OGNI cifra dentro una scheda (valori di tabelle, misure, indirizzi) e la portava a 28 px sul telefono */
+  .stat .value, .card > div.num { font-size:28px; }
 
   /* la visita: la colonna dell'assistente sotto, non di fianco */
   .rf-v-testa { position:static; }

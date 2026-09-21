@@ -202,3 +202,9 @@ Da ricordare più del risultato: **il primo punteggio assolveva tutti e tre**, p
 | `src/lib/prove-pazienti-abbina.test.ts` | chiave del nome, date, unico nei due ordini, omonimi non indovinati, la nascita decide, nascita diversa rifiutata, titolo di MediOnline, blocchi non persona, proposta per «Crea cartella» | 7/7 |
 | server di prova (DB demo) | proposta dal titolo, cartella creata, 12 appuntamenti e 1 referto collegati in un colpo, omonimo lasciato senza cartella, giornata con 79 tasti «Crea cartella» | ok |
 | browser | tasto nella tabella della giornata → modulo con cognome e nome precompilati | ok |
+
+## Giro dell'interfaccia — 22.9.2026
+
+| Banco | Che cosa | Esito |
+|---|---|---|
+| controllo nel browser, 34 pagine + 5 viste interne × 3 larghezze | elementi fuori schermo, tagliati, sotto elementi fissi, finestre più alte dello schermo | prima: 6 difetti (telefono e pannello laterale); dopo: 0 |
