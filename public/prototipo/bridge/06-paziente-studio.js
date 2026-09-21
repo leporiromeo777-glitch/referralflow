@@ -108,7 +108,6 @@ renderMobileNav = function () {
     // Prima apriva il pannello laterale, che sul telefono è un foglio a tutto
     // schermo senza quei tasti: sembrava Cleo e non lo era.
     if (k === 'ai') { state.aiOpen = false; if (state.route === 'ai') { render(); } else { go('#/ai'); } return; }
-    if (k === 'dittafono') { window.location.href = '/dittafono/index.html'; return; }
     if (k === 'altro') { rfMenuAltro(altre); return; }
     go('#/' + k);
   });

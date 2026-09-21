@@ -1,21 +1,15 @@
 <!doctype html>
-<html lang="it">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
-    <meta name="theme-color" content="#F5F5F7" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Dittafono" />
-    <meta name="format-detection" content="telephone=no" />
-    <link rel="apple-touch-icon" href="./icons/icon-180.png" />
-    <link rel="icon" type="image/png" sizes="64x64" href="./icons/favicon-64.png" />
-    <title>Dittafono · ReferralFlow</title>
-    <script type="module" crossorigin src="./assets/index-vh_6G9Ra.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-DHE68Oxb.css">
-  <link rel="manifest" href="./manifest.webmanifest"></head>
-  <body>
-    <div id="root"></div>
-  </body>
-</html>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dittafono — ReferralFlow</title>
+<meta http-equiv="refresh" content="0; url=/prototipo/index.html#/dittafono">
+<style>body{font:15px/1.5 -apple-system,system-ui,sans-serif;background:#faf8f4;color:#1d2a26;display:grid;place-items:center;min-height:100vh;margin:0}a{color:#0d5c48}</style>
+</head><body><p>Il dittafono ora è una pagina di ReferralFlow: <a href="/prototipo/index.html#/dittafono">aprilo qui</a>.</p>
+<script>
+// Chi aveva «installato» la vecchia applicazione sul telefono arriva qui: via il suo
+// service worker e le sue cache, poi dentro la piattaforma.
+(async function () {
+  try { if (navigator.serviceWorker) { const rr = await navigator.serviceWorker.getRegistrations(); for (const r of rr) if (/\/dittafono\//.test(r.scope)) await r.unregister(); } } catch (e) {}
+  try { if (window.caches) { const kk = await caches.keys(); for (const k of kk) if (/workbox|dittafono/i.test(k)) await caches.delete(k); } } catch (e) {}
+  location.replace('/prototipo/index.html#/dittafono');
+})();
+</script></body></html>

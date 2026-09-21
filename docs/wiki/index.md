@@ -22,6 +22,7 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 - [[Piattaforma/Accessi e ruoli]] — i cinque accessi dello studio, i ruoli veri e quello che manca
 - [[Piattaforma/Automazioni]] — cron, SMS, watchdog, report
 - [[Piattaforma/Robot agenda MediOnline]]
+- [[Piattaforma/Dittafono]] — pagina della piattaforma (dal 23.9.2026, non più un'app in cornice): registra, pausa, inserisci/sovrascrivi, resta sul dispositivo finché non si invia, stessa coda dei referti
 - [[Piattaforma/Immagini]] — esami per immagini dentro la cartella: DICOM, visore, abbinamento severo al paziente
 - [[Piattaforma/Funzioni fatte]] — tutto ciò che esiste già, in ordine inverso
 - [[Piattaforma/Revisione del 18.9.2026]] — le quattro forme di guasto uscite dalla passata di revisione, e che cosa resta da fare

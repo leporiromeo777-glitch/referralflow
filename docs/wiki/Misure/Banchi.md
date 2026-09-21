@@ -208,3 +208,10 @@ Da ricordare più del risultato: **il primo punteggio assolveva tutti e tre**, p
 | Banco | Che cosa | Esito |
 |---|---|---|
 | controllo nel browser, 34 pagine + 5 viste interne × 3 larghezze | elementi fuori schermo, tagliati, sotto elementi fissi, finestre più alte dello schermo | prima: 6 difetti (telefono e pannello laterale); dopo: 0 |
+
+## Dittafono come pagina — 23.9.2026
+
+| Banco | Che cosa | Esito |
+|---|---|---|
+| `src/lib/prove-dittafono-audio.test.ts` | riduzione 48→16 kHz, 16 bit con taglio, unione, inserisci/sovrascrivi (anche ai bordi, originale intatto), intestazione WAV, durata/orologio/livello/nome | 6/6 |
+| browser (server di prova, tono sintetico di 2 s) | pagina senza cornice, 12 parti, riascolto, inserisci 0:03 e sovrascrivi 0:02, errore chiaro senza microfono, salvataggio sul dispositivo (64 000 byte), invio nella coda e copia locale cancellata; sul telefono il tasto del menu resta nella piattaforma, niente fuori schermo | ok |

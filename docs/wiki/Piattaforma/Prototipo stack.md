@@ -208,7 +208,7 @@ L'originale non resta da nessuna parte, e nemmeno il nome del file — la pagina
 Trappola trovata qui: dentro un blocco di stile scritto in un template literal, **un apice inverso in un commento CSS chiude il template**. `node --check` non se ne accorge — il file resta JS valido — e la pagina smette semplicemente di disegnarsi. Si vede solo aprendola.
 
 
-## Il ponte in undici parti (21.9.2026)
+## Il ponte in parti (21.9.2026; dodici dal 23.9)
 
 Il ponte con la piattaforma era un file solo di 6851 righe (`referralflow-bridge.js`). Ora sta in `public/prototipo/bridge/`, tagliato **solo ai confini fra istruzioni di primo livello** con il parser di TypeScript, e la ricomposizione delle parti ridava il file originale **byte per byte**: nessuna riga è cambiata, è cambiato dove sta.
 
@@ -225,6 +225,7 @@ Il ponte con la piattaforma era un file solo di 6851 righe (`referralflow-bridge
 | `09-visita` | accoglienza, stanza, visita |
 | `10-rifiniture` | CSS delle barre scorrevoli |
 | `11-immagini` | immagini, righello, MPR |
+| `12-dittafono` | il dittafono come pagina della piattaforma |
 
 **L'ordine conta.** Sono script classici: condividono lo spazio globale ma **non l'hoisting** — una funzione dichiarata in `08-sale` non esiste ancora mentre si carica `03-cleo`. Dentro le funzioni si può usare tutto (girano dopo); al caricamento no. Lo sorveglia `src/lib/prove-prototipo-bridge.test.ts`, che gira con `npm run test:app`: `index.html` elenca tutte le parti in ordine e con una sola versione, ogni parte si legge da sola, nessuna parte usa al caricamento un nome dichiarato in una parte successiva, nessun `const`/`let` di primo livello è dichiarato due volte. Una parte nuova si aggiunge con il numero successivo e una riga in `index.html`; la versione `?v=` è la stessa per tutte.
 

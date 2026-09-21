@@ -1,1 +1,12 @@
-if(!self.define){let e,i={};const n=(n,c)=>(n=new URL(n+".js",c).href,i[n]||new Promise(i=>{if("document"in self){const e=document.createElement("script");e.src=n,e.onload=i,document.head.appendChild(e)}else e=n,importScripts(n),i()}).then(()=>{let e=i[n];if(!e)throw new Error(`Module ${n} didn’t register its module`);return e}));self.define=(c,s)=>{const o=e||("document"in self?document.currentScript.src:"")||location.href;if(i[o])return;let r={};const a=e=>n(e,o),d={module:{uri:o},exports:r,require:a};i[o]=Promise.all(c.map(e=>d[e]||a(e))).then(e=>(s(...e),r))}}define(["./workbox-9c191d2f"],function(e){"use strict";self.skipWaiting(),e.clientsClaim(),e.precacheAndRoute([{url:"index.html",revision:"9dc59905a063c9f9ec3bd19760796f8c"},{url:"icons/icon-512.png",revision:"7f9c4715cfd51abf3766aa6f915ca596"},{url:"icons/icon-512-maskable.png",revision:"286718abe3487ced817d01dff117e99e"},{url:"icons/icon-192.png",revision:"930b1c22b8c28e5de57c442ba1dca1fa"},{url:"icons/icon-180.png",revision:"07589ae749bcabea9b38ded2efbaed76"},{url:"icons/favicon-64.png",revision:"5abddc8b089fb36a873a911b7cb11567"},{url:"assets/workbox-window.prod.es5-BqEJf4Xk.js",revision:null},{url:"assets/index-vh_6G9Ra.js",revision:null},{url:"assets/index-DHE68Oxb.css",revision:null},{url:"icons/favicon-64.png",revision:"5abddc8b089fb36a873a911b7cb11567"},{url:"icons/icon-180.png",revision:"07589ae749bcabea9b38ded2efbaed76"},{url:"icons/icon-192.png",revision:"930b1c22b8c28e5de57c442ba1dca1fa"},{url:"icons/icon-512-maskable.png",revision:"286718abe3487ced817d01dff117e99e"},{url:"icons/icon-512.png",revision:"7f9c4715cfd51abf3766aa6f915ca596"},{url:"manifest.webmanifest",revision:"ffe7e4c4cc7aa929cf46d5d5d00c18cb"}],{}),e.cleanupOutdatedCaches(),e.registerRoute(new e.NavigationRoute(e.createHandlerBoundToURL("index.html")))});
+// La vecchia applicazione «Dittafono clinico» teneva in cache sé stessa con questo
+// service worker. Il dittafono ora è una pagina di ReferralFlow: questo file
+// sostituisce il vecchio, svuota le sue cache, si toglie da solo e porta chi
+// ha la vecchia app aperta alla pagina nuova.
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (e) => {
+  e.waitUntil((async () => {
+    try { const kk = await caches.keys(); await Promise.all(kk.map((k) => caches.delete(k))); } catch (_) {}
+    try { await self.registration.unregister(); } catch (_) {}
+    try { const cc = await self.clients.matchAll({ type: 'window' }); cc.forEach((c) => c.navigate('/prototipo/index.html#/dittafono')); } catch (_) {}
+  })());
+});

@@ -18,7 +18,7 @@ Il motivo è pratico, non estetico: due interfacce per lo stesso prodotto fanno 
 
 L'inviante registrato non c'entra: la sua area (`/invii`, più `sicurezza` e `profilo`) è fatta per un medico di un altro studio e non ha niente a che vedere con l'interfaccia interna.
 
-Restano dove sono, e devono restare: **accesso** (`/login`, verifica a due fattori, password dimenticata, registrazione, attivazione), **le pagine pubbliche con token** (`/invia`, `/affido/…`, `/appuntamento/…`, `/portale/…`), i **testi legali**, il **dittafono** (`/dittafono/`) e tutte le **API**, che sono ciò su cui l'interfaccia nuova gira.
+Restano dove sono, e devono restare: **accesso** (`/login`, verifica a due fattori, password dimenticata, registrazione, attivazione), **le pagine pubbliche con token** (`/invia`, `/affido/…`, `/appuntamento/…`, `/portale/…`), i **testi legali** e tutte le **API** (il dittafono non è più fra queste: dal 23.9.2026 è una pagina dell'interfaccia, [[Piattaforma/Dittafono]], e `/dittafono/` è solo un rimando), che sono ciò su cui l'interfaccia nuova gira.
 
 ## Le pagine vecchie non sono ancora state cancellate
 
