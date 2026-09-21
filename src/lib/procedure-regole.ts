@@ -205,6 +205,8 @@ export type VoceGiornata = {
   medico: string | null;
   motivo: string | null;
   patientId: string | null; // null = non in cartella
+  titoloAgenda?: string;    // il titolo com'è in agenda: serve a «Crea cartella»
+  persona?: boolean;        // false = blocco che non è un paziente («— Formazione»)
   briefing: { sezioni: Sezione[]; mancanti: Mancante[]; fonti: Fonte[] } | null;
 };
 
@@ -235,7 +237,7 @@ export function aggregaGiornata(voci: VoceGiornata[], dataCh: string): Omit<Esit
     const testa = `${v.ora} · ${v.paziente}${v.medico ? ` · ${v.medico}` : ''}${v.motivo ? ` · ${v.motivo}` : ''}`;
     if (!v.briefing) {
       sezioni.push({ chiave: `app-${v.ora}-${v.paziente}`, titolo: testa, righe: [{ testo: 'Non in cartella.' }] });
-      vociDoc.push({ ora: v.ora, paziente: v.paziente, medico: v.medico ?? null, motivo: v.motivo ?? null, patientId: null, mancanti: [], gruppi: [], inCartella: false });
+      vociDoc.push({ ora: v.ora, paziente: v.paziente, medico: v.medico ?? null, motivo: v.motivo ?? null, patientId: null, mancanti: [], gruppi: [], inCartella: false, crea: v.persona === false ? undefined : v.titoloAgenda });
       continue;
     }
     const righe: Riga[] = [];

@@ -2,6 +2,7 @@ import 'server-only';
 import { readFile, stat } from 'fs/promises';
 import path from 'path';
 import { query } from './db';
+import { riabbinaPazienti } from './pazienti-abbina';
 import { parseICal, type ICalEvent } from './ical';
 
 // Sincronizzazione di un feed iCal (agenda Cassa dei Medici) verso la tabella appointments.
@@ -228,6 +229,8 @@ export async function syncFeed(feedId: string): Promise<SyncResult> {
     [feedId, `OK · ${total} appuntamenti${avviso}`]
   );
 
+  // Gli appuntamenti arrivati trovano la loro cartella (abbinamento severo): non blocca mai la sincronizzazione.
+  try { await riabbinaPazienti(feed.studio_id); } catch (e) { console.error(`[agenda] riabbinamento pazienti: ${(e as Error)?.message ?? e}`); }
   return { ok: true, total, mapped, unassigned, matchedReferral };
 }
 

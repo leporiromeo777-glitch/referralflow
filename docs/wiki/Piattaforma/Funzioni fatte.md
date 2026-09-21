@@ -50,3 +50,15 @@ Le colonne della vista per medico sono di chi ha appuntamenti nella finestra car
 
 ## 16.9.2026 — Orchestrazione di sale, medici e pazienti
 Il gemello digitale dello studio ([[Piattaforma/Orchestrazione sale]]): la stanza si assegna al paziente, il medico si sposta. Pagina «Sale» con tre viste (Adesso: mappa, movimento dei medici, da chiamare, avvisi, proposte; Calendario: una colonna per stanza con i fili dei medici; Agenda: una colonna per medico con la stanza su ogni visita), e la card della Home dallo stesso stato, pagina «Accoglienza» (tablet: arrivato/chiamato/assente, e una frase in italiano interpretata dal modello piccolo e confermata da una persona), pagina «Stanza» (in preparazione/pronto/il medico è entrato/finito/uscito). Sotto: grafo da due pagine wiki, macchina a stati con rigidità, solver CP-SAT come servizio locale con riparatore di ripiego, orizzonte mobile di 90 min, spiegazioni da frasi fisse, previsione statistica delle durate, escalation asincrona al modello grande con proposte da confermare, comandi umani come vincoli. Migrazioni 056-060, v112.
+
+## Agenda, referti e cartelle legati per davvero (22.9.2026)
+
+**Il dato da cui si è partiti** (21.9.2026, produzione): 2274 appuntamenti in ±30 giorni, 7 cartelle, 4 appuntamenti abbinati. Giornata, briefing e richiami giravano a vuoto perché la piattaforma non sapeva di chi fosse un appuntamento o un referto: lo ricalcolava a ogni lettura confrontando il nome scritto, in punti diversi del codice e in modi diversi.
+
+**Il legame ora si scrive.** `appointments.patient_id` e `referti_bozze.patient_id` (migrazione 074), riempiti da `riabbinaPazienti` (`src/lib/pazienti-abbina.ts`) quando **nasce o cambia un paziente** (a mano o da CSV), quando **arriva l'agenda** e quando **si conferma un referto**. Non stacca mai niente e non tocca ciò che è già legato. Chi leggeva per nome (rotta dati, briefing, procedure, giornata) usa prima il legame scritto e il nome solo come ripiego.
+
+**L'abbinamento è severo per scelta** (`pazienti-abbina-regole.ts`, puro e provato): il nome si legge dal titolo come lo scrive MediOnline («Cognome Cognome Nome (gg.mm.aaaa / N° …) · sigla»), senza accenti né maiuscole, nei due ordini; se il titolo o il referto portano una data di nascita e la cartella ne ha una, **devono coincidere**, e la data sceglie anche fra omonimi; due cartelle con lo stesso nome e nessuna data che decida **non si abbinano**; i blocchi che non sono persone («— Formazione») si saltano. Attaccare un referto alla persona sbagliata è peggio che lasciarlo senza cartella.
+
+**«Crea cartella» dall'agenda.** Dove un appuntamento è «solo in agenda» — nel dettaglio dell'appuntamento e nella tabella della giornata — c'è il tasto: il server propone cognome, nome e nascita dal titolo, chi salva controlla e conferma, e la cartella nuova si prende da sola i suoi appuntamenti e i referti confermati (il messaggio dice quanti). Per l'anagrafica intera resta l'import CSV, che ora fa lo stesso abbinamento alla fine.
+
+Una tantum o quando serve: `npx tsx --conditions=react-server --env-file=.env scripts/pazienti-riabbina.ts` (stampa solo conteggi).

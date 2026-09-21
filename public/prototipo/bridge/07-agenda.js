@@ -56,7 +56,8 @@ function rfApptScheda(id) {
   const azioni = `<button class="btn" data-close>Chiudi</button>` +
     // Dall'agenda si apre la visita: è la via più corta per chi sta guardando
     // il programma del giorno (16.9.2026).
-    (inCartella ? `<button class="btn" onclick="closeModal();go('#/patients/${rfEsc(a.p)}')">Apri la cartella</button>` : '') +
+    (inCartella ? `<button class="btn" onclick="closeModal();go('#/patients/${rfEsc(a.p)}')">Apri la cartella</button>`
+      : (RF.live && /^[A-Za-zÀ-ÿ]/.test(a.nomeBreve || a.nome || '') && ['secretary', 'assistant', 'doctor', 'org_admin'].includes(state.role) ? `<button class="btn primary" onclick="closeModal();rfCartellaDaAgenda(${rfEsc(JSON.stringify(a.nome || ''))})">Crea la cartella</button>` : '')) +
     `<button class="btn ai" onclick="closeModal();askAI('Briefing pre-visita di ${rfEsc((a.nomeBreve || a.nome).replace(/'/g, ' '))}')">${ICONS.ai} Briefing</button>`;
   openModal('Appuntamento', corpo, azioni);
 }

@@ -194,3 +194,11 @@ Da ricordare più del risultato: **il primo punteggio assolveva tutti e tre**, p
 | `src/lib/prove-prototipo-bridge.test.ts` | ordine e versione in `index.html`, ogni parte si legge, nessun riferimento in avanti al caricamento (228 istruzioni guardate), nessun nome doppio, autoprova su un caso finto | 5/5 |
 | browser (server di prova) | 11 parti caricate, 34 pagine su 34 disegnate, 0 eccezioni, 0 errori di console dal ponte | ok |
 | `npm run test:e2e` | righello 42/42, segreteria 403, regressione, serie 19/19, giornata come documento; pulizia e spegnimento automatici | TUTTO OK |
+
+## Abbinamento pazienti — 22.9.2026
+
+| Banco | Che cosa | Esito |
+|---|---|---|
+| `src/lib/prove-pazienti-abbina.test.ts` | chiave del nome, date, unico nei due ordini, omonimi non indovinati, la nascita decide, nascita diversa rifiutata, titolo di MediOnline, blocchi non persona, proposta per «Crea cartella» | 7/7 |
+| server di prova (DB demo) | proposta dal titolo, cartella creata, 12 appuntamenti e 1 referto collegati in un colpo, omonimo lasciato senza cartella, giornata con 79 tasti «Crea cartella» | ok |
+| browser | tasto nella tabella della giornata → modulo con cognome e nome precompilati | ok |

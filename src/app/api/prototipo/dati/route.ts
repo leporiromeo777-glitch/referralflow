@@ -103,8 +103,8 @@ export async function GET() {
       where r.studio_id = $1 order by r.created_at desc limit 2000`, [sid]);
   const docs = await query<{ id: string; patient_id: string; filename: string; categoria: string; nota: string | null; uploaded_at: string }>(
     `select id, patient_id, filename, categoria, nota, uploaded_at::text from patient_documents where studio_id = $1 order by uploaded_at desc limit 2000`, [sid]);
-  const appts = await query<{ id: string; provider_id: string | null; medico: string | null; starts_at: string; ends_at: string | null; titolo: string | null; paziente_nome: string | null; motivo: string | null; luogo: string | null; completed_at: string | null; referral_id: string | null; colore: string | null; stato_medionline: string | null }>(
-    `select a.id, a.provider_id, pr.nome as medico, a.starts_at::text, a.ends_at::text, a.titolo, a.paziente_nome, a.motivo, a.luogo, a.completed_at::text, a.referral_id, a.colore, a.stato_medionline
+  const appts = await query<{ id: string; provider_id: string | null; medico: string | null; starts_at: string; ends_at: string | null; titolo: string | null; paziente_nome: string | null; motivo: string | null; luogo: string | null; completed_at: string | null; referral_id: string | null; colore: string | null; stato_medionline: string | null; patient_id: string | null }>(
+    `select a.id, a.provider_id, pr.nome as medico, a.starts_at::text, a.ends_at::text, a.titolo, a.paziente_nome, a.motivo, a.luogo, a.completed_at::text, a.referral_id, a.colore, a.stato_medionline, a.patient_id
        from appointments a left join providers pr on pr.id = a.provider_id
       where a.studio_id = $1 and a.starts_at >= current_date - interval '30 days' and a.starts_at < current_date + interval '30 days'
       order by a.starts_at`, [sid]);
@@ -117,7 +117,7 @@ export async function GET() {
   for (const p of pazienti) { pazPerNome.set(slug(`${p.cognome} ${p.nome}`), p.id); pazPerNome.set(slug(`${p.nome} ${p.cognome}`), p.id); }
   const apptsPer = new Map<string, typeof appts>();
   for (const a of appts) {
-    const pid = a.paziente_nome ? pazPerNome.get(slug(a.paziente_nome)) : undefined;
+    const pid = a.patient_id ?? (a.paziente_nome ? pazPerNome.get(slug(a.paziente_nome)) : undefined);
     if (pid) { const l = apptsPer.get(pid) ?? []; l.push(a); apptsPer.set(pid, l); }
   }
   const adesso = Date.now();
@@ -168,7 +168,7 @@ export async function GET() {
   // le schede leggere dei pazienti noti solo all'agenda si creano solo per oggi.
   const agenda = appts.map((a) => {
     const oggi = a.starts_at.slice(0, 10) === today;
-    const pid = a.paziente_nome ? pazPerNome.get(slug(a.paziente_nome)) : undefined;
+    const pid = a.patient_id ?? (a.paziente_nome ? pazPerNome.get(slug(a.paziente_nome)) : undefined);
     let p = pid ?? '';
     const nomeGrezzo = (a.paziente_nome ?? a.titolo ?? '').trim();
     // Una scheda leggera per NOME (non per appuntamento: la stessa persona con
@@ -255,14 +255,14 @@ export async function GET() {
 
   // Referti della catena.
   const bozze = await query<{ id: string; stato: string; tipo: string; created_at: string; testo_finale: string | null; payload: any; campi_confermati: any }>(
-    `select id, stato, tipo, created_at::text, testo_finale, payload, campi_confermati from referti_bozze
+    `select id, stato, tipo, created_at::text, testo_finale, payload, campi_confermati, patient_id from referti_bozze
       where studio_id = $1 and stato in ('bozza', 'confermata') and coalesce((payload->>'ombra')::boolean, false) = false
       order by (stato = 'bozza') desc, created_at desc limit 40`, [sid]);
   const reports = bozze.map((b) => {
     const p = b.payload ?? {};
     const campo = (k: string) => { const v = b.campi_confermati?.[k] ?? p.campi_estratti?.[k]; const s = typeof v === 'string' ? v.trim() : ''; return s && s.toLowerCase() !== 'non indicato' ? s : ''; };
     const nomePaz = campo('nome_paziente');
-    let pid = nomePaz ? pazPerNome.get(slug(nomePaz)) ?? '' : '';
+    let pid = (b as { patient_id?: string | null }).patient_id ?? (nomePaz ? pazPerNome.get(slug(nomePaz)) ?? '' : '');
     if (!pid) {
       pid = `rf-${b.id.slice(0, 8)}`;
       if (!P.has(pid)) {

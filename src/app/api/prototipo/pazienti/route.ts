@@ -1,3 +1,5 @@
+import { riabbinaPazienti } from '@/lib/pazienti-abbina';
+import { proponiAnagrafica } from '@/lib/pazienti-abbina-regole';
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
@@ -41,7 +43,9 @@ export async function POST(req: NextRequest) {
       if (dup) return NextResponse.json({ errore: 'Paziente già in cartella (stesso cognome, nome e data di nascita).', id: dup }, { status: 409 });
       const id = await inserisci(sid, dati);
       console.log(`[pazienti] creato ${id.slice(0, 8)}`);
-      return NextResponse.json({ id }, { status: 201 });
+      // La cartella nuova si prende subito i suoi appuntamenti e i suoi referti (abbinamento severo).
+      const abbinati = await riabbinaPazienti(sid).catch(() => ({ appuntamenti: 0, referti: 0 }));
+      return NextResponse.json({ id, abbinati }, { status: 201 });
     }
     const id = String(c?.id ?? '');
     if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 });
@@ -51,7 +55,13 @@ export async function POST(req: NextRequest) {
       [id, sid, dati.cognome, dati.nome, dati.data_nascita, dati.telefono, dati.assicurazione, dati.sesso, dati.via, dati.npa, dati.localita, dati.email, dati.avs, dati.n_assicurato, dati.indicazione, dati.percorso_id]);
     if (!r.length) return NextResponse.json({ errore: 'Paziente non trovato.' }, { status: 404 });
     console.log(`[pazienti] aggiornato ${id.slice(0, 8)}`);
-    return NextResponse.json({ id });
+    const abbinati = await riabbinaPazienti(sid).catch(() => ({ appuntamenti: 0, referti: 0 }));
+    return NextResponse.json({ id, abbinati });
+  }
+  if (azione === 'proponi') {
+    // «Crea cartella» dall'agenda: cognome, nome e nascita proposti dal titolo
+    // dell'appuntamento. È una proposta: la conferma chi salva il modulo.
+    return NextResponse.json({ proposta: proponiAnagrafica(String(c?.titolo ?? '').slice(0, 300)) });
   }
   if (azione === 'importa' || azione === 'importa_conferma') {
     const testo = String(c?.csv ?? '').slice(0, 2_000_000);
@@ -71,7 +81,9 @@ export async function POST(req: NextRequest) {
     let inseriti = 0;
     for (const r of righe) if (r.stato === 'nuovo') { await inserisci(sid, r.dati); inseriti++; }
     console.log(`[pazienti] importati ${inseriti} su ${righe.length} righe (esistenti ${riepilogo.esistenti}, errori ${riepilogo.errori})`);
-    return NextResponse.json({ inseriti, riepilogo });
+    // Con l'anagrafica dentro, agenda e referti trovano le loro cartelle in un colpo solo.
+    const abbinati = inseriti ? await riabbinaPazienti(sid).catch(() => ({ appuntamenti: 0, referti: 0 })) : { appuntamenti: 0, referti: 0 };
+    return NextResponse.json({ inseriti, riepilogo, abbinati });
   }
   return NextResponse.json({ errore: 'azione' }, { status: 400 });
 }

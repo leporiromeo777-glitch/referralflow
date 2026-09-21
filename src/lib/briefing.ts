@@ -66,10 +66,10 @@ export async function briefingGrezzo(studioId: string, patientId: string): Promi
     `select id, testo_finale, reviewed_at::text from referti_bozze
       where studio_id = $1 and stato = 'confermata' and tipo = 'referto' and testo_finale is not null
         and coalesce((payload->>'ombra')::boolean, false) = false
-        and lower(coalesce(campi_confermati->>'nome_paziente', payload->'campi_estratti'->>'nome_paziente', '')) in (lower($2), lower($3))
+        and (patient_id = $5::uuid or (patient_id is null and lower(coalesce(campi_confermati->>'nome_paziente', payload->'campi_estratti'->>'nome_paziente', '')) in (lower($2), lower($3))))
         and ($4 = '' or coalesce(campi_confermati->>'data_nascita', payload->'campi_estratti'->>'data_nascita', '') in ('', $4))
       order by reviewed_at desc nulls last limit 1`,
-    [studioId, nomeCompleto, `${p.nome} ${p.cognome}`.trim(), nascitaCh]);
+    [studioId, nomeCompleto, `${p.nome} ${p.cognome}`.trim(), nascitaCh, p.id]);
   let refertoPrecedente: RefertoPrecedente = null;
   if (conf) {
     refertoPrecedente = { id: conf.id, data: conf.reviewed_at, terapia: estraiTerapia(conf.testo_finale), fonte: 'referto' };
@@ -86,9 +86,9 @@ export async function briefingGrezzo(studioId: string, patientId: string): Promi
   const bozzeGrezze = await query<{ id: string; created_at: string; testo_finale: string | null; payload: any }>(
     `select id, created_at::text, testo_finale, payload from referti_bozze
       where studio_id = $1 and stato = 'bozza' and coalesce((payload->>'ombra')::boolean, false) = false
-        and lower(coalesce(campi_confermati->>'nome_paziente', payload->'campi_estratti'->>'nome_paziente', '')) in (lower($2), lower($3))
+        and (patient_id = $4::uuid or (patient_id is null and lower(coalesce(campi_confermati->>'nome_paziente', payload->'campi_estratti'->>'nome_paziente', '')) in (lower($2), lower($3))))
       order by created_at desc limit 5`,
-    [studioId, nomeCompleto, `${p.nome} ${p.cognome}`.trim()]);
+    [studioId, nomeCompleto, `${p.nome} ${p.cognome}`.trim(), p.id]);
   const bozze: BozzaIn[] = bozzeGrezze.map((b) => {
     const pl = b.payload ?? {};
     let critiche = 0;

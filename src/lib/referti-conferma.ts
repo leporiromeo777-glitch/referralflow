@@ -65,6 +65,8 @@ export async function confermaBozzaCore(a: {
     [a.id, a.studioId, testo, JSON.stringify(campi), a.userId]
   );
   if (!row) return { ok: false, errore: 'non_bozza' };
+  // Il referto confermato diventa storia del paziente: si aggancia alla cartella (abbinamento severo, mai un omonimo).
+  try { const { riabbinaPazienti } = await import('./pazienti-abbina'); await riabbinaPazienti(a.studioId, { bozzaId: a.id }); } catch (e) { console.error(`[referti] aggancio al paziente: ${(e as Error)?.message ?? e}`); }
 
   // Audit: la versione confermata diventa un artefatto e il diff con l'ultimo
   // output AI una riga di human_edits, col ruolo di chi firma.

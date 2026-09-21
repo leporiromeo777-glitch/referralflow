@@ -284,7 +284,7 @@ function rfHtmlDocumento(b) {
     }
     svuotaGruppi(); svuotaSchede();
     if (bl.tipo === 'avviso') pezzi.push(`<div class="rf-doc-avviso"><h4>${rfEsc(bl.titolo)} · ${bl.totale || ((bl.gruppi || []).reduce((t, g) => t + g.righe.length, 0) + bl.righe.length)}</h4>${(bl.gruppi || []).length ? `<div class="rf-doc-avv-gr">${bl.gruppi.map(g => `<div><b>${rfEsc(g.titolo)}</b>${rfDocRighe(g.righe)}</div>`).join('')}</div>` : ''}${bl.righe.length ? rfDocRighe(bl.righe) : ''}</div>`);
-    if (bl.tipo === 'tabella') pezzi.push(`<div><h4>${rfEsc(bl.titolo)}</h4><div class="rf-doc-tab"><table><thead><tr>${bl.colonne.map(c => `<th>${rfEsc(c)}</th>`).join('')}</tr></thead><tbody>${bl.righe.map(r => `<tr class="${rfEsc(r.tono || '')} ${r.go ? 'vai' : ''}" ${r.go ? `data-go="${rfEsc(r.go)}"` : ''}>${r.celle.map(c => `<td>${rfEsc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`);
+    if (bl.tipo === 'tabella') pezzi.push(`<div><h4>${rfEsc(bl.titolo)}</h4><div class="rf-doc-tab"><table><thead><tr>${bl.colonne.map(c => `<th>${rfEsc(c)}</th>`).join('')}</tr></thead><tbody>${bl.righe.map(r => `<tr class="${rfEsc(r.tono || '')} ${r.go ? 'vai' : ''}" ${r.go ? `data-go="${rfEsc(r.go)}"` : ''}>${r.celle.map((c, k) => `<td>${rfEsc(c)}${r.crea && k === r.celle.length - 1 ? ` <button class="btn sm" onclick="rfCartellaDaAgenda(${rfEsc(JSON.stringify(r.crea))})">Crea cartella</button>` : ''}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`);
   }
   svuotaGruppi(); svuotaSchede();
   const azioni = (b.azioni || []).map(a => a.go ? `<button class="btn sm ghost" data-go="${rfEsc(a.go)}">${rfEsc(a.etichetta)}</button>` : `<a class="btn sm ghost" href="${rfEsc(a.href)}" target="_blank" rel="noopener">${rfEsc(a.etichetta)}</a>`).join('');

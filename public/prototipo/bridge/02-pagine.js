@@ -405,6 +405,19 @@ function rfPazErrori(errori) {
   document.querySelectorAll('#modal .rf-paz-form .err').forEach(e => e.textContent = '');
   for (const [k, m] of Object.entries(errori || {})) { const e = document.getElementById(`${mappa[k] || ''}-err`); if (e) e.textContent = m; }
 }
+/* «Crea cartella» dall'agenda (22.9.2026): il server propone cognome, nome e
+   nascita leggendo il titolo dell'appuntamento; chi salva conferma o corregge.
+   Alla creazione la cartella si prende da sola i suoi appuntamenti e referti. */
+async function rfCartellaDaAgenda(titolo) {
+  let prop = { cognome: '', nome: '', data_nascita: '' };
+  try {
+    const r = await fetch('/api/prototipo/pazienti', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'proponi', titolo }) });
+    if (r.ok) prop = (await r.json()).proposta || prop;
+  } catch { /* si compila a mano */ }
+  openModal('Crea la cartella', `<p class="meta" style="margin:0 0 10px;line-height:1.5">Proposta letta dall'agenda: <b>controlla cognome e nome</b> prima di salvare. La cartella si collega da sola ai suoi appuntamenti e ai referti confermati con lo stesso nome (e la stessa data di nascita, se c'è).</p>${rfPazForm({ last: prop.cognome, first: prop.nome, dobIso: prop.data_nascita })}`,
+    `<button class="btn" data-close>Annulla</button><button class="btn primary" id="rf-pz-ok">Crea la cartella</button>`);
+  document.getElementById('rf-pz-ok').onclick = () => rfPazienteSalva(null);
+}
 async function rfPazienteSalva(id) {
   const corpo = Object.assign({ azione: id ? 'aggiorna' : 'crea', id }, rfPazRaccogli());
   try {
@@ -412,7 +425,9 @@ async function rfPazienteSalva(id) {
     const j = await r.json().catch(() => ({}));
     if (r.status === 400 && j.errori) { rfPazErrori(j.errori); toast('Controlla i campi segnati'); return; }
     if (!r.ok) { toast(j.errore || 'Salvataggio non riuscito'); return; }
-    closeModal(); toast(id ? 'Anagrafica salvata' : 'Paziente creato');
+    const ab = j.abbinati || {};
+    const collegati = (ab.appuntamenti || ab.referti) ? ` · collegati ${ab.appuntamenti || 0} appuntament${ab.appuntamenti === 1 ? 'o' : 'i'} e ${ab.referti || 0} refert${ab.referti === 1 ? 'o' : 'i'}` : '';
+    closeModal(); toast((id ? 'Anagrafica salvata' : 'Paziente creato') + collegati);
     await rfCaricaDati();
     if (!id && j.id) go(`#/patients/${j.id}`);
   } catch { toast('Piattaforma non raggiungibile'); }

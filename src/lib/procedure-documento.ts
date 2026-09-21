@@ -15,7 +15,7 @@ export type NumeroDoc = { etichetta: string; valore: string; tono?: 'ok' | 'atte
 export type GruppoDoc = { titolo: string; righe: Riga[] };
 export type BloccoDoc =
   | { tipo: 'avviso'; titolo: string; righe: Riga[]; gruppi?: GruppoDoc[]; totale?: number }
-  | { tipo: 'tabella'; titolo: string; colonne: string[]; righe: { celle: string[]; go?: string; tono?: 'attenzione' | 'ok' }[] }
+  | { tipo: 'tabella'; titolo: string; colonne: string[]; righe: { celle: string[]; go?: string; tono?: 'attenzione' | 'ok'; crea?: string }[] }
   | { tipo: 'scheda'; titolo: string; etichetta?: string; sottotitolo?: string; tono?: 'attenzione' | 'ok'; go?: string; gruppi: GruppoDoc[] }
   | { tipo: 'gruppo'; titolo: string; righe: Riga[] };
 export type DocumentoProcedura = {
@@ -66,6 +66,7 @@ export function documentoBriefing(e: { titolo: string; sezioni: Sezione[]; manca
 export type VoceDocumento = {
   ora: string; paziente: string; medico: string | null; motivo: string | null; patientId: string | null;
   mancanti: string[]; gruppi: GruppoDoc[]; inCartella: boolean;
+  crea?: string;   // titolo dell'agenda da cui proporre una cartella nuova (solo se non in cartella ed è una persona)
 };
 export function documentoGiornata(voci: VoceDocumento[], dataCh: string): DocumentoProcedura {
   const daSegnalare = voci.reduce((n, v) => n + v.mancanti.length, 0) + voci.filter((v) => !v.inCartella).length;
@@ -96,6 +97,7 @@ export function documentoGiornata(voci: VoceDocumento[], dataCh: string): Docume
         celle: [v.ora, v.paziente, v.medico ?? '—', v.motivo ?? '—', !v.inCartella ? 'non in cartella' : v.mancanti.length ? `${v.mancanti.length} da segnalare` : 'a posto'],
         go: v.patientId ? `#/patients/${v.patientId}` : undefined,
         tono: !v.inCartella || v.mancanti.length ? 'attenzione' as const : 'ok' as const,
+        crea: !v.inCartella ? v.crea : undefined,
       })),
     });
   }

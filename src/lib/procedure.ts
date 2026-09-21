@@ -34,9 +34,9 @@ export async function cambiamentiUltimaVisita(studioId: string, patientId: strin
     `select id, testo_finale, reviewed_at::text from referti_bozze
       where studio_id = $1 and stato = 'confermata' and tipo = 'referto' and testo_finale is not null
         and coalesce((payload->>'ombra')::boolean, false) = false
-        and lower(coalesce(campi_confermati->>'nome_paziente', payload->'campi_estratti'->>'nome_paziente', '')) in (lower($2), lower($3))
+        and (patient_id = $4::uuid or (patient_id is null and lower(coalesce(campi_confermati->>'nome_paziente', payload->'campi_estratti'->>'nome_paziente', '')) in (lower($2), lower($3))))
       order by reviewed_at desc nulls last limit 2`,
-    [studioId, nome, `${p.nome} ${p.cognome}`.trim()]);
+    [studioId, nome, `${p.nome} ${p.cognome}`.trim(), p.id]);
   const dopo = referti[0] ? { id: referti[0].id, data: referti[0].reviewed_at, testo: referti[0].testo_finale } : null;
   const prima = referti[1] ? { id: referti[1].id, data: referti[1].reviewed_at, testo: referti[1].testo_finale } : null;
   const e = confrontaReferti(prima, dopo, misureCliniche);
@@ -111,27 +111,28 @@ export async function preparazioneGiornata(studioId: string, userId?: string | n
   const { briefingGrezzo } = await import('./briefing');
   const { aggregaGiornata } = await import('./procedure-regole');
   const data = giorno && /^\d{4}-\d{2}-\d{2}$/.test(giorno) ? giorno : null;
-  const appts = await query<{ id: string; starts_at: string; paziente_nome: string | null; titolo: string | null; motivo: string | null; medico: string | null; completed_at: string | null }>(
-    `select a.id, a.starts_at::text, a.paziente_nome, a.titolo, a.motivo, pr.nome as medico, a.completed_at::text
+  const appts = await query<{ id: string; starts_at: string; paziente_nome: string | null; titolo: string | null; motivo: string | null; medico: string | null; completed_at: string | null; patient_id: string | null }>(
+    `select a.id, a.starts_at::text, a.paziente_nome, a.titolo, a.motivo, pr.nome as medico, a.completed_at::text, a.patient_id
        from appointments a left join providers pr on pr.id = a.provider_id
       where a.studio_id = $1 and a.starts_at >= coalesce($2::date, current_date) and a.starts_at < coalesce($2::date, current_date) + 1
       order by a.starts_at`,
     [studioId, data]);
-  const pazienti = await query<{ id: string; cognome: string; nome: string }>(`select id, cognome, nome from patients where studio_id = $1`, [studioId]);
-  const slug = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  const perNome = new Map<string, string>();
-  for (const p of pazienti) { perNome.set(slug(`${p.cognome} ${p.nome}`), p.id); perNome.set(slug(`${p.nome} ${p.cognome}`), p.id); }
+  const { abbina, daTitoloAgenda, indicePazienti } = await import('./pazienti-abbina-regole');
+  const idx = indicePazienti(await query<{ id: string; cognome: string; nome: string; data_nascita: string | null }>(`select id, cognome, nome, data_nascita::text from patients where studio_id = $1`, [studioId]));
   const voci = [];
   const cache = new Map<string, Awaited<ReturnType<typeof briefingGrezzo>>>();
   for (const a of appts) {
-    const nome = (a.paziente_nome ?? a.titolo ?? 'Paziente').trim();
-    const pid = perNome.get(slug(nome)) ?? null;
+    const grezzo = (a.paziente_nome ?? a.titolo ?? 'Paziente').trim();
+    const letto = daTitoloAgenda(grezzo);
+    const nome = letto.nome || grezzo;
+    // il legame scritto (patient_id) se c'è; altrimenti l'abbinamento severo sul titolo
+    const pid = a.patient_id ?? (letto.persona ? abbina(letto.nome, letto.nascita, idx).id : null);
     let b = pid ? cache.get(pid) : undefined;
     if (pid && b === undefined) { b = await briefingGrezzo(studioId, pid); cache.set(pid, b); }
     const d = new Date(a.starts_at);
     voci.push({
       ora: `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`,
-      paziente: nome, medico: a.medico, motivo: a.motivo, patientId: pid,
+      paziente: nome, medico: a.medico, motivo: a.motivo, patientId: pid, titoloAgenda: grezzo, persona: letto.persona,
       briefing: b ? { sezioni: b.briefing.sezioni, mancanti: b.briefing.mancanti, fonti: b.briefing.fonti } : null,
     });
   }
