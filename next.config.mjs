@@ -40,7 +40,7 @@ const nextConfig = {
   },
   // L'interfaccia nuova è un'app statica in public/prototipo/: Next serve i file
   // per percorso esatto e non risolve l'indice di cartella, quindi «/prototipo»
-  // da solo dà 404. Il ponte con i dati veri (referralflow-bridge.js) si attiva
+  // da solo dà 404. Il ponte con i dati veri (public/prototipo/bridge/*.js) si attiva
   // solo se il percorso contiene «/prototipo/», perciò serve un redirect — non
   // un rewrite, che lascerebbe l'URL senza la barra finale.
   async redirects() {

@@ -185,3 +185,12 @@ Da ricordare più del risultato: **il primo punteggio assolveva tutti e tre**, p
 |---|---|---|
 | `src/lib/prove-procedure.test.ts` | titolo/sottotitolo, documento generico (mancanze in cima, sezioni distinte, numeri), briefing (numeri e riquadro), giornata (numeri, tabella, schede con gruppi distinti), giorni pieni (37 fuori cartella in una riga, 3 schede su 40), più di otto pazienti con segnalazioni, `aggregaGiornata` con il documento | 15/15 (8 nuovi) |
 | server di prova (DB demo, giorno con 84 appuntamenti) | documento dal server e disegno nel visore: intestazione, 4 numeri, «in breve», segnalazioni per paziente con totale 91, tabella di 84 righe, 6 schede con le parti distinte, tasto Stampa, markdown leggero delle risposte libere | ok |
+
+## Debito tecnico — 21.9.2026
+
+| Banco | Che cosa | Esito |
+|---|---|---|
+| ricomposizione delle undici parti del ponte | identica al file originale, byte per byte | ok |
+| `src/lib/prove-prototipo-bridge.test.ts` | ordine e versione in `index.html`, ogni parte si legge, nessun riferimento in avanti al caricamento (228 istruzioni guardate), nessun nome doppio, autoprova su un caso finto | 5/5 |
+| browser (server di prova) | 11 parti caricate, 34 pagine su 34 disegnate, 0 eccezioni, 0 errori di console dal ponte | ok |
+| `npm run test:e2e` | righello 42/42, segreteria 403, regressione, serie 19/19, giornata come documento; pulizia e spegnimento automatici | TUTTO OK |

@@ -57,7 +57,7 @@ Le voci sotto sono **ciò che è vero adesso**; la storia delle modifiche, con i
 - Pagina «Anonimizzazione»: testo incollato o file (.txt, .md, .pdf con testo, .docx) → `POST /api/prototipo/anonimizza`, stessa libreria locale della piattaforma; originale con i rilevamenti accanto al testo anonimizzato, copia e scarica .txt; niente persistenza.
 
 **Manutenzione**
-- Il ponte è `public/prototipo/referralflow-bridge.js` (copia anche in `~/referralflow-stack/…/ui-prototype/` e in `~/Downloads/…`); a ogni modifica si alza `?v=` in `index.html` e `manifest.webmanifest`, poi `bash mac/aggiorna-server.sh`. Il ponte ridefinisce le funzioni del prototipo in place: quando si sostituisce un blocco, controllare di non cancellare funzioni vicine (è successo con l'impaginazione, v28-v30).
+- Il ponte è `public/prototipo/bridge/NN-nome.js` (copia anche in `~/referralflow-stack/…/ui-prototype/` e in `~/Downloads/…`); a ogni modifica si alza `?v=` in `index.html` e `manifest.webmanifest`, poi `bash mac/aggiorna-server.sh`. Il ponte ridefinisce le funzioni del prototipo in place: quando si sostituisce un blocco, controllare di non cancellare funzioni vicine (è successo con l'impaginazione, v28-v30).
 - Endpoint del prototipo: `accesso` (+ `verifica`, `esci`), `profilo`, `studio`, `dati`, `referti`, `referti/[id]` (+ `testo`, `conferma`, `richiamo`), `documenti/[id]/testo`, `assistente`, `interpreta`, `procedure`, `procedura`, `briefing`, `tracce/[id]`, `anonimizza`. Tutti con sessione; le procedure con permessi per ruolo dal registro.
 
 Il resto della pagina è la storia della giornata, sezione per sezione.
@@ -84,14 +84,14 @@ Pagine con selettore di ruolo (segreteria, aiuto medico, medico, admin org., adm
 - 13.9.2026: dittafono dal telefono dentro la piattaforma, con «Invia a ReferralFlow» ([[Catena/Dittafono DSS]]); piattaforma anche in HTTPS su :3444 via Caddy.
 
 ## Collegato alla catena (13.9.2026, sera)
-Il prototipo è servito anche dalla piattaforma in `public/prototipo/` (**http://192.168.1.146:3000/prototipo/index.html**, link «Prototipo con i dati veri» nella pagina Referti). Lì il file `referralflow-bridge.js` (caricato prima di `app.js`) sostituisce i dati finti con quelli veri, con la sessione del browser:
+Il prototipo è servito anche dalla piattaforma in `public/prototipo/` (**http://192.168.1.146:3000/prototipo/index.html**, link «Prototipo con i dati veri» nella pagina Referti). Lì il file `bridge/NN-nome.js` (caricato prima di `app.js`) sostituisce i dati finti con quelli veri, con la sessione del browser:
 - `GET /api/prototipo/referti` → la coda «Referti da controllare» con le bozze vere (paziente, medico, ora del dettato, durata audio, numero di verifiche e di critiche, stato priorità/consigliata/alcuni punti/pulito dalla fiducia). Ogni riga apre `#/review/<id>`.
 - `GET /api/prototipo/referti/[id]` → la Guided Review: trascrizione a segmenti dai tempi parola per parola (`payload.parole`), referto a sezioni (paragrafi) e span (frasi) agganciati al segmento più simile con grado di fonte (individuata/probabile/ambigua/assente), issue con evidenza audio da: motori discordi (negazione = critico), correzioni automatiche (annullabili), frasi non sostenute, frasi da chiarire, numeri non confermati, allarmi numerici, omissioni (con «aggiungi»), contraddizioni (solo medico), doppioni, terapia dubbia; marker su numeri, omissioni, negazioni. Traduzione pura in `src/lib/prototipo-revisione.ts`, test `prove-prototipo.test.ts`.
 - L'audio vero (`/api/referti/audio/<id>`) sostituisce l'orologio simulato: `rvPlay/rvPause/rvSeek` sono ridefinite sul tag `<audio>`, stesso stato `RV`, pre-roll e finestre di evidenza come nel prototipo.
 Limiti voluti: le decisioni prese nella Guided Review del prototipo restano nel suo localStorage (non scrivono nella piattaforma); su :8765 il ponte è inerte e restano i dati finti. Per aggiornare: modificare `~/referralflow-stack/referralflow/ui-prototype/` e ricopiare in `public/prototipo/` (rsync).
 
 ## Operativo (13.9.2026, notte): niente più dati demo
-Richiesta utente: «rendi il prototipo operativo, attaccagli anche il bot, elimina i dati demo». Dentro la piattaforma (`/prototipo/`) il ponte `referralflow-bridge.js` v2:
+Richiesta utente: «rendi il prototipo operativo, attaccagli anche il bot, elimina i dati demo». Dentro la piattaforma (`/prototipo/`) il ponte `bridge/NN-nome.js` v2:
 - **`GET /api/prototipo/dati`** (sessione): utente e ruolo (segretaria→secretary, medico→doctor, admin→org_admin), medici (profili della catena + providers dell'agenda), pazienti con cartella (referral, documenti, ultima visita, prossimo appuntamento), **agenda di oggi dalla tabella `appointments`** (il robot MediOnline e i feed la riempiono: è «il bot» attaccato al prototipo), attività (la stessa lista della Home «Oggi»), referti della catena, documenti, audio in coda, numeri. Le liste del prototipo vengono svuotate e riempite IN PLACE (`PATIENTS`, `P`, `APPTS`, `TASKS`, `REPORTS`, `DOCUMENTS`, `INBOX`, `DOCTORS`, `ROOMS`, `RV_QUEUE`); senza sessione la pagina mostra solo «Accedi alla piattaforma», mai i dati finti.
 - **Home** riscritta sui dati veri (saluto, schede-numero, prossimo paziente, da fare, timeline, referti dalla catena); **Referti** = coda vera + «Nuovo dettato» (file audio → `POST /api/referti/upload`, medico e tipo) + audio in lavorazione; le pagine senza backing (statistiche, amministrazione, sistema, comunicazioni, visite, knowledge, anonimizzazione) rimandano alla pagina corrispondente della piattaforma; barra laterale con i conteggi veri.
 - **Il bot** (sidebar AI, ⌘/): le domande più comuni (numeri della giornata, prossimo paziente, referti da controllare, richiami, ricerca di un documento per paziente ed esame) le risponde il CODICE nel browser, all'istante; il resto va a `POST /api/prototipo/assistente` → modello LOCALE (`PROTOTIPO_LLM`, default gemma3:12b, tenuto caldo 30 minuti, risposta in streaming) con un prompt che contiene solo i dati già in pagina e vieta di inventare; se Ollama non c'è risponde il codice. Nessun cloud.
@@ -207,3 +207,27 @@ L'originale non resta da nessuna parte, e nemmeno il nome del file — la pagina
 
 Trappola trovata qui: dentro un blocco di stile scritto in un template literal, **un apice inverso in un commento CSS chiude il template**. `node --check` non se ne accorge — il file resta JS valido — e la pagina smette semplicemente di disegnarsi. Si vede solo aprendola.
 
+
+## Il ponte in undici parti (21.9.2026)
+
+Il ponte con la piattaforma era un file solo di 6851 righe (`referralflow-bridge.js`). Ora sta in `public/prototipo/bridge/`, tagliato **solo ai confini fra istruzioni di primo livello** con il parser di TypeScript, e la ricomposizione delle parti ridava il file originale **byte per byte**: nessuna riga è cambiata, è cambiato dove sta.
+
+| Parte | Che cosa contiene |
+|---|---|
+| `01-dati` | caricamento dei dati veri, conteggi della barra laterale |
+| `02-pagine` | Home, percorsi, moduli, da fatturare, pazienti, prestazioni, chiamate, suggerisci |
+| `03-cleo` | domanda medica, «con la cartella», pagina grande di Cleo |
+| `04-referti-revisione` | coda dei referti, revisione, impaginazione, tracce audio, Edita, Nascondi, Word |
+| `05-assistente` | visualizzatore, bot, procedure con traccia e documento, registro, interprete |
+| `06-paziente-studio` | telefono, scheda paziente, anonimizzazione, Studio, profilo |
+| `07-agenda` | agenda vera, avvio |
+| `08-sale` | sale e orchestrazione |
+| `09-visita` | accoglienza, stanza, visita |
+| `10-rifiniture` | CSS delle barre scorrevoli |
+| `11-immagini` | immagini, righello, MPR |
+
+**L'ordine conta.** Sono script classici: condividono lo spazio globale ma **non l'hoisting** — una funzione dichiarata in `08-sale` non esiste ancora mentre si carica `03-cleo`. Dentro le funzioni si può usare tutto (girano dopo); al caricamento no. Lo sorveglia `src/lib/prove-prototipo-bridge.test.ts`, che gira con `npm run test:app`: `index.html` elenca tutte le parti in ordine e con una sola versione, ogni parte si legge da sola, nessuna parte usa al caricamento un nome dichiarato in una parte successiva, nessun `const`/`let` di primo livello è dichiarato due volte. Una parte nuova si aggiunge con il numero successivo e una riga in `index.html`; la versione `?v=` è la stessa per tutte.
+
+## Prove end-to-end con un comando
+
+`npm run test:e2e` (`scripts/prova-e2e.sh`): sintassi di tutti i file del prototipo, DICOM sintetici (`imaging/genera-sintetici.py`), server di prova sul **database demo** su una porta a parte, sessione di prova senza password (`scripts/e2e/sessione-demo.mjs`), prove del righello e della serie, segreteria respinta, regressione delle misure, procedura della giornata in forma di documento; alla fine pulisce esami, file e cache sintetici e spegne il server, anche se qualcosa fallisce. Il database è fisso (`referralflow_demo`): queste prove non toccano mai quello dello studio. Dura una decina di secondi a server caldo.

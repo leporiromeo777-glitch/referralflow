@@ -52,7 +52,7 @@ Versione 1.1 · 19.9.2026 sera (Measurement Safety Engine, fasi 1-5-7-8; la 1.0 
 | Caricatore lato server | `src/lib/imaging-misura.ts` | carica i tre moduli in un contesto `vm`; `cautionValidati`, `versioneSoftware`, `verificaIndipendente`, `tolleranzaVerifica` |
 | Rotte | `src/app/api/prototipo/imaging/misure/route.ts` (POST nuova/annulla/etichetta/riferimento; GET riepilogo e CSV), `…/misure/[id]/route.ts` (provenienza e storia), `…/immagine/[id]/calibrazione/route.ts` (geometria pigra), `…/[id]/route.ts` (dettaglio con geometria e contesto MSE) | |
 | Ingestione | `src/lib/imaging-ingest.ts`, `src/lib/imaging-ordina.ts` | geometria, calibrazione e sha256 entrano con l'immagine |
-| E. Viewer | `public/prototipo/referralflow-bridge.js` (`rfMis*`, `rfImgMisureManuali`) | gesto, disegno, indicatore, dettagli, storia, nome, rifai; nessun calcolo proprio |
+| E. Viewer | `public/prototipo/bridge/11-immagini.js` (`rfMis*`, `rfImgMisureManuali`) | gesto, disegno, indicatore, dettagli, storia, nome, rifai; nessun calcolo proprio |
 | F. Storage/audit | `db/migrations/068…`, `069_imaging_geometria.sql`, `070_imaging_misure_provenienza.sql` | `imaging_immagini.geometria/sha256`, `imaging_misure_manuali` con provenienza, `imaging_misure_eventi` |
 | Statistiche (fase 4) | `imaging/statistiche.py`, comando `statistiche`, azione `statistiche` | maschera sui centri dei pixel, modality LUT, HU/a.u., doppio calcolo numpy + stdlib |
 | Spazio paziente e serie (fase 9) | `public/prototipo/mse/serie.js` (`RFMSE.serie` 1.0), `src/lib/imaging-serie.ts` | pixel → paziente, geometria di serie (`imaging_serie.geometria`), griglia virtuale MPR decisa dal server |

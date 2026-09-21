@@ -202,4 +202,7 @@ function vaBind(root) {
   const d = root.querySelector('#va-discreet'); if (d) d.onchange = e => { VA.discreet = e.target.checked; localStorage.setItem('rf-voice-discreet', VA.discreet ? 'on' : 'off'); };
 }
 document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'v') { e.preventDefault(); if (!state.aiOpen) toggleAI(true); setTimeout(() => (VA.listening ? vaStop() : vaStart()), 80); } });
-vaDetect().then(() => { if (state.aiOpen) render(); });
+// `state` e `render` nascono in app.js, che si carica DOPO questo file: se il
+// rilevamento finisce prima, non c'è ancora niente da ridisegnare (e app.js
+// disegnerà comunque al suo avvio). Senza il controllo era un errore a ogni caricamento.
+vaDetect().then(() => { if (typeof state !== 'undefined' && typeof render === 'function' && state.aiOpen) render(); });

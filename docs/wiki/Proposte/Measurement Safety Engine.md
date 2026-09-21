@@ -20,7 +20,7 @@ Due avvertenze prima di tutto:
 | B. Geometry engine | schermo → pixel nativi con scala = colonne native / larghezza mostrata (`versoNativo`); pixel → mm per asse (regione US o PixelSpacing) | `public/prototipo/misura.js` |
 | C. Measurement engine | **solo distanza**: √((Δx·sx)² + (Δy·sy)²) | `misura.js` |
 | D. Validation & safety | stati impliciti: `ok` / `non_calibrata` / `rivelatore` / `fuori_regione` / `regioni_diverse` / `fuori_immagine` / `punti_uguali`; fail closed (senza calibrazione niente numero); il server ricalcola dai punti | `misura.js`, `api/prototipo/imaging/misure` |
-| E. Viewer | PNG già finestrato + canvas sopra; il browser non fa calcoli se non chiamando la libreria; nessuno zoom/pan/rotazione ancora | `referralflow-bridge.js` (`rfMis*`) |
+| E. Viewer | PNG già finestrato + canvas sopra; il browser non fa calcoli se non chiamando la libreria; nessuno zoom/pan/rotazione ancora | `bridge/11-immagini.js` (`rfMis*`) |
 | F. Storage/audit | `imaging_misure_manuali`: punti nativi, valore non arrotondato, calibrazione copiata, `versione_calcolo`, chi, quando; annullamento tracciato, nessuna cancellazione; registro accessi «misurato»; CSV di validazione | migrazione 068 |
 
 **Come si renderizza**: il server disegna un PNG (modality LUT → VOI → 8 bit, rimpicciolito oltre 2048 px), il browser lo mostra con `max-width:100%`. Nessuna libreria DICOM nel browser. **Come si gestiscono le coordinate**: il canvas copre l'immagine mostrata; `getBoundingClientRect` a ogni evento; DPR gestito nel disegno, non nella misura. **Come si caricano CT/MR/US**: stesso percorso; la modalità cambia solo le finestre proposte e la fonte della calibrazione.
