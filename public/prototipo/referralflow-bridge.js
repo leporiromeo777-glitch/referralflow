@@ -2510,7 +2510,8 @@ function rfRispostaImmediata(q) {
   .rf-doc{border:1px solid var(--border);border-radius:12px;background:var(--surface);overflow:hidden;margin:2px 0}
   .rf-doc-testa{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;padding:14px 16px 12px;border-bottom:1px solid var(--border);background:rgba(13,92,72,.05)}
   .rf-doc-testa .t{font-size:16px;font-weight:650;line-height:1.25;text-wrap:balance}.rf-doc-testa .s{font-size:12.5px;color:var(--muted);margin-top:2px}
-  .rf-doc-testa .az{display:flex;gap:6px;flex-shrink:0}
+  .rf-doc-testa .az{display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end}
+  #app.ai-mode .rf-doc-grande{display:none}
   .rf-doc-corpo{padding:14px 16px 16px;display:flex;flex-direction:column;gap:14px}
   .rf-doc-num{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px}
   .rf-doc-num div{border:1px solid var(--border);border-radius:10px;padding:8px 10px}
@@ -2603,8 +2604,22 @@ function rfHtmlDocumento(b) {
   svuotaGruppi(); svuotaSchede();
   const azioni = (b.azioni || []).map(a => a.go ? `<button class="btn sm ghost" data-go="${rfEsc(a.go)}">${rfEsc(a.etichetta)}</button>` : `<a class="btn sm ghost" href="${rfEsc(a.href)}" target="_blank" rel="noopener">${rfEsc(a.etichetta)}</a>`).join('');
   const passi = b.traccia && b.traccia.passi ? b.traccia.passi : b.passi;
-  return `<div class="rf-doc"><div class="rf-doc-testa"><div><div class="t">${rfEsc(d.intestazione.titolo)}</div>${d.intestazione.sottotitolo ? `<div class="s">${rfEsc(d.intestazione.sottotitolo)}</div>` : ''}</div><div class="az">${azioni}<button class="btn sm" onclick="rfDocStampa(${n})" title="Stampa o salva in PDF">Stampa</button></div></div>
+  return `<div class="rf-doc" id="rf-doc-${n}"><div class="rf-doc-testa"><div><div class="t">${rfEsc(d.intestazione.titolo)}</div>${d.intestazione.sottotitolo ? `<div class="s">${rfEsc(d.intestazione.sottotitolo)}</div>` : ''}</div><div class="az">${azioni}<button class="btn sm primary rf-doc-grande" onclick="rfDocInGrande(${n})" title="Apri questo documento nella pagina grande di Cleo">Apri in grande</button><button class="btn sm" onclick="rfDocStampa(${n})" title="Stampa o salva in PDF">Stampa</button></div></div>
     <div class="rf-doc-corpo">${numeri}${breve}${pezzi.join('')}${rfHtmlTraccia({ id: b.traccia && b.traccia.id, passi, fonti: b.fonti, mancanti: b.mancanti, modello: b.traccia && b.traccia.modello, durata_ms: b.traccia && b.traccia.durata_ms })}</div></div>`;
+}
+// Dal pannello laterale alla pagina grande di Cleo: la conversazione è la
+// stessa (state.aiMessages), quindi basta andarci e portare in vista il
+// documento. Il tasto si vede solo nel laterale (in pagina grande lo nasconde il CSS).
+function rfDocInGrande(n) {
+  location.hash = '#/ai';
+  let giri = 0;
+  const cerca = () => {
+    const el = document.getElementById(`rf-doc-${n}`);
+    const grande = document.getElementById('app') && document.getElementById('app').classList.contains('ai-mode');
+    if (el && grande) { el.scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
+    if (++giri < 20) setTimeout(cerca, 80);
+  };
+  setTimeout(cerca, 60);
 }
 // La stampa: lo stesso documento, su carta — tutte le schede aperte, niente bottoni.
 function rfDocStampa(n) {
