@@ -6,6 +6,7 @@
 // queste: sono confronti e conteggi, li fa meglio il codice.
 import { estraiTerapia, stessoFarmaco } from './referti-terapia';
 import { dataCh, type Fonte, type Mancante, type Passo, type Riga, type Sezione } from './briefing-regole';
+import { documentoGiornata, type DocumentoProcedura, type GruppoDoc, type VoceDocumento } from './procedure-documento';
 
 export type EsitoProcedura = {
   procedura: string;
@@ -17,6 +18,8 @@ export type EsitoProcedura = {
   fonti: Fonte[];
   azioni: { etichetta: string; go?: string; href?: string }[];
   passi: Passo[];
+  // La forma «da documento» (21.9.2026): intestazione, numeri, blocchi. Se manca la costruisce conTraccia.
+  documento?: DocumentoProcedura;
 };
 
 /* ---------- cosa è cambiato dall'ultima visita ---------- */
@@ -226,21 +229,31 @@ export function aggregaGiornata(voci: VoceGiornata[], dataCh: string): Omit<Esit
     sezioni.push({ chiave: 'mancanze', titolo: `Da segnalare (${righeMancanze.length + nonInCartella.length})`, righe: [...righeMancanze, ...nonInCartella.map((v) => ({ testo: `${v.ora} ${v.paziente}: non in cartella` }))] });
   }
   // 2. Un blocco per appuntamento: motivo, terapia, esami, visite (righe più corte del briefing singolo).
+  // Le stesse righe vanno anche, DISTINTE per parte, nella forma da documento.
+  const vociDoc: VoceDocumento[] = [];
   for (const v of ordinate) {
     const testa = `${v.ora} · ${v.paziente}${v.medico ? ` · ${v.medico}` : ''}${v.motivo ? ` · ${v.motivo}` : ''}`;
-    if (!v.briefing) { sezioni.push({ chiave: `app-${v.ora}-${v.paziente}`, titolo: testa, righe: [{ testo: 'Non in cartella.' }] }); continue; }
+    if (!v.briefing) {
+      sezioni.push({ chiave: `app-${v.ora}-${v.paziente}`, titolo: testa, righe: [{ testo: 'Non in cartella.' }] });
+      vociDoc.push({ ora: v.ora, paziente: v.paziente, medico: v.medico ?? null, motivo: v.motivo ?? null, patientId: null, mancanti: [], gruppi: [], inCartella: false });
+      continue;
+    }
     const righe: Riga[] = [];
+    const gruppi: GruppoDoc[] = [];
     const prendi = (chiave: string, max: number) => {
       const s = v.briefing!.sezioni.find((x) => x.chiave === chiave);
       if (!s) return;
-      for (const r of s.righe.slice(0, max)) righe.push({ testo: r.testo, fonte: r.fonte ? registra(r.fonte) : undefined });
-      if (s.righe.length > max) righe.push({ testo: `… e altre ${s.righe.length - max} righe di «${s.titolo}»` });
+      const g: GruppoDoc = { titolo: s.titolo, righe: [] };
+      for (const r of s.righe.slice(0, max)) { const riga = { testo: r.testo, fonte: r.fonte ? registra(r.fonte) : undefined }; righe.push(riga); g.righe.push(riga); }
+      if (s.righe.length > max) { const altra = { testo: `… e altre ${s.righe.length - max} righe di «${s.titolo}»` }; righe.push(altra); g.righe.push(altra); }
+      if (g.righe.length) gruppi.push(g);
     };
     prendi('motivo', 2);
     prendi('terapia', 6);
     prendi('esami', 3);
     prendi('sospeso', 3);
     sezioni.push({ chiave: `app-${v.ora}-${v.paziente}`, titolo: testa, righe: righe.length ? righe : [{ testo: 'Cartella vuota.' }] });
+    vociDoc.push({ ora: v.ora, paziente: v.paziente, medico: v.medico ?? null, motivo: v.motivo ?? null, patientId: v.patientId ?? null, mancanti: v.briefing.mancanti.map((m) => m.testo), gruppi, inCartella: !!v.patientId });
   }
   const conBriefing = ordinate.filter((v) => v.briefing).length;
   const passi: Passo[] = [
@@ -253,7 +266,7 @@ export function aggregaGiornata(voci: VoceGiornata[], dataCh: string): Omit<Esit
     ? `${ordinate.length} appuntament${ordinate.length === 1 ? 'o' : 'i'} il ${dataCh}: ${conBriefing} con cartella, ${nonInCartella.length} non in cartella, ${righeMancanze.length} cos${righeMancanze.length === 1 ? 'a' : 'e'} da segnalare.`
     : `Nessun appuntamento in agenda il ${dataCh}.`;
   if (!sezioni.length) sezioni.push({ chiave: 'nessuno', titolo: 'Agenda', righe: [{ testo: 'Nessun appuntamento.' }] });
-  return { sottotitolo: undefined, sintesi, sezioni, mancanti, fonti, passi };
+  return { sottotitolo: undefined, sintesi, sezioni, mancanti, fonti, passi, documento: documentoGiornata(vociDoc, dataCh) };
 }
 
 /* ---------- lettere in ritardo ---------- */

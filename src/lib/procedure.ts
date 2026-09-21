@@ -1,3 +1,4 @@
+import { documentoGenerico } from './procedure-documento';
 import 'server-only';
 import { query } from './db';
 import { dettatoConTerapia, letteraPrecedente } from './referti-lettera';
@@ -18,7 +19,8 @@ async function conTraccia(studioId: string, userId: string | null | undefined, p
   const id = await apriTraccia({ studioId, userId, patientId, procedura: e.procedura, obiettivo: e.titolo, passi: e.passi, fonti: e.fonti, mancanti: e.mancanti, modello: null });
   await chiudiTraccia(id, { durataMs: durata, caratteri: (e.sintesi ?? '').length });
   console.log(`[procedura] ${e.procedura} passi=${e.passi.length} fonti=${e.fonti.length} mancanti=${e.mancanti.length} ${durata}ms traccia=${id}`);
-  return { ...e, traccia: { id, modello: null, durata_ms: durata } };
+  // Ogni procedura esce anche in forma da documento: chi non se l'è costruita da sé riceve quella generica.
+  return { ...e, documento: e.documento ?? documentoGenerico(e), traccia: { id, modello: null, durata_ms: durata } };
 }
 
 /* ---------- cosa è cambiato dall'ultima visita ---------- */

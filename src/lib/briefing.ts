@@ -1,3 +1,4 @@
+import { documentoBriefing, type DocumentoProcedura } from './procedure-documento';
 import 'server-only';
 import { pool, query } from './db';
 import { estraiTerapia, letteraPrecedente } from './referti-lettera';
@@ -26,6 +27,7 @@ export type EsitoBriefing = {
   sezioni: Briefing['sezioni'];
   mancanti: Briefing['mancanti'];
   fonti: Briefing['fonti'];
+  documento: DocumentoProcedura;   // la forma da documento (21.9.2026)
   traccia: { id: number; passi: PassoTraccia[]; modello: string | null; durata_ms: number; fatti: number };
 };
 
@@ -168,6 +170,7 @@ SINTESI:`;
     azioni: [{ etichetta: 'Scheda paziente', go: `#/patients/${p.id}` }],
     paziente: { id: p.id, nome: nomeCompleto, nascita: nascitaCh },
     sintesi, testo, sezioni: briefing.sezioni, mancanti: briefing.mancanti, fonti: briefing.fonti,
+    documento: documentoBriefing({ titolo: `Briefing pre-visita · ${nomeCompleto}${nascitaCh ? ` · nato/a il ${nascitaCh}` : ''}`, sezioni: briefing.sezioni, mancanti: briefing.mancanti }),
     traccia: { id: tracciaId, passi, modello: modelloUsato, durata_ms: durata, fatti: fatti.length },
   };
 }

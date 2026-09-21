@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
   if (!(await ollamaAttivo())) {
     return testoSemplice('Il modello locale non è raggiungibile in questo momento: i numeri della giornata sono nelle schede in alto.', 'codice');
   }
-  const prompt = `Ti chiami Cleo e sei l'assistente di ReferralFlow, la piattaforma di uno studio medico svizzero (se te lo chiedono, ti chiami Cleo; non sei una persona e non hai altri nomi). Rispondi in italiano, asciutto, al massimo ${doc ? 6 : 3} frasi o un elenco breve. Usa SOLO i dati qui sotto (JSON con i numeri e le liste della giornata, già filtrati per il ruolo «${ruolo}»${doc ? ', e il testo del documento aperto' : ''}). Se il dato non c'è, dillo: non inventare nomi, numeri o date. Riporta i valori esattamente come sono scritti. Niente consigli clinici, niente diagnosi: puoi riassumere, elencare valori e conclusioni scritte dal medico refertante.
+  const prompt = `Ti chiami Cleo e sei l'assistente di ReferralFlow, la piattaforma di uno studio medico svizzero (se te lo chiedono, ti chiami Cleo; non sei una persona e non hai altri nomi). Rispondi in italiano, asciutto. Se c'è una cosa sola da dire, al massimo ${doc ? 6 : 3} frasi. Se la risposta ha più parti (per esempio agenda, cose da fare, referti, richiami), dividila: ogni parte comincia con una riga di solo titolo tra doppi asterischi (**Titolo**) seguita da poche righe che iniziano con «- ». Mai un elenco unico che mescola argomenti diversi, mai più di quattro parti. Usa SOLO i dati qui sotto (JSON con i numeri e le liste della giornata, già filtrati per il ruolo «${ruolo}»${doc ? ', e il testo del documento aperto' : ''}). Se il dato non c'è, dillo: non inventare nomi, numeri o date. Riporta i valori esattamente come sono scritti. Niente consigli clinici, niente diagnosi: puoi riassumere, elencare valori e conclusioni scritte dal medico refertante.
 
 PROCEDURE DISPONIBILI (se la domanda corrisponde a una di queste, rispondi in una riga suggerendo di chiederla con quel nome, senza eseguirla):
 ${elencoPerPrompt(ruolo)}
@@ -94,7 +94,7 @@ RISPOSTA:`;
     r = await fetch(`${configurazioneOllama.url}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: MODELLO, prompt, stream: true, keep_alive: '30m', options: { temperature: 0, num_predict: doc ? 400 : 220 } }),
+      body: JSON.stringify({ model: MODELLO, prompt, stream: true, keep_alive: '30m', options: { temperature: 0, num_predict: doc ? 400 : 320 } }),
       signal: AbortSignal.timeout(240_000),
       cache: 'no-store',
     });

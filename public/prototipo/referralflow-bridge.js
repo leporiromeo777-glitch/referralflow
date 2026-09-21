@@ -391,7 +391,7 @@ if (typeof NAV !== 'undefined') for (const r of ['secretary', 'assistant', 'doct
 .rf-mod-sino { display:flex; gap:6px; }
 .rf-mod-sino button.active { background:var(--accent-soft); border-color:var(--accent); color:var(--accent-text); }
 #rf-print { display:none; }
-@media print { body.rf-stampa > *:not(#rf-print) { display:none !important; } body.rf-stampa #rf-print { display:block; font:12pt/1.45 -apple-system, "Helvetica Neue", Arial, sans-serif; color:#000; padding:0; } #rf-print h1 { font-size:16pt; margin:0 0 2pt; } #rf-print .meta { color:#333; font-size:10.5pt; margin-bottom:12pt; } #rf-print table { width:100%; border-collapse:collapse; } #rf-print td { border-bottom:1px solid #999; padding:6pt 4pt; vertical-align:top; } #rf-print td:first-child { width:38%; color:#333; } #rf-print .firma { margin-top:28pt; display:flex; justify-content:space-between; } #rf-print .firma span { border-top:1px solid #000; padding-top:4pt; width:40%; font-size:10pt; } }
+@media print { body.rf-stampa > *:not(#rf-print) { display:none !important; } body.rf-stampa #rf-print { display:block; font:12pt/1.45 -apple-system, "Helvetica Neue", Arial, sans-serif; color:#000; padding:0; } #rf-print h1 { font-size:16pt; margin:0 0 2pt; } #rf-print .meta { color:#333; font-size:10.5pt; margin-bottom:12pt; } #rf-print table { width:100%; border-collapse:collapse; } #rf-print td { border-bottom:1px solid #999; padding:6pt 4pt; vertical-align:top; } #rf-print td:first-child { width:38%; color:#333; } #rf-print .firma { margin-top:28pt; display:flex; justify-content:space-between; } #rf-print .firma span { border-top:1px solid #000; padding-top:4pt; width:40%; font-size:10pt; } #rf-print .rf-docp h2 { font-size:12pt; margin:14pt 0 4pt; border-bottom:1px solid #999; padding-bottom:2pt; } #rf-print .rf-docp h2 span { font-weight:400; color:#333; } #rf-print .rf-docp h3 { font-size:10pt; margin:8pt 0 2pt; text-transform:uppercase; letter-spacing:.04em; color:#333; } #rf-print .rf-docp ul { margin:0 0 4pt; padding-left:14pt; } #rf-print .rf-docp li { margin:1.5pt 0; } #rf-print .rf-docp .num { font-size:11pt; } #rf-print .rf-docp .sch { break-inside:avoid; } #rf-print .rf-docp table.griglia th { text-align:left; font-size:9.5pt; border-bottom:1px solid #000; padding:3pt 4pt; } #rf-print .rf-docp table.griglia td { width:auto; color:#000; padding:4pt; } }
 `; document.head.appendChild(st); })();
 RF.moduli = null;
 async function rfCaricaModuli(rendi = true) {
@@ -2507,6 +2507,34 @@ function rfRispostaImmediata(q) {
   .rf-brief .rf-sint{margin-bottom:6px;padding:8px 10px;border-radius:8px;background:rgba(13,92,72,.08);border:1px solid rgba(13,92,72,.25)}
   .rf-note-seg{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--border);background:var(--warning-soft,rgba(214,150,42,.10));font-size:12.5px}
   .rf-note-seg svg{width:16px;height:16px}
+  .rf-doc{border:1px solid var(--border);border-radius:12px;background:var(--surface);overflow:hidden;margin:2px 0}
+  .rf-doc-testa{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;padding:14px 16px 12px;border-bottom:1px solid var(--border);background:rgba(13,92,72,.05)}
+  .rf-doc-testa .t{font-size:16px;font-weight:650;line-height:1.25;text-wrap:balance}.rf-doc-testa .s{font-size:12.5px;color:var(--muted);margin-top:2px}
+  .rf-doc-testa .az{display:flex;gap:6px;flex-shrink:0}
+  .rf-doc-corpo{padding:14px 16px 16px;display:flex;flex-direction:column;gap:14px}
+  .rf-doc-num{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px}
+  .rf-doc-num div{border:1px solid var(--border);border-radius:10px;padding:8px 10px}
+  .rf-doc-num b{display:block;font-size:20px;font-variant-numeric:tabular-nums;line-height:1.1}.rf-doc-num span{font-size:11.5px;color:var(--muted)}
+  .rf-doc-num .attenzione{border-color:rgba(214,92,42,.45);background:rgba(214,92,42,.07)}.rf-doc-num .attenzione b{color:#a3431b}
+  .rf-doc-num .ok b{color:#0d5c48}
+  .rf-doc h4{margin:0 0 6px;font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  .rf-doc-breve{padding:10px 12px;border-radius:10px;background:rgba(13,92,72,.08);border:1px solid rgba(13,92,72,.25);line-height:1.5}
+  .rf-doc-avviso{padding:10px 12px;border-radius:10px;background:rgba(214,92,42,.08);border:1px solid rgba(214,92,42,.35)}
+  .rf-doc-avv-gr{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:8px 16px;margin-bottom:6px}.rf-doc-avv-gr b{font-weight:600;font-size:13px}.rf-doc-avv-gr ul{margin-top:1px}
+  .rf-doc-avviso h4{color:#a3431b}.rf-doc-avviso ul,.rf-doc-gr ul{margin:0;padding-left:18px}.rf-doc li{margin:3px 0;line-height:1.45}
+  .rf-doc li .btn.sm{padding:0 6px;line-height:18px;font-size:11px;margin-left:6px}
+  .rf-doc-tab{overflow-x:auto}.rf-doc-tab table{width:100%;border-collapse:collapse;font-size:13px}
+  .rf-doc-tab th{text-align:left;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:4px 8px;border-bottom:1px solid var(--border)}
+  .rf-doc-tab td{padding:6px 8px;border-bottom:1px solid var(--border);vertical-align:top}.rf-doc-tab td:first-child{font-variant-numeric:tabular-nums;white-space:nowrap}
+  .rf-doc-tab tr.vai{cursor:pointer}.rf-doc-tab tr.vai:hover td{background:rgba(13,92,72,.05)}
+  .rf-doc-tab .attenzione td:last-child{color:#a3431b;font-weight:600}.rf-doc-tab .ok td:last-child{color:#0d5c48}
+  .rf-doc-griglia{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+  .rf-doc-gr{border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+  .rf-doc-sch{border:1px solid var(--border);border-radius:10px}.rf-doc-sch.attenzione{border-left:3px solid #d65c2a}
+  .rf-doc-sch summary{display:flex;gap:10px;align-items:baseline;padding:9px 12px;cursor:pointer;list-style:none}.rf-doc-sch summary::-webkit-details-marker{display:none}
+  .rf-doc-sch summary .ora{font-variant-numeric:tabular-nums;font-weight:650;min-width:44px}.rf-doc-sch summary .n{font-weight:600}.rf-doc-sch summary .so{color:var(--muted);font-size:12.5px;flex:1}
+  .rf-doc-sch .dentro{padding:2px 12px 12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+  .rf-md-t{font-weight:650;margin:8px 0 2px}.rf-md-t:first-child{margin-top:0}.rf-md ul{margin:0 0 4px;padding-left:18px}.rf-md li{margin:2px 0}
   .rf-traccia{margin-top:8px;font-size:12px}.rf-traccia summary{cursor:pointer;opacity:.75}.rf-traccia summary:hover{opacity:1}
   .rf-traccia ul{margin:6px 0 0 0;padding-left:16px}.rf-traccia li{margin:2px 0}
   .rf-traccia .ok{color:var(--ok,#0d5c48)}.rf-traccia .mancante{color:#b43c14}.rf-traccia .vuoto{opacity:.6}`;
@@ -2548,7 +2576,75 @@ function rfHtmlTraccia(t) {
   const riass = `${(t.passi || []).length} passi · ${(t.fonti || []).length} fonti${nMan ? ` · ${nMan} mancant${nMan === 1 ? 'e' : 'i'}` : ''}${t.modello ? ` · ${rfEsc(t.modello)}` : ' · solo codice'}${t.durata_ms ? ` · ${(t.durata_ms / 1000).toFixed(1)} s` : ''}${t.id ? ` · traccia #${t.id}` : ''}`;
   return `<details class="rf-traccia"><summary>Da dove viene · ${riass}</summary><ul>${passi}</ul>${fonti ? `<div class="caption" style="margin-top:6px">Fonti lette</div><ul>${fonti}</ul>` : ''}</details>`;
 }
+/* La risposta di una procedura come DOCUMENTO (21.9.2026): intestazione, numeri,
+   «in breve», riquadro delle cose da segnalare, tabella dell'agenda, gruppi in
+   griglia, una scheda richiudibile per paziente. La forma la decide il server
+   (src/lib/procedure-documento.ts); qui si disegna e si stampa. */
+RF.documenti = [];
+function rfDocRighe(righe) { return `<ul>${(righe || []).map(r => `<li>${rfEsc(r.testo)}${rfBottoneFonte(r.fonte)}</li>`).join('')}</ul>`; }
+function rfHtmlDocumento(b) {
+  const d = b.documento; const n = RF.documenti.push(b) - 1;
+  const numeri = (d.numeri || []).length ? `<div class="rf-doc-num">${d.numeri.map(x => `<div class="${rfEsc(x.tono || 'neutro')}"><b>${rfEsc(x.valore)}</b><span>${rfEsc(x.etichetta)}</span></div>`).join('')}</div>` : '';
+  const breve = b.sintesi ? `<div class="rf-doc-breve"><h4>In breve</h4>${rfEsc(b.sintesi).replace(/\n/g, '<br>')}</div>` : '';
+  const pezzi = []; let gruppi = [], schede = [];
+  const svuotaGruppi = () => { if (gruppi.length) { pezzi.push(`<div class="rf-doc-griglia">${gruppi.join('')}</div>`); gruppi = []; } };
+  const svuotaSchede = () => { if (schede.length) { pezzi.push(`<div><h4>Paziente per paziente</h4><div style="display:flex;flex-direction:column;gap:8px">${schede.join('')}</div></div>`); schede = []; } };
+  for (const bl of (d.blocchi || [])) {
+    if (bl.tipo === 'gruppo') { svuotaSchede(); gruppi.push(`<div class="rf-doc-gr"><h4>${rfEsc(bl.titolo)}</h4>${rfDocRighe(bl.righe)}</div>`); continue; }
+    if (bl.tipo === 'scheda') {
+      svuotaGruppi();
+      schede.push(`<details class="rf-doc-sch ${rfEsc(bl.tono || '')}" ${bl.tono === 'attenzione' ? 'open' : ''}><summary><span class="ora">${rfEsc(bl.etichetta || '')}</span><span class="n">${rfEsc(bl.titolo)}</span><span class="so">${rfEsc(bl.sottotitolo || '')}</span>${bl.go ? `<button class="btn sm ghost" data-go="${rfEsc(bl.go)}">Scheda</button>` : ''}</summary><div class="dentro">${(bl.gruppi || []).map(g => `<div><h4>${rfEsc(g.titolo)}</h4>${rfDocRighe(g.righe)}</div>`).join('')}</div></details>`);
+      continue;
+    }
+    svuotaGruppi(); svuotaSchede();
+    if (bl.tipo === 'avviso') pezzi.push(`<div class="rf-doc-avviso"><h4>${rfEsc(bl.titolo)} · ${bl.totale || ((bl.gruppi || []).reduce((t, g) => t + g.righe.length, 0) + bl.righe.length)}</h4>${(bl.gruppi || []).length ? `<div class="rf-doc-avv-gr">${bl.gruppi.map(g => `<div><b>${rfEsc(g.titolo)}</b>${rfDocRighe(g.righe)}</div>`).join('')}</div>` : ''}${bl.righe.length ? rfDocRighe(bl.righe) : ''}</div>`);
+    if (bl.tipo === 'tabella') pezzi.push(`<div><h4>${rfEsc(bl.titolo)}</h4><div class="rf-doc-tab"><table><thead><tr>${bl.colonne.map(c => `<th>${rfEsc(c)}</th>`).join('')}</tr></thead><tbody>${bl.righe.map(r => `<tr class="${rfEsc(r.tono || '')} ${r.go ? 'vai' : ''}" ${r.go ? `data-go="${rfEsc(r.go)}"` : ''}>${r.celle.map(c => `<td>${rfEsc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`);
+  }
+  svuotaGruppi(); svuotaSchede();
+  const azioni = (b.azioni || []).map(a => a.go ? `<button class="btn sm ghost" data-go="${rfEsc(a.go)}">${rfEsc(a.etichetta)}</button>` : `<a class="btn sm ghost" href="${rfEsc(a.href)}" target="_blank" rel="noopener">${rfEsc(a.etichetta)}</a>`).join('');
+  const passi = b.traccia && b.traccia.passi ? b.traccia.passi : b.passi;
+  return `<div class="rf-doc"><div class="rf-doc-testa"><div><div class="t">${rfEsc(d.intestazione.titolo)}</div>${d.intestazione.sottotitolo ? `<div class="s">${rfEsc(d.intestazione.sottotitolo)}</div>` : ''}</div><div class="az">${azioni}<button class="btn sm" onclick="rfDocStampa(${n})" title="Stampa o salva in PDF">Stampa</button></div></div>
+    <div class="rf-doc-corpo">${numeri}${breve}${pezzi.join('')}${rfHtmlTraccia({ id: b.traccia && b.traccia.id, passi, fonti: b.fonti, mancanti: b.mancanti, modello: b.traccia && b.traccia.modello, durata_ms: b.traccia && b.traccia.durata_ms })}</div></div>`;
+}
+// La stampa: lo stesso documento, su carta — tutte le schede aperte, niente bottoni.
+function rfDocStampa(n) {
+  const b = RF.documenti[n]; if (!b || !b.documento) return;
+  const d = b.documento; const box = document.getElementById('rf-print'); if (!box) { window.print(); return; }
+  const righe = (rr) => `<ul>${(rr || []).map(r => `<li>${rfEsc(r.testo)}</li>`).join('')}</ul>`;
+  const ora = new Date();
+  box.innerHTML = `<div class="rf-docp"><h1>${rfEsc(d.intestazione.titolo)}</h1><div class="meta">${rfEsc(d.intestazione.sottotitolo || '')}${d.intestazione.sottotitolo ? ' · ' : ''}stampato il ${String(ora.getDate()).padStart(2, '0')}.${String(ora.getMonth() + 1).padStart(2, '0')}.${ora.getFullYear()} alle ${String(ora.getHours()).padStart(2, '0')}:${String(ora.getMinutes()).padStart(2, '0')}</div>
+    ${(d.numeri || []).length ? `<p class="num">${d.numeri.map(x => `<b>${rfEsc(x.valore)}</b> ${rfEsc(x.etichetta.toLowerCase())}`).join(' · ')}</p>` : ''}
+    ${b.sintesi ? `<p>${rfEsc(b.sintesi)}</p>` : ''}
+    ${(d.blocchi || []).map(bl => bl.tipo === 'tabella'
+      ? `<h2>${rfEsc(bl.titolo)}</h2><table class="griglia"><thead><tr>${bl.colonne.map(c => `<th>${rfEsc(c)}</th>`).join('')}</tr></thead><tbody>${bl.righe.map(r => `<tr>${r.celle.map(c => `<td>${rfEsc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`
+      : bl.tipo === 'scheda'
+        ? `<div class="sch"><h2>${rfEsc(bl.etichetta ? bl.etichetta + ' · ' : '')}${rfEsc(bl.titolo)}${bl.sottotitolo ? ` <span>· ${rfEsc(bl.sottotitolo)}</span>` : ''}</h2>${(bl.gruppi || []).map(g => `<h3>${rfEsc(g.titolo)}</h3>${righe(g.righe)}`).join('')}</div>`
+        : `<h2>${rfEsc(bl.titolo)}${bl.totale ? ` · ${bl.totale}` : ''}</h2>${(bl.gruppi || []).map(g => `<h3>${rfEsc(g.titolo)}</h3>${righe(g.righe)}`).join('')}${(bl.righe || []).length ? righe(bl.righe) : ''}`).join('')}</div>`;
+  document.body.classList.add('rf-stampa');
+  const pulisci = () => { document.body.classList.remove('rf-stampa'); box.innerHTML = ''; window.removeEventListener('afterprint', pulisci); };
+  window.addEventListener('afterprint', pulisci);
+  window.print();
+}
+// Le risposte libere del modello: titoli in **grassetto** su una riga e righe
+// «- » diventano parti con il loro elenco, non un blocco unico di testo.
+function rfMdLeggero(t) {
+  const righe = String(t || '').split('\n'); const out = []; let lista = [];
+  const chiudi = () => { if (lista.length) { out.push(`<ul>${lista.join('')}</ul>`); lista = []; } };
+  const inline = (x) => rfEsc(x).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  for (const r0 of righe) {
+    const r = r0.trim();
+    if (!r) { chiudi(); continue; }
+    const tit = r.match(/^(?:#{1,4}\s*(.+)|\*\*([^*]+)\*\*:?)$/);
+    if (tit) { chiudi(); out.push(`<div class="rf-md-t">${rfEsc((tit[1] || tit[2]).replace(/:$/, ''))}</div>`); continue; }
+    const el = r.match(/^(?:[-•*]|\d+[.)])\s+(.*)$/);
+    if (el) { lista.push(`<li>${inline(el[1])}</li>`); continue; }
+    chiudi(); out.push(`<div>${inline(r)}</div>`);
+  }
+  chiudi();
+  return `<div class="rf-md">${out.join('')}</div>`;
+}
 function rfHtmlProcedura(b) {
+  if (b && b.documento && b.documento.intestazione) return rfHtmlDocumento(b);
   const sez = (b.sezioni || []).map(s => `<div class="rf-sez"><b>${rfEsc(s.titolo)}</b>${s.righe.map(r => `<div class="rf-riga"><span>• ${rfEsc(r.testo)}</span>${rfBottoneFonte(r.fonte)}</div>`).join('')}</div>`).join('');
   const manc = (b.mancanti || []).length ? `<div class="rf-manc"><b>${b.procedura === 'briefing_previsita' ? 'Da segnalare al medico' : 'Da fare'}</b>${b.mancanti.map(m => `<div>• ${rfEsc(m.testo)}</div>`).join('')}</div>` : '';
   const sint = b.sintesi ? `<div class="rf-sint">${rfEsc(b.sintesi).replace(/\n/g, '<br>')}</div>` : '';
@@ -2812,12 +2908,12 @@ function rfRispondiLibera(q) {
         if (done) break;
         testo += dec.decode(value, { stream: true });
         const el = document.getElementById(id);
-        if (el) el.innerHTML = rfEsc(testo).replace(/\n/g, '<br>') + '<span class="caption"> ▍</span>';
+        if (el) el.innerHTML = rfMdLeggero(testo) + '<span class="caption"> ▍</span>';
       }
       const tid = r.headers.get('X-Traccia');
       let traccia = '';
       if (tid) { try { const rt = await fetch(`/api/prototipo/tracce/${tid}`, { credentials: 'include' }); if (rt.ok) traccia = rfHtmlTraccia(await rt.json()); } catch { /* senza traccia */ } }
-      fine(rfEsc(testo.trim() || 'Nessuna risposta.').replace(/\n/g, '<br>') + traccia, fonte);
+      fine(rfMdLeggero(testo.trim() || 'Nessuna risposta.') + traccia, fonte);
     })
     .catch(() => fine('L\'assistente non è raggiungibile in questo momento.', 'Piattaforma'));
 };

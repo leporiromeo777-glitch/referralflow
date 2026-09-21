@@ -178,3 +178,10 @@ Da ricordare più del risultato: **il primo punteggio assolveva tutti e tre**, p
 | `scripts/prova-righello-serie-e2e.py` (DB demo) | serie 8 fette, passo reale, ordine, MPR, distanza 3D, fuori immagine, volume bloccato/salti/poche fette, MPR PNG e intestazione, misura su MPR bloccata, indice fuori, 3D su MPR | 20/20 |
 | browser | piani con slider (PNG 64×32), ✕ con motivo sull'MPR, distanza 3D a due tocchi su fette diverse | ok |
 | `scripts/misure-regressione.ts` (DB demo, misure di tutti i tipi) | | 0 differenze |
+
+## Risposte dell'assistente in forma di documento — 21.9.2026
+
+| Banco | Che cosa | Esito |
+|---|---|---|
+| `src/lib/prove-procedure.test.ts` | titolo/sottotitolo, documento generico (mancanze in cima, sezioni distinte, numeri), briefing (numeri e riquadro), giornata (numeri, tabella, schede con gruppi distinti), giorni pieni (37 fuori cartella in una riga, 3 schede su 40), più di otto pazienti con segnalazioni, `aggregaGiornata` con il documento | 15/15 (8 nuovi) |
+| server di prova (DB demo, giorno con 84 appuntamenti) | documento dal server e disegno nel visore: intestazione, 4 numeri, «in breve», segnalazioni per paziente con totale 91, tabella di 84 righe, 6 schede con le parti distinte, tasto Stampa, markdown leggero delle risposte libere | ok |
