@@ -733,6 +733,27 @@ def _prova_39() -> None:
     assert tronco["integrita_audio"] == "avviso", tronco
 
 
+@caso("40 · decisioni tarate (in ombra): la lettera dopo «numero:» diventa la probabilità del punto, il resto si ignora")
+def _prova_40() -> None:
+    lp = lambda tok, alt: {"token": tok, "logprob": 0.0, "top_logprobs": [{"token": k, "logprob": v} for k, v in alt.items()]}
+    uscita = [lp("1", {}), lp(":", {}), lp(" A", {" A": -0.1, " B": -2.4, " C": -4.0}), lp("\n", {}),
+              lp("2", {}), lp(":", {}), lp(" B", {" B": -0.02, " A": -4.5}), lp("\n", {}),
+              lp("Nota", {}), lp(": A", {})]
+    p = m.leggi_lettere(uscita)
+    assert set(p) == {1, 2}, p
+    assert p[1]["A"] > 0.85 and 0.05 < p[1]["B"] < 0.15, p
+    assert p[2]["B"] > 0.95 and p[2]["C"] == 0.0, p
+    assert m.leggi_lettere([]) == {}
+    # Il prompt delle decisioni è quello dell'arbitro con la sola risposta cambiata.
+    pr = m._prompt_decisioni("1) contesto: «x»\n   a: «y»\n   b: «z»")
+    assert "numero: lettera" in pr and "oggetto JSON" not in pr and pr.rstrip().endswith("b: «z»"), pr[-200:]
+    # I punti con numeri diversi o con la B vuota non arrivano né all'arbitro né qui.
+    div = [{"contesto": "c", "contesto_prima": "c", "versione_a": "99", "versione_b": "98"},
+           {"contesto": "c", "contesto_prima": "c", "versione_a": "lieve", "versione_b": ""},
+           {"contesto": "c", "contesto_prima": "c", "versione_a": "sensuale", "versione_b": "sinusale"}]
+    assert [d["versione_b"] for d in m._candidati_arbitro(div)] == ["sinusale"]
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0

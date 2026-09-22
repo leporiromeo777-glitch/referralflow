@@ -43,6 +43,7 @@ import errno
 import hashlib
 import json
 import logging
+import math
 import logging.handlers
 import os
 import re
@@ -1972,6 +1973,16 @@ def arbitra_divergenze(testo: str, divergenze: list[dict], file_id: str) -> tupl
     numeri diversi (il dubbio resta alla persona), mai segmenti lunghi, e la
     sostituzione avviene solo se il segmento è unico nel testo. Le divergenze
     restano comunque segnalate in bozza: la scelta è visibile e revocabile."""
+    candidate = _candidati_arbitro(divergenze)
+    if not candidate:
+        return testo, 0
+    inizio = time.monotonic()
+    return _arbitra_candidati(testo, candidate, file_id, inizio)
+
+
+def _candidati_arbitro(divergenze: list[dict]) -> list[dict]:
+    """I punti che arrivano all'arbitro (e alle decisioni tarate): stessi
+    paletti per entrambi."""
     candidate: list[dict] = []
     for d in divergenze:
         va, vb = d.get("versione_a", ""), d.get("versione_b", "")
@@ -1990,10 +2001,10 @@ def arbitra_divergenze(testo: str, divergenze: list[dict], file_id: str) -> tupl
         if not va and not d.get("contesto_prima"):
             continue
         candidate.append(d)
-    candidate = candidate[:30]
-    if not candidate:
-        return testo, 0
-    inizio = time.monotonic()
+    return candidate[:30]
+
+
+def _arbitra_candidati(testo: str, candidate: list[dict], file_id: str, inizio: float) -> tuple[str, int]:
     punti = "\n".join(
         f'{k + 1}) contesto: «{d["contesto"]}»\n'
         f'   a: «{d["versione_a"]}»\n   b: «{d["versione_b"]}»'
@@ -2036,13 +2047,17 @@ def arbitra_divergenze(testo: str, divergenze: list[dict], file_id: str) -> tupl
         return testo, 0
     applicate = 0
     for voce in scelte:
-        if not isinstance(voce, dict) or voce.get("scelta") != "b":
+        if not isinstance(voce, dict):
             continue
         try:
             k = int(voce.get("punto", 0)) - 1
         except (TypeError, ValueError):
             continue
         if not 0 <= k < len(candidate):
+            continue
+        if voce.get("scelta") in ("a", "b", "incerto"):
+            candidate[k]["scelta_arbitro"] = voce["scelta"]
+        if voce.get("scelta") != "b":
             continue
         va, vb = candidate[k]["versione_a"], candidate[k]["versione_b"]
         if not va:
@@ -2065,6 +2080,100 @@ def arbitra_divergenze(testo: str, divergenze: list[dict], file_id: str) -> tupl
         file_id, trasporto, len(candidate), applicate, time.monotonic() - inizio,
     )
     return testo, applicate
+
+
+# ── Decisioni tarate (23.9.2026, in OMBRA) ───────────────────────────────────
+# L'idea dei modelli «System One» (Jev) rifatta in locale: per ogni punto
+# dell'arbitro, invece di una scelta scritta, la PROBABILITÀ che abbia ragione
+# la B, letta dal modello locale fra le sole risposte ammesse (A, B, C =
+# incerto). Banco delle decisioni: 51/55 contro 49/55 dell'arbitro, gli
+# stessi 4 errori ma tutti sotto 0,66 di sicurezza, 0/10 casi indecidibili
+# presi per sicuri a 0,9 (l'arbitro: 9/10). IN OMBRA: scrive `p_b` e
+# `p_incerto` sulle divergenze e non cambia nulla del testo; la soglia si
+# decide sulle scelte vere della revisione. Una chiamata per gruppo di punti
+# (Ollama rilegge l'intero prompt a ogni chiamata: una per punto costava
+# ~9 s l'una). Solo locale: niente esce dal Mac. REFERTI_DECISIONI_TARATE=0
+# la spegne.
+DECISIONI_TARATE = os.environ.get("REFERTI_DECISIONI_TARATE", "1") == "1"
+GRUPPO_DECISIONI = 15
+
+ISTRUZIONE_DECISIONI = """Per OGNI punto scrivi una riga «numero: lettera», nell'ordine, senza altro testo:
+A se è giusta la versione a,
+B se è giusta la versione b,
+C se nessuna delle due è chiaramente giusta (il punto resterà a una persona).
+Esempio:
+1: A
+2: C
+
+"""
+
+
+def _prompt_decisioni(punti: str) -> str:
+    base = _prompt_arbitro(punti)
+    inizio, fine = base.find("Rispondi SOLO con un oggetto JSON valido"), base.find("PUNTI:")
+    if inizio < 0 or fine < inizio:
+        return base
+    return base[:inizio] + ISTRUZIONE_DECISIONI + base[fine:]
+
+
+def leggi_lettere(logprobs: list) -> dict[int, dict[str, float]]:
+    """Dalle probabilità dei token generati alle probabilità A/B/C per punto:
+    la lettera che segue «numero:» a inizio riga. Pura, provata nella suite."""
+    esiti: dict[int, dict[str, float]] = {}
+    riga = ""
+    for t in logprobs or []:
+        tok = str(t.get("token", ""))
+        m = re.match(r"\s*(\d+)\s*[:.)]\s*$", riga)
+        if m and tok.strip().upper() in ("A", "B", "C"):
+            p = {"A": 0.0, "B": 0.0, "C": 0.0}
+            for x in t.get("top_logprobs") or [t]:
+                k = str(x.get("token", "")).strip().upper()
+                if k in p:
+                    p[k] += math.exp(float(x.get("logprob", -99.0)))
+            esiti.setdefault(int(m.group(1)), p)
+        riga = (riga + tok).rsplit("\n", 1)[-1]
+    return esiti
+
+
+def decisioni_tarate(divergenze: list[dict], file_id: str) -> dict:
+    """Scrive p_b / p_incerto sui punti dell'arbitro. Mai un'eccezione verso
+    la catena: su qualunque intoppo quei punti restano senza probabilità."""
+    candidate = _candidati_arbitro(divergenze)
+    inizio, fatte = time.monotonic(), 0
+    for g in range(0, len(candidate), GRUPPO_DECISIONI):
+        gruppo = candidate[g:g + GRUPPO_DECISIONI]
+        punti = "\n".join(
+            f'{k + 1}) contesto: «{d["contesto"]}»\n   a: «{d["versione_a"]}»\n   b: «{d["versione_b"]}»'
+            + (f'\n   parole presenti da una parte sola: {", ".join(d["pesanti"])}' if d.get("pesanti") else "")
+            for k, d in enumerate(gruppo))
+        corpo = {"model": MODELLO_CORREZIONE, "prompt": _prompt_decisioni(punti), "stream": False,
+                 "logprobs": True, "top_logprobs": 20,
+                 "options": {"temperature": 0, "num_ctx": OLLAMA_NUM_CTX, "num_predict": 8 * len(gruppo) + 8}}
+        if "qwen3" in MODELLO_CORREZIONE.lower():
+            corpo["think"] = False
+        try:
+            req = urllib.request.Request(OLLAMA_URL + "/api/generate", data=json.dumps(corpo).encode(),
+                                         headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=OLLAMA_TIMEOUT_S) as r:
+                risposta = json.loads(r.read())
+        except (OSError, ValueError) as e:
+            log.warning("fase=decisioni_tarate file=%s esito=errore tipo=%s", file_id, type(e).__name__)
+            break
+        for n, p in leggi_lettere(risposta.get("logprobs") or []).items():
+            if not 1 <= n <= len(gruppo):
+                continue
+            ab, tot = p["A"] + p["B"], p["A"] + p["B"] + p["C"]
+            if ab <= 0:
+                continue
+            gruppo[n - 1]["p_b"] = round(p["B"] / ab, 3)
+            gruppo[n - 1]["p_incerto"] = round(p["C"] / tot, 3) if tot else None
+            fatte += 1
+    sicure = sum(1 for d in candidate if "p_b" in d and max(d["p_b"], 1 - d["p_b"]) >= 0.9)
+    esito = {"punti": len(candidate), "con_probabilita": fatte, "sicure_0_9": sicure,
+             "secondi": round(time.monotonic() - inizio, 1)}
+    log.info("fase=decisioni_tarate file=%s punti=%d con_probabilita=%d sicure=%d durata=%.1fs",
+             file_id, len(candidate), fatte, sicure, esito["secondi"])
+    return esito
 
 
 def carica_sostituzioni(medico: str | None = None) -> list[tuple[re.Pattern, str]]:
@@ -7888,6 +7997,12 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             corretto_a, n_arb = arbitra_divergenze(corretto_a, divergenze, file_id)
         tappa("confronto", "codice", divergenze=len(divergenze))
         tappa("arbitro", "modello", scelte_b=n_arb, trasporto=_trasporto(file_id, "arbitro"))
+        if DECISIONI_TARATE and divergenze:
+            try:
+                dt = decisioni_tarate(divergenze, file_id)
+                tappa("decisioni_tarate", "modello locale (in ombra)", **dt)
+            except Exception as e:  # noqa: BLE001 — in ombra: mai bloccare la catena
+                log.warning("fase=decisioni_tarate file=%s esito=errore tipo=%s", file_id, type(e).__name__)
         versioni["dopo_arbitro"] = corretto_a
 
         fase = "correzione_llm"

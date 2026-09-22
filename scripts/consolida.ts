@@ -13,6 +13,7 @@ import { attribuisci, riepilogo, NOMI_TAPPE, type Passo } from '../src/lib/audit
 import { statistiche } from '../src/lib/audit/metriche';
 import { esitiFlag, precisione, daDeclassare, type EsitoFlag } from '../src/lib/audit/precisione-flag';
 import { esitiVoci, vociDaRivedere, type Referto } from '../src/lib/audit/voci-respinte';
+import { esitiPunti, taratura, type EsitoPunto } from '../src/lib/audit/taratura-arbitro';
 
 const oggi = new Date().toISOString().slice(0, 10);
 const radice = process.cwd();
@@ -76,6 +77,7 @@ async function main() {
       const payloads = await query<{ id: string; payload: Record<string, unknown> }>(`select id::text, payload from referti_bozze where id = any($1::uuid[])`, [ids]);
       const perFlag: EsitoFlag[][] = [];
       const perVoci: Referto[] = [];
+      const perPunti: EsitoPunto[][] = [];
       for (const pl of payloads) {
         const vs = arte.filter((a) => a.bozza_id === pl.id);
         const persona = vs.find((a) => a.producer_type === 'SECRETARY');
@@ -83,6 +85,7 @@ async function main() {
         const primaDellaPersona = vs.filter((a) => a.version_no < persona.version_no);
         const catena = [...primaDellaPersona].reverse().find((a) => a.label === 'catena_finale' || a.label === 'testo_strutturato');
         if (catena) perFlag.push(esitiFlag(catena.content_text, pl.payload ?? {}, persona.content_text));
+        perPunti.push(esitiPunti((pl.payload ?? {}).divergenze, persona.content_text));
         const dopo = vs.find((a) => a.label === 'dopo_dizionario');
         const prima = vs.find((a) => a.label === 'grezzo_a_recuperato') ?? vs.find((a) => a.label === 'grezzo_a');
         const fine = vs.find((a) => a.label === 'catena_finale');
@@ -96,6 +99,14 @@ async function main() {
         for (const r of precFlag) righe.push(`| ${r.tipo} | ${r.flag} | ${r.critici} | ${r.utili}${r.quota_utili === null ? '' : ` (${r.quota_utili}%)`} | ${r.inutili} | ${r.senza_aggancio} |`);
         const giu = daDeclassare(precFlag);
         righe.push('', giu.length ? `Da declassare o togliere (almeno 8 valutate, al più il 15% porta a una correzione): ${giu.map((r) => r.tipo).join(', ')}. Decidere nel [[Decisioni/Registro]].` : 'Nessun tipo sotto la soglia (almeno 8 valutate, al più il 15% utili).', '');
+      }
+      const tar = taratura(perPunti);
+      if (tar.punti) {
+        righe.push('### Decisioni tarate dell\'arbitro (in ombra)', '',
+          `${tar.punti} punti con probabilità, ${tar.con_esito} con la scelta della persona riconoscibile nel testo. Giuste: probabilità ${tar.giuste_probabilita}/${tar.con_esito}, arbitro di oggi ${tar.giuste_arbitro}/${tar.arbitro_valutate}. Punti con parole pesanti dati per sicuri (≥ 0,9) ma sbagliati: ${tar.pesanti_sicuri_sbagliati}.`, '',
+          '| sicurezza | punti | giuste |', '|---|---|---|');
+        for (const f of tar.fasce) righe.push(`| ${f.fascia} | ${f.punti} | ${f.giuste}${f.quota === null ? '' : ` (${f.quota}%)`} |`);
+        righe.push('', 'La soglia si decide qui (Decisioni/Registro, 23.9.2026): la probabilità può confermare una correzione verso la B, mai nascondere una segnalazione.', '');
       }
       const voci = esitiVoci(perVoci);
       if (voci.length) {

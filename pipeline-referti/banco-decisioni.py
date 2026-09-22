@@ -224,7 +224,7 @@ def misure_generativo(righe: list[dict]) -> dict:
 
 
 def main(argv: list[str]) -> int:
-    metodi = ["generativo", "probabilita", "laya"]
+    metodi = ["generativo", "probabilita", "laya", "gruppo"]
     lim = None
     for k, x in enumerate(argv):
         if x == "--metodi": metodi = argv[k + 1].split(",")
@@ -247,6 +247,24 @@ def main(argv: list[str]) -> int:
         esiti["laya"] = misure_prob(righe, "laya_p_b")
         esiti["laya (senza scambio)"] = misure_prob(righe, "laya_p_b_dritto")
         print("laya:", json.dumps(esiti["laya"], ensure_ascii=False), flush=True)
+    if "gruppo" in metodi:
+        # La funzione della catena (decisioni_tarate): 15 punti per chiamata, al
+        # massimo 30 per referto come l'arbitro. Ordine mescolato (fisso) così
+        # un gruppo non è tutto della stessa famiglia.
+        import random
+        ordine = list(range(len(punti))); random.Random(7).shuffle(ordine)
+        copie = {i: dict(punti[i]) for i in ordine}
+        t0 = time.monotonic()
+        for g in range(0, len(ordine), 30):
+            attendi_catena_libera()
+            m.decisioni_tarate([copie[i] for i in ordine[g:g + 30]], "banco-decisioni")
+        for i, r in enumerate(righe):
+            if "p_b" in copie[i]:
+                r["grp_p_b"] = copie[i]["p_b"]; r["grp_p_incerto"] = copie[i].get("p_incerto")
+        esiti["gruppo"] = misure_prob(righe, "grp_p_b")
+        esiti["gruppo"]["con_probabilita"] = f"{sum('grp_p_b' in r for r in righe)}/{len(righe)}"
+        esiti["gruppo"]["secondi_per_punto"] = round((time.monotonic() - t0) / len(righe), 2)
+        print("gruppo:", json.dumps(esiti["gruppo"], ensure_ascii=False), flush=True)
     for nome, f, pref in (("probabilita", probabilita, "prob_"), ("generativo", generativo, "gen_")):
         if nome not in metodi:
             continue
