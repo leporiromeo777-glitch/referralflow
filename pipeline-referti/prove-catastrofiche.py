@@ -712,6 +712,27 @@ def _prova_38() -> None:
         m._parole_glossario = originale
 
 
+@caso("39 · integrità audio: saturazione come quota di campioni, la coda parlata del dittafono non abbassa il manifesto")
+def _prova_39() -> None:
+    # Un picco a 0 dB da solo non è saturazione (tutti i .ds2 decodificati lo toccano).
+    una = m._analizza_integrita("", "max_volume: 0.0 dB\nPeak count: 3.000000\nNumber of samples: 4800000.000000\ntime=00:05:00.00", "", 300.0)
+    assert una["saturati_pct"] < m.SOGLIA_SATURATI_PCT and not m.audio_saturato(una), una
+    # Metà dei campioni al fondo scala: saturato.
+    tagliato = m._analizza_integrita("", "max_volume: 0.0 dB\nPeak count: 256800.000000\nNumber of samples: 480000.000000", "", 30.0)
+    assert m.audio_saturato(tagliato), tagliato
+    # Tanti campioni al picco ma il picco è a -6 dB: non è saturazione.
+    basso = m._analizza_integrita("", "max_volume: -6.0 dB\nPeak count: 2400.000000\nNumber of samples: 480000.000000", "", 30.0)
+    assert basso["saturati_pct"] == 0.0, basso
+    coda = {"errori_decodifica": 0, "coda_parlata": True}
+    web = m.costruisci_manifesto(dict(coda), True, True, True, "whisper", [], [], [], [], 0, [], "prova-39a")
+    dss = m.costruisci_manifesto({**coda, "dittafono": True}, True, True, True, "whisper", [], [], [], [], 0, [], "prova-39b")
+    assert web["integrita_audio"] == "avviso" and "integrità audio" in web["componenti_mancanti"], web
+    assert dss["integrita_audio"] == "ok" and "integrità audio" not in dss["componenti_mancanti"], dss
+    # Il file tagliato davvero resta un avviso anche dal dittafono.
+    tronco = m.costruisci_manifesto({"errori_decodifica": 0, "troncato_s": 12.0, "dittafono": True}, True, True, True, "whisper", [], [], [], [], 0, [], "prova-39c")
+    assert tronco["integrita_audio"] == "avviso", tronco
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0

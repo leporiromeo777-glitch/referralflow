@@ -11,6 +11,8 @@ import { proposteDizionario } from '../src/lib/audit/dizionario';
 import { frasiCandidate } from '../src/lib/audit/frasi';
 import { attribuisci, riepilogo, NOMI_TAPPE, type Passo } from '../src/lib/audit/attribuzione';
 import { statistiche } from '../src/lib/audit/metriche';
+import { esitiFlag, precisione, daDeclassare, type EsitoFlag } from '../src/lib/audit/precisione-flag';
+import { esitiVoci, vociDaRivedere, type Referto } from '../src/lib/audit/voci-respinte';
 
 const oggi = new Date().toISOString().slice(0, 10);
 const radice = process.cwd();
@@ -61,6 +63,52 @@ async function main() {
       for (const t of tappe) righe.push(`| ${NOMI_TAPPE[t.label] ?? t.label} | ${t.referti} | ${t.avvicina} | ${t.allontana} | ${t.delta_medio > 0 ? '+' : ''}${t.delta_medio} |`);
       const sospette = tappe.filter((t) => t.referti >= 3 && t.allontana > t.avvicina);
       righe.push('', sospette.length ? `Da guardare: ${sospette.map((t) => NOMI_TAPPE[t.label] ?? t.label).join(', ')} (allontana più spesso di quanto avvicini).` : 'Nessuna tappa allontana più spesso di quanto avvicini.', '');
+    }
+
+    // 2b. Segnalazioni che portano a una correzione (precisione per tipo) e
+    // voci del dizionario che tornano com'erano. Testo della catena = l'ultima
+    // uscita AI prima della persona; testo della persona = il primo salvato
+    // dalla segreteria (prima dell'impaginazione AI della lettera).
+    if (ids.length) {
+      const arte = await query<{ bozza_id: string; label: string; producer_type: string; version_no: number; content_text: string }>(
+        `select bozza_id::text, label, producer_type, version_no, content_text from audit.artifacts
+          where studio_id = $1 and bozza_id = any($2::uuid[]) and content_text is not null and label <> 'grezzo_b' order by bozza_id, version_no`, [st.id, ids]);
+      const payloads = await query<{ id: string; payload: Record<string, unknown> }>(`select id::text, payload from referti_bozze where id = any($1::uuid[])`, [ids]);
+      const perFlag: EsitoFlag[][] = [];
+      const perVoci: Referto[] = [];
+      for (const pl of payloads) {
+        const vs = arte.filter((a) => a.bozza_id === pl.id);
+        const persona = vs.find((a) => a.producer_type === 'SECRETARY');
+        if (!persona) continue;
+        const primaDellaPersona = vs.filter((a) => a.version_no < persona.version_no);
+        const catena = [...primaDellaPersona].reverse().find((a) => a.label === 'catena_finale' || a.label === 'testo_strutturato');
+        if (catena) perFlag.push(esitiFlag(catena.content_text, pl.payload ?? {}, persona.content_text));
+        const dopo = vs.find((a) => a.label === 'dopo_dizionario');
+        const prima = vs.find((a) => a.label === 'grezzo_a_recuperato') ?? vs.find((a) => a.label === 'grezzo_a');
+        const fine = vs.find((a) => a.label === 'catena_finale');
+        if (dopo && prima && fine) perVoci.push({ prima: prima.content_text, dopo: dopo.content_text, catena: fine.content_text, persona: persona.content_text });
+      }
+      const precFlag = precisione(perFlag);
+      if (precFlag.length) {
+        righe.push('### Quali segnalazioni portano a una correzione', '',
+          `Su ${perFlag.length} referti: per ogni tipo, quante volte la persona ha poi cambiato la frase segnalata (o rimesso la frase mancante). È un tetto: la frase può essere cambiata per un altro motivo.`, '',
+          '| tipo | segnalazioni | di cui critiche | portano a una correzione | restano uguali | senza frase |', '|---|---|---|---|---|---|');
+        for (const r of precFlag) righe.push(`| ${r.tipo} | ${r.flag} | ${r.critici} | ${r.utili}${r.quota_utili === null ? '' : ` (${r.quota_utili}%)`} | ${r.inutili} | ${r.senza_aggancio} |`);
+        const giu = daDeclassare(precFlag);
+        righe.push('', giu.length ? `Da declassare o togliere (almeno 8 valutate, al più il 15% porta a una correzione): ${giu.map((r) => r.tipo).join(', ')}. Decidere nel [[Decisioni/Registro]].` : 'Nessun tipo sotto la soglia (almeno 8 valutate, al più il 15% utili).', '');
+      }
+      const voci = esitiVoci(perVoci);
+      if (voci.length) {
+        const tot = voci.reduce((s, v) => ({ t: s.t + v.tenuta, p: s.p + v.rimessa_persona, c: s.c + v.rimessa_catena, x: s.x + v.sparita }), { t: 0, p: 0, c: 0, x: 0 });
+        righe.push('### Dizionario e riparazioni fonetiche: che cosa resta', '',
+          `Su ${perVoci.length} referti, ${voci.length} voci applicate: tenute ${tot.t}, rimesse com'erano dalla segreteria ${tot.p}, rimesse dalla catena stessa (arbitro/correttore) ${tot.c}, sparite con la frase ${tot.x}.`, '');
+        const riv = vociDaRivedere(voci);
+        if (riv.length) {
+          righe.push('Rimesse dalla segreteria almeno quanto tenute (togliere dal dizionario? decide una persona):', '');
+          for (const v of riv.slice(0, 25)) righe.push(`- \`${v.da}\` → \`${v.a}\` (in ${v.referti} referti: rimessa ${v.rimessa_persona}, tenuta ${v.tenuta})`);
+          righe.push('');
+        }
+      }
     }
 
     // 3. Dizionario dalle correzioni (non ancora decise).

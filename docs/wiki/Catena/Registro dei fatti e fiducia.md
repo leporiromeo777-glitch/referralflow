@@ -1,6 +1,6 @@
 ---
 tipo: tappa
-aggiornata: 2026-09-11
+aggiornata: 2026-09-22
 ---
 # Registro dei fatti (evidence ledger) e punteggio di fiducia
 
@@ -23,4 +23,4 @@ Ordinato dal meno sicuro al più sicuro, max 200; `riepilogo` con conteggi. In p
 Correttore, arbitro, terapia, estrazione girano su `modello=` della config esterna (gemma-4-31B). I VERIFICATORI (avvocato del diavolo, omissioni semantiche, coerenza interna, verificatore selettivo) girano su `modello_verifica=` (oggi `Qwen/Qwen3.5-397B-A17B-FP8`, sempre via Infomaniak, testo pseudonimizzato): un'altra famiglia, così gli errori sistematici del correttore non vengono confermati da un gemello (`_modello_verifica`, `_chiama_esterno_verifica`; riga vuota = stesso modello). Nella versione della catena: `esterno_verifica`. Misure in [[Misure/Banchi]].
 
 ## Consolidatore notturno
-`npm run consolida` (`scripts/consolida.ts`, launchd `ch.referralflow.consolidatore` alle 03:30, log `~/referti/log/consolidatore.log`) scrive `docs/wiki/Proposte/<data>.md` e `Proposte/Ultime.md`: andamento delle correzioni (30 giorni contro i 30 prima), quale tappa aiuta davvero, voci di dizionario ricorrenti non ancora decise, frasi fisse da copiare nelle pagine `Agenti/`. Solo parole, frasi generiche senza nomi, numeri. Non modifica nulla: propone.
+`npm run consolida` (`scripts/consolida.ts`, launchd `ch.referralflow.consolidatore` alle 03:30, log `~/referti/log/consolidatore.log`) scrive `docs/wiki/Proposte/<data>.md` e `Proposte/Ultime.md`: andamento delle correzioni (30 giorni contro i 30 prima), quale tappa aiuta davvero, voci di dizionario ricorrenti non ancora decise, frasi fisse da copiare nelle pagine `Agenti/`; dal 22.9.2026 anche **quali segnalazioni portano a una correzione** (`src/lib/audit/precisione-flag.ts`: le stesse segnalazioni della revisione, ricostruite sul testo della catena, confrontate col primo testo salvato dalla segreteria; per tipo: quante volte la frase segnalata è stata cambiata o la frase mancante rimessa; soglia per proporre di declassare un tipo: almeno 8 valutate e al più il 15% utili) e **che cosa resta del dizionario** (`src/lib/audit/voci-respinte.ts`: le sostituzioni fatte si leggono dal confronto prima/dopo la tappa, poi tenute, rimesse dalla segreteria, rimesse dalla catena, sparite; le voci rimesse almeno quanto tenute si propongono per la rimozione, decide una persona). Solo parole, frasi generiche senza nomi, numeri. Non modifica nulla: propone.

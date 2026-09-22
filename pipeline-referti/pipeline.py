@@ -988,12 +988,23 @@ def _analizza_integrita(err_decodifica: str, err_volume: str, err_coda: str,
     decodificati contro la durata dichiarata dal contenitore (file troncato:
     m4a/mp3 con l'intestazione che promette più di quanto c'è) e «la
     registrazione finisce mentre si parla» (nessun silenzio in coda)."""
-    esito = {"errori_decodifica": 0, "picco_db": None, "silenzio_pct": None, "durata_s": durata,
-             "decodificato_s": None, "troncato_s": 0.0, "coda_parlata": False, "creato": creato}
+    esito = {"errori_decodifica": 0, "picco_db": None, "saturati_pct": None, "silenzio_pct": None,
+             "durata_s": durata, "decodificato_s": None, "troncato_s": 0.0, "coda_parlata": False,
+             "creato": creato}
     esito["errori_decodifica"] = len([l for l in err_decodifica.splitlines() if l.strip()])
     m = re.search(r"max_volume:\s*(-?[\d.]+) dB", err_volume)
     if m:
         esito["picco_db"] = float(m.group(1))
+    # Saturazione come QUOTA di campioni al massimo (22.9.2026): il picco da
+    # solo non distingue un dettato tagliato da uno che tocca 0 dB una volta
+    # — e sui .ds2 decodificati il picco è 0 dB in 23 dettati su 23, con un
+    # avviso «audio saturato» su ogni referto. astats conta i campioni al
+    # valore di picco: sono saturati solo se il picco è al fondo scala.
+    m_pc = re.search(r"Peak count:\s*([\d.]+)", err_volume)
+    m_ns = re.search(r"Number of samples:\s*([\d.]+)", err_volume)
+    if m_pc and m_ns and float(m_ns.group(1)) > 0:
+        fondo = esito["picco_db"] is not None and esito["picco_db"] >= -0.05
+        esito["saturati_pct"] = round(100.0 * float(m_pc.group(1)) / float(m_ns.group(1)), 3) if fondo else 0.0
     durate = [float(x) for x in re.findall(r"silence_duration:\s*([\d.]+)", err_volume)]
     if durata:
         esito["silenzio_pct"] = round(100.0 * sum(durate) / durata, 1)
@@ -1013,6 +1024,15 @@ def _analizza_integrita(err_decodifica: str, err_volume: str, err_coda: str,
     if durata and durata >= 20 and m_tutto and m_coda:
         esito["coda_parlata"] = float(m_coda.group(1)) >= float(m_tutto.group(1)) - 8.0
     return esito
+
+
+# Soglia della saturazione: 1 campione su 2000 al fondo scala. astats conta un
+# solo lato (il picco positivo o quello negativo), quindi è già prudente.
+SOGLIA_SATURATI_PCT = 0.05
+
+
+def audio_saturato(integ: dict) -> bool:
+    return (integ.get("saturati_pct") or 0) >= SOGLIA_SATURATI_PCT
 
 
 def _formato_ingresso(percorso: Path) -> list[str]:
@@ -1109,7 +1129,8 @@ def verifica_integrita_audio(ingresso: Path, file_id: str) -> dict:
         return _analizza_integrita("", "", "", None)
     try:
         r = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", *_formato_ingresso(ingresso), "-i", str(ingresso),
-                            "-af", "volumedetect,silencedetect=noise=-35dB:d=2", "-f", "null", "-"],
+                            "-af", "volumedetect,astats=measure_overall=Peak_count+Number_of_samples:measure_perchannel=none,"
+                            "silencedetect=noise=-35dB:d=2", "-f", "null", "-"],
                            capture_output=True, text=True, timeout=300)
         err2 = r.stderr
     except (subprocess.SubprocessError, OSError):
@@ -1132,9 +1153,9 @@ def verifica_integrita_audio(ingresso: Path, file_id: str) -> dict:
     except (subprocess.SubprocessError, OSError):
         pass
     esito = _analizza_integrita(err1, err2, err3, durata, creato)
-    log.info("fase=integrita_audio file=%s errori=%d picco_db=%s silenzio_pct=%s decodificato_s=%s "
+    log.info("fase=integrita_audio file=%s errori=%d picco_db=%s saturati_pct=%s silenzio_pct=%s decodificato_s=%s "
              "troncato_s=%s coda_parlata=%d", file_id, esito["errori_decodifica"], esito["picco_db"],
-             esito["silenzio_pct"], esito["decodificato_s"], esito["troncato_s"], int(esito["coda_parlata"]))
+             esito["saturati_pct"], esito["silenzio_pct"], esito["decodificato_s"], esito["troncato_s"], int(esito["coda_parlata"]))
     return esito
 
 
@@ -6947,7 +6968,8 @@ def costruisci_manifesto(integ: dict, fatto_b: bool, verif_cloud: bool, secondo_
         mancanti.append("tempi delle parole")
     integ = integ or {}
     integ_ok = (int(integ.get("errori_decodifica") or 0) == 0 and not integ.get("troncato_s")
-                and not integ.get("coda_parlata") and float(integ.get("silenzio_pct") or 0) < 60)
+                and not (integ.get("coda_parlata") and not integ.get("dittafono"))
+                and float(integ.get("silenzio_pct") or 0) < 60)
     if not integ_ok:
         mancanti.append("integrità audio")
     # Passata A collassata rispetto alla B (sentinella A-vs-B del 2026-09-07):
@@ -7564,8 +7586,15 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             tappa("dittafono", "codice", formato=formato_originale)
         fase = "preprocessing"
         integ = verifica_integrita_audio(ingresso, file_id)
+        # Dittafono: la registrazione si ferma col tasto subito dopo l'ultima
+        # parola, quindi la coda è parlato per costruzione (coda «parlata» in
+        # 11 dettati .ds2 su 21, manifesto «ridotto» e presa d'atto per metà
+        # dei referti, 22.9.2026). Lì la coda resta solo nella cronologia; il
+        # file tagliato davvero lo dicono troncato_s e gli errori di decodifica.
+        integ["dittafono"] = formato_originale in (".dss", ".ds2")
         tappa("integrita_audio", "codice", errori=integ["errori_decodifica"],
               picco_db=integ["picco_db"] if integ["picco_db"] is not None else "",
+              saturati_pct=integ["saturati_pct"] if integ.get("saturati_pct") is not None else "",
               silenzio_pct=integ["silenzio_pct"] if integ["silenzio_pct"] is not None else "",
               durata_s=round(integ["durata_s"], 1) if integ.get("durata_s") else "",
               decodificato_s=integ.get("decodificato_s") if integ.get("decodificato_s") is not None else "",
@@ -7577,7 +7606,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             avvisi.append(f"Il file audio è più corto di quanto dichiara: mancano circa "
                           f"{integ['troncato_s']:.0f} secondi alla fine. Il dettato è probabilmente "
                           "incompleto: riascolta la fine prima di confermare.")
-        if integ.get("coda_parlata"):
+        if integ.get("coda_parlata") and not integ.get("dittafono"):
             avvisi.append("La registrazione finisce mentre si sta ancora parlando: controlla che il "
                           "dettato non sia stato interrotto e che la chiusura ci sia tutta.")
         if integ["errori_decodifica"] > 0:
@@ -7586,9 +7615,9 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         if integ["silenzio_pct"] is not None and integ["silenzio_pct"] >= 60:
             avvisi.append(f"L'audio è silenzioso per il {integ['silenzio_pct']:.0f}% della durata: "
                           "controlla che la registrazione sia quella giusta e completa.")
-        if integ["picco_db"] is not None and integ["picco_db"] >= -0.2:
-            avvisi.append("L'audio è saturato (picchi a 0 dB): alcune parole possono essere distorte; "
-                          "in caso di dubbi riascolta i passaggi con numeri.")
+        if audio_saturato(integ):
+            avvisi.append(f"L'audio è saturato ({integ['saturati_pct']:.2f}% dei campioni al massimo): alcune "
+                          "parole possono essere distorte; in caso di dubbi riascolta i passaggi con numeri.")
         preprocessa(ingresso, percorso(".wav"), file_id)
         tappa("preprocessing", "codice")
         # Vocabolario di dominio per whisper (SPEC §4.2): stesso prompt per le due

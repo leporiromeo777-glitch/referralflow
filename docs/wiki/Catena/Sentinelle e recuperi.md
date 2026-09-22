@@ -1,6 +1,6 @@
 ---
 tipo: tappa
-aggiornata: 2026-09-19
+aggiornata: 2026-09-22
 #aggiornata-prima: 2026-09-11
 ---
 # Sentinelle e recuperi della trascrizione
@@ -22,6 +22,15 @@ Casi 20, 21, 25, 26 nella suite.
 
 ## Passata doppia (11.9.2026)
 Dopo tre collassi in tre giorni il banco VAD su 6 dettati veri ha dato 3 a 3 (accordo totale 735 contro 712): né il VAD né la corsa senza VAD vincono sempre, e un caso col VAD perdeva 400 caratteri e 2 numeri SENZA far scattare le sentinelle. Quindi la corsa senza VAD si fa SEMPRE (`REFERTI_PASSATA_DOPPIA=1`, default; `0` torna al solo recupero su sospetto) e vince quella che concorda di più con la B (`accordo_con_b`); a parità resta la VAD, che ha l'orologio compatto. Log `esito=passata_doppia` / `recuperato_senza_vad` / `seconda_passata_non_migliore`. Costo 10-100 s di whisper in più per dettato. Le sentinelle restano per il caso in cui entrambe le passate siano corte. Decisione in [[Decisioni/Registro]], numeri in [[Misure/Banchi]].
+
+## Integrità dell'audio (prima della trascrizione)
+`verifica_integrita_audio` (ffmpeg sul WAV già decodificato) misura errori di decodifica, picco, **quota di campioni saturati**, silenzio, secondi decodificati contro la durata dichiarata e coda parlata; numeri nel log e nella cronologia, avvisi nella bozza, criterio «integrità audio» nel manifesto.
+
+Dal 22.9.2026, dopo averlo misurato su 23 dettati veri:
+- **Saturazione** = campioni al fondo scala (astats, `saturati_pct`) almeno lo 0,05% (`SOGLIA_SATURATI_PCT`), e solo se il picco è a 0,0 dB. Prima bastava il picco a 0 dB: i `.ds2` decodificati lo toccano **tutti** (23 su 23), e l'avviso «audio saturato» era su ogni referto.
+- **Coda parlata** non conta più per i file del dittafono (`.ds2`/`.dss`, `integ["dittafono"]`): lì la registrazione si ferma col tasto subito dopo l'ultima parola, quindi la coda è parlato per costruzione. Era in 11 dettati su 21 e portava il manifesto a «ridotto», con presa d'atto obbligatoria, in metà dei referti. Resta nella cronologia; per registrazioni web o telefono vale come prima. Il file tagliato davvero lo dicono `troncato_s` e gli errori di decodifica, anche dal dittafono.
+
+Caso 39 nella suite.
 
 ## Altre barriere
 `payload.manifesto` (livello pieno/ridotto/minimo, testimoni, trasporti, conteggi), gate pre-firma nel wizard con presa d'atto registrata (`override_critici`), guardia d'identità e gate temporale sulla fusione, lucchetto delle relazioni (`src/lib/referti-misure-cliniche.ts`). La rilavorazione di una bozza scartata azzera anche `revisione_stato`.

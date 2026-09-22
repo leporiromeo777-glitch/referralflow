@@ -1,6 +1,6 @@
 ---
 tipo: decisioni
-aggiornata: 2026-09-12
+aggiornata: 2026-09-22
 ---
 # Registro delle decisioni chiuse
 
@@ -188,3 +188,14 @@ Misurato: 2274 appuntamenti, 7 cartelle, 4 abbinati. **Deciso**: `patient_id` su
 
 ## 23.9.2026 — Il dittafono è una pagina, non un'applicazione incorporata
 Richiesta dello studio: «sembra un software esterno, lo voglio integrato al 100%». Lo era: un'app React in una cornice, con stile, archivio e service worker suoi, e sul telefono il tasto del menu usciva dalla piattaforma. **Deciso**: riscriverlo come pagina del prototipo (`bridge/12-dittafono.js` + `dittafono-audio.js` puro e provato) e **togliere** l'app vecchia con le sue due copie, lasciando a `/dittafono/` solo un rimando che ripulisce service worker e cache di chi l'aveva installata. Si tiene ciò che serve a dettare (pausa/ripresa in un audio solo, inserisci e sovrascrivi in un punto, salvataggio sul dispositivo con recupero, invio nella coda dei referti); si lasciano marcatori, annulla a più livelli e riduzione dei silenzi, che non arrivavano da nessuna parte o che la catena fa già. Questo supera la riga di [[Piattaforma/Una interfaccia sola]] che teneva `/dittafono/` fra le cose da non toccare: il dato nuovo è la richiesta dello studio. Vedi [[Piattaforma/Dittafono]].
+
+## 22.9.2026 — Flag, dizionario e integrità dell'audio misurati sui referti veri
+Domanda dell'utente: come rendere più affidabile l'uscita della catena. Prima di toccare i modelli si è misurato che cosa succede nei referti veri (11 confermati dalla segreteria, solo conteggi).
+
+**Integrità dell'audio — deciso e cambiato.** Due controlli davano sempre lo stesso esito sui `.ds2` e quindi non dicevano niente: il picco a 0 dB (23 dettati su 23 → avviso «saturato» su ogni referto) e la coda parlata (11 su 21 → manifesto «ridotto» e presa d'atto obbligatoria). Ora la saturazione è la quota di campioni al fondo scala, e la coda parlata non conta per il dittafono, dove si ferma col tasto dopo l'ultima parola. Il troncamento vero resta. Vedi [[Catena/Sentinelle e recuperi]].
+
+**Flag — misurati, niente tolto.** I 71 critici «superati con la presa d'atto» vengono tutti dalla revisione vecchia (7–12 settembre), che contava come critici anche avvisi e frasi a rischio; nella revisione nuova (dal 14.9) nessun superamento. Per tipo, nella revisione nuova: frase non sostenuta 8 su 13 portano a una correzione, allarme numerico 2 su 2, numero non confermato 13 su 24, frase da chiarire 19 su 36; a zero, ma con troppo pochi casi per decidere, contraddizione (0/5), frase tolta dalla catena (0/6), negazione sentita da un solo motore (0/2, critica). Nessun tipo sotto la soglia (almeno 8 valutate e al più il 15% utili): la misura gira ogni notte nel consolidatore e si decide quando ci sono i numeri. Le correzioni automatiche sono il grosso del volume (119 segnalazioni in 11 referti).
+
+**Dizionario — l'ipotesi è caduta.** La tappa «dizionario» allontana nel riepilogo per tappe, ma voce per voce le sostituzioni fatte davvero reggono: 27 applicate, 9 tenute, 1 rimessa dalla segreteria, 2 rimesse dalla catena, 15 sparite con la frase riscritta. Una prima stima a mano (13 respinte) era sbagliata: applicava il dizionario di oggi ai testi di allora. Nessuna voce tolta; il consolidatore elenca ogni notte quelle rimesse almeno quanto tenute. La proposta `gli → egli` (Moccetti) resta da rifiutare nel cruscotto: rovinerebbe il testo giusto.
+
+**Non fatto**: ritarare il punteggio di fiducia (4 su 5 bozze «bassa», non distingue) — servono più referti confermati dalla revisione nuova.

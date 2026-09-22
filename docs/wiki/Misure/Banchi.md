@@ -1,6 +1,6 @@
 ---
 tipo: misure
-aggiornata: 2026-09-18
+aggiornata: 2026-09-22
 ---
 # Banchi e misure
 
@@ -215,3 +215,13 @@ Da ricordare più del risultato: **il primo punteggio assolveva tutti e tre**, p
 |---|---|---|
 | `src/lib/prove-dittafono-audio.test.ts` | riduzione 48→16 kHz, 16 bit con taglio, unione, inserisci/sovrascrivi (anche ai bordi, originale intatto), intestazione WAV, durata/orologio/livello/nome | 6/6 |
 | browser (server di prova, tono sintetico di 2 s) | pagina senza cornice, 12 parti, riascolto, inserisci 0:03 e sovrascrivi 0:02, errore chiaro senza microfono, salvataggio sul dispositivo (64 000 byte), invio nella coda e copia locale cancellata; sul telefono il tasto del menu resta nella piattaforma, niente fuori schermo | ok |
+
+## Affidabilità misurata sui referti veri — 22.9.2026
+
+| Banco | Che cosa | Esito |
+|---|---|---|
+| `src/lib/audit/prove-precisione-flag.test.ts` | frase cambiata/identica, omissione rimessa/ignorata, punteggiatura e maiuscole non contano, riepilogo e soglia | 4/4 |
+| `src/lib/audit/prove-voci-respinte.test.ts` | sostituzioni lette dal confronto, punteggiatura dettata esclusa, nomi e cifre esclusi, tenuta/rimessa/sparita | 3/3 |
+| `prove-catastrofiche.py` caso 39 | saturazione come quota di campioni, picco non al fondo scala, coda parlata del dittafono fuori dal manifesto, troncamento che resta | 39/39 |
+| `verifica_integrita_audio` su toni sintetici | tono tagliato: 53,5% saturati, avviso · tono a -0,1 dB: 0%, nessun avviso | ok |
+| consolidatore sul DB (11 referti confermati) | flag per tipo (tabella in [[Proposte/Ultime]]) · dizionario: 27 voci, 9 tenute, 1 rimessa dalla segreteria, 2 dalla catena, 15 sparite · integrità dai log: picco 0 dB in 23/23 `.ds2`, coda parlata in 11/21 | vedi [[Decisioni/Registro]] |
