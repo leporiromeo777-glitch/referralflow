@@ -754,6 +754,57 @@ def _prova_40() -> None:
     assert [d["versione_b"] for d in m._candidati_arbitro(div)] == ["sinusale"]
 
 
+@caso("41 · cartella condivisa: un audio alla volta a copia finita, medico dalla sottocartella, poi in «Audio trascritti» o «Non riusciti»")
+def _prova_41() -> None:
+    import tempfile, shutil as sh, os as o
+    tmp = Path(tempfile.mkdtemp())
+    vecchi = (m.CARTELLA_DA_TRASCRIVERE, m.CARTELLA_TRASCRITTI, m.carica_medici)
+    try:
+        da, fatti = tmp / "Audio da trascrivere", tmp / "Audio trascritti"
+        da.mkdir(); fatti.mkdir()
+        cart = {c: tmp / "referti" / c for c in ("ingresso", "lavorazione", "errori", "archivio_temp", "output")}
+        for c in cart.values(): c.mkdir(parents=True)
+        m.CARTELLA_DA_TRASCRIVERE, m.CARTELLA_TRASCRITTI = da, fatti
+        m.carica_medici = lambda: [{"id": "moccetti", "nome": "Dr. med. Mario Moccetti"}]
+        m._prepara_cartella_condivisa()
+        assert (da / "Moccetti").is_dir() and (da / "In lavorazione").is_dir() and (fatti / "Non riusciti").is_dir()
+        a1, a2 = da / "Moccetti" / "dettato uno.DS2", da / "dettato due.wav"
+        a1.write_bytes(b"x" * 100); a2.write_bytes(b"y" * 50)
+        (da / "note.txt").write_text("non audio")
+        o.utime(a1, (1_000_000, 1_000_000)); o.utime(a2, (2_000_000, 2_000_000))
+        m._CARTELLA_VISTI.clear()
+        m.preleva_da_cartella(cart)                       # primo giro: solo osservati
+        assert not list(cart["ingresso"].iterdir())
+        m.preleva_da_cartella(cart)                       # secondo giro: il più vecchio entra
+        entrati = [f.name for f in cart["ingresso"].iterdir()]
+        assert len(entrati) == 1 and entrati[0].startswith("medico-moccetti--cartella-") and entrati[0].endswith(".ds2"), entrati
+        assert m._medico_da_nome(entrati[0]) == "moccetti"
+        assert (da / "In lavorazione" / "dettato uno.DS2").is_file() and not a1.exists()
+        m.preleva_da_cartella(cart)                       # catena occupata: niente
+        assert len(list(cart["ingresso"].iterdir())) == 1
+        # la catena lavora (successo): l'originale va nei trascritti
+        sh.move(str(cart["ingresso"] / entrati[0]), str(cart["archivio_temp"] / "id.ds2"))
+        m.concludi_da_cartella(entrati[0], cart)
+        assert (fatti / "dettato uno.DS2").is_file() and not (da / "In lavorazione" / "dettato uno.DS2").exists()
+        # il secondo, senza medico, fallisce: «Non riusciti»
+        m.preleva_da_cartella(cart); m.preleva_da_cartella(cart)
+        (e2,) = [f.name for f in cart["ingresso"].iterdir()]
+        assert e2.startswith("cartella-") and m._medico_da_nome(e2) is None, e2
+        sh.move(str(cart["ingresso"] / e2), str(cart["errori"] / e2))
+        m.concludi_da_cartella(e2, cart)
+        assert (fatti / "Non riusciti" / "dettato due.wav").is_file()
+        assert (da / "note.txt").is_file(), "i file che non sono audio restano dove sono"
+        # servizio fermato a metà: all'avvio l'originale torna nella sua sottocartella
+        a3 = da / "Moccetti" / "tre.m4a"; a3.write_bytes(b"z" * 10); o.utime(a3, (3_000_000, 3_000_000))
+        m.preleva_da_cartella(cart); m.preleva_da_cartella(cart)
+        for f in cart["ingresso"].iterdir(): f.unlink()   # sparito dalla coda
+        m.ripara_cartella(cart)
+        assert (da / "Moccetti" / "tre.m4a").is_file() and m._stato_cartella(tmp / "referti") == {}
+    finally:
+        m.CARTELLA_DA_TRASCRIVERE, m.CARTELLA_TRASCRITTI, m.carica_medici = vecchi
+        sh.rmtree(tmp, ignore_errors=True)
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0

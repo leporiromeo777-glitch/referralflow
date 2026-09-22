@@ -1,6 +1,6 @@
 ---
 tipo: tappa
-aggiornata: 2026-09-11
+aggiornata: 2026-09-23
 ---
 # Catena dei referti: panoramica
 
@@ -34,4 +34,10 @@ Dettato (dittafono o drag & drop dalla pagina Referti) → `pipeline-referti/pip
 `testo_corretto`, `note_segreteria`, `campi_estratti`, `parole` (tempi), `divergenze`, `segmenti_dubbi`, `allarmi_numerici`, `avvisi`, `divagazioni`, `frasi_da_chiarire`, `doppioni_tolti/dubbi`, `frasi_non_supportate`, `riparazioni_applicate`, `numeri`, `rischio_frasi`, `frasi_omesse`, `terapia`, `incoerenze`, `ledger`, `fiducia`, `storia`, `versioni`, `versione_catena`, `manifesto`, `medico`, `dettato_il`, `ombra`, `richiede_revisione` (sempre true). L'endpoint accetta SOLO le chiavi in lista (`src/app/api/referti/bozza/route.ts`): una tappa nuova va aggiunta lì o non arriva in tabella (successo nel 2026-09-11 con `terapia`).
 
 ## Servizio
-Loop: dizionario ricaricato a ogni giro, dettati in `~/referti/ingresso`, `invia_bozze`, `pubblica_medici`, `sincronizza_dizionario` (10 min), `scarica_coda`, `lavora_fusioni`, scadenza dataset audio, pulizia. Log `~/referti/log/servizio.log` (mai contenuti clinici). Corse fallite: `<file_id>.fallita.json` spedito come `{esito:'fallita'}`.
+Loop: dizionario ricaricato a ogni giro, dettati in `~/referti/ingresso`, cartella condivisa dei dettati (sotto), `invia_bozze`, `pubblica_medici`, `sincronizza_dizionario` (10 min), `scarica_coda`, `lavora_fusioni`, scadenza dataset audio, pulizia. Log `~/referti/log/servizio.log` (mai contenuti clinici). Corse fallite: `<file_id>.fallita.json` spedito come `{esito:'fallita'}`.
+
+## Cartella condivisa dei dettati (23.9.2026)
+Si trascinano quanti audio si vuole in **«Audio da trascrivere»** (Scrivania del Mac, percorso in `REFERTI_CARTELLA_DA_TRASCRIVERE`), direttamente o nella sottocartella del medico («Moccetti», «Moschovitis»: il servizio le crea dai profili; fuori dalle sottocartelle il dettato entra senza medico). Il servizio (`preleva_da_cartella`) ne prende **uno alla volta**, solo a catena libera (ingresso e lavorazione vuote, così i dettati dalla piattaforma non aspettano dietro la cartella) e solo a copia finita (dimensione e data ferme per due giri, ultimo cambiamento da più di 10 s: le copie dalla rete sono lente). Mentre lavora l'originale sta in «In lavorazione»; a fine catena va in **«Audio trascritti»** (`REFERTI_CARTELLA_TRASCRITTI`), oppure in «Audio trascritti/Non riusciti» se la catena l'ha messo in `errori/`. In `ingresso/` entra una copia col nome `medico-<id>--cartella-<token>.<ext>`: il nome originale, che può contenere il nome del paziente, non entra nella catena né nel log (solo estensione, medico e quanti ne restano). Stato in `~/referti/cartella-condivisa.json`; all'avvio un prelievo rimasto a metà torna nella sua cartella (`ripara_cartella`). Formati: `.ds2 .dss .wav .mp3 .m4a .aac .ogg .opus .flac .wma .amr .3gp .mp4 .webm .caf .aif(f)`; gli altri file restano dove sono. Caso 41 nella suite.
+
+Condivisione con gli altri computer (anche Windows): condivisione file SMB del Mac, solo nella rete dello studio, mai cartelle sincronizzate su cloud (OneDrive, Dropbox, iCloud). Gli audio in «Audio trascritti» sono dati sanitari e restano finché qualcuno non li toglie.
+

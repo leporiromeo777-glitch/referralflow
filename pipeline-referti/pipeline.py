@@ -8634,6 +8634,205 @@ def _pulisci_intermedi(cartella: Path, file_id: str) -> None:
 _PREFISSO_PIATTAFORMA = "piattaforma-"
 
 
+# ── Cartella condivisa dei dettati (23.9.2026) ───────────────────────────────
+# Richiesta dello studio: una cartella dove buttare quanti audio si vuole, anche
+# da altri computer (Windows compreso, via condivisione SMB del Mac); la catena
+# li prende UNO ALLA VOLTA e a lavoro finito l'originale passa nella cartella
+# dei trascritti. Regole:
+# - si preleva solo a catena libera (ingresso/ e lavorazione/ vuote): i dettati
+#   dalla piattaforma non restano mai in coda dietro cento file della cartella;
+# - solo file la cui copia è finita (dimensione e data ferme per due giri e
+#   ultimo cambiamento da più di 10 s: una copia di rete da Windows è lenta);
+# - il medico si sceglie con la sottocartella (id o cognome del profilo,
+#   «Audio da trascrivere/Moccetti/…»); fuori dalle sottocartelle, senza medico;
+# - mentre lavora l'originale sta in «In lavorazione», poi va in «Audio
+#   trascritti» (o «Audio trascritti/Non riusciti» se la catena fallisce);
+# - nel log solo conteggi ed estensioni, mai nomi di file (possono contenere
+#   il nome del paziente).
+CARTELLA_DA_TRASCRIVERE = Path(os.environ.get(
+    "REFERTI_CARTELLA_DA_TRASCRIVERE", str(Path.home() / "Desktop" / "Audio da trascrivere")))
+CARTELLA_TRASCRITTI = Path(os.environ.get(
+    "REFERTI_CARTELLA_TRASCRITTI", str(Path.home() / "Desktop" / "Audio trascritti")))
+IN_LAVORAZIONE = "In lavorazione"
+NON_RIUSCITI = "Non riusciti"
+ESTENSIONI_AUDIO = {".ds2", ".dss", ".wav", ".mp3", ".m4a", ".aac", ".ogg", ".oga", ".opus", ".flac",
+                    ".wma", ".amr", ".3gp", ".mp4", ".webm", ".caf", ".aif", ".aiff"}
+_CARTELLA_VISTI: dict[Path, tuple[int, float]] = {}
+
+
+def _stato_cartella_file(base: Path) -> Path:
+    return base / "cartella-condivisa.json"
+
+
+def _stato_cartella(base: Path) -> dict:
+    try:
+        d = json.loads(_stato_cartella_file(base).read_text(encoding="utf-8"))
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _salva_stato_cartella(base: Path, stato: dict) -> None:
+    f = _stato_cartella_file(base)
+    tmp = f.with_suffix(".tmp")
+    tmp.write_text(json.dumps(stato, ensure_ascii=False), encoding="utf-8")
+    os.chmod(tmp, 0o600)
+    tmp.replace(f)
+
+
+def medico_da_sottocartella(nome: str) -> str | None:
+    """«Moccetti», «moccetti», «Dr. Moccetti» → id del profilo; None se non è
+    la cartella di un medico."""
+    chiave = re.sub(r"[^a-z]", "", nome.lower())
+    for mp in carica_medici():
+        cognome = re.sub(r"[^a-z]", "", str(mp.get("nome", "")).split()[-1].lower()) if mp.get("nome") else ""
+        if chiave and (chiave == re.sub(r"[^a-z]", "", mp["id"]) or (cognome and chiave.endswith(cognome))):
+            return mp["id"]
+    return None
+
+
+def _prepara_cartella_condivisa() -> None:
+    """Sottocartelle fisse (una per medico, «In lavorazione», «Non riusciti»):
+    si creano se mancano, mai si cancellano."""
+    if not CARTELLA_DA_TRASCRIVERE.is_dir():
+        return
+    (CARTELLA_DA_TRASCRIVERE / IN_LAVORAZIONE).mkdir(exist_ok=True)
+    for mp in carica_medici():
+        nome = str(mp.get("nome", "")).split()[-1] if mp.get("nome") else mp["id"]
+        if not any(medico_da_sottocartella(d.name) == mp["id"] for d in CARTELLA_DA_TRASCRIVERE.iterdir() if d.is_dir()):
+            (CARTELLA_DA_TRASCRIVERE / nome).mkdir(exist_ok=True)
+    if CARTELLA_TRASCRITTI.is_dir():
+        (CARTELLA_TRASCRITTI / NON_RIUSCITI).mkdir(exist_ok=True)
+
+
+def candidati_cartella(radice: Path) -> list[tuple[Path, str | None]]:
+    """Audio nella cartella e nelle sottocartelle dei medici (un livello), dal
+    più vecchio. «In lavorazione» e le cartelle sconosciute non si toccano."""
+    fuori: list[tuple[float, Path, str | None]] = []
+    for voce in radice.iterdir():
+        if voce.name.startswith((".", "~$")):
+            continue
+        if voce.is_file() and voce.suffix.lower() in ESTENSIONI_AUDIO:
+            fuori.append((voce.stat().st_mtime, voce, None))
+        elif voce.is_dir() and voce.name != IN_LAVORAZIONE:
+            mid = medico_da_sottocartella(voce.name)
+            if mid is None:
+                continue
+            for f in voce.iterdir():
+                if f.is_file() and not f.name.startswith((".", "~$")) and f.suffix.lower() in ESTENSIONI_AUDIO:
+                    fuori.append((f.stat().st_mtime, f, mid))
+    return [(p, mid) for _, p, mid in sorted(fuori, key=lambda x: (x[0], str(x[1])))]
+
+
+def _libero(dest: Path) -> Path:
+    """Stesso nome se libero, altrimenti «nome (2).ext», «nome (3).ext»…"""
+    if not dest.exists():
+        return dest
+    k = 2
+    while (dest.with_name(f"{dest.stem} ({k}){dest.suffix}")).exists():
+        k += 1
+    return dest.with_name(f"{dest.stem} ({k}){dest.suffix}")
+
+
+def preleva_da_cartella(cartelle: dict) -> None:
+    """Un audio della cartella condivisa → ingresso/, solo a catena libera."""
+    radice = CARTELLA_DA_TRASCRIVERE
+    if not radice.is_dir():
+        return
+    occupata = any(not x.name.startswith(".") for c in ("ingresso", "lavorazione") for x in cartelle[c].iterdir())
+    if occupata:
+        return
+    try:
+        candidati = candidati_cartella(radice)
+    except OSError as e:
+        log.warning("fase=cartella esito=illeggibile tipo=%s", type(e).__name__)
+        return
+    ora = time.time()
+    visti_ora = {p for p, _ in candidati}
+    for p in list(_CARTELLA_VISTI):
+        if p not in visti_ora:
+            _CARTELLA_VISTI.pop(p, None)
+    for p, mid in candidati:
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        chiave = (st.st_size, st.st_mtime)
+        if st.st_size == 0 or _CARTELLA_VISTI.get(p) != chiave or ora - st.st_mtime < 10:
+            _CARTELLA_VISTI[p] = chiave   # copia forse ancora in corso: al giro dopo
+            continue
+        _CARTELLA_VISTI.pop(p, None)
+        token = hashlib.sha256(f"{p}{st.st_size}{st.st_mtime}{ora}".encode()).hexdigest()[:8]
+        nome_ingresso = (f"medico-{mid}--" if mid else "") + f"cartella-{token}{p.suffix.lower()}"
+        in_lav = _libero(radice / IN_LAVORAZIONE / p.name)
+        try:
+            shutil.move(str(p), str(in_lav))
+            tmp = cartelle["ingresso"] / f".{nome_ingresso}.tmp"
+            shutil.copyfile(in_lav, tmp)
+            tmp.replace(cartelle["ingresso"] / nome_ingresso)
+        except OSError as e:
+            log.warning("fase=cartella esito=errore_prelievo tipo=%s", type(e).__name__)
+            return
+        base = cartelle["ingresso"].parent
+        stato = _stato_cartella(base)
+        stato[nome_ingresso] = {"originale": str(in_lav), "medico": mid, "dal": int(ora)}
+        _salva_stato_cartella(base, stato)
+        log.info("fase=cartella esito=prelevato estensione=%s medico=%s in_attesa=%d",
+                 p.suffix.lower(), mid or "-", len(candidati) - 1)
+        return
+
+
+def concludi_da_cartella(nome_ingresso: str, cartelle: dict) -> None:
+    """Dopo _processa_uno: l'originale passa in «Audio trascritti» (o in
+    «Non riusciti» se la catena l'ha messo in errori/)."""
+    base = cartelle["ingresso"].parent
+    stato = _stato_cartella(base)
+    voce = stato.pop(nome_ingresso, None)
+    if not voce:
+        return
+    _salva_stato_cartella(base, stato)
+    originale = Path(voce.get("originale", ""))
+    fallito = (cartelle["errori"] / nome_ingresso).exists()
+    if not originale.is_file():
+        log.warning("fase=cartella esito=originale_sparito")
+        return
+    dest_dir = CARTELLA_TRASCRITTI / NON_RIUSCITI if fallito else CARTELLA_TRASCRITTI
+    try:
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(originale), str(_libero(dest_dir / originale.name)))
+    except OSError as e:
+        log.warning("fase=cartella esito=errore_spostamento tipo=%s", type(e).__name__)
+        return
+    log.info("fase=cartella esito=%s", "non_riuscito" if fallito else "trascritto")
+
+
+def ripara_cartella(cartelle: dict) -> None:
+    """All'avvio: un prelievo rimasto a metà (servizio fermato durante la
+    lavorazione) torna nella cartella da trascrivere, così si rifà."""
+    base = cartelle["ingresso"].parent
+    stato = _stato_cartella(base)
+    if not stato:
+        return
+    rimessi = 0
+    for nome, voce in list(stato.items()):
+        if any((cartelle[c] / nome).exists() for c in ("ingresso", "lavorazione")):
+            continue
+        originale = Path(voce.get("originale", ""))
+        if originale.is_file() and originale.parent.name == IN_LAVORAZIONE:
+            radice = originale.parent.parent
+            mid = voce.get("medico")
+            sotto = next((d for d in radice.iterdir() if d.is_dir() and mid and medico_da_sottocartella(d.name) == mid), radice)
+            try:
+                shutil.move(str(originale), str(_libero(sotto / originale.name)))
+                rimessi += 1
+            except OSError:
+                continue
+        stato.pop(nome, None)
+    _salva_stato_cartella(base, stato)
+    if rimessi:
+        log.info("fase=cartella esito=ripresi rimessi=%d", rimessi)
+
+
 def scarica_coda(cartelle: dict) -> None:
     """Preleva dalla piattaforma gli audio caricati col drag & drop (pagina
     Referti) e li mette in ingresso/: da lì la catena è identica ai file della
@@ -9022,6 +9221,13 @@ def servizio(sostituzioni, controlli) -> int:
     )
 
     in_attesa: dict[Path, int] = {}
+    try:
+        _prepara_cartella_condivisa()
+        ripara_cartella(cartelle)
+        if CARTELLA_DA_TRASCRIVERE.is_dir():
+            log.info("fase=cartella esito=attiva")
+    except OSError as e:
+        log.warning("fase=cartella esito=non_accessibile tipo=%s", type(e).__name__)
     while True:
         try:
             # Dizionario ricaricato a ogni giro: le voci aggiunte dal
@@ -9047,6 +9253,7 @@ def servizio(sostituzioni, controlli) -> int:
                     continue
                 in_attesa.pop(f, None)
                 _processa_uno(f, cartelle, sostituzioni, controlli)
+                concludi_da_cartella(f.name, cartelle)
             in_attesa = {p: d for p, d in in_attesa.items() if p.exists()}
             invia_bozze(cartelle)
             # Elenco dei medici che dettano alla piattaforma (solo se cambiato).
@@ -9056,6 +9263,8 @@ def servizio(sostituzioni, controlli) -> int:
             # Dopo l'invio: prendi eventuali dettati caricati dalla pagina
             # Referti (drag & drop). Al giro dopo entrano nella catena normale.
             scarica_coda(cartelle)
+            # Cartella condivisa dei dettati: uno alla volta, a catena libera.
+            preleva_da_cartella(cartelle)
             # Lettere incrementali chieste dalla pagina (dettato + lettera
             # precedente → lettera aggiornata).
             lavora_fusioni()
