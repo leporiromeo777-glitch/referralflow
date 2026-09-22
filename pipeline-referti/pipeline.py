@@ -8833,6 +8833,38 @@ def ripara_cartella(cartelle: dict) -> None:
         log.info("fase=cartella esito=ripresi rimessi=%d", rimessi)
 
 
+# Cancellazione automatica dei trascritti (23.9.2026, richiesta dello studio:
+# una settimana). Conta da quando il file è ARRIVATO in «Audio trascritti»
+# (st_ctime: lo sposta il servizio, e lo spostamento lo aggiorna), non dalla
+# data della registrazione, che lo spostamento conserva. Solo file audio,
+# solo al primo livello: «Non riusciti» NON si cancella mai da sé (quei
+# dettati non sono stati trascritti: qualcuno deve guardarli). 0 = spenta.
+GIORNI_TRASCRITTI = int(os.environ.get("REFERTI_CARTELLA_TRASCRITTI_GIORNI", "7"))
+_ULTIMA_PULIZIA_TRASCRITTI = 0.0
+
+
+def pulisci_trascritti(ora: float | None = None, forza: bool = False) -> int:
+    global _ULTIMA_PULIZIA_TRASCRITTI
+    ora = time.time() if ora is None else ora
+    if GIORNI_TRASCRITTI <= 0 or not CARTELLA_TRASCRITTI.is_dir():
+        return 0
+    if not forza and ora - _ULTIMA_PULIZIA_TRASCRITTI < 3600:
+        return 0
+    _ULTIMA_PULIZIA_TRASCRITTI = ora
+    tolti = 0
+    for f in CARTELLA_TRASCRITTI.iterdir():
+        try:
+            if (f.is_file() and not f.name.startswith(".") and f.suffix.lower() in ESTENSIONI_AUDIO
+                    and ora - f.stat().st_ctime > GIORNI_TRASCRITTI * 86400):
+                f.unlink()
+                tolti += 1
+        except OSError:
+            continue
+    if tolti:
+        log.info("fase=cartella esito=trascritti_cancellati n=%d giorni=%d", tolti, GIORNI_TRASCRITTI)
+    return tolti
+
+
 def scarica_coda(cartelle: dict) -> None:
     """Preleva dalla piattaforma gli audio caricati col drag & drop (pagina
     Referti) e li mette in ingresso/: da lì la catena è identica ai file della
@@ -9265,6 +9297,7 @@ def servizio(sostituzioni, controlli) -> int:
             scarica_coda(cartelle)
             # Cartella condivisa dei dettati: uno alla volta, a catena libera.
             preleva_da_cartella(cartelle)
+            pulisci_trascritti()
             # Lettere incrementali chieste dalla pagina (dettato + lettera
             # precedente → lettera aggiornata).
             lavora_fusioni()

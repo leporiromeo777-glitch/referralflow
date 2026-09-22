@@ -805,6 +805,29 @@ def _prova_41() -> None:
         sh.rmtree(tmp, ignore_errors=True)
 
 
+@caso("42 · cartella dei trascritti: via dopo 7 giorni dall'arrivo, «Non riusciti» e i file non audio restano")
+def _prova_42() -> None:
+    import tempfile, shutil as sh, time as t
+    tmp = Path(tempfile.mkdtemp())
+    vecchio = m.CARTELLA_TRASCRITTI
+    try:
+        m.CARTELLA_TRASCRITTI = tmp
+        (tmp / "Non riusciti").mkdir()
+        for n in ("a.DS2", "b.wav", "note.txt"):
+            (tmp / n).write_bytes(b"x")
+        (tmp / "Non riusciti" / "c.DS2").write_bytes(b"x")
+        assert m.pulisci_trascritti(ora=t.time() + 6 * 86400, forza=True) == 0, "prima dei 7 giorni non si tocca nulla"
+        assert m.pulisci_trascritti(ora=t.time() + 8 * 86400, forza=True) == 2
+        assert sorted(x.name for x in tmp.iterdir()) == ["Non riusciti", "note.txt"]
+        assert (tmp / "Non riusciti" / "c.DS2").is_file()
+        (tmp / "d.m4a").write_bytes(b"x")
+        assert m.pulisci_trascritti(ora=t.time() + 8 * 86400 + 60) == 0, "al massimo una volta l'ora"
+        assert (tmp / "d.m4a").is_file()
+    finally:
+        m.CARTELLA_TRASCRITTI = vecchio
+        sh.rmtree(tmp, ignore_errors=True)
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0
