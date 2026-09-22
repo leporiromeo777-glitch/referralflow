@@ -225,3 +225,17 @@ Da ricordare più del risultato: **il primo punteggio assolveva tutti e tre**, p
 | `prove-catastrofiche.py` caso 39 | saturazione come quota di campioni, picco non al fondo scala, coda parlata del dittafono fuori dal manifesto, troncamento che resta | 39/39 |
 | `verifica_integrita_audio` su toni sintetici | tono tagliato: 53,5% saturati, avviso · tono a -0,1 dB: 0%, nessun avviso | ok |
 | consolidatore sul DB (11 referti confermati) | flag per tipo (tabella in [[Proposte/Ultime]]) · dizionario: 27 voci, 9 tenute, 1 rimessa dalla segreteria, 2 dalla catena, 15 sparite · integrità dai log: picco 0 dB in 23/23 `.ds2`, coda parlata in 11/21 | vedi [[Decisioni/Registro]] |
+
+## Decisioni tarate sull'arbitro (stile Jev, in locale) — 23.9.2026
+
+`pipeline-referti/banco-decisioni.py` con i casi finti di `banco-arbitro.py` + `banco-decisioni-casi.py`: 65 divergenze arrivate all'arbitro (4 saltate dalle guardie), 55 decidibili e 10 indecidibili (atteso «incerto»). Modello locale della catena (Qwen 3.8 27B IQ4), 0 CHF. Esiti in `~/referti-dataset/banco-decisioni/2026-09-23-0001.json`.
+
+| Metodo | Giuste (su 55) | Sbagliate | Indecidibili decise come sicure | Taratura (ECE / Brier) | Tempo |
+|---|---|---|---|---|---|
+| arbitro di oggi (JSON a/b/incerto) | 49 | 4, senza alcun segnale | 9/10 | — | 14 s |
+| probabilità (una lettera, logprobs di Ollama) | 51 | 4, tutte con sicurezza fra 0,51 e 0,66 | 0/10 a 0,9 · 2/10 a 0,8 | 0,16 / 0,087 (0,14 senza scambio) | 19 s con scambio, ~10 s senza |
+| Laya multilingue 322M | 31 | 24 | 0/10 (non è mai sicuro) | 0,07 / 0,23 | 1,5 s |
+
+- Sopra la soglia di sicurezza: a 0,9 si decidono da sole 12 divergenze su 55, tutte giuste; a 0,8 se ne decidono 23, tutte giuste. Sono quasi tutte «resta la A» (con p ≥ 0,8 la B entra solo in 4–6 casi, contro le 13 sostituzioni dell'arbitro di oggi, 2 delle quali sbagliate).
+- La preferenza di posizione è trascurabile (−0,01): lo scambio fra A e B non serve e dimezza il tempo.
+- Il modello è sotto-sicuro (tutte giuste sopra 0,8): la taratura va rifatta sulle scelte vere della revisione.
