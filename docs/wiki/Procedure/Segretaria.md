@@ -44,6 +44,7 @@ Tutto ciò che fai nel wizard si **salva da solo**: puoi chiudere e riaprire sen
 ## 6. Confermare e scaricare il Word
 - **Conferma** quando il testo è quello definitivo. Da quel momento le tue correzioni vengono contate nel cruscotto «Qualità AI» (misura del lavoro umano, non un giudizio).
 - **Scarica il Word** in carta intestata: intestazione del medico che ha dettato, destinatario su più righe, data del dettato con la tua sigla. Se scarichi PRIMA di impaginare, ottieni il testo della revisione, non una lettera.
+- Il Word si scarica anche **senza aprire la revisione**: ogni bozza della pagina Referti, aperta o confermata, ha il suo tasto «Scarica Word» (dal 23.9.2026). Scarica il testo com'è salvato in quel momento: le correzioni non salvate della revisione aperta altrove non ci sono.
 - **Scarta** solo se il dettato non va lavorato; una bozza scartata si può ripristinare.
 
 ## 7. Ogni settimana (chi ha il ruolo admin)

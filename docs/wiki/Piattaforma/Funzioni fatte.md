@@ -1,11 +1,12 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-09-14
+aggiornata: 2026-09-23
 ---
 # Funzioni fatte (dalla più recente)
 
 Elenco di ciò che esiste. Per la catena dei referti vedi [[Catena/Panoramica]].
 
+- **«Scarica Word» su ogni bozza della pagina Referti** (2026-09-23): lo stesso Word della revisione (`/api/referti/docx/<id>`, carta intestata del medico, evento `word_scaricato`) senza aprire la revisione; «Detta dal telefono» porta alla pagina del dittafono dentro la piattaforma. v180.
 - **Agenda a settimana con filtri, moduli nascosti per studio, «Suggerisci una modifica»** (2026-09-14, migrazione 044): chiude il piano in 8 punti dal confronto con CardioOS ([[Proposte/CardioOS confronto per funzione]]).
 - **Medici invianti, chiamate di preparazione, personale con GLN/RCC/colore** (2026-09-14, migrazione 043): pagina invianti con referral a 12 mesi; «Da chiamare» in Home con esito registrato; colori dei medici in agenda; GLN/RCC nel CSV; personale senza accesso ([[Piattaforma/Prototipo stack]]).
 - **Catalogo delle prestazioni e pagina Prestazioni** (2026-09-14, migrazione 042): voci con tipo, durata, sala e parole chiave abbinate al motivo dell'agenda; catalogo in un clic dai percorsi; elenco di tutte le prestazioni con filtri ([[Piattaforma/Prototipo stack]]).
