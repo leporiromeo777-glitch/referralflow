@@ -30,8 +30,8 @@ export async function POST(req: NextRequest) {
   if (!/^[0-9a-f]{16}$/.test(fileId)) return NextResponse.json({ errore: 'file_id' }, { status: 400 });
   if (!TIPI_AUDIO[ext]) return NextResponse.json({ errore: 'formato_non_audio' }, { status: 400 });
 
-  const [bozza] = await query<{ id: string; tipo: string; medico: string | null }>(
-    `select id, tipo, payload->'medico'->>'id' as medico from referti_bozze
+  const [bozza] = await query<{ id: string; tipo: string; medico: string | null; creata: string }>(
+    `select id, tipo, payload->'medico'->>'id' as medico, created_at::text as creata from referti_bozze
       where studio_id = $1 and file_id = $2 order by created_at desc limit 1`,
     [studio.id, fileId]
   );
@@ -46,9 +46,12 @@ export async function POST(req: NextRequest) {
   if (ESTENSIONI_DITTAFONO.has(ext)) void wavDaDittafono(key, buffer);
   const medico = bozza.medico && RX_MEDICO_ID.test(bozza.medico) ? bozza.medico : null;
   const [row] = await query<{ id: string }>(
-    `insert into referti_audio (studio_id, filename, storage_key, content_type, stato, bozza_id, tipo, medico)
-     values ($1, $2, $3, $4, 'fatto', $5, $6, $7) returning id`,
-    [studio.id, `dettato${ext}`, key, TIPI_AUDIO[ext], bozza.id, bozza.tipo === 'visita' ? 'visita' : 'referto', medico]
+    // created_at = quello della bozza: l'audio è arrivato con lei. Con l'ora
+    // di adesso la coda lo prendeva per un ricaricamento dello stesso dettato
+    // e mostrava una scheda «Già dettato» per ogni bozza (visto il 23.9.2026).
+    `insert into referti_audio (studio_id, filename, storage_key, content_type, stato, bozza_id, tipo, medico, created_at, updated_at)
+     values ($1, $2, $3, $4, 'fatto', $5, $6, $7, $8::timestamptz, $8::timestamptz) returning id`,
+    [studio.id, `dettato${ext}`, key, TIPI_AUDIO[ext], bozza.id, bozza.tipo === 'visita' ? 'visita' : 'referto', medico, bozza.creata]
   );
   console.log(`[referti] audio della catena collegato: bozza ${bozza.id.slice(0, 8)}, ${buffer.length} byte`);
   return NextResponse.json({ esito: 'collegato', audio_id: row.id }, { status: 201 });
