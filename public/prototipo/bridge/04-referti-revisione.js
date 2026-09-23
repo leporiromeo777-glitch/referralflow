@@ -894,6 +894,11 @@ function rfAudioSetup(url, tracce) {
       if (prossima && RV.playing) { RF.audioEl = prossima.el; prossima.el.playbackRate = RV.speed || 1; try { prossima.el.currentTime = 0; } catch (e) { /* metadati */ } prossima.el.play().catch(() => { RV.playing = false; rvTick(); }); return; }
       RV.playing = false; if (typeof rvTick === 'function') rvTick();
     });
+    // Lo stato del tasto segue l'audio VERO (23.9.2026): se il file si ferma o
+    // riparte per conto suo (fine del tratto, sistema, cuffie), RV.playing non
+    // resta indietro e il clic successivo fa la cosa giusta.
+    a.addEventListener('play', () => { if (RF.audioEl === a && !RV.playing) { RV.playing = true; if (typeof rvTick === 'function') rvTick(); } });
+    a.addEventListener('pause', () => { if (RF.audioEl === a && RV.playing && !a.ended) { RV.playing = false; if (typeof rvTick === 'function') rvTick(); } });
     a.addEventListener('loadedmetadata', () => {
       if (isFinite(a.duration) && a.duration > 0) { tr.dur = a.duration; const tot = RF.tracce.reduce((m, x) => Math.max(m, x.offset + (x.dur || 0)), 0); if (tot > 0) { RV_AUDIO.dur = tot; RV_AUDIO.label = fmt(tot); } }
     });
@@ -917,9 +922,17 @@ rvPlay = function (from, to) {
   if (RF.audioEl !== tr.el) { RF.audioEl.pause(); RF.audioEl = tr.el; }
   RF.audioEl.playbackRate = RV.speed || 1;
   try { RF.audioEl.currentTime = tr.locale; } catch (e) { /* metadati non pronti */ }
-  RF.audioEl.play().catch(() => { RV.playing = false; toast('Audio non riproducibile'); rvTick(); });
+  // Una pausa premuta mentre l'audio sta ancora partendo interrompe play():
+  // non è un audio rotto, niente avviso.
+  RF.audioEl.play().catch(e => { RV.playing = false; if (!e || e.name !== 'AbortError') toast('Audio non riproducibile'); rvTick(); });
 };
 rvPause = function () { if (!RF.audioEl) return rfPauseOrig(); RF.audioEl.pause(); RV.playing = false; rvTick(); };
+// Play o pausa lo decide lo stato vero dell'audio, non quello ricordato.
+const rfToggleOrig = rvToggle;
+rvToggle = function () {
+  if (!RF.audioEl) return rfToggleOrig();
+  if (!RF.audioEl.paused || RV.playing) rvPause(); else rvPlay();
+};
 rvSeek = function (t, play) {
   if (!RF.audioEl) return rfSeekOrig(t, play);
   RV.t = Math.min(RV_AUDIO.dur || t, Math.max(0, t)); RV.detached = false;

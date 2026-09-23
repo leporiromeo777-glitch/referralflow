@@ -455,8 +455,13 @@ function rvTick() {
   const ph = document.getElementById('rv-ph');
   if (ph) ph.style.left = (RV.t / RV_AUDIO.dur * 100).toFixed(2) + '%';
   const t = document.getElementById('rv-t'); if (t) t.textContent = fmt(RV.t);
+  // Il tasto si ridisegna SOLO quando cambia stato (23.9.2026): prima lo si
+  // riscriveva a ogni aggiornamento dell'audio (~4 volte al secondo) e un clic
+  // che cadeva mentre l'icona veniva sostituita andava perso («a volte non
+  // si ferma»), soprattutto in Safari.
   const pb = document.getElementById('rv-play');
-  if (pb) pb.innerHTML = RV.playing ? `${ICONS.pause || ICONS.play} Pausa` : `${ICONS.play} Play`;
+  const stato = RV.playing ? 'pausa' : 'play';
+  if (pb && pb.dataset.stato !== stato) { pb.dataset.stato = stato; pb.innerHTML = RV.playing ? `${ICONS.pause || ICONS.play} Pausa` : `${ICONS.play} Play`; }
   const seg = rvSeg(RV.t);
   document.querySelectorAll('#rv-tr .tr').forEach(el => {
     const on = seg && el.dataset.seg === seg.id;
