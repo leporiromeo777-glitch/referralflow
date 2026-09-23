@@ -280,7 +280,7 @@ export function costruisciRevisione(ingresso: {
       why: `${o.motivo || 'Detto nell’audio, non trovato nel referto.'}${o.simile ? ` Forse è già nel referto come: «${o.simile}».` : ''}${o.fonte === 'modello' ? ' (vista dal modello)' : ''}`,
       audioTx: testo,
       add: { section: ultimaSezione, text: testo },
-      opts: [{ l: 'Aggiungi al referto', apply: null, note: 'in fondo, poi sposta' }, { l: 'Ignora', apply: null, note: 'resta solo nell’audio' }],
+      opts: [{ l: 'Aggiungi al referto', apply: null, note: 'nel punto del dettato in cui era' }, { l: 'Ignora', apply: null, note: 'resta solo nell’audio' }],
       preroll: 2,
     });
   }
@@ -322,8 +322,8 @@ export function costruisciRevisione(ingresso: {
     nuovo({
       cat: 'STRUCTURE', sev: 'suggestion', title: 'Tolta dalla catena: non era per il referto',
       span: null, now: frase, ev: aggancia(frase, transcript).ev, conf: 'likely',
-      why: `La catena ha lasciato fuori «${frase}» (${motivo}). Se invece va nel referto, rimettila in coda alla sezione.`,
-      opts: [{ l: 'Lascia fuori', apply: null, note: '' }, { l: 'Rimetti nel referto', apply: null, note: 'in coda all’ultima sezione' }],
+      why: `La catena ha lasciato fuori «${frase}» (${motivo}). Se invece va nel referto, rimettila: torna nel punto del dettato in cui era.`,
+      opts: [{ l: 'Lascia fuori', apply: null, note: '' }, { l: 'Rimetti nel referto', apply: null, note: 'nel punto del dettato in cui era' }],
       add: { section: ultimaSezione, text: frase },
       preroll: 1.5,
     });

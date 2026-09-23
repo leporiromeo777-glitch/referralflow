@@ -181,18 +181,22 @@ async function rfCaricaRevisione(id) {
 }
 /* Ricompone il testo dalle frasi: le frasi che iniziavano una riga (nl)
    restano a capo, le altre seguono sulla stessa riga; le sezioni (paragrafi)
-   restano separate da una riga vuota; le aggiunte vanno in coda alla sezione. */
+   restano separate da una riga vuota; le aggiunte vanno subito dopo la frase
+   indicata in «after» (il punto del dettato), le altre in coda alla sezione. */
 function rfTestoRicomposto() {
   const blocchi = [];
   for (const s of RV_REPORT) {
     let testo = '';
+    const aggiunte = RV.added.filter(x => x.section === s.code && x.text && x.text.trim());
+    const messe = new Set();
+    const metti = id => aggiunte.filter(a => a.after === id).forEach(a => { messe.add(a); testo += (testo ? ' ' : '') + a.text.trim(); });
+    metti('^');
     for (const p of s.parts) {
-      if (RV.removed[p.id]) continue;
-      const t = (RV.text[p.id] != null ? RV.text[p.id] : p.t).trim();
-      if (!t) continue;
-      testo += testo ? (p.nl ? '\n' : ' ') + t : t;
+      const t = RV.removed[p.id] ? '' : (RV.text[p.id] != null ? RV.text[p.id] : p.t).trim();
+      if (t) testo += testo ? (p.nl ? '\n' : ' ') + t : t;
+      metti(p.id);   // anche dopo una frase tolta: il punto resta quello
     }
-    for (const a of RV.added.filter(x => x.section === s.code)) if (a.text && a.text.trim()) testo += (testo ? '\n' : '') + a.text.trim();
+    for (const a of aggiunte) if (!messe.has(a)) testo += (testo ? '\n' : '') + a.text.trim();
     if (testo.trim()) blocchi.push(testo);
   }
   return blocchi.join('\n\n');
@@ -410,6 +414,41 @@ async function rfTracciaAggiungi(id, input) {
   input.value = '';
 }
 
+/* ---------- punto di rientro nel dettato (23.9.2026) ---------- */
+/* Richiesta dello studio: «Rimetti» deve rimettere la frase esattamente dove
+   la catena l'aveva tolta, non in coda. Il punto si ritrova dall'audio: il
+   momento in cui la frase è stata detta (le sue parole nella trascrizione con
+   i tempi, o il secondo già noto per le omissioni) e il momento di ogni frase
+   del referto; va subito dopo l'ultima frase detta prima. Null se non si
+   ritrova con sicurezza (meno di metà delle parole): allora si fa come prima. */
+function rfTokRientro(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').match(/[a-z0-9]{3,}/g) || []; }
+function rfTempoDi(testo, seg) {
+  const t = new Set(rfTokRientro(testo));
+  const w = (seg && Array.isArray(seg.w)) ? seg.w.find(([, x]) => t.has(rfTokRientro(x)[0])) : null;
+  return w ? w[0] : (seg ? seg.s : null);
+}
+function rfPuntoDiRientro(testo, secondo) {
+  const segs = typeof RV_TRANSCRIPT !== 'undefined' ? RV_TRANSCRIPT : [];
+  if (!segs.length || typeof RV_REPORT === 'undefined') return null;
+  let quando = typeof secondo === 'number' && secondo >= 0 ? secondo : null;
+  if (quando === null) {
+    const t = new Set(rfTokRientro(testo)); if (!t.size) return null;
+    let best = null, bp = 0;
+    for (const s of segs) { const ts = new Set(rfTokRientro(s.tx)); let c = 0; for (const w of t) if (ts.has(w)) c++; if (c / t.size > bp) { bp = c / t.size; best = s; } }
+    if (!best || bp < 0.5) return null;
+    quando = rfTempoDi(testo, best);
+  }
+  const perId = new Map(segs.map(s => [s.id, s]));
+  let dopo = null, tDopo = -1;
+  for (const sz of RV_REPORT) for (const p of sz.parts) {
+    const seg = p.src ? perId.get(p.src) : null; if (!seg) continue;
+    const tp = rfTempoDi(p.t, seg);
+    if (tp !== null && tp < quando && tp >= tDopo) { tDopo = tp; dopo = { section: RV.moved[p.id] || sz.code, after: p.id }; }
+  }
+  if (dopo) return dopo;
+  return RV_REPORT.length ? { section: RV_REPORT[0].code, after: '^' } : null;
+}
+
 /* ---------- note alla segretaria: «Rimetti nel referto» (19.9.2026) ---------- */
 // Si sceglie la sezione (la frase va in coda a quella), e la nota diventa una
 // frase aggiunta: entra nel testo ricomposto, nel salvataggio e nel Word come
@@ -422,14 +461,16 @@ function rfNotaRimetti(k) {
   const sezioni = (typeof RV_REPORT !== 'undefined' ? RV_REPORT : []).map(sz => ({ code: sz.code, label: sz.label }));
   if (!sezioni.length) { toast('Nessuna sezione in cui rimetterla'); return; }
   const ultima = sezioni[sezioni.length - 1].code;
+  const pos = rfPuntoDiRientro(testo);
   openModal('Rimetti nel referto', `<p style="margin:0 0 10px">${rfEsc(testo)}</p>
-    <div class="field"><label>In quale parte del referto</label><select class="input" id="rf-nota-sez">${sezioni.map(sz => `<option value="${rfEsc(sz.code)}" ${sz.code === ultima ? 'selected' : ''}>${rfEsc(sz.label)}</option>`).join('')}</select></div>
-    <p class="caption mt-8">La frase va in coda alla parte scelta, evidenziata come aggiunta a mano: da lì si può correggere o togliere come ogni altra.</p>`,
+    <div class="field"><label>Dove</label><select class="input" id="rf-nota-sez">${pos ? '<option value="__dettato" selected>Dove era nel dettato</option>' : ''}${sezioni.map(sz => `<option value="${rfEsc(sz.code)}" ${!pos && sz.code === ultima ? 'selected' : ''}>In coda a: ${rfEsc(sz.label)}</option>`).join('')}</select></div>
+    <p class="caption mt-8">${pos ? 'Torna esattamente nel punto del dettato da cui la catena l’aveva tolta.' : 'Il punto del dettato non si ritrova: la frase va in coda alla parte scelta.'} Resta evidenziata come aggiunta a mano: da lì si può correggere o togliere come ogni altra.</p>`,
     `<button class="btn" data-close>Annulla</button><button class="btn primary" id="rf-nota-ok">Rimetti</button>`);
   document.getElementById('rf-nota-ok').onclick = () => {
-    const sez = document.getElementById('rf-nota-sez').value || ultima;
+    const scelta = document.getElementById('rf-nota-sez').value || ultima;
+    const sez = scelta === '__dettato' && pos ? pos.section : scelta;
     RV.added = RV.added || [];
-    RV.added.push({ id: `nota-${k}-${Date.now()}`, section: sez, text: testo });
+    RV.added.push({ id: `nota-${k}-${Date.now()}`, section: sez, after: scelta === '__dettato' && pos ? pos.after : undefined, text: testo });
     RF.noteRimesse = RF.noteRimesse || new Set(); RF.noteRimesse.add(k);
     rvLog('NOTE_RESTORED', `nota ${k + 1} rimessa in ${sez}`);
     closeModal(); rvSave(); rvAfterRender();
@@ -731,8 +772,8 @@ function rfPennelloApplica() {
 
 
 /* ---------- frasi tolte dalla catena e note per la segreteria ---------- */
-/* «Rimetti nel referto» rimette la frase tolta in coda all'ultima sezione
-   (come un'omissione aggiunta); «Lascia fuori» la lascia fuori. Le note per
+/* «Rimetti nel referto» rimette la frase tolta nel punto del dettato da cui
+   era stata tolta (rfPuntoDiRientro; in coda all'ultima sezione se non si ritrova); «Lascia fuori» la lascia fuori. Le note per
    la segreteria (allega, invia, richiama…) stanno in una striscia sopra il
    testo: sono istruzioni, non testo del referto. */
 const rfChooseOrig = rvChoose;
@@ -740,7 +781,7 @@ rvChoose = function (k) {
   const i = typeof rvIssue === 'function' ? rvIssue() : null;
   if (RF.live && i && i.status === 'open' && i.cat === 'STRUCTURE' && i.add && i.opts && i.opts[k]) {
     const o = i.opts[k];
-    if (o.l === 'Rimetti nel referto') { RV.added.push({ id: 'add-' + i.id, section: i.add.section, text: i.add.text }); i.status = 'corrected'; i.resolution = 'rimessa nel referto'; RV.metrics.corrections++; rvLog('CORRECTION', i.id + ': frase tolta rimessa'); }
+    if (o.l === 'Rimetti nel referto') { const pos = rfPuntoDiRientro(i.add.text); RV.added.push({ id: 'add-' + i.id, section: (pos && pos.section) || i.add.section, after: pos ? pos.after : undefined, text: i.add.text }); i.status = 'corrected'; i.resolution = 'rimessa nel referto'; RV.metrics.corrections++; rvLog('CORRECTION', i.id + ': frase tolta rimessa'); }
     else { i.status = 'verified'; i.resolution = 'lasciata fuori'; rvLog('ISSUE_VERIFIED', i.id); }
     if (typeof rvAfterResolve === 'function') rvAfterResolve(i); else { rvSave(); rvAfterRender(); }
     return;

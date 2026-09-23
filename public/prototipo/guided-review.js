@@ -169,8 +169,13 @@ function rvRenderReport() {
     const parts = s.parts.filter(p => (RV.moved[p.id] || s.code) === s.code);
     const moved = RV_REPORT.flatMap(x => x.parts).filter(p => RV.moved[p.id] === s.code && !s.parts.includes(p));
     const added = RV.added.filter(a => a.section === s.code);
-    const body = [...parts, ...moved].map(p => rvPartHtml(p, s.code)).join(' ') +
-      added.map(a => ` <span class="rv-span edited" data-span="${a.id}" data-conf="human">${esc(a.text)}</span>`).join('');
+    // Un'aggiunta con «after» sta subito dopo quella frase («^» = in testa alla
+    // sezione): è il punto del dettato da cui era stata tolta. Le altre in coda.
+    const tutte = [...parts, ...moved];
+    const addHtml = a => ` <span class="rv-span edited" data-span="${a.id}" data-conf="human">${esc(a.text)}</span>`;
+    const dopoDi = id => added.filter(a => a.after === id).map(addHtml).join('');
+    const inCoda = added.filter(a => !a.after || (a.after !== '^' && !tutte.some(p => p.id === a.after)));
+    const body = dopoDi('^') + tutte.map(p => rvPartHtml(p, s.code) + dopoDi(p.id)).join(' ') + inCoda.map(addHtml).join('');
     return `<section class="rv-sec" data-sec="${s.code}"><h4>${s.label}</h4><p contenteditable="${RV.mode !== 'read'}" spellcheck="false" data-sec-body="${s.code}">${body || '<span class="caption">—</span>'}</p></section>`;
   }).join('');
   el.innerHTML = `
@@ -389,7 +394,7 @@ function rvChoose(k) {
   const o = i.opts[k]; if (!o) return;
   if (i.cat === 'OMISSION') {
     if (o.l === 'Ignora') { i.status = 'verified'; i.resolution = 'ignorata'; rvLog('ISSUE_IGNORED', i.id); }
-    else { RV.added.push({ id: 'add-' + i.id, section: i.add.section, text: i.add.text }); i.status = 'corrected'; i.resolution = 'aggiunta al referto'; RV.metrics.corrections++; rvLog('CORRECTION', i.id + ': omissione aggiunta'); }
+    else { const pos = typeof rfPuntoDiRientro === 'function' ? rfPuntoDiRientro(i.add.text, i.ev && i.ev.focus) : null; RV.added.push({ id: 'add-' + i.id, section: (pos && pos.section) || i.add.section, after: pos ? pos.after : undefined, text: i.add.text }); i.status = 'corrected'; i.resolution = 'aggiunta al referto'; RV.metrics.corrections++; rvLog('CORRECTION', i.id + ': omissione aggiunta'); }
   } else if (i.cat === 'STRUCTURE') {
     if (o.l.startsWith('Sposta')) { RV.moved[i.span] = 'followup'; i.status = 'corrected'; i.resolution = 'spostata in Follow-up'; RV.metrics.corrections++; }
     else { i.status = 'verified'; i.resolution = 'lasciata dov\'era'; }
