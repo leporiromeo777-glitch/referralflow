@@ -114,3 +114,13 @@ passato» delle guide non regge: arrivano 669 eventi.
 **Deciso**: il robot resta la fonte, il CalDAV non lo sostituisce. Resta utile come **recupero del
 passato** (la finestra del robot è corta) e come **controllo incrociato** se il robot si rompe.
 Vedi [[Decisioni/Registro]].
+
+## Scrittura via CalDAV: tecnicamente possibile (23.9.2026)
+Il server dichiara i metodi di scrittura e l'account del titolare ha permesso di scrittura sui
+calendari. Una prova su un calendario non clinico, con una data lontana, ha creato un evento e
+poi lo ha cancellato; il server salva ogni evento sotto il suo UID, non sotto il nome di file
+del client. Script: `scripts/prova-caldav-diritti.sh`, `scripts/prova-caldav-scrivi.sh`; gli
+indirizzi dei calendari stanno solo nel file locale delle credenziali, mai nel repo (pubblico).
+
+Da vedere ancora come appare un evento così a chi lavora in MediOnline (colore, visibilità).
+Serve un'agenda di prova visibile, da chiedere alla Cassa insieme a un utente dedicato.

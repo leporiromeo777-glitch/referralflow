@@ -231,3 +231,11 @@ più della finestra del robot: 669 eventi su una agenda) e fare da **controllo i
 robot si rompe. L'utente dello studio non ha l'autorizzazione per pubblicare le agende — la
 concede il titolare o il service desk della Cassa. Misure e dettagli in
 [[Piattaforma/Cassa dei Medici documenti e interfacce]].
+
+## 23.9.2026 — Scrivere in MediOnline si potrebbe; la regola «mai scrivere» resta
+Una prova sul CalDAV della Cassa ha mostrato che la scrittura funziona. Cade quindi la ragione
+tecnica della regola «la piattaforma non scrive mai in MediOnline». La regola però resta finché lo
+studio non la cambia: servono prima un utente dedicato (con l'account di un medico, ogni
+appuntamento risulterebbe creato da lui), un'agenda di prova visibile e dei limiti chiari (solo su
+gesto esplicito di una persona, con conferma, niente in blocco). Vedi
+[[Piattaforma/Cassa dei Medici documenti e interfacce]].
