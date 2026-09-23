@@ -19,7 +19,7 @@ export default async function Preparazioni({
 }) {
   const session = await getSession();
   if (!session) redirect('/login');
-  if (session.role !== 'admin') redirect('/');
+  if (session.role !== 'admin' && session.role !== 'tecnico') redirect('/');
 
   const preparazioni = await query<Prep>(
     'select id, nome, testo, attiva from preparazioni where studio_id = $1 order by nome',

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { costruisciRevisione } from '@/lib/prototipo-revisione';
+import { vietato } from '@/lib/permessi';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +12,8 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'reports');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   const righe = await query<{
     id: string; stato: string; tipo: string; created_at: string; testo_finale: string | null; payload: any; campi_confermati: any;
   }>(

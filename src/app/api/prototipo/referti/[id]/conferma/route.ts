@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
 import { confermaBozzaCore } from '@/lib/referti-conferma';
+import { vietato } from '@/lib/permessi';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,11 +11,13 @@ export const dynamic = 'force-dynamic';
 // piattaforma (gate con presa d'atto, audit, misura, suggerimenti, evento).
 // I campi confermati sono quelli già in bozza (confermati, o estratti dalla
 // catena), eventualmente corretti nel corpo della richiesta.
-const RUOLI_AMMESSI = new Set(['segretaria', 'medico', 'admin']);
+const RUOLI_AMMESSI = new Set(['segretaria', 'medico', 'admin', 'tecnico']);
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'reports');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   if (!RUOLI_AMMESSI.has(session.role)) return NextResponse.json({ errore: 'ruolo_non_ammesso' }, { status: 403 });
   if (!isUuid(params.id)) return NextResponse.json({ errore: 'non_trovato' }, { status: 404 });
   const corpo = await req.json().catch(() => null);

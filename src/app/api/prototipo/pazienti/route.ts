@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { analizzaCsvPazienti, CAMPI_ANAGRAFICA, validaAnagrafica, type Anagrafica } from '@/lib/pazienti-import';
+import { vietato } from '@/lib/permessi';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +31,8 @@ async function inserisci(studioId: string, a: Anagrafica): Promise<string> {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'patients');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   const sid = session.studioId;
   const c = await req.json().catch(() => null);
   const azione = String(c?.azione ?? '');

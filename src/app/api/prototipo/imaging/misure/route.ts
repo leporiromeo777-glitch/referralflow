@@ -6,6 +6,7 @@ import { pianoVirtuale } from '@/lib/imaging-serie';
 import type { GeometriaSerie } from '@/lib/imaging-misura';
 import { isUuid } from '@/lib/cartella';
 import { mse, puntoValido, cautionValidati, versioneSoftware, verificaIndipendente, tolleranzaVerifica, type Calibrazione, type Geometria, type Punto } from '@/lib/imaging-misura';
+import { vietato } from '@/lib/permessi';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,6 +30,8 @@ const VEDE = new Set(['segretaria', 'medico', 'admin', 'assistente']);
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'imaging');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   if (!MISURA.has(session.role)) return NextResponse.json({ errore: 'ruolo_non_ammesso' }, { status: 403 });
   const sid = session.studioId;
   let corpo: any = {};
@@ -283,6 +286,8 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'imaging');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   if (!VEDE.has(session.role)) return NextResponse.json({ errore: 'ruolo_non_ammesso' }, { status: 403 });
 
   const righe = await query<{

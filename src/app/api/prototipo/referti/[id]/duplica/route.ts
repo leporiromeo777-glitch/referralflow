@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { query, transazione } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
 import { registraEvento } from '@/lib/referti-eventi';
+import { vietato } from '@/lib/permessi';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,11 +22,13 @@ export const dynamic = 'force-dynamic';
 // metà. L'originale non viene toccato — anche se è già confermato, che è
 // il caso più comune: ci si accorge del secondo paziente dopo aver
 // firmato il primo.
-const RUOLI_AMMESSI = new Set(['segretaria', 'medico', 'admin']);
+const RUOLI_AMMESSI = new Set(['segretaria', 'medico', 'admin', 'tecnico']);
 
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'reports');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   if (!RUOLI_AMMESSI.has(session.role)) return NextResponse.json({ errore: 'ruolo_non_ammesso' }, { status: 403 });
   if (!isUuid(params.id)) return NextResponse.json({ errore: 'non_trovato' }, { status: 404 });
   const sid = session.studioId;

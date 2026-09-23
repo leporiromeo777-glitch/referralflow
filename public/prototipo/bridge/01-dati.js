@@ -69,12 +69,13 @@ async function rfCaricaDati() {
   // vince su qualunque aggiunta fatta al caricamento dello script.
   const nav = ['home', 'agenda', 'visite', 'richiami', 'sale', 'prestazioni', 'patients', 'invianti', 'percorsi', 'reports', 'dittafono', 'converti', 'documents', 'imaging', 'moduli', 'anonymize', 'inbox', 'ai', 'fatturazione', 'administration'];
   const nascosti = new Set(Array.isArray(RF.data.moduli_nascosti) ? RF.data.moduli_nascosti : []);
-  // Chi vede che cosa: «Da fatturare» è di segreteria e amministrazione; le
-  // immagini sono dati sanitari e le vede chi cura, non il tecnico — come per
-  // la scheda del paziente. La rotta dice già di no, ma una voce di menu che
-  // risponde «non ti è permesso» è una voce di menu scritta male.
-  const soloRuoli = { fatturazione: ['secretary', 'org_admin'], imaging: ['secretary', 'assistant', 'doctor', 'org_admin'], converti: ['secretary', 'assistant', 'doctor', 'org_admin'] };
-  for (const k of Object.keys(NAV)) NAV[k] = nav.filter(v => (!soloRuoli[v] || soloRuoli[v].includes(k)) && (!nascosti.has(v) || v === 'home' || v === 'administration'));
+  // Chi vede che cosa (23.9.2026): le sezioni del ruolo arrivano dal server
+  // (src/lib/permessi.ts, la stessa tabella che blocca le rotte). Una voce di
+  // menu che risponde «non ti è permesso» è una voce di menu scritta male.
+  const sezioni = new Set(Array.isArray(RF.data.sezioni) ? RF.data.sezioni : nav);
+  for (const k of Object.keys(NAV)) NAV[k] = nav.filter(v => (v === 'home' || sezioni.has(v)) && (!nascosti.has(v) || v === 'home' || v === 'administration'));
+  // La pagina aperta prima che arrivassero i permessi: se non è del ruolo, home.
+  if (!rfRottaPermessa(state.route)) { try { history.replaceState(null, '', '#/home'); } catch (e) { /* niente */ } state.route = 'home'; state.params = {}; }
   render();
 }
 
@@ -193,6 +194,25 @@ body:has(#app.rf-modo-accesso){background:#eef2f7}
 .rf-trust li{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--a-ink);background:var(--a-surface);border:1px solid var(--a-line-strong);border-radius:999px;padding:6px 12px}
 .rf-trust li span{font-size:15px;line-height:1}
 `; document.head.appendChild(st); })();
+
+/* ---------- sezioni non del proprio ruolo (23.9.2026) ---------- */
+/* Chi apre a mano l'indirizzo di una sezione non sua torna alla home (il
+   server risponderebbe comunque 403). Rotte senza sezione (home, profilo…)
+   sempre aperte. */
+const RF_SEZIONE_ROTTA = { agenda: 'agenda', visite: 'visite', richiami: 'richiami', sale: 'sale', prestazioni: 'prestazioni', patients: 'patients', patient: 'patients', invianti: 'invianti', percorsi: 'percorsi', reports: 'reports', report: 'reports', review: 'reports', dittafono: 'dittafono', converti: 'converti', documents: 'documents', imaging: 'imaging', moduli: 'moduli', anonymize: 'anonymize', inbox: 'inbox', tasks: 'inbox', ai: 'ai', fatturazione: 'fatturazione', administration: 'administration' };
+function rfRottaPermessa(route) {
+  if (!RF.live || !RF.data || !Array.isArray(RF.data.sezioni)) return true;
+  const sez = RF_SEZIONE_ROTTA[route];
+  return !sez || RF.data.sezioni.includes(sez);
+}
+const rfParseHashOrig = parseHash;
+parseHash = function () {
+  const r = rfParseHashOrig();
+  if (rfRottaPermessa(r.route)) return r;
+  try { history.replaceState(null, '', '#/home'); } catch (e) { /* niente */ }
+  if (typeof toast === 'function') toast('Questa sezione non fa parte del tuo ruolo');
+  return { route: 'home', params: {} };
+};
 
 /* ---------- barra laterale: conteggi veri ---------- */
 const rfRenderSidebarOrig = renderSidebar;

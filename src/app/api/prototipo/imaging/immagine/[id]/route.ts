@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
 import { fotogrammaPng } from '@/lib/imaging';
+import { vietato } from '@/lib/permessi';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,8 @@ const RUOLI = new Set(['segretaria', 'medico', 'admin', 'assistente']);
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session || !session.studioId) return new NextResponse('non autorizzato', { status: 401 });
+  const nonPermesso = vietato(session.role, 'imaging');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   if (!RUOLI.has(session.role)) return new NextResponse('non autorizzato', { status: 403 });
   if (!isUuid(params.id)) return new NextResponse('non trovato', { status: 404 });
 

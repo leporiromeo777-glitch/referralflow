@@ -6,7 +6,7 @@
 // procedura X»). Puro, testato in `prove-registro.test.ts`. Le espressioni
 // sono stringhe compatibili con JavaScript e TypeScript: vanno bene da
 // entrambe le parti. Il modello non sceglie qui: sceglie il codice.
-export type RuoloProto = 'secretary' | 'doctor' | 'org_admin';
+export type RuoloProto = 'secretary' | 'doctor' | 'org_admin' | 'tech_admin';
 export type InputProcedura = 'nessuno' | 'paziente' | 'bozza';
 
 export type ProceduraDef = {
@@ -36,7 +36,7 @@ export const PROCEDURE: ProceduraDef[] = [
   {
     nome: 'briefing_previsita', titolo: 'Briefing pre-visita',
     descrizione: 'Che cosa sapere prima di ricevere un paziente: referral, questionario, ultimo referto e terapia, esami recenti (ECG entro 12 mesi, eco entro 24), agenda, sospesi. Il modello locale scrive solo la sintesi.',
-    ruoli: ['secretary', 'doctor', 'org_admin'], input: 'paziente', parametri: [],
+    ruoli: ['secretary', 'doctor', 'org_admin', 'tech_admin'], input: 'paziente', parametri: [],
     dati: ['referrals', 'questionario', 'referti_bozze', 'patient_documents', 'appointments'], produce: 'sezioni con fonte, mancanze, fatti nel grafo, traccia', modello: true,
     frasi: ['briefing', 'prepar(a|ami|are|azione)( la| alla| della| per la)? visita', 'prima della visita', 'cosa (devo|dobbiamo) sapere (su|di|prima)', '(riassunto|sintesi) (del |della )?(paziente|cartella)', 'prossimo paziente.*(prepar|brief)'],
     parole: ['briefing', 'brief', 'prepar', 'visita', 'sapere', 'riassunt', 'sintesi', 'cartella', 'arriva', 'ricev'],
@@ -46,7 +46,7 @@ export const PROCEDURE: ProceduraDef[] = [
   {
     nome: 'preparazione_giornata', titolo: 'Preparazione della giornata',
     descrizione: 'Il briefing di ogni paziente in agenda nel giorno, con tutte le mancanze in cima e i pazienti non in cartella segnalati.',
-    ruoli: ['secretary', 'doctor', 'org_admin'], input: 'nessuno', parametri: ['giorno'],
+    ruoli: ['secretary', 'doctor', 'org_admin', 'tech_admin'], input: 'nessuno', parametri: ['giorno'],
     dati: ['appointments', 'patients', 'briefing di ciascuno'], produce: 'da segnalare + un blocco per appuntamento, traccia', modello: false,
     frasi: ['prepar(a|ami|are|azione)( la| della| mia)? giornata', 'briefing (di|per) (tutti|oggi|la giornata)', 'tutti i pazienti di oggi', 'giornata di oggi', 'prepara oggi'],
     parole: ['giornata', 'oggi', 'tutti', 'agenda', 'prepar', 'mattina', 'pazienti'],
@@ -56,7 +56,7 @@ export const PROCEDURE: ProceduraDef[] = [
   {
     nome: 'cambiamenti_ultima_visita', titolo: 'Cosa è cambiato dall’ultima visita',
     descrizione: 'Misure riconosciute e terapia a confronto tra gli ultimi due referti confermati del paziente.',
-    ruoli: ['secretary', 'doctor', 'org_admin'], input: 'paziente', parametri: [],
+    ruoli: ['secretary', 'doctor', 'org_admin', 'tech_admin'], input: 'paziente', parametri: [],
     dati: ['referti_bozze (confermati)'], produce: 'misure cambiate/invariate, terapia nuova/modificata/tolta, traccia', modello: false,
     frasi: ['cosa (è|e\') cambiat', 'cos\'è cambiat', 'differenz', 'confront.*(ultim|preced)', 'rispetto all.ultima', 'dall.ultima visita'],
     parole: ['cambiat', 'differenz', 'confront', 'preced', 'ultima', 'evoluz', 'variaz', 'peggior', 'miglior', 'andament', 'rispetto', 'prima', 'terapia'],
@@ -66,7 +66,7 @@ export const PROCEDURE: ProceduraDef[] = [
   {
     nome: 'richiami_mese', titolo: 'Richiami del mese',
     descrizione: 'Richiami aperti entro 30 giorni: scaduti, questa settimana, nel resto del mese; quanti fatti nell’ultimo mese.',
-    ruoli: ['secretary', 'doctor', 'org_admin'], input: 'nessuno', parametri: [],
+    ruoli: ['secretary', 'doctor', 'org_admin', 'tech_admin'], input: 'nessuno', parametri: [],
     dati: ['referrals (follow_up)', 'appointments (follow_up)'], produce: 'tre liste con fonte, traccia', modello: false,
     frasi: ['richiami (del|di questo|in scadenza|prossim|del prossimo)', 'chi (devo|dobbiamo|va) (ri)?chiam', 'da richiamare'],
     parole: ['richiam', 'scadenz', 'chiamare', 'follow', 'controlli', 'scadut'],
@@ -76,7 +76,7 @@ export const PROCEDURE: ProceduraDef[] = [
   {
     nome: 'controllo_prefirma', titolo: 'Controllo prima della firma',
     descrizione: 'Dieci controlli sulla bozza: stato, verifica della catena, fiducia, critiche chiuse, numeri, terapia, campi, testo, lettera precedente. Verdetto in una riga. Non sostituisce la conferma nella piattaforma.',
-    ruoli: ['secretary', 'doctor', 'org_admin'], input: 'bozza', parametri: [],
+    ruoli: ['secretary', 'doctor', 'org_admin', 'tech_admin'], input: 'bozza', parametri: [],
     dati: ['referti_bozze', 'revisione_stato', 'referti_eventi'], produce: 'lista dei controlli con esito, verdetto, traccia', modello: false,
     frasi: ['prima della firma', 'pronto per la firma', 'posso firmar', 'si può firmar', 'controllo (pre|prima)', 'controlla (il|questo) referto', 'manca (qualcosa|niente) (per|prima)'],
     parole: ['firma', 'firmare', 'pronto', 'controllo', 'conferm', 'bozza', 'manca', 'referto', 'sigla'],
@@ -86,7 +86,7 @@ export const PROCEDURE: ProceduraDef[] = [
   {
     nome: 'lettere_ritardo', titolo: 'Lettere in ritardo',
     descrizione: 'Referti confermati senza Word prodotto da 3 giorni, bozze ferme da 7, referral viste da 10 giorni senza referto inviato.',
-    ruoli: ['secretary', 'doctor', 'org_admin'], input: 'nessuno', parametri: [],
+    ruoli: ['secretary', 'doctor', 'org_admin', 'tech_admin'], input: 'nessuno', parametri: [],
     dati: ['referti_bozze', 'referti_eventi (word_scaricato)', 'referrals (vista)'], produce: 'tre liste con fonte, traccia', modello: false,
     frasi: ['letter[ae] in ritardo', 'referti (confermati )?senza word', 'word non (scaricat|prodott)', 'bozze ferme', 'in ritardo con (le lettere|i referti)', 'lettere da (mandare|spedire|inviare)'],
     parole: ['letter', 'ritardo', 'word', 'spedi', 'manda', 'invia', 'ferme', 'arretrat', 'sospes'],
@@ -96,7 +96,7 @@ export const PROCEDURE: ProceduraDef[] = [
   {
     nome: 'chiusura_mensile', titolo: 'Chiusura mensile',
     descrizione: 'I numeri del mese (referti, referral, richiami, cartella, assistente) e i punti ancora aperti. Solo conteggi e id.',
-    ruoli: ['secretary', 'doctor', 'org_admin'], input: 'nessuno', parametri: ['mese'],
+    ruoli: ['secretary', 'doctor', 'org_admin', 'tech_admin'], input: 'nessuno', parametri: ['mese'],
     dati: ['referti_bozze', 'referrals', 'appointments', 'patient_documents', 'assistente_tracce', 'referti_dizionario'], produce: 'cinque sezioni di numeri, punti aperti, traccia', modello: false,
     frasi: ['chiusura (mensile|del mese|di [a-z]+)', 'chiud(i|ere) il mese', 'bilancio del mese', 'numeri del mese', 'com.è andato il mese', 'resoconto (mensile|del mese)'],
     parole: ['chiusura', 'mese', 'mensile', 'bilancio', 'numeri', 'resoconto', 'statistic', 'andato', 'riepilog'],

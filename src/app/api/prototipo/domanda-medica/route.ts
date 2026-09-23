@@ -48,7 +48,7 @@ function log(m: string) {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
-  if (!['medico', 'admin'].includes(session.role)) {
+  if (!['medico', 'admin', 'tecnico'].includes(session.role)) {
     return NextResponse.json({ errore: 'Le domande di medicina le fa il medico.' }, { status: 403 });
   }
   const corpo = await req.json().catch(() => null);

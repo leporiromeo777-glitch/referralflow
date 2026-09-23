@@ -208,3 +208,6 @@ Deciso con l'utente: la tappa entra **in ombra** (scrive le probabilità sui pun
 
 ## 23.9.2026 — Cartella condivisa dei dettati
 Richiesta dello studio: una cartella in cui caricare molti audio insieme, anche da computer Windows, che entrino nella catena uno alla volta e a lavoro finito passino in un'altra cartella. **Deciso**: la fa il servizio stesso, non un programma a parte (una sola coda, stesse guardie): un audio per volta e solo a catena libera, a copia finita; medico dalla sottocartella; originale in «In lavorazione» e poi in «Audio trascritti» o «Non riusciti»; nomi dei file mai nel log. La condivisione è SMB del Mac nella rete dello studio: nessun servizio cloud. Vedi [[Catena/Panoramica]].
+
+## 23.9.2026 — Ogni ruolo vede il suo lavoro; il tecnico vede tutto
+Richiesta dello studio: accessi limitati per ruolo e home diverse. Proposta una tabella per sezione e accettata con una correzione: **il tecnico è chi amministra la piattaforma e vede tutto**, dati clinici compresi (supera la scelta del 16.9 che gli dava schede ridotte). La tabella sta in un posto solo (`src/lib/permessi.ts`) e comanda menu, rotte del server e pagine vecchie: nascondere una voce senza bloccare la rotta non è una protezione. Resta aperto: un account per ogni cardiologo, perché la home del medico possa dire «i tuoi pazienti». Vedi [[Piattaforma/Accessi e ruoli]].

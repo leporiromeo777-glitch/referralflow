@@ -240,3 +240,11 @@ Da ricordare più del risultato: **il primo punteggio assolveva tutti e tre**, p
 - La preferenza di posizione è trascurabile (−0,01): lo scambio fra A e B non serve e dimezza il tempo.
 - Il modello è sotto-sicuro (tutte giuste sopra 0,8): la taratura va rifatta sulle scelte vere della revisione.
 - **A gruppi, com'è in catena** (`decisioni_tarate`, 15 punti per chiamata, ordine mescolato): 50/55 giuste, ECE 0,071, Brier 0,065, 4,6 s a punto (esiti `2026-09-23-0034.json`). A 0,9 decide da sole 42/55, tutte giuste, ma prende per sicuri 5 indecidibili su 10 (0,99: 27/55 giuste, 1/10): si fida troppo della A anche su amiodarone/dronedarone, sospeso/ripreso, destra/sinistra. Da qui la regola in [[Catena/Arbitro]]: confermare la B sì, nascondere segnalazioni no.
+
+## Accessi per ruolo — 23.9.2026
+
+| Banco | Che cosa | Esito |
+|---|---|---|
+| `src/lib/prove-permessi.test.ts` | tecnico tutto, amministrazione senza dittafono, chi cura senza fatture/invianti/amministrazione, aiuto medico senza referti, ruoli sconosciuti senza niente, `vietato` | 3/3 |
+| `npm run test:e2e`, blocco «chi vede che cosa» (DB demo) | sezioni dal server: medico 13, aiuto medico 12, segreteria 17, amministrazione 18, tecnico 19; 403 su fatturazione (medico) e referti (aiuto medico) | TUTTO OK |
+| browser sul DB demo | home del medico, dell'aiuto medico e del tecnico; indirizzo di una sezione vietata → home; API 403 | ok |

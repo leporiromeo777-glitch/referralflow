@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { anonimizza, TESTO_MAX } from '@/lib/anonimizza';
 import { query } from '@/lib/db';
+import { vietato } from '@/lib/permessi';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,11 +19,13 @@ export const dynamic = 'force-dynamic';
 // senso della pagina (`anonimizzazioni`, migrazioni 053 e 054).
 const QUANTI_TESTI = 5;
 const FILE_MAX = 10 * 1024 * 1024;
-const RUOLI_AMMESSI = new Set(['segretaria', 'medico', 'admin']);
+const RUOLI_AMMESSI = new Set(['segretaria', 'medico', 'admin', 'tecnico']);
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'anonymize');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   if (!RUOLI_AMMESSI.has(session.role)) return NextResponse.json({ errore: 'ruolo_non_ammesso' }, { status: 403 });
   let testo = '';
   let origine = 'testo';
@@ -107,6 +110,8 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'anonymize');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   if (!RUOLI_AMMESSI.has(session.role)) return NextResponse.json({ errore: 'ruolo_non_ammesso' }, { status: 403 });
 
   const id = req.nextUrl.searchParams.get('id');

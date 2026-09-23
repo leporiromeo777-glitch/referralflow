@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { caricaModuli, validaCompilazione } from '@/lib/moduli';
+import { vietato } from '@/lib/permessi';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,8 @@ const isUuid = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-
 export async function GET() {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'moduli');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   const moduli = caricaModuli();
   const compilazioni = await query<{ id: string; modulo: string; codice: string; titolo: string; patient_id: string | null; paziente: string | null; da: string | null; completo: boolean; created_at: string; updated_at: string }>(
     `select c.id, c.modulo, c.codice, c.titolo, c.patient_id, p.cognome || ' ' || p.nome as paziente, split_part(u.email, '@', 1) as da, c.completo, c.created_at::text, c.updated_at::text
@@ -25,6 +28,8 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'moduli');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   const c = await req.json().catch(() => null);
   const modulo = caricaModuli().find((m) => m.id === String(c?.modulo ?? ''));
   if (!modulo) return NextResponse.json({ errore: 'Modulo sconosciuto.' }, { status: 400 });

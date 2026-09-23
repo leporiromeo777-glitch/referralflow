@@ -10,6 +10,7 @@ import { agendaEsclusa, agendeFuoriPiano, assegnaVisite, capienza, deduciMedici,
 import type { ModificaSala, RigaPiano } from '@/lib/sale';
 import { abbinaPrestazioneAgenda, tipoDaTesto, type VoceCatalogo } from '@/lib/prestazioni';
 import { lettereRitardoGrezzo } from '@/lib/procedure';
+import { sezioniDi, puo } from '@/lib/permessi';
 
 export const dynamic = 'force-dynamic';
 
@@ -477,7 +478,10 @@ export async function GET() {
   // Questa GET consegnava a chiunque avesse una sessione l'anagrafica clinica
   // di 500 pazienti — mentre a quello stesso tecnico la rotta «procedura»
   // nega il briefing di UN paziente solo.
-  const clinico = session.role !== 'tecnico';
+  // Dal 23.9.2026 il tecnico è chi amministra tutta la piattaforma e vede
+  // tutto (decisione dello studio, Piattaforma/Accessi e ruoli): niente più
+  // schede ridotte. Chi vede che cosa sta in src/lib/permessi.ts.
+  const clinico = true;
   const pazientiFuori = clinico ? patients : patients.map((p) => ({
     ...p, avs: '', n_assicurato: '', terapia: [], terapiaDa: '', fatti: [], indicazione: '',
     referrals: (p.referrals ?? []).map((r: any) => ({ ...r, quesito: '' })),
@@ -485,7 +489,10 @@ export async function GET() {
 
   return NextResponse.json({
     utente: { role: RUOLO[session.role] ?? 'secretary', name: nome, initials: iniz, studio: session.studioNome, email: session.email },
-    today, doctors, patients: pazientiFuori, appts: apptsOggi, agenda, tasks, reports, documents, inbox, audioInbox, stats, sale, agendeMedico, ruoliMedici, pianoSale: piano, capienzaSale: { ...cap, stanze: sale.length },
+    // Sezioni del ruolo (permessi.ts): il menu si costruisce da qui; la coda
+    // dei referti non parte verso chi non ha la sezione Referti.
+    sezioni: sezioniDi(session.role),
+    today, doctors, patients: pazientiFuori, appts: apptsOggi, agenda, tasks, reports: puo(session.role, 'reports') ? reports : [], documents, inbox, audioInbox, stats, sale, agendeMedico, ruoliMedici, pianoSale: piano, capienzaSale: { ...cap, stanze: sale.length },
     risorse: risorse.map((r) => ({ id: r.id, tipo: r.tipo, nome: r.nome, posti: r.posti })),
     catalogo, coloriMedici, daChiamare, moduli_nascosti: stud?.moduli_nascosti ?? [],
   });

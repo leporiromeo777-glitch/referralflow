@@ -1,6 +1,6 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-09-16
+aggiornata: 2026-09-23
 ---
 # Accessi e ruoli
 
@@ -29,4 +29,19 @@ Negli stessi ruoli esiste anche la [[Piattaforma/Demo pubblica]], con una passwo
 
 **Un account per funzione non è un account per persona.** Finché i cinque cardiologi entrano tutti da `medico@`, la pagina Visite non può dire «i *tuoi* pazienti» senza chiederlo, e il registro dice «un medico», non quale. Il passo successivo è un utente per ogni cardiologo, collegato al suo `providers.user_id`: da lì la domanda «chi sei?» sparisce da sola e ogni gesto ha un nome.
 
-Nel frattempo il menu è quasi lo stesso per tutti: nell'interfaccia nuova le voci vengono decise a runtime (`rfCaricaDati`) e differiscono solo per «Da fatturare». Dare a ogni ruolo il suo menu è una riga di codice e una decisione dello studio: chi deve vedere che cosa.
+## Chi vede che cosa (23.9.2026)
+Decisione dello studio: ogni ruolo vede le sezioni del suo lavoro e ha la sua home. **Il tecnico vede tutto**: è chi amministra la piattaforma (fino al 22.9 era tenuto fuori dai dati clinici; decisione cambiata dallo studio). Una tabella sola, `src/lib/permessi.ts`, usata da tre posti: il menu (le sezioni arrivano con `/api/prototipo/dati` → `sezioni`), le rotte del server (`vietato(ruolo, sezione)` → 403 in 25 rotte di `/api/prototipo/`) e il middleware per le pagine della vecchia interfaccia. Chi apre a mano l'indirizzo di una sezione non sua torna alla home.
+
+| sezione | medico | aiuto medico | segreteria | amministrazione | tecnico |
+|---|---|---|---|---|---|
+| Agenda, Visite, Richiami, Sale, Pazienti, Percorsi, Documenti, Moduli, Immagini, Attività, Cleo | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Referti | ✅ | — | ✅ | ✅ | ✅ |
+| Dittafono | ✅ | ✅ | — | — | ✅ |
+| Prestazioni, Invianti, Converti audio, Anonimizzazione, Da fatturare | — | — | ✅ | ✅ | ✅ |
+| Amministrazione | — | — | — | ✅ | ✅ |
+
+Le regole più fini delle singole rotte restano: misurare sulle immagini è di medico, aiuto medico e amministrazione (il righello è un dispositivo in-house con i suoi utenti previsti: il tecnico guarda, non misura); modificare lo Studio e le impostazioni è di amministrazione e tecnico.
+
+**Home per ruolo** (`PAGES.home` nel ponte, stessi blocchi composti diversamente): medico «La tua giornata» (prossimo paziente, visti da dettare → Dittafono, referti, richiami, cose da fare, sale); aiuto medico «Le sale e i pazienti di oggi» (sale, accoglienza, prossimo paziente); segreteria «La giornata dello studio» (tutti i numeri, cose da fare, accoglienza); amministrazione «Lo studio oggi» (numeri, Da fatturare, Amministrazione); tecnico «Tutta la piattaforma». Le caselle e i tasti verso sezioni non del ruolo non compaiono.
+
+Prove: `src/lib/prove-permessi.test.ts` e il blocco «chi vede che cosa» di `npm run test:e2e` (menu e 403 ruolo per ruolo sul database demo).

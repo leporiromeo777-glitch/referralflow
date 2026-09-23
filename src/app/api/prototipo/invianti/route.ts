@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
+import { vietato } from '@/lib/permessi';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,8 @@ function dCh(iso: string | null | undefined): string {
 export async function GET() {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'invianti');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   const sid = session.studioId;
   const invianti = await query<{ id: string; nome: string; studio: string | null; email: string | null; telefono: string | null; hin: string | null; n_12m: number; n_tot: number; ultimo: string | null }>(
     `select d.id, d.nome, d.studio, d.email, d.telefono, d.hin_address as hin,
@@ -41,6 +44,8 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'invianti');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   const c = await req.json().catch(() => null);
   const s = (v: unknown, max = 160) => String(v ?? '').trim().slice(0, max);
   const nome = s(c?.nome, 120);

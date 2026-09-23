@@ -5,6 +5,7 @@ import { isUuid } from '@/lib/cartella';
 import { costruisciRevisione } from '@/lib/prototipo-revisione';
 import { formatoPerBozza } from '@/lib/referti-medici';
 import { rilevaRichiamo } from '@/lib/referti-richiami';
+import { vietato } from '@/lib/permessi';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,8 @@ export const dynamic = 'force-dynamic';
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'reports');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   if (!isUuid(params.id)) return NextResponse.json({ errore: 'non_trovato' }, { status: 404 });
   const [b] = await query<{
     id: string; stato: string; tipo: string; created_at: string; testo_finale: string | null; payload: any; campi_confermati: any; audio_id: string | null;

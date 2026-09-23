@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
 import { registraEvento, impronta } from '@/lib/referti-eventi';
+import { vietato } from '@/lib/permessi';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,13 +16,15 @@ export const dynamic = 'force-dynamic';
 // 16.9 esistono anche `assistente` e `tecnico` ([[Piattaforma/Accessi e
 // ruoli]]) e qui mancava il cancello che i due fratelli — conferma e
 // richiamo — hanno sempre avuto.
-const RUOLI_AMMESSI = new Set(['segretaria', 'medico', 'admin']);
+const RUOLI_AMMESSI = new Set(['segretaria', 'medico', 'admin', 'tecnico']);
 const MAX_TESTO = 200_000;
 const MAX_STATO = 300_000;
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'reports');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   if (!RUOLI_AMMESSI.has(session.role)) return NextResponse.json({ errore: 'ruolo_non_ammesso' }, { status: 403 });
   if (!isUuid(params.id)) return NextResponse.json({ errore: 'non_trovato' }, { status: 404 });
   const corpo = await req.json().catch(() => null);

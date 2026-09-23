@@ -14,6 +14,7 @@ async function vincoliDelleSale(): Promise<SoloIn[]> {
   } catch { return []; }
 }
 import { preparaPianoSale, statoLavoro } from '@/lib/piano-sale';
+import { vietato } from '@/lib/permessi';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,12 +33,16 @@ const ORA = /^\d{2}:\d{2}$/;
 export async function GET() {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'sale');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   return NextResponse.json({ lavoro: statoLavoro(session.studioId) }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'sale');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   const c = await req.json().catch(() => null);
   const azione = String(c?.azione ?? '');
 

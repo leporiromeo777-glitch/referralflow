@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
+import { puo, type Sezione } from '@/lib/permessi';
+
+// Pagine della vecchia interfaccia, ancora raggiungibili scrivendo l'indirizzo:
+// stessa tabella dei permessi dell'interfaccia nuova (23.9.2026).
+const SEZIONE_PAGINA: [string, Sezione][] = [
+  ['/referti', 'reports'], ['/pazienti', 'patients'], ['/anonimizza', 'anonymize'], ['/richiami', 'richiami'],
+  ['/visite', 'visite'], ['/statistiche', 'administration'], ['/medici', 'administration'], ['/piattaforma', 'administration'],
+  ['/coda', 'invianti'], ['/referral', 'invianti'], ['/lista-attesa', 'invianti'], ['/inviati', 'invianti'], ['/affida', 'invianti'],
+];
 
 const secret = new TextEncoder().encode(process.env.SESSION_SECRET);
 
@@ -52,8 +61,16 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Le impostazioni (gestione utenti dello studio) sono solo per l'admin.
-  if (path.startsWith('/impostazioni') && role !== 'admin') {
+  const sezione = SEZIONE_PAGINA.find(([p]) => path === p || path.startsWith(p + '/'))?.[1];
+  if (sezione && role !== 'medico' && role !== 'inviante' && !puo(role, sezione)) {
+    const url = req.nextUrl.clone();
+    url.pathname = '/prototipo/index.html';
+    url.search = '';
+    return NextResponse.redirect(url);
+  }
+
+  // Le impostazioni (gestione utenti dello studio): amministrazione e tecnico.
+  if (path.startsWith('/impostazioni') && role !== 'admin' && role !== 'tecnico') {
     const url = req.nextUrl.clone();
     url.pathname = '/prototipo/index.html';
     url.search = '';

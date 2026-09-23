@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { convertiInMp3, estensioneAudioAmmessa, estensioneDi } from '@/lib/dittafono';
+import { vietato } from '@/lib/permessi';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -15,6 +16,8 @@ const MAX_BYTE = 200 * 1024 * 1024;
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'converti');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   if (!RUOLI.has(session.role)) return NextResponse.json({ errore: 'ruolo_non_ammesso' }, { status: 403 });
 
   const form = await req.formData().catch(() => null);

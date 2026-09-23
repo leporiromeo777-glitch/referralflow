@@ -152,7 +152,7 @@ export async function GET(req: NextRequest) {
   const [base, sicurezza] = await Promise.all([leggi(session.studioId), sicurezzaDi(session.id)]);
   const qualita = extra === 'qualita' ? await qualitaDella(session.studioId) : null;
   const statistiche = extra === 'statistiche' ? await statisticheDello(session.studioId) : null;
-  return NextResponse.json({ ...base, io: session.id, admin: session.role === 'admin', ruolo: session.role, sicurezza, qualita, statistiche }, { headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json({ ...base, io: session.id, admin: session.role === 'admin' || session.role === 'tecnico', ruolo: session.role, sicurezza, qualita, statistiche }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function POST(req: NextRequest) {
@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
   // persona sul suo accesso, non l'amministratore. Quindi prima del controllo
   // dei permessi (16.9.2026, portata qui dalla pagina «Sicurezza»).
   if (azione.startsWith('2fa_')) return await sicurezza2fa(session, azione, c);
-  if (session.role !== 'admin') return NextResponse.json({ errore: 'Solo l’amministratore dello studio può modificare.' }, { status: 403 });
+  if (session.role !== 'admin' && session.role !== 'tecnico') return NextResponse.json({ errore: 'Solo l’amministratore dello studio può modificare.' }, { status: 403 });
   const sid = session.studioId;
   const s = (v: unknown, max = 200) => String(v ?? '').trim().slice(0, max);
   try {

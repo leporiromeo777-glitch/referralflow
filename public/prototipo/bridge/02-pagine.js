@@ -44,17 +44,25 @@ PAGES.home = () => {
     const chi = x.titolare ? `<span class="rf-sala-chi">${rfEsc(x.titolare)}</span>` : (x.perche && x.perche !== 'libera' ? `<span class="rf-sala-chi vuota">${rfEsc(x.perche)}</span>` : '');
     return `<div class="rf-sala"><div class="rf-sala-top"><span class="name">${rfEsc(x.nome)}${chi}${x.tipo === 'apparecchio' ? ' <span class="caption">apparecchio</span>' : x.tipo === 'codice' ? ' <span class="caption">codice agenda</span>' : ''}</span><span class="n num">${x.n ? `${x.n} · ${oreSala(x.minuti)}` : '—'}${x.posti > 1 ? ` <span class="caption">· ${x.posti} posti</span>` : ''}</span></div><div class="meter${x.occupataOra ? ' now' : ''}"><i style="width:${pct}%"></i></div><div class="cap${x.occupataOra ? ' now' : ''}">${cap}</div></div>`;
   };
-  return `
-    <div class="page-head"><div><div class="eyebrow">La giornata dello studio</div><div class="display">${rfEsc(ROLES[state.role].greet)}</div><div class="page-sub" style="text-transform:none">${data} · ${appts.length} ${appts.length === 1 ? 'appuntamento' : 'appuntamenti'}${nMed ? ` · ${nMed} ${nMed === 1 ? 'medico' : 'medici'} in agenda` : ''} · ${TASKS.length ? `${TASKS.length} ${TASKS.length === 1 ? 'cosa' : 'cose'} da fare` : 'niente in sospeso'}</div></div>
-      <div class="actions"><button class="btn" data-go="#/agenda">${ICONS.agenda} Agenda</button><button class="btn" data-go="#/reports">${ICONS.reports} Referti</button><button class="btn ai" data-ai="Preparazione della giornata">${ICONS.ai} Prepara la giornata</button></div></div>
-    <div class="grid grid-6">
-      ${stat(s.appuntamenti_oggi ?? appts.length, 'Appuntamenti oggi', '#/agenda', s.visti_oggi ? `${s.visti_oggi} già visti` : (next ? `prossimo alle ${next.start}` : ''))}
-      ${stat(s.bozze_da_rivedere ?? 0, 'Referti da controllare', '#/reports', prio ? `${prio} prioritari` : '', prio > 0)}
-      ${stat(s.visti_senza_referto ?? 0, 'Visti senza referto', '#/agenda', 'oggi, ancora da dettare')}
-      ${stat(s.urgenti ?? 0, 'Referral urgenti', '#/inbox', s.da_prenotare ? `${s.da_prenotare} da prenotare` : '')}
-      ${stat(s.richiami_scaduti ?? 0, 'Richiami scaduti', '#/inbox')}
-      ${stat(s.lettere_in_ritardo ?? 0, 'Lettere in ritardo', '#/reports', (s.lettere_in_ritardo ?? 0) > 0 ? 'da sbloccare' : 'nessuna', (s.lettere_in_ritardo ?? 0) > 0)}
-    </div>
+  // Una home per ruolo (23.9.2026, decisione dello studio): stessi blocchi,
+  // composti secondo il lavoro di chi entra. Le caselle e i tasti che portano
+  // a una sezione non del ruolo non compaiono (permessi.ts).
+  const ruolo = state.role;
+  const puoi = (href) => typeof rfRottaPermessa !== 'function' || rfRottaPermessa(String(href).replace(/^#\//, '').split('/')[0]);
+  const T = {
+    appuntamenti: stat(s.appuntamenti_oggi ?? appts.length, 'Appuntamenti oggi', '#/agenda', s.visti_oggi ? `${s.visti_oggi} già visti` : (next ? `prossimo alle ${next.start}` : '')),
+    referti: stat(s.bozze_da_rivedere ?? 0, 'Referti da controllare', '#/reports', prio ? `${prio} prioritari` : '', prio > 0),
+    daDettare: stat(s.visti_senza_referto ?? 0, 'Visti senza referto', ruolo === 'doctor' ? '#/dittafono' : '#/agenda', 'oggi, ancora da dettare'),
+    urgenti: stat(s.urgenti ?? 0, 'Referral urgenti', '#/inbox', s.da_prenotare ? `${s.da_prenotare} da prenotare` : ''),
+    richiami: stat(s.richiami_scaduti ?? 0, 'Richiami scaduti', '#/richiami'),
+    ritardo: stat(s.lettere_in_ritardo ?? 0, 'Lettere in ritardo', '#/reports', (s.lettere_in_ritardo ?? 0) > 0 ? 'da sbloccare' : 'nessuna', (s.lettere_in_ritardo ?? 0) > 0),
+    visti: stat(s.visti_oggi ?? 0, 'Già visti oggi', '#/agenda', next ? `prossimo alle ${next.start}` : ''),
+  };
+  const HREF = { appuntamenti: '#/agenda', referti: '#/reports', daDettare: ruolo === 'doctor' ? '#/dittafono' : '#/agenda', urgenti: '#/inbox', richiami: '#/richiami', ritardo: '#/reports', visti: '#/agenda' };
+  const caselle = (chiavi) => { const v = chiavi.filter(c => puoi(HREF[c])); return v.length ? `<div class="grid grid-${Math.min(6, Math.max(3, v.length))}">${v.map(c => T[c]).join('')}</div>` : ''; };
+  const tasto = (href, icona, testo) => puoi(href) ? `<button class="btn" data-go="${href}">${ICONS[icona] || ''} ${testo}</button>` : '';
+  const aiGiornata = `<button class="btn ai" data-ai="Preparazione della giornata">${ICONS.ai} Prepara la giornata</button>`;
+  const HERO = `
     ${next ? `<div class="card hero mt-16">
       <div class="row between"><span class="section-title">Prossimo paziente</span><span class="status"><i class="dot ${next.late ? 'danger' : 'success'}"></i>${next.late ? 'In ritardo' : STATUS_LABEL[next.status] || ''}</span></div>
       <div class="row mt-16" style="gap:16px;align-items:flex-start">
@@ -64,13 +72,13 @@ PAGES.home = () => {
       </div>
       <div class="row mt-24"><button class="btn primary lg" data-go="#/patients/${next.p}">Scheda paziente</button>${rfUuid(next.p) ? `<button class="btn lg ai" data-ai="Briefing pre-visita di ${rfEsc(rfNomeAppt(next))}">${ICONS.ai} Briefing pre-visita</button>` : ''}<button class="btn lg" data-go="#/agenda">Agenda di oggi</button></div>
     </div>` : ''}
-    <div class="grid grid-main-side mt-16">
-      <div class="stack rf-home-sx">
+`;
+  const TODO = `
         <div class="card"><div class="card-head"><span class="section-title">Da fare adesso</span><button class="btn sm ghost" data-go="#/inbox">Tutte ${ICONS.chevR}</button></div>
           <div class="list">${TASKS.length ? TASKS.slice(0, 12).map(t => `<div class="list-item"><i class="dot ${t.prio === 'urgent' || t.prio === 'high' ? 'danger' : 'accent'}"></i><div class="grow"><div class="name">${rfEsc(t.title)}</div><div class="sub">${rfEsc(t.due)}</div></div><a class="btn sm" href="${t.href}">Apri</a></div>`).join('') : '<div class="caption" style="padding:8px 6px">Tutto gestito. Buon lavoro.</div>'}</div></div>
-        ${rfCardSale(sale, rigaSala, nMed)}
-      </div>
-      <div class="stack rf-home-acc">
+`;
+  const SALE = `${rfCardSale(sale, rigaSala, nMed)}`;
+  const ACC = `
         ${(() => {
           // L'accoglienza al posto della colonna destra (16.9.2026 sera):
           // gli arrivi di oggi coi tasti, e la frase in italiano.
@@ -83,7 +91,23 @@ PAGES.home = () => {
             ${c.testo}
             <div class="rf-or-acc scorre" style="margin-top:10px">${c.righe}</div></div>`;
         })()}
-      </div>
+`;
+  const PROFILO = {
+    doctor: { occhiello: 'La tua giornata', caselle: ['appuntamenti', 'daDettare', 'referti', 'richiami'], tasti: tasto('#/dittafono', 'mic', 'Dittafono') + tasto('#/agenda', 'agenda', 'Agenda') + aiGiornata, hero: true, sx: [TODO], dx: [SALE] },
+    assistant: { occhiello: 'Le sale e i pazienti di oggi', caselle: ['appuntamenti', 'visti', 'richiami'], tasti: tasto('#/agenda', 'agenda', 'Agenda') + tasto('#/sale', 'agenda', 'Sale') + tasto('#/dittafono', 'mic', 'Dittafono'), hero: true, sx: [SALE, TODO], dx: [ACC] },
+    secretary: { occhiello: 'La giornata dello studio', caselle: ['appuntamenti', 'referti', 'daDettare', 'urgenti', 'richiami', 'ritardo'], tasti: tasto('#/agenda', 'agenda', 'Agenda') + tasto('#/reports', 'reports', 'Referti') + aiGiornata, hero: true, sx: [TODO, SALE], dx: [ACC] },
+    org_admin: { occhiello: 'Lo studio oggi', caselle: ['appuntamenti', 'referti', 'ritardo', 'urgenti', 'richiami', 'daDettare'], tasti: tasto('#/fatturazione', 'stats', 'Da fatturare') + tasto('#/administration', 'admin', 'Amministrazione') + tasto('#/reports', 'reports', 'Referti'), hero: false, sx: [TODO, SALE], dx: [ACC] },
+    tech_admin: { occhiello: 'Tutta la piattaforma', caselle: ['appuntamenti', 'referti', 'daDettare', 'urgenti', 'richiami', 'ritardo'], tasti: tasto('#/agenda', 'agenda', 'Agenda') + tasto('#/reports', 'reports', 'Referti') + tasto('#/administration', 'admin', 'Amministrazione') + aiGiornata, hero: true, sx: [TODO, SALE], dx: [ACC] },
+  };
+  const PR = PROFILO[ruolo] || PROFILO.secretary;
+  return `
+    <div class="page-head"><div><div class="eyebrow">${PR.occhiello}</div><div class="display">${rfEsc(ROLES[state.role].greet)}</div><div class="page-sub" style="text-transform:none">${data} · ${appts.length} ${appts.length === 1 ? 'appuntamento' : 'appuntamenti'}${nMed ? ` · ${nMed} ${nMed === 1 ? 'medico' : 'medici'} in agenda` : ''} · ${TASKS.length ? `${TASKS.length} ${TASKS.length === 1 ? 'cosa' : 'cose'} da fare` : 'niente in sospeso'}</div></div>
+      <div class="actions">${PR.tasti}</div></div>
+    ${caselle(PR.caselle)}
+    ${PR.hero ? HERO : ''}
+    <div class="grid grid-main-side mt-16">
+      <div class="stack rf-home-sx">${PR.sx.join('')}</div>
+      <div class="stack rf-home-acc">${PR.dx.join('')}</div>
     </div>`;
 };
 

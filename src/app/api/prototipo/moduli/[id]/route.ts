@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { caricaModuli, validaCompilazione } from '@/lib/moduli';
+import { vietato } from '@/lib/permessi';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +22,8 @@ async function leggi(id: string, studioId: string) {
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'moduli');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   if (!isUuid(params.id)) return NextResponse.json({ errore: 'id' }, { status: 400 });
   const c = await leggi(params.id, session.studioId);
   if (!c) return NextResponse.json({ errore: 'Compilazione non trovata.' }, { status: 404 });
@@ -34,6 +37,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'moduli');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   if (!isUuid(params.id)) return NextResponse.json({ errore: 'id' }, { status: 400 });
   const c = await leggi(params.id, session.studioId);
   if (!c) return NextResponse.json({ errore: 'Compilazione non trovata.' }, { status: 404 });

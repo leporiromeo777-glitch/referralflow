@@ -5,6 +5,7 @@ import { isUuid } from '@/lib/cartella';
 import { putFile } from '@/lib/storage';
 import { ESTENSIONI_DITTAFONO, wavDaDittafono } from '@/lib/dittafono';
 import { registraEvento } from '@/lib/referti-eventi';
+import { vietato } from '@/lib/permessi';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +13,7 @@ export const dynamic = 'force-dynamic';
 // in due. Entra nella stessa coda della catena, con lo stesso medico e lo
 // stesso tipo della bozza, ma con `aggiunge_a` = questa bozza: alla consegna
 // la piattaforma accoda il testo invece di aprire un referto nuovo.
-const RUOLI_AMMESSI = new Set(['segretaria', 'medico', 'admin']);
+const RUOLI_AMMESSI = new Set(['segretaria', 'medico', 'admin', 'tecnico']);
 const MAX_BYTES = 200 * 1024 * 1024;
 const TIPI: Record<string, string> = {
   '.ds2': 'audio/x-dss', '.dss': 'audio/x-dss', '.m4a': 'audio/mp4', '.mp3': 'audio/mpeg', '.wav': 'audio/wav',
@@ -22,6 +23,8 @@ const TIPI: Record<string, string> = {
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'reports');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   if (!RUOLI_AMMESSI.has(session.role)) return NextResponse.json({ errore: 'ruolo_non_ammesso' }, { status: 403 });
   if (!isUuid(params.id)) return NextResponse.json({ errore: 'non_trovato' }, { status: 404 });
   const sid = session.studioId;

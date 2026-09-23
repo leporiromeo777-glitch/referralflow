@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ id: r.id }, { status: 201 });
   }
   if (azione === 'stato') {
-    if (session.role !== 'admin') return NextResponse.json({ errore: 'Solo l’amministratore.' }, { status: 403 });
+    if (session.role !== 'admin' && session.role !== 'tecnico') return NextResponse.json({ errore: 'Solo l’amministratore.' }, { status: 403 });
     const id = String(c?.id ?? ''); const stato = String(c?.stato ?? '');
     if (!isUuid(id) || !['aperto', 'fatto', 'no'].includes(stato)) return NextResponse.json({ errore: 'dati' }, { status: 400 });
     await query(`update suggerimenti set stato = $3, risposta = nullif($4, ''), updated_at = now() where id = $1 and studio_id = $2`, [id, session.studioId, stato, String(c?.risposta ?? '').trim().slice(0, 500)]);

@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth';
 import { query, transazione } from '@/lib/db';
 import { controlloFatturazione, csvPrestazioni, nomeFileCsv, periodoMese, riepilogoPrestazioni, type RigaFattura } from '@/lib/fatturazione';
 import { abbinaPrestazioneAgenda, type VoceCatalogo } from '@/lib/prestazioni';
+import { vietato } from '@/lib/permessi';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,12 +67,14 @@ async function righeDelMese(studioId: string, dal: string, al: string): Promise<
 // Chi tocca la fatturazione. Era scritto al contrario — «tutti tranne il
 // medico» — e i ruoli nati dopo (assistente, tecnico) ci passavano in mezzo:
 // il CSV porta AVS e numero d'assicurato di tutti i pazienti del mese.
-const RUOLI_VEDONO = new Set(['segretaria', 'admin', 'medico']);
-const RUOLI_ESPORTANO = new Set(['segretaria', 'admin']);
+const RUOLI_VEDONO = new Set(['segretaria', 'admin', 'medico', 'tecnico']);
+const RUOLI_ESPORTANO = new Set(['segretaria', 'admin', 'tecnico']);
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'fatturazione');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   if (!RUOLI_VEDONO.has(session.role)) return NextResponse.json({ errore: 'ruolo_non_ammesso' }, { status: 403 });
   // All'01:30 del 1° ottobre `toISOString()` dice ancora settembre: il mese
   // predefinito si prende dall'orologio di Zurigo.
@@ -90,6 +93,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'fatturazione');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   if (!RUOLI_ESPORTANO.has(session.role)) return NextResponse.json({ errore: 'L’esportazione la fa la segreteria o l’amministratore.' }, { status: 403 });
   const c = await req.json().catch(() => null);
   const per = periodoMese(String(c?.mese ?? ''));

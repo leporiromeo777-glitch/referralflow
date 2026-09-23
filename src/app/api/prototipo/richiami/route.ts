@@ -6,6 +6,7 @@ import { query, transazione } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
 import { abbina, buchi, frase, giornoItaliano as giornoTesto, hm as oraTesto, perQuestoBuco, perQuestoPaziente, type Appunt, type Candidato } from '@/lib/agenda-buchi';
 import { medicoAbilitato, costruisciGrafo } from '@/lib/orchestrazione/grafo';
+import { vietato } from '@/lib/permessi';
 
 export const dynamic = 'force-dynamic';
 
@@ -123,6 +124,8 @@ async function raccogli(studioId: string, giorni: number) {
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'richiami');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   const giorni = Math.min(21, Math.max(1, Number(new URL(req.url).searchParams.get('giorni') ?? 7)));
   const { b, candidati, proposte, chiamate } = await raccogli(session.studioId, giorni);
   return NextResponse.json({
@@ -137,6 +140,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'richiami');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   const c = await req.json().catch(() => null);
   const azione = String(c?.azione ?? '');
   const sid = session.studioId;

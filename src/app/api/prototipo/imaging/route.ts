@@ -4,6 +4,7 @@ import { query } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
 import { lettoreDisponibile, statoRicezione } from '@/lib/imaging';
 import { ingestaDicom } from '@/lib/imaging-ingest';
+import { vietato } from '@/lib/permessi';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -12,7 +13,7 @@ export const maxDuration = 300;
 //
 // Le immagini sono dati sanitari come i referti: le vede chi cura, non chi
 // amministra il sistema. Il tecnico è fuori, come dalla scheda del paziente.
-const RUOLI = new Set(['segretaria', 'medico', 'admin', 'assistente']);
+const RUOLI = new Set(['segretaria', 'medico', 'admin', 'assistente', 'tecnico']);  // tecnico: vede tutto (23.9.2026); misurare no
 const MAX_FILE = 300;
 const MAX_BYTE = 400 * 1024 * 1024;
 
@@ -26,6 +27,8 @@ async function registra(studioId: string, esameId: string | null, userId: string
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'imaging');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   if (!RUOLI.has(session.role)) return NextResponse.json({ errore: 'ruolo_non_ammesso' }, { status: 403 });
   const sid = session.studioId;
   const paziente = req.nextUrl.searchParams.get('paziente') ?? '';
@@ -59,6 +62,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  const nonPermesso = vietato(session.role, 'imaging');  // Accessi/permessi.ts (23.9.2026)
+  if (nonPermesso) return nonPermesso;
   if (!RUOLI.has(session.role)) return NextResponse.json({ errore: 'ruolo_non_ammesso' }, { status: 403 });
   const sid = session.studioId;
   const tipo = req.headers.get('content-type') ?? '';

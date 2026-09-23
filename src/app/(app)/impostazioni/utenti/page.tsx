@@ -45,7 +45,7 @@ export default async function Utenti({
 }) {
   const session = await getSession();
   if (!session) redirect('/login');
-  if (session.role !== 'admin') redirect('/');
+  if (session.role !== 'admin' && session.role !== 'tecnico') redirect('/');
 
   const utenti = await query<Utente>(
     `select u.id, u.email, u.role::text, u.attivo, u.created_at,

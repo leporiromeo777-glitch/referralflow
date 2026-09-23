@@ -88,6 +88,23 @@ echo "→ procedure dell'assistente in forma di documento"
 DOC="$(curl -s -b "$C_MEDICO" -X POST -H 'Content-Type: application/json' -d '{"nome":"preparazione_giornata"}' "http://localhost:$PORTA/api/prototipo/procedura" | python3 -c "import sys,json; j=json.load(sys.stdin); d=j.get('documento') or {}; print('ok' if d.get('intestazione',{}).get('titolo')=='Preparazione della giornata' and len(d.get('numeri',[]))==4 else 'no')" 2> /dev/null)"
 [ "$DOC" = "ok" ] && echo "   ok" || fallito "la preparazione della giornata non torna un documento"
 
+echo "→ chi vede che cosa: menu dal server e rotte bloccate, ruolo per ruolo"
+B="http://localhost:$PORTA/api/prototipo"
+controlla() {   # ruolo  sezione-attesa-si  sezione-attesa-no  rotta-attesa-200  rotta-attesa-403
+  local c; c="$(sessione "$1")" || { echo "   (nel demo manca $1: salto)"; return; }
+  local sez; sez="$(curl -s -b "$c" "$B/dati" | python3 -c "import sys,json; print(' '.join(json.load(sys.stdin).get('sezioni', [])))" 2> /dev/null)"
+  case " $sez " in *" $2 "*) ;; *) fallito "$1: nel menu manca $2";; esac
+  if [ -n "$3" ]; then case " $sez " in *" $3 "*) fallito "$1: nel menu c'è $3";; esac; fi
+  [ -z "$4" ] || { local k; k="$(curl -s -o /dev/null -w '%{http_code}' -b "$c" "$B/$4")"; [ "$k" = "200" ] || fallito "$1: /$4 ha dato $k invece di 200"; }
+  [ -z "$5" ] || { local k; k="$(curl -s -o /dev/null -w '%{http_code}' -b "$c" "$B/$5")"; [ "$k" = "403" ] || fallito "$1: /$5 ha dato $k invece di 403"; }
+  echo "   $1: $(echo $sez | wc -w | tr -d ' ') sezioni"
+}
+controlla medico reports fatturazione referti fatturazione
+controlla assistente dittafono reports percorsi referti
+controlla segretaria fatturazione administration fatturazione ""
+controlla admin administration dittafono fatturazione ""
+controlla tecnico administration "" fatturazione ""
+
 echo
 [ "$ESITO" = "0" ] && echo "TUTTO OK" || echo "CI SONO ERRORI"
 exit "$ESITO"

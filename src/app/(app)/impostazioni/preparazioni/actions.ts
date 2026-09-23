@@ -10,7 +10,7 @@ import { getSession } from '@/lib/auth';
 async function requireAdmin() {
   const session = await getSession();
   if (!session) redirect('/login');
-  if (session.role !== 'admin') redirect('/');
+  if (session.role !== 'admin' && session.role !== 'tecnico') redirect('/');
   return session;
 }
 

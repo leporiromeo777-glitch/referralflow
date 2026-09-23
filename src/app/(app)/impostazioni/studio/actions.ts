@@ -12,7 +12,7 @@ import { getSession, createSession, cookieSecure } from '@/lib/auth';
 export async function updateStudio(formData: FormData) {
   const session = await getSession();
   if (!session) redirect('/login');
-  if (session.role !== 'admin') redirect('/');
+  if (session.role !== 'admin' && session.role !== 'tecnico') redirect('/');
 
   const nome = String(formData.get('nome') ?? '').trim().slice(0, 120);
   const specialita = String(formData.get('specialita') ?? '').trim().slice(0, 200) || null;
@@ -46,7 +46,7 @@ const TOKEN_FLASH_COOKIE = 'rf_referti_token';
 export async function generaRefertiToken() {
   const session = await getSession();
   if (!session) redirect('/login');
-  if (session.role !== 'admin') redirect('/');
+  if (session.role !== 'admin' && session.role !== 'tecnico') redirect('/');
 
   const token = 'rfb_' + randomBytes(32).toString('hex');
   const hash = createHash('sha256').update(token).digest('hex');
@@ -71,7 +71,7 @@ export async function generaRefertiToken() {
 export async function revocaRefertiToken() {
   const session = await getSession();
   if (!session) redirect('/login');
-  if (session.role !== 'admin') redirect('/');
+  if (session.role !== 'admin' && session.role !== 'tecnico') redirect('/');
 
   await query(
     `update studios set referti_token_hash = null, referti_token_set_at = null
@@ -90,7 +90,7 @@ export async function revocaRefertiToken() {
 export async function aggiungiFinestra(formData: FormData) {
   const session = await getSession();
   if (!session) redirect('/login');
-  if (session.role !== 'admin') redirect('/');
+  if (session.role !== 'admin' && session.role !== 'tecnico') redirect('/');
 
   const giorno = parseInt(String(formData.get('giorno') ?? ''), 10);
   const oraInizio = String(formData.get('ora_inizio') ?? '');
@@ -116,7 +116,7 @@ export async function aggiungiFinestra(formData: FormData) {
 export async function rimuoviFinestra(formData: FormData) {
   const session = await getSession();
   if (!session) redirect('/login');
-  if (session.role !== 'admin') redirect('/');
+  if (session.role !== 'admin' && session.role !== 'tecnico') redirect('/');
 
   const id = String(formData.get('id') ?? '');
   await query('delete from slot_finestre where id = $1 and studio_id = $2', [id, session.studioId]);
