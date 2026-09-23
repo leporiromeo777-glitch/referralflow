@@ -675,6 +675,9 @@ select.input { padding-right: 28px; }
 .rv-card .crow { display: flex; align-items: center; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
 .rv-card .crow .right { margin-left: auto; }
 .rv-card .copts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+/* Scelte con testo lungo (versione del secondo motore, frase proposta): vanno a capo dentro la scheda invece di uscirne (23.9.2026). */
+.rv-card .copts .btn { height: auto; min-height: 30px; max-width: 100%; padding: 6px 10px; white-space: normal; overflow-wrap: anywhere; text-align: left; justify-content: flex-start; line-height: 1.35; }
+.rv-card .copts kbd { flex-shrink: 0; }
 .rv-card .copts kbd { font-size: 9.5px; padding: 1px 4px; border-radius: 4px; background: rgba(127,127,127,.22); margin-right: 4px; }
 .rv-card .cnote { font-size: 11px; color: var(--text-3); margin-top: 6px; }
 .rv-card .cfoot { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
