@@ -23,8 +23,10 @@ NETRC=$(mktemp); trap 'rm -f "$NETRC"' EXIT; chmod 600 "$NETRC"
   printf '\n'
 } > "$NETRC"
 
-BASE=https://www.medionline.ch/caldav/calendars
-CAL=${1:-$BASE/0c651eba-f874-4d17-9508-cd3c36aa7122/}
+# L'indirizzo del calendario sta nel file locale (CALDAV_CALENDARIO=...) o si
+# passa come argomento: gli identificativi dello studio non vanno nel repo.
+CAL=${1:-$(sed -n 's/^CALDAV_CALENDARIO=//p' "$CONF" | head -1)}
+[ -n "$CAL" ] || { echo "manca CALDAV_CALENDARIO in $CONF (o l'indirizzo come argomento)"; exit 1; }
 
 leggi() { # descrizione, metodo, depth, corpo
   echo "--- $1"

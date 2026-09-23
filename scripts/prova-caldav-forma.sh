@@ -18,7 +18,9 @@ NETRC=$(mktemp); trap 'rm -f "$NETRC"' EXIT; chmod 600 "$NETRC"
   printf '\n'
 } > "$NETRC"
 
-CAL=${1:-https://www.medionline.ch/caldav/calendars/0c651eba-f874-4d17-9508-cd3c36aa7122/}
+# indirizzo del calendario: argomento o CALDAV_CALENDARIO nel file locale (mai nel repo)
+CAL=${1:-$(sed -n 's/^CALDAV_CALENDARIO=//p' "$CONF" | head -1)}
+[ -n "$CAL" ] || { echo "manca CALDAV_CALENDARIO in $CONF (o l'indirizzo come argomento)"; exit 1; }
 DA=$(date -v-2d +%Y%m%dT000000Z 2>/dev/null || date -u -d '2 days ago' +%Y%m%dT000000Z)
 A=$(date -v+2d +%Y%m%dT000000Z 2>/dev/null || date -u -d '2 days' +%Y%m%dT000000Z)
 echo "finestra $DA → $A"
