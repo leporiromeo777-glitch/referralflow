@@ -4,6 +4,7 @@ import { query } from '@/lib/db';
 import { putFile } from '@/lib/storage';
 import { mediciDelloStudio } from '@/lib/referti-medici';
 import { ESTENSIONI_DITTAFONO, wavDaDittafono } from '@/lib/dittafono';
+import { TIPI_AUDIO, MAX_BYTES_AUDIO } from '@/lib/referti-audio-tipi';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,16 +13,8 @@ export const dynamic = 'force-dynamic';
 // (referti_audio, stato in_coda); la pipeline sul Mac dello studio lo preleva,
 // lo trascrive e restituisce la bozza. Solo utenti dello studio.
 
-const TIPI: Record<string, string> = {
-  '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.mp4': 'audio/mp4',
-  '.wav': 'audio/wav', '.aac': 'audio/aac', '.ogg': 'audio/ogg',
-  '.flac': 'audio/flac', '.aiff': 'audio/aiff', '.caf': 'audio/x-caf',
-  // Dittafono Philips DPM (2026-09-07): DSS classico e DSS Pro. Il file
-  // resta com'è (lo decodifica ffmpeg sul Mac dello studio); per il
-  // riascolto nel browser la rotta audio lo converte al volo in WAV.
-  '.dss': 'audio/x-dss', '.ds2': 'audio/x-dss',
-};
-const MAX_BYTES = 200 * 1024 * 1024;
+const TIPI = TIPI_AUDIO;
+const MAX_BYTES = MAX_BYTES_AUDIO;
 
 // I medici dello studio per il dittafono dal telefono (13.9.2026): id e nome,
 // con la sessione del browser. Nessun dato clinico.

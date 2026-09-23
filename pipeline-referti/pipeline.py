@@ -53,6 +53,7 @@ import tempfile
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9215,6 +9216,19 @@ def invia_bozze(cartelle: dict) -> None:
             log.warning("fase=invio esito=rinviato motivo=non_raggiungibile")
             return
         if codice in (200, 201):
+            # Audio per il riascolto (23.9.2026): i dettati dalla cartella
+            # condivisa o da ingresso/ non hanno l'audio nella piattaforma
+            # (quelli dalla pagina Referti sì: audio_id). Si consegna prima
+            # che il file lasci la coda; se non riesce, la bozza resta buona
+            # e l'audio finisce comunque nella cassaforte locale.
+            try:
+                dati_bozza = json.loads(bozza.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                dati_bozza = {}
+            if isinstance(dati_bozza, dict) and not dati_bozza.get("audio_id") and not dati_bozza.get("ombra"):
+                for audio in cartelle["archivio_temp"].glob(file_id + ".*"):
+                    consegna_audio(file_id, audio)
+                    break
             # Salvataggio confermato: ORA (e solo ora) l'audio lascia la coda
             # (§2.3). Con la conserva attiva finisce nella cassaforte locale
             # per il futuro addestramento; altrimenti si cancella come prima.
@@ -9236,6 +9250,29 @@ def invia_bozze(cartelle: dict) -> None:
             log.info("fase=invio file=%s esito=ok codice=%d", file_id, codice)
         else:
             log.warning("fase=invio file=%s esito=rinviato codice=%d", file_id, codice)
+
+
+def consegna_audio(file_id: str, audio: Path) -> bool:
+    """Manda il file originale a /api/referti/audio-catena, che lo collega alla
+    bozza con quell'impronta. Mai il nome del file (solo impronta ed
+    estensione nell'indirizzo). Mai un'eccezione verso il servizio."""
+    ext = audio.suffix.lower()
+    if not FLOW_URL or not FLOW_TOKEN or not re.fullmatch(r"[0-9a-f]{16}", file_id):
+        return False
+    try:
+        richiesta = urllib.request.Request(
+            FLOW_URL + f"/api/referti/audio-catena?file_id={file_id}&ext={urllib.parse.quote(ext)}",
+            data=audio.read_bytes(),
+            headers={"Content-Type": "application/octet-stream", "Authorization": f"Bearer {FLOW_TOKEN}"},
+        )
+        with urllib.request.urlopen(richiesta, timeout=max(FLOW_TIMEOUT_S, 120)) as r:
+            log.info("fase=audio_piattaforma file=%s esito=ok codice=%d", file_id, r.status)
+            return True
+    except urllib.error.HTTPError as e:
+        log.warning("fase=audio_piattaforma file=%s esito=rifiutato codice=%d", file_id, e.code)
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        log.warning("fase=audio_piattaforma file=%s esito=errore tipo=%s", file_id, type(e).__name__)
+    return False
 
 
 def filevault_attivo() -> bool:
