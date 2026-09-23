@@ -22,6 +22,7 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 - [[Piattaforma/Accessi e ruoli]] — i cinque accessi dello studio, i ruoli veri e quello che manca
 - [[Piattaforma/Automazioni]] — cron, SMS, watchdog, report
 - [[Piattaforma/Robot agenda MediOnline]]
+- [[Piattaforma/Cassa dei Medici documenti e interfacce]] — che cosa pubblica la Cassa, il CalDAV ufficiale di MediOnline (c'è, autentica, ma nessuna agenda è pubblicata) e le domande da farle
 - [[Piattaforma/Dittafono]] — pagina della piattaforma (dal 23.9.2026, non più un'app in cornice): registra, pausa, inserisci/sovrascrivi, resta sul dispositivo finché non si invia, stessa coda dei referti
 - [[Piattaforma/Immagini]] — esami per immagini dentro la cartella: DICOM, visore, abbinamento severo al paziente
 - [[Piattaforma/Funzioni fatte]] — tutto ciò che esiste già, in ordine inverso
