@@ -88,6 +88,29 @@ l'iPhone né il server vedono alcunché — l'errore «impossibile verificare» 
 `TaskCanceledException in SsoClient.TryGetToken` nel browser sono inciampi passeggeri del loro
 SSO, non la causa.
 
-Resta da misurare, appena una agenda è pubblicata: se l'evento CalDAV porta anche **colore**,
-**stato di fatturazione** e **id MediOnline**. Se sì il robot diventa quasi superfluo; se no si
-tiene il robot per quei tre campi e il CalDAV per l'ossatura.
+## Misurato il 23.9.2026: il CalDAV porta meno del robot
+Dall'account del titolare la pagina di connessione elenca **dieci calendari**, uno per medico
+(`/caldav/calendars/<guid>/`): mancano Cassani, Bronz, Laboratorio, Sala apparecchi e
+l'amministrativo, cioè cinque delle quindici colonne dell'agenda. L'utente dello studio che usa il
+robot **non ha l'autorizzazione** per pubblicare agende; il titolare sì.
+
+Letti in sola lettura (`scripts/prova-caldav.sh`, `scripts/prova-caldav-forma.sh`: stampano
+codici, conteggi, nomi e FORMA dei valori — mai il contenuto) 669 eventi di una agenda, 104 in
+nove giorni. I campi sono sempre questi:
+
+`DTSTART` `DTEND` `SUMMARY` `DESCRIPTION` `LOCATION` `UID` `CLASS` `TRANSP` `CREATED`
+`LAST-MODIFIED` `DTSTAMP`.
+
+**Nessun `X-`, nessun `COLOR`, nessun `CATEGORIES`, nessuno `STATUS`.** Per forma dei valori:
+`UID` è un GUID del server CalDAV (8-4-4-4-12), **non** l'id a dieci cifre di MediOnline, quindi i
+due canali non si uniscono per identificativo; `LOCATION` è vuoto in tutti gli eventi;
+`DESCRIPTION` quasi sempre vuoto (max 18 caratteri); `SUMMARY` è l'unico campo pieno (19-67
+caratteri) ed è lo stesso titolo col paziente che il robot già legge.
+
+Quindi mancano le tre cose che contano: **colore** (da cui la prestazione), **stato di
+fatturazione** (la pagina «Da fatturare») e **id MediOnline**. Il limite dei «14 giorni nel
+passato» delle guide non regge: arrivano 669 eventi.
+
+**Deciso**: il robot resta la fonte, il CalDAV non lo sostituisce. Resta utile come **recupero del
+passato** (la finestra del robot è corta) e come **controllo incrociato** se il robot si rompe.
+Vedi [[Decisioni/Registro]].

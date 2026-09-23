@@ -211,3 +211,23 @@ Richiesta dello studio: una cartella in cui caricare molti audio insieme, anche 
 
 ## 23.9.2026 — Ogni ruolo vede il suo lavoro; il tecnico vede tutto
 Richiesta dello studio: accessi limitati per ruolo e home diverse. Proposta una tabella per sezione e accettata con una correzione: **il tecnico è chi amministra la piattaforma e vede tutto**, dati clinici compresi (supera la scelta del 16.9 che gli dava schede ridotte). La tabella sta in un posto solo (`src/lib/permessi.ts`) e comanda menu, rotte del server e pagine vecchie: nascondere una voce senza bloccare la rotta non è una protezione. Resta aperto: un account per ogni cardiologo, perché la home del medico possa dire «i tuoi pazienti». Vedi [[Piattaforma/Accessi e ruoli]].
+
+## 23.9.2026 — L'agenda resta al robot: il CalDAV di MediOnline porta meno
+Cercando un canale ufficiale verso la Cassa dei Medici abbiamo trovato il suo **server CalDAV**
+(`https://www.medionline.ch/caldav`), documentato nelle guide di configurazione per iPhone e
+Android. Provato davvero, in sola lettura, dall'account del titolare: dieci calendari pubblicati su
+quindici colonne dell'agenda, e per ogni evento soltanto `DTSTART`, `DTEND`, `SUMMARY`,
+`DESCRIPTION`, `LOCATION`, `UID` e i marcatori di tempo — `LOCATION` vuoto, `DESCRIPTION` quasi
+sempre vuoto, `UID` un GUID del server e non l'id di MediOnline, **nessun colore e nessuno stato di
+fatturazione**.
+
+**Deciso**: la fonte dell'agenda resta il robot in sola lettura, che dai riquadri ricava colore
+(quindi prestazione), stato di fatturazione e id — i tre campi su cui poggiano «Da fatturare», le
+prestazioni e l'abbinamento. Il CalDAV non si adotta come canale principale: darebbe meno dati,
+coprirebbe dieci agende su quindici e sarebbe un secondo canale da mantenere.
+
+**Resta buono per due cose**, quando servirà: **recuperare il passato** (il CalDAV ne tiene molto
+più della finestra del robot: 669 eventi su una agenda) e fare da **controllo incrociato** se il
+robot si rompe. L'utente dello studio non ha l'autorizzazione per pubblicare le agende — la
+concede il titolare o il service desk della Cassa. Misure e dettagli in
+[[Piattaforma/Cassa dei Medici documenti e interfacce]].
