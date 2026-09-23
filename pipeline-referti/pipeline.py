@@ -3618,6 +3618,11 @@ def _chiama_esterno_openai(prompt: str, file_id: str,
     impossibili. Un 400 (server che non lo supporta) fa scendere la
     scaletta alle varianti senza schema: nessuna regressione."""
     t_inizio_est = time.monotonic()
+    if not _config_esterno():
+        # Uscita spenta (attivo=0) fra la lettura della config e la chiamata:
+        # non è un fornitore sbagliato, e nulla esce.
+        log.info("fase=esterno file=%s esito=spento", file_id)
+        raise RuntimeError("percorso esterno spento")
     _cfg_url = (_config_esterno() or {}).get("url", "")
     if not _fornitore_autorizzato(_cfg_url):
         log.error("fase=esterno file=%s esito=rifiutato motivo=fornitore_non_autorizzato", file_id)
@@ -8739,7 +8744,9 @@ def preleva_da_cartella(cartelle: dict) -> None:
     radice = CARTELLA_DA_TRASCRIVERE
     if not radice.is_dir():
         return
-    occupata = any(not x.name.startswith(".") for c in ("ingresso", "lavorazione") for x in cartelle[c].iterdir())
+    occupata = (any(not x.name.startswith(".") for x in cartelle["ingresso"].iterdir())
+                 or any(not x.name.startswith(".") and not _RX_INTERMEDIO.match(x.name)
+                        for x in cartelle["lavorazione"].iterdir()))
     if occupata:
         return
     try:
@@ -8764,8 +8771,9 @@ def preleva_da_cartella(cartelle: dict) -> None:
         _CARTELLA_VISTI.pop(p, None)
         token = hashlib.sha256(f"{p}{st.st_size}{st.st_mtime}{ora}".encode()).hexdigest()[:8]
         nome_ingresso = (f"medico-{mid}--" if mid else "") + f"cartella-{token}{p.suffix.lower()}"
-        in_lav = _libero(radice / IN_LAVORAZIONE / p.name)
         try:
+            (radice / IN_LAVORAZIONE).mkdir(exist_ok=True)   # se qualcuno l'ha cancellata
+            in_lav = _libero(radice / IN_LAVORAZIONE / p.name)
             shutil.move(str(p), str(in_lav))
             tmp = cartelle["ingresso"] / f".{nome_ingresso}.tmp"
             shutil.copyfile(in_lav, tmp)
@@ -8804,6 +8812,30 @@ def concludi_da_cartella(nome_ingresso: str, cartelle: dict) -> None:
         log.warning("fase=cartella esito=errore_spostamento tipo=%s", type(e).__name__)
         return
     log.info("fase=cartella esito=%s", "non_riuscito" if fallito else "trascritto")
+
+
+# File intermedi della catena in lavorazione/: «<file_id di 16 cifre esadecimali>.*».
+_RX_INTERMEDIO = re.compile(r"^[0-9a-f]{16}(\.|$)")
+
+
+def riprendi_lavorazione(cartelle: dict) -> int:
+    """All'avvio (23.9.2026): il servizio lavora un dettato alla volta, quindi
+    tutto ciò che è rimasto in lavorazione/ è orfano di uno spegnimento a metà
+    (il Mac portato in studio). Prima restava lì per sempre — il ciclo non
+    riscansiona lavorazione/ — e bloccava anche la cartella condivisa. Ora
+    l'audio torna in ingresso/ e si rifà da capo (stessa impronta, stesso
+    file_id: gli intermedi si riscrivono e alla fine si puliscono)."""
+    rimessi = 0
+    for f in cartelle["lavorazione"].iterdir():
+        if (f.is_file() and not f.name.startswith(".") and not _RX_INTERMEDIO.match(f.name)
+                and f.suffix.lower() in ESTENSIONI_AUDIO):
+            dest = cartelle["ingresso"] / f.name
+            if not dest.exists():
+                shutil.move(str(f), str(dest))
+                rimessi += 1
+    if rimessi:
+        log.info("fase=servizio esito=ripresi_da_lavorazione n=%d", rimessi)
+    return rimessi
 
 
 def ripara_cartella(cartelle: dict) -> None:
@@ -9253,6 +9285,10 @@ def servizio(sostituzioni, controlli) -> int:
     )
 
     in_attesa: dict[Path, int] = {}
+    try:
+        riprendi_lavorazione(cartelle)
+    except OSError as e:
+        log.warning("fase=servizio esito=ripresa_non_riuscita tipo=%s", type(e).__name__)
     try:
         _prepara_cartella_condivisa()
         ripara_cartella(cartelle)

@@ -828,6 +828,34 @@ def _prova_42() -> None:
         sh.rmtree(tmp, ignore_errors=True)
 
 
+@caso("43 · spegnimento a metà: l'audio rimasto in lavorazione/ torna in ingresso, gli intermedi non bloccano la cartella condivisa")
+def _prova_43() -> None:
+    import tempfile, shutil as sh, os as o
+    tmp = Path(tempfile.mkdtemp())
+    vecchi = (m.CARTELLA_DA_TRASCRIVERE, m.CARTELLA_TRASCRITTI, m.carica_medici)
+    try:
+        cart = {c: tmp / "referti" / c for c in ("ingresso", "lavorazione", "errori", "archivio_temp", "output")}
+        for c in cart.values(): c.mkdir(parents=True)
+        (cart["lavorazione"] / "medico-moccetti--cartella-ab12cd34.ds2").write_bytes(b"a")
+        (cart["lavorazione"] / "0123456789abcdef.wav").write_bytes(b"i")      # intermedio
+        (cart["lavorazione"] / "0123456789abcdef.divergenze.json").write_text("[]")
+        assert m.riprendi_lavorazione(cart) == 1
+        assert (cart["ingresso"] / "medico-moccetti--cartella-ab12cd34.ds2").is_file()
+        assert (cart["lavorazione"] / "0123456789abcdef.wav").is_file(), "gli intermedi restano"
+        # con i soli intermedi in lavorazione/ la cartella condivisa non è bloccata
+        for f in cart["ingresso"].iterdir(): f.unlink()
+        da, fatti = tmp / "da", tmp / "fatti"; da.mkdir(); fatti.mkdir()
+        m.CARTELLA_DA_TRASCRIVERE, m.CARTELLA_TRASCRITTI = da, fatti
+        m.carica_medici = lambda: []
+        a = da / "x.wav"; a.write_bytes(b"x"); o.utime(a, (1_000_000, 1_000_000))
+        m._CARTELLA_VISTI.clear()
+        m.preleva_da_cartella(cart); m.preleva_da_cartella(cart)
+        assert len(list(cart["ingresso"].iterdir())) == 1
+    finally:
+        m.CARTELLA_DA_TRASCRIVERE, m.CARTELLA_TRASCRITTI, m.carica_medici = vecchi
+        sh.rmtree(tmp, ignore_errors=True)
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0
