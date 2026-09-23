@@ -139,7 +139,7 @@ function rvRenderNav() {
     <div class="rv-nav-head">
       <div class="row between"><b style="font-size:13px">Revisione</b><span class="caption">${done} / ${tot} controllati</span></div>
       <div class="rv-prog"><i style="width:${Math.round(done / tot * 100)}%"></i></div>
-      ${rvBlocking().length ? `<div class="rv-block">${ICONS.alert || ''} ${rvBlocking().length} verifica${rvBlocking().length > 1 ? 'e' : ''} obbligatoria${rvBlocking().length > 1 ? 'e' : ''}</div>` : '<div class="rv-ok">Controlli obbligatori completati</div>'}
+      ${rvBlocking().length ? `<div class="rv-block">${ICONS.alert || ''} ${rvBlocking().length === 1 ? '1 verifica obbligatoria' : `${rvBlocking().length} verifiche obbligatorie`}</div>` : '<div class="rv-ok">Controlli obbligatori completati</div>'}
     </div>
     <div class="rv-nav-body">
       ${openIssues.length ? `<div class="rv-group">Da verificare</div>${groups.map(([g]) => openIssues.filter(i => i.sev === g).map(card).join('')).join('')}` : ''}
@@ -478,7 +478,7 @@ function rvFinish() {
   const block = rvBlocking();
   if (block.length) {
     openModal('Non puoi terminare la revisione', `
-      <p>${block.length === 1 ? 'Resta una verifica obbligatoria' : `Restano ${block.length} verifiche obbligatorie`} non controllata:</p>
+      <p>${block.length === 1 ? 'Resta una verifica obbligatoria non controllata' : `Restano ${block.length} verifiche obbligatorie non controllate`}:</p>
       <div class="list mt-8">${block.map(b => `<div class="list-item"><i class="dot danger"></i><div class="grow"><div class="name" style="font-size:13px">${esc(b.title)}</div><div class="sub">${RV_CAT[b.cat][0]}${b.ev ? ' · ' + fmt(b.ev.focus) : ''}</div></div></div>`).join('')}</div>
       <p class="caption mt-8">Puoi controllarla, oppure inviarla al medico con "Chiedi al medico": quello che non puoi fare è chiudere la revisione lasciandola invisibile.</p>`,
       `<button class="btn" data-close>Chiudi</button><button class="btn primary" id="rv-open-block">Apri la verifica</button>`);

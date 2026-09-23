@@ -782,7 +782,7 @@ rvRenderNav = function () {
     <div class="rv-nav-head">
       <div class="row between"><b style="font-size:13px">Revisione</b><span class="caption">${done} / ${tot} controllati</span></div>
       <div class="rv-prog"><i style="width:${tot ? Math.round(done / tot * 100) : 100}%"></i></div>
-      ${rvBlocking().length ? `<div class="rv-block">${ICONS.alert || ''} ${rvBlocking().length} verifica${rvBlocking().length > 1 ? 'e' : ''} obbligatoria${rvBlocking().length > 1 ? 'e' : ''}</div>` : '<div class="rv-ok">Controlli obbligatori completati</div>'}
+      ${rvBlocking().length ? `<div class="rv-block">${ICONS.alert || ''} ${rvBlocking().length === 1 ? '1 verifica obbligatoria' : `${rvBlocking().length} verifiche obbligatorie`}</div>` : '<div class="rv-ok">Controlli obbligatori completati</div>'}
     </div>
     <div class="rv-nav-body">
       <details class="rf-campi" ${Object.values(c).some(v => !v) ? 'open' : ''}><summary><b>Campi estratti</b> <span class="caption">${['nome_paziente', 'data_nascita', 'medico_destinatario'].filter(k => c[k]).length}/3 · dalla catena, correggibili</span></summary>
@@ -821,7 +821,9 @@ rvRenderSource = function () {
   st.textContent = `
   .rf-campi { margin: 4px 4px 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
   .rf-campi summary { cursor: pointer; font-size: 12.5px; }
-  .rf-campo { display: grid; grid-template-columns: 82px 1fr; gap: 6px; align-items: center; margin-top: 6px; font-size: 12px; color: var(--text-2); }
+  .rf-campo { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 6px; align-items: center; margin-top: 6px; font-size: 12px; color: var(--text-2); }
+  .rf-campo input { width: 100%; min-width: 0; box-sizing: border-box; }
+  .rf-campi { min-width: 0; overflow: hidden; }
   .rf-perche { margin-top: 10px; }`;
   document.head.appendChild(st);
 })();
