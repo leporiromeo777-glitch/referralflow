@@ -234,18 +234,28 @@ export function paroleNome(s: string): string[] {
     .filter((p) => p.length >= 2 && !TITOLI_NOME.has(p));
 }
 
-export function scegliInRubrica(nome: string, righe: RigaRubrica[]): RigaRubrica | null {
+// Le parole del cognome: in rubrica il nome di battesimo viene prima («Mattia
+// Maggi», «Deborah Moccetti Bernasconi»), quindi in un nome di due o più
+// parole la prima non conta come cognome.
+export function paroleCognome(nome: string): string[] {
+  const p = paroleNome(nome);
+  return p.length >= 2 ? p.slice(1) : p;
+}
+
+export function scegliInRubrica<T extends RigaRubrica>(nome: string, righe: T[]): T | null {
   const cercate = paroleNome(nome);
   if (!cercate.length) return null;
-  const conParole = righe.map((r) => ({ r, p: new Set(paroleNome(r.nome)) }));
-  const tutte = conParole.filter((x) => cercate.every((w) => x.p.has(w)));
-  if (tutte.length === 1) return tutte[0].r;
-  if (tutte.length > 1) return null;
-  // Col solo cognome dettato basta il cognome, se unico. Con un nome di
-  // battesimo che in rubrica non c'è no: «Dr. Luca Rossi» non è Mario Rossi.
-  if (cercate.length !== 1) return null;
-  const perCognome = conParole.filter((x) => x.p.has(cercate[0]));
-  return perCognome.length === 1 ? perCognome[0].r : null;
+  if (cercate.length === 1) {
+    // Una parola sola vale come COGNOME (26.9.2026): nelle lettere al collega
+    // il saluto è spesso col nome di battesimo, e «Caro Michele» non è
+    // Michele Fiore solo perché in rubrica c'è un Michele solo.
+    const perCognome = righe.filter((r) => paroleCognome(r.nome).includes(cercate[0]));
+    return perCognome.length === 1 ? perCognome[0] : null;
+  }
+  // Più parole: tutte nel nome in rubrica, in qualunque ordine. «Dr. Luca
+  // Rossi» non è Mario Rossi.
+  const tutte = righe.filter((r) => { const p = new Set(paroleNome(r.nome)); return cercate.every((w) => p.has(w)); });
+  return tutte.length === 1 ? tutte[0] : null;
 }
 
 export async function destinatarioInRubrica(

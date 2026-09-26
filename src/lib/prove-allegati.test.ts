@@ -84,3 +84,21 @@ test('inviante: collegato, ambiguo, nuovo, nessuno; il nome viene da campi o sal
   const campi = (m: Record<string, string>) => (k: string) => m[k] ?? '';
   assert.equal(nomeInviante('Testo qualsiasi.', campi({ medico_inviante: 'Dr. Rossi', medico_destinatario: 'Dr. Bianchi' })), 'Dr. Rossi');
 });
+
+test('inviante: il nome di battesimo del saluto non basta, e i medici dello studio non sono invianti', () => {
+  const rubrica = [
+    { id: 'f', nome: 'Michele Fiore', email: null, studio: null, specialita: null },
+    { id: 'b', nome: 'Marco Bonomo', email: null, studio: null, specialita: null },
+    { id: 'g', nome: 'Marco Grossi', email: null, studio: null, specialita: null },
+    { id: 'd', nome: 'Deborah Moccetti Bernasconi', email: null, studio: null, specialita: null },
+  ];
+  const interni = [{ nome: 'Dr. med. Marco Moccetti', email: null, studio: null, specialita: null }];
+  assert.equal(statoInviante('Michele', rubrica).stato, 'ambiguo', '«Caro Michele»: non si collega da solo');
+  assert.deepEqual(statoInviante('Michele', rubrica).candidati.map((c) => c.id), ['f']);
+  assert.deepEqual(statoInviante('Marco', rubrica).candidati.map((c) => c.id), ['b', 'g']);
+  assert.equal(statoInviante('Fiore', rubrica).stato, 'collegato', 'il cognome da solo sì');
+  assert.equal(statoInviante('Bernasconi', rubrica).riga?.id, 'd', 'anche il secondo cognome');
+  assert.equal(statoInviante('Dr. Marco Moccetti', rubrica, interni).stato, null, 'chi detta non è l\'inviante');
+  assert.equal(statoInviante('Dr. Moccetti', rubrica, interni).stato, 'ambiguo', 'medico dello studio E in rubrica: decide una persona');
+  assert.equal(statoInviante('Dr. Moccetti', rubrica).stato, 'collegato', 'senza medici dello studio omonimi: Deborah');
+});

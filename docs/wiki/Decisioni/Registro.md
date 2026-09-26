@@ -260,7 +260,11 @@ si indovina.
 Richiesta dello studio. Tre regole, tutte senza AI e tutte visibili in revisione prima del Word:
 - **Inviante**: collegato alla rubrica solo se c'è un medico solo che corrisponde; con omonimi o
   nome diverso resta «da scegliere», senza nome in rubrica è «nuovo» e si segnala in coda e in
-  revisione. Una scelta a mano non viene mai sovrascritta.
+  revisione. Una scelta a mano non viene mai sovrascritta. **Una parola sola vale come cognome**:
+  nelle lettere al collega il saluto è spesso col nome di battesimo («Caro Marco»), e sui 50 referti
+  veri la prima versione aveva collegato «Caro Michele» all'unico Michele in rubrica. **I medici
+  dello studio non diventano invianti**: tre referti nominavano chi li dettava; se il nome è anche in
+  rubrica (una Moccetti c'è), decide una persona.
 - **Copia per conoscenza**: dal dettato, correggibile in revisione; chi non è in rubrica entra
   senza indirizzo, e senza titolo davanti (il genere non lo sappiamo).
 - **ECG**: si allega solo un ECG della cartella degli ultimi 30 giorni (fino a 3 giorni dopo il

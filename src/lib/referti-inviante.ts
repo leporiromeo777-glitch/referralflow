@@ -1,7 +1,7 @@
 import 'server-only';
 import { query } from './db';
 import {
-  destinatarioAffidabile, destinatarioDalSaluto, paroleNome, scegliInRubrica, type RigaRubrica,
+  destinatarioAffidabile, destinatarioDalSaluto, paroleCognome, paroleNome, scegliInRubrica, type RigaRubrica,
 } from './referti-lettera';
 import { copieDalCampo, copieDalDettato, type VoceCopia } from './referti-copia';
 import { citaECG, citatoNelTesto, etichettaDocumento, scegliECG } from './referti-allegato-blocco';
@@ -39,16 +39,31 @@ export function nomeInviante(testo: string, campo: (k: string) => string): strin
   return destinatarioDalSaluto(testo)?.nome ?? '';
 }
 
-// collegato = uno solo in rubrica; ambiguo = qualcuno con quel cognome ma non
-// si può dire chi (omonimi, o nome di battesimo diverso); nuovo = nessuno.
-export function statoInviante<T extends RigaRubrica>(nome: string, righe: T[]): { stato: StatoInviante; riga: T | null; candidati: T[] } {
+// collegato = uno solo in rubrica; ambiguo = qualcuno può essere lui ma non
+// si può dire chi (omonimi, nome di battesimo diverso, solo il nome di
+// battesimo nel saluto); nuovo = nessuno.
+// `interni` sono i medici dello studio stesso: il referto a volte nomina chi
+// lo detta («Dr. Moccetti»), e quel nome non deve diventare l'inviante. Se il
+// nome è di un medico dello studio: nessun inviante; se è anche in rubrica
+// (Deborah Moccetti Bernasconi), decide una persona.
+export function statoInviante<T extends RigaRubrica>(nome: string, righe: T[], interni: RigaRubrica[] = []): { stato: StatoInviante; riga: T | null; candidati: T[] } {
   const parole = paroleNome(nome);
   if (!parole.length) return { stato: null, riga: null, candidati: [] };
-  const riga = scegliInRubrica(nome, righe) as T | null;
+  const interno = interni.length > 0 && scegliInRubrica(nome, interni) !== null;
+  const riga = scegliInRubrica(nome, righe);
+  // Nome di un medico dello studio: in rubrica conta solo se ci corrisponde
+  // anche lì (allora decide una persona), altrimenti nessun inviante.
+  if (interno) return riga ? { stato: 'ambiguo', riga: null, candidati: [riga] } : { stato: null, riga: null, candidati: [] };
   if (riga) return { stato: 'collegato', riga, candidati: [riga] };
   const cognome = parole[parole.length - 1];
-  const candidati = righe.filter((r) => paroleNome(r.nome).includes(cognome));
+  let candidati = righe.filter((r) => paroleCognome(r.nome).includes(cognome));
+  // Solo il nome di battesimo («Caro Marco»): i Marco della rubrica.
+  if (!candidati.length && parole.length === 1) candidati = righe.filter((r) => paroleNome(r.nome)[0] === parole[0]);
   return { stato: candidati.length ? 'ambiguo' : 'nuovo', riga: null, candidati };
+}
+
+async function mediciDelloStudio(studioId: string): Promise<RigaRubrica[]> {
+  return query<RigaRubrica>(`select nome, null as email, null as studio, null as specialita from providers where studio_id = $1`, [studioId]);
 }
 
 type Bozza = {
@@ -87,7 +102,7 @@ export async function collegaInviante(studioId: string, bozzaId: string, righe?:
   const b = await bozza(studioId, bozzaId);
   if (!b || b.inviante_manuale) return b?.inviante_stato ?? null;
   const nome = nomeInviante(b.testo, campoDi(b));
-  const { stato, riga } = statoInviante(nome, righe ?? await rubricaInvianti(studioId));
+  const { stato, riga } = statoInviante(nome, righe ?? await rubricaInvianti(studioId), await mediciDelloStudio(studioId));
   await query(
     `update referti_bozze set referring_doctor_id = $3, inviante_stato = $4, inviante_nome = nullif($5, '')
       where id = $1 and studio_id = $2 and not inviante_manuale`,
@@ -137,7 +152,7 @@ export async function attorno(studioId: string, bozzaId: string): Promise<Attorn
 
   // Inviante: quello scelto o collegato, altrimenti lo stato calcolato ora.
   const nome = b.inviante_nome || nomeInviante(b.testo, campo);
-  const calcolo = statoInviante(nome, righe);
+  const calcolo = statoInviante(nome, righe, await mediciDelloStudio(studioId));
   const scelta = b.referring_doctor_id ? righe.find((r) => r.id === b.referring_doctor_id) ?? null : null;
   const riga = scelta ?? (b.inviante_manuale ? null : calcolo.riga);
   const inviante: Attorno['inviante'] = {
@@ -152,7 +167,7 @@ export async function attorno(studioId: string, bozzaId: string): Promise<Attorn
   const copia: Attorno['copia'] = {
     fonte: toccata ? 'revisione' : 'dettato',
     voci: nomiCopia.map((n) => {
-      const r = scegliInRubrica(n, righe) as RigaInviante | null;
+      const r = scegliInRubrica(n, righe);
       return r ? { nome: r.nome, in_rubrica: true, indirizzo: indirizzoDi(r), id: r.id } : { nome: n, in_rubrica: false, indirizzo: '', id: null };
     }),
   };

@@ -250,3 +250,5 @@ Da ricordare più del risultato: **il primo punteggio assolveva tutti e tre**, p
 | browser sul DB demo | home del medico, dell'aiuto medico e del tecnico; indirizzo di una sezione vietata → home; API 403 | ok |
 
 **Inviante, copia e ECG** (26.9.2026, DB demo, dati inventati: un inviante, un medico in copia, un paziente con un ECG caricato il giorno prima, un referto che li nomina tutti più un medico sconosciuto): inviante «collegato»; copia 2 voci (una in rubrica con indirizzo, una «non in rubrica»); allegato l'ECG giusto; cambiato l'inviante in uno sconosciuto → «nuovo»; aggiunto in rubrica → ricollegato da solo (1). Prove: 3 nuove in `prove-allegati.test.ts`, suite 302/302.
+
+**Invianti sui 50 referti veri** (26.9.2026, solo conteggi): prima versione 7 collegati / 17 nuovi / 23 da scegliere / 3 senza nome — ma 16 «da scegliere» erano un nome di battesimo del saluto preso per cognome, uno era collegato così per sbaglio, e 3 nominavano il medico che dettava. Con la regola corretta: **6 collegati, 17 nuovi (16 nomi diversi), 21 da scegliere (16 fra tre «Marco»), 6 senza inviante** (di cui 3 perché era il medico dello studio).
