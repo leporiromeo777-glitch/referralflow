@@ -286,3 +286,13 @@ allegati. La regola nLPD del progetto vieta dati clinici nelle mail spedite dall
 quindi la piattaforma consegna un file `.eml` pronto (destinatari, testo, allegati) che si apre nel
 programma di posta dello studio e si invia da lì, via HIN. Solo referti confermati; oggetto e nomi
 dei file senza il paziente; avviso per ogni indirizzo che non è HIN.
+
+## 26.9.2026 — L'inviante si prende dalla prima frase del dettato, mai dalla firma
+Detto dallo studio: il medico nomina sempre l'inviante nella **prima frase** del dettato, la frase di
+regia che la segretaria poi toglie; e il «Marco» in fondo alle lettere è la firma di Marco Moccetti.
+Ora il nome si cerca prima nella prima frase del testo della catena (prima della revisione), poi
+nei campi e nel saluto; un nome che è del medico che detta non vale mai. Un cognome che differisce
+di una o due lettere da uno in rubrica (errore del motore) diventa una **proposta** «forse è…», mai
+un collegamento automatico. Nella scelta c'è **«Altro…»** per cercare in tutta la rubrica. Sui 57
+referti: 10 collegati, 15 da scegliere, 23 nuovi, 9 senza inviante (prima: 6 / 21 / 17 / 6 su 50,
+con 16 «da scegliere» fra tre Marco dovuti alla firma).

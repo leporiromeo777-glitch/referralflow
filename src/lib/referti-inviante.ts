@@ -29,14 +29,44 @@ export function indirizzoDi(r: { via: string | null; npa: string | null; localit
   return [r.via, [r.npa, r.localita].filter(Boolean).join(' ')].filter(Boolean).join(', ');
 }
 
-// Chi è l'inviante secondo il referto: il campo «inviante»; altrimenti il
-// destinatario, se il testo lo sostiene; altrimenti il saluto della lettera.
-export function nomeInviante(testo: string, campo: (k: string) => string): string {
+// Chi è l'inviante secondo il referto (26.9.2026, dallo studio): il medico lo
+// dice SEMPRE nella prima frase del dettato («lettera al dottor Rossi…»), la
+// frase di regia che la segretaria poi toglie; quindi si guarda prima lì, nel
+// testo della catena prima della revisione. Poi il campo «inviante», il
+// destinatario se il testo lo sostiene, il saluto. Un nome che è del medico
+// che detta non vale mai: il «Marco» in fondo è la firma di Marco Moccetti.
+const RX_TITOLO_NOME = /\b(?:collega|dottor|dottore|dottoressa|dott\.?(?:ssa)?|dr\.?(?:ssa)?|prof\.?(?:essor(?:e|essa))?)\s+(?:med\.?\s+)?((?:[A-ZÀ-Ý][\p{L}'’-]*|d[aei]|de|del|della|von|van)(?:\s+(?:[A-ZÀ-Ý][\p{L}'’-]*|d[aei]|de|del|della|von|van)){0,3})/gu;
+
+export function primaFrase(testo: string): string {
+  const t = String(testo || '').replace(/\b(dr|dott|prof|med|sig|dr\.?ssa|dott\.?ssa)\./gi, '$1 ').trim();
+  const fine = t.search(/[.!?\n]/);
+  return (fine >= 0 ? t.slice(0, fine) : t).slice(0, 300);
+}
+
+export function diChiDetta(nome: string, dettante: string): boolean {
+  const a = paroleNome(nome), d = new Set(paroleNome(dettante));
+  return a.length > 0 && d.size > 0 && a.every((w) => d.has(w));
+}
+
+export function nomiDallaPrimaFrase(testo: string): string[] {
+  const out: string[] = [];
+  for (const m of primaFrase(testo).matchAll(RX_TITOLO_NOME)) {
+    const parole = m[1].split(/\s+/);
+    while (parole.length && !/^[A-ZÀ-Ý]/.test(parole[parole.length - 1])) parole.pop();
+    if (parole.some((w) => /^[A-ZÀ-Ý]/.test(w))) out.push(parole.join(' '));
+  }
+  return out;
+}
+
+export function nomeInviante(testo: string, campo: (k: string) => string, grezzo = '', dettante = ''): string {
+  const valido = (n: string) => !!n && paroleNome(n).length > 0 && !diChiDetta(n, dettante);
+  for (const n of nomiDallaPrimaFrase(grezzo)) if (valido(n)) return n;
   const inv = campo('medico_inviante');
-  if (inv) return inv;
+  if (valido(inv)) return inv;
   const dest = campo('medico_destinatario');
-  if (dest && destinatarioAffidabile(testo, dest)) return dest;
-  return destinatarioDalSaluto(testo)?.nome ?? '';
+  if (valido(dest) && destinatarioAffidabile(testo, dest)) return dest;
+  const saluto = destinatarioDalSaluto(testo)?.nome ?? '';
+  return valido(saluto) ? saluto : '';
 }
 
 // collegato = uno solo in rubrica; ambiguo = qualcuno può essere lui ma non
@@ -46,7 +76,26 @@ export function nomeInviante(testo: string, campo: (k: string) => string): strin
 // lo detta («Dr. Moccetti»), e quel nome non deve diventare l'inviante. Se il
 // nome è di un medico dello studio: nessun inviante; se è anche in rubrica
 // (Deborah Moccetti Bernasconi), decide una persona.
-export function statoInviante<T extends RigaRubrica>(nome: string, righe: T[], interni: RigaRubrica[] = []): { stato: StatoInviante; riga: T | null; candidati: T[] } {
+// Distanza di battitura (Levenshtein).
+export function distanza(a: string, b: string): number {
+  const d: number[] = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let prec = d[0]; d[0] = i;
+    for (let j = 1; j <= b.length; j++) { const t = d[j]; d[j] = Math.min(d[j] + 1, d[j - 1] + 1, prec + (a[i - 1] === b[j - 1] ? 0 : 1)); prec = t; }
+  }
+  return d[b.length];
+}
+
+// Un cognome scritto male dal motore («Bonomi» per Bonomo): al più una
+// lettera diversa fino a 6 lettere, due oltre. Sui 29 «nuovi» del 26.9.2026,
+// 13 erano così. Mai collegati da soli: diventano una proposta.
+export function cognomeSimile(a: string, b: string): boolean {
+  if (!a || !b || a === b || a[0] !== b[0]) return false;
+  const lim = Math.max(a.length, b.length) >= 7 ? 2 : 1;
+  return Math.abs(a.length - b.length) <= lim && distanza(a, b) <= lim;
+}
+
+export function statoInviante<T extends RigaRubrica>(nome: string, righe: T[], interni: RigaRubrica[] = []): { stato: StatoInviante; riga: T | null; candidati: T[]; simili?: boolean } {
   const parole = paroleNome(nome);
   if (!parole.length) return { stato: null, riga: null, candidati: [] };
   const interno = interni.length > 0 && scegliInRubrica(nome, interni) !== null;
@@ -59,6 +108,10 @@ export function statoInviante<T extends RigaRubrica>(nome: string, righe: T[], i
   let candidati = righe.filter((r) => paroleCognome(r.nome).includes(cognome));
   // Solo il nome di battesimo («Caro Marco»): i Marco della rubrica.
   if (!candidati.length && parole.length === 1) candidati = righe.filter((r) => paroleNome(r.nome)[0] === parole[0]);
+  if (!candidati.length) {
+    const simili = righe.filter((r) => paroleCognome(r.nome).some((c) => cognomeSimile(cognome, c)));
+    if (simili.length) return { stato: 'ambiguo', riga: null, candidati: simili, simili: true };
+  }
   return { stato: candidati.length ? 'ambiguo' : 'nuovo', riga: null, candidati };
 }
 
@@ -68,7 +121,7 @@ async function mediciDelloStudio(studioId: string): Promise<RigaRubrica[]> {
 
 type Bozza = {
   id: string; stato: string; testo: string; campi: Record<string, unknown>; estratti: Record<string, unknown>;
-  note: string[]; patient_id: string | null; dettato: Date;
+  note: string[]; patient_id: string | null; dettato: Date; grezzo: string; dettante: string;
   referring_doctor_id: string | null; inviante_manuale: boolean; inviante_stato: StatoInviante; inviante_nome: string | null;
 };
 
@@ -83,7 +136,9 @@ async function bozza(studioId: string, id: string): Promise<Bozza | null> {
     id, stato: b.stato, testo: String(b.testo_finale ?? p.testo_corretto ?? '').trim(),
     campi: b.campi_confermati ?? {}, estratti: p.campi_estratti ?? {},
     note: Array.isArray(p.note_segreteria) ? p.note_segreteria.filter((n: unknown): n is string => typeof n === 'string') : [],
-    patient_id: b.patient_id, dettato, referring_doctor_id: b.referring_doctor_id, inviante_manuale: !!b.inviante_manuale,
+    patient_id: b.patient_id, dettato,
+    grezzo: String(p.testo_grezzo ?? p.testo_corretto ?? ''), dettante: typeof p.medico?.nome === 'string' ? p.medico.nome : '',
+    referring_doctor_id: b.referring_doctor_id, inviante_manuale: !!b.inviante_manuale,
     inviante_stato: b.inviante_stato, inviante_nome: b.inviante_nome,
   };
 }
@@ -101,7 +156,7 @@ function campoDi(b: Bozza) {
 export async function collegaInviante(studioId: string, bozzaId: string, righe?: RigaInviante[]): Promise<StatoInviante> {
   const b = await bozza(studioId, bozzaId);
   if (!b || b.inviante_manuale) return b?.inviante_stato ?? null;
-  const nome = nomeInviante(b.testo, campoDi(b));
+  const nome = nomeInviante(b.testo, campoDi(b), b.grezzo, b.dettante);
   const { stato, riga } = statoInviante(nome, righe ?? await rubricaInvianti(studioId), await mediciDelloStudio(studioId));
   await query(
     `update referti_bozze set referring_doctor_id = $3, inviante_stato = $4, inviante_nome = nullif($5, '')
@@ -137,7 +192,7 @@ export async function scegliInviante(studioId: string, bozzaId: string, referrin
 }
 
 export type Attorno = {
-  inviante: { stato: StatoInviante; nome: string; manuale: boolean; scelto: { id: string; nome: string; specialita: string; indirizzo: string; email: string } | null; candidati: { id: string; nome: string; localita: string }[] };
+  inviante: { stato: StatoInviante; nome: string; manuale: boolean; simili?: boolean; scelto: { id: string; nome: string; specialita: string; indirizzo: string; email: string } | null; candidati: { id: string; nome: string; localita: string }[] };
   copia: { fonte: 'dettato' | 'revisione'; voci: { nome: string; in_rubrica: boolean; indirizzo: string; id: string | null }[] };
   allegati: { etichetta: string; documento_id: string | null; motivo: 'nota' | 'citato' | 'ecg' }[];
   ecg: { citato: boolean; trovato: boolean };
@@ -151,12 +206,12 @@ export async function attorno(studioId: string, bozzaId: string): Promise<Attorn
   const righe = await rubricaInvianti(studioId);
 
   // Inviante: quello scelto o collegato, altrimenti lo stato calcolato ora.
-  const nome = b.inviante_nome || nomeInviante(b.testo, campo);
+  const nome = b.inviante_nome || nomeInviante(b.testo, campo, b.grezzo, b.dettante);
   const calcolo = statoInviante(nome, righe, await mediciDelloStudio(studioId));
   const scelta = b.referring_doctor_id ? righe.find((r) => r.id === b.referring_doctor_id) ?? null : null;
   const riga = scelta ?? (b.inviante_manuale ? null : calcolo.riga);
   const inviante: Attorno['inviante'] = {
-    stato: riga ? 'collegato' : calcolo.stato, nome, manuale: b.inviante_manuale,
+    stato: riga ? 'collegato' : calcolo.stato, nome, manuale: b.inviante_manuale, simili: !riga && !!calcolo.simili,
     scelto: riga ? { id: riga.id, nome: riga.nome, specialita: riga.specialita ?? '', indirizzo: indirizzoDi(riga), email: riga.email ?? '' } : null,
     candidati: calcolo.candidati.map((r) => ({ id: r.id, nome: r.nome, localita: r.localita ?? '' })),
   };

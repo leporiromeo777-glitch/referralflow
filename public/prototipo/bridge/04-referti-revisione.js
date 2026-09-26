@@ -957,8 +957,21 @@ async function rfCaricaAttorno(forza) {
   RF.attornoCarica = id;
   try { const r = await fetch(`/api/prototipo/referti/${id}/allegati`, { credentials: 'include', cache: 'no-store' }); RF.attorno = r.ok ? await r.json() : null; }
   catch { RF.attorno = null; }
-  RF.attornoPer = id; RF.attornoCarica = null;
+  RF.attornoPer = id; RF.attornoCarica = null; RF.attornoAltro = false;
   if (typeof rvRenderNav === 'function' && state.route === 'review') rvRenderNav();
+}
+// «Altro…»: un medico qualunque della rubrica, cercandolo per nome.
+function rfAttornoAltroHtml(a) {
+  return `<div class="row" style="gap:6px"><input class="input sm" id="rf-att-altro" list="rf-att-rub-inv" placeholder="Cerca nella rubrica" autocomplete="off"><button class="btn sm primary" onclick="rfAttornoAltroScegli()">Collega</button><button class="btn sm ghost" onclick="RF.attornoAltro=false;rvRenderNav()">Annulla</button></div>
+    <datalist id="rf-att-rub-inv">${(a.rubrica || []).map(x => `<option value="${rfEsc(x.nome)}${x.localita ? ' · ' + rfEsc(x.localita) : ''}"></option>`).join('')}</datalist>
+    <div class="caption">Non c'è? «Aggiungi alla rubrica» dalla pagina Medici invianti, poi torna qui.</div>`;
+}
+function rfAttornoAltroScegli() {
+  const v = ((document.getElementById('rf-att-altro') || {}).value || '').trim().toLowerCase();
+  const r = ((RF.attorno || {}).rubrica || []).find(x => `${x.nome}${x.localita ? ' · ' + x.localita : ''}`.toLowerCase() === v || x.nome.toLowerCase() === v);
+  if (!r) { toast('Scegli un medico dall\'elenco'); return; }
+  RF.attornoAltro = false;
+  void rfAttornoInviante(r.id);
 }
 function rfAttornoHtml() {
   if (!RF.live || !RF.loaded) return '';
@@ -969,7 +982,7 @@ function rfAttornoHtml() {
   let invHtml;
   if (inv.scelto) invHtml = `<div class="rf-att-ok">✓ <b>${rfEsc(inv.scelto.nome)}</b>${inv.manuale ? ' <span class="caption">scelto a mano</span>' : ''}<div class="caption">${[inv.scelto.specialita, inv.scelto.indirizzo, inv.scelto.email].filter(Boolean).map(rfEsc).join(' · ')}</div></div>
       <details class="rf-att-cambia"><summary class="caption">cambia</summary><select class="input sm" onchange="rfAttornoInviante(this.value)">${scelte(a.rubrica || [], inv.scelto.id)}</select>${inv.manuale ? '<button class="btn sm ghost" onclick="rfAttornoInviante(\'\')">Torna automatico</button>' : ''}</details>`;
-  else if (inv.stato === 'ambiguo') invHtml = `<div class="rf-att-warn">Il referto dice <b>${rfEsc(inv.nome)}</b>: in rubrica ci sono più medici possibili.</div><select class="input sm" onchange="rfAttornoInviante(this.value)">${scelte(inv.candidati || [], '')}</select>`;
+  else if (inv.stato === 'ambiguo') invHtml = `<div class="rf-att-warn">Il referto dice <b>${rfEsc(inv.nome)}</b>: ${inv.simili ? 'in rubrica c\'è un nome simile, forse scritto male dal motore. È lui?' : (inv.candidati || []).length > 1 ? 'in rubrica ci sono più medici possibili' : 'in rubrica c\'è un medico simile, ma non si può dire se è lui'}.</div>${RF.attornoAltro ? rfAttornoAltroHtml(a) : `<select class="input sm" onchange="if (this.value === '__altro') { RF.attornoAltro = true; rvRenderNav(); } else rfAttornoInviante(this.value)">${scelte(inv.candidati || [], '')}<option value="__altro">Altro… (tutta la rubrica)</option></select>`}`;
   else if (inv.stato === 'nuovo') invHtml = `<div class="rf-att-warn"><b>Inviante nuovo</b>: ${rfEsc(inv.nome)} non è nella rubrica.</div><div class="row" style="gap:6px"><button class="btn sm primary" onclick="rfAttornoAggiungi()">Aggiungi alla rubrica</button></div><details class="rf-att-cambia"><summary class="caption">oppure è uno di questi</summary><select class="input sm" onchange="rfAttornoInviante(this.value)">${scelte(a.rubrica || [], '')}</select></details>`;
   else invHtml = `<div class="caption">Il referto non nomina un medico inviante.</div><select class="input sm" onchange="rfAttornoInviante(this.value)">${scelte(a.rubrica || [], '')}</select>`;
   const cc = (a.copia && a.copia.voci) || [];

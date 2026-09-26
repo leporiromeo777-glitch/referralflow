@@ -34,7 +34,7 @@ test('documenti citati nel testo: parole specifiche presenti, date facoltative, 
 // ---------- 26.9.2026: copia per conoscenza, ECG, inviante (dati inventati) ----------
 import { bloccoCopiaConoscenza, copieDalCampo, copieDalDettato } from './referti-copia';
 import { citaECG, eUnECG, scegliECG } from './referti-allegato-blocco';
-import { nomeInviante, statoInviante } from './referti-inviante';
+import { cognomeSimile, diChiDetta, nomeInviante, nomiDallaPrimaFrase, primaFrase, statoInviante } from './referti-inviante';
 
 test('copia per conoscenza: dal dettato, con titoli, più nomi, niente falsi', () => {
   assert.deepEqual(copieDalDettato('Si invia copia al dottor Mario Rossi e alla dottoressa Anna Bianchi.'), ['Mario Rossi', 'Anna Bianchi']);
@@ -101,4 +101,32 @@ test('inviante: il nome di battesimo del saluto non basta, e i medici dello stud
   assert.equal(statoInviante('Dr. Marco Moccetti', rubrica, interni).stato, null, 'chi detta non è l\'inviante');
   assert.equal(statoInviante('Dr. Moccetti', rubrica, interni).stato, 'ambiguo', 'medico dello studio E in rubrica: decide una persona');
   assert.equal(statoInviante('Dr. Moccetti', rubrica).stato, 'collegato', 'senza medici dello studio omonimi: Deborah');
+});
+
+test('inviante: prima frase del dettato, mai il medico che detta', () => {
+  const grezzo = 'Lettera per il dottor Mattia Maggi riguardante il signor Rossi. Caro Mattia, ti scrivo… Un caro saluto, Marco.';
+  assert.equal(primaFrase(grezzo), 'Lettera per il dottor Mattia Maggi riguardante il signor Rossi');
+  assert.deepEqual(nomiDallaPrimaFrase(grezzo), ['Mattia Maggi'], 'il paziente («signor») non è un medico');
+  assert.deepEqual(nomiDallaPrimaFrase('Qui il dr. Marco Moccetti, lettera alla dottoressa Vera Paiocchi'), ['Marco Moccetti', 'Vera Paiocchi']);
+  assert.deepEqual(nomiDallaPrimaFrase('Paziente visto oggi. Il dottor Rossi dopo'), [], 'solo la prima frase');
+  assert.ok(diChiDetta('Marco', 'Dr. med. Marco Moccetti') && diChiDetta('Dr. Moccetti', 'Dr. med. Marco Moccetti'));
+  assert.ok(!diChiDetta('Marco Bonomo', 'Dr. med. Marco Moccetti'));
+  const campi = (m: Record<string, string>) => (k: string) => m[k] ?? '';
+  const dettante = 'Dr. med. Marco Moccetti';
+  assert.equal(nomeInviante('Caro Mattia, …', campi({ medico_inviante: 'Marco' }), grezzo, dettante), 'Mattia Maggi', 'la prima frase vince');
+  assert.equal(nomeInviante('Testo. Un caro saluto, Marco', campi({ medico_inviante: 'Marco' }), 'Paziente visto oggi.', dettante), '', 'la firma di chi detta non è l\'inviante');
+  assert.equal(nomeInviante('Testo.', campi({ medico_inviante: 'Dr. Bonomo' }), 'Qui il dottor Marco Moccetti.', dettante), 'Dr. Bonomo', 'chi detta nella prima frase si salta');
+});
+
+test('inviante: cognome scritto male dal motore → proposta, mai collegato da solo', () => {
+  const rubrica = [
+    { id: 'b', nome: 'Marco Bonomo', email: null, studio: null, specialita: null },
+    { id: 'g', nome: 'Elisa Graziano', email: null, studio: null, specialita: null },
+  ];
+  assert.ok(cognomeSimile('bonomi', 'bonomo') && cognomeSimile('graziani', 'graziano'));
+  assert.ok(!cognomeSimile('rossi', 'bossi'), 'iniziale diversa: no');
+  assert.ok(!cognomeSimile('neri', 'nardi'), 'troppo diverso');
+  const x = statoInviante('Dr. Marco Bonomi', rubrica);
+  assert.equal(x.stato, 'ambiguo'); assert.equal(x.simili, true); assert.deepEqual(x.candidati.map((c) => c.id), ['b']);
+  assert.equal(statoInviante('Dr. Carlo Verdi', rubrica).stato, 'nuovo');
 });
