@@ -58,3 +58,32 @@ test('contenutoSenzaIntestazioni: via i titoli di sezione e le righe vuote, le f
   const urlo = 'IL PAZIENTE HA AVUTO UN EPISODIO SINCOPALE DURANTE LA NOTTE DI IERI';
   assert.equal(contenutoSenzaIntestazioni(urlo), urlo);
 });
+
+// Rubrica degli invianti: omonimi mai indovinati (26.9.2026). Nomi inventati.
+import { paroleNome, scegliInRubrica, type RigaRubrica } from './referti-lettera';
+const RUBRICA: RigaRubrica[] = [
+  { nome: 'Mattia Maggi', email: 'mattia@esempio.ch', studio: null, specialita: 'medicina interna generale' },
+  { nome: 'Stefano Maggi', email: 'stefano@esempio.ch', studio: null, specialita: 'medicina interna' },
+  { nome: 'Dr.ssa med. Vera Lucia Paiocchi', email: 'vera@esempio.ch', studio: null, specialita: null },
+  { nome: 'Edy Massera', email: 'edy@esempio.ch', studio: null, specialita: null },
+  { nome: 'François Diederik Rego', email: 'rego@esempio.ch', studio: null, specialita: null },
+];
+const mail = (n: string) => scegliInRubrica(n, RUBRICA)?.email ?? null;
+
+test('rubrica: un cognome solo e unico basta, qualunque titolo e ordine', () => {
+  assert.equal(mail('Dr. med. Massera'), 'edy@esempio.ch');
+  assert.equal(mail('Massera Edy'), 'edy@esempio.ch');
+  assert.equal(mail('Dr.ssa Paiocchi'), 'vera@esempio.ch');
+  assert.equal(mail('Dr. Francois Rego'), 'rego@esempio.ch', 'accenti ignorati');
+  assert.deepEqual(paroleNome('Prof. Dr. med. Tiziano Moccetti'), ['tiziano', 'moccetti']);
+});
+
+test('rubrica: due omonimi di cognome → serve il nome, altrimenti nessuno', () => {
+  assert.equal(mail('Dr. Maggi'), null, 'mai l\'ultimo inserito');
+  assert.equal(mail('Dr. med. Stefano Maggi'), 'stefano@esempio.ch');
+  assert.equal(mail('Maggi Mattia'), 'mattia@esempio.ch');
+  assert.equal(mail('Dr. Luca Maggi'), null, 'nome che non c\'è: nessuno');
+  assert.equal(mail('Dr. Bianchi'), null);
+  assert.equal(mail('Dr. Luca Massera'), null, 'cognome giusto, nome sbagliato: nessuno');
+  assert.equal(mail('Dr. med.'), null);
+});

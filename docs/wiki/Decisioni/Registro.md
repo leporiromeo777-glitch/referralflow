@@ -239,3 +239,19 @@ studio non la cambia: servono prima un utente dedicato (con l'account di un medi
 appuntamento risulterebbe creato da lui), un'agenda di prova visibile e dei limiti chiari (solo su
 gesto esplicito di una persona, con conferma, niente in blocco). Vedi
 [[Piattaforma/Cassa dei Medici documenti e interfacce]].
+
+## 26.9.2026 — Rubrica degli invianti importata; nelle lettere gli omonimi non si indovinano
+Lo studio ha consegnato l'elenco dei suoi 93 medici invianti. Gli indirizzi mancanti sono stati
+cercati negli elenchi pubblici del Cantone (medici convenzionati, 10.9.2026; programma HPV,
+1.4.2026) e nelle rubriche pubbliche (search.ch, OneDoc, local.ch, siti degli studi); ogni riga porta
+la fonte. Importate 92 righe (una era doppia) nel solo database dello studio, **mai nella demo
+pubblica**. Nuovi campi `specialita`, `via`, `npa`, `localita`, `note`, `da_verificare`
+(migrazione 075): 8 righe restano «da verificare» perché le fonti non concordano o manca un dato, e
+il motivo sta nella nota.
+
+**Deciso anche**: la lettera prende e-mail e specialità del destinatario dalla rubrica, e prima
+cercava per cognome prendendo l'ultimo inserito. Con 93 invianti ci sono omonimi (due Maggi, due
+Nobile, tre Bernasconi): una lettera sarebbe partita con l'e-mail di un altro medico. Ora servono
+tutte le parole del nome dettato; il cognome da solo vale solo se unico; altrimenti la lettera
+resta con «Via e-mail» senza indirizzo. Stessa regola dell'abbinamento dei pazienti: un omonimo non
+si indovina.

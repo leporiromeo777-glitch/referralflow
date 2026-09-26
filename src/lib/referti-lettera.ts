@@ -210,26 +210,58 @@ async function letteraPrecedenteInCartella(studioId: string, nome: string): Prom
   return null;
 }
 
-// Il destinatario in rubrica (medici invianti dello studio), cercato per
-// cognome: e-mail e, se registrato sulla piattaforma, la specialità.
+// Il destinatario in rubrica (medici invianti dello studio): e-mail e
+// specialità (quella del profilo sulla piattaforma, se c'è, altrimenti quella
+// della rubrica).
+//
+// Omonimi mai indovinati (26.9.2026). Prima si cercava per cognome e vinceva
+// l'ultimo inserito: con la rubrica di 93 invianti (due Maggi, due Nobile, tre
+// Bernasconi…) la lettera per «Dr. Maggi» avrebbe preso l'e-mail di un altro
+// medico. Ora: tutte le parole del nome dettato devono stare nel nome in
+// rubrica, in qualunque ordine; se il dettato ha solo il cognome, basta il
+// cognome ma deve essere unico. Più di un candidato = nessuno: meglio «Via
+// e-mail» senza indirizzo che l'indirizzo di un altro.
+export type RigaRubrica = { nome: string; email: string | null; studio: string | null; specialita: string | null };
+
+const TITOLI_NOME = new Set(['dr', 'dott', 'drssa', 'dottssa', 'dssa', 'med', 'prof', 'pd', 'sig', 'sigra', 'signor', 'signora', 'dottore', 'dottoressa']);
+
+export function paroleNome(s: string): string[] {
+  return String(s || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/\.(?=ssa\b)/g, '')
+    .split(/[^a-z]+/)
+    .filter((p) => p.length >= 2 && !TITOLI_NOME.has(p));
+}
+
+export function scegliInRubrica(nome: string, righe: RigaRubrica[]): RigaRubrica | null {
+  const cercate = paroleNome(nome);
+  if (!cercate.length) return null;
+  const conParole = righe.map((r) => ({ r, p: new Set(paroleNome(r.nome)) }));
+  const tutte = conParole.filter((x) => cercate.every((w) => x.p.has(w)));
+  if (tutte.length === 1) return tutte[0].r;
+  if (tutte.length > 1) return null;
+  // Col solo cognome dettato basta il cognome, se unico. Con un nome di
+  // battesimo che in rubrica non c'è no: «Dr. Luca Rossi» non è Mario Rossi.
+  if (cercate.length !== 1) return null;
+  const perCognome = conParole.filter((x) => x.p.has(cercate[0]));
+  return perCognome.length === 1 ? perCognome[0].r : null;
+}
+
 export async function destinatarioInRubrica(
   studioId: string,
   nome: string
 ): Promise<{ email: string; specialita: string; studio: string } | null> {
-  const pulito = nome.replace(/^(dr\.?|dott\.?|dr\.?ssa|dott\.?ssa|med\.?|prof\.?)\s*/gi, '').trim();
-  const parole = pulito.split(/\s+/).filter((p) => p.length >= 3);
-  if (!parole.length) return null;
-  const cognome = parole[parole.length - 1];
-  const [r] = await query<{ email: string | null; studio: string | null; specialita: string | null }>(
-    `select rd.email, rd.studio, ip.specialita
+  if (!paroleNome(nome).length) return null;
+  const righe = await query<RigaRubrica>(
+    `select rd.nome, rd.email, rd.studio, coalesce(nullif(ip.specialita, ''), rd.specialita) as specialita
        from referring_doctors rd
        left join users u on lower(u.email) = lower(rd.email) and u.role = 'inviante'
        left join inviante_profiles ip on ip.user_id = u.id
-      where rd.studio_id = $1 and rd.nome ilike '%' || $2 || '%'
-      order by rd.created_at desc
-      limit 1`,
-    [studioId, cognome]
+      where rd.studio_id = $1`,
+    [studioId]
   );
+  const r = scegliInRubrica(nome, righe);
   if (!r) return null;
   return { email: (r.email ?? '').trim(), specialita: (r.specialita ?? '').trim(), studio: (r.studio ?? '').trim() };
 }

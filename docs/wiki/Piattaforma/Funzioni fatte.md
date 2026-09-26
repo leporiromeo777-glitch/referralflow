@@ -6,6 +6,7 @@ aggiornata: 2026-09-23
 
 Elenco di ciò che esiste. Per la catena dei referti vedi [[Catena/Panoramica]].
 
+- **Rubrica degli invianti completa** (2026-09-26, migrazione 075): 92 medici dall'elenco dello studio con specialità, indirizzo (cercato negli elenchi cantonali e nelle rubriche pubbliche, fonte in nota), telefono ed e-mail; «da verificare» dove le fonti non concordano; la pagina Medici invianti mostra specialità e indirizzo e il modulo «Nuovo inviante» li chiede; nelle lettere il destinatario si cerca senza indovinare gli omonimi. v181.
 - **«Scarica Word» su ogni bozza della pagina Referti** (2026-09-23): lo stesso Word della revisione (`/api/referti/docx/<id>`, carta intestata del medico, evento `word_scaricato`) senza aprire la revisione; «Detta dal telefono» porta alla pagina del dittafono dentro la piattaforma. v180.
 - **Agenda a settimana con filtri, moduli nascosti per studio, «Suggerisci una modifica»** (2026-09-14, migrazione 044): chiude il piano in 8 punti dal confronto con CardioOS ([[Proposte/CardioOS confronto per funzione]]).
 - **Medici invianti, chiamate di preparazione, personale con GLN/RCC/colore** (2026-09-14, migrazione 043): pagina invianti con referral a 12 mesi; «Da chiamare» in Home con esito registrato; colori dei medici in agenda; GLN/RCC nel CSV; personale senza accesso ([[Piattaforma/Prototipo stack]]).

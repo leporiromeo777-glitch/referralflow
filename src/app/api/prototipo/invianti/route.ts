@@ -20,8 +20,9 @@ export async function GET() {
   const nonPermesso = vietato(session.role, 'invianti');  // Accessi/permessi.ts (23.9.2026)
   if (nonPermesso) return nonPermesso;
   const sid = session.studioId;
-  const invianti = await query<{ id: string; nome: string; studio: string | null; email: string | null; telefono: string | null; hin: string | null; n_12m: number; n_tot: number; ultimo: string | null }>(
+  const invianti = await query<{ id: string; nome: string; studio: string | null; email: string | null; telefono: string | null; hin: string | null; specialita: string | null; via: string | null; npa: string | null; localita: string | null; note: string | null; da_verificare: boolean; n_12m: number; n_tot: number; ultimo: string | null }>(
     `select d.id, d.nome, d.studio, d.email, d.telefono, d.hin_address as hin,
+            d.specialita, d.via, d.npa, d.localita, d.note, d.da_verificare,
             count(r.id) filter (where r.created_at >= now() - interval '12 months')::int as n_12m,
             count(r.id)::int as n_tot, max(r.created_at)::text as ultimo
        from referring_doctors d left join referrals r on r.referring_doctor_id = d.id
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
   if (!nome) return NextResponse.json({ errore: 'Il nome è obbligatorio.' }, { status: 400 });
   const email = s(c?.email).toLowerCase();
   if (email && !email.includes('@')) return NextResponse.json({ errore: 'E-mail non valida.' }, { status: 400 });
-  const [r] = await query<{ id: string }>(`insert into referring_doctors (studio_id, nome, studio, email, telefono) values ($1, $2, nullif($3, ''), nullif($4, ''), nullif($5, '')) returning id`, [session.studioId, nome, s(c?.studio, 160), email, s(c?.telefono, 40)]);
+  const [r] = await query<{ id: string }>(`insert into referring_doctors (studio_id, nome, studio, email, telefono, specialita, via, npa, localita) values ($1, $2, nullif($3, ''), nullif($4, ''), nullif($5, ''), nullif($6, ''), nullif($7, ''), nullif($8, ''), nullif($9, '')) returning id`, [session.studioId, nome, s(c?.studio), email, s(c?.telefono, 40), s(c?.specialita, 120).replace(/^m?fmh\s+/i, ''), s(c?.via), s(c?.npa, 10), s(c?.localita, 80)]);
   console.log(`[invianti] creato ${r.id.slice(0, 8)}`);
   return NextResponse.json({ id: r.id }, { status: 201 });
 }
