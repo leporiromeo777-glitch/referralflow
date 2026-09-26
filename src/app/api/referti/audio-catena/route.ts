@@ -38,13 +38,7 @@ export async function POST(req: NextRequest) {
   );
   if (!bozza) return NextResponse.json({ errore: 'bozza_non_trovata' }, { status: 404 });
   const [gia] = await query<{ id: string }>('select id from referti_audio where bozza_id = $1 limit 1', [bozza.id]);
-  if (gia) {
-    // Stesso audio rimesso nella cartella e ripassato dalla catena (26.9.2026:
-    // 4 dei 7 dettati del giorno): nessun audio nuovo, ma il dettato va lo
-    // stesso in «Trascrizioni grezze».
-    void esportaGrezza(bozza.id).catch((e: any) => console.error(`[grezze] bozza ${bozza.id.slice(0, 8)}: ${e?.code ?? e?.name ?? 'errore'}`));
-    return NextResponse.json({ esito: 'gia_presente', audio_id: gia.id }, { status: 200 });
-  }
+  if (gia) return NextResponse.json({ esito: 'gia_presente', audio_id: gia.id }, { status: 200 });
 
   const buffer = Buffer.from(await req.arrayBuffer());
   if (buffer.length === 0) return NextResponse.json({ errore: 'file_mancante' }, { status: 400 });
