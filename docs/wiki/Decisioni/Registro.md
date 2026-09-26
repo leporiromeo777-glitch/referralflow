@@ -279,6 +279,10 @@ l'audio (originale e, per il DS2, una copia ascoltabile). Sono dati sanitari fuo
 piattaforma: nomi delle sottocartelle senza paziente, permessi solo per l'utente del Mac, mai in
 cartelle sincronizzate su cloud, cancellazione dopo 7 giorni come «Audio trascritti». Il Word dice
 in testa che non è il referto.
+Aggiornato lo stesso giorno, sempre su richiesta dello studio: niente più audio nella cartella
+(tolto anche dalle sottocartelle già scritte); accanto alla trascrizione grezza c'è il Word del
+referto **corretto dalla catena** (`testo_corretto`, prima di ogni ritocco umano), per vedere che
+cosa cambia il correttore. Anche questo Word dice in testa che il referto valido è quello confermato.
 
 ## 26.9.2026 — «Prepara e-mail»: la mail la prepara la piattaforma, la manda una persona
 Richiesta dello studio: un tasto che prepari la mail al medico inviante con la lettera e gli
