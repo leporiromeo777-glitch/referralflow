@@ -88,6 +88,10 @@ echo "→ procedure dell'assistente in forma di documento"
 DOC="$(curl -s -b "$C_MEDICO" -X POST -H 'Content-Type: application/json' -d '{"nome":"preparazione_giornata"}' "http://localhost:$PORTA/api/prototipo/procedura" | python3 -c "import sys,json; j=json.load(sys.stdin); d=j.get('documento') or {}; print('ok' if d.get('intestazione',{}).get('titolo')=='Preparazione della giornata' and len(d.get('numeri',[]))==4 else 'no')" 2> /dev/null)"
 [ "$DOC" = "ok" ] && echo "   ok" || fallito "la preparazione della giornata non torna un documento"
 
+echo "→ e-mail per l'inviante: anteprima, file .eml, allegati identici, bozza bloccata"
+DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-email.ts "http://localhost:$PORTA" "$C_MEDICO" "$STUDIO" > "$TMP/email.txt" 2>&1 || fallito "prova-email"
+grep -E "^NO" "$TMP/email.txt"; echo "   $(grep -c '^ok' "$TMP/email.txt") ok, $(grep -c '^NO' "$TMP/email.txt") no"
+
 echo "→ chi vede che cosa: menu dal server e rotte bloccate, ruolo per ruolo"
 B="http://localhost:$PORTA/api/prototipo"
 controlla() {   # ruolo  sezione-attesa-si  sezione-attesa-no  rotta-attesa-200  rotta-attesa-403

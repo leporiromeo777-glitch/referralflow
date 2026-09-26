@@ -279,3 +279,10 @@ l'audio (originale e, per il DS2, una copia ascoltabile). Sono dati sanitari fuo
 piattaforma: nomi delle sottocartelle senza paziente, permessi solo per l'utente del Mac, mai in
 cartelle sincronizzate su cloud, cancellazione dopo 7 giorni come «Audio trascritti». Il Word dice
 in testa che non è il referto.
+
+## 26.9.2026 — «Prepara e-mail»: la mail la prepara la piattaforma, la manda una persona
+Richiesta dello studio: un tasto che prepari la mail al medico inviante con la lettera e gli
+allegati. La regola nLPD del progetto vieta dati clinici nelle mail spedite dalla piattaforma,
+quindi la piattaforma consegna un file `.eml` pronto (destinatari, testo, allegati) che si apre nel
+programma di posta dello studio e si invia da lì, via HIN. Solo referti confermati; oggetto e nomi
+dei file senza il paziente; avviso per ogni indirizzo che non è HIN.

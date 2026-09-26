@@ -32,7 +32,7 @@ reportsQueue = function () {
         <div class="qm"><span class="v num">${r.issues}</span><span class="l">verifiche</span></div>
         <div class="qm"><span class="v num ${r.crit ? 'crit' : ''}">${r.crit}</span><span class="l">critiche</span></div>
         <div class="qm"><span class="v num">${r.audio}</span><span class="l">audio</span></div>
-        <button class="btn ${r.state === 'priority' ? 'primary' : ''}" data-go="#/review/${r.id}">${r.status === 'APPROVED' ? 'Rileggi' : r.rivisto ? 'Riprendi e conferma' : r.state === 'clean' ? 'Lettura rapida' : 'Apri revisione'}</button>${r.status !== 'APPROVED' ? `<button class="btn ghost" data-prefirma="${r.id}" title="Controllo prima della firma, con traccia">✓ Controllo</button>` : ''}<button class="btn" onclick="event.stopPropagation();rfWord('${rfEsc(r.id)}')" title="${r.status === 'APPROVED' ? 'Il Word del referto confermato' : 'Il Word della bozza com\'è adesso, con le correzioni già salvate'}">${ICONS.file} Scarica Word</button>
+        <button class="btn ${r.state === 'priority' ? 'primary' : ''}" data-go="#/review/${r.id}">${r.status === 'APPROVED' ? 'Rileggi' : r.rivisto ? 'Riprendi e conferma' : r.state === 'clean' ? 'Lettura rapida' : 'Apri revisione'}</button>${r.status !== 'APPROVED' ? `<button class="btn ghost" data-prefirma="${r.id}" title="Controllo prima della firma, con traccia">✓ Controllo</button>` : ''}<button class="btn" onclick="event.stopPropagation();rfWord('${rfEsc(r.id)}')" title="${r.status === 'APPROVED' ? 'Il Word del referto confermato' : 'Il Word della bozza com\'è adesso, con le correzioni già salvate'}">${ICONS.file} Scarica Word</button>${r.status === 'APPROVED' ? `<button class="btn" onclick="event.stopPropagation();rfEmailPrepara('${rfEsc(r.id)}')" title="La mail per il medico inviante con il Word e gli allegati, da aprire nel programma di posta">${ICONS.mail} Prepara e-mail</button>` : ''}
       </div>
     </div>`;
   };
@@ -255,7 +255,7 @@ rvFinish = function () {
       }
       closeModal();
       openModal('Referto confermato', `<p>Il referto è confermato ed è nell'audit con il tuo ruolo. Il testo corretto alimenta le proposte di dizionario del medico.</p>${notaRichiamo}`,
-        `<button class="btn" onclick="rfWord('${idBozza}')">Scarica il Word</button><button class="btn primary" data-close onclick="RF.loaded=null;go('#/reports');void rfCaricaDati()">Torna ai referti</button>`);
+        `<button class="btn" onclick="rfWord('${idBozza}')">Scarica il Word</button><button class="btn" onclick="rfEmailPrepara('${idBozza}')">${ICONS.mail} Prepara e-mail</button><button class="btn primary" data-close onclick="RF.loaded=null;go('#/reports');void rfCaricaDati()">Torna ai referti</button>`);
     } catch (e) {
       riarma(e.message === 'critici' ? 'La piattaforma chiede la presa d’atto: spunta la casella' : e.message === 'non_bozza' ? 'La bozza è già confermata' : 'Conferma non riuscita');
     }
@@ -1033,3 +1033,42 @@ function rfAttornoCopia(indice, nuovo) {
 .rf-att-cambia summary { cursor:pointer; }
 .rf-att .input.sm { max-width:100%; }
 `; document.head.appendChild(st); })();
+
+
+/* ---------- «Prepara e-mail» per il medico inviante (26.9.2026) ----------
+   La piattaforma non spedisce (regola nLPD: mai dati clinici in mail dalla
+   piattaforma): prepara un file .eml con destinatario, copie, testo e
+   allegati, che si apre nel programma di posta dello studio (HIN) e si manda
+   da lì. Prima un'anteprima: chi riceve, che cosa parte, che cosa manca. */
+async function rfEmailPrepara(id) {
+  let p;
+  try {
+    const r = await fetch(`/api/prototipo/referti/${id}/email?anteprima=1`, { credentials: 'include', cache: 'no-store' });
+    p = await r.json().catch(() => ({}));
+    if (!r.ok) { openModal('E-mail non pronta', `<p>${rfEsc(p.errore || 'Errore ' + r.status)}</p>`, '<button class="btn" data-close>Chiudi</button>'); return; }
+  } catch { toast('Non riesco a raggiungere la piattaforma'); return; }
+  const chi = (x) => `<div class="rf-att-voce"><span><b>${rfEsc(x.nome)}</b> <span class="caption">${rfEsc(x.email)}</span></span>${x.hin ? '<span class="badge success">HIN</span>' : '<span class="badge warning">non HIN</span>'}</div>`;
+  const corpo = `
+    <div class="rf-ap">
+      <div class="rf-ap-riga"><span class="e">A</span><span class="v">${p.a.map(chi).join('')}</span></div>
+      ${p.cc.length ? `<div class="rf-ap-riga"><span class="e">Copia</span><span class="v">${p.cc.map(chi).join('')}</span></div>` : ''}
+      <div class="rf-ap-riga"><span class="e">Oggetto</span><span class="v">${rfEsc(p.oggetto)}</span></div>
+      <div class="rf-ap-riga"><span class="e">Allegati</span><span class="v">${p.allegati.map(x => `<div>${rfEsc(x.etichetta)} <span class="caption">· ${rfEsc(x.file)}</span></div>`).join('')}</span></div>
+    </div>
+    ${p.avvisi.length ? `<div class="rf-att-warn mt-8">${p.avvisi.map(rfEsc).join('<br>')}</div>` : ''}
+    <p class="caption mt-8">Si scarica un file di posta: aprilo con doppio clic, controlla e premi <b>Invia</b> dal tuo programma (HIN). ReferralFlow non spedisce nulla da sé.</p>`;
+  openModal('E-mail per il medico inviante', corpo, `<button class="btn" data-close>Annulla</button><button class="btn primary" id="rf-eml-ok">Scarica la mail</button>`);
+  document.getElementById('rf-eml-ok').onclick = async () => {
+    closeModal();
+    try {
+      const r = await fetch(`/api/prototipo/referti/${id}/email`, { credentials: 'include', cache: 'no-store' });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); toast(j.errore || `Errore ${r.status}`); return; }
+      const blob = await r.blob();
+      const m = (r.headers.get('Content-Disposition') || '').match(/filename="?([^";]+)"?/);
+      const href = URL.createObjectURL(blob); const a = document.createElement('a');
+      a.href = href; a.download = (m && m[1]) || 'rapporto.eml'; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(href), 60000);
+      toast('Mail pronta: aprila e premi Invia dal programma di posta');
+    } catch { toast('Non riesco a raggiungere la piattaforma'); }
+  };
+}
