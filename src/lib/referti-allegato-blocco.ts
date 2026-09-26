@@ -77,7 +77,42 @@ export function righeAllegato(note: NotaAgganciata[], testo = '', cartella: Docu
   return righe;
 }
 
-export function bloccoAllegato(note: NotaAgganciata[], testo = '', cartella: DocumentoCartella[] = []): string {
+export function bloccoAllegato(note: NotaAgganciata[], testo = '', cartella: DocumentoCartella[] = [], extra: string[] = []): string {
   const righe = righeAllegato(note, testo, cartella);
+  for (const e of extra) if (e && !righe.some((r) => r.toLowerCase() === e.toLowerCase())) righe.push(e);
   return righe.length ? ['Allegato:', ...righe.map((r) => `-${r}`)].join('\n') : '';
+}
+
+// ---------- L'ECG citato nel dettato (26.9.2026) ----------
+// Richiesta dello studio: se il medico parla di un ECG, il sistema lo cerca
+// nella cartella e lo allega. La regola di sopra non poteva farlo: «ECG» ha
+// tre lettere e le parole specifiche ne vogliono almeno quattro, quindi un
+// documento «ECG» non risultava mai citato.
+// Quale ECG: un documento della cartella di categoria «ecg» (o con «ECG» /
+// «elettrocardiogramma» nella nota o nel nome), caricato fra 30 giorni prima
+// e 3 giorni dopo il dettato; il più recente. Un ECG di mesi prima NON si
+// allega: il medico parla dell'ECG di oggi, e allegare quello vecchio sarebbe
+// un errore scritto nella lettera. Niente ECG adatto = la revisione lo dice.
+export type DocumentoDatato = DocumentoCartella & { id?: string; uploaded_at: string | Date };
+
+export function citaECG(testo: string): boolean {
+  return /\b(?:ecg|e\.c\.g\.|elettrocardiogramm[ai])\b/i.test(String(testo || ''));
+}
+
+export function eUnECG(d: DocumentoCartella): boolean {
+  return d.categoria === 'ecg' || /\b(?:ecg|elettrocardiogramm[ai])\b/i.test(`${d.nota ?? ''} ${d.filename}`);
+}
+
+export function scegliECG<T extends DocumentoDatato>(cartella: T[], dettatoIl: Date): T | null {
+  const t = dettatoIl.getTime();
+  const adatti = cartella
+    .filter((d) => eUnECG(d))
+    .map((d) => ({ d, q: new Date(d.uploaded_at).getTime() }))
+    .filter((x) => Number.isFinite(x.q) && x.q >= t - 30 * 86_400_000 && x.q <= t + 3 * 86_400_000)
+    .sort((a, b) => b.q - a.q);
+  return adatti[0]?.d ?? null;
+}
+
+export function etichettaDocumento(d: { filename: string; nota?: string | null }): string {
+  return etichetta(d);
 }

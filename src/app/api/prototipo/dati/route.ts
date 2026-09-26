@@ -255,8 +255,8 @@ export async function GET() {
   }
 
   // Referti della catena.
-  const bozze = await query<{ id: string; stato: string; tipo: string; created_at: string; testo_finale: string | null; payload: any; campi_confermati: any }>(
-    `select id, stato, tipo, created_at::text, testo_finale, payload, campi_confermati, patient_id from referti_bozze
+  const bozze = await query<{ id: string; stato: string; tipo: string; created_at: string; testo_finale: string | null; payload: any; campi_confermati: any; inviante_stato: string | null; inviante_nome: string | null }>(
+    `select id, stato, tipo, created_at::text, testo_finale, payload, campi_confermati, patient_id, inviante_stato, inviante_nome from referti_bozze
       where studio_id = $1 and stato in ('bozza', 'confermata') and coalesce((payload->>'ombra')::boolean, false) = false
       order by (stato = 'bozza') desc, created_at desc limit 40`, [sid]);
   const reports = bozze.map((b) => {
@@ -298,6 +298,7 @@ export async function GET() {
       // 01.09. Per ordinare serve una chiave ordinabile.
       atIso: d.toISOString(),
       audio: rev.audio.label, fiducia: p.fiducia?.punteggio ?? null, ...rev.riepilogo,
+      inviante: b.inviante_stato === 'nuovo' || b.inviante_stato === 'ambiguo' ? { stato: b.inviante_stato, nome: b.inviante_nome ?? '' } : null,
     };
   });
 

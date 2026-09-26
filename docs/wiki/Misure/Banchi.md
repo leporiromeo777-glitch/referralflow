@@ -248,3 +248,5 @@ Da ricordare più del risultato: **il primo punteggio assolveva tutti e tre**, p
 | `src/lib/prove-permessi.test.ts` | tecnico tutto, amministrazione senza dittafono, chi cura senza fatture/invianti/amministrazione, aiuto medico senza referti, ruoli sconosciuti senza niente, `vietato` | 3/3 |
 | `npm run test:e2e`, blocco «chi vede che cosa» (DB demo) | sezioni dal server: medico 13, aiuto medico 12, segreteria 17, amministrazione 18, tecnico 19; 403 su fatturazione (medico) e referti (aiuto medico) | TUTTO OK |
 | browser sul DB demo | home del medico, dell'aiuto medico e del tecnico; indirizzo di una sezione vietata → home; API 403 | ok |
+
+**Inviante, copia e ECG** (26.9.2026, DB demo, dati inventati: un inviante, un medico in copia, un paziente con un ECG caricato il giorno prima, un referto che li nomina tutti più un medico sconosciuto): inviante «collegato»; copia 2 voci (una in rubrica con indirizzo, una «non in rubrica»); allegato l'ECG giusto; cambiato l'inviante in uno sconosciuto → «nuovo»; aggiunto in rubrica → ricollegato da solo (1). Prove: 3 nuove in `prove-allegati.test.ts`, suite 302/302.

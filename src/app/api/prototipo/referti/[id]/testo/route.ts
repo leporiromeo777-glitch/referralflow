@@ -4,6 +4,7 @@ import { query } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
 import { registraEvento, impronta } from '@/lib/referti-eventi';
 import { vietato } from '@/lib/permessi';
+import { collegaInviante } from '@/lib/referti-inviante';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,6 +47,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       `update referti_bozze set campi_confermati = coalesce(campi_confermati, '{}'::jsonb) || $3::jsonb where id = $1 and studio_id = $2 and stato = 'bozza' returning id`,
       [params.id, session.studioId, JSON.stringify(campi)]);
     if (!agg) return NextResponse.json({ errore: 'non_bozza' }, { status: 409 });
+    // Cambiato inviante o destinatario: il legame con la rubrica si rifà.
+    if (campi.medico_inviante !== undefined || campi.medico_destinatario !== undefined) await collegaInviante(session.studioId, params.id).catch(() => null);
     if (!testo && !statoJson) return NextResponse.json({ ok: true, solo_campi: true });
   }
   if (!testo && !statoJson) return NextResponse.json({ errore: 'testo_vuoto' }, { status: 400 });

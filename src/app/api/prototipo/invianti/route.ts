@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { vietato } from '@/lib/permessi';
+import { ricollegaInvianti } from '@/lib/referti-inviante';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,6 +55,7 @@ export async function POST(req: NextRequest) {
   const email = s(c?.email).toLowerCase();
   if (email && !email.includes('@')) return NextResponse.json({ errore: 'E-mail non valida.' }, { status: 400 });
   const [r] = await query<{ id: string }>(`insert into referring_doctors (studio_id, nome, studio, email, telefono, specialita, via, npa, localita) values ($1, $2, nullif($3, ''), nullif($4, ''), nullif($5, ''), nullif($6, ''), nullif($7, ''), nullif($8, ''), nullif($9, '')) returning id`, [session.studioId, nome, s(c?.studio), email, s(c?.telefono, 40), s(c?.specialita, 120).replace(/^m?fmh\s+/i, ''), s(c?.via), s(c?.npa, 10), s(c?.localita, 80)]);
-  console.log(`[invianti] creato ${r.id.slice(0, 8)}`);
+  const ricollegati = await ricollegaInvianti(session.studioId).catch(() => 0);
+  console.log(`[invianti] creato ${r.id.slice(0, 8)}, ricollegati ${ricollegati}`);
   return NextResponse.json({ id: r.id }, { status: 201 });
 }

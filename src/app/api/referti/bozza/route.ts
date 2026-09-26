@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { collegaInviante } from '@/lib/referti-inviante';
 import { registraCorsa, registraCorsaFallita } from '@/lib/audit/lineage';
 import { createHash } from 'crypto';
 import { query } from '@/lib/db';
@@ -466,6 +467,8 @@ export async function POST(req: NextRequest) {
     await registraAudit(inserita.id);
     await registraEvento(studio.id, inserita?.id ?? null, 'bozza_ricevuta', null, { versione: String((payload as any).versione_catena?.pipeline ?? ''), ombra: (payload as any).ombra === true, medico: medicoId ?? '' });
     await fusioneAutomatica(inserita.id);
+    // Inviante collegato alla rubrica, o segnalato se nuovo (26.9.2026).
+    try { await collegaInviante(studio.id, inserita.id); } catch (e: any) { console.error('inviante:', e?.message || e); }
   return NextResponse.json({ id: inserita.id }, { status: 201 });
   }
 

@@ -25,7 +25,7 @@ reportsQueue = function () {
       <div class="row wrap" style="gap:12px">
         <div class="avatar-sm">${initials(P[r.p])}</div>
         <div class="grow" style="min-width:220px">
-          <div class="row" style="gap:8px"><b>${rfEsc(fullName(P[r.p]))}</b><span class="badge ${st[1]}">${st[0]}</span>${r.status === 'APPROVED' ? '<span class="badge success">confermato</span>' : r.rivisto ? `<span class="badge accent" title="${r.rivisto.correzioni} correzioni · ${r.rivisto.chiuse} verifiche chiuse">rivisto ${rfEsc(r.rivisto.quando)}</span>` : ''}</div>
+          <div class="row" style="gap:8px"><b>${rfEsc(fullName(P[r.p]))}</b><span class="badge ${st[1]}">${st[0]}</span>${r.status === 'APPROVED' ? '<span class="badge success">confermato</span>' : r.rivisto ? `<span class="badge accent" title="${r.rivisto.correzioni} correzioni · ${r.rivisto.chiuse} verifiche chiuse">rivisto ${rfEsc(r.rivisto.quando)}</span>` : ''}${r.inviante ? `<span class="badge warning" title="${r.inviante.stato === 'nuovo' ? 'Il medico inviante non è nella rubrica: si aggiunge dalla revisione' : 'Più medici possibili in rubrica: si sceglie nella revisione'}">${r.inviante.stato === 'nuovo' ? 'inviante nuovo' : 'inviante da scegliere'}${r.inviante.nome ? ': ' + rfEsc(r.inviante.nome) : ''}</span>` : ''}</div>
           <div class="caption">${rfEsc(DOCTORS[r.doc] || '')} · ${rfEsc(r.type)} · ${r.at}</div>
           <div class="sub" style="font-size:12.5px;color:var(--text-2);margin-top:2px">${rfEsc(r.note)}</div>
         </div>
@@ -829,6 +829,7 @@ rvRenderNav = function () {
       <details class="rf-campi" ${Object.values(c).some(v => !v) ? 'open' : ''}><summary><b>Campi estratti</b> <span class="caption">${['nome_paziente', 'data_nascita', 'medico_destinatario'].filter(k => c[k]).length}/3 · dalla catena, correggibili</span></summary>
         ${campo('nome_paziente', 'Paziente', 'Cognome Nome')}${campo('data_nascita', 'Nascita', 'gg.mm.aaaa')}${campo('medico_destinatario', 'Destinatario', 'Dr. …')}
         <div class="caption" style="margin-top:4px">Si salvano nella bozza appena li cambi; valgono per la lettera e per il Word.</div></details>
+      ${rfAttornoHtml()}
       ${passi.length ? passi.map((g, n) => `<div class="rv-group">${n + 1}. ${rfEsc(g.titolo)} <span class="caption">${g.voci.length}</span></div>${g.voci.map(card).join('')}`).join('') : '<div class="rv-group">Nessuna verifica aperta</div>'}
       ${closed.length ? `<div class="rv-group">Controllati</div>${closed.map(card).join('')}` : ''}
     </div>
@@ -942,3 +943,93 @@ rvSeek = function (t, play) {
   if (play) rvPlay(RV.t, null); else rvTick();
 };
 
+
+/* ---------- Inviante, copia per conoscenza, allegati (26.9.2026) ----------
+   Richiesta dello studio: il referto si collega da solo al medico inviante
+   della rubrica e segnala quando è nuovo; la lettera porta la copia per
+   conoscenza; se il medico parla di un ECG, l'ECG della cartella si allega.
+   Quel che si vede qui è quel che finisce nel Word: stessa funzione sul
+   server (src/lib/referti-inviante.ts, attorno()). */
+RF.attorno = null; RF.attornoPer = null;
+async function rfCaricaAttorno(forza) {
+  const id = RF.loaded; if (!id) return;
+  if (!forza && (RF.attornoPer === id || RF.attornoCarica === id)) return;
+  RF.attornoCarica = id;
+  try { const r = await fetch(`/api/prototipo/referti/${id}/allegati`, { credentials: 'include', cache: 'no-store' }); RF.attorno = r.ok ? await r.json() : null; }
+  catch { RF.attorno = null; }
+  RF.attornoPer = id; RF.attornoCarica = null;
+  if (typeof rvRenderNav === 'function' && state.route === 'review') rvRenderNav();
+}
+function rfAttornoHtml() {
+  if (!RF.live || !RF.loaded) return '';
+  if (RF.attornoPer !== RF.loaded) { void rfCaricaAttorno(); return '<div class="rf-att caption">Cerco inviante e allegati…</div>'; }
+  const a = RF.attorno; if (!a) return '';
+  const inv = a.inviante || {};
+  const scelte = (lista, sel) => `<option value="">— scegli —</option>${lista.map(x => `<option value="${rfEsc(x.id)}" ${x.id === sel ? 'selected' : ''}>${rfEsc(x.nome)}${x.localita ? ' · ' + rfEsc(x.localita) : ''}</option>`).join('')}`;
+  let invHtml;
+  if (inv.scelto) invHtml = `<div class="rf-att-ok">✓ <b>${rfEsc(inv.scelto.nome)}</b>${inv.manuale ? ' <span class="caption">scelto a mano</span>' : ''}<div class="caption">${[inv.scelto.specialita, inv.scelto.indirizzo, inv.scelto.email].filter(Boolean).map(rfEsc).join(' · ')}</div></div>
+      <details class="rf-att-cambia"><summary class="caption">cambia</summary><select class="input sm" onchange="rfAttornoInviante(this.value)">${scelte(a.rubrica || [], inv.scelto.id)}</select>${inv.manuale ? '<button class="btn sm ghost" onclick="rfAttornoInviante(\'\')">Torna automatico</button>' : ''}</details>`;
+  else if (inv.stato === 'ambiguo') invHtml = `<div class="rf-att-warn">Il referto dice <b>${rfEsc(inv.nome)}</b>: in rubrica ci sono più medici possibili.</div><select class="input sm" onchange="rfAttornoInviante(this.value)">${scelte(inv.candidati || [], '')}</select>`;
+  else if (inv.stato === 'nuovo') invHtml = `<div class="rf-att-warn"><b>Inviante nuovo</b>: ${rfEsc(inv.nome)} non è nella rubrica.</div><div class="row" style="gap:6px"><button class="btn sm primary" onclick="rfAttornoAggiungi()">Aggiungi alla rubrica</button></div><details class="rf-att-cambia"><summary class="caption">oppure è uno di questi</summary><select class="input sm" onchange="rfAttornoInviante(this.value)">${scelte(a.rubrica || [], '')}</select></details>`;
+  else invHtml = `<div class="caption">Il referto non nomina un medico inviante.</div><select class="input sm" onchange="rfAttornoInviante(this.value)">${scelte(a.rubrica || [], '')}</select>`;
+  const cc = (a.copia && a.copia.voci) || [];
+  const ccHtml = `${cc.length ? cc.map((v, i) => `<div class="rf-att-voce ${v.in_rubrica ? '' : 'nuovo'}"><span>${rfEsc(v.nome)}${v.indirizzo ? `<span class="caption"> · ${rfEsc(v.indirizzo)}</span>` : (v.in_rubrica ? '' : '<span class="caption"> · non in rubrica</span>')}</span><button class="icon-btn" title="Togli" onclick="rfAttornoCopia(${i}, null)">${ICONS.x}</button></div>`).join('') : '<div class="caption">Nessuna copia per conoscenza.</div>'}
+      <div class="row" style="gap:6px;margin-top:4px"><input class="input sm" id="rf-att-cc" list="rf-att-rub" placeholder="Aggiungi un medico" autocomplete="off"><button class="btn sm" onclick="rfAttornoCopia(-1, document.getElementById('rf-att-cc').value)">Aggiungi</button></div>
+      <datalist id="rf-att-rub">${(a.rubrica || []).map(x => `<option value="${rfEsc(x.nome)}"></option>`).join('')}</datalist>
+      <div class="caption">${a.copia && a.copia.fonte === 'revisione' ? 'Elenco corretto a mano.' : 'Dal dettato («copia al dottor…», «per conoscenza…»).'}</div>`;
+  const al = a.allegati || [];
+  const motivo = { nota: 'chiesto nel dettato', citato: 'citato nel testo', ecg: 'ECG citato dal medico' };
+  const alHtml = `${al.length ? al.map(x => `<div class="rf-att-voce"><span>${rfEsc(x.etichetta)}<span class="caption"> · ${motivo[x.motivo] || ''}</span></span>${x.documento_id ? `<a class="btn sm ghost" href="/api/documents/${rfEsc(x.documento_id)}" target="_blank" rel="noopener">Apri</a>` : ''}</div>`).join('') : '<div class="caption">Nessun allegato.</div>'}
+      ${a.ecg && a.ecg.citato && !a.ecg.trovato ? `<div class="rf-att-warn">Il medico parla di un <b>ECG</b>, ma nella cartella non c'è un ECG degli ultimi 30 giorni. Caricalo nella cartella del paziente (categoria ECG) e riapri il referto.</div>` : ''}
+      ${a.paziente_in_cartella ? '' : '<div class="caption">Paziente non in cartella: gli allegati non si possono cercare.</div>'}`;
+  return `<details class="rf-campi rf-att" ${inv.stato === 'nuovo' || inv.stato === 'ambiguo' || (a.ecg && a.ecg.citato && !a.ecg.trovato) ? 'open' : ''}><summary><b>Inviante, copie e allegati</b>${inv.stato === 'nuovo' || inv.stato === 'ambiguo' ? ' <span class="badge warning">da guardare</span>' : ''}</summary>
+    <div class="rf-att-sez"><div class="rf-att-tit">Medico inviante</div>${invHtml}</div>
+    <div class="rf-att-sez"><div class="rf-att-tit">Copia per conoscenza</div>${ccHtml}</div>
+    <div class="rf-att-sez"><div class="rf-att-tit">Allegati nel Word</div>${alHtml}</div></details>`;
+}
+async function rfAttornoPost(corpo) {
+  const r = await fetch(`/api/prototipo/referti/${RF.loaded}/allegati`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.errore || `Errore ${r.status}`);
+  return j;
+}
+async function rfAttornoInviante(id) {
+  try { await rfAttornoPost({ azione: 'inviante', referring_doctor_id: id || null }); toast(id ? 'Inviante collegato' : 'Inviante di nuovo automatico'); } catch (e) { toast(e.message); }
+  void rfCaricaAttorno(true); void rfCaricaDati();
+}
+function rfAttornoAggiungi() {
+  const nome = ((RF.attorno || {}).inviante || {}).nome || '';
+  openModal('Aggiungi alla rubrica', `<div class="field"><label>Nome</label><input class="input" id="rf-att-n" value="${rfEsc(nome.replace(/^(dr\.?\s*(med\.?)?|dott\.?(ssa)?|dr\.?ssa\s*(med\.?)?)\s*/i, ''))}"></div>
+    <div class="field mt-8"><label>Specialità</label><input class="input" id="rf-att-s" placeholder="medicina interna generale"></div>
+    <div class="grid grid-2 mt-8"><div class="field"><label>E-mail</label><input class="input" id="rf-att-e" type="email"></div><div class="field"><label>Telefono</label><input class="input" id="rf-att-t"></div></div>
+    <div class="grid grid-2 mt-8"><div class="field"><label>Via</label><input class="input" id="rf-att-v"></div><div class="field"><label>NPA e località</label><div class="row" style="gap:6px"><input class="input" id="rf-att-c" style="max-width:80px" inputmode="numeric"><input class="input" id="rf-att-l"></div></div></div>
+    <p class="caption mt-8">Dopo il salvataggio, questo referto e gli altri che aspettavano lo stesso medico si collegano da soli.</p>`,
+    `<button class="btn" data-close>Annulla</button><button class="btn primary" id="rf-att-ok">Aggiungi</button>`);
+  document.getElementById('rf-att-ok').onclick = async () => {
+    const v = (id) => (document.getElementById(id) || {}).value || '';
+    try {
+      const j = await rfAttornoPost({ azione: 'aggiungi', nome: v('rf-att-n'), specialita: v('rf-att-s'), email: v('rf-att-e'), telefono: v('rf-att-t'), via: v('rf-att-v'), npa: v('rf-att-c'), localita: v('rf-att-l') });
+      closeModal(); toast(j.ricollegati > 1 ? `Aggiunto: collegati ${j.ricollegati} referti` : 'Aggiunto alla rubrica');
+      RF.invianti = null; void rfCaricaAttorno(true); void rfCaricaDati();
+    } catch (e) { toast(e.message); }
+  };
+}
+function rfAttornoCopia(indice, nuovo) {
+  const voci = (((RF.attorno || {}).copia || {}).voci || []).map(v => v.nome);
+  if (indice >= 0) voci.splice(indice, 1);
+  if (nuovo && nuovo.trim() && !voci.some(x => x.toLowerCase() === nuovo.trim().toLowerCase())) voci.push(nuovo.trim());
+  RF.campi = RF.campi || {};
+  RF.campi.copia_conoscenza = voci.join('; ');
+  void (async () => { await rfSalvaCampi(); await rfCaricaAttorno(true); })();
+}
+(function () { const st = document.createElement('style'); st.textContent = `
+.rf-att .rf-att-sez { padding:8px 0; border-top:1px solid var(--border); display:flex; flex-direction:column; gap:5px; }
+.rf-att .rf-att-sez:first-of-type { border-top:0; }
+.rf-att-tit { font-size:11.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-3); }
+.rf-att-ok { font-size:13px; }
+.rf-att-warn { font-size:12.5px; background:var(--warning-soft, #fff3c4); border-radius:8px; padding:6px 8px; }
+.rf-att-voce { display:flex; justify-content:space-between; align-items:center; gap:6px; font-size:12.5px; }
+.rf-att-voce.nuovo > span:first-child { color:var(--text-2); }
+.rf-att-cambia summary { cursor:pointer; }
+.rf-att .input.sm { max-width:100%; }
+`; document.head.appendChild(st); })();

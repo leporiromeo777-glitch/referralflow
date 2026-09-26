@@ -3,11 +3,13 @@ import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { generaDocxReferto, ricomponiParagrafi } from '@/lib/referto-docx';
 import { profiloMedico } from '@/lib/referti-medici';
-import { appellativo, conTitolo, dataCh, dataVisitaDalTesto, destinatarioAffidabile, destinatarioDalSaluto, destinatarioInRubrica, siglaDaEmail } from '@/lib/referti-lettera';
+import { appellativo, conTitolo, dataCh, dataVisitaDalTesto, destinatarioAffidabile, destinatarioDalSaluto, destinatarioInRubrica, scegliInRubrica, siglaDaEmail } from '@/lib/referti-lettera';
 import { salvaDalModulo } from '@/lib/referti-salva';
 import { isUuid } from '@/lib/cartella';
 import { agganciaRiferimenti, documentiDelPaziente } from '@/lib/referti-allegati';
 import { bloccoAllegato } from '@/lib/referti-allegato-blocco';
+import { bloccoCopiaConoscenza } from '@/lib/referti-copia';
+import { attorno, vociCopia } from '@/lib/referti-inviante';
 import { registraEvento } from '@/lib/referti-eventi';
 
 export const runtime = 'nodejs';
@@ -117,8 +119,17 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const femminile = (daiCampi ? /\b(dr\.?ssa|dott\.?ssa|dottoressa|signora)\b/i.test(daiCampi) : false) || (!daiCampi && (dalSaluto?.femminile ?? false));
   let destinatario = nomeDest ? conTitolo(nomeDest.replace(/^dr\.?\s*(med\.?)?\s*/i, ''), femminile) : ' ';
   let via = 'Via email';
+  // Inviante collegato, copia per conoscenza, allegati (ECG compreso): la
+  // stessa funzione della pagina di revisione (26.9.2026).
+  const intorno = await attorno(session.studioId, params.id).catch(() => null);
   if (formato === 'lettera') {
-    const rubrica = nomeDest ? await destinatarioInRubrica(session.studioId, nomeDest) : null;
+    // Se il referto è collegato a un inviante e il destinatario è lui, i suoi
+    // dati vengono dal legame (scelto una volta, anche a mano), non da una
+    // nuova ricerca per nome.
+    const scelto = intorno?.inviante.scelto ?? null;
+    const legato = scelto && nomeDest && scegliInRubrica(nomeDest, [{ nome: scelto.nome, email: null, studio: null, specialita: null }])
+      ? { email: scelto.email, specialita: scelto.specialita, studio: '' } : null;
+    const rubrica = legato ?? (nomeDest ? await destinatarioInRubrica(session.studioId, nomeDest) : null);
     const righe = nomeDest
       ? [appellativo(nomeDest, femminile), destinatario,
          rubrica?.specialita ? `FMH ${rubrica.specialita}` : '',
@@ -134,20 +145,28 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const titolo = (profilo?.titolo_rapporto || 'VISITA AMBULATORIALE, RAPPORTO').replace('{data_visita}', dataVisita);
   // Riga «Copia»: dal profilo (Moschovitis la tiene, Moccetti no).
   let copia = profilo ? profilo.copia : 'Copia: alla paziente';
-  // Formato lettera: blocco «Allegato:» come lo scrive la segretaria, dai
-  // documenti della cartella agganciati alle note per la segreteria
-  // (12.9.2026). Senza documenti agganciati non compare.
-  if (formato === 'lettera') {
+  // Copia per conoscenza (26.9.2026): dal dettato o dalla revisione, con
+  // l'indirizzo della rubrica.
+  if (intorno) {
+    const cc = bloccoCopiaConoscenza(vociCopia(intorno));
+    if (cc) copia = [copia, cc].filter(Boolean).join('\n');
+  }
+  // Blocco «Allegato:» come lo scrive la segretaria (12.9.2026): documenti
+  // agganciati alle note per la segreteria, documenti citati nel testo e,
+  // dal 26.9.2026, l'ECG della cartella quando il medico ne parla. Dal
+  // 26.9.2026 anche nel formato rapporto. Senza documenti non compare.
+  if (intorno?.allegati.length) {
+    const blocco = bloccoAllegato([], '', [], intorno.allegati.map((a) => a.etichetta));
+    if (blocco) copia = [copia, blocco].filter(Boolean).join('\n');
+  } else if (formato === 'lettera' && !intorno && pazienteNome) {
     const note = Array.isArray(b.payload?.note_segreteria)
       ? (b.payload.note_segreteria as unknown[]).filter((n): n is string => typeof n === 'string') : [];
-    if (pazienteNome) {
-      try {
-        const rif = note.length ? await agganciaRiferimenti(session.studioId, pazienteNome, note) : [];
-        const cartella = await documentiDelPaziente(session.studioId, pazienteNome);
-        const blocco = bloccoAllegato(rif, testo, cartella);
-        if (blocco) copia = [copia, blocco].filter(Boolean).join('\n');
-      } catch { /* best-effort */ }
-    }
+    try {
+      const rif = note.length ? await agganciaRiferimenti(session.studioId, pazienteNome, note) : [];
+      const cartella = await documentiDelPaziente(session.studioId, pazienteNome);
+      const blocco = bloccoAllegato(rif, testo, cartella);
+      if (blocco) copia = [copia, blocco].filter(Boolean).join('\n');
+    } catch { /* best-effort */ }
   }
 
   const docx = await generaDocxReferto({

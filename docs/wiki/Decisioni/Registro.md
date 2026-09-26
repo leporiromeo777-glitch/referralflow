@@ -255,3 +255,15 @@ Nobile, tre Bernasconi): una lettera sarebbe partita con l'e-mail di un altro me
 tutte le parole del nome dettato; il cognome da solo vale solo se unico; altrimenti la lettera
 resta con «Via e-mail» senza indirizzo. Stessa regola dell'abbinamento dei pazienti: un omonimo non
 si indovina.
+
+## 26.9.2026 — Il referto si collega all'inviante, porta la copia per conoscenza e allega l'ECG
+Richiesta dello studio. Tre regole, tutte senza AI e tutte visibili in revisione prima del Word:
+- **Inviante**: collegato alla rubrica solo se c'è un medico solo che corrisponde; con omonimi o
+  nome diverso resta «da scegliere», senza nome in rubrica è «nuovo» e si segnala in coda e in
+  revisione. Una scelta a mano non viene mai sovrascritta.
+- **Copia per conoscenza**: dal dettato, correggibile in revisione; chi non è in rubrica entra
+  senza indirizzo, e senza titolo davanti (il genere non lo sappiamo).
+- **ECG**: si allega solo un ECG della cartella degli ultimi 30 giorni (fino a 3 giorni dopo il
+  dettato). Allegare quello di mesi prima sarebbe un errore scritto nella lettera: meglio dire che
+  manca. Dove finiscono oggi gli ECG dell'apparecchio dello studio non è ancora deciso: finché non
+  entrano in cartella, la regola li trova solo se qualcuno li carica.
