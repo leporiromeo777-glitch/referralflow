@@ -283,6 +283,11 @@ Aggiornato lo stesso giorno, sempre su richiesta dello studio: niente più audio
 (tolto anche dalle sottocartelle già scritte); accanto alla trascrizione grezza c'è il Word del
 referto **corretto dalla catena** (`testo_corretto`, prima di ogni ritocco umano), per vedere che
 cosa cambia il correttore. Anche questo Word dice in testa che il referto valido è quello confermato.
+Aggiornato il 27.9.2026, richiesta dello studio: i due Word sono **pseudonimizzati** (non «anonimi»:
+lo dicono in testa) con il modello locale di Anonimizza più i nomi che la piattaforma conosce già, e
+si scrivono **solo quando la catena è ferma** («quando tutti i referti sono finiti»): il modello
+dell'anonimizzatore sulla GPU insieme a whisper o al correttore è la contesa di memoria che ha già
+fatto cadere la catena. Il testo in chiaro non va più sulla Scrivania.
 
 ## 26.9.2026 — «Prepara e-mail»: la mail la prepara la piattaforma, la manda una persona
 Richiesta dello studio: un tasto che prepari la mail al medico inviante con la lettera e gli

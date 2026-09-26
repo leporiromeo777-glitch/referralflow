@@ -2,6 +2,7 @@
 # ReferralFlow — automazioni del server dello studio. Lanciato da launchd
 # ogni 15 minuti (vedi installa-server.sh):
 #   - sincronizzazione dell'agenda (feed iCal Cassa dei Medici) a ogni giro
+#   - «Trascrizioni grezze» pseudonimizzate, a catena ferma, a ogni giro
 #   - promemoria SMS una volta l'ora (fa qualcosa solo se gli SMS sono attivi)
 #   - watchdog delle referral ferme una volta al giorno, la mattina
 #   - report mensile il 1° del mese
@@ -37,6 +38,8 @@ chiama cron/agenda
 # Le immagini arrivate dagli apparecchi: il servizio di ricezione chiama da sé
 # appena finisce di ricevere, ma un avviso può perdersi e un esame no.
 chiama cron/imaging
+# «Trascrizioni grezze» pseudonimizzate: parte solo se la catena è ferma.
+chiama cron/grezze
 
 # Una sola volta l'ora / al giorno / al mese: passa di qui ogni quarto d'ora,
 # quindi il giro col minuto sotto i 15 è quello «in punto».
