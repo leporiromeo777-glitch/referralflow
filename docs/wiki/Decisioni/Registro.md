@@ -271,3 +271,11 @@ Richiesta dello studio. Tre regole, tutte senza AI e tutte visibili in revisione
   dettato). Allegare quello di mesi prima sarebbe un errore scritto nella lettera: meglio dire che
   manca. Dove finiscono oggi gli ECG dell'apparecchio dello studio non è ancora deciso: finché non
   entrano in cartella, la regola li trova solo se qualcuno li carica.
+
+## 26.9.2026 — «Trascrizioni grezze»: Word grezzo e audio per ogni dettato della cartella
+Richiesta dello studio: poter confrontare quel che la catena ha sentito con l'audio. La piattaforma
+scrive una sottocartella per dettato sulla Scrivania del Mac con il Word della trascrizione grezza e
+l'audio (originale e, per il DS2, una copia ascoltabile). Sono dati sanitari fuori dalla
+piattaforma: nomi delle sottocartelle senza paziente, permessi solo per l'utente del Mac, mai in
+cartelle sincronizzate su cloud, cancellazione dopo 7 giorni come «Audio trascritti». Il Word dice
+in testa che non è il referto.

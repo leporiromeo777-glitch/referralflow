@@ -5,6 +5,7 @@ import { putFile } from '@/lib/storage';
 import { ESTENSIONI_DITTAFONO, wavDaDittafono } from '@/lib/dittafono';
 import { TIPI_AUDIO, MAX_BYTES_AUDIO } from '@/lib/referti-audio-tipi';
 import { RX_MEDICO_ID } from '@/lib/referti-medici';
+import { esportaGrezza, pulisciGrezze } from '@/lib/esporta-grezze';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -54,5 +55,11 @@ export async function POST(req: NextRequest) {
     [studio.id, `dettato${ext}`, key, TIPI_AUDIO[ext], bozza.id, bozza.tipo === 'visita' ? 'visita' : 'referto', medico, bozza.creata]
   );
   console.log(`[referti] audio della catena collegato: bozza ${bozza.id.slice(0, 8)}, ${buffer.length} byte`);
+  // Word della trascrizione grezza + audio nella cartella «Trascrizioni
+  // grezze» del Mac (26.9.2026). Non blocca mai la consegna.
+  void (async () => {
+    try { await esportaGrezza(bozza.id); await pulisciGrezze(); }
+    catch (e: any) { console.error(`[grezze] bozza ${bozza.id.slice(0, 8)}: ${e?.code ?? e?.name ?? 'errore'}`); }
+  })();
   return NextResponse.json({ esito: 'collegato', audio_id: row.id }, { status: 201 });
 }

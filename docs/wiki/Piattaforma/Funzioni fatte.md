@@ -6,6 +6,7 @@ aggiornata: 2026-09-23
 
 Elenco di ciò che esiste. Per la catena dei referti vedi [[Catena/Panoramica]].
 
+- **Cartella «Trascrizioni grezze»** (2026-09-26): per ogni dettato della cartella condivisa, Word della trascrizione grezza + audio originale + audio ascoltabile, in una sottocartella per dettato sulla Scrivania del Mac; si cancella dopo 7 giorni. Riempita subito con i 35 dettati dell'ultima settimana.
 - **Referto collegato all'inviante, copia per conoscenza, ECG allegato** (2026-09-26, migrazione 076): il referto si collega da solo al medico inviante della rubrica e segnala quello nuovo o ambiguo (bollino in coda, riquadro in revisione con «Aggiungi alla rubrica»); la copia per conoscenza dal dettato va nel Word con l'indirizzo; l'ECG citato si allega dalla cartella se recente. v182.
 - **Rubrica degli invianti completa** (2026-09-26, migrazione 075): 92 medici dall'elenco dello studio con specialità, indirizzo (cercato negli elenchi cantonali e nelle rubriche pubbliche, fonte in nota), telefono ed e-mail; «da verificare» dove le fonti non concordano; la pagina Medici invianti mostra specialità e indirizzo e il modulo «Nuovo inviante» li chiede; nelle lettere il destinatario si cerca senza indovinare gli omonimi. v181.
 - **«Scarica Word» su ogni bozza della pagina Referti** (2026-09-23): lo stesso Word della revisione (`/api/referti/docx/<id>`, carta intestata del medico, evento `word_scaricato`) senza aprire la revisione; «Detta dal telefono» porta alla pagina del dittafono dentro la piattaforma. v180.
