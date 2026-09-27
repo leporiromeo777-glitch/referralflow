@@ -125,8 +125,8 @@ PAGES.review = () => {
   html = html.replace(/<div class="rv-pat">[\s\S]*?<\/div>/, testata);
   // Impaginazione nel formato del medico e Word: stessi motori della piattaforma.
   const bottoni = m.stato === 'bozza'
-    ? `<button class="btn sm ghost" onclick="rfImpagina()" title="${m.formato === 'lettera' ? 'Formato del medico: lettera al collega («Caro …,», corpo, saluto, terapia dalla lettera precedente)' : 'Formato del medico: rapporto a sezioni'}">${ICONS.ai || ''} ${m.formato === 'lettera' ? 'Impagina come lettera' : 'Riorganizza nel formato'}</button><button class="btn sm ghost" onclick="rfDuplica('${id}')" title="Quando in un solo audio ci sono due referti di due pazienti: crea una copia di questa bozza, con lo stesso audio, da tagliare per il secondo">Duplica</button><label class="btn sm ghost" title="Quando il medico ha spezzato il dettato in due file: il secondo si aggiunge in fondo a questo referto, e nel riascolto le due tracce sono una sola">${m.tracce_in_arrivo ? 'Traccia in arrivo…' : 'Aggiungi traccia audio'}<input type="file" accept=".ds2,.dss,.m4a,.mp3,.wav,.aac,.ogg,.flac,.caf,.mp4" style="display:none" ${m.tracce_in_arrivo ? 'disabled' : ''} onchange="rfTracciaAggiungi('${id}', this)"></label><button class="btn sm ghost" onclick="rfWord('${id}')" title="Word con la carta intestata del medico, dal testo salvato">Word</button>`
-    : `<button class="btn sm ghost" onclick="rfDuplica('${id}')" title="Anche da un referto già confermato: la copia riparte dal dettato della catena, da tagliare per il secondo paziente">Duplica</button><button class="btn sm ghost" onclick="rfWord('${id}')">Word</button>`;
+    ? `<button class="btn sm ghost" onclick="rfImpagina()" title="${m.formato === 'lettera' ? 'Formato del medico: lettera al collega («Caro …,», corpo, saluto, terapia dalla lettera precedente)' : 'Formato del medico: rapporto a sezioni'}">${ICONS.ai || ''} ${m.formato === 'lettera' ? 'Impagina come lettera' : 'Riorganizza nel formato'}</button><button class="btn sm ghost" onclick="rfDuplica('${id}')" title="Quando in un solo audio ci sono due referti di due pazienti: crea una copia di questa bozza, con lo stesso audio, da tagliare per il secondo">Duplica</button><label class="btn sm ghost" title="Quando il medico ha spezzato il dettato in due file: il secondo si aggiunge in fondo a questo referto, e nel riascolto le due tracce sono una sola">${m.tracce_in_arrivo ? 'Traccia in arrivo…' : 'Aggiungi traccia audio'}<input type="file" accept=".ds2,.dss,.m4a,.mp3,.wav,.aac,.ogg,.flac,.caf,.mp4" style="display:none" ${m.tracce_in_arrivo ? 'disabled' : ''} onchange="rfTracciaAggiungi('${id}', this)"></label><button class="btn sm ghost" onclick="rfWord('${id}')" title="Word con la carta intestata del medico, dal testo salvato">Word</button><button class="btn sm ghost" onclick="rfAllegati()" title="Che cosa parte con la mail all'inviante e che cosa elenca il Word; aggiungi o togli">Allegati</button>`
+    : `<button class="btn sm ghost" onclick="rfDuplica('${id}')" title="Anche da un referto già confermato: la copia riparte dal dettato della catena, da tagliare per il secondo paziente">Duplica</button><button class="btn sm ghost" onclick="rfWord('${id}')">Word</button><button class="btn sm ghost" onclick="rfAllegati()" title="Che cosa parte con la mail all'inviante e che cosa elenca il Word; aggiungi o togli">Allegati</button>`;
   html = html.replace('<div class="rv-top-r">', `<div class="rv-top-r">${bottoni}`);
   const note = Array.isArray(m.note_segreteria) ? m.note_segreteria.filter(n => typeof n === 'string' && n.trim()) : [];
   // Ogni nota ha «Rimetti»: la catena a volte scambia una frase clinica per
@@ -991,15 +991,79 @@ function rfAttornoHtml() {
       <datalist id="rf-att-rub">${(a.rubrica || []).map(x => `<option value="${rfEsc(x.nome)}"></option>`).join('')}</datalist>
       <div class="caption">${a.copia && a.copia.fonte === 'revisione' ? 'Elenco corretto a mano.' : 'Dal dettato («copia al dottor…», «per conoscenza…»).'}</div>`;
   const al = a.allegati || [];
-  const motivo = { nota: 'chiesto nel dettato', citato: 'citato nel testo', ecg: 'ECG citato dal medico' };
+  const motivo = RF_MOTIVO_ALLEGATO;
   const alHtml = `${al.length ? al.map(x => `<div class="rf-att-voce"><span>${rfEsc(x.etichetta)}<span class="caption"> · ${motivo[x.motivo] || ''}</span></span>${x.documento_id ? `<a class="btn sm ghost" href="/api/documents/${rfEsc(x.documento_id)}" target="_blank" rel="noopener">Apri</a>` : ''}</div>`).join('') : '<div class="caption">Nessun allegato.</div>'}
       ${a.ecg && a.ecg.citato && !a.ecg.trovato ? `<div class="rf-att-warn">Il medico parla di un <b>ECG</b>, ma nella cartella non c'è un ECG degli ultimi 30 giorni. Caricalo nella cartella del paziente (categoria ECG) e riapri il referto.</div>` : ''}
       ${a.paziente_in_cartella ? '' : '<div class="caption">Paziente non in cartella: gli allegati non si possono cercare.</div>'}`;
   return `<details class="rf-campi rf-att" ${inv.stato === 'nuovo' || inv.stato === 'ambiguo' || (a.ecg && a.ecg.citato && !a.ecg.trovato) ? 'open' : ''}><summary><b>Inviante, copie e allegati</b>${inv.stato === 'nuovo' || inv.stato === 'ambiguo' ? ' <span class="badge warning">da guardare</span>' : ''}</summary>
     <div class="rf-att-sez"><div class="rf-att-tit">Medico inviante</div>${invHtml}</div>
     <div class="rf-att-sez"><div class="rf-att-tit">Copia per conoscenza</div>${ccHtml}</div>
-    <div class="rf-att-sez"><div class="rf-att-tit">Allegati nel Word</div>${alHtml}</div></details>`;
+    <div class="rf-att-sez"><div class="row between"><div class="rf-att-tit">Allegati (Word e mail)</div><button class="btn sm" onclick="rfAllegati()">Gestisci</button></div>${alHtml}</div></details>`;
 }
+const RF_MOTIVO_ALLEGATO = { nota: 'chiesto nel dettato', citato: 'citato nel testo', ecg: 'ECG citato dal medico', aggiunto: 'aggiunto a mano', caricato: 'caricato per questo referto' };
+
+/* ---------- «Allegati» (27.9.2026) ----------
+   Che cosa parte con la mail all'inviante (e che cosa elenca il Word nel
+   blocco «Allegato:»): il Word del referto, poi i documenti trovati in
+   automatico e quelli scelti a mano. Si aggiunge dalla cartella del paziente
+   o caricando un file (che entra nella cartella se il paziente c'è). */
+async function rfAllegati() {
+  const id = RF.loaded; if (!id) return;
+  await rfCaricaAttorno(true);
+  const a = RF.attorno;
+  if (!a) { toast('Non riesco a leggere gli allegati'); return; }
+  const al = a.allegati || [];
+  const apri = (x) => x.documento_id ? `/api/documents/${encodeURIComponent(x.documento_id)}` : (x.motivo === 'caricato' && x.id ? `/api/prototipo/referti/${encodeURIComponent(id)}/allegati?file=${encodeURIComponent(x.id)}` : '');
+  const riga = (x, i) => {
+    const link = apri(x);
+    return `<div class="rf-al-riga"><span class="rf-al-nome">${rfEsc(x.etichetta)}<span class="caption"> · ${rfEsc(RF_MOTIVO_ALLEGATO[x.motivo] || '')}</span>${link ? '' : '<span class="badge warning" style="margin-left:6px">non in cartella</span>'}</span>
+      <span class="row" style="gap:4px">${link ? `<a class="btn sm ghost" href="${link}" target="_blank" rel="noopener">Apri</a>` : ''}<button class="btn sm ghost" onclick="rfAllegatoTogli(${i})">Togli</button></span></div>`;
+  };
+  const usati = new Set(al.map(x => x.documento_id).filter(Boolean));
+  const liberi = (a.cartella || []).filter(d => !usati.has(d.id));
+  const cat = { ecg: 'ECG', referto: 'Referto', imaging: 'Imaging', altro: 'Altro' };
+  const corpo = `
+    <div class="rf-al-tit">Partono con la mail</div>
+    <div class="rf-al-riga"><span class="rf-al-nome"><b>Rapporto (Word)</b><span class="caption"> · sempre</span></span></div>
+    ${al.map(riga).join('') || '<div class="caption" style="padding:6px 0">Nessun altro allegato.</div>'}
+    ${(a.tolti || []).length ? `<div class="rf-al-tit mt-8">Tolti</div>${a.tolti.map(t => `<div class="rf-al-riga"><span class="rf-al-nome" style="color:var(--text-3)">${rfEsc(t.etichetta)}</span><button class="btn sm ghost" onclick="rfAllegatoPost({ azione: 'allegato_rimetti', id: '${rfEsc(t.id)}' })">Rimetti</button></div>`).join('')}` : ''}
+    ${a.ecg && a.ecg.citato && !a.ecg.trovato ? `<div class="rf-att-warn mt-8">Il medico parla di un <b>ECG</b> che nella cartella non c'è: caricalo qui sotto con categoria ECG.</div>` : ''}
+    <div class="rf-al-tit mt-16">Aggiungi dalla cartella</div>
+    ${a.paziente_in_cartella
+      ? (liberi.length ? `<div class="row" style="gap:6px"><select class="input sm grow" id="rf-al-doc">${liberi.map(d => `<option value="${rfEsc(d.id)}">${rfEsc(d.etichetta)} · ${rfEsc(cat[d.categoria] || d.categoria)} · ${rfEsc(d.data)}</option>`).join('')}</select><button class="btn sm" onclick="rfAllegatoPost({ azione: 'allegato_aggiungi', documento_id: document.getElementById('rf-al-doc').value })">Aggiungi</button></div>` : '<div class="caption">Nella cartella non ci sono altri documenti.</div>')
+      : '<div class="caption">Il paziente non è in cartella: carica il file qui sotto, resterà attaccato solo a questo referto.</div>'}
+    <div class="rf-al-tit mt-16">Carica un file</div>
+    <div class="grid grid-2" style="gap:6px">
+      <select class="input sm" id="rf-al-cat">${Object.entries(cat).map(([k, v]) => `<option value="${k}" ${a.ecg && a.ecg.citato && !a.ecg.trovato && k === 'ecg' ? 'selected' : ''}>${v}</option>`).join('')}</select>
+      <input class="input sm" id="rf-al-nota" placeholder="Descrizione nella lettera (es. ECG a riposo)">
+    </div>
+    <div class="row mt-8" style="gap:6px"><input type="file" id="rf-al-file" accept=".pdf,.jpg,.jpeg,.png,.docx" class="grow"><button class="btn sm primary" onclick="rfAllegatoCarica()">Carica</button></div>
+    <p class="caption mt-8">PDF, immagini o Word, fino a 10 MB. ${a.paziente_in_cartella ? 'Il file entra anche nella cartella del paziente.' : ''} Gli allegati valgono per la mail e per il blocco «Allegato:» del Word.</p>`;
+  openModal('Allegati del referto', corpo, '<button class="btn" data-close>Chiudi</button>');
+}
+async function rfAllegatoPost(corpo) {
+  try { await rfAttornoPost(corpo); } catch (e) { toast(e.message); }
+  await rfAllegati(); rvRenderNav();
+}
+function rfAllegatoTogli(i) {
+  const x = ((RF.attorno || {}).allegati || [])[i]; if (!x) return;
+  void rfAllegatoPost(x.id ? { azione: 'allegato_togli', id: x.id } : { azione: 'allegato_togli', etichetta: x.etichetta });
+}
+async function rfAllegatoCarica() {
+  const inp = document.getElementById('rf-al-file');
+  const f = inp && inp.files && inp.files[0];
+  if (!f) { toast('Scegli prima un file'); return; }
+  const fd = new FormData();
+  fd.append('file', f); fd.append('categoria', document.getElementById('rf-al-cat').value); fd.append('nota', document.getElementById('rf-al-nota').value);
+  try {
+    const r = await fetch(`/api/prototipo/referti/${RF.loaded}/allegati`, { method: 'POST', credentials: 'include', body: fd });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(j.errore || `Errore ${r.status}`); return; }
+    toast(j.in_cartella ? 'Caricato e aggiunto (anche nella cartella)' : 'Caricato e aggiunto');
+  } catch { toast('Non riesco a raggiungere la piattaforma'); }
+  await rfAllegati(); rvRenderNav();
+}
+
 async function rfAttornoPost(corpo) {
   const r = await fetch(`/api/prototipo/referti/${RF.loaded}/allegati`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
   const j = await r.json().catch(() => ({}));
@@ -1044,6 +1108,9 @@ function rfAttornoCopia(indice, nuovo) {
 .rf-att-voce { display:flex; justify-content:space-between; align-items:center; gap:6px; font-size:12.5px; }
 .rf-att-voce.nuovo > span:first-child { color:var(--text-2); }
 .rf-att-cambia summary { cursor:pointer; }
+.rf-al-tit { font-size:11.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-3); margin-bottom:4px; }
+.rf-al-riga { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-top:1px solid var(--border); font-size:13px; }
+.rf-al-nome { min-width:0; overflow-wrap:anywhere; }
 .rf-att .input.sm { max-width:100%; }
 `; document.head.appendChild(st); })();
 

@@ -66,9 +66,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const avvisi: string[] = [];
   let n = 0;
   for (const al of intorno?.allegati ?? []) {
-    if (!al.documento_id) { avvisi.push(`«${al.etichetta}» è elencato nella lettera ma non è un documento della cartella: allegalo a mano.`); continue; }
-    const [d] = await query<{ storage_key: string; filename: string; categoria: string | null }>('select storage_key, filename, categoria from patient_documents where id = $1 and studio_id = $2', [al.documento_id, sid]);
-    if (!d) continue;
+    // Caricato dalla revisione solo per questo referto (27.9.2026).
+    const [d] = al.motivo === 'caricato' && al.id
+      ? await query<{ storage_key: string; filename: string; categoria: string | null }>(`select storage_key, filename, null as categoria from referti_allegati where id = $1 and studio_id = $2 and tipo = 'caricato'`, [al.id, sid])
+      : al.documento_id
+        ? await query<{ storage_key: string; filename: string; categoria: string | null }>('select storage_key, filename, categoria from patient_documents where id = $1 and studio_id = $2', [al.documento_id, sid])
+        : [];
+    if (!d) { avvisi.push(`«${al.etichetta}» è elencato nella lettera ma non è un documento della cartella: aggiungilo con il tasto «Allegati» nella revisione, o allegalo a mano.`); continue; }
     try {
       const f = await getFile(d.storage_key);
       const ext = path.extname(d.filename).toLowerCase().slice(0, 6);

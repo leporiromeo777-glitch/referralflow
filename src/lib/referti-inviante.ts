@@ -194,10 +194,22 @@ export async function scegliInviante(studioId: string, bozzaId: string, referrin
 export type Attorno = {
   inviante: { stato: StatoInviante; nome: string; manuale: boolean; simili?: boolean; scelto: { id: string; nome: string; specialita: string; indirizzo: string; email: string } | null; candidati: { id: string; nome: string; localita: string }[] };
   copia: { fonte: 'dettato' | 'revisione'; voci: { nome: string; in_rubrica: boolean; indirizzo: string; id: string | null }[] };
-  allegati: { etichetta: string; documento_id: string | null; motivo: 'nota' | 'citato' | 'ecg' }[];
+  // `id` = riga di referti_allegati (solo per quelli scelti a mano).
+  allegati: { etichetta: string; documento_id: string | null; motivo: 'nota' | 'citato' | 'ecg' | 'aggiunto' | 'caricato'; id?: string }[];
+  tolti: { id: string; etichetta: string }[];
   ecg: { citato: boolean; trovato: boolean };
   paziente_in_cartella: boolean;
+  // La cartella del paziente, per scegliere che cosa aggiungere.
+  cartella: { id: string; etichetta: string; categoria: string; data: string }[];
 };
+
+// Il paziente del referto nella cartella: il legame scritto, poi il nome.
+export async function pazienteDelReferto(studioId: string, bozzaId: string): Promise<string | null> {
+  const b = await bozza(studioId, bozzaId);
+  if (!b) return null;
+  const nome = campoDi(b)('nome_paziente');
+  return b.patient_id ?? (nome ? await trovaPaziente(studioId, nome) : null);
+}
 
 export async function attorno(studioId: string, bozzaId: string): Promise<Attorno | null> {
   const b = await bozza(studioId, bozzaId);
@@ -236,7 +248,7 @@ export async function attorno(studioId: string, bozzaId: string): Promise<Attorn
           where patient_id = $1 and studio_id = $2 order by uploaded_at desc limit 100`, [patientId, studioId])
     : [];
   const allegati: Attorno['allegati'] = [];
-  const aggiungi = (etichetta: string, documento_id: string | null, motivo: 'nota' | 'citato' | 'ecg') => {
+  const aggiungi = (etichetta: string, documento_id: string | null, motivo: Attorno['allegati'][number]['motivo']) => {
     if (etichetta && !allegati.some((a) => a.etichetta.toLowerCase() === etichetta.toLowerCase())) allegati.push({ etichetta, documento_id, motivo });
   };
   if (pazienteNome && b.note.length) {
@@ -253,7 +265,22 @@ export async function attorno(studioId: string, bozzaId: string): Promise<Attorn
   const ecg = citato ? scegliECG(docs, b.dettato) : null;
   if (ecg) aggiungi(etichettaDocumento(ecg), ecg.id, 'ecg');
 
-  return { inviante, copia, allegati, ecg: { citato, trovato: !!ecg }, paziente_in_cartella: !!patientId };
+  // Le scelte a mano della revisione (27.9.2026): i tolti escono, gli
+  // aggiunti entrano in fondo, nell'ordine in cui sono stati aggiunti.
+  const scelte = await query<{ id: string; tipo: string; documento_id: string | null; etichetta: string }>(
+    `select id, tipo, documento_id, etichetta from referti_allegati where bozza_id = $1 and studio_id = $2 order by created_at`, [bozzaId, studioId]);
+  const tolti = scelte.filter((x) => x.tipo === 'tolto');
+  const viaSet = new Set(tolti.map((x) => x.etichetta.toLowerCase()));
+  const restano = allegati.filter((a) => !viaSet.has(a.etichetta.toLowerCase()));
+  allegati.length = 0; allegati.push(...restano);
+  for (const x of scelte) {
+    if (x.tipo === 'cartella' && !allegati.some((a) => a.documento_id === x.documento_id)) allegati.push({ etichetta: x.etichetta, documento_id: x.documento_id, motivo: 'aggiunto', id: x.id });
+    if (x.tipo === 'caricato') allegati.push({ etichetta: x.etichetta, documento_id: null, motivo: 'caricato', id: x.id });
+  }
+  const fmtData = (d: Date) => new Intl.DateTimeFormat('it-CH', { timeZone: 'Europe/Zurich', day: '2-digit', month: '2-digit', year: 'numeric' }).format(d);
+  const cartella = docs.map((d) => ({ id: d.id, etichetta: etichettaDocumento(d) || d.filename, categoria: d.categoria ?? 'altro', data: fmtData(new Date(d.uploaded_at)) }));
+
+  return { inviante, copia, allegati, tolti: tolti.map((x) => ({ id: x.id, etichetta: x.etichetta })), ecg: { citato, trovato: !!ecg }, paziente_in_cartella: !!patientId, cartella };
 }
 
 // Le righe della copia per conoscenza per il Word: il nome come sta in

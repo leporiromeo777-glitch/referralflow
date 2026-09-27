@@ -49,12 +49,36 @@ async function main() {
     verifica(Buffer.from(ecg.split('\r\n\r\n')[1]?.replace(/\r\n/g, '') ?? '', 'base64').equals(pdf), 'l\'ECG allegato è identico');
     verifica(!/Emailprova/.test(eml.split('\r\n\r\n')[0]), 'nessun nome del paziente nelle intestazioni');
 
+    // «Allegati» della revisione (27.9.2026): togli, rimetti, carica.
+    const post = (corpo: unknown) => fetch(`${base}/api/prototipo/referti/${ids.boz}/allegati`, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+    const anteprima = async () => (await (await fetch(`${base}/api/prototipo/referti/${ids.boz}/email?anteprima=1`, { headers: h })).json()).allegati ?? [];
+    await post({ azione: 'allegato_togli', etichetta: 'ECG a riposo' });
+    verifica((await anteprima()).length === 1, 'allegati: l\'ECG tolto non parte');
+    const at = await (await fetch(`${base}/api/prototipo/referti/${ids.boz}/allegati`, { headers: h })).json();
+    await post({ azione: 'allegato_rimetti', id: at.tolti?.[0]?.id });
+    verifica((await anteprima()).length === 2, 'allegati: rimesso');
+    const fd = new FormData();
+    fd.append('file', new Blob([pdf], { type: 'application/pdf' }), 'holter.pdf'); fd.append('categoria', 'referto'); fd.append('nota', 'Referto Holter');
+    const rc = await fetch(`${base}/api/prototipo/referti/${ids.boz}/allegati`, { method: 'POST', headers: h, body: fd });
+    const jc = await rc.json();
+    verifica(rc.status === 201 && jc.in_cartella === true, 'allegati: file caricato, entra anche nella cartella');
+    const dopo = await anteprima();
+    verifica(dopo.length === 3 && dopo[2].etichetta === 'Referto Holter', 'allegati: il caricato parte con la mail');
+    const rw = await fetch(`${base}/api/referti/docx/${ids.boz}`, { headers: h });
+    const zw = await JSZip.loadAsync(Buffer.from(await rw.arrayBuffer())).catch(() => null);
+    verifica(!!(await zw?.file('word/document.xml')?.async('string'))?.includes('Referto Holter'), 'allegati: il Word lo elenca');
+    const at2 = await (await fetch(`${base}/api/prototipo/referti/${ids.boz}/allegati`, { headers: h })).json();
+    await post({ azione: 'allegato_togli', id: at2.allegati.find((x: { etichetta: string }) => x.etichetta === 'Referto Holter')?.id });
+    verifica((await anteprima()).length === 2, 'allegati: il caricato si toglie');
+
     await query(`update referti_bozze set stato = 'bozza' where id = $1`, [ids.boz]);
     const r3 = await fetch(`${base}/api/prototipo/referti/${ids.boz}/email?anteprima=1`, { headers: h });
     verifica(r3.status === 409, 'una bozza non confermata non esce (409)');
   } finally {
     await query('delete from referti_eventi where bozza_id = $1', [ids.boz ?? null]);
     await query('delete from referti_bozze where id = $1', [ids.boz ?? null]);
+    const altri = await query<{ storage_key: string }>('delete from patient_documents where patient_id = $1 and id <> $2 returning storage_key', [ids.paz ?? null, ids.doc ?? null]);
+    for (const x of altri) await deleteFile(x.storage_key).catch(() => null);
     await query('delete from patient_documents where id = $1', [ids.doc ?? null]);
     await query('delete from patients where id = $1', [ids.paz ?? null]);
     if (ids.key) await deleteFile(ids.key).catch(() => null);

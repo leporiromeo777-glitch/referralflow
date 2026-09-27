@@ -6,6 +6,7 @@ aggiornata: 2026-09-23
 
 Elenco di ciò che esiste. Per la catena dei referti vedi [[Catena/Panoramica]].
 
+- **«Allegati» nella revisione** (2026-09-27): che cosa parte con la mail e che cosa elenca il Word, con aggiungi dalla cartella, carica un file, togli e rimetti.
 - **«Prepara e-mail» per il medico inviante** (2026-09-26): sui referti confermati, un file di posta pronto con il Word e gli allegati (ECG compreso), indirizzato all'inviante collegato, in copia i medici della copia per conoscenza; anteprima con avvisi (non HIN, allegati mancanti); si invia dal programma di posta, la piattaforma non spedisce. v183.
 - **Cartella «Trascrizioni grezze»** (2026-09-26): per ogni dettato della cartella condivisa, Word della trascrizione grezza + Word del referto corretto dalla catena (prima della revisione), entrambi pseudonimizzati a catena ferma, senza audio, in una sottocartella per dettato sulla Scrivania del Mac; si cancella dopo 7 giorni. Tiene solo i dettati nuovi dal 26.9.
 - **Referto collegato all'inviante, copia per conoscenza, ECG allegato** (2026-09-26, migrazione 076): il referto si collega da solo al medico inviante della rubrica e segnala quello nuovo o ambiguo (bollino in coda, riquadro in revisione con «Aggiungi alla rubrica»); la copia per conoscenza dal dettato va nel Word con l'indirizzo; l'ECG citato si allega dalla cartella se recente. v182.

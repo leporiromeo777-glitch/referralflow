@@ -46,6 +46,7 @@ Tutto ciò che fai nel wizard si **salva da solo**: puoi chiudere e riaprire sen
 - **Scarica il Word** in carta intestata: intestazione del medico che ha dettato, destinatario su più righe, data del dettato con la tua sigla. Se scarichi PRIMA di impaginare, ottieni il testo della revisione, non una lettera.
 - Il Word si scarica anche **senza aprire la revisione**: ogni bozza della pagina Referti, aperta o confermata, ha il suo tasto «Scarica Word» (dal 23.9.2026). Scarica il testo com'è salvato in quel momento: le correzioni non salvate della revisione aperta altrove non ci sono.
 - **Prepara e-mail** (dal 26.9.2026, sui referti confermati, nella coda e dopo la conferma): prepara la mail per il medico inviante collegato, con il Word e gli allegati della cartella (ECG compreso), in copia i medici della copia per conoscenza che hanno un'e-mail in rubrica. Prima un'anteprima dice chi riceve, che cosa parte e che cosa manca (indirizzi non HIN, allegati non in cartella). Si scarica un file di posta: doppio clic, controlli, **Invia** dal tuo programma HIN. ReferralFlow non spedisce nulla da sé.
+- **Allegati** (dal 27.9.2026, in alto nella revisione): mostra che cosa parte con la mail e che cosa elenca il Word. Se manca qualcosa: «Aggiungi dalla cartella» oppure «Carica un file» (entra anche nella cartella del paziente); se c'è qualcosa di troppo: «Togli».
 - **Scarta** solo se il dettato non va lavorato; una bozza scartata si può ripristinare.
 
 ## 7. Ogni settimana (chi ha il ruolo admin)

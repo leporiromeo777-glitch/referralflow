@@ -305,3 +305,13 @@ di una o due lettere da uno in rubrica (errore del motore) diventa una **propost
 un collegamento automatico. Nella scelta c'è **«Altro…»** per cercare in tutta la rubrica. Sui 57
 referti: 10 collegati, 15 da scegliere, 23 nuovi, 9 senza inviante (prima: 6 / 21 / 17 / 6 su 50,
 con 16 «da scegliere» fra tre Marco dovuti alla firma).
+
+## 27.9.2026 — «Allegati»: chi rivede sceglie che cosa parte con la mail
+Richiesta dello studio: vedere che cosa è allegato alla mail per l'inviante e aggiungere ciò che
+manca. Un elenco solo per la mail e per il blocco «Allegato:» del Word, così la lettera non elenca
+mai qualcosa che non parte (o viceversa). La scelta a mano vince sull'automatico: un allegato
+trovato in automatico si può togliere (e rimettere). Un file caricato dalla revisione entra nella
+cartella del paziente quando il paziente c'è — è un documento suo, e le regole automatiche (ECG) lo
+ritrovano; se no resta attaccato solo a quel referto. Solo formati che chi riceve sa aprire (PDF,
+immagini, Word). Anche dopo la conferma: il Word del referto confermato si costruisce già dallo
+stato attuale (come la copia per conoscenza), e ogni modifica lascia un evento.
