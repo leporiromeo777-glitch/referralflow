@@ -49,6 +49,9 @@ Tutto ciò che fai nel wizard si **salva da solo**: puoi chiudere e riaprire sen
 - **Allegati** (dal 27.9.2026, in alto nella revisione): mostra che cosa parte con la mail e che cosa elenca il Word. Se manca qualcosa: «Aggiungi dalla cartella» oppure «Carica un file» (entra anche nella cartella del paziente); se c'è qualcosa di troppo: «Togli».
 - **Scarta** solo se il dettato non va lavorato; una bozza scartata si può ripristinare.
 
+## Caricare documenti e cartelle scansionate
+Dalla scheda del paziente, **Carica** (o «Carica documento»): scegli o trascina uno o più file (PDF, immagini, Word, DICOM, fino a 50 MB l'uno), controlla la **categoria** e scrivi una **descrizione** breve («ECG 2019–2023»). Per le cartelle cartacee: scanner in **PDF con OCR**, 200–300 dpi in scala di grigi, fronte-retro con eliminazione delle pagine bianche; una cartella lunga si divide per contenuto (lettere, ECG, laboratorio, imaging…). Se un file risulta «senza testo», la scansione non ha l'OCR: rifalla con l'OCR attivo. Dopo il caricamento cancella la copia rimasta sul PC o nella cartella dello scanner.
+
 ## 7. Ogni settimana (chi ha il ruolo admin)
 In **Qualità AI**, in fondo, «Che cosa insegnano le correzioni»: le parole che correggi sempre allo stesso modo. «Metti nel dizionario» solo per errori d'ascolto ricorrenti (mai cambiamenti di senso clinico): dal dettato successivo la catena le corregge da sola.
 

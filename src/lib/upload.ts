@@ -19,6 +19,11 @@ const PUBLIC_EXTENSIONS = new Set(['.pdf', '.jpg', '.jpeg', '.png']);
 const INTERNAL_EXTENSIONS = new Set(Object.keys(MIME_BY_EXT));
 
 export const MAX_UPLOAD_SIZE = 10 * 1024 * 1024; // 10 MB
+// Documenti della cartella caricati dallo studio (28.9.2026): una cartella
+// cartacea scansionata di 200 pagine non sta in 10 MB. Solo per i
+// caricamenti interni: il portale degli invianti e gli allegati per posta
+// restano a 10 MB.
+export const MAX_CARTELLA_SIZE = 50 * 1024 * 1024; // 50 MB
 
 function extensionOf(filename: string): string {
   const i = filename.lastIndexOf('.');

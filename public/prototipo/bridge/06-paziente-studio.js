@@ -593,3 +593,120 @@ PAGES.profile = () => {
 (function () { const st = document.createElement('style'); st.textContent = `.rf-week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}.rf-week-col{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);min-height:200px;padding:6px}.rf-week-col.oggi{border-color:var(--accent)}.rf-week-head{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text-2);padding:4px 6px 8px;border-bottom:1px solid var(--border);margin-bottom:6px}.rf-week-item{border-left:3px solid var(--border-2);padding:5px 8px;margin:4px 0;border-radius:4px;background:var(--surface-2);font-size:12.5px;cursor:pointer;line-height:1.3}.rf-week-item.done{opacity:.6}.rf-week-item:hover{background:var(--accent-soft)}@media (max-width:1199px){.rf-week{grid-template-columns:repeat(4,1fr)}}@media (max-width:767px){.rf-week{grid-template-columns:1fr}.rf-week-col{min-height:0}}.appt.rf-over{border-left-color:var(--danger);background:var(--danger-soft)}.rf-codici{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:10px}.rf-codici code{padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);font-size:13px;letter-spacing:.04em}`; document.head.appendChild(st); })();
 
 
+
+
+/* ---------- «Carica documento» vero (28.9.2026) ----------
+   Prima il tasto era dimostrativo: diceva «Documento caricato» e non
+   caricava nulla. Ora: più file insieme, fino a 50 MB l'uno (una cartella
+   cartacea scansionata ci sta), categoria e descrizione per file, un file
+   alla volta verso /api/prototipo/pazienti/<id>/documenti con l'avanzamento,
+   e l'avviso quando un PDF non ha testo (scansione senza OCR). */
+const RF_DOC_MAX_MB = 50;
+const RF_DOC_CAT = { altro: 'Documento', referto: 'Referto', ecg: 'ECG', holter: 'Holter', laboratorio: 'Laboratorio', imaging: 'Imaging', lettera: 'Lettera', dimissione: 'Lettera di dimissione', consenso: 'Consenso firmato' };
+const rfDocUploadDemo = MODALS.upload;
+MODALS.upload = function () {
+  if (!RF.live) return rfDocUploadDemo();
+  RF.docFile = [];
+  const qui = state.route === 'patient' && P[state.params.id] ? P[state.params.id] : null;
+  const reali = PATIENTS.filter(p => rfDocUuid(p.id)).sort((a, b) => fullName(a).localeCompare(fullName(b)));
+  const chi = qui
+    ? `<div class="rf-doc-chi"><b>${rfEsc(fullName(qui))}</b>${qui.dob ? ` <span class="caption">· ${rfEsc(qui.dob)}</span>` : ''}</div>${rfDocUuid(qui.id) ? '' : '<div class="rf-att-warn mt-8">Questo paziente ha solo la scheda dell\'agenda: crea prima la sua scheda in anagrafica, poi carica.</div>'}`
+    : `<input class="input" id="rf-doc-paz" list="rf-doc-paz-l" placeholder="Cerca il paziente (cognome nome)" autocomplete="off"><datalist id="rf-doc-paz-l">${reali.map(p => `<option value="${rfEsc(fullName(p))}${p.dob ? ' · ' + rfEsc(p.dob) : ''}"></option>`).join('')}</datalist>`;
+  openModal('Carica documento', `
+    <div class="field"><label>Paziente</label>${chi}</div>
+    <label class="rf-doc-drop mt-16" id="rf-doc-drop">${ICONS.upload}<span><b>Scegli i file</b> o trascinali qui</span><span class="caption">PDF, immagini, Word, DICOM · fino a ${RF_DOC_MAX_MB} MB l'uno · più file insieme</span>
+      <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx,.dcm" style="display:none" onchange="rfDocScegli(this.files)"></label>
+    <div id="rf-doc-lista"></div>
+    <p class="caption mt-8">Per le scansioni: PDF <b>con OCR</b> (testo ricercabile), 200–300 dpi in scala di grigi. Una cartella lunga si può dividere per contenuto (ECG, laboratorio, lettere…): si ritrova meglio.</p>`,
+    `<button class="btn" data-close>Chiudi</button><button class="btn primary" id="rf-doc-ok" onclick="rfDocCarica()" disabled>Carica</button>`);
+  const drop = document.getElementById('rf-doc-drop');
+  if (drop) {
+    drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('sopra'); };
+    drop.ondragleave = () => drop.classList.remove('sopra');
+    drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove('sopra'); rfDocScegli(e.dataTransfer.files); };
+  }
+};
+function rfDocUuid(id) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id || '')); }
+function rfDocPaziente() {
+  if (state.route === 'patient' && P[state.params.id]) return rfDocUuid(state.params.id) ? state.params.id : null;
+  const v = ((document.getElementById('rf-doc-paz') || {}).value || '').trim().toLowerCase();
+  if (!v) return null;
+  const p = PATIENTS.find(x => rfDocUuid(x.id) && `${fullName(x)}${x.dob ? ' · ' + x.dob : ''}`.toLowerCase() === v)
+    || (PATIENTS.filter(x => rfDocUuid(x.id) && fullName(x).toLowerCase() === v).length === 1 ? PATIENTS.find(x => rfDocUuid(x.id) && fullName(x).toLowerCase() === v) : null);
+  return p ? p.id : null;
+}
+function rfDocIndovina(nome) {
+  const n = nome.toLowerCase();
+  if (/holter/.test(n)) return 'holter';
+  if (/\becg\b|elettrocardio/.test(n)) return 'ecg';
+  if (/labor|sangue|emocromo/.test(n)) return 'laboratorio';
+  if (/dimission/.test(n)) return 'dimissione';
+  if (/consens/.test(n)) return 'consenso';
+  if (/\.dcm$|risonanz|\btac\b|\bct\b|\brm\b/.test(n)) return 'imaging';
+  return 'altro';
+}
+function rfDocScegli(files) {
+  for (const f of Array.from(files || [])) {
+    if (RF.docFile.some(x => x.f.name === f.name && x.f.size === f.size)) continue;
+    RF.docFile.push({ f, categoria: rfDocIndovina(f.name), nota: '', stato: f.size > RF_DOC_MAX_MB * 1048576 ? 'grande' : 'pronto', msg: '' });
+  }
+  rfDocLista();
+}
+function rfDocLista() {
+  const el = document.getElementById('rf-doc-lista'); if (!el) return;
+  const mb = (b) => b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`;
+  const stato = (x) => ({
+    pronto: '', grande: `<span class="badge danger">oltre ${RF_DOC_MAX_MB} MB: dividilo</span>`, invio: `<span class="caption">${x.msg || 'carico…'}</span>`,
+    fatto: `<span class="badge success">✓ caricato${x.msg ? ' · ' + rfEsc(x.msg) : ''}</span>`, senzatesto: `<span class="badge warning">caricato · senza testo (manca l'OCR)</span>`, errore: `<span class="badge danger">${rfEsc(x.msg || 'errore')}</span>`,
+  })[x.stato] || '';
+  const fermo = (x) => ['invio', 'fatto', 'senzatesto'].includes(x.stato);
+  el.innerHTML = RF.docFile.length ? `<div class="rf-doc-righe mt-16">${RF.docFile.map((x, i) => `
+    <div class="rf-doc-riga">
+      <div class="row between" style="gap:8px"><span class="rf-doc-nome">${rfEsc(x.f.name)} <span class="caption">· ${mb(x.f.size)}</span></span>${fermo(x) ? '' : `<button class="icon-btn" title="Togli dalla lista" onclick="RF.docFile.splice(${i},1);rfDocLista()">${ICONS.x}</button>`}</div>
+      <div class="grid grid-2 mt-8" style="gap:6px"><select class="input sm" ${fermo(x) ? 'disabled' : ''} onchange="RF.docFile[${i}].categoria=this.value">${Object.entries(RF_DOC_CAT).map(([k, v]) => `<option value="${k}" ${k === x.categoria ? 'selected' : ''}>${v}</option>`).join('')}</select>
+        <input class="input sm" ${fermo(x) ? 'disabled' : ''} placeholder="Descrizione (es. ECG 2019–2023)" value="${rfEsc(x.nota)}" oninput="RF.docFile[${i}].nota=this.value"></div>
+      <div class="mt-8">${stato(x)}</div>
+    </div>`).join('')}</div>` : '';
+  const ok = document.getElementById('rf-doc-ok');
+  const daFare = RF.docFile.filter(x => x.stato === 'pronto' || x.stato === 'errore').length;
+  if (ok) { ok.disabled = !daFare || RF.docInCorso; ok.textContent = daFare > 1 ? `Carica ${daFare} file` : 'Carica'; }
+}
+function rfDocInvia(pid, x) {
+  return new Promise((resolve) => {
+    const fd = new FormData();
+    fd.append('file', x.f); fd.append('categoria', x.categoria); fd.append('nota', x.nota.trim());
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `/api/prototipo/pazienti/${encodeURIComponent(pid)}/documenti`);
+    xhr.withCredentials = true;
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) { x.msg = `carico… ${Math.round(e.loaded / e.total * 100)}%`; rfDocLista(); } };
+    xhr.onload = () => {
+      let j = {}; try { j = JSON.parse(xhr.responseText || '{}'); } catch { /* ignora */ }
+      if (xhr.status >= 200 && xhr.status < 300) { x.stato = j.senza_testo ? 'senzatesto' : 'fatto'; x.msg = j.pagine ? `${j.pagine} pagine` : ''; }
+      else { x.stato = 'errore'; x.msg = j.errore || `errore ${xhr.status}`; }
+      resolve();
+    };
+    xhr.onerror = () => { x.stato = 'errore'; x.msg = 'rete non raggiungibile'; resolve(); };
+    x.stato = 'invio'; x.msg = 'carico…'; rfDocLista();
+    xhr.send(fd);
+  });
+}
+async function rfDocCarica() {
+  const pid = rfDocPaziente();
+  if (!pid) { toast('Scegli un paziente con la scheda in anagrafica'); return; }
+  RF.docInCorso = true; rfDocLista();
+  for (const x of RF.docFile) if (x.stato === 'pronto' || x.stato === 'errore') await rfDocInvia(pid, x);
+  RF.docInCorso = false; rfDocLista();
+  const fatti = RF.docFile.filter(x => x.stato === 'fatto' || x.stato === 'senzatesto').length;
+  const senza = RF.docFile.filter(x => x.stato === 'senzatesto').length;
+  const err = RF.docFile.filter(x => x.stato === 'errore').length;
+  toast(`${fatti} caricati${senza ? ` · ${senza} senza testo` : ''}${err ? ` · ${err} non riusciti` : ''}`);
+  // La scheda del paziente sotto il modale mostra subito i documenti nuovi.
+  if (fatti) { await rfCaricaDati(); render(); }
+}
+(function () { const st = document.createElement('style'); st.textContent = `
+.rf-doc-drop { display:flex; flex-direction:column; align-items:center; gap:4px; padding:18px; border:1.5px dashed var(--border-2); border-radius:14px; cursor:pointer; text-align:center; }
+.rf-doc-drop.sopra { border-color:var(--cta, #0d5c48); background:var(--accent-soft, #e8f3ef); }
+.rf-doc-righe { display:flex; flex-direction:column; gap:8px; max-height:45vh; overflow:auto; }
+.rf-doc-riga { border:1px solid var(--border); border-radius:10px; padding:8px 10px; }
+.rf-doc-nome { font-size:13px; min-width:0; overflow-wrap:anywhere; }
+`; document.head.appendChild(st); })();

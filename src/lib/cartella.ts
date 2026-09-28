@@ -17,6 +17,9 @@ export const CATEGORIE: Record<string, string> = {
   imaging: 'Imaging',
   lettera: 'Lettera',
   consenso: 'Consenso firmato',
+  laboratorio: 'Laboratorio',
+  dimissione: 'Lettera di dimissione',
+  holter: 'Holter',
   altro: 'Documento',
 };
 

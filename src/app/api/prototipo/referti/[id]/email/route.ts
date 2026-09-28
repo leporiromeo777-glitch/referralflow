@@ -78,6 +78,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       const ext = path.extname(d.filename).toLowerCase().slice(0, 6);
       const nome = `allegato-${++n}-${(d.categoria || 'documento').replace(/[^a-z]/gi, '') || 'documento'}${ext}`;
       allegati.push({ nome, tipo: TIPI[ext] ?? f.contentType ?? 'application/octet-stream', dati: f.body });
+      if (f.body.length > 10 * 1024 * 1024) avvisi.push(`«${al.etichetta}» pesa ${Math.round(f.body.length / 1024 / 1024)} MB: molti server di posta non accettano mail così grandi. Meglio togliere l'allegato o mandarne un estratto.`);
       elenco.push({ etichetta: al.etichetta, file: nome });
     } catch { avvisi.push(`«${al.etichetta}» non si legge dallo storage: allegalo a mano.`); }
   }

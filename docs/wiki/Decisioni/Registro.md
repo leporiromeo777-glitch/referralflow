@@ -315,3 +315,12 @@ cartella del paziente quando il paziente c'è — è un documento suo, e le rego
 ritrovano; se no resta attaccato solo a quel referto. Solo formati che chi riceve sa aprire (PDF,
 immagini, Word). Anche dopo la conferma: il Word del referto confermato si costruisce già dallo
 stato attuale (come la copia per conoscenza), e ogni modifica lascia un evento.
+
+## 28.9.2026 — Documenti della cartella fino a 50 MB; il «Carica documento» dimostrativo sostituito
+Lo studio deve caricare cartelle cartacee scansionate (una di oltre 200 pagine). Il limite di 10 MB
+resta per ciò che entra da fuori (portale degli invianti) e per ciò che esce per posta (avviso sopra
+i 10 MB); per i documenti che lo studio carica nella cartella del paziente sale a 50 MB. Consiglio
+che resta valido: PDF con OCR e cartelle lunghe divise per contenuto. Scoperto nel farlo: il tasto
+«Carica documento» della nuova interfaccia era rimasto quello dimostrativo e non caricava nulla
+(diceva «Documento caricato»); sostituito con il caricamento vero. Un PDF senza testo viene segnalato
+subito, perché una scansione senza OCR non si cerca e non si legge.
