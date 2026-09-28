@@ -21,15 +21,15 @@ renderDocViewer = function () {
   const a = DV.item;
   const paz = a.p && P[a.p] ? fullName(P[a.p]) : '';
   const corpo = a.pdf
-    ? `<iframe src="/api/documents/${a.id}#toolbar=1&view=FitH" title="${rfEsc(a.title)}" style="width:100%;height:100%;min-height:70vh;border:0;background:#fff;border-radius:12px"></iframe>`
+    ? `<iframe src="${a.src || `/api/documents/${a.id}`}#${a.pagina ? `page=${a.pagina}&` : ''}toolbar=1&view=FitH" title="${rfEsc(a.title)}" style="width:100%;height:100%;min-height:70vh;border:0;background:#fff;border-radius:12px"></iframe>`
     : `<div class="dv-page"><div class="dv-head"><div><div class="dv-title">${rfEsc(a.title)}</div><div class="caption">${rfEsc(paz)}${a.date ? ' · ' + rfEsc(a.date) : ''}</div></div></div><pre style="white-space:pre-wrap;font:inherit;margin:12px 0 0">${a.testo == null ? 'Estraggo il testo…' : rfEsc(a.testo)}</pre></div>`;
   el.innerHTML = `
     <div class="dv-bar"><span class="section-title" style="margin:0">Documento</span><span class="badge">${rfEsc(DOC_TYPE[a.kind] || a.kind)}</span><span class="caption">${rfEsc(paz)}${a.date ? ' · ' + a.date : ''}</span>
       <span class="right row" style="gap:4px">
-        ${a.pdf ? `<button class="btn sm ghost" title="Taglia alcune pagine in un documento nuovo della cartella (per esempio un ECG da allegare)" onclick="rfEstraiPagine('${rfEsc(a.id)}')">Estrai pagine</button>` : ''}
+        ${a.pdf && !a.src ? `<button class="btn sm ghost" title="Taglia alcune pagine in un documento nuovo della cartella (per esempio un ECG da allegare)" onclick="rfEstraiPagine('${rfEsc(a.id)}')">Estrai pagine</button>` : ''}
         ${a.p ? `<button class="icon-btn" title="Scheda paziente" data-go="#/patients/${a.p}">${ICONS.patients}</button>` : ''}
         <button class="icon-btn" title="Chiedi all'assistente di riassumerlo" data-ai="Riassumi questo documento in poche righe">${ICONS.ai}</button>
-        <a class="icon-btn" title="Scarica" href="/api/documents/${a.id}" target="_blank" rel="noopener">${ICONS.download || '↓'}</a>
+        <a class="icon-btn" title="Scarica" href="${a.src || `/api/documents/${a.id}`}" download>${ICONS.download || '↓'}</a>
         <button class="icon-btn" id="dv-close" title="Chiudi">${ICONS.x}</button></span></div>
     ${DV.source ? `<div class="caption" style="padding:6px 14px 0">${ICONS.ai} ${rfEsc(DV.source)}</div>` : ''}
     <div class="dv-body" style="display:flex;flex-direction:column">${corpo}</div>
@@ -37,6 +37,38 @@ renderDocViewer = function () {
   el.querySelector('#dv-close').onclick = dvClose;
   bindCommon(el);
 };
+
+/* I documenti si aprono nel visualizzatore, non in una scheda nuova
+   (28.9.2026): con ReferralFlow installato come app, una scheda nuova si
+   apre nel browser di sistema, dove non si è entrati, e il documento
+   risponde «Non autorizzato». Vale per ogni link a /api/documents/<id> e ai
+   file caricati per un referto; «#page=N» apre il PDF a quella pagina. */
+function rfGuarda(src, titolo, pagina, docId) {
+  DV.open = true; DV.source = '';
+  DV.item = { id: docId || 'file', live: true, p: null, title: titolo || 'Documento', date: '', kind: 'exam', filename: '', pdf: true, testo: null, src: docId ? null : src, pagina: pagina || null };
+  if (docId) {
+    const d = PATIENTS.flatMap(p => (p.docs || []).map(x => ({ ...x, p: p.id }))).find(x => x.id === docId) || DOCUMENTS.find(x => x.id === docId);
+    if (d) {
+      const nome = String(d.filename || d.t || '').toLowerCase();
+      if (!nome.endsWith('.pdf') && !/\.(jpe?g|png)$/.test(nome)) { dvOpen(docId); return; }
+      Object.assign(DV.item, { p: d.p || null, title: d.t || DV.item.title, date: d.date || d.d || '', kind: d.type || d.k || 'exam' });
+    }
+  }
+  render();
+}
+document.addEventListener('click', (e) => {
+  const a = e.target && e.target.closest ? e.target.closest('a[target="_blank"]') : null;
+  if (!a || !RF.live) return;
+  let u; try { u = new URL(a.getAttribute('href'), location.href); } catch { return; }
+  if (u.origin !== location.origin) return;
+  const doc = u.pathname.match(/^\/api\/documents\/([0-9a-f-]{36})$/i);
+  const file = /^\/api\/prototipo\/referti\/[0-9a-f-]{36}\/allegati$/i.test(u.pathname) && u.searchParams.get('file');
+  if (!doc && !file) return;
+  e.preventDefault();
+  const ov = document.getElementById('modal-overlay'); if (ov && ov.classList.contains('show')) closeModal();
+  const pagina = Number((u.hash.match(/page=(\d+)/) || [])[1]) || null;
+  rfGuarda(u.pathname + u.search, a.dataset.titolo || '', pagina, doc ? doc[1] : null);
+}, true);
 
 /* ---------- il bot: sidebar AI sul modello locale della piattaforma ---------- */
 function rfContestoBot() {

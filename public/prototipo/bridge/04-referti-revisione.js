@@ -1029,7 +1029,7 @@ function rfProposteHtml() {
   const righe = vive.map(p => `<div class="rf-pr">
       <div><b>${rfEsc(p.richiesta)}</b> → ${pag(p)} di «${rfEsc(p.documento)}» <span class="caption">(${p.pagine_documento} pagine)</span></div>
       <div class="caption">trovato: ${p.motivi.map(rfEsc).join(', ')}</div>
-      <div class="row" style="gap:4px;margin-top:4px"><a class="btn sm ghost" href="/api/documents/${rfEsc(p.documento_id)}#page=${p.da}" target="_blank" rel="noopener">Guarda</a>
+      <div class="row" style="gap:4px;margin-top:4px"><a class="btn sm ghost" href="/api/documents/${rfEsc(p.documento_id)}#page=${p.da}" target="_blank" rel="noopener" data-titolo="${rfEsc(p.documento)} · p. ${p.da}">Guarda</a>
         <button class="btn sm primary" onclick="rfPropostaEstrai('${rfEsc(p.documento_id)}', ${p.da})">${p.gia_estratto ? 'Allega (già estratto)' : 'Estrai e allega'}</button>
         <button class="btn sm ghost" onclick="rfPropostaNo('${rfEsc(p.documento_id)}', ${p.da})">No</button></div></div>`).join('');
   const senza = (pr.senza_proposta || []).length ? `<div class="caption">Citato nel dettato ma non trovato nella cartella: ${pr.senza_proposta.map(rfEsc).join(', ')}.</div>` : '';
