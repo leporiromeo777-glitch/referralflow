@@ -95,6 +95,15 @@ async function main() {
     verifica(ecgP?.documento_id === cart.j.id && ecgP.da === 3 && ecgP.a === 3 && ecgP.motivi.includes('data 12.3.2024'), `proposte: l'ECG del 12.3.2024 a pagina 3 (${JSON.stringify(ecgP ?? pr)})`);
     verifica(labP?.da === 4, 'proposte: gli esami di agosto 2025 a pagina 4');
     await query('delete from referti_bozze where id = $1', [boz]);
+    // Il referto dice «ecocardiogramma di marzo 2025», in cartella c'è
+    // l'ECG di marzo 2025 dopo una lettera che cita l'eco con un'altra data.
+    const cart2 = await carica(paz!, pdf(['Egregio collega Lugano 20.05.2025 ecocardiogramma controllo', 'ECG 12.03.2025 ritmo sinusale QRS 90', 'Emocromo creatinina']), 'cartella-due.pdf');
+    const [{ id: boz2 }] = await query<{ id: string }>(`insert into referti_bozze (studio_id, file_id, payload, tipo, patient_id) values ($1, 'prova-proposte-' || gen_random_uuid(), $2, 'referto', $3) returning id`,
+      [S, JSON.stringify({ testo_corretto: 'Controllo. Ecocardiogramma di marzo 2025 nella norma.', dettato_il: '2026-09-28T09:00:00Z' }), paz]);
+    const pr2 = await (await fetch(`${base}/api/prototipo/referti/${boz2}/proposte`, { headers: { cookie } })).json();
+    const x2 = (pr2.proposte ?? []).find((x: any) => x.documento_id === cart2.j.id);
+    verifica(x2?.tipo === 'ecg' && x2.da === 2 && x2.motivi.some((m: string) => m.startsWith('sulla pagina: ECG')), `proposte: stessa data su un altro esame → l'ECG a pagina 2, segnalato (${JSON.stringify(x2 ?? pr2)})`);
+    await query('delete from referti_bozze where id = $1', [boz2]);
 
     const grande = Buffer.alloc(51 * 1024 * 1024, 0x20); grande.write('%PDF-1.4\n');
     const c = await carica(paz!, grande, 'enorme.pdf');

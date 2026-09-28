@@ -3,7 +3,7 @@ import { query } from './db';
 import { getFile } from './storage';
 import { pazienteDelReferto } from './referti-inviante';
 import { etichettaDocumento } from './referti-allegato-blocco';
-import { CATEGORIA_DI, cercaPagine, cercaSenzaData, etichettaRichiesta, richiesteDalDettato } from './cerca-in-cartella';
+import { CATEGORIA_DI, NOME_DI, cercaPagine, cercaSenzaData, etichettaRichiesta, richiesteDalDettato, type Tipo } from './cerca-in-cartella';
 
 // Proposte di pagine da estrarre dalla cartella scansionata (28.9.2026):
 // il dettato dice che cosa serve (cerca-in-cartella.ts), qui si leggono le
@@ -64,6 +64,20 @@ export async function proposteDallaCartella(studioId: string, bozzaId: string): 
     const escludi = (id: string) => (r.tipo === 'lettera' ? new Set<number>() : occupate.get(id) ?? new Set<number>());
     let trovate = leggibili.flatMap(({ d, pagine }) => cercaPagine(pagine, r, escludi(d.id)).map((p) => ({ d, n: pagine.length, p })))
       .sort((x, y) => y.p.punteggio - x.p.punteggio).slice(0, 2);
+    // La data c'è ma su un esame di un altro tipo (28.9.2026, cartella vera:
+    // il referto dice «ecocardiogramma di marzo 2025», in cartella c'è l'ECG
+    // di marzo 2025): si propone, dicendo che cosa c'è sulla pagina.
+    let altroTipo: Tipo | null = null;
+    if (!trovate.length && r.data && r.tipo !== 'lettera') {
+      const esami: Tipo[] = ['ecg', 'holter', 'eco', 'ergometria', 'laboratorio', 'imaging'];
+      const altre = esami.filter((t) => t !== r.tipo).flatMap((t) => leggibili.flatMap(({ d, pagine }) => cercaPagine(pagine, { ...r, tipo: t }, escludi(d.id)).map((p) => ({ d, n: pagine.length, p, t }))))
+        .sort((x, y) => y.p.punteggio - x.p.punteggio).slice(0, 1);
+      if (altre.length) {
+        altroTipo = altre[0].t;
+        altre[0].p.motivi.push(`sulla pagina: ${NOME_DI[altroTipo]}, il referto dice ${NOME_DI[r.tipo]}`);
+        trovate = altre.map(({ d, n, p }) => ({ d, n, p }));
+      }
+    }
     if (!trovate.length && r.data && r.tipo !== 'lettera') {
       trovate = leggibili.flatMap(({ d, pagine }) => cercaSenzaData(pagine, r, escludi(d.id)).map((p) => ({ d, n: pagine.length, p })))
         .sort((x, y) => y.p.punteggio - x.p.punteggio).slice(0, 2);
@@ -81,7 +95,7 @@ export async function proposteDallaCartella(studioId: string, bozzaId: string): 
       const eti = p.pagina_da === p.pagina_a ? `${p.pagina_da}` : `${p.pagina_da}–${p.pagina_a}`;
       const gia = docs.find((x) => x.filename === `${base} – pp. ${eti}.pdf`);
       proposte.push({
-        richiesta: etichettaRichiesta(r), tipo: r.tipo, categoria: CATEGORIA_DI[r.tipo],
+        richiesta: etichettaRichiesta(altroTipo ? { ...r, tipo: altroTipo } : r), tipo: altroTipo ?? r.tipo, categoria: CATEGORIA_DI[altroTipo ?? r.tipo],
         documento_id: d.id, documento: etichettaDocumento(d) || d.filename, pagine_documento: n,
         da: p.pagina_da, a: p.pagina_a, motivi: p.motivi, gia_estratto: gia?.id ?? null, senza_data: !!p.senza_data,
       });
