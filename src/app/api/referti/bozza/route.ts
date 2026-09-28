@@ -5,6 +5,7 @@ import { createHash } from 'crypto';
 import { query } from '@/lib/db';
 import { registraEvento, impronta } from '@/lib/referti-eventi';
 import { RX_MEDICO_ID } from '@/lib/referti-medici';
+import { aggiornamentoAutomatico } from '@/lib/aggiorna-lettera-server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -467,6 +468,12 @@ export async function POST(req: NextRequest) {
     await registraAudit(inserita.id);
     await registraEvento(studio.id, inserita?.id ?? null, 'bozza_ricevuta', null, { versione: String((payload as any).versione_catena?.pipeline ?? ''), ombra: (payload as any).ombra === true, medico: medicoId ?? '' });
     await fusioneAutomatica(inserita.id);
+    // Aggiornamento della lettera vecchia chiesto nel dettato (28.9.2026):
+    // applicato qui, prima che qualcuno apra la bozza.
+    if (tipo === 'referto' && !(payload as any).ombra) try {
+      const esito = await aggiornamentoAutomatico(studio.id, inserita.id);
+      if (esito === 'applicato') await registraEvento(studio.id, inserita.id, 'lettera_aggiornata', null, { automatico: true });
+    } catch (e: any) { console.error(`[aggiorna-lettera] ${inserita.id.slice(0, 8)}: ${e?.code ?? e?.name ?? 'errore'}`); }
     // Inviante collegato alla rubrica, o segnalato se nuovo (26.9.2026).
     try { await collegaInviante(studio.id, inserita.id); } catch (e: any) { console.error('inviante:', e?.message || e); }
   return NextResponse.json({ id: inserita.id }, { status: 201 });

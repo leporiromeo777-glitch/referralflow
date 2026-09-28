@@ -396,3 +396,11 @@ mano; sotto anamnesi e rischi va la visita di oggi con esami e valutazione; i me
 dal dettato, 12 se non li dice. Fatto con regole e non col modello: si spiega, non inventa, si
 prova su lettere finte. Resta una proposta: Applica / Annulla.
 
+## 28.9.2026 (sera) — La lettera aggiornata la fa la catena, all'arrivo
+Lo studio vuole la lettera aggiornata già pronta, «dentro la catena», non una proposta da applicare.
+Ora, se il medico lo chiede nel dettato e la lettera si trova, all'arrivo della bozza la lettera
+aggiornata diventa il suo testo. Restano due paletti: sotto il 35% di somiglianza delle anamnesi
+resta una proposta (forse è la lettera di un altro paziente), e le frasi nuove non entrano da sole.
+«Annulla» torna sempre al dettato. Le lettere da scansione si puliscono prima (intestazione, piè di
+pagina, righe spezzate).
+

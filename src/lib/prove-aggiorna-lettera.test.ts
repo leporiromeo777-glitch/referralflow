@@ -85,3 +85,14 @@ test('la frase di regia non è una «frase nuova»', () => {
   assert.deepEqual(p.novita, ['Da maggio diabete mellito tipo 2 in terapia con metformina.']);
   assert.ok(!/Riprendimi|Lettera al dottor/.test(p.testo));
 });
+
+test('lettera da scansione: intestazione, piè di pagina e righe spezzate', async () => {
+  const { pulisciScansione } = await import('./aggiorna-lettera');
+  const ocr = ['Studio di cardiologia', 'Via Esempio 1', '6900 Lugano', 'Lugano, 14.03.2025', '', 'Caro', 'Luca,', '', 'non ritorno sull\'anamne-', 'si del paziente. FRCV: iper-', 'tensione.', 'Tel. 091 000 00 00 · info@esempio.invalid', 'Pagina 1 di 2', 'Studio di cardiologia', 'Comorbidità: nessuna. Clinicamente bene.'].join('\n');
+  const t = pulisciScansione(ocr);
+  assert.ok(t.startsWith('Caro Luca,'), t);
+  assert.ok(t.includes("non ritorno sull'anamnesi del paziente. FRCV: ipertensione."), t);
+  assert.ok(!/Tel\.|@|Pagina 1|Studio di cardiologia|Via Esempio/.test(t), t);
+  const p = aggiorna({ lettera: t, dettato: 'Caro Luca, FRCV: ipertensione. Clinicamente oggi bene.', oggi: '28.09.2026', femminile: false });
+  assert.ok(!('errore' in p) && p.vecchia.startsWith("non ritorno sull'anamnesi"));
+});

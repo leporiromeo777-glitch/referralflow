@@ -5,6 +5,7 @@
 // propone niente. Poi toglie tutto.
 //   DATABASE_URL=…demo NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-aggiorna-lettera.ts <base> <cookie> <studio>
 import { query, pool } from '../../src/lib/db';
+import { aggiornamentoAutomatico } from '../../src/lib/aggiorna-lettera-server';
 
 const [base, cookie, S] = process.argv.slice(2);
 let ok = 0, no = 0;
@@ -38,6 +39,19 @@ async function main() {
     const an = await fetch(url, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'annulla' }) });
     const [annullato] = await query<{ t: string | null }>('select testo_finale as t from referti_bozze where id = $1', [boz]);
     verifica(an.status === 200 && annullato.t == null, `annulla: torna il testo di prima (${an.status} ${annullato.t == null})`);
+    // Dentro la catena: appena arriva la bozza, la lettera aggiornata è già il
+    // suo testo (senza la frase nuova, che resta da spuntare).
+    const [{ id: auto }] = await query<{ id: string }>(`insert into referti_bozze (studio_id, file_id, payload, tipo) values ($1, 'prova-agg-' || gen_random_uuid(), $2, 'referto') returning id`,
+      [S, JSON.stringify({ testo_corretto: DETTATO, medico, dettato_il: '2026-09-28T09:00:00Z', campi_estratti: { nome_paziente: 'Aggiornaprova Paziente' } })]);
+    ids.push(auto);
+    const esito = await aggiornamentoAutomatico(S, auto);
+    const [ta] = await query<{ t: string }>('select testo_finale as t from referti_bozze where id = $1', [auto]);
+    verifica(esito === 'applicato' && ta.t.includes('Rivedo in data 28.09.2026') && !ta.t.includes('diabete') && ta.t.endsWith('rivalutazione anticipata.'), `automatico: lettera aggiornata applicata all'arrivo, frase nuova non aggiunta (${esito})`);
+    const sa = await (await fetch(`${base}/api/prototipo/referti/${auto}/aggiornamento`, { headers: h })).json();
+    verifica(sa.applicato?.automatico === true && sa.applicato?.novita?.length === 1, 'automatico: segnato come fatto dalla catena, la frase nuova resta da spuntare');
+    const ag = await fetch(`${base}/api/prototipo/referti/${auto}/aggiornamento`, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'aggiungi', novita: [0] }) });
+    const [tb] = await query<{ t: string }>('select testo_finale as t from referti_bozze where id = $1', [auto]);
+    verifica(ag.status === 200 && /ipotiroidismo\. Da maggio diabete mellito/.test(tb.t), 'aggiungi: la frase nuova entra in fondo all\'anamnesi ripresa');
     const [{ id: senza }] = await query<{ id: string }>(`insert into referti_bozze (studio_id, file_id, payload, tipo) values ($1, 'prova-agg-' || gen_random_uuid(), $2, 'referto') returning id`,
       [S, JSON.stringify({ testo_corretto: 'Caro Luca, rivedo il paziente. Clinicamente bene.', medico, dettato_il: '2026-09-28T09:00:00Z', campi_estratti: { nome_paziente: 'Aggiornaprova Paziente' } })]);
     ids.push(senza);

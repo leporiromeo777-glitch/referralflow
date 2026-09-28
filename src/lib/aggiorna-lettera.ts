@@ -184,3 +184,29 @@ export function eFemminile(sesso: string | null | undefined, testo: string): boo
   const m = (t.match(/\b(il paziente|il signor|egli|del paziente|al paziente|lo stesso)\b/g) ?? []).length;
   return f > m;
 }
+
+// Una lettera che viene da una SCANSIONE (testo dell'OCR) arriva spezzata in
+// righe corte, con intestazione, data e piè di pagina in mezzo (28.9.2026,
+// prima lettera vera: 236 righe per 3181 caratteri, il saluto spezzato su
+// più righe, telefono ed e-mail del piè di pagina dentro l'anamnesi). Qui:
+// via le righe di intestazione e piè di pagina e quelle ripetute a ogni
+// pagina, righe riunite (anche le parole spezzate col trattino), e tutto ciò
+// che sta prima del saluto tagliato.
+const RX_RIGA_CARTA = /(\btel\.?\b|\btelefono\b|\bfax\b|e-?mail|@|www\.|https?:|\bCH-\d{4}\b|\bpagina\s+\d+|\bpag\.\s*\d+|\b\d+\s*\/\s*\d+\s*$|^\s*\d{4}\s+[A-ZÀ-Ý][a-zà-ý]+\s*$|\bFMH\b|\bIBAN\b|\bGLN\b|\bZSR\b|\bRCC\b)/i;
+const RX_SALUTO_DENTRO = /\b(?:caro|cara|cari|gentile|egregio|egregia|stimato|stimata|lieber|liebe|sehr geehrte[rs]?)\s+[^,.;:\n]{1,60},/i;
+
+export function pulisciScansione(testo: string): string {
+  const righe = String(testo || '').split(/\r?\n/).map((r) => r.replace(/\s+/g, ' ').trim());
+  const conta = new Map<string, number>();
+  for (const r of righe) if (r.length > 3) conta.set(r.toLowerCase(), (conta.get(r.toLowerCase()) ?? 0) + 1);
+  const tenute = righe.filter((r) => !r || (!RX_RIGA_CARTA.test(r) && (conta.get(r.toLowerCase()) ?? 0) < 2));
+  let unito = '';
+  for (const r of tenute) {
+    if (!r) { unito += '\n\n'; continue; }
+    if (/\p{L}-$/u.test(unito) && /^\p{Ll}/u.test(r)) unito = unito.slice(0, -1) + r;
+    else unito += (unito && !unito.endsWith('\n') ? ' ' : '') + r;
+  }
+  unito = unito.replace(/\n{3,}/g, '\n\n').replace(/[ \t]+/g, ' ').trim();
+  const s = RX_SALUTO_DENTRO.exec(unito.slice(0, 1200));
+  return s ? unito.slice(s.index) : unito;
+}

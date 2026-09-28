@@ -3,7 +3,7 @@ import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
 import { vietato } from '@/lib/permessi';
 import { registraEvento } from '@/lib/referti-eventi';
-import { annullaAggiornamento, applicaAggiornamento, scegliLettera, statoAggiornamento } from '@/lib/aggiorna-lettera-server';
+import { aggiungiNovita, annullaAggiornamento, applicaAggiornamento, scegliLettera, statoAggiornamento } from '@/lib/aggiorna-lettera-server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -47,6 +47,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const r = await applicaAggiornamento(sid, params.id, session.id, Array.isArray(c.novita) ? c.novita.map(Number) : []);
     if ('errore' in r) return NextResponse.json(r, { status: 409 });
     void registraEvento(sid, params.id, 'lettera_aggiornata', session.id, { novita: Array.isArray(c.novita) ? c.novita.length : 0 });
+    return NextResponse.json(r);
+  }
+  if (c?.azione === 'aggiungi') {
+    const r = await aggiungiNovita(sid, params.id, Array.isArray(c.novita) ? c.novita.map(Number) : []);
+    if ('errore' in r) return NextResponse.json(r, { status: 409 });
+    void registraEvento(sid, params.id, 'lettera_frasi_aggiunte', session.id, { frasi: Array.isArray(c.novita) ? c.novita.length : 0 });
     return NextResponse.json(r);
   }
   if (c?.azione === 'annulla') {

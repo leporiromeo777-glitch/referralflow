@@ -1050,8 +1050,11 @@ function rfAggHtml() {
   const scelteHtml = (lista, testo) => lista && lista.length ? `<div class="row" style="gap:6px;margin-top:4px"><select class="input sm grow" id="rf-agg-scelta">${lista.map(f => `<option value="${rfEsc(f.tipo)}|${rfEsc(f.id)}">${rfEsc(f.etichetta)}</option>`).join('')}</select><button class="btn sm" onclick="rfAggScegli()">${testo}</button></div>` : '';
   if (a.applicato) {
     const q = new Date(a.applicato.quando);
-    return `<div class="rf-campi rf-agg"><div class="row between"><b>Lettera aggiornata</b><button class="btn sm ghost" onclick="rfAggAzione({ azione: 'annulla' })">Annulla</button></div>
-      <div class="caption">Da ${rfEsc(a.applicato.fonte.etichetta)} · alle ${q.toLocaleTimeString('it-CH', { hour: '2-digit', minute: '2-digit' })} · controllo a ${a.applicato.mesi} mesi${a.applicato.novita_aggiunte ? ` · ${a.applicato.novita_aggiunte} frasi nuove aggiunte` : ''}</div></div>`;
+    const restano = a.applicato.novita || [];
+    const novHtml = restano.map((f, i) => `<label class="rf-agg-nov"><input type="checkbox" ${RF.aggNovita && RF.aggNovita[i] ? 'checked' : ''} onchange="RF.aggNovita[${i}]=this.checked"> <span>${rfEsc(f)}</span></label>`).join('');
+    return `<div class="rf-campi rf-agg" ${restano.length ? 'open' : ''}><div class="row between"><b>Lettera aggiornata</b><button class="btn sm ghost" onclick="rfAggAzione({ azione: 'annulla' })" title="Torna al testo dettato">Annulla</button></div>
+      <div class="caption">${a.applicato.automatico ? 'Fatta dalla catena' : 'Applicata'} da ${rfEsc(a.applicato.fonte.etichetta)} · alle ${q.toLocaleTimeString('it-CH', { hour: '2-digit', minute: '2-digit' })} · controllo a ${a.applicato.mesi} mesi${a.applicato.novita_aggiunte ? ` · ${a.applicato.novita_aggiunte} frasi nuove aggiunte` : ''}</div>
+      ${restano.length ? `<div class="rf-att-tit" style="margin-top:6px">Nel dettato, non nella lettera vecchia</div><div class="caption">Non aggiunte: spunta quelle da mettere nell'anamnesi.</div>${novHtml}<div class="row" style="margin-top:4px"><button class="btn sm" onclick="rfAggAggiungi()">Aggiungi le spuntate</button></div>` : ''}</div>`;
   }
   if (!a.richiesta && !a.proposta) {
     if (!a.scelte || !a.scelte.length) return '';
@@ -1078,11 +1081,11 @@ async function rfAggAzione(corpo) {
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { toast(j.errore || `Errore ${r.status}`); return false; }
   } catch { toast('Non riesco a raggiungere la piattaforma'); return false; }
-  if (corpo.azione === 'applica' || corpo.azione === 'annulla') {
+  if (corpo.azione === 'applica' || corpo.azione === 'annulla' || corpo.azione === 'aggiungi') {
     // Il testo della bozza è cambiato sul server: si ricarica la revisione.
     try { clearTimeout(rvSave._rf); rvSave._rf = null; localStorage.removeItem(RV_KEY); } catch { /* ignora */ }
     RF.aggPer = null; RF.loaded = null; closeModal(); render();
-    toast(corpo.azione === 'applica' ? 'Lettera aggiornata: rileggila' : 'Tornato al testo di prima');
+    toast(corpo.azione === 'applica' ? 'Lettera aggiornata: rileggila' : corpo.azione === 'aggiungi' ? 'Frasi aggiunte all\'anamnesi' : 'Tornato al testo dettato');
   } else { await rfCaricaAgg(true); }
   return true;
 }
@@ -1090,6 +1093,11 @@ function rfAggScegli() {
   const v = (document.getElementById('rf-agg-scelta') || {}).value || '';
   const [tipo, id] = v.split('|');
   if (id) void rfAggAzione({ azione: 'scegli', fonte: { tipo, id } });
+}
+function rfAggAggiungi() {
+  const novita = Object.entries(RF.aggNovita || {}).filter(([, v]) => v).map(([k]) => Number(k));
+  if (!novita.length) { toast('Spunta prima una frase'); return; }
+  void rfAggAzione({ azione: 'aggiungi', novita });
 }
 function rfAggApplica() {
   const novita = Object.entries(RF.aggNovita || {}).filter(([, v]) => v).map(([k]) => Number(k));

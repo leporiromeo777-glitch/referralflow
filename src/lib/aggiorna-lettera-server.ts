@@ -6,7 +6,7 @@ import { nomePerConfronto } from './referti-allegati';
 import { pazienteDelReferto } from './referti-inviante';
 import { formatoPerBozza } from './referti-medici';
 import { etichettaDocumento } from './referti-allegato-blocco';
-import { aggiorna, eFemminile, richiestaAggiornamento, type Proposta } from './aggiorna-lettera';
+import { aggiorna, eFemminile, pulisciScansione, richiestaAggiornamento, type Proposta } from './aggiorna-lettera';
 import { cercaPagine, etichettaData, rxDataPagina, type DataCercata } from './cerca-in-cartella';
 
 // Aggiornamento della lettera vecchia, lato piattaforma (28.9.2026). Parte
@@ -72,7 +72,8 @@ export async function lettereVecchie(studioId: string, bozzaId: string, nomePazi
   const rx = data ? rxDataPagina(data) : null;
   for (const d of docs.filter((x) => x.categoria === 'lettera')) {
     try {
-      const testo = (await testoDelFile(d.storage_key, d.filename)).join('\n');
+      const grezzo = (await testoDelFile(d.storage_key, d.filename)).join('\n');
+      const testo = d.filename.toLowerCase().endsWith('.pdf') ? pulisciScansione(grezzo) : grezzo;
       if (testo.trim().length < 200) continue;
       if (rx && !rx.test(`${d.nota ?? ''} ${d.filename} ${testo.slice(0, 600)}`)) continue;
       out.push({ fonte: { tipo: 'documento', id: d.id, etichetta: `lettera in cartella: ${etichettaDocumento(d) || d.filename}`, data: fmt(d.uploaded_at) }, testo });
@@ -85,7 +86,7 @@ export async function lettereVecchie(studioId: string, bozzaId: string, nomePazi
         if (pagine.length < 3) continue;
         const [p] = cercaPagine(pagine, { tipo: 'lettera', data, esplicita: true });
         if (!p) continue;
-        const testo = pagine.slice(p.pagina_da - 1, p.pagina_a).join('\n');
+        const testo = pulisciScansione(pagine.slice(p.pagina_da - 1, p.pagina_a).join('\n'));
         const pp = p.pagina_da === p.pagina_a ? `p. ${p.pagina_da}` : `pp. ${p.pagina_da}–${p.pagina_a}`;
         out.push({ fonte: { tipo: 'pagine', id: d.id, etichetta: `${etichettaDocumento(d) || d.filename}, ${pp}`, data: etichettaData(data), da: p.pagina_da, a: p.pagina_a }, testo });
       } catch { /* file che non si legge */ }
@@ -128,7 +129,7 @@ async function bozza(studioId: string, id: string): Promise<Bozza | null> {
 export type StatoAggiornamento = {
   abilitato: boolean;
   richiesta: { dal_dettato: boolean; data: string | null } | null;
-  applicato: { quando: string; fonte: Fonte; mesi: number; novita_aggiunte: number } | null;
+  applicato: { quando: string; fonte: Fonte; mesi: number; novita_aggiunte: number; automatico: boolean; novita: string[] } | null;
   fonte: Fonte | null;
   proposta: Proposta | null;
   errore: string | null;
@@ -149,7 +150,7 @@ export async function statoAggiornamento(studioId: string, bozzaId: string): Pro
   if (!medicoAggiornaLettera(p.medico?.id) || b.stato !== 'bozza') return vuoto;
   const base = { ...vuoto, abilitato: true };
   const ag = p.aggiornamento_lettera;
-  if (ag?.applicato_il) return { ...base, applicato: { quando: ag.applicato_il, fonte: ag.fonte, mesi: ag.mesi, novita_aggiunte: ag.novita_aggiunte ?? 0 } };
+  if (ag?.applicato_il) return { ...base, applicato: { quando: ag.applicato_il, fonte: ag.fonte, mesi: ag.mesi, novita_aggiunte: ag.novita_aggiunte ?? 0, automatico: !!ag.automatico, novita: Array.isArray(ag.novita) ? ag.novita : [] } };
 
   const note = Array.isArray(p.note_segreteria) ? p.note_segreteria.filter((n: unknown): n is string => typeof n === 'string') : [];
   const quando = p.dettato_il && !Number.isNaN(Date.parse(p.dettato_il)) ? new Date(p.dettato_il) : new Date(b.created_at);
@@ -197,7 +198,7 @@ export async function scegliLettera(studioId: string, bozzaId: string, fonte: { 
 
 // Applica: le frasi nuove scelte entrano in fondo alla parte ripresa dalla
 // lettera vecchia (dopo anamnesi e rischi, prima della visita di oggi).
-export async function applicaAggiornamento(studioId: string, bozzaId: string, utente: string, scelte: number[]): Promise<{ ok: true } | { errore: string }> {
+export async function applicaAggiornamento(studioId: string, bozzaId: string, utente: string | null, scelte: number[], automatico = false): Promise<{ ok: true } | { errore: string }> {
   const s = await statoAggiornamento(studioId, bozzaId);
   if (!s?.abilitato) return { errore: 'Non previsto per questo referto.' };
   if (s.applicato) return { errore: 'Già applicato.' };
@@ -211,13 +212,15 @@ export async function applicaAggiornamento(studioId: string, bozzaId: string, ut
   }
   const b = await bozza(studioId, bozzaId);
   const prima = b?.testo_finale ?? null;
-  const traccia = { applicato_il: new Date().toISOString(), da: utente, fonte: s.fonte, mesi: p.mesi, novita_aggiunte: aggiunte.length, somiglianza: p.somiglianza, prima };
+  // Le frasi nuove NON aggiunte restano scritte: dopo l'applicazione (anche
+  // automatica) la revisione le mostra ancora, da aggiungere a mano.
+  const traccia = { applicato_il: new Date().toISOString(), da: utente, automatico, fonte: s.fonte, mesi: p.mesi, novita_aggiunte: aggiunte.length, novita: p.novita.filter((f) => !aggiunte.includes(f)), vecchia: p.vecchia, somiglianza: p.somiglianza, prima };
   const [ok] = await query<{ id: string }>(
     `update referti_bozze set testo_finale = $3,
             payload = jsonb_set(jsonb_set(payload, '{aggiornamento_lettera}', $4::jsonb), '{revisione_prototipo}', coalesce(payload->'revisione_prototipo', '{}'::jsonb) || '{"tolte": []}'::jsonb)
       where id = $1 and studio_id = $2 and stato = 'bozza' returning id`, [bozzaId, studioId, testo, JSON.stringify(traccia)]);
   if (!ok) return { errore: 'La bozza non è più aperta.' };
-  console.log(`[aggiorna-lettera] ${bozzaId.slice(0, 8)}: applicato (${s.fonte.tipo}, somiglianza ${p.somiglianza}, ${aggiunte.length} frasi nuove, ${p.mesi} mesi)`);
+  console.log(`[aggiorna-lettera] ${bozzaId.slice(0, 8)}: applicato${automatico ? ' dalla catena' : ''} (${s.fonte.tipo}, somiglianza ${p.somiglianza}, ${aggiunte.length} frasi nuove, ${p.mesi} mesi)`);
   return { ok: true };
 }
 
@@ -228,4 +231,44 @@ export async function annullaAggiornamento(studioId: string, bozzaId: string): P
   if (!ok) return { errore: 'Niente da annullare.' };
   console.log(`[aggiorna-lettera] ${bozzaId.slice(0, 8)}: annullato`);
   return { ok: true };
+}
+
+// Dentro la catena (28.9.2026, richiesta dello studio): appena la bozza
+// arriva, se il medico ha chiesto di riprendere la lettera e la si trova, la
+// lettera aggiornata diventa subito il testo della bozza — senza le frasi
+// nuove, che restano da spuntare, e solo se le anamnesi si somigliano
+// abbastanza (se no resta una proposta con l'avviso). «Annulla» torna al
+// dettato. Best-effort: un intoppo qui non ferma la consegna.
+export async function aggiornamentoAutomatico(studioId: string, bozzaId: string): Promise<'applicato' | 'proposta' | 'niente'> {
+  const s = await statoAggiornamento(studioId, bozzaId);
+  if (!s?.abilitato || !s.richiesta || !s.proposta) return 'niente';
+  if (s.proposta.somiglianza < 0.35) return 'proposta';
+  const r = await applicaAggiornamento(studioId, bozzaId, null, [], true);
+  return 'ok' in r ? 'applicato' : 'proposta';
+}
+
+// Dopo l'applicazione: aggiungere le frasi nuove spuntate in fondo alla
+// parte ripresa dalla lettera vecchia (se il testo è cambiato e quella parte
+// non si trova più, si dice di aggiungerle a mano).
+export async function aggiungiNovita(studioId: string, bozzaId: string, scelte: number[]): Promise<{ ok: true } | { errore: string }> {
+  const b = await bozza(studioId, bozzaId);
+  const ag = b?.payload?.aggiornamento_lettera;
+  if (!b || b.stato !== 'bozza' || !ag?.applicato_il) return { errore: 'Niente da aggiungere.' };
+  const novita: string[] = Array.isArray(ag.novita) ? ag.novita : [];
+  const frasi = scelte.filter((i) => Number.isInteger(i) && i >= 0 && i < novita.length).map((i) => novita[i]);
+  if (!frasi.length) return { errore: 'Scegli almeno una frase.' };
+  const testo = String(b.testo_finale ?? '');
+  const vecchia = String(ag.vecchia ?? '');
+  const i = vecchia ? testo.indexOf(vecchia) : -1;
+  if (i < 0) return { errore: 'Il testo è cambiato e non trovo più la parte ripresa dalla lettera vecchia: aggiungi la frase a mano.' };
+  const fine = i + vecchia.length;
+  const nuovo = `${testo.slice(0, fine)} ${frasi.join(' ')}${testo.slice(fine)}`;
+  const resto = novita.filter((f) => !frasi.includes(f));
+  const [ok] = await query<{ id: string }>(
+    `update referti_bozze set testo_finale = $3,
+            payload = jsonb_set(jsonb_set(jsonb_set(payload, '{aggiornamento_lettera,novita}', $4::jsonb), '{aggiornamento_lettera,vecchia}', to_jsonb($5::text)),
+                                '{aggiornamento_lettera,novita_aggiunte}', to_jsonb($6::int))
+      where id = $1 and studio_id = $2 and stato = 'bozza' returning id`,
+    [bozzaId, studioId, nuovo, JSON.stringify(resto), `${vecchia} ${frasi.join(' ')}`, (Number(ag.novita_aggiunte) || 0) + frasi.length]);
+  return ok ? { ok: true } : { errore: 'La bozza non è più aperta.' };
 }
