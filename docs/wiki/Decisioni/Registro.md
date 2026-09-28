@@ -379,3 +379,9 @@ solo per tutte le bozze. Ora: entrando nella revisione la bozza si ricarica dal 
 un salvataggio in sospeso); lo stato locale è uno per bozza; ogni salvataggio porta l'impronta del
 testo da cui la pagina è partita, e se nel frattempo la bozza è cambiata il server rifiuta
 («cambiata») e la pagina ricarica la versione salvata invece di sovrascriverla.
+
+## 28.9.2026 — Una frase cancellata resta cancellata
+Nella revisione un paragrafo cancellato selezionandolo tutto tornava nel referto al salvataggio: la
+pagina aggiornava solo le frasi ancora presenti. Ora le frasi sparite si svuotano e il testo scritto
+al loro posto si conserva. Non sono «frasi tolte» (quelle tornano barrate alla riapertura): sono
+cancellate, come se si fosse cancellato il loro testo a mano.

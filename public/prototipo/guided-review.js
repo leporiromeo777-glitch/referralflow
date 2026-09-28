@@ -190,7 +190,7 @@ function rvRenderReport() {
   el.querySelectorAll('[data-sec-body]').forEach(p => {
     p.oninput = () => { rvHumanEdit(p); };
     p.onfocus = () => { RV.editing = true; };
-    p.onblur = () => { RV.editing = false; };
+    p.onblur = () => { RV.editing = false; rvRaccogliFuori(p); };
   });
 }
 function rvHover(sp) {
@@ -219,17 +219,51 @@ function rvSpanClick(id) {
   if (p && p.src) { const seg = RV_TRANSCRIPT.find(s => s.id === p.src); RV.panel = 'source'; rvRenderSource(); rvSeek(seg.s - 1.5, false); rvScrollTranscript(true); }
   else toast('Questa frase non ha una fonte individuata');
 }
+// Le frasi che dovrebbero stare in questo paragrafo (come in rvRenderReport).
+function rvIdDelParagrafo(sec) {
+  const s = RV_REPORT.find(x => x.code === sec); if (!s) return [];
+  const proprie = s.parts.filter(p => (RV.moved[p.id] || s.code) === s.code).map(p => p.id);
+  const arrivate = RV_REPORT.flatMap(x => x.parts).filter(p => RV.moved[p.id] === s.code && !s.parts.includes(p)).map(p => p.id);
+  return [...proprie, ...arrivate, ...RV.added.filter(a => a.section === sec).map(a => a.id)];
+}
 function rvHumanEdit(pEl) {
+  const presenti = new Set();
   pEl.querySelectorAll('.rv-span').forEach(sp => {
     const id = sp.dataset.span;
+    presenti.add(id);
     const txt = sp.innerText;
+    const agg = RV.added.find(a => a.id === id);
+    if (agg) { if (agg.text !== txt) agg.text = txt; return; }
     if (RV.text[id] !== undefined && RV.text[id] !== txt) {
       RV.text[id] = txt; RV.edited[id] = true; sp.dataset.conf = 'human'; sp.classList.add('edited');
       const i = RV.issues.find(x => x.span === id);
       if (i && i.status === 'open') { i.status = 'corrected'; i.resolution = 'modifica manuale'; RV.metrics.corrections++; rvLog('CORRECTION', id + ' (manuale)'); rvRenderNav(); rvCount(); }
     }
   });
+  // Frasi selezionate e cancellate insieme spariscono dal paragrafo senza
+  // passare dal ciclo sopra: prima tenevano il loro testo e al salvataggio
+  // tornavano nel referto (28.9.2026, «mi rimette il paragrafo 4»).
+  for (const id of rvIdDelParagrafo(pEl.dataset.secBody)) {
+    if (presenti.has(id) || RV.removed[id]) continue;
+    const agg = RV.added.find(a => a.id === id);
+    if (agg) { agg.text = ''; continue; }
+    if (RV.text[id]) { RV.text[id] = ''; RV.edited[id] = true; }
+  }
   rvSave();
+}
+// Testo scritto fuori dalle frasi (dopo averle cancellate tutte, o fra una
+// e l'altra): uscendo dal paragrafo diventa un'aggiunta al suo posto, così
+// entra nel referto e si salva.
+function rvRaccogliFuori(pEl) {
+  const sec = pEl.dataset.secBody; let dopo = '^', trovato = false;
+  pEl.childNodes.forEach(n => {
+    if (n.nodeType === 1 && n.classList && n.classList.contains('rv-span')) { dopo = n.dataset.span; return; }
+    const t = (n.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!t || (n.nodeType === 1 && n.classList && n.classList.contains('caption') && t === '—')) return;
+    RV.added.push({ id: 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), section: sec, text: t, after: dopo });
+    trovato = true;
+  });
+  if (trovato) { rvRenderReport(); rvSave(); }
 }
 
 /* ---------- pannello destro ---------- */
