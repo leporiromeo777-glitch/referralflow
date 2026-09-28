@@ -144,7 +144,7 @@ export async function GET() {
         const k = tipoEsame(d);
         return { id: d.id, t: d.nota || d.filename, d: dCh(d.uploaded_at), r: ETICHETTA_ESAME[k] ?? 'Documento', k, filename: d.filename };
       }),
-      docs: dd.map((d) => ({ id: d.id, t: d.nota || d.filename, d: dCh(d.uploaded_at), k: DOC_TYPE[d.categoria] ?? 'admin', new: (adesso - new Date(d.uploaded_at).getTime()) < 7 * 86400000 })),
+      docs: dd.map((d) => ({ id: d.id, t: d.nota || d.filename, filename: d.filename, d: dCh(d.uploaded_at), k: DOC_TYPE[d.categoria] ?? 'admin', new: (adesso - new Date(d.uploaded_at).getTime()) < 7 * 86400000 })),
       assicurazione: p.assicurazione ?? '',
       // Tutte le visite in agenda del paziente (passate e future), per la scheda.
       visits: aa.map((a) => ({ id: a.id, d: dCh(a.starts_at), ora: ora(a.starts_at), medico: a.medico ?? '', motivo: a.motivo ?? a.titolo ?? '', fatta: !!a.completed_at || new Date(a.starts_at).getTime() < adesso, futura: new Date(a.starts_at).getTime() >= adesso })),

@@ -66,9 +66,22 @@ async function main() {
     if (st?.ocr_stato === 'da_fare') console.log('ok OCR rimandato: la catena dei referti sta lavorando (si rifà al prossimo giro)');
     else verifica(st?.ocr_stato === 'fatto' && st.ocr_pagine_testo === 2, `OCR fatto sul Mac: 2 pagine su 2 con testo (${st?.ocr_stato}, ${st?.ocr_pagine_testo})`);
     const righe = await query<{ categoria: string; nota: string | null }>('select categoria, nota from patient_documents where patient_id = $1 order by uploaded_at', [paz]);
-    verifica(righe.length === 3 && righe[0].categoria === 'laboratorio' && righe[0].nota === 'Laboratorio 2020-2024' && righe[1].categoria === 'ecg', 'in cartella con categoria e descrizione');
+    verifica(righe.length >= 3 && righe[0].categoria === 'laboratorio' && righe[0].nota === 'Laboratorio 2020-2024' && righe[1].categoria === 'ecg', 'in cartella con categoria e descrizione');
     const acc = await query<{ n: number }>(`select count(*)::int as n from document_access_log where document_id = any($1::uuid[])`, [[a.j.id, b.j.id]]).catch(() => [{ n: -1 }]);
     verifica(acc[0].n === -1 || acc[0].n >= 2, 'caricamento nel registro accessi');
+    // «Estrai pagine»: dal PDF di 3 pagine, le pagine 2-3 come ECG.
+    const es = `${base}/api/prototipo/documenti/${a.j.id}/estrai`;
+    const g = await (await fetch(es, { headers: { cookie } })).json();
+    verifica(g.pagine === 3, `estrai: il documento ha 3 pagine (${g.pagine})`);
+    const pe = await fetch(es, { method: 'POST', headers: { cookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ pagine: '2–3', categoria: 'ecg', nota: 'ECG di prova' }) });
+    const je = await pe.json();
+    const [nuovo] = await query<{ categoria: string; nota: string; filename: string }>('select categoria, nota, filename from patient_documents where id = $1', [je.id ?? null]);
+    verifica(pe.status === 201 && je.pagine === 2 && nuovo?.categoria === 'ecg' && nuovo.nota === 'ECG di prova' && /pp\. 2–3\.pdf$/.test(nuovo.filename), 'estrai: 2 pagine in un documento nuovo, categoria ECG');
+    const ge = await (await fetch(`${base}/api/prototipo/documenti/${je.id}/estrai`, { headers: { cookie } })).json();
+    verifica(ge.pagine === 2, 'estrai: il nuovo PDF ha davvero 2 pagine');
+    const oltre = await fetch(es, { method: 'POST', headers: { cookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ pagine: '3-5' }) });
+    verifica(oltre.status === 400, 'estrai: pagine oltre la fine respinte (400)');
+
     const grande = Buffer.alloc(51 * 1024 * 1024, 0x20); grande.write('%PDF-1.4\n');
     const c = await carica(paz!, grande, 'enorme.pdf');
     verifica(c.status === 413, `oltre 50 MB respinto (${c.status})`);

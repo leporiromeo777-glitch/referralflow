@@ -333,3 +333,10 @@ Invece di chiedere a chi scansiona di rifarle, il Mac aggiunge lo strato di test
 stesse immagini (ottimizzazione senza perdita), in più il testo invisibile — non si conservano due
 copie dello stesso documento. Le pagine scritte a mano restano immagini: l'OCR non le legge
 in modo affidabile e non si finge che lo faccia.
+
+## 28.9.2026 — «Estrai pagine»: la cartella scansionata resta intera, i pezzi si tagliano
+Lo studio carica la cartella cartacea di un paziente in un PDF solo (lettere, ECG, esami). Intera
+non si allega a una mail: all'inviante arriverebbero anche le lettere di altri medici. Scelto un
+taglio a mano (pagine, categoria, descrizione) che crea un documento nuovo e lascia l'originale
+intatto; la divisione proposta in automatico dal modello locale sul testo OCR resta un lavoro
+successivo, da misurare sulle cartelle vere prima di fidarsene.

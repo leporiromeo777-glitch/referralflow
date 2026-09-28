@@ -710,3 +710,55 @@ async function rfDocCarica() {
 .rf-doc-riga { border:1px solid var(--border); border-radius:10px; padding:8px 10px; }
 .rf-doc-nome { font-size:13px; min-width:0; overflow-wrap:anywhere; }
 `; document.head.appendChild(st); })();
+
+
+/* ---------- «Estrai pagine» (28.9.2026) ----------
+   Da un PDF della cartella (per esempio tutta la cartella cartacea
+   scansionata in un file solo) si tagliano le pagine che servono in un
+   documento nuovo, con categoria e descrizione; l'originale resta com'è.
+   Aperto dalla revisione («Allegati»), il pezzo estratto entra anche negli
+   allegati del referto. */
+async function rfEstraiPagine(docId, opts) {
+  opts = opts || {};
+  if (!docId) { toast('Scegli prima il documento'); return; }
+  let n = null;
+  try {
+    const r = await fetch(`/api/prototipo/documenti/${encodeURIComponent(docId)}/estrai`, { credentials: 'include', cache: 'no-store' });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(j.errore || `Errore ${r.status}`); return; }
+    n = j.pagine;
+  } catch { toast('Non riesco a raggiungere la piattaforma'); return; }
+  RF.estratti = RF.estrattiPer === docId ? (RF.estratti || []) : [];
+  RF.estrattiPer = docId;
+  const corpo = () => `
+    <p class="caption">Il documento ha <b>${n}</b> pagine.${opts.bozza ? '' : ' I numeri di pagina li vedi nel visualizzatore accanto.'} L'originale resta com'è.</p>
+    <div class="field mt-8"><label>Pagine</label><input class="input" id="rf-es-pag" placeholder="per esempio 12-15 oppure 3, 7-9" autocomplete="off"></div>
+    <div class="grid grid-2 mt-8" style="gap:6px">
+      <div class="field"><label>Categoria</label><select class="input" id="rf-es-cat">${Object.entries(RF_DOC_CAT).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+      <div class="field"><label>Descrizione</label><input class="input" id="rf-es-nota" placeholder="per esempio ECG 12.3.2024"></div>
+    </div>
+    ${RF.estratti.length ? `<div class="mt-16"><div class="rf-al-tit">Già estratti</div>${RF.estratti.map(e => `<div class="rf-al-riga"><span class="rf-al-nome">${rfEsc(e)}</span><span class="badge success">✓</span></div>`).join('')}</div>` : ''}
+    ${opts.bozza ? '<p class="caption mt-8">Il documento estratto entra nella cartella del paziente e negli allegati di questo referto.</p>' : ''}`;
+  openModal('Estrai pagine', corpo(), `<button class="btn" data-close>Chiudi</button><button class="btn primary" id="rf-es-ok">Estrai</button>`);
+  const bottone = document.getElementById('rf-es-ok');
+  bottone.onclick = async () => {
+    const pagine = document.getElementById('rf-es-pag').value;
+    const categoria = document.getElementById('rf-es-cat').value;
+    const nota = document.getElementById('rf-es-nota').value.trim();
+    bottone.disabled = true; bottone.textContent = 'Estraggo…';
+    try {
+      const r = await fetch(`/api/prototipo/documenti/${encodeURIComponent(docId)}/estrai`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pagine, categoria, nota }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { toast(j.errore || `Errore ${r.status}`); bottone.disabled = false; bottone.textContent = 'Estrai'; return; }
+      RF.estratti.push(`${nota || RF_DOC_CAT[categoria]} · pp. ${pagine.trim()}`);
+      void rfCaricaDati();
+      if (opts.bozza && typeof rfAllegatoPost === 'function') {
+        toast('Estratto e aggiunto agli allegati');
+        await rfAllegatoPost({ azione: 'allegato_aggiungi', documento_id: j.id });
+        return;
+      }
+      toast(`Estratte ${j.pagine} pagine`);
+      rfEstraiPagine(docId, opts);
+    } catch { toast('Non riesco a raggiungere la piattaforma'); bottone.disabled = false; bottone.textContent = 'Estrai'; }
+  };
+}

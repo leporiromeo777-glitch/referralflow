@@ -200,7 +200,7 @@ export type Attorno = {
   ecg: { citato: boolean; trovato: boolean };
   paziente_in_cartella: boolean;
   // La cartella del paziente, per scegliere che cosa aggiungere.
-  cartella: { id: string; etichetta: string; categoria: string; data: string }[];
+  cartella: { id: string; etichetta: string; categoria: string; data: string; pdf: boolean }[];
 };
 
 // Il paziente del referto nella cartella: il legame scritto, poi il nome.
@@ -278,7 +278,7 @@ export async function attorno(studioId: string, bozzaId: string): Promise<Attorn
     if (x.tipo === 'caricato') allegati.push({ etichetta: x.etichetta, documento_id: null, motivo: 'caricato', id: x.id });
   }
   const fmtData = (d: Date) => new Intl.DateTimeFormat('it-CH', { timeZone: 'Europe/Zurich', day: '2-digit', month: '2-digit', year: 'numeric' }).format(d);
-  const cartella = docs.map((d) => ({ id: d.id, etichetta: etichettaDocumento(d) || d.filename, categoria: d.categoria ?? 'altro', data: fmtData(new Date(d.uploaded_at)) }));
+  const cartella = docs.map((d) => ({ id: d.id, etichetta: etichettaDocumento(d) || d.filename, categoria: d.categoria ?? 'altro', data: fmtData(new Date(d.uploaded_at)), pdf: /\.pdf$/i.test(d.filename) }));
 
   return { inviante, copia, allegati, tolti: tolti.map((x) => ({ id: x.id, etichetta: x.etichetta })), ecg: { citato, trovato: !!ecg }, paziente_in_cartella: !!patientId, cartella };
 }
