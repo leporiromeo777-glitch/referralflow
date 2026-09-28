@@ -855,6 +855,7 @@ rvRenderNav = function () {
       <details class="rf-campi" ${Object.values(c).some(v => !v) ? 'open' : ''}><summary><b>Campi estratti</b> <span class="caption">${['nome_paziente', 'data_nascita', 'medico_destinatario'].filter(k => c[k]).length}/3 · dalla catena, correggibili</span></summary>
         ${campo('nome_paziente', 'Paziente', 'Cognome Nome')}${campo('data_nascita', 'Nascita', 'gg.mm.aaaa')}${campo('medico_destinatario', 'Destinatario', 'Dr. …')}
         <div class="caption" style="margin-top:4px">Si salvano nella bozza appena li cambi; valgono per la lettera e per il Word.</div></details>
+      ${rfAggHtml()}
       ${rfAttornoHtml()}
       ${passi.length ? passi.map((g, n) => `<div class="rv-group">${n + 1}. ${rfEsc(g.titolo)} <span class="caption">${g.voci.length}</span></div>${g.voci.map(card).join('')}`).join('') : '<div class="rv-group">Nessuna verifica aperta</div>'}
       ${closed.length ? `<div class="rv-group">Controllati</div>${closed.map(card).join('')}` : ''}
@@ -1027,6 +1028,87 @@ function rfAttornoHtml() {
     <div class="rf-att-sez"><div class="rf-att-tit">Copia per conoscenza</div>${ccHtml}</div>
     <div class="rf-att-sez"><div class="row between"><div class="rf-att-tit">Allegati (Word e mail)</div><button class="btn sm" onclick="rfAllegati()">Gestisci</button></div>${alHtml}</div></details>`;
 }
+/* ---------- Aggiornamento della lettera vecchia (28.9.2026) ----------
+   Marco Moccetti e Moschovitis: «riprendimi la lettera del …» nel dettato →
+   la piattaforma trova quella lettera, confronta anamnesi e fattori di
+   rischio, e propone la lettera aggiornata (parte vecchia con la data di
+   oggi, visita dettata, frase del controllo). Applica / Annulla; senza la
+   richiesta del medico, un tasto per sceglierla a mano. */
+async function rfCaricaAgg(forza) {
+  const id = RF.loaded; if (!id) return;
+  if (!forza && (RF.aggPer === id || RF.aggCarica === id)) return;
+  RF.aggCarica = id;
+  try { const r = await fetch(`/api/prototipo/referti/${id}/aggiornamento`, { credentials: 'include', cache: 'no-store' }); RF.agg = r.ok ? await r.json() : null; }
+  catch { RF.agg = null; }
+  RF.aggPer = id; RF.aggCarica = null; RF.aggNovita = {};
+  if (typeof rvRenderNav === 'function' && state.route === 'review') rvRenderNav();
+}
+function rfAggHtml() {
+  if (!RF.live || !RF.loaded) return '';
+  if (RF.aggPer !== RF.loaded) { void rfCaricaAgg(); return ''; }
+  const a = RF.agg; if (!a || !a.abilitato) return '';
+  const scelteHtml = (lista, testo) => lista && lista.length ? `<div class="row" style="gap:6px;margin-top:4px"><select class="input sm grow" id="rf-agg-scelta">${lista.map(f => `<option value="${rfEsc(f.tipo)}|${rfEsc(f.id)}">${rfEsc(f.etichetta)}</option>`).join('')}</select><button class="btn sm" onclick="rfAggScegli()">${testo}</button></div>` : '';
+  if (a.applicato) {
+    const q = new Date(a.applicato.quando);
+    return `<div class="rf-campi rf-agg"><div class="row between"><b>Lettera aggiornata</b><button class="btn sm ghost" onclick="rfAggAzione({ azione: 'annulla' })">Annulla</button></div>
+      <div class="caption">Da ${rfEsc(a.applicato.fonte.etichetta)} · alle ${q.toLocaleTimeString('it-CH', { hour: '2-digit', minute: '2-digit' })} · controllo a ${a.applicato.mesi} mesi${a.applicato.novita_aggiunte ? ` · ${a.applicato.novita_aggiunte} frasi nuove aggiunte` : ''}</div></div>`;
+  }
+  if (!a.richiesta && !a.proposta) {
+    if (!a.scelte || !a.scelte.length) return '';
+    return `<details class="rf-campi rf-agg"><summary><b>Aggiorna una lettera vecchia…</b> <span class="caption">il medico non l'ha chiesto nel dettato</span></summary>${scelteHtml(a.scelte, 'Usa questa')}</details>`;
+  }
+  const r = a.richiesta;
+  const testa = `<div class="row between"><b>Aggiornamento della lettera</b>${r && r.dal_dettato ? `<span class="badge accent">chiesto nel dettato${r.data ? `: lettera del ${rfEsc(r.data)}` : ''}</span>` : '<span class="badge">scelta a mano</span>'}</div>`;
+  if (!a.proposta) return `<div class="rf-campi rf-agg">${testa}<div class="rf-att-warn">${rfEsc(a.errore || 'Nessuna proposta.')}</div>${scelteHtml(a.scelte, 'Usa questa')}</div>`;
+  const p = a.proposta;
+  const pct = Math.round((p.somiglianza || 0) * 100);
+  const nov = (p.novita || []).map((f, i) => `<label class="rf-agg-nov"><input type="checkbox" ${RF.aggNovita && RF.aggNovita[i] ? 'checked' : ''} onchange="RF.aggNovita[${i}]=this.checked"> <span>${rfEsc(f)}</span></label>`).join('');
+  return `<div class="rf-campi rf-agg">${testa}
+    <div class="caption">Da ${rfEsc(a.fonte.etichetta)}${p.data_vecchia ? ` · data della visita ${rfEsc(p.data_vecchia)} → oggi` : ''}</div>
+    <div class="${pct < 35 ? 'rf-att-warn' : 'caption'}">Anamnesi e fattori di rischio dettati e della lettera vecchia: simili al <b>${pct}%</b>.</div>
+    ${(p.avvisi || []).filter(x => !/si somigliano poco/.test(x)).map(x => `<div class="rf-att-warn">${rfEsc(x)}</div>`).join('')}
+    ${nov ? `<div class="rf-att-tit" style="margin-top:6px">Nel dettato, non nella lettera vecchia</div><div class="caption">Spunta quelle da aggiungere all'anamnesi.</div>${nov}` : '<div class="caption">Nel dettato non c\'è niente che la lettera vecchia non abbia.</div>'}
+    <div class="caption" style="margin-top:6px">Controllo: ${p.mesi} mesi ${p.mesi_dal_dettato ? '(dal dettato)' : '(di serie: il dettato non lo dice)'} · ${p.femminile ? 'della paziente' : 'del paziente'}</div>
+    <div class="row" style="gap:6px;margin-top:6px"><button class="btn sm" onclick="rfAggAnteprima()">Anteprima</button><button class="btn sm primary" onclick="rfAggApplica()">Applica</button></div>
+    ${a.scelte && a.scelte.length > 1 ? `<details class="rf-att-cambia"><summary class="caption">un'altra lettera</summary>${scelteHtml(a.scelte, 'Usa questa')}</details>` : ''}</div>`;
+}
+async function rfAggAzione(corpo) {
+  try {
+    const r = await fetch(`/api/prototipo/referti/${RF.loaded}/aggiornamento`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(j.errore || `Errore ${r.status}`); return false; }
+  } catch { toast('Non riesco a raggiungere la piattaforma'); return false; }
+  if (corpo.azione === 'applica' || corpo.azione === 'annulla') {
+    // Il testo della bozza è cambiato sul server: si ricarica la revisione.
+    try { clearTimeout(rvSave._rf); rvSave._rf = null; localStorage.removeItem(RV_KEY); } catch { /* ignora */ }
+    RF.aggPer = null; RF.loaded = null; closeModal(); render();
+    toast(corpo.azione === 'applica' ? 'Lettera aggiornata: rileggila' : 'Tornato al testo di prima');
+  } else { await rfCaricaAgg(true); }
+  return true;
+}
+function rfAggScegli() {
+  const v = (document.getElementById('rf-agg-scelta') || {}).value || '';
+  const [tipo, id] = v.split('|');
+  if (id) void rfAggAzione({ azione: 'scegli', fonte: { tipo, id } });
+}
+function rfAggApplica() {
+  const novita = Object.entries(RF.aggNovita || {}).filter(([, v]) => v).map(([k]) => Number(k));
+  void rfAggAzione({ azione: 'applica', novita });
+}
+function rfAggAnteprima() {
+  const p = RF.agg && RF.agg.proposta; if (!p) return;
+  const scelte = (p.novita || []).filter((_, i) => RF.aggNovita && RF.aggNovita[i]);
+  const blocco = (etichetta, testo, cls) => testo ? `<div class="rf-agg-blocco ${cls}"><div class="rf-att-tit">${etichetta}</div><div>${rfEsc(testo).replace(/\n/g, '<br>')}</div></div>` : '';
+  openModal('Anteprima della lettera aggiornata', `
+    ${p.saluto ? `<div class="rf-agg-blocco"><div>${rfEsc(p.saluto)}</div></div>` : ''}
+    ${blocco('Dalla lettera vecchia (data della visita portata a oggi)', p.vecchia, 'vecchia')}
+    ${blocco('Frasi nuove che hai scelto di aggiungere', scelte.join(' '), 'aggiunte')}
+    ${blocco('Dal dettato di oggi: visita, esami, valutazione', p.nuova, 'nuova')}
+    ${blocco('Frase finale', p.finale, 'finale')}
+    <p class="caption mt-8">Saluto finale, terapia e firma li mette il Word, come sempre. Con «Applica» questo diventa il testo della bozza: si rilegge e si corregge come ogni referto, e «Annulla» torna al testo di prima.</p>`,
+    `<button class="btn" data-close>Chiudi</button><button class="btn primary" onclick="rfAggApplica()">Applica</button>`);
+}
+
 /* ---------- Proposte dalla cartella scansionata (28.9.2026) ----------
    Il dettato cita un documento («allego l'ECG del 12.3.2024», «come da
    lettera del 2023»): la piattaforma lo cerca pagina per pagina nel testo
@@ -1208,6 +1290,13 @@ function rfAttornoCopia(indice, nuovo) {
 .rf-al-tit { font-size:11.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-3); margin-bottom:4px; }
 .rf-al-riga { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-top:1px solid var(--border); font-size:13px; }
 .rf-al-nome { min-width:0; overflow-wrap:anywhere; }
+.rf-agg { display:flex; flex-direction:column; gap:4px; }
+.rf-agg-nov { display:flex; gap:6px; align-items:flex-start; font-size:12.5px; }
+.rf-agg-blocco { border-left:3px solid var(--border-2); padding:4px 10px; margin-bottom:8px; font-size:13px; }
+.rf-agg-blocco.vecchia { border-color:var(--text-3); }
+.rf-agg-blocco.aggiunte { border-color:var(--warning, #b7791f); }
+.rf-agg-blocco.nuova { border-color:var(--cta, #0d5c48); }
+.rf-agg-blocco.finale { border-color:var(--accent, #0d5c48); }
 .rf-pr-box { margin-top:8px; display:flex; flex-direction:column; gap:6px; }
 .rf-pr { font-size:12.5px; background:var(--accent-soft, #e8f3ef); border-radius:8px; padding:6px 8px; }
 .rf-att .input.sm { max-width:100%; }

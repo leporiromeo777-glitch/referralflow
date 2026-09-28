@@ -6,6 +6,7 @@ aggiornata: 2026-09-23
 
 Elenco di ciò che esiste. Per la catena dei referti vedi [[Catena/Panoramica]].
 
+- **Aggiornamento della lettera vecchia** (2026-09-28, Moccetti e Moschovitis): su «riprendimi la lettera del …» la revisione propone la lettera aggiornata — anamnesi e rischi della vecchia con la data di oggi, visita dettata, frase del controllo — con il confronto delle anamnesi; Applica / Annulla.
 - **Proposte dalla cartella scansionata** (2026-09-28): il dettato cita un documento con la data, la revisione propone le pagine del PDF del paziente dove sta (Guarda / Estrai e allega / No).
 - **«Estrai pagine»** (2026-09-28): da un PDF della cartella (anche tutta la cartella cartacea in un file) un documento nuovo con solo le pagine scelte, categoria e descrizione; dalla revisione entra negli allegati.
 - **«Carica documento» vero** (2026-09-28): nella nuova interfaccia il tasto era dimostrativo; ora carica più file insieme nella cartella del paziente, fino a 50 MB l'uno, con categoria e descrizione; i PDF senza testo ricevono l'OCR dal Mac (ocrmypdf, locale, a catena ferma).

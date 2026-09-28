@@ -385,3 +385,14 @@ Nella revisione un paragrafo cancellato selezionandolo tutto tornava nel referto
 pagina aggiornava solo le frasi ancora presenti. Ora le frasi sparite si svuotano e il testo scritto
 al loro posto si conserva. Non sono «frasi tolte» (quelle tornano barrate alla riapertura): sono
 cancellate, come se si fosse cancellato il loro testo a mano.
+
+## 28.9.2026 — Aggiornamento della lettera vecchia: solo su richiesta del medico, con regole
+Richiesta dello studio per Marco Moccetti e Moschovitis. Scelte fatte con lo studio: parte solo
+quando il medico lo chiede nel dettato («riprendimi la lettera del …», la data sceglie la lettera)
+o chi rivede lo sceglie a mano — mai su ogni referto; la lettera vecchia si cerca prima tra i
+referti confermati e poi nella cartella (anche scansionata); il medico ridetta anche l'anamnesi, e
+se è diversa resta quella della lettera vecchia e le frasi nuove si segnalano da aggiungere a
+mano; sotto anamnesi e rischi va la visita di oggi con esami e valutazione; i mesi del controllo
+dal dettato, 12 se non li dice. Fatto con regole e non col modello: si spiega, non inventa, si
+prova su lettere finte. Resta una proposta: Applica / Annulla.
+
