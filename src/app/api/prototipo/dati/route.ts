@@ -255,8 +255,9 @@ export async function GET() {
   }
 
   // Referti della catena.
-  const bozze = await query<{ id: string; stato: string; tipo: string; created_at: string; testo_finale: string | null; payload: any; campi_confermati: any; inviante_stato: string | null; inviante_nome: string | null }>(
-    `select id, stato, tipo, created_at::text, testo_finale, payload, campi_confermati, patient_id, inviante_stato, inviante_nome from referti_bozze
+  const bozze = await query<{ id: string; stato: string; tipo: string; created_at: string; testo_finale: string | null; payload: any; campi_confermati: any; inviante_stato: string | null; inviante_nome: string | null; inviante_manuale: boolean; inviante_rubrica: string | null }>(
+    `select id, stato, tipo, created_at::text, testo_finale, payload, campi_confermati, patient_id, inviante_stato, inviante_nome, inviante_manuale,
+            (select rd.nome from referring_doctors rd where rd.id = referti_bozze.referring_doctor_id) as inviante_rubrica from referti_bozze
       where studio_id = $1 and stato in ('bozza', 'confermata') and coalesce((payload->>'ombra')::boolean, false) = false
       order by (stato = 'bozza') desc, created_at desc limit 40`, [sid]);
   const reports = bozze.map((b) => {
@@ -301,6 +302,18 @@ export async function GET() {
       inviante: b.inviante_stato === 'nuovo' || b.inviante_stato === 'ambiguo' ? { stato: b.inviante_stato, nome: b.inviante_nome ?? '' } : null,
     };
   });
+  // Il medico inviante nella scheda del paziente (28.9.2026): quello scelto a
+  // mano in un referto vince su quello della referral; se no, quello
+  // collegato dal referto più recente riempie la scheda solo se è vuota.
+  const invPer = new Map<string, { nome: string; manuale: boolean; quando: string }>();
+  bozze.forEach((b, i) => {
+    const pid = reports[i]?.p;
+    if (!b.inviante_rubrica || !pid || /^(rf|ag)-/.test(pid) || !P.has(pid)) return;
+    const c = { nome: b.inviante_rubrica, manuale: !!b.inviante_manuale, quando: b.created_at };
+    const x = invPer.get(pid);
+    if (!x || (c.manuale && !x.manuale) || (c.manuale === x.manuale && c.quando > x.quando)) invPer.set(pid, c);
+  });
+  for (const [pid, v] of invPer) { const sched = P.get(pid) as { gp: string }; if (v.manuale || !sched.gp) sched.gp = v.nome; }
 
   const documents = docs.slice(0, 200).map((d) => ({
     id: d.id, t: d.nota || d.filename, p: d.patient_id, type: DOC_TYPE[d.categoria] ?? 'admin', date: dCh(d.uploaded_at),

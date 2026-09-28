@@ -1132,7 +1132,17 @@ async function rfAttornoPost(corpo) {
   return j;
 }
 async function rfAttornoInviante(id) {
-  try { await rfAttornoPost({ azione: 'inviante', referring_doctor_id: id || null }); toast(id ? 'Inviante collegato' : 'Inviante di nuovo automatico'); } catch (e) { toast(e.message); }
+  // Il nome scelto va anche nei campi della bozza (Destinatario, Medico
+  // inviante): si aggiornano qui, così un salvataggio dei campi non rimette
+  // quello di prima.
+  const prima = (((RF.attorno || {}).inviante || {}).scelto || {}).nome || '';
+  try {
+    const j = await rfAttornoPost({ azione: 'inviante', referring_doctor_id: id || null });
+    RF.campi = RF.campi || {};
+    if (j.nome) { RF.campi.medico_destinatario = j.nome; RF.campi.medico_inviante = j.nome; }
+    else for (const k of ['medico_destinatario', 'medico_inviante']) if (prima && RF.campi[k] === prima) delete RF.campi[k];
+    toast(id ? 'Inviante collegato: aggiornati destinatario e scheda del paziente' : 'Inviante di nuovo automatico');
+  } catch (e) { toast(e.message); }
   void rfCaricaAttorno(true); void rfCaricaDati();
 }
 function rfAttornoAggiungi() {

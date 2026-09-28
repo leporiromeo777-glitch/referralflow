@@ -179,18 +179,37 @@ export async function ricollegaInvianti(studioId: string): Promise<number> {
   return collegati;
 }
 
-export async function scegliInviante(studioId: string, bozzaId: string, referringDoctorId: string | null): Promise<void> {
+// Scelta a mano dell'inviante (28.9.2026, richiesta dello studio): oltre al
+// collegamento, il nome della rubrica diventa quello del referto — campi
+// «Destinatario» e «Medico inviante» (quindi Word e mail) — e il referto si
+// lega al paziente, così nella sua scheda compare questo inviante. Tornando
+// all'automatico, i due campi tornano quelli del dettato se nessuno li ha
+// cambiati nel frattempo. Restituisce il nome della rubrica.
+export async function scegliInviante(studioId: string, bozzaId: string, referringDoctorId: string | null): Promise<string | null> {
   if (referringDoctorId) {
-    const [r] = await query('select 1 from referring_doctors where id = $1 and studio_id = $2', [referringDoctorId, studioId]);
+    const [r] = await query<{ nome: string }>('select nome from referring_doctors where id = $1 and studio_id = $2', [referringDoctorId, studioId]);
     if (!r) throw new Error('inviante_non_trovato');
-  }
-  await query(
+    const paziente = await pazienteDelReferto(studioId, bozzaId);
     // $3 con il tipo scritto: usato solo in «is null» Postgres non sa di che
     // tipo è e la scelta a mano falliva sempre (28.9.2026).
-    `update referti_bozze set referring_doctor_id = $3::uuid, inviante_manuale = $3::uuid is not null,
-            inviante_stato = case when $3::uuid is null then inviante_stato else 'collegato' end
-      where id = $1 and studio_id = $2`, [bozzaId, studioId, referringDoctorId]);
-  if (!referringDoctorId) await collegaInviante(studioId, bozzaId);
+    await query(
+      `update referti_bozze set referring_doctor_id = $3::uuid, inviante_manuale = true, inviante_stato = 'collegato',
+              campi_confermati = coalesce(campi_confermati, '{}'::jsonb) || jsonb_build_object('medico_destinatario', $4::text, 'medico_inviante', $4::text),
+              patient_id = coalesce(patient_id, $5::uuid)
+        where id = $1 and studio_id = $2`, [bozzaId, studioId, referringDoctorId, r.nome, paziente]);
+    return r.nome;
+  }
+  const [prima] = await query<{ nome: string | null }>(
+    `select rd.nome from referti_bozze b left join referring_doctors rd on rd.id = b.referring_doctor_id where b.id = $1 and b.studio_id = $2 and b.inviante_manuale`, [bozzaId, studioId]);
+  await query(
+    `update referti_bozze set referring_doctor_id = null, inviante_manuale = false,
+            campi_confermati = case when $3::text is null or campi_confermati is null then campi_confermati
+              else campi_confermati
+                - (case when campi_confermati->>'medico_destinatario' = $3::text then 'medico_destinatario' else '' end)
+                - (case when campi_confermati->>'medico_inviante' = $3::text then 'medico_inviante' else '' end) end
+      where id = $1 and studio_id = $2`, [bozzaId, studioId, prima?.nome ?? null]);
+  await collegaInviante(studioId, bozzaId);
+  return null;
 }
 
 export type Attorno = {

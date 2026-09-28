@@ -364,3 +364,9 @@ determine data type of parameter $3»; la rotta lo mostrava come «Inviante non 
 tornava vuoto. Stesso difetto nell'abbinamento di un esame di imaging a un paziente. Regola: un
 parametro che compare in `is null` / `is not null` porta sempre il tipo (`$3::uuid`). Ora la scelta
 dell'inviante ha due controlli end-to-end (scelta salvata, ritorno all'automatico).
+
+## 28.9.2026 — L'inviante scelto a mano aggiorna anche referto e scheda del paziente
+Richiesta dello studio: quando il nome dell'inviante è scritto male dal motore e si sceglie a mano
+il medico giusto, il nome giusto deve valere ovunque. Scelto «entrambi»: i campi Destinatario e
+Medico inviante del referto prendono il nome della rubrica (Word e mail compresi) e il medico
+diventa l'inviante nella scheda del paziente. Il testo del referto invece non si riscrive da solo.

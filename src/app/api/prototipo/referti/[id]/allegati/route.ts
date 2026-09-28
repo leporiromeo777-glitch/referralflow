@@ -146,8 +146,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (c?.azione === 'inviante') {
     const rid = c.referring_doctor_id == null || c.referring_doctor_id === '' ? null : String(c.referring_doctor_id);
     if (rid && !isUuid(rid)) return NextResponse.json({ errore: 'id' }, { status: 400 });
-    try { await scegliInviante(session.studioId, params.id, rid); } catch { return NextResponse.json({ errore: 'Inviante non trovato.' }, { status: 404 }); }
-    return NextResponse.json({ ok: true });
+    let nome: string | null = null;
+    try { nome = await scegliInviante(session.studioId, params.id, rid); }
+    catch (e: any) {
+      if (e?.message === 'inviante_non_trovato') return NextResponse.json({ errore: 'Inviante non trovato.' }, { status: 404 });
+      console.error(`[invianti] scelta non salvata: ${e?.code ?? e?.name ?? 'errore'}`);
+      return NextResponse.json({ errore: 'La scelta non si è salvata: riprova.' }, { status: 500 });
+    }
+    return NextResponse.json({ ok: true, nome });
   }
   if (c?.azione === 'aggiungi') {
     const nome = s(c.nome, 120);

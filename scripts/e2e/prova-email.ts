@@ -51,11 +51,15 @@ async function main() {
 
     // Scelta a mano dell'inviante (28.9.2026: falliva sempre per il tipo di $3).
     const pi = await fetch(`${base}/api/prototipo/referti/${ids.boz}/allegati`, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'inviante', referring_doctor_id: ids.cc }) });
-    const [sc] = await query<{ rid: string; manuale: boolean }>('select referring_doctor_id as rid, inviante_manuale as manuale from referti_bozze where id = $1', [ids.boz]);
+    const [sc] = await query<{ rid: string; manuale: boolean; dest: string | null; inv: string | null }>(`select referring_doctor_id as rid, inviante_manuale as manuale, campi_confermati->>'medico_destinatario' as dest, campi_confermati->>'medico_inviante' as inv from referti_bozze where id = $1`, [ids.boz]);
     verifica(pi.status === 200 && sc.rid === ids.cc && sc.manuale === true, `inviante scelto a mano: salvato (${pi.status})`);
+    verifica(sc.dest === 'Carla Copiafinta' && sc.inv === 'Carla Copiafinta', 'inviante scelto a mano: destinatario e medico inviante del referto aggiornati');
+    const dati = await (await fetch(`${base}/api/prototipo/dati`, { headers: h })).json();
+    verifica((dati.patients ?? []).find((x: any) => x.id === ids.paz)?.gp === 'Carla Copiafinta', 'inviante scelto a mano: nella scheda del paziente');
     const pa = await fetch(`${base}/api/prototipo/referti/${ids.boz}/allegati`, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'inviante', referring_doctor_id: null }) });
     const [sa] = await query<{ rid: string; manuale: boolean }>('select referring_doctor_id as rid, inviante_manuale as manuale from referti_bozze where id = $1', [ids.boz]);
-    verifica(pa.status === 200 && sa.rid === ids.inv && sa.manuale === false, 'inviante di nuovo automatico: torna quello del dettato');
+    const [sd] = await query<{ dest: string | null }>(`select campi_confermati->>'medico_destinatario' as dest from referti_bozze where id = $1`, [ids.boz]);
+    verifica(pa.status === 200 && sa.rid === ids.inv && sa.manuale === false && sd.dest == null, 'inviante di nuovo automatico: torna quello del dettato, destinatario compreso');
 
     // «Allegati» della revisione (27.9.2026): togli, rimetti, carica.
     const post = (corpo: unknown) => fetch(`${base}/api/prototipo/referti/${ids.boz}/allegati`, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
