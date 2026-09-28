@@ -102,10 +102,19 @@ async function rfCaricaMedici() {
 }
 
 /* ---------- Revisione: bozza vera, audio vero, salvataggio nella piattaforma ---------- */
+window.addEventListener('hashchange', () => { if (!/^#\/review\//.test(location.hash)) RF.reviewAperta = null; });
 const rfReviewOrig = PAGES.review;
 PAGES.review = () => {
   const id = state.params && state.params.id;
   if (!RF.live || !id || !/^[0-9a-f-]{36}$/.test(id)) return RF.live ? rfPaginaPiattaforma('Revisione guidata', 'Scegli un referto dalla coda') : rfReviewOrig();
+  // Entrando nella revisione (non a ogni ridisegno) la bozza si ricarica dal
+  // server (28.9.2026): prima restava quella in memoria dalla prima apertura,
+  // e dopo ore di lavoro altrove si vedeva una versione vecchia. Se c'è un
+  // salvataggio in sospeso, si aspetta quello.
+  if (RF.reviewAperta !== id) {
+    RF.reviewAperta = id;
+    if (RF.loaded === id && RV.saved !== false && !rvSave._rf) RF.loaded = null;
+  }
   if (RF.loaded !== id) {
     if (RF.loading !== id) { RF.loading = id; void rfCaricaRevisione(id); }
     return `<div class="page-head"><div><h2 class="page-title">Revisione guidata</h2><div class="page-sub">Carico la bozza dalla piattaforma…</div></div></div>`;
@@ -138,8 +147,11 @@ PAGES.review = () => {
   return html;
 };
 async function rfCaricaRevisione(id) {
+  // Una chiave per bozza (28.9.2026): prima era una sola per tutte, e lo stato
+  // di una revisione poteva finire sopra un'altra.
+  RV_KEY = `rf-review-${id}`;
   try {
-    const r = await fetch('/api/prototipo/referti/' + id, { credentials: 'include' });
+    const r = await fetch('/api/prototipo/referti/' + id, { credentials: 'include', cache: 'no-store' });
     if (!r.ok) { RF.loading = null; toast('Bozza non disponibile'); go('#/reports'); return; }
     const j = await r.json();
     RV_AUDIO.dur = j.audio.dur; RV_AUDIO.label = j.audio.label;
@@ -148,6 +160,9 @@ async function rfCaricaRevisione(id) {
     rfSvuota(RV_REPORT); (j.report || []).forEach(s => RV_REPORT.push(s));
     rfSvuota(RV_ISSUES); (j.issues || []).forEach(i => RV_ISSUES.push(i));
     RF.meta = j; RF.loaded = id; RF.loading = null;
+    // Impronta del testo caricato: ogni salvataggio la manda, e il server
+    // rifiuta se nel frattempo la bozza è cambiata (copia vecchia a schermo).
+    RF.base = j.impronta || null;
     // Revisione già fatta e salvata nel prototipo: riparte da lì (verifiche
     // chiuse, correzioni per frase, frasi tolte o aggiunte).
     RF.campi = Object.assign({}, j.campi || {});
@@ -224,7 +239,8 @@ rvFinish = function () {
   document.getElementById('rf-finish-salva').onclick = async () => {
     const b = document.getElementById('rf-finish-salva'); b.disabled = true; b.textContent = 'Salvo…';
     try {
-      const r = await fetch(`/api/prototipo/referti/${RF.loaded}/testo`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ testo, correzioni: RV.metrics.corrections, verifiche: rvDone(), stato: rfStatoRevisione() }) });
+      const r = await fetch(`/api/prototipo/referti/${RF.loaded}/testo`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ testo, base: RF.base, correzioni: RV.metrics.corrections, verifiche: rvDone(), stato: rfStatoRevisione() }) });
+      if (r.status === 409) { const j = await r.json().catch(() => ({})); if (j.errore === 'cambiata') throw new Error('La bozza è stata salvata in un\'altra versione nel frattempo: chiudi e riapri la revisione per vedere quella salvata.'); }
       if (!r.ok) throw new Error(String(r.status));
       rvLog('SECRETARY_REVIEW_COMPLETED', `${RV.metrics.corrections} correzioni · salvato`);
       closeModal(); toast('Salvato: il referto è segnato come rivisto, da confermare'); RF.loaded = null; go('#/reports'); void rfCaricaDati();
@@ -279,8 +295,18 @@ rvSave = function () {
       // Il testo corretto viaggia insieme allo stato: così un referto lasciato a
       // metà ha già le correzioni nella bozza. Le mappe per id di frase non si
       // salvano (gli id cambiano col testo): si salvano solo gli esiti.
-      await fetch(`/api/prototipo/referti/${id}/testo`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ testo: rfTestoRicomposto(), stato: rfStatoRevisione(), correzioni: RV.metrics.corrections, verifiche: rvDone() }), keepalive: true });
+      const r = await fetch(`/api/prototipo/referti/${id}/testo`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ testo: rfTestoRicomposto(), stato: rfStatoRevisione(), correzioni: RV.metrics.corrections, verifiche: rvDone(), base: RF.base }), keepalive: true });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.impronta) RF.base = j.impronta;
+      if (r.status === 409 && j.errore === 'cambiata') {
+        // La pagina aveva una copia vecchia: niente sovrascrittura, si ricarica
+        // la versione salvata.
+        localStorage.removeItem(RV_KEY);
+        openModal('La bozza è cambiata', '<p>Nel frattempo la bozza è stata salvata in un\'altra versione (da un\'altra finestra o da un altro computer). Per non sovrascriverla, ricarico quella salvata: le ultime modifiche di questa pagina non sono state salvate.</p>', '<button class="btn primary" data-close>Va bene</button>');
+        RF.loaded = null; render();
+      }
     } catch { /* riprova al prossimo salvataggio */ }
+    finally { rvSave._rf = null; }
   }, 2000);
 };
 function rfStatoRevisione() {

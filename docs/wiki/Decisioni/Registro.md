@@ -370,3 +370,12 @@ Richiesta dello studio: quando il nome dell'inviante è scritto male dal motore 
 il medico giusto, il nome giusto deve valere ovunque. Scelto «entrambi»: i campi Destinatario e
 Medico inviante del referto prendono il nome della rubrica (Word e mail compresi) e il medico
 diventa l'inviante nella scheda del paziente. Il testo del referto invece non si riscrive da solo.
+
+## 28.9.2026 — La revisione riparte sempre dalla versione salvata, e una copia vecchia non sovrascrive
+Visto dallo studio: dopo ore sulla stessa bozza (allegati, proposte, un'impaginazione scartata) la
+revisione mostrava il testo com'era alla prima apertura, mentre sul server c'era la versione
+corretta. La pagina teneva in memoria la bozza caricata la prima volta e lo stato locale era uno
+solo per tutte le bozze. Ora: entrando nella revisione la bozza si ricarica dal server (se non c'è
+un salvataggio in sospeso); lo stato locale è uno per bozza; ogni salvataggio porta l'impronta del
+testo da cui la pagina è partita, e se nel frattempo la bozza è cambiata il server rifiuta
+(«cambiata») e la pagina ricarica la versione salvata invece di sovrascriverla.

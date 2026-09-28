@@ -4,7 +4,8 @@
    L'audio è simulato da un orologio di riproduzione: stessa semantica di un file
    reale (posizione, finestra di evidenza, velocità), nessun file da caricare. */
 
-const RV_KEY = 'rf-review-r1';
+// `let`: nella piattaforma la chiave è una per bozza (04-referti-revisione.js).
+let RV_KEY = 'rf-review-r1';
 const RV = {
   report: 'r1', cur: 0, issues: [], text: {}, edited: {}, moved: {}, removed: {}, added: [],
   t: 0, playing: false, speed: 1, stopAt: null, follow: true, detached: false,

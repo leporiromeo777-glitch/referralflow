@@ -86,6 +86,19 @@ async function main() {
     await query(`update referti_bozze set stato = 'bozza' where id = $1`, [ids.boz]);
     const r3 = await fetch(`${base}/api/prototipo/referti/${ids.boz}/email?anteprima=1`, { headers: h });
     verifica(r3.status === 409, 'una bozza non confermata non esce (409)');
+    // Copia vecchia a schermo (28.9.2026): il salvataggio con un'impronta
+    // superata viene rifiutato, non sovrascrive.
+    const g0 = await (await fetch(`${base}/api/prototipo/referti/${ids.boz}`, { headers: h })).json();
+    const salva = (testo: string, b: string | null) => fetch(`${base}/api/prototipo/referti/${ids.boz}/testo`, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ testo, base: b }) });
+    const s1 = await salva(testo + ' Prima correzione.', g0.impronta);
+    const j1 = await s1.json();
+    verifica(s1.status === 200 && typeof j1.impronta === 'string' && j1.impronta !== g0.impronta, 'salvataggio con impronta giusta: accettato, impronta nuova');
+    const s2 = await salva(testo + ' Versione vecchia sopra quella nuova.', g0.impronta);
+    const j2 = await s2.json();
+    const [salvata] = await query<{ t: string }>('select testo_finale as t from referti_bozze where id = $1', [ids.boz]);
+    verifica(s2.status === 409 && j2.errore === 'cambiata' && salvata.t.endsWith('Prima correzione.'), 'salvataggio da una copia vecchia: rifiutato, la versione salvata resta');
+    const s3 = await salva(testo + ' Prima correzione. Seconda.', j1.impronta);
+    verifica(s3.status === 200, 'con l\'impronta aggiornata si continua a salvare');
   } finally {
     await query('delete from referti_eventi where bozza_id = $1', [ids.boz ?? null]);
     await query('delete from referti_bozze where id = $1', [ids.boz ?? null]);

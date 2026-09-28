@@ -59,16 +59,26 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!agg) return NextResponse.json({ errore: 'non_bozza' }, { status: 409 });
     return NextResponse.json({ ok: true, solo_stato: true });
   }
+  // Copia vecchia a schermo (28.9.2026): la pagina manda l'impronta del testo
+  // da cui è partita; se la bozza nel frattempo è cambiata non si sovrascrive.
+  const base = typeof corpo?.base === 'string' ? corpo.base : null;
   const [agg] = await query<{ id: string }>(
     `update referti_bozze set testo_finale = $3, payload = case when $4::jsonb is null then payload else jsonb_set(payload, '{revisione_prototipo}', $4::jsonb) end
-      where id = $1 and studio_id = $2 and stato = 'bozza' returning id`,
-    [params.id, session.studioId, testo, statoJson]
+      where id = $1 and studio_id = $2 and stato = 'bozza'
+        and ($5::text is null or encode(sha256(convert_to(coalesce(testo_finale, payload->>'testo_corretto', ''), 'UTF8')), 'hex') like $5::text || '%'
+             or $3 = coalesce(testo_finale, payload->>'testo_corretto', ''))
+      returning id`,
+    [params.id, session.studioId, testo, statoJson, base]
   );
-  if (!agg) return NextResponse.json({ errore: 'non_bozza' }, { status: 409 });
+  if (!agg) {
+    const [c] = await query<{ stato: string }>('select stato from referti_bozze where id = $1 and studio_id = $2', [params.id, session.studioId]);
+    if (c?.stato === 'bozza' && base) return NextResponse.json({ errore: 'cambiata' }, { status: 409 });
+    return NextResponse.json({ errore: 'non_bozza' }, { status: 409 });
+  }
   await registraEvento(session.studioId, params.id, 'testo_salvato', session.id, {
     impronta_testo: impronta(testo), caratteri: testo.length, origine: 'prototipo',
     correzioni: Number.isInteger(corpo?.correzioni) ? corpo.correzioni : undefined,
     verifiche: Number.isInteger(corpo?.verifiche) ? corpo.verifiche : undefined,
   });
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, impronta: impronta(testo) });
 }

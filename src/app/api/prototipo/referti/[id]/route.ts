@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { impronta } from '@/lib/referti-eventi';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
@@ -58,6 +59,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   return NextResponse.json({
     id: b.id,
     stato: b.stato,
+    impronta: impronta((b.testo_finale ?? p.testo_corretto ?? '') as string),
     formato,
     tracce,
     tracce_in_arrivo: inArrivo?.n ?? 0,

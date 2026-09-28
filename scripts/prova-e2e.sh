@@ -89,7 +89,7 @@ DOC="$(curl -s -b "$C_MEDICO" -X POST -H 'Content-Type: application/json' -d '{"
 [ "$DOC" = "ok" ] && echo "   ok" || fallito "la preparazione della giornata non torna un documento"
 
 echo "→ e-mail per l'inviante: anteprima, file .eml, allegati identici, bozza bloccata"
-DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-email.ts "http://localhost:$PORTA" "$C_MEDICO" "$STUDIO" > "$TMP/email.txt" 2>&1 || fallito "prova-email"
+DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-email.ts "http://localhost:$PORTA" "$C_MEDICO" "$STUDIO" > "$TMP/email.txt" 2>&1 || { fallito "prova-email"; tail -4 "$TMP/email.txt" | cut -c1-300; }
 grep -E "^NO" "$TMP/email.txt"; echo "   $(grep -c '^ok' "$TMP/email.txt") ok, $(grep -c '^NO' "$TMP/email.txt") no"
 
 echo "→ carica documento nella cartella: 50 MB, testo o no, categoria, rifiuti"
