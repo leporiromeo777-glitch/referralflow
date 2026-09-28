@@ -130,3 +130,11 @@ test('inviante: cognome scritto male dal motore → proposta, mai collegato da s
   assert.equal(x.stato, 'ambiguo'); assert.equal(x.simili, true); assert.deepEqual(x.candidati.map((c) => c.id), ['b']);
   assert.equal(statoInviante('Dr. Carlo Verdi', rubrica).stato, 'nuovo');
 });
+
+test('nome del paziente per il confronto: virgola, titoli, spazi (28.9.2026)', async () => {
+  const { nomePerConfronto } = await import('./referti-allegati');
+  assert.equal(nomePerConfronto('Rossi, Mario'), 'rossi mario');
+  assert.equal(nomePerConfronto('  Sig.ra  Bianchi;Anna '), 'bianchi anna');
+  assert.equal(nomePerConfronto('Signor Verdi Luca.'), 'verdi luca');
+  assert.equal(nomePerConfronto('non indicato'), 'non indicato');
+});

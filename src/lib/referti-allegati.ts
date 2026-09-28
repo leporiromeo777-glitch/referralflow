@@ -54,15 +54,29 @@ function punteggio(nota: string[], testoDoc: string): number {
   return p;
 }
 
+// Il nome come lo scrive la catena o chi rivede, pronto per il confronto:
+// «Rossi, Mario» e «Sig.ra Rossi Mario» diventano «rossi mario» (28.9.2026:
+// una virgola fra cognome e nome bastava a non trovare il paziente). Resta un
+// confronto ESATTO su cognome+nome: mai indovinare, un aggancio sbagliato
+// porterebbe i documenti di un altro paziente negli allegati.
+export function nomePerConfronto(nome: string | null | undefined): string {
+  return String(nome ?? '')
+    .toLowerCase()
+    .replace(/^\s*(?:sig\.?(?:ra|na)?|signor[ae]?|paziente)\s+/, '')
+    .replace(/[,;.:]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /** Trova il paziente citato nei campi estratti (match per cognome+nome). */
 export async function trovaPaziente(studioId: string, nomePaziente: string | null): Promise<string | null> {
-  const pulito = (nomePaziente ?? '').trim();
+  const pulito = nomePerConfronto(nomePaziente);
   if (!pulito || pulito === 'non indicato') return null;
   const [p] = await query<{ id: string }>(
     `select id from patients
       where studio_id = $1
-        and (lower(cognome || ' ' || nome) = lower($2)
-             or lower(nome || ' ' || cognome) = lower($2))
+        and (regexp_replace(lower(trim(cognome || ' ' || nome)), '[\\s,;.:]+', ' ', 'g') = $2
+             or regexp_replace(lower(trim(nome || ' ' || cognome)), '[\\s,;.:]+', ' ', 'g') = $2)
       order by created_at desc limit 1`,
     [studioId, pulito]
   );
