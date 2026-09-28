@@ -112,6 +112,13 @@ export function frasePerIlControllo(mesi: number, femminile: boolean, giaInConcl
   return `${apertura} un prossimo controllo non prima di ${mesi} mesi rimanendo a disposizione Tua e ${femminile ? 'della paziente' : 'del paziente'} qualora la clinica richiedesse una rivalutazione anticipata.`;
 }
 
+const MESI_LETTERA = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+// Una data completa: 14.03.2025, 14. 03. 2025 (OCR), 14/3/25, 14 marzo 2025.
+const RX_DATA_PIENA = new RegExp(`(?<!\\d)(?:\\d{1,2}\\s?[./]\\s?\\d{1,2}\\s?[./]\\s?(?:\\d{4}|\\d{2})|\\d{1,2}°?\\s+(?:${MESI_LETTERA.join('|')})\\s+\\d{4})(?!\\d)`, 'i');
+function dataAParole(oggi: string): string {
+  const [g, m, a] = oggi.split('.').map(Number);
+  return g && m && a ? `${g} ${MESI_LETTERA[m - 1]} ${a}` : oggi;
+}
 const RX_DATA_VISITA = /\b((?:rivedo|rivediamo|ho rivisto|vedo|visito|ho visitato|ho rivalutato|rivaluto)\b[^.]{0,60}?\bin data\s+)(\d{1,2}[./]\d{1,2}[./]\d{2,4})/i;
 
 // `unParagrafo`: la lettera di Moccetti è un paragrafo solo; il rapporto a
@@ -130,11 +137,23 @@ export function aggiorna(opts: { lettera: string; dettato: string; oggi: string;
   if (!dd.punto) return { errore: 'Nel dettato non trovo dove comincia la visita di oggi (esame clinico, ECG, esami…).' };
   if (dv.prima.length < 40) return { errore: 'La parte «anamnesi e fattori di rischio» della lettera vecchia è troppo corta per essere ripresa.' };
 
+  // La data della visita (28.9.2026, dopo la prima lettera vera: «In data
+  // 14.03.2025 …» senza «rivedo» davanti): la prima data completa della
+  // PRIMA frase, in cifre (anche con gli spazi dell'OCR) o a parole; se lì
+  // non c'è, «rivedo … in data …» più avanti. Le altre date restano.
   let vecchia = dv.prima;
   let dataVecchia: string | null = null;
-  const md = RX_DATA_VISITA.exec(vecchia);
-  if (md) { dataVecchia = md[2]; vecchia = vecchia.replace(RX_DATA_VISITA, `$1${opts.oggi}`); }
-  else avvisi.push('Nella lettera vecchia non c\'è «rivedo in data …»: controlla le date della parte ripresa.');
+  const primaFine = (() => { const m = /[.!?](?=\s+[A-ZÀ-Ý])/.exec(vecchia); return m ? m.index + 1 : vecchia.length; })();
+  const inPrima = RX_DATA_PIENA.exec(vecchia.slice(0, primaFine));
+  if (inPrima) {
+    dataVecchia = inPrima[0].replace(/\s+/g, ' ').trim();
+    const aParole = /[a-zà-ù]/i.test(inPrima[0]);
+    vecchia = vecchia.slice(0, inPrima.index) + (aParole ? dataAParole(opts.oggi) : opts.oggi) + vecchia.slice(inPrima.index + inPrima[0].length);
+  } else {
+    const md = RX_DATA_VISITA.exec(vecchia);
+    if (md) { dataVecchia = md[2]; vecchia = vecchia.replace(RX_DATA_VISITA, `$1${opts.oggi}`); }
+    else avvisi.push('Nella prima frase della lettera vecchia non trovo la data della visita: controlla le date della parte ripresa.');
+  }
 
   const { somiglianza, novita } = confronta(dv.prima, dd.prima);
   if (somiglianza < 0.35) avvisi.push(`L'anamnesi dettata e quella della lettera vecchia si somigliano poco (${Math.round(somiglianza * 100)}%): controlla che la lettera vecchia sia del paziente giusto.`);

@@ -96,3 +96,18 @@ test('lettera da scansione: intestazione, piè di pagina e righe spezzate', asyn
   const p = aggiorna({ lettera: t, dettato: 'Caro Luca, FRCV: ipertensione. Clinicamente oggi bene.', oggi: '28.09.2026', femminile: false });
   assert.ok(!('errore' in p) && p.vecchia.startsWith("non ritorno sull'anamnesi"));
 });
+
+test('data della visita nella prima frase, anche senza «rivedo» e con gli spazi dell\'OCR', () => {
+  const lettera = (inizio: string) => `Caro Luca, ${inizio} FRCV: ipertensione arteriosa, dislipidemia. Nel 2019 infarto del 03.05.2019. Clinicamente bene.`;
+  for (const [inizio, atteso] of [
+    ['In data 14.03.2025 ho rivisto il paziente per il controllo annuale.', 'In data 28.09.2026 ho rivisto'],
+    ['Ti scrivo a seguito della visita del 14. 03. 2025 del paziente a margine.', 'visita del 28.09.2026 del paziente'],
+    ['Il 14 marzo 2025 ho rivalutato il paziente.', 'Il 28 settembre 2026 ho rivalutato'],
+  ] as const) {
+    const p = aggiorna({ lettera: lettera(inizio), dettato: 'Caro Luca, FRCV: ipertensione arteriosa, dislipidemia. Clinicamente oggi bene.', oggi: '28.09.2026', femminile: false });
+    assert.ok(!('errore' in p));
+    if ('errore' in p) continue;
+    assert.ok(p.vecchia.includes(atteso), p.vecchia);
+    assert.ok(p.vecchia.includes('03.05.2019'), 'la data dell\'infarto resta');
+  }
+});
