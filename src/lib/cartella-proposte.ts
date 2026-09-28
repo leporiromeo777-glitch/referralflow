@@ -3,7 +3,7 @@ import { query } from './db';
 import { getFile } from './storage';
 import { pazienteDelReferto } from './referti-inviante';
 import { etichettaDocumento } from './referti-allegato-blocco';
-import { CATEGORIA_DI, cercaPagine, etichettaRichiesta, richiesteDalDettato } from './cerca-in-cartella';
+import { CATEGORIA_DI, cercaPagine, cercaSenzaData, etichettaRichiesta, richiesteDalDettato } from './cerca-in-cartella';
 
 // Proposte di pagine da estrarre dalla cartella scansionata (28.9.2026):
 // il dettato dice che cosa serve (cerca-in-cartella.ts), qui si leggono le
@@ -28,7 +28,7 @@ async function testoPerPagina(storageKey: string): Promise<string[]> {
 export type PropostaCartella = {
   richiesta: string; tipo: string; categoria: string;
   documento_id: string; documento: string; pagine_documento: number;
-  da: number; a: number; motivi: string[]; gia_estratto: string | null;
+  da: number; a: number; motivi: string[]; gia_estratto: string | null; senza_data: boolean;
 };
 
 export async function proposteDallaCartella(studioId: string, bozzaId: string): Promise<{ proposte: PropostaCartella[]; senza_proposta: string[]; attesa_ocr: number } | null> {
@@ -57,9 +57,22 @@ export async function proposteDallaCartella(studioId: string, bozzaId: string): 
   }
   const proposte: PropostaCartella[] = [];
   const senza: string[] = [];
-  for (const r of richieste) {
-    const trovate = leggibili.flatMap(({ d, pagine }) => cercaPagine(pagine, r).map((p) => ({ d, n: pagine.length, p })))
+  // Prima le lettere: le loro pagine non valgono poi per gli altri tipi.
+  const occupate = new Map<string, Set<number>>();
+  const ordinate = [...richieste].sort((a, b) => Number(b.tipo === 'lettera') - Number(a.tipo === 'lettera'));
+  for (const r of ordinate) {
+    const escludi = (id: string) => (r.tipo === 'lettera' ? new Set<number>() : occupate.get(id) ?? new Set<number>());
+    let trovate = leggibili.flatMap(({ d, pagine }) => cercaPagine(pagine, r, escludi(d.id)).map((p) => ({ d, n: pagine.length, p })))
       .sort((x, y) => y.p.punteggio - x.p.punteggio).slice(0, 2);
+    if (!trovate.length && r.data && r.tipo !== 'lettera') {
+      trovate = leggibili.flatMap(({ d, pagine }) => cercaSenzaData(pagine, r, escludi(d.id)).map((p) => ({ d, n: pagine.length, p })))
+        .sort((x, y) => y.p.punteggio - x.p.punteggio).slice(0, 2);
+    }
+    if (r.tipo === 'lettera') for (const { d, p } of trovate) {
+      const s = occupate.get(d.id) ?? new Set<number>();
+      for (let k = p.pagina_da; k <= p.pagina_a; k++) s.add(k);
+      occupate.set(d.id, s);
+    }
     // L'ECG citato senza data è quello del giorno: se la cartella non ce l'ha
     // non è una mancanza da segnalare qui (lo dice già la regola dell'ECG).
     if (!trovate.length) { if (r.esplicita) senza.push(etichettaRichiesta(r)); continue; }
@@ -70,7 +83,7 @@ export async function proposteDallaCartella(studioId: string, bozzaId: string): 
       proposte.push({
         richiesta: etichettaRichiesta(r), tipo: r.tipo, categoria: CATEGORIA_DI[r.tipo],
         documento_id: d.id, documento: etichettaDocumento(d) || d.filename, pagine_documento: n,
-        da: p.pagina_da, a: p.pagina_a, motivi: p.motivi, gia_estratto: gia?.id ?? null,
+        da: p.pagina_da, a: p.pagina_a, motivi: p.motivi, gia_estratto: gia?.id ?? null, senza_data: !!p.senza_data,
       });
     }
   }

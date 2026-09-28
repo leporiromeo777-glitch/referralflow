@@ -51,3 +51,20 @@ test('nulla da proporre: data che non c\'è, ECG di oggi, pagine a mano', () => 
     assert.deepEqual(cercaPagine(CARTELLA, r), [], frase);
   }
 });
+
+test('la lettera che cita l\'eco non è l\'eco; senza data si propongono le pagine da eco (28.9.2026)', async () => {
+  const { cercaSenzaData } = await import('./cerca-in-cartella');
+  const cartella = [
+    'Egregio collega, Lugano 20.03.2024. ecocardiogramma di marzo 2024 con frazione di eiezione conservata.',
+    'seguito della lettera, cordiali saluti',
+    'Ecocardiogramma transtoracico. FEVS 60%. TAPSE 22. frazione di eiezione normale. ventricolo sinistro',
+    'Laboratorio emocromo',
+  ];
+  const [lett, eco] = richiesteDalDettato('Come da lettera del 20.3.2024. Ecocardiogramma di marzo 2024.', [], OGGI);
+  const pl = cercaPagine(cartella, lett);
+  assert.deepEqual(pl.map((p) => [p.pagina_da, p.pagina_a]), [[1, 2]]);
+  const occupate = new Set([1, 2]);
+  assert.deepEqual(cercaPagine(cartella, eco, occupate), [], 'fuori dalla lettera nessuna pagina ha eco e data');
+  const sd = cercaSenzaData(cartella, eco, occupate);
+  assert.deepEqual(sd.map((p) => [p.pagina_da, p.pagina_a, p.senza_data]), [[3, 3, true]]);
+});

@@ -11,7 +11,7 @@
 export type Tipo = 'ecg' | 'holter' | 'eco' | 'ergometria' | 'laboratorio' | 'imaging' | 'lettera';
 export type DataCercata = { g?: number; m?: number; a: number };
 export type Richiesta = { tipo: Tipo; data: DataCercata | null; esplicita: boolean };
-export type Proposta = { pagina_da: number; pagina_a: number; punteggio: number; motivi: string[] };
+export type Proposta = { pagina_da: number; pagina_a: number; punteggio: number; motivi: string[]; senza_data?: boolean };
 
 const MESI_IT = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
 const MESI_DE = ['januar', 'februar', 'märz', 'april', 'mai', 'juni', 'juli', 'august', 'september', 'oktober', 'november', 'dezember'];
@@ -125,6 +125,7 @@ export function rxDataPagina(d: DataCercata): RegExp {
 }
 
 const RX_DATA_PIENA = /(?<!\d)(\d{1,2})\s?[./-]\s?(\d{1,2})\s?[./-]\s?(\d{4}|\d{2})(?!\d)/g;
+const RX_CHIUSURA = /\b(?:cordiali saluti|distinti saluti|con i migliori saluti|cordialmente|mit freundlichen gr(?:ü|u)ssen|freundliche gr(?:ü|u)sse|meilleures salutations|salutations distingu(?:é|e)es)\b/i;
 const RX_APERTURA = /\b(?:egregio|gentile|caro collega|cara collega|cari colleghi|lieber|liebe|sehr geehrte|cher confrère|chère consœur)\b/i;
 
 function contaTipo(tipo: Tipo, testo: string): number {
@@ -139,7 +140,12 @@ function contaTipo(tipo: Tipo, testo: string): number {
 // dopo finché hanno la stessa data o parole del tipo senza aprire un
 // documento nuovo (un'altra data in testa, un «Egregio collega»), al massimo
 // 6 pagine. Le due proposte migliori.
-export function cercaPagine(pagine: string[], r: Richiesta): Proposta[] {
+// `escludi`: pagine già proposte per un'altra richiesta — una lettera che
+// parla dell'eco del marzo 2024 non è l'eco (28.9.2026, visto su una cartella
+// vera: l'unica pagina con «eco» e la data era la lettera). Se nessuna pagina
+// ha data e tipo insieme, `cercaSenzaData` propone le pagine con più parole
+// del tipo, segnate «senza data».
+export function cercaPagine(pagine: string[], r: Richiesta, escludi: Set<number> = new Set()): Proposta[] {
   const rxData = r.data ? rxDataPagina(r.data) : null;
   const pesoData = r.data ? (r.data.g ? 4 : r.data.m ? 2 : 1) : 0;
   const valuta = (i: number) => {
@@ -151,12 +157,14 @@ export function cercaPagine(pagine: string[], r: Richiesta): Proposta[] {
   };
   const candidati: Proposta[] = [];
   for (let i = 0; i < pagine.length; i++) {
+    if (escludi.has(i + 1)) continue;
     const v = valuta(i);
     if (!v.tipo || (rxData && !v.data)) continue;
     const motivi = [`${NOME_DI[r.tipo]} a pagina ${i + 1}`];
     if (v.data && r.data) motivi.unshift(`data ${etichettaData(r.data)}`);
     let fine = i;
-    while (fine + 1 < pagine.length && fine - i < 5) {
+    // Una lettera finisce col saluto: la pagina dopo è un altro documento.
+    while (fine + 1 < pagine.length && fine - i < 5 && !escludi.has(fine + 2) && !(r.tipo === 'lettera' && RX_CHIUSURA.test(pagine[fine] ?? ''))) {
       const dopo = pagine[fine + 1] ?? '';
       const w = valuta(fine + 1);
       const testa = dopo.slice(0, 400);
@@ -172,4 +180,20 @@ export function cercaPagine(pagine: string[], r: Richiesta): Proposta[] {
     i = fine;
   }
   return candidati.sort((a, b) => b.punteggio - a.punteggio || a.pagina_da - b.pagina_da).slice(0, 2);
+}
+
+// Nessuna pagina con data e tipo insieme: le pagine con più parole del tipo
+// (almeno 2), fuori da quelle già proposte, da controllare a vista.
+export function cercaSenzaData(pagine: string[], r: Richiesta, escludi: Set<number> = new Set()): Proposta[] {
+  const conta = pagine.map((t, i) => (escludi.has(i + 1) ? 0 : contaTipo(r.tipo, t)));
+  const out: Proposta[] = [];
+  for (let i = 0; i < pagine.length; i++) {
+    if (conta[i] < 2) continue;
+    let fine = i;
+    while (fine + 1 < pagine.length && fine - i < 5 && conta[fine + 1] >= 1 && !RX_APERTURA.test((pagine[fine + 1] ?? '').slice(0, 400))) fine++;
+    const tot = conta.slice(i, fine + 1).reduce((a, b) => a + b, 0);
+    out.push({ pagina_da: i + 1, pagina_a: fine + 1, punteggio: tot, senza_data: true, motivi: [`${tot} parole da ${NOME_DI[r.tipo]}`, 'senza la data del dettato'] });
+    i = fine;
+  }
+  return out.sort((a, b) => b.punteggio - a.punteggio || a.pagina_da - b.pagina_da).slice(0, 2);
 }
