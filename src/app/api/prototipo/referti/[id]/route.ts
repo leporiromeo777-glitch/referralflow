@@ -60,6 +60,13 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     id: b.id,
     stato: b.stato,
     impronta: impronta((b.testo_finale ?? p.testo_corretto ?? '') as string),
+    // Quale versione si sta guardando (28.9.2026): ora dell'ultimo salvataggio
+    // e lunghezza, in testa alla revisione.
+    versione: await (async () => {
+      const testo = (b.testo_finale ?? p.testo_corretto ?? '') as string;
+      const [e] = await query<{ quando: string }>(`select created_at::text as quando from referti_eventi where bozza_id = $1 and azione = 'testo_salvato' order by created_at desc limit 1`, [b.id]);
+      return { salvata_il: b.testo_finale != null ? e?.quando ?? null : null, caratteri: testo.length, dalla_catena: b.testo_finale == null };
+    })(),
     formato,
     tracce,
     tracce_in_arrivo: inArrivo?.n ?? 0,
