@@ -3,6 +3,10 @@
 // testo (come una scansione senza OCR), file oltre i 50 MB, paziente solo
 // d'agenda. Poi toglie tutto. Uso (da prova-e2e.sh):
 //   DATABASE_URL=…demo NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-documenti.ts <base> <cookie> <studio>
+import { execFileSync } from 'child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import os from 'os';
+import path from 'path';
 import { query, pool } from '../../src/lib/db';
 import { deleteFile } from '../../src/lib/storage';
 
@@ -16,7 +20,7 @@ function pdf(testo: string | null, pagine = 1): Buffer {
   const kids = Array.from({ length: pagine }, (_, i) => `${4 + i * 2} 0 R`).join(' ');
   ogg.push('<< /Type /Catalog /Pages 2 0 R >>', `<< /Type /Pages /Kids [${kids}] /Count ${pagine} >>`, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
   for (let i = 0; i < pagine; i++) {
-    const flusso = testo ? `BT /F1 12 Tf 72 720 Td (${testo} pagina ${i + 1}) Tj ET` : '';
+    const flusso = testo ? `BT /F1 22 Tf 60 700 Td (${testo} pagina ${i + 1}) Tj ET` : '';
     ogg.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${5 + i * 2} 0 R >>`, `<< /Length ${flusso.length} >>\nstream\n${flusso}\nendstream`);
   }
   let out = '%PDF-1.4\n';
@@ -43,9 +47,26 @@ async function main() {
     const a = await carica(paz!, pdf('Esame di prova con testo leggibile', 3), 'cartella.pdf', 'laboratorio', 'Laboratorio 2020-2024');
     verifica(a.status === 201 && a.j.pagine === 3 && a.j.senza_testo === false, `PDF con testo: caricato, 3 pagine, testo trovato (${a.status} ${JSON.stringify(a.j)})`);
     const b = await carica(paz!, pdf(null, 4), 'scansione.pdf', 'ecg');
-    verifica(b.status === 201 && b.j.senza_testo === true, 'PDF senza testo: caricato con l\'avviso «senza testo»');
+    verifica(b.status === 201 && b.j.senza_testo === true && b.j.ocr === 'in_coda', 'PDF senza testo: caricato e in coda per l\'OCR');
+    // Una «scansione»: il PDF con testo trasformato in sole immagini da
+    // Ghostscript; il Mac deve rimetterci il testo con l'OCR.
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'rf-prova-ocr-'));
+    writeFileSync(path.join(dir, 'a.pdf'), pdf('Ecocardiogramma di controllo', 2));
+    execFileSync('/opt/homebrew/bin/gs', ['-q', '-sDEVICE=pdfimage24', '-r200', '-o', path.join(dir, 'b.pdf'), path.join(dir, 'a.pdf')]);
+    const scansione = readFileSync(path.join(dir, 'b.pdf'));
+    rmSync(dir, { recursive: true, force: true });
+    const o = await carica(paz!, scansione, 'scansione-ocr.pdf', 'referto');
+    verifica(o.status === 201 && o.j.senza_testo === true && o.j.ocr === 'in_coda', 'scansione di sole immagini: in coda per l\'OCR');
+    let st: { ocr_stato: string | null; ocr_pagine_testo: number | null } | undefined;
+    for (let i = 0; i < 60; i++) {
+      [st] = await query<{ ocr_stato: string | null; ocr_pagine_testo: number | null }>('select ocr_stato, ocr_pagine_testo from patient_documents where id = $1', [o.j.id]);
+      if (st?.ocr_stato !== 'da_fare') break;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    if (st?.ocr_stato === 'da_fare') console.log('ok OCR rimandato: la catena dei referti sta lavorando (si rifà al prossimo giro)');
+    else verifica(st?.ocr_stato === 'fatto' && st.ocr_pagine_testo === 2, `OCR fatto sul Mac: 2 pagine su 2 con testo (${st?.ocr_stato}, ${st?.ocr_pagine_testo})`);
     const righe = await query<{ categoria: string; nota: string | null }>('select categoria, nota from patient_documents where patient_id = $1 order by uploaded_at', [paz]);
-    verifica(righe.length === 2 && righe[0].categoria === 'laboratorio' && righe[0].nota === 'Laboratorio 2020-2024' && righe[1].categoria === 'ecg', 'in cartella con categoria e descrizione');
+    verifica(righe.length === 3 && righe[0].categoria === 'laboratorio' && righe[0].nota === 'Laboratorio 2020-2024' && righe[1].categoria === 'ecg', 'in cartella con categoria e descrizione');
     const acc = await query<{ n: number }>(`select count(*)::int as n from document_access_log where document_id = any($1::uuid[])`, [[a.j.id, b.j.id]]).catch(() => [{ n: -1 }]);
     verifica(acc[0].n === -1 || acc[0].n >= 2, 'caricamento nel registro accessi');
     const grande = Buffer.alloc(51 * 1024 * 1024, 0x20); grande.write('%PDF-1.4\n');

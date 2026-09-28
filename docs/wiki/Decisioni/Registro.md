@@ -324,3 +324,12 @@ che resta valido: PDF con OCR e cartelle lunghe divise per contenuto. Scoperto n
 «Carica documento» della nuova interfaccia era rimasto quello dimostrativo e non caricava nulla
 (diceva «Documento caricato»); sostituito con il caricamento vero. Un PDF senza testo viene segnalato
 subito, perché una scansione senza OCR non si cerca e non si legge.
+
+## 28.9.2026 — OCR dei PDF della cartella fatto dal Mac
+Le cartelle che escono da DocuWare (e le scansioni fatte senza OCR) sono solo immagini: Anteprima le
+«legge» al volo, ma dentro il file non c'è testo, e la piattaforma non le può cercare né leggere.
+Invece di chiedere a chi scansiona di rifarle, il Mac aggiunge lo strato di testo con `ocrmypdf`
+(Tesseract, locale: nulla esce), solo a catena ferma. Il file con il testo sostituisce l'originale:
+stesse immagini (ottimizzazione senza perdita), in più il testo invisibile — non si conservano due
+copie dello stesso documento. Le pagine scritte a mano restano immagini: l'OCR non le legge
+in modo affidabile e non si finge che lo faccia.

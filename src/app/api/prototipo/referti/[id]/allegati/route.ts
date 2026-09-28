@@ -10,6 +10,7 @@ import { CATEGORIE, logDocumento } from '@/lib/cartella';
 import { deleteFile, getFile, putFile } from '@/lib/storage';
 import { isAllowedInternalUpload, MAX_UPLOAD_SIZE } from '@/lib/upload';
 import { registraEvento } from '@/lib/referti-eventi';
+import { dopoCaricamento } from '@/lib/documenti-ocr';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,6 +94,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         `insert into patient_documents (studio_id, patient_id, filename, storage_key, categoria, nota, uploaded_by)
          values ($1, $2, $3, $4, $5, $6, $7) returning id`, [sid, patientId, file.name, key, categoria, nota, session.id]);
       await logDocumento(doc.id, 'caricamento', { studioId: sid, userId: session.id });
+      await dopoCaricamento(doc.id, buffer, ext);
       await query(`insert into referti_allegati (studio_id, bozza_id, tipo, documento_id, etichetta, created_by) values ($1, $2, 'cartella', $3, $4, $5)`,
         [sid, params.id, doc.id, etichettaDocumento({ filename: file.name, nota }) || file.name, session.id]);
       evento('caricato_in_cartella');

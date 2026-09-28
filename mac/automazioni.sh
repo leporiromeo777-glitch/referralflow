@@ -3,6 +3,7 @@
 # ogni 15 minuti (vedi installa-server.sh):
 #   - sincronizzazione dell'agenda (feed iCal Cassa dei Medici) a ogni giro
 #   - «Trascrizioni grezze» pseudonimizzate, a catena ferma, a ogni giro
+#   - OCR dei PDF della cartella senza testo, a catena ferma, a ogni giro
 #   - promemoria SMS una volta l'ora (fa qualcosa solo se gli SMS sono attivi)
 #   - watchdog delle referral ferme una volta al giorno, la mattina
 #   - report mensile il 1° del mese
@@ -40,6 +41,8 @@ chiama cron/agenda
 chiama cron/imaging
 # «Trascrizioni grezze» pseudonimizzate: parte solo se la catena è ferma.
 chiama cron/grezze
+# OCR dei PDF della cartella caricati senza testo: anche questo a catena ferma.
+chiama cron/ocr
 
 # Una sola volta l'ora / al giorno / al mese: passa di qui ogni quarto d'ora,
 # quindi il giro col minuto sotto i 15 è quello «in punto».

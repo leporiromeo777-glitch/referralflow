@@ -95,6 +95,7 @@ grep -E "^NO" "$TMP/email.txt"; echo "   $(grep -c '^ok' "$TMP/email.txt") ok, $
 echo "→ carica documento nella cartella: 50 MB, testo o no, categoria, rifiuti"
 DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-documenti.ts "http://localhost:$PORTA" "$C_MEDICO" "$STUDIO" > "$TMP/documenti.txt" 2>&1 || fallito "prova-documenti"
 grep -E "^NO" "$TMP/documenti.txt"; echo "   $(grep -c '^ok' "$TMP/documenti.txt") ok, $(grep -c '^NO' "$TMP/documenti.txt") no"
+grep -E "^ok OCR" "$TMP/documenti.txt" | sed 's/^ok /   /'
 
 echo "→ chi vede che cosa: menu dal server e rotte bloccate, ruolo per ruolo"
 B="http://localhost:$PORTA/api/prototipo"

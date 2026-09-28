@@ -600,7 +600,7 @@ PAGES.profile = () => {
    caricava nulla. Ora: più file insieme, fino a 50 MB l'uno (una cartella
    cartacea scansionata ci sta), categoria e descrizione per file, un file
    alla volta verso /api/prototipo/pazienti/<id>/documenti con l'avanzamento,
-   e l'avviso quando un PDF non ha testo (scansione senza OCR). */
+   e, per un PDF senza testo, l'OCR fatto dal Mac (src/lib/documenti-ocr.ts). */
 const RF_DOC_MAX_MB = 50;
 const RF_DOC_CAT = { altro: 'Documento', referto: 'Referto', ecg: 'ECG', holter: 'Holter', laboratorio: 'Laboratorio', imaging: 'Imaging', lettera: 'Lettera', dimissione: 'Lettera di dimissione', consenso: 'Consenso firmato' };
 const rfDocUploadDemo = MODALS.upload;
@@ -617,7 +617,7 @@ MODALS.upload = function () {
     <label class="rf-doc-drop mt-16" id="rf-doc-drop">${ICONS.upload}<span><b>Scegli i file</b> o trascinali qui</span><span class="caption">PDF, immagini, Word, DICOM · fino a ${RF_DOC_MAX_MB} MB l'uno · più file insieme</span>
       <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx,.dcm" style="display:none" onchange="rfDocScegli(this.files)"></label>
     <div id="rf-doc-lista"></div>
-    <p class="caption mt-8">Per le scansioni: PDF <b>con OCR</b> (testo ricercabile), 200–300 dpi in scala di grigi. Una cartella lunga si può dividere per contenuto (ECG, laboratorio, lettere…): si ritrova meglio.</p>`,
+    <p class="caption mt-8">Per le scansioni: PDF in scala di grigi, 200–300 dpi. Se il PDF non ha il testo (niente OCR, o esportato da DocuWare), lo aggiunge il Mac da solo; le pagine scritte a mano restano immagini. Una cartella lunga si può dividere per contenuto (ECG, laboratorio, lettere…): si ritrova meglio.</p>`,
     `<button class="btn" data-close>Chiudi</button><button class="btn primary" id="rf-doc-ok" onclick="rfDocCarica()" disabled>Carica</button>`);
   const drop = document.getElementById('rf-doc-drop');
   if (drop) {
@@ -657,7 +657,7 @@ function rfDocLista() {
   const mb = (b) => b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`;
   const stato = (x) => ({
     pronto: '', grande: `<span class="badge danger">oltre ${RF_DOC_MAX_MB} MB: dividilo</span>`, invio: `<span class="caption">${x.msg || 'carico…'}</span>`,
-    fatto: `<span class="badge success">✓ caricato${x.msg ? ' · ' + rfEsc(x.msg) : ''}</span>`, senzatesto: `<span class="badge warning">caricato · senza testo (manca l'OCR)</span>`, errore: `<span class="badge danger">${rfEsc(x.msg || 'errore')}</span>`,
+    fatto: `<span class="badge success">✓ caricato${x.msg ? ' · ' + rfEsc(x.msg) : ''}</span>`, senzatesto: `<span class="badge success">✓ caricato${x.msg ? ' · ' + rfEsc(x.msg) : ''}</span> <span class="caption">senza testo: il Mac aggiunge l'OCR appena la catena dei referti è ferma</span>`, errore: `<span class="badge danger">${rfEsc(x.msg || 'errore')}</span>`,
   })[x.stato] || '';
   const fermo = (x) => ['invio', 'fatto', 'senzatesto'].includes(x.stato);
   el.innerHTML = RF.docFile.length ? `<div class="rf-doc-righe mt-16">${RF.docFile.map((x, i) => `
@@ -699,7 +699,7 @@ async function rfDocCarica() {
   const fatti = RF.docFile.filter(x => x.stato === 'fatto' || x.stato === 'senzatesto').length;
   const senza = RF.docFile.filter(x => x.stato === 'senzatesto').length;
   const err = RF.docFile.filter(x => x.stato === 'errore').length;
-  toast(`${fatti} caricati${senza ? ` · ${senza} senza testo` : ''}${err ? ` · ${err} non riusciti` : ''}`);
+  toast(`${fatti} caricati${senza ? ` · ${senza} in coda per l'OCR` : ''}${err ? ` · ${err} non riusciti` : ''}`);
   // La scheda del paziente sotto il modale mostra subito i documenti nuovi.
   if (fatti) { await rfCaricaDati(); render(); }
 }
