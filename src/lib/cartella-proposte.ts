@@ -74,6 +74,17 @@ export async function proposteDallaCartella(studioId: string, bozzaId: string): 
       });
     }
   }
+  // Due richieste che portano alle stesse pagine (l'eco riportato dentro la
+  // lettera) sono una proposta sola: «Lettera del 2023 · Ecocardiogramma»
+  // (28.9.2026: due righe per le stesse pagine sembravano due allegati).
+  const unite: PropostaCartella[] = [];
+  for (const p of proposte) {
+    const g = unite.find((x) => x.documento_id === p.documento_id && x.da === p.da && x.a === p.a);
+    if (!g) { unite.push({ ...p, motivi: [...p.motivi] }); continue; }
+    g.richiesta = `${g.richiesta} · ${p.richiesta}`;
+    for (const m of p.motivi) if (!g.motivi.includes(m)) g.motivi.push(m);
+  }
+  proposte.length = 0; proposte.push(...unite);
   console.log(`[cartella] proposte per ${bozzaId.slice(0, 8)}: ${richieste.length} richieste, ${proposte.length} proposte, ${leggibili.length} PDF letti`);
   return { proposte, senza_proposta: senza, attesa_ocr: attesa };
 }
