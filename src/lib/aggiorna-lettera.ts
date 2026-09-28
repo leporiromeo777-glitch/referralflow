@@ -43,6 +43,7 @@ const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const segnali = (l: string[]) => new RegExp(`(^|[.;:!?]\\s+|\\n\\s*)(${l.map(esc).join('|')})`, 'i');
 const FORTI = segnali(['clinicamente', "all'esame obiettivo", 'all’esame obiettivo', 'esame obiettivo', 'obiettivamente', "all'esame clinico", 'all’esame clinico', 'parametri vitali']);
 const DEBOLI = segnali(['elettrocardiogramma', "all'ecg", 'all’ecg', 'ecg', "all'ecocardiogramma", 'all’ecocardiogramma', 'ecocardiogramma', 'esami strumentali', 'esami', 'valutazione', 'procedere']);
+const RX_MISURA = /(\b\d{2,3}(?:[.,]\d)?\s*kg\b|\bPA\s*:?\s*\d{2,3}\s*\/\s*\d{2,3}|\b\d{2,3}\s*\/\s*\d{2,3}\s*mmHg|\bFC\s*:?\s*\d{2,3}\b|\b\d{2,3}\s*bpm\b)/i;
 const ETICHETTE_ANAMNESI = /\b(frcv|fattori di rischio(?: cardiovascolare)?|comorbidit[aà]|allergie(?: e intolleranze)?)\s*:/gi;
 const RX_SALUTO = /^\s*((?:caro|cara|cari|gentile|egregio|egregia|stimato|stimata|lieber|liebe|sehr geehrte[rs]?)\b[^\n,]{0,80},)\s*/i;
 
@@ -57,7 +58,21 @@ export function dividi(testo: string): Divisione {
   for (const e of t.matchAll(ETICHETTE_ANAMNESI)) da = Math.max(da, (e.index ?? 0) + e[0].length);
   const cerca = (rx: RegExp, dove: number) => { const m = rx.exec(t.slice(dove)); return m ? { i: dove + m.index + m[1].length, punto: m[2] } : null; };
   const forte = cerca(FORTI, da) ?? cerca(FORTI, 0);
-  const trovato = forte ?? cerca(DEBOLI, da);
+  let trovato = forte ?? cerca(DEBOLI, da);
+  // L'esame clinico senza «Clinicamente» (28.9.2026, prima lettera vera: «…
+  // di 80 Kg, PA 130/80 mmHg, FC 64 bpm» e poi l'ECG): la visita comincia
+  // dalla frase con la prima misura clinica dopo anamnesi e rischi, se viene
+  // prima degli altri segnali.
+  const mv = RX_MISURA.exec(t.slice(da));
+  if (mv) {
+    const assoluto = da + mv.index;
+    const prima = t.slice(0, assoluto);
+    const fineFrase = Math.max(prima.lastIndexOf('. '), prima.lastIndexOf('; '), prima.lastIndexOf('! '), prima.lastIndexOf('? '), prima.lastIndexOf('\n'));
+    const inizio = Math.max(da, fineFrase >= 0 ? fineFrase + 1 : 0);
+    const iniziaQui = t.slice(inizio).replace(/^\s+/, '');
+    const i = t.length - iniziaQui.length;
+    if (!trovato || i < trovato.i) trovato = { i, punto: 'misure' };
+  }
   if (!trovato) return { prima: t.trim(), dopo: '', punto: null };
   return { prima: t.slice(0, trovato.i).trim(), dopo: t.slice(trovato.i).trim(), punto: trovato.punto.trim().toLowerCase() };
 }

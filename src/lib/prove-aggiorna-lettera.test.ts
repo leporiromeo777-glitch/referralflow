@@ -111,3 +111,15 @@ test('data della visita nella prima frase, anche senza «rivedo» e con gli spaz
     assert.ok(p.vecchia.includes('03.05.2019'), 'la data dell\'infarto resta');
   }
 });
+
+test('esame clinico senza «Clinicamente»: la visita comincia dalla prima misura', () => {
+  const vecchia = "Caro Luca, in data 14.03.2025 rivedo il paziente a margine. FRCV: ipertensione arteriosa, dislipidemia. Nel 2019 ecocardiogramma con FE 55%. Si presenta in buone condizioni, 80 Kg per 175 cm, PA 130/80 mmHg, FC 64 bpm. All'ECG ritmo sinusale. In conclusione stabile.";
+  const d = dividi(vecchia.replace(/^Caro Luca, /, ''));
+  assert.equal(d.punto, 'misure');
+  assert.ok(d.dopo.startsWith('Si presenta in buone condizioni, 80 Kg'), d.dopo);
+  assert.ok(d.prima.endsWith('Nel 2019 ecocardiogramma con FE 55%.'), d.prima);
+  const p = aggiorna({ lettera: vecchia, dettato: "Caro Luca, FRCV: ipertensione arteriosa, dislipidemia. All'esame clinico 82 Kg, PA 125/78 mmHg. All'ECG ritmo sinusale.", oggi: '28.09.2026', femminile: false });
+  assert.ok(!('errore' in p));
+  if ('errore' in p) return;
+  assert.ok(!p.testo.includes('80 Kg') && !p.testo.includes('130/80') && p.testo.includes('82 Kg'), 'un esame clinico solo, quello di oggi');
+});
