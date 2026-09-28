@@ -21,7 +21,7 @@ renderDocViewer = function () {
   const a = DV.item;
   const paz = a.p && P[a.p] ? fullName(P[a.p]) : '';
   const corpo = a.pdf
-    ? `<iframe src="${a.src || `/api/documents/${a.id}`}#${a.pagina ? `page=${a.pagina}&` : ''}toolbar=1&view=FitH" title="${rfEsc(a.title)}" style="width:100%;height:100%;min-height:70vh;border:0;background:#fff;border-radius:12px"></iframe>`
+    ? `<div class="rf-pdf" id="rf-pdf" data-url="${rfEsc(a.src || `/api/documents/${a.id}`)}"></div>`
     : `<div class="dv-page"><div class="dv-head"><div><div class="dv-title">${rfEsc(a.title)}</div><div class="caption">${rfEsc(paz)}${a.date ? ' · ' + rfEsc(a.date) : ''}</div></div></div><pre style="white-space:pre-wrap;font:inherit;margin:12px 0 0">${a.testo == null ? 'Estraggo il testo…' : rfEsc(a.testo)}</pre></div>`;
   el.innerHTML = `
     <div class="dv-bar"><span class="section-title" style="margin:0">Documento</span><span class="badge">${rfEsc(DOC_TYPE[a.kind] || a.kind)}</span><span class="caption">${rfEsc(paz)}${a.date ? ' · ' + a.date : ''}</span>
@@ -36,7 +36,70 @@ renderDocViewer = function () {
     <div class="dv-foot caption">${ICONS.shield} Apertura registrata nel registro accessi · chiedi all'assistente: «cosa dice questo documento?», «quali valori riporta?»</div>`;
   el.querySelector('#dv-close').onclick = dvClose;
   bindCommon(el);
+  const box = el.querySelector('#rf-pdf');
+  if (box) void rfPdfMostra(box, box.dataset.url, a.pagina || 1);
 };
+
+/* PDF disegnati con pdf.js (28.9.2026) invece che con il visualizzatore del
+   browser: nell'app installata (Safari) un PDF dentro la pagina restava
+   bianco. Le pagine si disegnano quando si avvicinano allo schermo; il file
+   scaricato una volta resta in memoria finché non se ne apre un altro, così
+   un nuovo disegno della pagina non lo riscarica. pdf.js è in
+   public/prototipo/vendor/pdfjs (build «legacy», Apache-2.0). */
+let rfPdfLib = null;
+const RF_PDF = { url: null, dati: null };
+async function rfPdfJs() {
+  if (!rfPdfLib) {
+    rfPdfLib = await import('/prototipo/vendor/pdfjs/pdf.min.mjs');
+    rfPdfLib.GlobalWorkerOptions.workerSrc = '/prototipo/vendor/pdfjs/pdf.worker.min.mjs';
+  }
+  return rfPdfLib;
+}
+async function rfPdfMostra(el, url, pagina) {
+  const turno = String(Math.random()); el.dataset.turno = turno;
+  el.innerHTML = '<div class="caption" style="padding:14px">Apro il documento…</div>';
+  try {
+    const lib = await rfPdfJs();
+    if (RF_PDF.url !== url) {
+      const r = await fetch(url, { credentials: 'include', cache: 'no-store' });
+      if (!r.ok) throw new Error(String(r.status));
+      RF_PDF.dati = new Uint8Array(await r.arrayBuffer()); RF_PDF.url = url;
+    }
+    const doc = await lib.getDocument({ data: RF_PDF.dati.slice(), isEvalSupported: false, wasmUrl: '/prototipo/vendor/pdfjs/wasm/', standardFontDataUrl: '/prototipo/vendor/pdfjs/standard_fonts/' }).promise;
+    if (el.dataset.turno !== turno) return;
+    const larghezza = Math.max(240, el.clientWidth - 16);
+    const prima = (await doc.getPage(1)).getViewport({ scale: 1 });
+    const alta = Math.round(larghezza * prima.height / prima.width);
+    el.innerHTML = Array.from({ length: doc.numPages }, (_, i) => `<div class="rf-pdf-pag" data-n="${i + 1}" style="min-height:${alta}px"><span class="rf-pdf-num">${i + 1} / ${doc.numPages}</span></div>`).join('');
+    const disegna = async (b) => {
+      if (b.dataset.fatto) return; b.dataset.fatto = '1';
+      const p = await doc.getPage(Number(b.dataset.n));
+      const v1 = p.getViewport({ scale: 1 }), dpr = Math.min(2, window.devicePixelRatio || 1);
+      const v = p.getViewport({ scale: larghezza / v1.width * dpr });
+      const c = document.createElement('canvas');
+      c.width = Math.floor(v.width); c.height = Math.floor(v.height);
+      c.style.width = `${Math.floor(v.width / dpr)}px`; c.style.height = `${Math.floor(v.height / dpr)}px`;
+      b.style.minHeight = ''; b.appendChild(c);
+      await p.render({ canvas: c, canvasContext: c.getContext('2d'), viewport: v }).promise;
+    };
+    const oss = new IntersectionObserver((voci) => voci.forEach(x => { if (x.isIntersecting) void disegna(x.target); }), { root: el, rootMargin: '800px 0px' });
+    el.querySelectorAll('.rf-pdf-pag').forEach(b => oss.observe(b));
+    const dove = el.querySelector(`.rf-pdf-pag[data-n="${Math.min(pagina, doc.numPages)}"]`);
+    if (dove && pagina > 1) el.scrollTop = dove.offsetTop - el.offsetTop;
+    el.onscroll = () => {
+      const sopra = [...el.querySelectorAll('.rf-pdf-pag')].find(b => b.offsetTop - el.offsetTop + b.offsetHeight > el.scrollTop + 40);
+      if (sopra && DV.item) DV.item.pagina = Number(sopra.dataset.n);
+    };
+  } catch {
+    if (el.dataset.turno === turno) el.innerHTML = `<div class="caption" style="padding:14px">Non riesco a mostrare il PDF qui. <a href="${rfEsc(url)}" download>Scaricalo</a>.</div>`;
+  }
+}
+(function () { const st = document.createElement('style'); st.textContent = `
+.rf-pdf { flex:1; min-height:70vh; overflow:auto; background:var(--surface-2, #eef0ec); border-radius:12px; padding:8px; display:flex; flex-direction:column; align-items:center; gap:8px; }
+.rf-pdf-pag { position:relative; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.12); max-width:100%; }
+.rf-pdf-pag canvas { display:block; max-width:100%; }
+.rf-pdf-num { position:absolute; top:6px; right:8px; font-size:11px; color:var(--text-3); background:rgba(255,255,255,.85); padding:1px 6px; border-radius:6px; }
+`; document.head.appendChild(st); })();
 
 /* I documenti si aprono nel visualizzatore, non in una scheda nuova
    (28.9.2026): con ReferralFlow installato come app, una scheda nuova si

@@ -1,0 +1,1 @@
+pdf.js 5.4.296 (Mozilla, Apache-2.0), build «legacy» copiata da node_modules/pdfjs-dist il 28.9.2026 per il visualizzatore dei PDF della cartella (05-assistente.js). Per aggiornarla: ricopiare legacy/build/pdf.min.mjs, pdf.worker.min.mjs, wasm/ e standard_fonts/.
