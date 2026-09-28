@@ -180,7 +180,10 @@ export async function statoAggiornamento(studioId: string, bozzaId: string): Pro
   if (patientId) sesso = (await query<{ sesso: string | null }>('select sesso from patients where id = $1', [patientId]))[0]?.sesso ?? null;
   let formato: 'rapporto' | 'lettera' = 'lettera';
   try { formato = await formatoPerBozza(studioId, p.medico ?? null); } catch { /* lettera */ }
-  const r = aggiorna({ lettera: vecchia.testo, dettato, oggi: fmt(quando), femminile: eFemminile(sesso, dettato), unParagrafo: formato === 'lettera' });
+  // La data della visita vecchia, se la prima frase non la dice: quella del
+  // referto confermato, o quella completa chiesta nel dettato.
+  const dataLettera = vecchia.fonte.tipo === 'referto' ? vecchia.fonte.data : data?.g && data.m ? `${String(data.g).padStart(2, '0')}.${String(data.m).padStart(2, '0')}.${data.a}` : null;
+  const r = aggiorna({ lettera: vecchia.testo, dettato, oggi: fmt(quando), femminile: eFemminile(sesso, dettato), unParagrafo: formato === 'lettera', dataLettera });
   const scelte = trovate.length > 1 ? trovate.map((t) => t.fonte) : [];
   if ('errore' in r) return { ...base, richiesta, fonte: vecchia.fonte, errore: r.errore, scelte };
   return { ...base, richiesta, fonte: vecchia.fonte, proposta: r, scelte };

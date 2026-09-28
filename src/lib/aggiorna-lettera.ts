@@ -134,11 +134,37 @@ function dataAParole(oggi: string): string {
   const [g, m, a] = oggi.split('.').map(Number);
   return g && m && a ? `${g} ${MESI_LETTERA[m - 1]} ${a}` : oggi;
 }
+// «Odierno», «oggi» della lettera vecchia → la data di quella visita.
+// Solo dopo `da` (la prima frase parla ormai della visita di oggi).
+const ODIERNO_DI = 'visita|valutazione|controllo|consultazione|consulto|incontro|ecg|elettrocardiogramma|ecocardiogramma|eco|esame|esami|tracciato|misurazione|misurazioni|holter|ergometria|cicloergometria|spiroergometria|test|prelievo|prelievi|laboratorio';
+export function alPassato(testo: string, data: string | null, da = 0): { testo: string; cambiate: number; senzaData: boolean } {
+  const testa = testo.slice(0, da), coda = testo.slice(da);
+  const regole: [RegExp, (d: string, ...g: string[]) => string][] = [
+    [/\bin data (?:odierna|di oggi)\b/gi, (d) => `in data ${d}`],
+    [new RegExp(`\\b(${ODIERNO_DI})\\s+odiern[oaie]\\b`, 'gi'), (d, g1) => `${g1} del ${d}`],
+    [/\b(?:fino\s+)?ad?\s+oggi\b/gi, (d) => `al ${d}`],
+    [/\bquest['’]oggi\b/gi, (d) => `in data ${d}`],
+    [/\bin giornata odierna\b/gi, (d) => `in data ${d}`],
+    [/\boggi\b/gi, (d) => `in data ${d}`],
+  ];
+  let n = 0;
+  const conta = regole.reduce((t, [rx]) => t + (coda.match(rx) ?? []).length, 0);
+  if (!conta) return { testo, cambiate: 0, senzaData: false };
+  if (!data) return { testo, cambiate: 0, senzaData: true };
+  let nuova = coda;
+  for (const [rx, f] of regole) nuova = nuova.replace(rx, (m: string, ...g: any[]) => {
+    n++;
+    const r = f(data, ...g.filter((x) => typeof x === 'string'));
+    return /^[A-ZÀ-Ý]/.test(m) ? r[0].toUpperCase() + r.slice(1) : r;
+  });
+  return { testo: testa + nuova, cambiate: n, senzaData: false };
+}
+
 const RX_DATA_VISITA = /\b((?:rivedo|rivediamo|ho rivisto|vedo|visito|ho visitato|ho rivalutato|rivaluto)\b[^.]{0,60}?\bin data\s+)(\d{1,2}[./]\d{1,2}[./]\d{2,4})/i;
 
 // `unParagrafo`: la lettera di Moccetti è un paragrafo solo; il rapporto a
 // sezioni (Moschovitis) tiene i suoi a capo.
-export function aggiorna(opts: { lettera: string; dettato: string; oggi: string; femminile: boolean; unParagrafo?: boolean }): Proposta | { errore: string } {
+export function aggiorna(opts: { lettera: string; dettato: string; oggi: string; femminile: boolean; unParagrafo?: boolean; dataLettera?: string | null }): Proposta | { errore: string } {
   const unParagrafo = opts.unParagrafo !== false;
   const avvisi: string[] = [];
   const v = togliSaluto(opts.lettera);
@@ -169,6 +195,14 @@ export function aggiorna(opts: { lettera: string; dettato: string; oggi: string;
     if (md) { dataVecchia = md[2]; vecchia = vecchia.replace(RX_DATA_VISITA, `$1${opts.oggi}`); }
     else avvisi.push('Nella prima frase della lettera vecchia non trovo la data della visita: controlla le date della parte ripresa.');
   }
+
+  // «Odierno» nella lettera vecchia era il giorno di QUELLA visita (28.9.2026,
+  // richiesta dello studio): dopo la prima frase, si ancora alla sua data.
+  const dataDellaVisitaVecchia = dataVecchia && /\d/.test(dataVecchia) && /^\d{1,2}\s?[./]/.test(dataVecchia) ? dataVecchia.replace(/\s+/g, '') : (dataVecchia ?? opts.dataLettera ?? null);
+  const pp = alPassato(vecchia, dataDellaVisitaVecchia, primaFine);
+  vecchia = pp.testo;
+  if (pp.cambiate) avvisi.push(`${pp.cambiate === 1 ? 'Un\'espressione' : `${pp.cambiate} espressioni`} della lettera vecchia riferit${pp.cambiate === 1 ? 'a' : 'e'} al giorno di quella visita («odierno», «oggi»…) portat${pp.cambiate === 1 ? 'a' : 'e'} alla sua data (${dataDellaVisitaVecchia}): controlla.`);
+  if (pp.senzaData) avvisi.push('Nella parte ripresa ci sono «odierno» o «oggi» riferiti alla visita vecchia, ma la sua data non si conosce: correggili a mano.');
 
   const { somiglianza, novita } = confronta(dv.prima, dd.prima);
   if (somiglianza < 0.35) avvisi.push(`L'anamnesi dettata e quella della lettera vecchia si somigliano poco (${Math.round(somiglianza * 100)}%): controlla che la lettera vecchia sia del paziente giusto.`);

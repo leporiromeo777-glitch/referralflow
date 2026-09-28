@@ -123,3 +123,15 @@ test('esame clinico senza «Clinicamente»: la visita comincia dalla prima misur
   if ('errore' in p) return;
   assert.ok(!p.testo.includes('80 Kg') && !p.testo.includes('130/80') && p.testo.includes('82 Kg'), 'un esame clinico solo, quello di oggi');
 });
+
+test('«odierno» e «oggi» della lettera vecchia portati alla data di quella visita', async () => {
+  const { alPassato } = await import('./aggiorna-lettera');
+  const r = alPassato('In data odierna rivedo il paziente. ECG odierno con ritmo sinusale. Ad oggi nessun evento. Quest\'oggi riferisce benessere. Gli esami odierni sono nella norma. Oggi stabile.', '14.03.2025', 36);
+  assert.equal(r.testo, "In data odierna rivedo il paziente. ECG del 14.03.2025 con ritmo sinusale. Al 14.03.2025 nessun evento. In data 14.03.2025 riferisce benessere. Gli esami del 14.03.2025 sono nella norma. In data 14.03.2025 stabile.");
+  assert.equal(r.cambiate, 5);
+  assert.deepEqual(alPassato('Visita odierna tranquilla.', null, 0), { testo: 'Visita odierna tranquilla.', cambiate: 0, senzaData: true });
+  const p = aggiorna({ lettera: "Caro Luca, in data 14.03.2025 rivedo il paziente a margine. FRCV: ipertensione. All'ECG odierno ritmo sinusale noto. Clinicamente bene.", dettato: 'Caro Luca, FRCV: ipertensione. Clinicamente oggi bene.', oggi: '28.09.2026', femminile: false });
+  assert.ok(!('errore' in p));
+  if ('errore' in p) return;
+  assert.ok(p.vecchia.includes('in data 28.09.2026 rivedo') && p.vecchia.includes("All'ECG del 14.03.2025 ritmo sinusale"), p.vecchia);
+});
