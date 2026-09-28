@@ -49,6 +49,14 @@ async function main() {
     verifica(Buffer.from(ecg.split('\r\n\r\n')[1]?.replace(/\r\n/g, '') ?? '', 'base64').equals(pdf), 'l\'ECG allegato è identico');
     verifica(!/Emailprova/.test(eml.split('\r\n\r\n')[0]), 'nessun nome del paziente nelle intestazioni');
 
+    // Scelta a mano dell'inviante (28.9.2026: falliva sempre per il tipo di $3).
+    const pi = await fetch(`${base}/api/prototipo/referti/${ids.boz}/allegati`, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'inviante', referring_doctor_id: ids.cc }) });
+    const [sc] = await query<{ rid: string; manuale: boolean }>('select referring_doctor_id as rid, inviante_manuale as manuale from referti_bozze where id = $1', [ids.boz]);
+    verifica(pi.status === 200 && sc.rid === ids.cc && sc.manuale === true, `inviante scelto a mano: salvato (${pi.status})`);
+    const pa = await fetch(`${base}/api/prototipo/referti/${ids.boz}/allegati`, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'inviante', referring_doctor_id: null }) });
+    const [sa] = await query<{ rid: string; manuale: boolean }>('select referring_doctor_id as rid, inviante_manuale as manuale from referti_bozze where id = $1', [ids.boz]);
+    verifica(pa.status === 200 && sa.rid === ids.inv && sa.manuale === false, 'inviante di nuovo automatico: torna quello del dettato');
+
     // «Allegati» della revisione (27.9.2026): togli, rimetti, carica.
     const post = (corpo: unknown) => fetch(`${base}/api/prototipo/referti/${ids.boz}/allegati`, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
     const anteprima = async () => (await (await fetch(`${base}/api/prototipo/referti/${ids.boz}/email?anteprima=1`, { headers: h })).json()).allegati ?? [];

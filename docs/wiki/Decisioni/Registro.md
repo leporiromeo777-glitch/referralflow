@@ -356,3 +356,11 @@ paziente come nome del file risultava così «citata» da ogni referto di quel p
 partita intera con la mail (visto su un referto del 28.9, prima di ogni invio: nessuna mail era
 ancora stata preparata). Ora il nome del paziente non conta mai, e parole come «cartella»,
 «scansionata», «completa», «paziente», «pagine» sono generiche.
+
+## 28.9.2026 — Parametri SQL con il tipo scritto quando compaiono in «is null»
+La scelta a mano del medico inviante nella revisione non si salvava mai: la query usava lo stesso
+parametro in `referring_doctor_id = $3` e in `$3 is not null`, e Postgres rispondeva «could not
+determine data type of parameter $3»; la rotta lo mostrava come «Inviante non trovato» e il menu
+tornava vuoto. Stesso difetto nell'abbinamento di un esame di imaging a un paziente. Regola: un
+parametro che compare in `is null` / `is not null` porta sempre il tipo (`$3::uuid`). Ora la scelta
+dell'inviante ha due controlli end-to-end (scelta salvata, ritorno all'automatico).

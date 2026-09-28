@@ -185,8 +185,10 @@ export async function scegliInviante(studioId: string, bozzaId: string, referrin
     if (!r) throw new Error('inviante_non_trovato');
   }
   await query(
-    `update referti_bozze set referring_doctor_id = $3, inviante_manuale = $3 is not null,
-            inviante_stato = case when $3 is null then inviante_stato else 'collegato' end
+    // $3 con il tipo scritto: usato solo in «is null» Postgres non sa di che
+    // tipo è e la scelta a mano falliva sempre (28.9.2026).
+    `update referti_bozze set referring_doctor_id = $3::uuid, inviante_manuale = $3::uuid is not null,
+            inviante_stato = case when $3::uuid is null then inviante_stato else 'collegato' end
       where id = $1 and studio_id = $2`, [bozzaId, studioId, referringDoctorId]);
   if (!referringDoctorId) await collegaInviante(studioId, bozzaId);
 }

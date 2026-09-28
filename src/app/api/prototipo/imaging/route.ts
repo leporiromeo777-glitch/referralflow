@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
         if (!p) return NextResponse.json({ errore: 'Paziente non trovato.' }, { status: 404 });
       }
       const [agg] = await query<{ id: string }>(
-        `update imaging_esami set patient_id = $3, stato = case when $3 is null then stato else 'disponibile' end, updated_at = now()
+        `update imaging_esami set patient_id = $3::uuid, stato = case when $3::uuid is null then stato else 'disponibile' end, updated_at = now()
           where id = $1 and studio_id = $2 returning id`, [id, sid, pid || null]);
       if (!agg) return NextResponse.json({ errore: 'Esame non trovato.' }, { status: 404 });
       await registra(sid, id, session.id, pid ? 'abbinato' : 'staccato');
