@@ -340,3 +340,11 @@ non si allega a una mail: all'inviante arriverebbero anche le lettere di altri m
 taglio a mano (pagine, categoria, descrizione) che crea un documento nuovo e lascia l'originale
 intatto; la divisione proposta in automatico dal modello locale sul testo OCR resta un lavoro
 successivo, da misurare sulle cartelle vere prima di fidarsene.
+
+## 28.9.2026 — Proposte dalla cartella scansionata: regole, non modello
+Via di mezzo chiesta dallo studio fra il taglio a mano e la divisione automatica della cartella: il
+dettato dice che cosa serve, la piattaforma lo cerca nel testo OCR e propone le pagine. Scelte
+regole (date e parole chiave) invece del modello locale: sono veloci, dicono perché («data
+12.3.2024, parola ECG a pagina 12») e non inventano. Il modello entrerà solo se le misure sulle
+cartelle vere dicono che serve a scegliere fra più candidati. Nessun allegato parte da solo: la
+proposta va confermata. Da misurare: su quanti referti la proposta era giusta (solo il conteggio).

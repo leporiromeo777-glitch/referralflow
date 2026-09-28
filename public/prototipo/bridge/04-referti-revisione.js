@@ -994,12 +994,72 @@ function rfAttornoHtml() {
   const motivo = RF_MOTIVO_ALLEGATO;
   const alHtml = `${al.length ? al.map(x => `<div class="rf-att-voce"><span>${rfEsc(x.etichetta)}<span class="caption"> · ${motivo[x.motivo] || ''}</span></span>${x.documento_id ? `<a class="btn sm ghost" href="/api/documents/${rfEsc(x.documento_id)}" target="_blank" rel="noopener">Apri</a>` : ''}</div>`).join('') : '<div class="caption">Nessun allegato.</div>'}
       ${a.ecg && a.ecg.citato && !a.ecg.trovato ? `<div class="rf-att-warn">Il medico parla di un <b>ECG</b>, ma nella cartella non c'è un ECG degli ultimi 30 giorni. Caricalo nella cartella del paziente (categoria ECG) e riapri il referto.</div>` : ''}
-      ${a.paziente_in_cartella ? '' : '<div class="caption">Paziente non in cartella: gli allegati non si possono cercare.</div>'}`;
-  return `<details class="rf-campi rf-att" ${inv.stato === 'nuovo' || inv.stato === 'ambiguo' || (a.ecg && a.ecg.citato && !a.ecg.trovato) ? 'open' : ''}><summary><b>Inviante, copie e allegati</b>${inv.stato === 'nuovo' || inv.stato === 'ambiguo' ? ' <span class="badge warning">da guardare</span>' : ''}</summary>
+      ${a.paziente_in_cartella ? '' : '<div class="caption">Paziente non in cartella: gli allegati non si possono cercare.</div>'}
+      ${rfProposteHtml()}`;
+  return `<details class="rf-campi rf-att" ${inv.stato === 'nuovo' || inv.stato === 'ambiguo' || (a.ecg && a.ecg.citato && !a.ecg.trovato) || rfProposteVive().length ? 'open' : ''}><summary><b>Inviante, copie e allegati</b>${inv.stato === 'nuovo' || inv.stato === 'ambiguo' ? ' <span class="badge warning">da guardare</span>' : ''}</summary>
     <div class="rf-att-sez"><div class="rf-att-tit">Medico inviante</div>${invHtml}</div>
     <div class="rf-att-sez"><div class="rf-att-tit">Copia per conoscenza</div>${ccHtml}</div>
     <div class="rf-att-sez"><div class="row between"><div class="rf-att-tit">Allegati (Word e mail)</div><button class="btn sm" onclick="rfAllegati()">Gestisci</button></div>${alHtml}</div></details>`;
 }
+/* ---------- Proposte dalla cartella scansionata (28.9.2026) ----------
+   Il dettato cita un documento («allego l'ECG del 12.3.2024», «come da
+   lettera del 2023»): la piattaforma lo cerca pagina per pagina nel testo
+   OCR dei PDF del paziente e propone le pagine. Guarda / Estrai e allega /
+   No: non si allega mai nulla da solo. */
+async function rfCaricaProposte(forza) {
+  const id = RF.loaded; if (!id) return;
+  if (!forza && (RF.propostePer === id || RF.proposteCarica === id)) return;
+  RF.proposteCarica = id;
+  try { const r = await fetch(`/api/prototipo/referti/${id}/proposte`, { credentials: 'include', cache: 'no-store' }); RF.proposte = r.ok ? await r.json() : null; }
+  catch { RF.proposte = null; }
+  RF.propostePer = id; RF.proposteCarica = null;
+  if (typeof rvRenderNav === 'function' && state.route === 'review') rvRenderNav();
+}
+function rfProposteVive() {
+  if (RF.propostePer !== RF.loaded || !RF.proposte) return [];
+  const no = RF.proposteNo || {};
+  const allegati = new Set((((RF.attorno || {}).allegati) || []).map(x => x.documento_id).filter(Boolean));
+  return (RF.proposte.proposte || []).filter(p => !no[`${RF.loaded}|${p.documento_id}|${p.da}`] && !(p.gia_estratto && allegati.has(p.gia_estratto)));
+}
+function rfProposteHtml() {
+  if (RF.propostePer !== RF.loaded) { void rfCaricaProposte(); return ''; }
+  const pr = RF.proposte; if (!pr) return '';
+  const vive = rfProposteVive();
+  const pag = (p) => p.da === p.a ? `pagina ${p.da}` : `pagine ${p.da}–${p.a}`;
+  const righe = vive.map(p => `<div class="rf-pr">
+      <div><b>${rfEsc(p.richiesta)}</b> → ${pag(p)} di «${rfEsc(p.documento)}» <span class="caption">(${p.pagine_documento} pagine)</span></div>
+      <div class="caption">trovato: ${p.motivi.map(rfEsc).join(', ')}</div>
+      <div class="row" style="gap:4px;margin-top:4px"><a class="btn sm ghost" href="/api/documents/${rfEsc(p.documento_id)}#page=${p.da}" target="_blank" rel="noopener">Guarda</a>
+        <button class="btn sm primary" onclick="rfPropostaEstrai('${rfEsc(p.documento_id)}', ${p.da})">${p.gia_estratto ? 'Allega (già estratto)' : 'Estrai e allega'}</button>
+        <button class="btn sm ghost" onclick="rfPropostaNo('${rfEsc(p.documento_id)}', ${p.da})">No</button></div></div>`).join('');
+  const senza = (pr.senza_proposta || []).length ? `<div class="caption">Citato nel dettato ma non trovato nella cartella: ${pr.senza_proposta.map(rfEsc).join(', ')}.</div>` : '';
+  const attesa = pr.attesa_ocr ? `<div class="caption">${pr.attesa_ocr === 1 ? 'Un documento della cartella aspetta' : `${pr.attesa_ocr} documenti della cartella aspettano`} l'OCR: le proposte arrivano dopo.</div>` : '';
+  if (!righe && !senza && !attesa) return '';
+  return `<div class="rf-pr-box"><div class="rf-att-tit">Trovato nella cartella scansionata</div>${righe}${senza}${attesa}</div>`;
+}
+function rfPropostaNo(doc, da) {
+  RF.proposteNo = RF.proposteNo || {};
+  RF.proposteNo[`${RF.loaded}|${doc}|${da}`] = true;
+  rvRenderNav();
+  if (document.getElementById('rf-al-file')) void rfAllegati();
+}
+async function rfPropostaEstrai(doc, da) {
+  const p = ((RF.proposte || {}).proposte || []).find(x => x.documento_id === doc && x.da === da); if (!p) return;
+  try {
+    let id = p.gia_estratto;
+    if (!id) {
+      const r = await fetch(`/api/prototipo/documenti/${encodeURIComponent(doc)}/estrai`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pagine: `${p.da}-${p.a}`, categoria: p.categoria, nota: p.richiesta }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { toast(j.errore || `Errore ${r.status}`); return; }
+      id = j.id;
+    }
+    await rfAttornoPost({ azione: 'allegato_aggiungi', documento_id: id });
+    toast(`${p.richiesta}: estratto e allegato`);
+  } catch (e) { toast(e.message || 'Non riesco a raggiungere la piattaforma'); return; }
+  await rfCaricaAttorno(true); await rfCaricaProposte(true); void rfCaricaDati();
+  if (document.getElementById('rf-al-file')) void rfAllegati();
+}
+
 const RF_MOTIVO_ALLEGATO = { nota: 'chiesto nel dettato', citato: 'citato nel testo', ecg: 'ECG citato dal medico', aggiunto: 'aggiunto a mano', caricato: 'caricato per questo referto' };
 
 /* ---------- «Allegati» (27.9.2026) ----------
@@ -1038,6 +1098,7 @@ async function rfAllegati() {
       <input class="input sm" id="rf-al-nota" placeholder="Descrizione nella lettera (es. ECG a riposo)">
     </div>
     <div class="row mt-8" style="gap:6px"><input type="file" id="rf-al-file" accept=".pdf,.jpg,.jpeg,.png,.docx" class="grow"><button class="btn sm primary" onclick="rfAllegatoCarica()">Carica</button></div>
+    ${rfProposteHtml()}
     <p class="caption mt-8">PDF, immagini o Word, fino a 10 MB. ${a.paziente_in_cartella ? 'Il file entra anche nella cartella del paziente.' : ''} Gli allegati valgono per la mail e per il blocco «Allegato:» del Word.</p>`;
   openModal('Allegati del referto', corpo, '<button class="btn" data-close>Chiudi</button>');
 }
@@ -1111,6 +1172,8 @@ function rfAttornoCopia(indice, nuovo) {
 .rf-al-tit { font-size:11.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-3); margin-bottom:4px; }
 .rf-al-riga { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-top:1px solid var(--border); font-size:13px; }
 .rf-al-nome { min-width:0; overflow-wrap:anywhere; }
+.rf-pr-box { margin-top:8px; display:flex; flex-direction:column; gap:6px; }
+.rf-pr { font-size:12.5px; background:var(--accent-soft, #e8f3ef); border-radius:8px; padding:6px 8px; }
 .rf-att .input.sm { max-width:100%; }
 `; document.head.appendChild(st); })();
 

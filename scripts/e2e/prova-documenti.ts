@@ -15,12 +15,14 @@ let ok = 0, no = 0;
 const verifica = (cond: boolean, cosa: string) => { if (cond) { ok++; console.log(`ok ${cosa}`); } else { no++; console.log(`NO ${cosa}`); } };
 
 // Un PDF minimo e valido, con o senza una riga di testo.
-function pdf(testo: string | null, pagine = 1): Buffer {
+function pdf(testo: string | null | string[], pagine = 1): Buffer {
+  if (Array.isArray(testo)) pagine = testo.length;
   const ogg: string[] = [];
   const kids = Array.from({ length: pagine }, (_, i) => `${4 + i * 2} 0 R`).join(' ');
   ogg.push('<< /Type /Catalog /Pages 2 0 R >>', `<< /Type /Pages /Kids [${kids}] /Count ${pagine} >>`, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
   for (let i = 0; i < pagine; i++) {
-    const flusso = testo ? `BT /F1 22 Tf 60 700 Td (${testo} pagina ${i + 1}) Tj ET` : '';
+    const riga = Array.isArray(testo) ? testo[i] : testo ? `${testo} pagina ${i + 1}` : '';
+    const flusso = riga ? `BT /F1 22 Tf 60 700 Td (${riga}) Tj ET` : '';
     ogg.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${5 + i * 2} 0 R >>`, `<< /Length ${flusso.length} >>\nstream\n${flusso}\nendstream`);
   }
   let out = '%PDF-1.4\n';
@@ -81,6 +83,18 @@ async function main() {
     verifica(ge.pagine === 2, 'estrai: il nuovo PDF ha davvero 2 pagine');
     const oltre = await fetch(es, { method: 'POST', headers: { cookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ pagine: '3-5' }) });
     verifica(oltre.status === 400, 'estrai: pagine oltre la fine respinte (400)');
+
+    // Proposte dalla cartella: il dettato cita l'ECG del 12.3.2024, la
+    // cartella (4 pagine) lo ha a pagina 3.
+    const cart = await carica(paz!, pdf(['Egregio collega Lugano 14.06.2023 lettera di prova', 'seguito della lettera di prova', 'ECG 12.03.2024 ritmo sinusale QRS 90', 'Laboratorio 21.08.2025 emocromo creatinina']), 'cartella-completa.pdf');
+    const [{ id: boz }] = await query<{ id: string }>(`insert into referti_bozze (studio_id, file_id, payload, tipo, patient_id) values ($1, 'prova-proposte-' || gen_random_uuid(), $2, 'referto', $3) returning id`,
+      [S, JSON.stringify({ testo_corretto: "Paziente visto oggi. Allego l'ECG del 12.3.2024 e gli esami del sangue di agosto 2025.", dettato_il: '2026-09-28T09:00:00Z' }), paz]);
+    const pr = await (await fetch(`${base}/api/prototipo/referti/${boz}/proposte`, { headers: { cookie } })).json();
+    const ecgP = (pr.proposte ?? []).find((x: any) => x.tipo === 'ecg');
+    const labP = (pr.proposte ?? []).find((x: any) => x.tipo === 'laboratorio');
+    verifica(ecgP?.documento_id === cart.j.id && ecgP.da === 3 && ecgP.a === 3 && ecgP.motivi.includes('data 12.3.2024'), `proposte: l'ECG del 12.3.2024 a pagina 3 (${JSON.stringify(ecgP ?? pr)})`);
+    verifica(labP?.da === 4, 'proposte: gli esami di agosto 2025 a pagina 4');
+    await query('delete from referti_bozze where id = $1', [boz]);
 
     const grande = Buffer.alloc(51 * 1024 * 1024, 0x20); grande.write('%PDF-1.4\n');
     const c = await carica(paz!, grande, 'enorme.pdf');
