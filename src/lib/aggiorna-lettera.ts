@@ -214,9 +214,25 @@ export function aggiorna(opts: { lettera: string; dettato: string; oggi: string;
   const giaInConclusione = /in conclusione,?\s+alla luce degli elementi di cui sopra/i.test(nuova);
   const finale = frasePerIlControllo(mesi, opts.femminile, giaInConclusione);
   const saluto = d.saluto || v.saluto;
-  const corpo = unParagrafo
-    ? [vecchia, nuova, finale].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
-    : [vecchia, nuova, finale].filter(Boolean).join('\n\n').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  // Impaginazione come la lettera vecchia (28.9.2026, richiesta dello
+  // studio): se la vecchia ha paragrafi o righe a sé, la parte ripresa li
+  // tiene e la parte nuova va a capo dove la vecchia andava a capo (davanti
+  // a ECG, eco, esami, conclusione, terapia…); se la vecchia è un paragrafo
+  // solo, tutto in un paragrafo. Senza struttura nella vecchia vale il
+  // formato del medico (`unParagrafo`).
+  const forma = formaDellaLettera(v.corpo, dv);
+  let corpo: string;
+  if (forma.strutturata) {
+    // Le righe della parte dettata (intestazioni di sezione comprese) restano;
+    // dentro ogni riga si va a capo come nella lettera vecchia.
+    const nuovaImpaginata = nuova.split(/\n/).map((r) => impagina(r, forma.aCapoDavanti, forma.separatore)).join('\n');
+    corpo = `${vecchia.replace(/[ \t]+/g, ' ').trim()}${forma.primaDellaVisita}${nuovaImpaginata}${forma.primaDellaFinale}${finale}`
+      .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  } else if (unParagrafo) {
+    corpo = [vecchia, nuova, finale].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+  } else {
+    corpo = [vecchia, nuova, finale].filter(Boolean).join('\n\n').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  }
   return {
     testo: saluto ? `${saluto}\n\n${corpo}` : corpo,
     saluto, vecchia, nuova, finale, somiglianza, novita, mesi, mesi_dal_dettato: mesiDettato != null,
@@ -277,4 +293,59 @@ export function pulisciScansione(testo: string): string {
   unito = unito.replace(/\n{3,}/g, '\n\n').replace(/[ \t]+/g, ' ').trim();
   const s = RX_SALUTO_DENTRO.exec(unito.slice(0, 1200));
   return s ? unito.slice(s.index) : unito;
+}
+
+// La forma della lettera vecchia: se ha paragrafi (riga vuota) o righe a sé,
+// quale separatore usa prima della visita, fra le parti della visita e prima
+// della conclusione, e davanti a quali tipi di frase va a capo.
+const CLASSI: [string, RegExp][] = [
+  ['esame', /^(?:clinicamente|all['’]esame|esame obiettivo|obiettivamente|parametri|peso|pa\b|si presenta|il paziente si presenta|la paziente si presenta)/i],
+  ['ecg', /^(?:all['’]ecg|ecg|l['’]ecg|elettrocardiogramma|all['’]elettrocardiogramma|l['’]elettrocardiogramma|il tracciato)/i],
+  ['eco', /^(?:all['’]ecocardiogramma|ecocardiogramma|l['’]ecocardiogramma|ecocardiografia|eco\b)/i],
+  ['sforzo', /^(?:ergometria|cicloergometria|spiroergometria|la cicloergometria|la spiroergometria|test da sforzo|holter|l['’]holter|all['’]holter)/i],
+  ['esami', /^(?:esami|laboratorio|gli esami|agli esami|coronarotac|corotac|la coronarografia|coronarografia|tac|risonanza)/i],
+  ['conclusione', /^(?:in conclusione|concludendo|in sintesi|riassumendo|valutazione)/i],
+  ['terapia', /^(?:terapia|frattanto|la terapia|propongo|a te chiedo|a completamento)/i],
+];
+const classeDi = (frase: string): string | null => {
+  const f = frase.trim();
+  for (const [k, rx] of CLASSI) if (rx.test(f)) return k;
+  return null;
+};
+
+type Forma = { strutturata: boolean; separatore: string; primaDellaVisita: string; primaDellaFinale: string; aCapoDavanti: Set<string> };
+
+export function formaDellaLettera(corpo: string, dv: Divisione): Forma {
+  const c = String(corpo || '').replace(/\r\n/g, '\n').trim();
+  const haParagrafi = /\n\s*\n/.test(c);
+  const righe = c.split('\n').filter((r) => r.trim()).length;
+  const strutturata = haParagrafi || righe >= 3;
+  const separatore = haParagrafi ? '\n\n' : '\n';
+  if (!strutturata) return { strutturata: false, separatore: ' ', primaDellaVisita: ' ', primaDellaFinale: ' ', aCapoDavanti: new Set() };
+  // Separatore davanti alla visita, come nella vecchia.
+  const iVisita = c.indexOf(dv.dopo.slice(0, 40));
+  const spazioPrima = iVisita > 0 ? (/\s*$/.exec(c.slice(0, iVisita))?.[0] ?? ' ') : ' ';
+  const primaDellaVisita = /\n\s*\n/.test(spazioPrima) ? '\n\n' : /\n/.test(spazioPrima) ? '\n' : ' ';
+  // Davanti a quali tipi di frase la visita vecchia andava a capo.
+  const aCapoDavanti = new Set<string>();
+  const blocchi = dv.dopo.split(haParagrafi ? /\n\s*\n/ : /\n/).map((b) => b.trim()).filter(Boolean);
+  for (const b of blocchi.slice(1)) { const k = classeDi(b); if (k) aCapoDavanti.add(k); }
+  // La conclusione o il controllo in un paragrafo a sé?
+  const ultimo = blocchi[blocchi.length - 1] ?? '';
+  const primaDellaFinale = blocchi.length > 1 && (classeDi(ultimo) === 'conclusione' || /prossimo controllo|rimanendo a disposizione/i.test(ultimo)) ? separatore : ' ';
+  return { strutturata: true, separatore, primaDellaVisita, primaDellaFinale, aCapoDavanti };
+}
+
+// La parte dettata, a capo davanti ai tipi di frase dove andava a capo la
+// lettera vecchia (mai due volte di fila per lo stesso tipo).
+export function impagina(testo: string, aCapoDavanti: Set<string>, separatore: string): string {
+  if (!aCapoDavanti.size) return testo.trim();
+  let out = '', ultima: string | null = null;
+  for (const f of frasi(testo)) {
+    const k = classeDi(f);
+    const aCapo = !!out && k != null && aCapoDavanti.has(k) && k !== ultima;
+    out += out ? (aCapo ? separatore : ' ') + f : f;
+    if (k) ultima = k;
+  }
+  return out.trim();
 }

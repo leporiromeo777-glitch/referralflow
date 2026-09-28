@@ -404,3 +404,9 @@ resta una proposta (forse è la lettera di un altro paziente), e le frasi nuove 
 «Annulla» torna sempre al dettato. Le lettere da scansione si puliscono prima (intestazione, piè di
 pagina, righe spezzate).
 
+## 28.9.2026 — La lettera aggiornata ha la forma della lettera vecchia
+Richiesta dello studio: l'impaginazione deve essere quella della lettera ripresa. Paragrafi e righe
+della parte vecchia restano; la parte dettata va a capo dove andava a capo la vecchia; la frase
+finale sta dove stava la conclusione. Il paragrafo unico di Moccetti vale solo quando la lettera
+vecchia è così (o quando non ha una forma riconoscibile).
+

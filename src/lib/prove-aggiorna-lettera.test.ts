@@ -64,7 +64,8 @@ test('rapporto a sezioni (Moschovitis): gli a capo restano', () => {
   const p = aggiorna({ lettera: vecchia, dettato, oggi: '28.09.2026', femminile: false, unParagrafo: false });
   assert.ok(!('errore' in p));
   if ('errore' in p) return;
-  assert.ok(p.testo.startsWith('Anamnesi:\nIpertensione dal 2015.\nFRCV: ipertensione, dislipidemia.\n\nValutazione:\nStabile, FE 55%.'), p.testo);
+  // La vecchia va a capo senza righe vuote: la nuova fa lo stesso.
+  assert.ok(p.testo.startsWith('Anamnesi:\nIpertensione dal 2015.\nFRCV: ipertensione, dislipidemia.\nValutazione:\nStabile, FE 55%.'), p.testo);
   assert.ok(!p.nuova.includes('Prossimo controllo'));
 });
 
@@ -134,4 +135,16 @@ test('«odierno» e «oggi» della lettera vecchia portati alla data di quella v
   assert.ok(!('errore' in p));
   if ('errore' in p) return;
   assert.ok(p.vecchia.includes('in data 28.09.2026 rivedo') && p.vecchia.includes("All'ECG del 14.03.2025 ritmo sinusale"), p.vecchia);
+});
+
+test('impaginazione come la lettera vecchia: paragrafi, righe a sé, conclusione staccata', () => {
+  const vecchia = "Caro Luca,\n\nin data 14.03.2025 rivedo il paziente a margine.\nFRCV: ipertensione arteriosa, dislipidemia.\nComorbidità: ipotiroidismo.\n\nClinicamente mi confronto con un paziente di 80 Kg, PA 130/80 mmHg.\n\nAll'ECG ritmo sinusale.\n\nAll'ecocardiogramma FE 55%.\n\nIn conclusione, alla luce degli elementi di cui sopra, stabile.";
+  const dettato = "Caro Luca, FRCV: ipertensione arteriosa, dislipidemia. Comorbidità: ipotiroidismo. Clinicamente 82 Kg, PA 125/78 mmHg. All'ECG ritmo sinusale. All'ecocardiogramma FE 60%. Terapia invariata.";
+  const p = aggiorna({ lettera: vecchia, dettato, oggi: '28.09.2026', femminile: false });
+  assert.ok(!('errore' in p));
+  if ('errore' in p) return;
+  assert.equal(p.testo, "Caro Luca,\n\nin data 28.09.2026 rivedo il paziente a margine.\nFRCV: ipertensione arteriosa, dislipidemia.\nComorbidità: ipotiroidismo.\n\nClinicamente 82 Kg, PA 125/78 mmHg.\n\nAll'ECG ritmo sinusale.\n\nAll'ecocardiogramma FE 60%. Terapia invariata.\n\nIn conclusione, alla luce degli elementi di cui sopra, propongo un prossimo controllo non prima di 12 mesi rimanendo a disposizione Tua e del paziente qualora la clinica richiedesse una rivalutazione anticipata.");
+  // Una lettera vecchia in un paragrafo solo resta in un paragrafo solo.
+  const unico = aggiorna({ lettera: vecchia.replace(/\n+/g, ' ').replace('Caro Luca, ', 'Caro Luca,\n\n'), dettato, oggi: '28.09.2026', femminile: false });
+  assert.ok(!('errore' in unico) && !/\n/.test(unico.testo.replace(/^Caro Luca,\n\n/, '')));
 });
