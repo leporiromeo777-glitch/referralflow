@@ -22,6 +22,8 @@ const GENERICHE = new Set([
   'esame', 'esami', 'referto', 'referti', 'documento', 'documenti', 'lettera', 'lettere', 'copia',
   'del', 'della', 'dello', 'dei', 'delle', 'degli', 'con', 'per', 'senza', 'eseguito', 'eseguita',
   'controllo', 'visita', 'rapporto', 'allegato', 'allegati', 'vecchio', 'vecchia', 'ultimo', 'ultima',
+  // 28.9.2026: la cartella scansionata intera non è «citata» da nessun referto.
+  'cartella', 'cartelle', 'scansione', 'scansionata', 'scansionato', 'completa', 'completo', 'paziente', 'pagine',
 ]);
 
 function etichetta(c: { filename: string; nota?: string | null }): string {
@@ -41,8 +43,12 @@ export function paroleSpecifiche(nota: string): string[] {
 // Il documento è citato nel testo se OGNI parola specifica della sua nota
 // compare nel testo (confronto sul prefisso di 5 lettere, così «carotideo»
 // aggancia «carotidei»). Una nota senza parole specifiche non aggancia mai.
-export function citatoNelTesto(notaDoc: string, testo: string): boolean {
-  const parole = paroleSpecifiche(notaDoc);
+// `escluse`: parole che non contano mai, cioè il nome del paziente
+// (28.9.2026: una cartella caricata col nome del paziente come nome del file
+// risultava «citata» da ogni suo referto, e partiva intera con la mail).
+export function citatoNelTesto(notaDoc: string, testo: string, escluse: string[] = []): boolean {
+  const via = new Set(escluse.flatMap((e) => paroleSpecifiche(e)));
+  const parole = paroleSpecifiche(notaDoc).filter((w) => !via.has(w));
   if (!parole.length) return false;
   const corpo = normalizza(testo);
   const presenti = new Set(corpo.match(/[a-z]{4,}/g) ?? []);

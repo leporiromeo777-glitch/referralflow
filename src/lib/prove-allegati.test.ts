@@ -138,3 +138,12 @@ test('nome del paziente per il confronto: virgola, titoli, spazi (28.9.2026)', a
   assert.equal(nomePerConfronto('Signor Verdi Luca.'), 'verdi luca');
   assert.equal(nomePerConfronto('non indicato'), 'non indicato');
 });
+
+test('il nome del paziente non «cita» un documento (28.9.2026)', async () => {
+  const { citatoNelTesto } = await import('./referti-allegato-blocco');
+  const testo = 'Rivedo il signor Esempio Finto per controllo. Ecocardiogramma carotideo invariato.';
+  assert.equal(citatoNelTesto('Esempio Finto', testo), true, 'senza esclusioni aggancerebbe');
+  assert.equal(citatoNelTesto('Esempio Finto', testo, ['Esempio Finto']), false, 'il nome del paziente non conta');
+  assert.equal(citatoNelTesto('cartella Esempio Finto scansionata', testo, ['Finto Esempio']), false);
+  assert.equal(citatoNelTesto('Eco carotideo Esempio', testo, ['Esempio Finto']), true, 'le altre parole contano ancora');
+});

@@ -348,3 +348,11 @@ regole (date e parole chiave) invece del modello locale: sono veloci, dicono per
 12.3.2024, parola ECG a pagina 12») e non inventano. Il modello entrerà solo se le misure sulle
 cartelle vere dicono che serve a scegliere fra più candidati. Nessun allegato parte da solo: la
 proposta va confermata. Da misurare: su quanti referti la proposta era giusta (solo il conteggio).
+
+## 28.9.2026 — Il nome del paziente non «cita» un documento
+Un documento della cartella entra negli allegati da solo se le parole specifiche della sua
+descrizione compaiono nel testo del referto. Una cartella scansionata caricata con il nome del
+paziente come nome del file risultava così «citata» da ogni referto di quel paziente, e sarebbe
+partita intera con la mail (visto su un referto del 28.9, prima di ogni invio: nessuna mail era
+ancora stata preparata). Ora il nome del paziente non conta mai, e parole come «cartella»,
+«scansionata», «completa», «paziente», «pagine» sono generiche.

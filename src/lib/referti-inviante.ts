@@ -247,6 +247,12 @@ export async function attorno(studioId: string, bozzaId: string): Promise<Attorn
         `select id, filename, nota, categoria, uploaded_at from patient_documents
           where patient_id = $1 and studio_id = $2 order by uploaded_at desc limit 100`, [patientId, studioId])
     : [];
+  // Il nome del paziente non è mai una «citazione» di un documento.
+  const nomiPaziente = [pazienteNome ?? ''];
+  if (patientId) {
+    const [pp] = await query<{ cognome: string; nome: string }>('select cognome, nome from patients where id = $1', [patientId]);
+    if (pp) nomiPaziente.push(pp.cognome, pp.nome);
+  }
   const allegati: Attorno['allegati'] = [];
   const aggiungi = (etichetta: string, documento_id: string | null, motivo: Attorno['allegati'][number]['motivo']) => {
     if (etichetta && !allegati.some((a) => a.etichetta.toLowerCase() === etichetta.toLowerCase())) allegati.push({ etichetta, documento_id, motivo });
@@ -259,7 +265,7 @@ export async function attorno(studioId: string, bozzaId: string): Promise<Attorn
   for (const d of docs) {
     if (d.categoria === 'lettera') continue;
     const e = etichettaDocumento(d);
-    if (e && citatoNelTesto(e, b.testo)) aggiungi(e, d.id, 'citato');
+    if (e && citatoNelTesto(e, b.testo, nomiPaziente)) aggiungi(e, d.id, 'citato');
   }
   const citato = citaECG(b.testo) || b.note.some((n) => citaECG(n));
   const ecg = citato ? scegliECG(docs, b.dettato) : null;
