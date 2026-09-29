@@ -1,6 +1,6 @@
 ---
 tipo: decisioni
-aggiornata: 2026-09-22
+aggiornata: 2026-09-29
 ---
 # Registro delle decisioni chiuse
 
@@ -418,3 +418,9 @@ vede e si annulla nella revisione. Scelto il modello locale e solo a catena ferm
 esce, e la GPU non si contende con la trascrizione. Se non sono istruzioni, tutto come prima (più le
 note per la segreteria della traccia, che prima si perdevano).
 
+
+## 29.9.2026 — Avvisi di guasto sul telefono con ntfy
+Prima un blocco si scopriva solo quando un referto non arrivava. Scelta dell'utente: notifica sul
+telefono con ntfy (non email: sul server non c'è SMTP, e servirebbe una password da mettere a mano;
+non solo nell'app: la si vede solo aprendola). Il testo passa da ntfy.sh ed è sempre neutro. Di
+notte silenzio; il riepilogo delle 7:30 arriva ogni giorno così la sua assenza dice «Mac spento».

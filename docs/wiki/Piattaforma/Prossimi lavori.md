@@ -37,6 +37,6 @@ aggiornata: 2026-09-14
 - **Blocco «Allegato:» nel Word** FATTO (12.9.2026): da vedere sul terzo referto vero se le note della segreteria agganciano i documenti giusti.
 - Usare «Impagina come lettera» PRIMA di correggere sul prossimo dettato vero, per misurare se le regole di forma tolgono davvero le correzioni di formato.
 - Passata doppia di whisper FATTA (11.9.2026, vedi [[Catena/Sentinelle e recuperi]]): verificare sui prossimi dettati veri quante volte vince la corsa senza VAD (log `recuperato_senza_vad`) e se i tempi restano accettabili.
-- Terapia: ripulire il tag `qwen3.8:27b` inutilizzabile (17 GB) da Ollama; telefono dello studio in Impostazioni per la riga Tel della carta intestata.
+- Orchestrazione delle sale: la strategia chiama il tag `qwen3.8:27b`, che su questo Mac risponde vuoto (vedi [[Catena/Modelli locali]]); passarla alla versione IQ4_XS della catena solo a catena ferma, per non contendere la GPU. Telefono dello studio in Impostazioni per la riga Tel della carta intestata.
 - Guardare ogni settimana nel cruscotto: proposte di dizionario, frasi che il medico ripete, quale tappa aiuta davvero ([[Catena/Audit e qualità]]).
 - Whisper addestrato sulla voce del medico (audio conservato + testi confermati): solo con un oro verificato; per ora si accumulano dati.
