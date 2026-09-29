@@ -855,6 +855,7 @@ rvRenderNav = function () {
       <details class="rf-campi" ${Object.values(c).some(v => !v) ? 'open' : ''}><summary><b>Campi estratti</b> <span class="caption">${['nome_paziente', 'data_nascita', 'medico_destinatario'].filter(k => c[k]).length}/3 · dalla catena, correggibili</span></summary>
         ${campo('nome_paziente', 'Paziente', 'Cognome Nome')}${campo('data_nascita', 'Nascita', 'gg.mm.aaaa')}${campo('medico_destinatario', 'Destinatario', 'Dr. …')}
         <div class="caption" style="margin-top:4px">Si salvano nella bozza appena li cambi; valgono per la lettera e per il Word.</div></details>
+      ${rfIstrHtml()}
       ${rfAggHtml()}
       ${rfAttornoHtml()}
       ${passi.length ? passi.map((g, n) => `<div class="rv-group">${n + 1}. ${rfEsc(g.titolo)} <span class="caption">${g.voci.length}</span></div>${g.voci.map(card).join('')}`).join('') : '<div class="rv-group">Nessuna verifica aperta</div>'}
@@ -1028,6 +1029,37 @@ function rfAttornoHtml() {
     <div class="rf-att-sez"><div class="rf-att-tit">Copia per conoscenza</div>${ccHtml}</div>
     <div class="rf-att-sez"><div class="row between"><div class="rf-att-tit">Allegati (Word e mail)</div><button class="btn sm" onclick="rfAllegati()">Gestisci</button></div>${alHtml}</div></details>`;
 }
+/* ---------- Seconda traccia con istruzioni (29.9.2026) ----------
+   «Aggiungi questa frase prima di…», «togli…», «al posto di…»: la traccia non
+   va più in fondo al referto; il Mac la applica a catena ferma e qui si vede
+   che cosa ha fatto, con Annulla, Rifai, e «Era testo da aggiungere». */
+function rfIstrHtml() {
+  const m = RF.meta || {}; const t = m.istruzioni_traccia; if (!t || !RF.live) return '';
+  const dettato = `<details class="rf-att-cambia"><summary class="caption">che cosa ha dettato</summary><div class="caption" style="white-space:pre-wrap">${rfEsc([t.testo, ...(t.note || [])].filter(Boolean).join('\n'))}</div></details>`;
+  const bott = (az, testo, cls) => `<button class="btn sm ${cls || ''}" onclick="rfIstrAzione('${az}')">${testo}</button>`;
+  let corpo = '';
+  if (t.stato === 'da_interpretare' || t.stato === 'in_corso') corpo = `<div class="caption">${t.stato === 'in_corso' ? 'Il Mac sta applicando le istruzioni…' : 'Il Mac le applica appena la catena dei referti è ferma (qualche minuto).'}</div>${dettato}<div class="row" style="gap:6px;margin-top:4px"><button class="btn sm ghost" onclick="RF.loaded=null;render()">Controlla di nuovo</button>${bott('in_fondo', 'Era testo da aggiungere in fondo', 'ghost')}</div>`;
+  else if (t.stato === 'fatta' || t.stato === 'nessuna' || t.stato === 'fallita') {
+    const esiti = (t.esiti || []).map(e => `<div class="rf-agg-nov"><span>${e.ok ? '✓' : '✕'}</span><span>${rfEsc(e.descrizione)}${e.ok ? '' : ` <span class="caption">— non applicata: ${rfEsc(e.motivo || '')}</span>`}</span></div>`).join('');
+    const nc = (t.non_capite || []).length ? `<div class="rf-att-warn">Da fare a mano: ${t.non_capite.map(rfEsc).join(' · ')}</div>` : '';
+    const testa = t.stato === 'fatta' ? '' : `<div class="rf-att-warn">${t.stato === 'fallita' ? 'Il modello locale non ha risposto.' : 'Nessuna istruzione applicata.'} Il testo del referto è com'era.</div>`;
+    corpo = `${testa}${esiti}${nc}${dettato}<div class="row" style="gap:6px;margin-top:4px">${t.stato === 'fatta' ? bott('annulla', 'Annulla') : ''}${bott('rifai', 'Rifai', 'ghost')}${bott('in_fondo', 'Era testo da aggiungere in fondo', 'ghost')}</div>`;
+  } else corpo = `<div class="caption">${t.stato === 'annullata' ? 'Modifiche annullate: il referto è com\'era.' : 'Il testo della traccia è stato aggiunto in fondo.'}</div>${dettato}`;
+  const aperto = ['da_interpretare', 'in_corso', 'fatta', 'nessuna', 'fallita'].includes(t.stato);
+  return `<details class="rf-campi rf-agg" ${aperto ? 'open' : ''}><summary><b>Seconda traccia: istruzioni</b>${t.stato === 'fatta' ? ` <span class="badge success">${(t.esiti || []).filter(e => e.ok).length} applicate</span>` : ''}</summary>${corpo}</details>`;
+}
+async function rfIstrAzione(azione) {
+  if (azione === 'in_fondo' && !confirm('Aggiungo in fondo al referto il testo della seconda traccia, così com\'è?')) return;
+  try {
+    const r = await fetch(`/api/prototipo/referti/${RF.loaded}/istruzioni`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(j.errore || `Errore ${r.status}`); return; }
+  } catch { toast('Non riesco a raggiungere la piattaforma'); return; }
+  try { clearTimeout(rvSave._rf); rvSave._rf = null; localStorage.removeItem(RV_KEY); } catch { /* ignora */ }
+  RF.loaded = null; render();
+  toast({ annulla: 'Modifiche annullate', rifai: 'Le istruzioni si rifanno appena la catena è ferma', in_fondo: 'Testo aggiunto in fondo' }[azione] || 'Fatto');
+}
+
 /* ---------- Aggiornamento della lettera vecchia (28.9.2026) ----------
    Marco Moccetti e Moschovitis: «riprendimi la lettera del …» nel dettato →
    la piattaforma trova quella lettera, confronta anamnesi e fattori di

@@ -410,3 +410,11 @@ della parte vecchia restano; la parte dettata va a capo dove andava a capo la ve
 finale sta dove stava la conclusione. Il paragrafo unico di Moccetti vale solo quando la lettera
 vecchia è così (o quando non ha una forma riconoscibile).
 
+## 29.9.2026 — Seconda traccia: istruzioni applicate, non testo in fondo
+Lo studio: la seconda traccia spesso contiene indicazioni («aggiungi questa frase prima di…»), e
+incollarla in fondo era sbagliato. Ora se sembra fatta di istruzioni resta da parte e il modello
+locale la trasforma in un piano (numeri di frase e citazioni) che il codice applica con guardie; si
+vede e si annulla nella revisione. Scelto il modello locale e solo a catena ferma: il testo non
+esce, e la GPU non si contende con la trascrizione. Se non sono istruzioni, tutto come prima (più le
+note per la segreteria della traccia, che prima si perdevano).
+

@@ -6,6 +6,8 @@ import { query } from '@/lib/db';
 import { registraEvento, impronta } from '@/lib/referti-eventi';
 import { RX_MEDICO_ID } from '@/lib/referti-medici';
 import { aggiornamentoAutomatico } from '@/lib/aggiorna-lettera-server';
+import { sembraIstruzioni } from '@/lib/istruzioni-traccia';
+import { giroIstruzioni } from '@/lib/istruzioni-traccia-server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -427,9 +429,19 @@ export async function POST(req: NextRequest) {
         const testoNuovo = String(payload.testo_corretto ?? '').trim();
         const concat = (a: unknown, b: string) => { const x = typeof a === 'string' ? a.trim() : ''; return x && b ? `${x}\n\n${b}` : (x || b); };
         const tracce = Array.isArray(pd.tracce) ? pd.tracce : [];
+        // Istruzioni invece di testo nuovo (29.9.2026): «aggiungi questa frase
+        // prima di…», «togli…», «al posto di…». Allora la traccia NON va in
+        // fondo: resta da parte e il modello locale la applica a catena ferma
+        // (istruzioni-traccia-server.ts). Le note per la segreteria della
+        // traccia (dove la catena sposta spesso proprio queste frasi) contano,
+        // e se è testo normale entrano nelle note della bozza invece di perdersi.
+        const noteNuove: string[] = (Array.isArray(payload.note_segreteria) ? payload.note_segreteria : []).filter((n: unknown): n is string => typeof n === 'string' && !!n.trim());
+        const sonoIstruzioni = sembraIstruzioni([testoNuovo, ...noteNuove].join('\n'));
         const payloadUnito = {
           ...pd,
-          testo_corretto: concat(pd.testo_corretto, testoNuovo),
+          testo_corretto: sonoIstruzioni ? pd.testo_corretto : concat(pd.testo_corretto, testoNuovo),
+          note_segreteria: sonoIstruzioni ? pd.note_segreteria : [...(Array.isArray(pd.note_segreteria) ? pd.note_segreteria : []), ...noteNuove],
+          ...(sonoIstruzioni ? { istruzioni_traccia: { stato: 'da_interpretare', testo: testoNuovo, note: noteNuove, arrivata_il: new Date().toISOString(), audio_id: audioId } } : {}),
           testo_grezzo: concat(pd.testo_grezzo, String(payload.testo_grezzo ?? '').trim()),
           parole: [...paroleDest, ...nuoveParole],
           segmenti_dubbi: [...(Array.isArray(pd.segmenti_dubbi) ? pd.segmenti_dubbi : []), ...(Array.isArray(payload.segmenti_dubbi) ? payload.segmenti_dubbi.map(sposta) : [])],
@@ -437,10 +449,11 @@ export async function POST(req: NextRequest) {
         };
         await query(
           `update referti_bozze set payload = $3::jsonb, testo_finale = case when testo_finale is null then null else $4 end where id = $1 and studio_id = $2`,
-          [dest.id, studio.id, JSON.stringify(payloadUnito), concat(dest.testo_finale, testoNuovo)]);
+          [dest.id, studio.id, JSON.stringify(payloadUnito), sonoIstruzioni ? dest.testo_finale : concat(dest.testo_finale, testoNuovo)]);
+        if (sonoIstruzioni) void giroIstruzioni().catch((e: any) => console.error(`[istruzioni] giro: ${e?.code ?? e?.name ?? 'errore'}`));
         await collega(dest.id);
         try { await registraCorsa(studio.id, dest.id, payload, { audioStorage: (await query<{ storage_key: string }>('select storage_key from referti_audio where id = $1', [audioId]))[0]?.storage_key ?? null }); } catch (e: any) { console.error('audit corsa (traccia):', e?.message || e); }
-        await registraEvento(studio.id, dest.id, 'traccia_aggiunta', null, { audio_id: audioId, file_id: fileId, offset, caratteri: testoNuovo.length, parole: nuoveParole.length });
+        await registraEvento(studio.id, dest.id, 'traccia_aggiunta', null, { audio_id: audioId, file_id: fileId, offset, caratteri: testoNuovo.length, parole: nuoveParole.length, istruzioni: sonoIstruzioni });
         console.log(`[bozza] seconda traccia accodata a ${dest.id.slice(0, 8)}: +${testoNuovo.length} caratteri, +${nuoveParole.length} parole, offset ${offset}s`);
         return NextResponse.json({ id: dest.id, traccia: true }, { status: 201 });
       }

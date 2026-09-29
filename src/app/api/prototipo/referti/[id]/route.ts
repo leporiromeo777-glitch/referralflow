@@ -74,6 +74,10 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     richiamo: p.richiamo && typeof p.richiamo === 'object' ? { mesi: Number(p.richiamo.mesi), creato_at: p.richiamo.creato_at ?? null } : null,
     richiamo_proposto: p.richiamo ? null : rilevaRichiamo([(b.testo_finale ?? p.testo_corretto ?? '') as string, ...(Array.isArray(p.note_segreteria) ? p.note_segreteria.filter((n: unknown) => typeof n === 'string') : [])]),
     revisione_prototipo: p.revisione_prototipo && typeof p.revisione_prototipo === 'object' ? p.revisione_prototipo : null,
+    // Seconda traccia con istruzioni (29.9.2026): stato ed esiti, senza il testo di prima.
+    istruzioni_traccia: p.istruzioni_traccia && typeof p.istruzioni_traccia === 'object'
+      ? { stato: p.istruzioni_traccia.stato, testo: p.istruzioni_traccia.testo, note: p.istruzioni_traccia.note ?? [], esiti: p.istruzioni_traccia.esiti ?? [], non_capite: p.istruzioni_traccia.non_capite ?? [], fatta_il: p.istruzioni_traccia.fatta_il ?? null }
+      : null,
     livello_verifica: typeof p.manifesto?.livello_verifica === 'string' ? p.manifesto.livello_verifica : 'pieno',
     medico_id: typeof p.medico?.id === 'string' ? p.medico.id : null,
     tipo: b.tipo,

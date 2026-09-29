@@ -101,6 +101,10 @@ echo "→ aggiornamento della lettera vecchia: richiesta nel dettato, proposta, 
 DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-aggiorna-lettera.ts "http://localhost:$PORTA" "$C_MEDICO" "$STUDIO" > "$TMP/aggiorna.txt" 2>&1 || { fallito "prova-aggiorna-lettera"; cut -c1-300 "$TMP/aggiorna.txt"; }
 grep -E "^NO" "$TMP/aggiorna.txt"; echo "   $(grep -c '^ok' "$TMP/aggiorna.txt") ok, $(grep -c '^NO' "$TMP/aggiorna.txt") no"
 
+echo "→ seconda traccia con istruzioni: annulla, era testo da aggiungere"
+DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-istruzioni.ts "http://localhost:$PORTA" "$C_MEDICO" "$STUDIO" > "$TMP/istruzioni.txt" 2>&1 || { fallito "prova-istruzioni"; cut -c1-300 "$TMP/istruzioni.txt"; }
+grep -E "^NO" "$TMP/istruzioni.txt"; echo "   $(grep -c '^ok' "$TMP/istruzioni.txt") ok, $(grep -c '^NO' "$TMP/istruzioni.txt") no"
+
 echo "→ chi vede che cosa: menu dal server e rotte bloccate, ruolo per ruolo"
 B="http://localhost:$PORTA/api/prototipo"
 controlla() {   # ruolo  sezione-attesa-si  sezione-attesa-no  rotta-attesa-200  rotta-attesa-403

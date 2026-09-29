@@ -43,6 +43,8 @@ chiama cron/imaging
 chiama cron/grezze
 # OCR dei PDF della cartella caricati senza testo: anche questo a catena ferma.
 chiama cron/ocr
+# Seconde tracce con istruzioni («aggiungi prima di…»): a catena ferma.
+chiama cron/istruzioni
 
 # Una sola volta l'ora / al giorno / al mese: passa di qui ogni quarto d'ora,
 # quindi il giro col minuto sotto i 15 è quello «in punto».
