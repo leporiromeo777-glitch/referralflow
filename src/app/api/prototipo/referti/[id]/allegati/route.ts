@@ -43,7 +43,8 @@ async function sessione(id: string) {
 // Solo formati che il medico che riceve la mail sa aprire.
 const EST_ALLEGATO = new Set(['.pdf', '.jpg', '.jpeg', '.png', '.docx']);
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const { session, errore } = await sessione(params.id);
   if (errore) return errore;
   const fileId = req.nextUrl.searchParams.get('file');
@@ -66,7 +67,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   return NextResponse.json({ ...a, rubrica }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const { session, errore } = await sessione(params.id);
   if (errore) return errore;
   if (!RUOLI.has(session.role)) return NextResponse.json({ errore: 'ruolo_non_ammesso' }, { status: 403 });

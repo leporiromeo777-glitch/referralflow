@@ -11,14 +11,15 @@ export const dynamic = 'force-dynamic';
 
 const GIORNI = ['', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica'];
 
-// Dati dello studio, modificabili dall'admin (il middleware recinta
+// Dati dello studio, modificabili dall'admin (il proxy, src/proxy.ts, recinta
 // /impostazioni al solo admin). Lo slug resta fisso: è nei link condivisi.
 
-export default async function ImpostazioniStudio({
-  searchParams,
-}: {
-  searchParams: { ok?: string; err?: string };
-}) {
+export default async function ImpostazioniStudio(
+  props: {
+    searchParams: Promise<{ ok?: string; err?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const session = await getSession();
   if (!session) redirect('/login');
 
@@ -36,7 +37,7 @@ export default async function ImpostazioniStudio({
 
   // Token appena generato: si mostra una volta sola (cookie flash di 2 minuti),
   // poi resta solo l'hash in tabella.
-  const tokenNuovo = cookies().get('rf_referti_token')?.value ?? null;
+  const tokenNuovo = (await cookies()).get('rf_referti_token')?.value ?? null;
 
   const finestre = await query<{
     id: string; giorno: number; ora_inizio: string; ora_fine: string; durata_min: number;

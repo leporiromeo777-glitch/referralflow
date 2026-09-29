@@ -1,6 +1,6 @@
 ---
 tipo: misure
-aggiornata: 2026-09-22
+aggiornata: 2026-09-29
 ---
 # Banchi e misure
 
@@ -271,3 +271,17 @@ Sul DB vero (solo conteggi): dal 31.8 13 revisioni misurate (tutte della segreta
 **Misura senza conferma** (29.9.2026): 3 prove pure del riepilogo (`prove-riepilogo-settimana.test.ts`), suite 342/342; end-to-end sul demo (`prova-misura.ts`) 5/5 — Word senza correzioni = una misura a 0, lo stesso Word riscaricato non raddoppia, corretto e riscaricato conta la correzione, il riepilogo conta la bozza una volta col suo medico, bozza confermata = nessuna misura in più. Sui 36 Word già scaricati di bozze non confermate: 35 a zero correzioni (corretti poi in Word) → recupero scartato.
 
 **CalDAV di MediOnline** (29.9.2026): prove pure e contro un finto server locale (`prove-caldav.test.ts`, nomi inventati) più 1 nuova sull'interruttore (spenta di serie, solo «attiva» la accende, elenco dei calendari ammessi) — suite 351/351. End-to-end sul demo (`prova-medionline.ts`) 4/4: stato «scrittura spenta» e calendario in sola lettura, «Fissa» con la scrittura spenta = 403 prima di qualsiasi chiamata a MediOnline, niente registrato, senza conferma 400.
+
+## Next 16 e React 19 — 29.9.2026
+Worktree separato, DB demo, nessun servizio toccato. Stessi banchi prima (Next 14.2.35) e dopo (Next 16.3.7 + React 19.3.0).
+
+| Banco | Next 14 | Next 16 |
+|---|---|---|
+| `npx tsc --noEmit -p .` | 0 errori | 0 errori |
+| `npm run build` | — | ok (Turbopack, 8,2 s da `.next` vuota, 141 rotte dinamiche e 3 statiche, 14 avvisi di tracciamento attesi) |
+| `npm run test:app` | 339/339 | 339/339 |
+| `npm run test:audit` | 25/25 | 25/25 |
+| `npm run test:e2e` (porta 3011) | TUTTO OK | TUTTO OK — righello 42/42, segreteria 403, regressione misure, serie 19/19, giornata, e-mail 25/25, documenti 16/16 (OCR 2/2), lettera aggiornata 12/12, istruzioni 6/6, tracce 2/2, menu per ruolo 13/12/17/18/19 |
+| `next start` (porta 3012) | — | `/login` 200, `/prototipo/` 200 (dopo i redirect), `/` → `/prototipo/index.html`, `/referti` senza sessione → `/login?next=…`, `/api/cron/istruzioni` senza chiave 404 (scelta del codice, non 500), CSP e intestazioni invariate |
+| browser su `next start` | — | login sbagliato: «Credenziali non valide», email rimasta, 0 errori di console; prototipo disegnato |
+| `npm audit` | 5 (4 alte, 1 critica) | 2 alte (`nodemailer`, `@xmldom/xmldom`), nessuna su Next |

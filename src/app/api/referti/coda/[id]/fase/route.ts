@@ -16,7 +16,8 @@ const FASI_VALIDE = new Set([
   'bella_copia', 'verificatore', 'rischio', 'struttura', 'estrazione', 'controlli', 'invio', 'errore',
 ]);
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = req.headers.get('authorization') ?? '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   if (!token) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });

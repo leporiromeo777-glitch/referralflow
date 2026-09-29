@@ -1,6 +1,7 @@
 'use client';
 
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { confirmSetup, finishSetup, type ConfirmState } from './actions';
 
 function SubmitButton() {
@@ -13,7 +14,7 @@ function SubmitButton() {
 }
 
 export function ConfirmForm() {
-  const [state, formAction] = useFormState<ConfirmState, FormData>(confirmSetup, {});
+  const [state, formAction] = useActionState<ConfirmState, FormData>(confirmSetup, {});
 
   // Codice giusto: i codici di recupero si vedono SOLO qui, una volta.
   // La 2FA si accende davvero solo col bottone qui sotto (finishSetup).

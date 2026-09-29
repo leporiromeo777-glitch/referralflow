@@ -9,7 +9,7 @@ const COOKIE = 'rf_session';
 // La sessione porta con sé lo studio: ogni query dell'area interna è
 // recintata su studioId (piattaforma multi-studio).
 // Eccezione: il ruolo 'inviante' (medico esterno registrato) non appartiene a
-// nessuno studio — studioId/studioNome restano stringhe vuote e il middleware
+// nessuno studio — studioId/studioNome restano stringhe vuote e il proxy (src/proxy.ts)
 // lo recinta nella sua area /invii.
 export type SessionUser = {
   id: string;
@@ -41,7 +41,7 @@ export async function createSession(user: SessionUser) {
     .setIssuedAt()
     .setExpirationTime('8h')
     .sign(secret);
-  cookies().set(COOKIE, token, {
+  (await cookies()).set(COOKIE, token, {
     httpOnly: true,
     secure: cookieSecure(),
     sameSite: 'lax',
@@ -50,8 +50,8 @@ export async function createSession(user: SessionUser) {
   });
 }
 
-export function destroySession() {
-  cookies().delete(COOKIE);
+export async function destroySession() {
+  (await cookies()).delete(COOKIE);
 }
 
 // ─── 2FA: sessione «in attesa di verifica» ───
@@ -65,7 +65,7 @@ export async function createPending2fa(userId: string) {
     .setIssuedAt()
     .setExpirationTime('5m')
     .sign(secret);
-  cookies().set(PENDING_COOKIE, token, {
+  (await cookies()).set(PENDING_COOKIE, token, {
     httpOnly: true,
     secure: cookieSecure(),
     sameSite: 'lax',
@@ -75,7 +75,7 @@ export async function createPending2fa(userId: string) {
 }
 
 export async function getPending2fa(): Promise<string | null> {
-  const token = cookies().get(PENDING_COOKIE)?.value;
+  const token = (await cookies()).get(PENDING_COOKIE)?.value;
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secret);
@@ -86,12 +86,12 @@ export async function getPending2fa(): Promise<string | null> {
   }
 }
 
-export function destroyPending2fa() {
-  cookies().delete(PENDING_COOKIE);
+export async function destroyPending2fa() {
+  (await cookies()).delete(PENDING_COOKIE);
 }
 
 export async function getSession(): Promise<SessionUser | null> {
-  const token = cookies().get(COOKIE)?.value;
+  const token = (await cookies()).get(COOKIE)?.value;
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secret);

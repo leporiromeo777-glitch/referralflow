@@ -12,11 +12,12 @@ export const dynamic = 'force-dynamic';
 
 type Prep = { id: string; nome: string; testo: string; attiva: boolean };
 
-export default async function Preparazioni({
-  searchParams,
-}: {
-  searchParams: { err?: string };
-}) {
+export default async function Preparazioni(
+  props: {
+    searchParams: Promise<{ err?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const session = await getSession();
   if (!session) redirect('/login');
   if (session.role !== 'admin' && session.role !== 'tecnico') redirect('/');

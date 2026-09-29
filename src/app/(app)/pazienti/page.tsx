@@ -18,11 +18,12 @@ type Row = {
   n_referral: number;
 };
 
-export default async function Pazienti({
-  searchParams,
-}: {
-  searchParams: { q?: string };
-}) {
+export default async function Pazienti(
+  props: {
+    searchParams: Promise<{ q?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const session = await getSession();
   if (!session) redirect('/login');
   const q = (searchParams.q ?? '').trim();

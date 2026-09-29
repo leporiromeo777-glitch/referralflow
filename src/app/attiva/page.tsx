@@ -18,11 +18,12 @@ const COSA = [
   ['Referral tra studi', 'Affida pazienti ad altri studi e segui lo stato in tempo reale, senza email che spariscono.'],
 ];
 
-export default async function Attiva({
-  searchParams,
-}: {
-  searchParams: { ok?: string; error?: string; err?: string; step?: string; a?: string; da?: string };
-}) {
+export default async function Attiva(
+  props: {
+    searchParams: Promise<{ ok?: string; error?: string; err?: string; step?: string; a?: string; da?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const phone = process.env.SUPPORT_PHONE;
   const email = process.env.SUPPORT_EMAIL;
 

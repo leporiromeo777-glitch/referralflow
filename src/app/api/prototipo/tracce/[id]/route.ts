@@ -6,7 +6,8 @@ export const dynamic = 'force-dynamic';
 
 // La traccia di una risposta dell'assistente (passi, fonti, mancanze, modello,
 // tempo): il prototipo la mostra sotto la risposta come «Da dove viene».
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
   const id = Number(params.id);

@@ -1,6 +1,7 @@
 'use client';
 
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { doReset, type ResetState } from './actions';
 
 function SubmitButton() {
@@ -13,7 +14,7 @@ function SubmitButton() {
 }
 
 export function ResetForm({ token }: { token: string }) {
-  const [state, formAction] = useFormState<ResetState, FormData>(doReset, {});
+  const [state, formAction] = useActionState<ResetState, FormData>(doReset, {});
   return (
     <form action={formAction} className="fp-form">
       <input type="hidden" name="token" value={token} />

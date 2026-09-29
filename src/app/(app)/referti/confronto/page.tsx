@@ -21,7 +21,8 @@ type Riga = { id: string; file_id: string; testo: string; created_at: string; om
 // (più candidate sullo stesso audio, es. le prove di rallentamento).
 const RX_OMBRA = /-ombra(?:-[a-z0-9.-]+)?$/;
 
-export default async function Confronto({ searchParams }: { searchParams: { ok?: string } }) {
+export default async function Confronto(props: { searchParams: Promise<{ ok?: string }> }) {
+  const searchParams = await props.searchParams;
   const session = await getSession();
   if (!session || !session.studioId) redirect('/login');
 

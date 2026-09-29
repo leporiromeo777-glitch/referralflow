@@ -23,7 +23,8 @@ const ora = (iso: string | null) => (iso ? new Date(iso).toLocaleString('it-CH',
 const durata = (ms: number | null) => (ms === null || ms === undefined ? '—' : ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${ms} ms`);
 const RUOLO: Record<string, string> = { AI: 'AI', SYSTEM: 'codice', SECRETARY: 'segretaria', DOCTOR: 'medico' };
 
-export default async function StoriaReferto({ params }: { params: { id: string } }) {
+export default async function StoriaReferto(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getSession();
   if (!session || !session.studioId) redirect('/login');
   if (!isUuid(params.id)) notFound();

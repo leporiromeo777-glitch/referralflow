@@ -11,8 +11,8 @@ import { isLoginLocked, recordFailedLogin, clearLoginAttempts } from '@/lib/rate
 
 type State = { error?: string };
 
-function clientIp(): string {
-  const h = headers();
+async function clientIp(): Promise<string> {
+  const h = await headers();
   const fwd = h.get('x-forwarded-for');
   if (fwd) return fwd.split(',')[0].trim();
   return h.get('x-real-ip') ?? 'dev-locale';
@@ -44,7 +44,7 @@ export async function verify2fa(_prev: State, formData: FormData): Promise<State
   if (!user || !user.attivo || !user.totp_enabled_at || !user.totp_secret) redirect('/login');
   if (user.studio_id && user.studio_attivo === false) redirect('/login');
 
-  const ip = clientIp();
+  const ip = await clientIp();
   const key = `2fa:${user.email.toLowerCase()}`;
   const lockedUntil = isLoginLocked(key, ip);
   if (lockedUntil) {
@@ -70,7 +70,7 @@ export async function verify2fa(_prev: State, formData: FormData): Promise<State
   }
 
   clearLoginAttempts(key);
-  destroyPending2fa();
+  await destroyPending2fa();
   await createSession({
     id: user.id,
     email: user.email,

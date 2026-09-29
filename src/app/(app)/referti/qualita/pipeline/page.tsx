@@ -39,7 +39,8 @@ const n1 = (v: number | null | undefined) => (v === null || v === undefined ? 'â
 const pct = (num: number, den: number) => (den ? `${Math.round((num / den) * 100)}%` : 'â€”');
 const media = (v: number[]) => (v.length ? v.reduce((s, x) => s + x, 0) / v.length : null);
 
-export default async function QualitaPipeline({ searchParams }: { searchParams: Filtri }) {
+export default async function QualitaPipeline(props: { searchParams: Promise<Filtri> }) {
+  const searchParams = await props.searchParams;
   const session = await getSession();
   if (!session || !session.studioId) redirect('/login');
   const proprietario = process.env.PLATFORM_OWNER_EMAIL && session.email?.toLowerCase() === process.env.PLATFORM_OWNER_EMAIL.toLowerCase();

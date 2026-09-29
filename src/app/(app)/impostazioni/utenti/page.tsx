@@ -6,7 +6,7 @@ import { createUser, resetPassword, toggleUser } from './actions';
 export const dynamic = 'force-dynamic';
 
 // Gestione degli accessi dello studio: solo l'amministratore (recinto anche nel
-// middleware). Crea le credenziali dei colleghi, reimposta le password,
+// proxy, src/proxy.ts). Crea le credenziali dei colleghi, reimposta le password,
 // disattiva gli account (mai eliminati: restano nell'audit).
 
 const RUOLI: Record<string, string> = {
@@ -38,11 +38,12 @@ const OK: Record<string, string> = {
   password: 'Password reimpostata.',
 };
 
-export default async function Utenti({
-  searchParams,
-}: {
-  searchParams: { err?: string; ok?: string };
-}) {
+export default async function Utenti(
+  props: {
+    searchParams: Promise<{ err?: string; ok?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const session = await getSession();
   if (!session) redirect('/login');
   if (session.role !== 'admin' && session.role !== 'tecnico') redirect('/');

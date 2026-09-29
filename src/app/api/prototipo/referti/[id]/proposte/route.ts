@@ -9,7 +9,8 @@ export const dynamic = 'force-dynamic';
 
 // Pagine della cartella scansionata che il dettato cita (28.9.2026): solo
 // proposte, la revisione le conferma con «Estrai e allega».
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
   const no = vietato(session.role, 'reports');

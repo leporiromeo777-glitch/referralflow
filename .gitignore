@@ -3,6 +3,8 @@ node_modules
 .next
 out
 tsconfig.tsbuildinfo
+# Next 16 lo riscrive a ogni build e a ogni dev (percorsi diversi): non si traccia
+next-env.d.ts
 
 # Segreti e configurazione locale (MAI su GitHub)
 .env

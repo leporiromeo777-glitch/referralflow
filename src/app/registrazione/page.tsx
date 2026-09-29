@@ -6,11 +6,12 @@ export const dynamic = 'force-dynamic';
 // (nessuno studio li ha ancora invitati). La richiesta arriva alla piattaforma,
 // che verifica l'identità professionale prima di attivare l'accesso.
 
-export default function Registrazione({
-  searchParams,
-}: {
-  searchParams: { ok?: string; error?: string };
-}) {
+export default async function Registrazione(
+  props: {
+    searchParams: Promise<{ ok?: string; error?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   return (
     <main className="public">
       <div className="brand brand-lg center">Referral<span>Flow</span></div>

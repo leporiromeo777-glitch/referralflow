@@ -17,11 +17,12 @@ function LockBadge() {
 
 // Pagina pubblica «Password dimenticata». Dopo l'invio (?inviata=1) mostra la
 // conferma neutra: non si rivela mai se l'email è registrata.
-export default function PasswordDimenticata({
-  searchParams,
-}: {
-  searchParams: { inviata?: string };
-}) {
+export default async function PasswordDimenticata(
+  props: {
+    searchParams: Promise<{ inviata?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const inviata = searchParams.inviata === '1';
 
   return (

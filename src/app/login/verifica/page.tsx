@@ -6,7 +6,8 @@ export const dynamic = 'force-dynamic';
 
 // Secondo passaggio del login (solo per chi ha la 2FA attiva). Senza il
 // cookie «in attesa di verifica» (scade in 5 minuti) si torna al login.
-export default async function Verifica({ searchParams }: { searchParams: { next?: string } }) {
+export default async function Verifica(props: { searchParams: Promise<{ next?: string }> }) {
+  const searchParams = await props.searchParams;
   const uid = await getPending2fa();
   if (!uid) redirect('/login');
   const next = typeof searchParams?.next === 'string' && searchParams.next.startsWith('/') && !searchParams.next.startsWith('//') ? searchParams.next : '';

@@ -13,7 +13,8 @@ export const dynamic = 'force-dynamic';
 
 const MAX_TESTO = 200_000;
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = req.headers.get('authorization') ?? '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   if (!token) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });

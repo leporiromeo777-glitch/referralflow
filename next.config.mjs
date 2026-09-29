@@ -36,8 +36,16 @@ const nextConfig = {
       bodySizeLimit: '12mb',
       ...(process.env.ORIGINI_CONSENTITE ? { allowedOrigins: process.env.ORIGINI_CONSENTITE.split(',').map((x) => x.trim()).filter(Boolean) } : {}),
     },
-    serverComponentsExternalPackages: ['@node-rs/argon2', 'pg', 'pdf-parse'],
+    // Il proxy (src/proxy.ts) copia in memoria il corpo delle richieste che
+    // intercetta, di serie fino a 10 MB: oltre lo tronca. Le server action delle
+    // pagine passano dal proxy e ammettono 12 MB, quindi stesso limite qui
+    // (le API, con i caricamenti fino a 50 MB, sono fuori dal proxy).
+    proxyClientMaxBodySize: '12mb',
   },
+  // Pacchetti con binari nativi o che leggono file propri a runtime: restano
+  // fuori dal bundle del server e si caricano da node_modules. Fino a Next 14
+  // era experimental.serverComponentsExternalPackages (Next 16 dal 29.9.2026).
+  serverExternalPackages: ['@node-rs/argon2', 'pg', 'pdf-parse'],
   // L'interfaccia nuova è un'app statica in public/prototipo/: Next serve i file
   // per percorso esatto e non risolve l'indice di cartella, quindi «/prototipo»
   // da solo dà 404. Il ponte con i dati veri (public/prototipo/bridge/*.js) si attiva

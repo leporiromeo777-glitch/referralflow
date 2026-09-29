@@ -12,7 +12,8 @@ const RUOLI = new Set(['segretaria', 'medico', 'admin', 'assistente']);
 // La calibrazione di un'immagine (mm per pixel), per il righello. Le immagini
 // entrate dal 19.9.2026 ce l'hanno già in tabella; per quelle di prima si
 // legge dal DICOM originale una volta sola e si scrive.
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
   const nonPermesso = vietato(session.role, 'imaging');  // Accessi/permessi.ts (23.9.2026)

@@ -5,13 +5,13 @@ Sta *sopra* gli strumenti esistenti (Cassa dei Medici, HIN): non li sostituisce,
 delle referral che oggi vive su carta.
 
 ## Stack
-- Next.js 14 (App Router) + TypeScript
+- Next.js 16 (App Router) + React 19 + TypeScript
 - PostgreSQL (`pg`) — da ospitare su cloud svizzero (Infomaniak / Exoscale) per la nLPD
 - Sessioni con cookie httpOnly firmato (`jose`), password con argon2id (`@node-rs/argon2`)
 - Allegati su object storage S3-compatibile svizzero (`@aws-sdk/client-s3`), con fallback su disco locale
 
 ## Requisiti
-- Node.js 20+ (serve per `--env-file`)
+- Node.js 20.9+ (Next 16; serve anche per `--env-file`)
 - Un database PostgreSQL
 
 ## Avvio

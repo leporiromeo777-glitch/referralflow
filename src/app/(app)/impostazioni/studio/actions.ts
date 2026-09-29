@@ -56,7 +56,7 @@ export async function generaRefertiToken() {
     [session.studioId, hash]
   );
 
-  cookies().set(TOKEN_FLASH_COOKIE, token, {
+  (await cookies()).set(TOKEN_FLASH_COOKIE, token, {
     httpOnly: true,
     secure: cookieSecure(),
     sameSite: 'lax',

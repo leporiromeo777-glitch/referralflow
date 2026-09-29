@@ -4,6 +4,6 @@ import { redirect } from 'next/navigation';
 import { destroySession } from '@/lib/auth';
 
 export async function logout() {
-  destroySession();
+  await destroySession();
   redirect('/login');
 }

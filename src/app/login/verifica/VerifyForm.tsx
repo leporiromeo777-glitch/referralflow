@@ -1,6 +1,7 @@
 'use client';
 
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { verify2fa } from './actions';
 
 function SubmitButton() {
@@ -13,7 +14,7 @@ function SubmitButton() {
 }
 
 export function VerifyForm({ next = '' }: { next?: string }) {
-  const [state, formAction] = useFormState(verify2fa, {});
+  const [state, formAction] = useActionState(verify2fa, {});
   return (
     <form action={formAction} className="card auth-card">
       {next && <input type="hidden" name="next" value={next} />}

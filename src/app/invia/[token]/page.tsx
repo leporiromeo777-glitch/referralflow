@@ -7,12 +7,14 @@ import { slotProposti } from '@/lib/slot';
 
 export const dynamic = 'force-dynamic';
 
-export default async function InviaReferral({
-  params, searchParams,
-}: {
-  params: { token: string };
-  searchParams: { ok?: string; error?: string };
-}) {
+export default async function InviaReferral(
+  props: {
+    params: Promise<{ token: string }>;
+    searchParams: Promise<{ ok?: string; error?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const [doc] = await query<{
     nome: string; studio: string | null; scaduto: boolean;
     studio_nome: string; studio_id: string;

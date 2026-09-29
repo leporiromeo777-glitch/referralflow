@@ -69,11 +69,12 @@ type Attesa = {
   telefono: string | null; medico_nome: string | null;
 };
 
-export default async function Dashboard({
-  searchParams,
-}: {
-  searchParams: { stato?: string; urgenza?: string; benvenuto?: string; vista?: string };
-}) {
+export default async function Dashboard(
+  props: {
+    searchParams: Promise<{ stato?: string; urgenza?: string; benvenuto?: string; vista?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const session = await getSession();
   if (!session) redirect('/login');
 

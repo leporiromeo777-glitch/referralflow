@@ -83,11 +83,12 @@ function meseAnno(day: string): string {
   return new Date(`${day}T12:00:00`).toLocaleDateString('it-CH', { month: 'long', year: 'numeric' });
 }
 
-export default async function Programma({
-  searchParams,
-}: {
-  searchParams: { d?: string; m?: string; err?: string };
-}) {
+export default async function Programma(
+  props: {
+    searchParams: Promise<{ d?: string; m?: string; err?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const session = await getSession();
   const oggi = localDay(new Date());
   const day = /^\d{4}-\d{2}-\d{2}$/.test(searchParams.d ?? '') ? searchParams.d! : oggi;

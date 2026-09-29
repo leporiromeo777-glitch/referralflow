@@ -19,11 +19,12 @@ function LockBadge() {
 
 // Verifica il token lato server: se valido mostra il form per la nuova password,
 // altrimenti un avviso neutro con l'invito a richiederne uno nuovo.
-export default async function ReimpostaPassword({
-  params,
-}: {
-  params: { token: string };
-}) {
+export default async function ReimpostaPassword(
+  props: {
+    params: Promise<{ token: string }>;
+  }
+) {
+  const params = await props.params;
   const tokenHash = crypto.createHash('sha256').update(params.token).digest('hex');
   const [reset] = await query<{ id: string }>(
     `select id from password_resets

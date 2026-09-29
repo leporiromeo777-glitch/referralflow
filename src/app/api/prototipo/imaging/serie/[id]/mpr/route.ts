@@ -15,7 +15,8 @@ const RUOLI = new Set(['segretaria', 'medico', 'admin', 'assistente']);
 // fase 9). Solo se la geometria di serie lo permette: fette uniformi, stesse
 // dimensioni e spaziatura, stesso Frame of Reference. Con `?info=1` torna
 // la descrizione della griglia virtuale, senza disegnare.
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getSession();
   if (!session || !session.studioId) return new NextResponse('non autorizzato', { status: 401 });
   const nonPermesso = vietato(session.role, 'imaging');  // Accessi/permessi.ts (23.9.2026)

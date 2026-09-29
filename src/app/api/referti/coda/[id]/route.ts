@@ -10,7 +10,8 @@ export const dynamic = 'force-dynamic';
 // Il prelievo marca 'elaborazione': se il Mac muore a metà, dopo un'ora
 // l'audio ricompare in coda (vedi ../route.ts).
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const auth = req.headers.get('authorization') ?? '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   if (!token) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });

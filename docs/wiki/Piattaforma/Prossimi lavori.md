@@ -1,6 +1,6 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-09-14
+aggiornata: 2026-09-29
 ---
 # Prossimi lavori (in ordine di valore)
 
@@ -11,7 +11,7 @@ aggiornata: 2026-09-14
 5. **Chat AI su «Affida paziente»** (serve chiave API Anthropic e la stessa validazione legale della cattura impegnativa).
 6. **Referto strutturato: invio HIN** (dipende da account HIN).
 7. **Cassa dei Medici / MediOnline** (lo studio fattura così, saputo il 14.9.2026). Verificato sul sito della Cassa (14.9.2026 sera): le prestazioni da un software terzo entrano SOLO con la «Variante XML» — il software dello studio esporta i **dati di fatturazione** in XML e li manda al centro di calcolo, che emette fattura, incassa e sollecita; i partner con interfaccia XML sono ~17 gestionali (ametiq, mediway, nexus, Elexis, Axenita, VITOMED…), gli altri passano dal «Partnermanagement». Non esiste un import CSV delle prestazioni in MediOnline. Lo schema non è pubblicato sul sito; lo standard svizzero dei dati di fattura è il Forum Datenaustausch `generalInvoiceRequest` (4.5 fino al 30.6.2027, 5.0 dal 1.1.2026), quasi certamente la base della variante XML, ma va confermato dalla Cassa. Conseguenza: usare la variante XML vorrebbe dire che ReferralFlow DIVENTA il software di fatturazione (posizioni TARDOC, punti, diagnosi, GLN/RCC, assicurazione) — la scelta esclusa il 14.9.2026. Quindi «Da fatturare» resta un **controllo** (fatte contro registrate, referto confermato) e il CSV porta la posizione tariffaria dal catalogo. Si riapre solo se la fatturazione diventa il modello di business. La piattaforma non scrive mai in MediOnline (robot in sola lettura: [[Decisioni/Registro]]). Fonti: cassa-dei-medici.ch/offerta/servizi/fatturazione, aerztekasse.ch/xml, aerztekasse.ch/abrechnen/xml/software-partner.
-8. **Migrazione a Next 16** (advisory residue di `npm audit`, feature non usate).
+8. ~~**Migrazione a Next 16**~~ FATTA il 29.9.2026 (Next 16.3.7 + React 19.3, [[Decisioni/Registro]]): `npm audit` da 5 advisory (1 critica) a 2 alte, fuori da Next — `nodemailer` ≤10.0.1 e `@xmldom/xmldom` (via `mammoth`), si chiudono con `npm audit fix` senza salti di versione maggiore; da fare a parte con una prova dell'invio e-mail.
 
 ## Dal confronto con CardioOS ([[Proposte/CardioOS confronto per funzione]], 14.9.2026)
 **Gli otto punti sono FATTI la sera del 14.9.2026** (migrazioni 041-044, ponte v54-v57). Restano da fare con lo studio: popolare il catalogo (Studio → Prestazioni, anche dai percorsi) e le parole chiave, i posti delle sale, GLN/RCC dei medici, importare i pazienti dal gestionale via CSV, validare percorsi e moduli. Il piano era: anagrafica paziente completa (AVS, cassa, numero assicurato, indirizzo, e-mail, sesso, indicazione, percorso) e scheda con terapia derivata dai referti; catalogo prestazioni + pagina Prestazioni; medici invianti nell'interfaccia nuova; chiamate di preparazione; personale con GLN/RCC/colore; calendario a settimana; moduli nascosti per studio e «Suggerisci una modifica»; import CSV pazienti. Non si portano turni/ferie/presenze/ore/rimborsi, magazzino, chatbot clinico, fatturazione TARDOC.

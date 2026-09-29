@@ -29,7 +29,8 @@ function dataBreve(iso: string | null): string {
   return `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
 }
 
-export default async function SchedaStudio({ params }: { params: { id: string } }) {
+export default async function SchedaStudio(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getSession();
   if (!session) redirect('/login');
   const owner = (process.env.PLATFORM_OWNER_EMAIL || '').trim().toLowerCase();

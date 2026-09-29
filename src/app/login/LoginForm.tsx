@@ -1,6 +1,7 @@
 'use client';
 
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { login } from './actions';
 
 function SubmitButton() {
@@ -13,7 +14,7 @@ function SubmitButton() {
 }
 
 export function LoginForm({ next = '' }: { next?: string }) {
-  const [state, formAction] = useFormState(login, {});
+  const [state, formAction] = useActionState(login, {});
   return (
     <form action={formAction} className="card auth-card">
       {next && <input type="hidden" name="next" value={next} />}
@@ -23,7 +24,7 @@ export function LoginForm({ next = '' }: { next?: string }) {
       <p className="muted center">La piattaforma delle referral tra studi medici</p>
       <label>
         Email
-        <input name="email" type="email" required autoComplete="username" />
+        <input name="email" type="email" required autoComplete="username" defaultValue={state?.email ?? ''} />
       </label>
       <label>
         Password

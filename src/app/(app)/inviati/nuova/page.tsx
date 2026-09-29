@@ -9,11 +9,12 @@ export const dynamic = 'force-dynamic';
 
 // Affida un paziente a un altro studio della piattaforma.
 
-export default async function InviaAdAltroStudio({
-  searchParams,
-}: {
-  searchParams: { err?: string; studio?: string; paz?: string };
-}) {
+export default async function InviaAdAltroStudio(
+  props: {
+    searchParams: Promise<{ err?: string; studio?: string; paz?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const session = await getSession();
   if (!session) redirect('/login');
 

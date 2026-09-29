@@ -35,11 +35,12 @@ type Esterno = {
   piattaforma_id: string | null;
 };
 
-export default async function Affida({
-  searchParams,
-}: {
-  searchParams: { q?: string; err?: string; paz?: string };
-}) {
+export default async function Affida(
+  props: {
+    searchParams: Promise<{ q?: string; err?: string; paz?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const session = await getSession();
   if (!session) redirect('/login');
 

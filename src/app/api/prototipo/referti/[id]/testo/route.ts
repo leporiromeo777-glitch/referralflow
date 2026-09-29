@@ -21,7 +21,8 @@ const RUOLI_AMMESSI = new Set(['segretaria', 'medico', 'admin', 'tecnico']);
 const MAX_TESTO = 200_000;
 const MAX_STATO = 300_000;
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
   const nonPermesso = vietato(session.role, 'reports');  // Accessi/permessi.ts (23.9.2026)
