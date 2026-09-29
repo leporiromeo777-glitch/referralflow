@@ -227,3 +227,24 @@ export async function registraPassoApp(opz: {
      new Date(opz.inizio).toISOString(), Math.max(0, Date.now() - opz.inizio), ingressoId, uscitaId, JSON.stringify(opz.metadata ?? {})]
   );
 }
+
+// Testo cambiato dalla MACCHINA dopo la catena (seconda traccia unita,
+// lettera vecchia aggiornata, istruzioni della seconda traccia applicate, e i
+// loro «Annulla»): diventa l'ultimo output AI, così la misura delle
+// correzioni umane parte da qui. Prima la segretaria si vedeva contare come
+// sue correzioni la lettera aggiornata o la traccia unita (29.9.2026).
+// Best-effort: un intoppo dell'audit non ferma mai la bozza.
+export async function registraTestoMacchina(opz: {
+  studioId: string; bozzaId: string; nome: string; modello: string; regole: string;
+  prima: string | null; dopo: string; metadata?: Record<string, unknown>;
+}): Promise<void> {
+  try {
+    await registraPassoApp({
+      studioId: opz.studioId, bozzaId: opz.bozzaId, nome: opz.nome, tipo: 'postprocessing', modello: opz.modello, provider: 'local',
+      promptNome: `regole_${opz.nome}`, promptTesto: opz.regole, ingresso: opz.prima ?? '', uscita: opz.dopo,
+      inizio: Date.now(), stato: 'SUCCESS', producerIngresso: 'SYSTEM', metadata: opz.metadata,
+    });
+  } catch (e: any) {
+    console.error(`[audit] ${opz.nome} ${opz.bozzaId.slice(0, 8)}: ${e?.code ?? e?.name ?? 'errore'}`);
+  }
+}

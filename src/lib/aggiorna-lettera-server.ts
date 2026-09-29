@@ -8,6 +8,7 @@ import { formatoPerBozza } from './referti-medici';
 import { etichettaDocumento } from './referti-allegato-blocco';
 import { aggiorna, eFemminile, pulisciScansione, richiestaAggiornamento, type Proposta } from './aggiorna-lettera';
 import { cercaPagine, etichettaData, rxDataPagina, type DataCercata } from './cerca-in-cartella';
+import { registraTestoMacchina } from './audit/lineage';
 
 // Aggiornamento della lettera vecchia, lato piattaforma (28.9.2026). Parte
 // SOLO se il medico lo chiede nel dettato («riprendimi la lettera del …») o
@@ -15,6 +16,8 @@ import { cercaPagine, etichettaData, rxDataPagina, type DataCercata } from './ce
 // proposta (aggiorna-lettera.ts), la applica o la annulla: mai da sola.
 // Solo per i medici in REFERTI_AGGIORNA_LETTERA (profili, virgola; di serie
 // Marco Moccetti e Moschovitis). Nei log solo id abbreviati e numeri.
+
+const REGOLE = 'aggiornamento della lettera vecchia con regole (src/lib/aggiorna-lettera.ts)';
 
 export function medicoAggiornaLettera(medicoId: string | null | undefined): boolean {
   const elenco = (process.env.REFERTI_AGGIORNA_LETTERA ?? 'moccetti,moschovitis').split(',').map((x) => x.trim()).filter(Boolean);
@@ -223,15 +226,18 @@ export async function applicaAggiornamento(studioId: string, bozzaId: string, ut
             payload = jsonb_set(jsonb_set(payload, '{aggiornamento_lettera}', $4::jsonb), '{revisione_prototipo}', coalesce(payload->'revisione_prototipo', '{}'::jsonb) || '{"tolte": []}'::jsonb)
       where id = $1 and studio_id = $2 and stato = 'bozza' returning id`, [bozzaId, studioId, testo, JSON.stringify(traccia)]);
   if (!ok) return { errore: 'La bozza non è più aperta.' };
+  await registraTestoMacchina({ studioId, bozzaId, nome: 'aggiornamento_lettera', modello: 'regole', regole: REGOLE, prima: prima ?? String(b?.payload?.testo_corretto ?? ''), dopo: testo, metadata: { automatico, somiglianza: p.somiglianza, novita_aggiunte: aggiunte.length } });
   console.log(`[aggiorna-lettera] ${bozzaId.slice(0, 8)}: applicato${automatico ? ' dalla catena' : ''} (${s.fonte.tipo}, somiglianza ${p.somiglianza}, ${aggiunte.length} frasi nuove, ${p.mesi} mesi)`);
   return { ok: true };
 }
 
 export async function annullaAggiornamento(studioId: string, bozzaId: string): Promise<{ ok: true } | { errore: string }> {
-  const [ok] = await query<{ id: string }>(
+  const prima = (await bozza(studioId, bozzaId))?.testo_finale ?? null;
+  const [ok] = await query<{ id: string; testo: string | null }>(
     `update referti_bozze set testo_finale = payload->'aggiornamento_lettera'->>'prima', payload = payload - 'aggiornamento_lettera'
-      where id = $1 and studio_id = $2 and stato = 'bozza' and payload ? 'aggiornamento_lettera' returning id`, [bozzaId, studioId]);
+      where id = $1 and studio_id = $2 and stato = 'bozza' and payload ? 'aggiornamento_lettera' returning id, coalesce(testo_finale, payload->>'testo_corretto') as testo`, [bozzaId, studioId]);
   if (!ok) return { errore: 'Niente da annullare.' };
+  await registraTestoMacchina({ studioId, bozzaId, nome: 'aggiornamento_annullato', modello: 'regole', regole: REGOLE, prima, dopo: ok.testo ?? '' });
   console.log(`[aggiorna-lettera] ${bozzaId.slice(0, 8)}: annullato`);
   return { ok: true };
 }

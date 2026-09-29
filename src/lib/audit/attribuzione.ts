@@ -23,6 +23,8 @@ export const NOMI_TAPPE: Record<string, string> = {
   dopo_dizionario: 'dizionario', dopo_arbitro: 'arbitro', dopo_correzione: 'correzione AI', dopo_bella_copia: 'bella copia',
   dopo_doppioni: 'doppioni', catena_finale: 'uscita della catena', testo_strutturato: 'riorganizzazione (rapporto)',
   ingresso_impaginazione_lettera: 'revisione guidata (persona)', impaginazione_lettera: 'impaginazione lettera (AI)',
+  unione_tracce: 'seconda traccia unita', aggiornamento_lettera: 'lettera vecchia aggiornata', aggiornamento_annullato: 'aggiornamento annullato',
+  istruzioni_traccia: 'istruzioni della seconda traccia (AI)', istruzioni_annullate: 'istruzioni annullate', istruzioni_in_fondo: 'traccia messa in fondo',
 };
 
 export function distanza(testo: string, finale: string): number {

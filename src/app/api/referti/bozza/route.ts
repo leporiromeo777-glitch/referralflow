@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { collegaInviante } from '@/lib/referti-inviante';
-import { registraCorsa, registraCorsaFallita } from '@/lib/audit/lineage';
+import { registraCorsa, registraCorsaFallita, registraTestoMacchina } from '@/lib/audit/lineage';
 import { createHash } from 'crypto';
 import { query } from '@/lib/db';
 import { registraEvento, impronta } from '@/lib/referti-eventi';
@@ -453,6 +453,14 @@ export async function POST(req: NextRequest) {
         if (sonoIstruzioni) void giroIstruzioni().catch((e: any) => console.error(`[istruzioni] giro: ${e?.code ?? e?.name ?? 'errore'}`));
         await collega(dest.id);
         try { await registraCorsa(studio.id, dest.id, payload, { audioStorage: (await query<{ storage_key: string }>('select storage_key from referti_audio where id = $1', [audioId]))[0]?.storage_key ?? null }); } catch (e: any) { console.error('audit corsa (traccia):', e?.message || e); }
+        // La corsa della traccia registra come ultimo output AI il SOLO testo
+        // della traccia: il testo intero della bozza (unito, o invariato se
+        // sono istruzioni) torna a essere la base della misura delle correzioni.
+        {
+          const prima = String(dest.testo_finale ?? pd.testo_corretto ?? '');
+          const dopo = sonoIstruzioni ? prima : String(dest.testo_finale != null ? concat(dest.testo_finale, testoNuovo) : payloadUnito.testo_corretto ?? '');
+          await registraTestoMacchina({ studioId: studio.id, bozzaId: dest.id, nome: 'unione_tracce', modello: 'regole', regole: 'seconda traccia in fondo al referto (route api/referti/bozza); se sono istruzioni il testo resta com\'è', prima, dopo, metadata: { istruzioni: sonoIstruzioni } });
+        }
         await registraEvento(studio.id, dest.id, 'traccia_aggiunta', null, { audio_id: audioId, file_id: fileId, offset, caratteri: testoNuovo.length, parole: nuoveParole.length, istruzioni: sonoIstruzioni });
         console.log(`[bozza] seconda traccia accodata a ${dest.id.slice(0, 8)}: +${testoNuovo.length} caratteri, +${nuoveParole.length} parole, offset ${offset}s`);
         return NextResponse.json({ id: dest.id, traccia: true }, { status: 201 });

@@ -3,6 +3,7 @@ import { query } from './db';
 import { generaOllamaEsito } from './ollama';
 import { catenaOccupata } from './esporta-grezze';
 import { registraEvento } from './referti-eventi';
+import { registraTestoMacchina } from './audit/lineage';
 import { applica, inFrasi, leggiPiano, numerate, PROMPT_ISTRUZIONI } from './istruzioni-traccia';
 
 // Seconda traccia con istruzioni, lato piattaforma (29.9.2026). All'arrivo
@@ -66,6 +67,7 @@ export async function interpreta(id: string): Promise<StatoIstruzioni['stato'] |
     prima: fatte ? b.testo : null,
   };
   await salva(id, st, fatte ? esito.testo : undefined);
+  if (fatte) await registraTestoMacchina({ studioId: b.studio_id, bozzaId: id, nome: 'istruzioni_traccia', modello: MODELLO, regole: PROMPT_ISTRUZIONI, prima: b.testo, dopo: esito.testo, metadata: { applicate: fatte } });
   await registraEvento(b.studio_id, id, 'istruzioni_traccia', null, { modifiche: piano.modifiche.length, applicate: fatte, non_capite: piano.non_capite.length, secondi: Math.round((Date.now() - t0) / 1000) });
   console.log(`[istruzioni] ${id.slice(0, 8)}: ${fatte} di ${piano.modifiche.length} modifiche applicate, ${piano.non_capite.length} non capite, ${Math.round((Date.now() - t0) / 1000)} s`);
   return st.stato;
@@ -105,18 +107,22 @@ export async function azioneIstruzioni(studioId: string, id: string, azione: str
   if (azione === 'annulla') {
     if (ist.stato !== 'fatta' || ist.prima == null) return { errore: 'Niente da annullare.' };
     await salva(id, { ...ist, stato: 'annullata' }, ist.prima);
+    await registraTestoMacchina({ studioId, bozzaId: id, nome: 'istruzioni_annullate', modello: 'regole', regole: 'Annulla: torna il testo di prima delle istruzioni', prima: b.testo, dopo: ist.prima });
     return { ok: true };
   }
   if (azione === 'in_fondo') {
     // Non erano istruzioni: il testo della traccia va in fondo, come prima.
     const base = ist.stato === 'fatta' && ist.prima != null ? ist.prima : b.testo;
     const aggiunta = [ist.testo, ...(ist.note ?? [])].filter(Boolean).join(' ');
-    await salva(id, { ...ist, stato: 'in_fondo' }, `${base.trim()}\n\n${aggiunta}`.trim());
+    const dopo = `${base.trim()}\n\n${aggiunta}`.trim();
+    await salva(id, { ...ist, stato: 'in_fondo' }, dopo);
+    await registraTestoMacchina({ studioId, bozzaId: id, nome: 'istruzioni_in_fondo', modello: 'regole', regole: 'la traccia non erano istruzioni: va in fondo al referto', prima: b.testo, dopo });
     return { ok: true };
   }
   if (azione === 'rifai') {
     const base = ist.stato === 'fatta' && ist.prima != null ? ist.prima : undefined;
     await salva(id, { ...ist, stato: 'da_interpretare', esiti: [], non_capite: [], prima: null }, base);
+    if (base != null) await registraTestoMacchina({ studioId, bozzaId: id, nome: 'istruzioni_annullate', modello: 'regole', regole: 'Rifai: torna il testo di prima delle istruzioni', prima: b.testo, dopo: base });
     void giroIstruzioni().catch(() => null);
     return { ok: true };
   }

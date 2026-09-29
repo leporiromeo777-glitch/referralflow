@@ -5,6 +5,7 @@
 // propone niente. Poi toglie tutto.
 //   DATABASE_URL=…demo NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-aggiorna-lettera.ts <base> <cookie> <studio>
 import { query, pool } from '../../src/lib/db';
+import { togliAudit, ultimoTestoAI } from './pulizia-audit';
 import { aggiornamentoAutomatico } from '../../src/lib/aggiorna-lettera-server';
 
 const [base, cookie, S] = process.argv.slice(2);
@@ -34,11 +35,14 @@ async function main() {
     const ap = await fetch(url, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'applica', novita: [0] }) });
     const [dopo] = await query<{ t: string }>('select testo_finale as t from referti_bozze where id = $1', [boz]);
     verifica(ap.status === 200 && dopo.t.includes('Rivedo in data 28.09.2026') && dopo.t.includes('diabete mellito') && dopo.t.includes('82 Kg') && !dopo.t.includes('80 Kg') && dopo.t.endsWith('rivalutazione anticipata.'), 'applica: parte vecchia con la data di oggi, frase nuova aggiunta, visita di oggi, frase finale');
+    verifica((await ultimoTestoAI(boz)) === dopo.t, 'applica: la lettera aggiornata è la base della misura delle correzioni (non conta come correzione umana)');
     const s2 = await (await fetch(url, { headers: h })).json();
     verifica(!!s2.applicato && s2.applicato.novita_aggiunte === 1, `dopo Applica: segnato come applicato (${JSON.stringify(s2).slice(0, 300)})`);
     const an = await fetch(url, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'annulla' }) });
     const [annullato] = await query<{ t: string | null }>('select testo_finale as t from referti_bozze where id = $1', [boz]);
     verifica(an.status === 200 && annullato.t == null, `annulla: torna il testo di prima (${an.status} ${annullato.t == null})`);
+    const [dett] = await query<{ t: string }>(`select payload->>'testo_corretto' as t from referti_bozze where id = $1`, [boz]);
+    verifica((await ultimoTestoAI(boz)) === dett.t, 'annulla: la base della misura torna il dettato');
     // Dentro la catena: appena arriva la bozza, la lettera aggiornata è già il
     // suo testo (senza la frase nuova, che resta da spuntare).
     const [{ id: auto }] = await query<{ id: string }>(`insert into referti_bozze (studio_id, file_id, payload, tipo) values ($1, 'prova-agg-' || gen_random_uuid(), $2, 'referto') returning id`,
@@ -58,6 +62,7 @@ async function main() {
     const s3 = await (await fetch(`${base}/api/prototipo/referti/${senza}/aggiornamento`, { headers: h })).json();
     verifica(s3.richiesta == null && s3.proposta == null && (s3.scelte ?? []).some((f: any) => f.id === vecchia), 'senza richiesta nel dettato: nessuna proposta, la lettera c\'è tra le scelte a mano');
   } finally {
+    await togliAudit(ids);
     await query('delete from referti_eventi where bozza_id = any($1::uuid[])', [ids]);
     await query('delete from referti_bozze where id = any($1::uuid[])', [ids]);
     await pool.end();

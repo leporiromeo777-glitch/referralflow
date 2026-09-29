@@ -105,6 +105,10 @@ echo "→ seconda traccia con istruzioni: annulla, era testo da aggiungere"
 DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-istruzioni.ts "http://localhost:$PORTA" "$C_MEDICO" "$STUDIO" > "$TMP/istruzioni.txt" 2>&1 || { fallito "prova-istruzioni"; cut -c1-300 "$TMP/istruzioni.txt"; }
 grep -E "^NO" "$TMP/istruzioni.txt"; echo "   $(grep -c '^ok' "$TMP/istruzioni.txt") ok, $(grep -c '^NO' "$TMP/istruzioni.txt") no"
 
+echo "→ seconda traccia unita: in fondo alla bozza, base della misura delle correzioni"
+DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-tracce.ts "http://localhost:$PORTA" "$C_MEDICO" "$STUDIO" > "$TMP/tracce.txt" 2>&1 || { fallito "prova-tracce"; cut -c1-300 "$TMP/tracce.txt"; }
+grep -E "^NO" "$TMP/tracce.txt"; echo "   $(grep -c '^ok' "$TMP/tracce.txt") ok, $(grep -c '^NO' "$TMP/tracce.txt") no"
+
 echo "→ chi vede che cosa: menu dal server e rotte bloccate, ruolo per ruolo"
 B="http://localhost:$PORTA/api/prototipo"
 controlla() {   # ruolo  sezione-attesa-si  sezione-attesa-no  rotta-attesa-200  rotta-attesa-403

@@ -1,6 +1,6 @@
 ---
 tipo: tappa
-aggiornata: 2026-09-11
+aggiornata: 2026-09-29
 ---
 # Audit trail, lineage, versioni, qualità, dizionario dalle correzioni
 
@@ -17,6 +17,8 @@ La metrica principale conta SOLO `editor_role='SECRETARY'`; AI→AI mai contate;
 
 ## Agganci
 `POST /api/referti/bozza` registra la corsa (anche `{esito:'fallita'}`); `confermaBozza` registra la revisione col ruolo di chi firma; l'apertura della bozza segna IN_REVIEW; «Impagina come lettera» e «Controllo della lettera» sono tappe AI dell'app col prompt registrato. Limite noto: bozze precedenti al 9.9.2026 senza la tappa «Impagina».
+
+**Testo cambiato dalla macchina dopo la catena** (29.9.2026): seconda traccia unita (`unione_tracce`), lettera vecchia aggiornata e il suo Annulla (`aggiornamento_lettera`, `aggiornamento_annullato`), istruzioni della seconda traccia e i loro Annulla/Rifai/«in fondo» (`istruzioni_traccia`, `istruzioni_annullate`, `istruzioni_in_fondo`) si registrano con `registraTestoMacchina` (lineage.ts) come ultimo output AI. Prima la base della misura restava il dettato (o, dopo una seconda traccia, il SOLO testo della traccia) e alla conferma la lettera aggiornata o la traccia unita contavano come correzioni della segretaria. Le frasi nuove aggiunte con «Aggiungi» restano correzioni umane (le sceglie una persona). Le bozze con righe di audit non si cancellano (FK `on delete set null` = UPDATE vietato dal trigger): le prove sul demo le tolgono con `scripts/e2e/pulizia-audit.ts`.
 
 ## Pagine
 **Dal 16.9.2026 la parte che si guarda ogni settimana sta nell'interfaccia nuova**, in Studio → «Qualità AI»: *«Quanto si corregge, referto per referto»* — un punto (una barra) per referto con la **media mobile**, la mediana delle correzioni, quelle ogni 100 parole, i referti passati senza una correzione, il tempo di revisione e le categorie. Legge le stesse righe (`audit.human_edits`, solo `editor_role = 'SECRETARY'`, ultime 200). Le modifiche del medico non entrano: quella è un'altra domanda.

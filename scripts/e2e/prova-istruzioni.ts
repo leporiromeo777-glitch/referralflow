@@ -2,6 +2,7 @@
 // (29.9.2026) sul DB DEMO, dati inventati, senza modello: Annulla ed «Era
 // testo da aggiungere in fondo». Poi toglie tutto.
 import { query, pool } from '../../src/lib/db';
+import { togliAudit, ultimoTestoAI } from './pulizia-audit';
 
 const [base, cookie, S] = process.argv.slice(2);
 let ok = 0, no = 0;
@@ -20,11 +21,14 @@ async function main() {
     const a = await post('annulla');
     const [x] = await query<{ t: string; s: string }>(`select testo_finale as t, payload->'istruzioni_traccia'->>'stato' as s from referti_bozze where id = $1`, [id]);
     verifica(a.status === 200 && x.t === prima && x.s === 'annullata', 'annulla: torna il testo di prima');
+    verifica((await ultimoTestoAI(id)) === prima, 'annulla: per la misura delle correzioni la base torna il testo di prima');
     verifica((await post('annulla')).status === 409, 'annulla due volte: niente da annullare (409)');
     const f = await post('in_fondo');
     const [y] = await query<{ t: string; s: string }>(`select testo_finale as t, payload->'istruzioni_traccia'->>'stato' as s from referti_bozze where id = $1`, [id]);
     verifica(f.status === 200 && y.t === `${prima}\n\nTogli la frase sulla terapia.` && y.s === 'in_fondo', 'era testo da aggiungere: in fondo, come prima');
+    verifica((await ultimoTestoAI(id)) === y.t, 'in fondo: la base della misura è il testo con la traccia in fondo');
   } finally {
+    await togliAudit([id]);
     await query('delete from referti_eventi where bozza_id = $1', [id]);
     await query('delete from referti_bozze where id = $1', [id]);
     await pool.end();
