@@ -12,7 +12,7 @@ const SEZIONE_PAGINA: [string, Sezione][] = [
 
 const secret = new TextEncoder().encode(process.env.SESSION_SECRET);
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const token = req.cookies.get('rf_session')?.value;
   let role: string | null = null;
   if (token) {
