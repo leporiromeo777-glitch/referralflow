@@ -11,8 +11,8 @@ type State = { error?: string };
 // L'app gira dietro Caddy: l'IP reale del client è in X-Forwarded-For
 // (Caddy lo imposta di default). In locale/dev l'header manca: si raggruppa
 // tutto sotto una chiave fissa, che va bene per lo sviluppo.
-function clientIp(): string {
-  const h = headers();
+async function clientIp(): Promise<string> {
+  const h = await headers();
   const fwd = h.get('x-forwarded-for');
   if (fwd) return fwd.split(',')[0].trim();
   return h.get('x-real-ip') ?? 'dev-locale';
@@ -31,7 +31,7 @@ export async function login(_prev: State, formData: FormData): Promise<State> {
   const next = destinazioneSicura(formData.get('next'));
   if (!email || !password) return { error: 'Inserisci email e password.' };
 
-  const ip = clientIp();
+  const ip = await clientIp();
   const lockedUntil = isLoginLocked(email, ip);
   if (lockedUntil) {
     const minuti = Math.max(1, Math.ceil((lockedUntil - Date.now()) / 60000));

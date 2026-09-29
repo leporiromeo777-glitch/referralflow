@@ -24,7 +24,8 @@ async function sessione(id: string) {
   return { session };
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const { session, errore } = await sessione(params.id);
   if (errore) return errore;
   const s = await statoAggiornamento(session.studioId, params.id);
@@ -32,7 +33,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   return NextResponse.json(s, { headers: { 'Cache-Control': 'no-store' } });
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const { session, errore } = await sessione(params.id);
   if (errore) return errore;
   if (!RUOLI.has(session.role)) return NextResponse.json({ errore: 'ruolo_non_ammesso' }, { status: 403 });

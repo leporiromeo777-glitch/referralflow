@@ -8,7 +8,8 @@ export const runtime = 'nodejs';
 
 // Download di un documento della cartella del paziente: solo lo studio
 // proprietario, e ogni lettura finisce nel registro accessi (art. 4 OPDa).
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getSession();
   if (!session || !session.studioId) return new NextResponse('Non autorizzato', { status: 401 });
   if (!isUuid(params.id)) return new NextResponse('Non trovato', { status: 404 });

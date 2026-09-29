@@ -9,8 +9,8 @@ import { sendPlain, notifySupporto } from '@/lib/notify';
 import { TERMS_VERSION } from '@/lib/terms';
 
 // IP reale del client dietro Caddy (X-Forwarded-For); in dev l'header manca.
-function clientIp(): string {
-  const h = headers();
+async function clientIp(): Promise<string> {
+  const h = await headers();
   const fwd = h.get('x-forwarded-for');
   if (fwd) return fwd.split(',')[0].trim();
   return h.get('x-real-ip') ?? 'dev-locale';
@@ -120,7 +120,7 @@ export async function completaAttivazione(formData: FormData) {
   await query(
     `insert into terms_acceptances (studio_id, user_id, email, terms_version, ip)
      values ($1, $2, lower($3), $4, $5)`,
-    [studio.id, user.id, att.email, TERMS_VERSION, clientIp()]
+    [studio.id, user.id, att.email, TERMS_VERSION, await clientIp()]
   );
 
   // Gli affidi esterni pendenti indirizzati a questa email diventano referral

@@ -19,16 +19,18 @@ function dataCh(d: string | null): string {
 
 // POST dal modulo della revisione guidata: salva testo e campi come sono
 // nella pagina (bozza aperta), poi genera il PDF da ciò che è salvato.
-export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
+export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session || !session.studioId) return new NextResponse('Non autorizzato', { status: 401 });
-  if (!isUuid(ctx.params.id)) return new NextResponse('Non trovato', { status: 404 });
+  const { id } = await ctx.params;
+  if (!isUuid(id)) return new NextResponse('Non trovato', { status: 404 });
   const form = await req.formData().catch(() => null);
-  await salvaDalModulo(form, session.studioId, ctx.params.id, session.id, 'pdf');
+  await salvaDalModulo(form, session.studioId, id, session.id, 'pdf');
   return GET(req, ctx);
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getSession();
   if (!session || !session.studioId) return new NextResponse('Non autorizzato', { status: 401 });
 

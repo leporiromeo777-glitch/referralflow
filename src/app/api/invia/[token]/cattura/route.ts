@@ -10,7 +10,8 @@ export const runtime = 'nodejs';
 // riceve i campi estratti per precompilare il modulo. Autorizzata dal token
 // del modulo (medico noto), limitata per token (l'API costa). Non salva il
 // file: lo legge in memoria, estrae, e lo scarta. La revisione umana resta.
-export async function POST(req: NextRequest, { params }: { params: { token: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const motore = await motoreCattura();
   if (!motore) return new NextResponse('Funzione non attiva', { status: 404 });
 

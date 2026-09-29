@@ -28,7 +28,8 @@ function dataBreve(d: string): string {
   return new Date(d).toLocaleDateString('it-CH', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-export default async function MedicoDetail({ params }: { params: { id: string } }) {
+export default async function MedicoDetail(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getSession();
   if (!session) redirect('/login');
 

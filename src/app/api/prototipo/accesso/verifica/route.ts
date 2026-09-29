@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ errore: 'Codice non valido. Usa l’app di autenticazione o un codice di recupero.' }, { status: 401 });
   }
   clearLoginAttempts(key);
-  destroyPending2fa();
+  await destroyPending2fa();
   await createSession({ id: user.id, email: user.email, role: user.role, studioId: user.studio_id ?? '', studioNome: user.studio_nome ?? '' });
   return NextResponse.json({ ok: true });
 }

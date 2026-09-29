@@ -155,13 +155,14 @@ function fraseAllarme(a: Allarme): string {
   }
 }
 
-export default async function RefertoBozza({
-  params,
-  searchParams,
-}: {
-  params: { id: string };
-  searchParams: { ok?: string; err?: string; aggiunte?: string };
-}) {
+export default async function RefertoBozza(
+  props: {
+    params: Promise<{ id: string }>;
+    searchParams: Promise<{ ok?: string; err?: string; aggiunte?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const session = await getSession();
   if (!session) redirect('/login');
   if (!isUuid(params.id)) notFound();

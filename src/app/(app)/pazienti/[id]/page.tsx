@@ -24,12 +24,14 @@ type Ref = {
 };
 type Referto = { id: string; stato: string; quando: string };
 
-export default async function SchedaPaziente({
-  params, searchParams,
-}: {
-  params: { id: string };
-  searchParams: { ai?: string };
-}) {
+export default async function SchedaPaziente(
+  props: {
+    params: Promise<{ id: string }>;
+    searchParams: Promise<{ ai?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const session = await getSession();
   if (!session) redirect('/login');
   if (!isUuid(params.id)) notFound();

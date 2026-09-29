@@ -28,11 +28,12 @@ type Profilo = {
   telefono: string | null; visibile: boolean; avatar_key: string | null;
 };
 
-export default async function MieiInvii({
-  searchParams,
-}: {
-  searchParams: { benvenuto?: string };
-}) {
+export default async function MieiInvii(
+  props: {
+    searchParams: Promise<{ benvenuto?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const session = await getSession();
   if (!session) redirect('/login');
   if (session.role !== 'inviante') redirect('/');

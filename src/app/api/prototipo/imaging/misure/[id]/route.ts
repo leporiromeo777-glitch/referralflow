@@ -11,7 +11,8 @@ const VEDE = new Set(['segretaria', 'medico', 'admin', 'assistente']);
 // «Da dove arriva questo numero?» — la provenienza completa di una misura e la
 // sua storia (MSE fase 8): tutto ciò che serve a rifare il calcolo senza
 // nient'altro, e ogni evento che l'ha toccata.
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
   const nonPermesso = vietato(session.role, 'imaging');  // Accessi/permessi.ts (23.9.2026)

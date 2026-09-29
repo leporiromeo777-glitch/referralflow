@@ -14,7 +14,8 @@ const RUOLI = new Set(['segretaria', 'medico', 'admin', 'assistente']);
 // Un esame aperto: le sue serie e, dentro, le immagini in ordine. L'apertura
 // finisce nel registro: le immagini sono dati sanitari, e «chi l'ha visto?»
 // deve avere una risposta.
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
   const nonPermesso = vietato(session.role, 'imaging');  // Accessi/permessi.ts (23.9.2026)

@@ -8,8 +8,8 @@ import { sendPlain } from '@/lib/notify';
 import { isResetLocked, recordResetRequest } from '@/lib/rate-limit';
 
 // IP reale dietro Caddy (X-Forwarded-For); in dev l'header manca.
-function clientIp(): string {
-  const h = headers();
+async function clientIp(): Promise<string> {
+  const h = await headers();
   const fwd = h.get('x-forwarded-for');
   if (fwd) return fwd.split(',')[0].trim();
   return h.get('x-real-ip') ?? 'dev-locale';
@@ -21,7 +21,7 @@ export async function requestReset(formData: FormData): Promise<void> {
   const email = String(formData.get('email') ?? '').trim().toLowerCase();
 
   if (email) {
-    const ip = clientIp();
+    const ip = await clientIp();
     // Se già troppe richieste, non mandiamo altra posta ma restiamo neutri.
     if (!isResetLocked(email, ip)) {
       recordResetRequest(email, ip);

@@ -11,12 +11,14 @@ type Row = {
   quesito: string | null; appuntamento_at: string | null; created_at: string;
 };
 
-export default async function Portale({
-  params, searchParams,
-}: {
-  params: { token: string };
-  searchParams: { reg?: string };
-}) {
+export default async function Portale(
+  props: {
+    params: Promise<{ token: string }>;
+    searchParams: Promise<{ reg?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const [doc] = await query<{
     id: string; nome: string; email: string | null;
     scaduto: boolean; studio_nome: string;

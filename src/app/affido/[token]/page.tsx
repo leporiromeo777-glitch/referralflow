@@ -34,11 +34,12 @@ const URGENZE: Record<string, string> = {
   programmabile: 'Programmabile',
 };
 
-export default async function AffidoPubblico({
-  params,
-}: {
-  params: { token: string };
-}) {
+export default async function AffidoPubblico(
+  props: {
+    params: Promise<{ token: string }>;
+  }
+) {
+  const params = await props.params;
   const [aff] = await query<Aff>(
     `select er.id, er.cognome, er.nome, er.data_nascita::text, er.telefono,
             er.quesito, er.urgenza::text, er.stato, er.appuntamento_at::text,

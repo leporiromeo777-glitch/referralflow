@@ -29,12 +29,14 @@ function dataEstesa(d: string): string {
   });
 }
 
-export default async function Appuntamento({
-  params, searchParams,
-}: {
-  params: { token: string };
-  searchParams: { ok?: string; quest?: string };
-}) {
+export default async function Appuntamento(
+  props: {
+    params: Promise<{ token: string }>;
+    searchParams: Promise<{ ok?: string; quest?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const [ref] = await query<Row>(
     `select r.appuntamento_at::text, r.status, r.appt_response, s.nome as studio_nome,
             s.telefono as studio_telefono,

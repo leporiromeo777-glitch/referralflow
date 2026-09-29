@@ -17,7 +17,8 @@ export const dynamic = 'force-dynamic';
 // 50 MB: una cartella cartacea scansionata ci sta. Un PDF senza testo
 // (scansione senza OCR) va in coda per l'OCR sul Mac (src/lib/documenti-ocr.ts). Nei log solo id abbreviati e numeri.
 //   POST multipart { file, categoria?, nota? } → { id, pagine?, senza_testo?, ocr? }
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
   const no = vietato(session.role, 'patients');

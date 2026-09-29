@@ -41,12 +41,14 @@ type HistoryRow = {
 };
 type Att = { id: string; filename: string; uploaded_at: string };
 
-export default async function ReferralDetail({
-  params, searchParams,
-}: {
-  params: { id: string };
-  searchParams: { err?: string };
-}) {
+export default async function ReferralDetail(
+  props: {
+    params: Promise<{ id: string }>;
+    searchParams: Promise<{ err?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const session = await getSession();
   if (!session) redirect('/login');
 

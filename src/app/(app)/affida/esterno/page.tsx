@@ -10,11 +10,12 @@ export const dynamic = 'force-dynamic';
 // Affida un paziente a uno studio esterno (fuori piattaforma): lo studio
 // riceve una email neutra con un link sicuro dove vede i dettagli e risponde.
 
-export default async function AffidaEsterno({
-  searchParams,
-}: {
-  searchParams: { e?: string; err?: string; paz?: string };
-}) {
+export default async function AffidaEsterno(
+  props: {
+    searchParams: Promise<{ e?: string; err?: string; paz?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const session = await getSession();
   if (!session) redirect('/login');
 

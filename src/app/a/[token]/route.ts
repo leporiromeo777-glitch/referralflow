@@ -3,10 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 // Link breve per gli SMS: /a/<token> → /appuntamento/<token>.
 // Serve a far stare il promemoria in un solo SMS (160 caratteri):
 // i link lunghi spezzati su due SMS risultano cliccabili a metà.
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { token: string } }
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   // Dietro il reverse proxy req.nextUrl vede localhost: usa l'URL pubblico.
   const base = (process.env.APP_BASE_URL || '').replace(/\/$/, '');
   if (base) {

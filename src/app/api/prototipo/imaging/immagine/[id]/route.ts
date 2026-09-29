@@ -12,7 +12,8 @@ const RUOLI = new Set(['segretaria', 'medico', 'admin', 'assistente']);
 // Un fotogramma, in PNG. Il DICOM originale non esce mai da qui: esce
 // un'immagine già finestrata, che è quello che serve per guardarla nel
 // browser — e che non porta con sé l'anagrafica scritta dentro il file.
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getSession();
   if (!session || !session.studioId) return new NextResponse('non autorizzato', { status: 401 });
   const nonPermesso = vietato(session.role, 'imaging');  // Accessi/permessi.ts (23.9.2026)

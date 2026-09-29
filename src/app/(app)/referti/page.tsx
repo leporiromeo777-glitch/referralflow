@@ -30,11 +30,12 @@ type Row = {
   fiducia_livello: string | null;
 };
 
-export default async function Referti({
-  searchParams,
-}: {
-  searchParams: { ok?: string };
-}) {
+export default async function Referti(
+  props: {
+    searchParams: Promise<{ ok?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const session = await getSession();
   if (!session) redirect('/login');
 

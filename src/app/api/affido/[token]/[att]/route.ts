@@ -8,8 +8,9 @@ export const runtime = 'nodejs';
 // lungo con scadenza (stesso principio delle pagine /affido/[token]).
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { token: string; att: string } }
+  props: { params: Promise<{ token: string; att: string }> }
 ) {
+  const params = await props.params;
   const [att] = await query<{ storage_key: string; filename: string }>(
     `select a.storage_key, a.filename
        from external_attachments a

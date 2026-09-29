@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 
 // Uscita dall'interfaccia nuova: cancella la sessione (e un'eventuale verifica in sospeso).
 export async function POST() {
-  destroySession();
-  destroyPending2fa();
+  await destroySession();
+  await destroyPending2fa();
   return NextResponse.json({ ok: true });
 }

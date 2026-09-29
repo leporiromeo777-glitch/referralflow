@@ -13,7 +13,8 @@ export const dynamic = 'force-dynamic';
 // Una bozza vera nel modello della «Guided Review» del prototipo: audio,
 // trascrizione a segmenti con i tempi, referto a span con fonte, issue con
 // evidenza, marker. Sessione del browser.
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
   const nonPermesso = vietato(session.role, 'reports');  // Accessi/permessi.ts (23.9.2026)

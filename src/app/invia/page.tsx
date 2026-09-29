@@ -23,11 +23,12 @@ async function resolveStudio(slug?: string): Promise<Studio | null> {
   return studios.length === 1 ? studios[0] : null;
 }
 
-export default async function InviaPubblico({
-  searchParams,
-}: {
-  searchParams: { ok?: string; error?: string; s?: string };
-}) {
+export default async function InviaPubblico(
+  props: {
+    searchParams: Promise<{ ok?: string; error?: string; s?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const studio = await resolveStudio(searchParams.s);
 
   if (!studio) {

@@ -45,11 +45,12 @@ const STATO_ESTERNO: Record<string, { label: string; tone: string }> = {
   rifiutato: { label: 'Non accettato', tone: 'danger' },
 };
 
-export default async function Inviati({
-  searchParams,
-}: {
-  searchParams: { ok?: string };
-}) {
+export default async function Inviati(
+  props: {
+    searchParams: Promise<{ ok?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const session = await getSession();
   if (!session) redirect('/login');
 

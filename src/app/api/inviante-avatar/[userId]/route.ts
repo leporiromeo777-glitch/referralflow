@@ -9,7 +9,8 @@ export const runtime = 'nodejs';
 // Foto profilo di un medico inviante registrato. Accessibile a qualunque utente
 // autenticato (è un annuario professionale della piattaforma). Il file vero è
 // nello storage; qui si risolve avatar_key → immagine.
-export async function GET(_req: NextRequest, { params }: { params: { userId: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ userId: string }> }) {
+  const params = await props.params;
   const session = await getSession();
   if (!session) return new NextResponse('Non autorizzato', { status: 401 });
   if (!isUuid(params.userId)) return new NextResponse('Non trovato', { status: 404 });

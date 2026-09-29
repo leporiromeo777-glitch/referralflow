@@ -6,11 +6,12 @@ import { TrustStrip } from '../TrustStrip';
 // force-dynamic: i contatti si leggono a ogni richiesta, non al build.
 export const dynamic = 'force-dynamic';
 
-export default function LoginPage({
-  searchParams,
-}: {
-  searchParams: { reset?: string; next?: string };
-}) {
+export default async function LoginPage(
+  props: {
+    searchParams: Promise<{ reset?: string; next?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const phone = process.env.SUPPORT_PHONE;
   const email = process.env.SUPPORT_EMAIL;
   return (
