@@ -6,7 +6,9 @@ import { query } from '@/lib/db';
 import { verifyPassword, createSession, createPending2fa } from '@/lib/auth';
 import { isLoginLocked, recordFailedLogin, clearLoginAttempts } from '@/lib/rate-limit';
 
-type State = { error?: string };
+// `email` torna nel modulo: React 19 svuota il form dopo ogni azione, così
+// dopo un errore l'indirizzo resta scritto (la password no).
+type State = { error?: string; email?: string };
 
 // L'app gira dietro Caddy: l'IP reale del client è in X-Forwarded-For
 // (Caddy lo imposta di default). In locale/dev l'header manca: si raggruppa
@@ -29,13 +31,13 @@ export async function login(_prev: State, formData: FormData): Promise<State> {
   const email = String(formData.get('email') ?? '').trim().toLowerCase();
   const password = String(formData.get('password') ?? '');
   const next = destinazioneSicura(formData.get('next'));
-  if (!email || !password) return { error: 'Inserisci email e password.' };
+  if (!email || !password) return { error: 'Inserisci email e password.', email };
 
   const ip = await clientIp();
   const lockedUntil = isLoginLocked(email, ip);
   if (lockedUntil) {
     const minuti = Math.max(1, Math.ceil((lockedUntil - Date.now()) / 60000));
-    return { error: `Troppi tentativi falliti. Riprova tra ${minuti} minuti.` };
+    return { error: `Troppi tentativi falliti. Riprova tra ${minuti} minuti.`, email };
   }
 
   const rows = await query<{
@@ -53,11 +55,11 @@ export async function login(_prev: State, formData: FormData): Promise<State> {
   const user = rows[0];
   if (!user || !user.attivo || !(await verifyPassword(user.password_hash, password))) {
     recordFailedLogin(email, ip);
-    return { error: 'Credenziali non valide.' };
+    return { error: 'Credenziali non valide.', email };
   }
   // Studio spento dal titolare della piattaforma: nessun accesso.
   if (user.studio_id && user.studio_attivo === false) {
-    return { error: 'Lo studio non è attivo: contatti l’assistenza.' };
+    return { error: 'Lo studio non è attivo: contatti l’assistenza.', email };
   }
   // 2FA attiva: password ok non basta — si passa dal secondo fattore.
   // La sessione vera nasce solo in /login/verifica, a codice confermato.

@@ -1,6 +1,7 @@
 'use client';
 
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { disable2fa, type DisableState } from './actions';
 
 function SubmitButton() {
@@ -13,7 +14,7 @@ function SubmitButton() {
 }
 
 export function DisableForm() {
-  const [state, formAction] = useFormState<DisableState, FormData>(disable2fa, {});
+  const [state, formAction] = useActionState<DisableState, FormData>(disable2fa, {});
   return (
     <form action={formAction} className="disable-2fa">
       <label>
