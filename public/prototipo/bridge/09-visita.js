@@ -1011,7 +1011,7 @@ if (typeof PAGES !== 'undefined' && PAGES.statistics) {
 function rfQualitaCorrezioni(c) {
   if (!c || !c.punti || !c.punti.length) {
     return `<div class="card"><div class="card-head"><span class="section-title">Quanto si corregge</span></div>
-      <p class="meta" style="margin:0;line-height:1.55">Nessuna correzione registrata. Il conto parte da solo: ogni volta che qualcuno rivede una bozza e la conferma, la differenza rispetto al testo dell&rsquo;AI finisce nel registro e compare qui.</p></div>`;
+      <p class="meta" style="margin:0;line-height:1.55">Nessuna correzione registrata. Il conto parte da solo: ogni volta che qualcuno conferma una bozza o ne scarica il Word, la differenza rispetto al testo dell&rsquo;AI finisce nel registro e compare qui.</p></div>`;
   }
   const p = c.punti;
   const max = Math.max(1, ...p.map(x => x.edit_count));
@@ -1020,14 +1020,18 @@ function rfQualitaCorrezioni(c) {
   const y = (v) => H - (v / max) * (H - 12);
   const barre = p.map((x, i) => {
     const alto = H - y(x.edit_count);
-    const tit = `${x.edit_count} correzioni · ${Math.round((x.edits_per_100_words || 0) * 10) / 10} ogni 100 parole · ${rfEsc((x.created_at || '').slice(0, 10).split('-').reverse().join('.'))}${x.medico ? ` · ${rfEsc(rfNomeCorto(x.medico))}` : ''}`;
-    return `<rect x="${(i * passo + (passo - larg) / 2).toFixed(1)}" y="${y(x.edit_count).toFixed(1)}" width="${larg.toFixed(1)}" height="${Math.max(1, alto).toFixed(1)}" rx="2" fill="var(--accent)" opacity="${x.edit_count === 0 ? '.25' : '.55'}"><title>${tit}</title></rect>`;
+    const tit = `${x.edit_count} correzioni · ${Math.round((x.edits_per_100_words || 0) * 10) / 10} ogni 100 parole · ${rfEsc((x.created_at || '').slice(0, 10).split('-').reverse().join('.'))}${x.medico ? ` · ${rfEsc(rfNomeCorto(x.medico))}` : ''}${x.confermata === false ? ' · non confermato, misurato al Word scaricato' : ''}`;
+    // Barra vuota = referto non confermato, misurato quando si è scaricato il Word.
+    const riemp = x.confermata === false
+      ? `fill="none" stroke="var(--accent)" stroke-width="1.2" opacity=".7"`
+      : `fill="var(--accent)" opacity="${x.edit_count === 0 ? '.25' : '.55'}"`;
+    return `<rect x="${(i * passo + (passo - larg) / 2).toFixed(1)}" y="${y(x.edit_count).toFixed(1)}" width="${larg.toFixed(1)}" height="${Math.max(1, alto).toFixed(1)}" rx="2" ${riemp}><title>${tit}</title></rect>`;
   }).join('');
   const linea = p.map((x, i) => x.media == null ? null : `${(i * passo + passo / 2).toFixed(1)},${y(x.media).toFixed(1)}`).filter(Boolean).join(' ');
   const n = (v, d = 1) => v == null ? '—' : String(Math.round(Number(v) * 10 ** d) / 10 ** d);
   const tempo = c.tempo && c.tempo.mediana != null ? `${Math.round(c.tempo.mediana)} s` : '—';
   return `<div class="card">
-    <div class="card-head"><span class="section-title">Quanto si corregge, referto per referto</span><span class="caption">${p.length} referti rivisti · media mobile su ${c.finestra}</span></div>
+    <div class="card-head"><span class="section-title">Quanto si corregge, referto per referto</span><span class="caption">${p.length} referti rivisti${c.nonConfermati ? ` (${c.nonConfermati} non confermati)` : ''} · media mobile su ${c.finestra}</span></div>
     <div class="grid grid-4" style="margin-bottom:14px">
       <div class="card tight stat" style="box-shadow:none"><span class="label">Correzioni per referto</span><span class="value num">${n(c.st.mediana, 0)}</span><span class="delta">mediana · media ${n(c.st.media)}</span></div>
       <div class="card tight stat" style="box-shadow:none"><span class="label">Ogni 100 parole</span><span class="value num">${n(c.per100.mediana)}</span><span class="delta">peggiore ${n(c.per100.p90)} (9 su 10 sotto)</span></div>
@@ -1039,7 +1043,7 @@ function rfQualitaCorrezioni(c) {
       ${barre}
       ${linea ? `<polyline points="${linea}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>` : ''}
     </svg></div>
-    <div class="caption" style="line-height:1.5">Da sinistra (il più vecchio) a destra (l&rsquo;ultimo). Le barre sono i singoli referti, la linea è la media mobile: se scende, la catena sta imparando a sbagliare meno. Le correzioni del medico non entrano — qui si misura solo quanto lavoro resta a chi rivede.</div>
+    <div class="caption" style="line-height:1.5">Da sinistra (il più vecchio) a destra (l&rsquo;ultimo). Le barre sono i singoli referti, la linea è la media mobile: se scende, la catena sta imparando a sbagliare meno. Le correzioni del medico non entrano — qui si misura solo quanto lavoro resta a chi rivede.${c.nonConfermati ? ' Le barre vuote sono referti non confermati, misurati quando è stato scaricato il Word: ciò che si ritocca dopo, dentro Word, qui non si vede.' : ''}</div>
     ${c.categorie.length ? `<div class="mt-16"><div class="section-title" style="margin-bottom:8px">Che cosa si corregge</div>
       <div class="row wrap" style="gap:8px">${c.categorie.map(x => `<span class="badge">${rfEsc(x.categoria)} · ${x.n}</span>`).join('')}</div></div>` : ''}
   </div>`;

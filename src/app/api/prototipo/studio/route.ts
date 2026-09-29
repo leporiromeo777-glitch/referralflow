@@ -98,13 +98,26 @@ async function qualitaDella(studioId: string) {
   // testo dell'AI. Le trasformazioni AI→AI non entrano, e nemmeno le
   // modifiche del medico: quelle sono un'altra domanda.
   const { mediaMobile, statistiche } = await import('@/lib/audit/metriche');
-  const punti = await query<{ bozza_id: string; created_at: string; edit_count: number; edits_per_100_words: number; words_total: number; severity_max: string | null; medico: string | null; review_seconds: number | null; categories: Record<string, number> | null; tipo: string | null; revisore: string | null }>(
-    `select h.bozza_id::text, h.created_at::text, h.edit_count, h.edits_per_100_words::float, h.words_total,
-            h.severity_max, h.medico, h.review_seconds, h.categories, b.tipo, u.email as revisore
-       from audit.human_edits h join referti_bozze b on b.id = h.bozza_id
-       left join users u on u.id = h.editor_user_id
-      where h.studio_id = $1 and h.editor_role = 'SECRETARY'
-      order by h.created_at desc limit 200`, [studioId]).catch(() => []);
+  // Una riga per referto: la revisione confermata (human_edits) se c'è, se
+  // no l'ultima misura al Word scaricato di una bozza non confermata
+  // (misure_lavoro, 29.9.2026: nello studio la lettera si chiude in Word).
+  const punti = await query<{ bozza_id: string; created_at: string; edit_count: number; edits_per_100_words: number; words_total: number; severity_max: string | null; medico: string | null; review_seconds: number | null; categories: Record<string, number> | null; tipo: string | null; revisore: string | null; confermata: boolean }>(
+    `with conf as (
+       select h.bozza_id, h.created_at, h.edit_count, h.edits_per_100_words::float as edits_per_100_words, h.words_total, h.severity_max, h.medico,
+              h.review_seconds, h.categories, h.editor_user_id, true as confermata
+         from audit.human_edits h where h.studio_id = $1 and h.editor_role = 'SECRETARY'),
+     lav as (
+       select distinct on (m.bozza_id) m.bozza_id, m.created_at, m.edit_count, m.edits_per_100_words::float as edits_per_100_words, m.words_total, m.severity_max, m.medico,
+              null::integer as review_seconds, m.categories, m.editor_user_id, false as confermata
+         from audit.misure_lavoro m
+        where m.studio_id = $1 and m.editor_role = 'SECRETARY'
+          and not exists (select 1 from audit.human_edits h where h.bozza_id = m.bozza_id and h.editor_role = 'SECRETARY')
+        order by m.bozza_id, m.created_at desc)
+     select x.bozza_id::text, x.created_at::text, x.edit_count, x.edits_per_100_words, x.words_total,
+            x.severity_max, x.medico, x.review_seconds, x.categories, b.tipo, u.email as revisore, x.confermata
+       from (select * from conf union all select * from lav) x join referti_bozze b on b.id = x.bozza_id
+       left join users u on u.id = x.editor_user_id
+      order by x.created_at desc limit 200`, [studioId]).catch(() => []);
   const inOrdine = [...punti].reverse();
   const valori = inOrdine.map((x) => x.edit_count);
   const finestra = valori.length >= 100 ? 50 : 20;
@@ -116,6 +129,7 @@ async function qualitaDella(studioId: string) {
     per100: statistiche(inOrdine.map((x) => x.edits_per_100_words)),
     tempo: statistiche(inOrdine.map((x) => Number(x.review_seconds ?? 0)).filter((v) => v > 0)),
     senzaCorrezioni: valori.filter((v) => v === 0).length,
+    nonConfermati: inOrdine.filter((x) => !x.confermata).length,
     categorie: Object.entries(categorie).map(([k, n]) => ({ categoria: k, n })).sort((a, b) => b.n - a.n).slice(0, 12),
     finestra,
   };

@@ -6,6 +6,7 @@
 #   - OCR dei PDF della cartella senza testo, a catena ferma, a ogni giro
 #   - promemoria SMS una volta l'ora (fa qualcosa solo se gli SMS sono attivi)
 #   - watchdog delle referral ferme una volta al giorno, la mattina
+#   - riepilogo settimanale delle correzioni sul telefono il lunedì alle 7
 #   - report mensile il 1° del mese
 # Gli endpoint sono protetti dalla chiave REMINDER_SECRET nel .env.
 set -euo pipefail
@@ -52,6 +53,10 @@ if [ "$MINUTO" -lt 15 ]; then
   chiama reminders/run
   if [ "$ORA" = "07" ]; then
     chiama cron/watchdog
+  fi
+  # Il lunedì alle 7: riepilogo delle correzioni della settimana sul telefono.
+  if [ "$ORA" = "07" ] && [ "$(date +%u)" = "1" ]; then
+    chiama cron/settimana
   fi
   if [ "$ORA" = "08" ] && [ "$GIORNO" = "01" ]; then
     chiama cron/report

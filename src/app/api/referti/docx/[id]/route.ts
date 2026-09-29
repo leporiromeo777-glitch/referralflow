@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { salvaDalModulo } from '@/lib/referti-salva';
 import { isUuid } from '@/lib/cartella';
 import { registraEvento } from '@/lib/referti-eventi';
+import { misuraAlloScaricamento } from '@/lib/audit/misura-lavoro';
 import { costruisciWord } from '@/lib/referto-word';
 
 export const runtime = 'nodejs';
@@ -32,6 +33,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   // Evento «word_scaricato» (13.9.2026): serve alla procedura «lettere in
   // ritardo» (referto confermato senza Word prodotto). Solo id, mai testo.
   void registraEvento(session.studioId, params.id, 'word_scaricato', session.id, { stato: w.stato });
+  // Misura delle correzioni anche senza «Conferma» (29.9.2026): nello studio
+  // la lettera si chiude scaricando il Word. Solo numeri, mai il testo.
+  if (w.stato === 'bozza') void misuraAlloScaricamento({ studioId: session.studioId, bozzaId: params.id, userId: session.id, ruoloUtente: session.role, momento: 'word' });
   return new NextResponse(new Uint8Array(w.docx), {
     headers: {
       'Content-Type': MIME_DOCX,

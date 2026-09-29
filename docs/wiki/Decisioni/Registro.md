@@ -424,3 +424,12 @@ Prima un blocco si scopriva solo quando un referto non arrivava. Scelta dell'ute
 telefono con ntfy (non email: sul server non c'è SMTP, e servirebbe una password da mettere a mano;
 non solo nell'app: la si vede solo aprendola). Il testo passa da ntfy.sh ed è sempre neutro. Di
 notte silenzio; il riepilogo delle 7:30 arriva ogni giorno così la sua assenza dice «Mac spento».
+
+## 29.9.2026 — Si misura anche senza «Conferma»; le correzioni si fanno nella piattaforma
+Nello studio le lettere si chiudono scaricando il Word: in due settimane 80 bozze, 42 Word, 1
+conferma. La misura delle correzioni, che partiva solo dalla conferma, non vedeva quasi niente.
+Scelta dell'utente: misurare anche al Word scaricato (solo numeri, tabella a parte) e far correggere
+la segreteria nella revisione prima di scaricare. Il recupero dei Word già scaricati dava 35 referti
+su 36 «senza correzioni»: erano stati corretti dentro Word, invisibili alla piattaforma; tolto,
+perché avrebbe mostrato una catena perfetta che non esiste. Il riepilogo del lunedì dice anche
+quanti Word escono senza correzioni qui, per vedere se l'abitudine regge.

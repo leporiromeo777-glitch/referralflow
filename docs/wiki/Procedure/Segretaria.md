@@ -1,6 +1,6 @@
 ---
 tipo: procedura
-aggiornata: 2026-09-12
+aggiornata: 2026-09-29
 ---
 # Procedure per la segreteria: dal dettato alla lettera
 
@@ -42,6 +42,8 @@ Tutto ciò che fai nel wizard si **salva da solo**: puoi chiudere e riaprire sen
 - Poi la card **Controllo della lettera** dice se qualcosa del testo di partenza è sparito o se la lettera dice qualcosa che nel testo non c'era.
 
 ## 6. Confermare e scaricare il Word
+
+**Le correzioni si fanno qui, nella revisione, PRIMA di scaricare il Word** (decisione dello studio del 29.9.2026). Ciò che si ritocca dopo dentro Word la piattaforma non lo vede: la misura di quanto la catena sbaglia (cruscotto «Qualità AI» e riepilogo del lunedì) resterebbe a zero e la catena non migliorerebbe. Se in Word serve ancora un ritocco, meglio rifarlo anche qui e riscaricare.
 - **Conferma** quando il testo è quello definitivo. Da quel momento le tue correzioni vengono contate nel cruscotto «Qualità AI» (misura del lavoro umano, non un giudizio).
 - **Scarica il Word** in carta intestata: intestazione del medico che ha dettato, destinatario su più righe, data del dettato con la tua sigla. Se scarichi PRIMA di impaginare, ottieni il testo della revisione, non una lettera.
 - Il Word si scarica anche **senza aprire la revisione**: ogni bozza della pagina Referti, aperta o confermata, ha il suo tasto «Scarica Word» (dal 23.9.2026). Scarica il testo com'è salvato in quel momento: le correzioni non salvate della revisione aperta altrove non ci sono.
