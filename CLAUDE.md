@@ -27,7 +27,7 @@ Regole d'uso in `docs/wiki/Wiki/Come si usa.md` (SilverBullet su :3400 in LAN la
   nulla in `~/referti/`, testi clinici delle bozze: solo log, numeri, booleani, codice, configurazione
   (vedi `pipeline-referti/CLAUDE.md`).
 - **Avvisare prima di spendere**: stima in CHF e ok dell'utente prima di ogni chiamata a pagamento.
-- Mai inserire credenziali. Robot MediOnline in SOLA LETTURA. Whisper turbo rifiutato: resta large-v3.
+- Mai inserire credenziali. Robot MediOnline in SOLA LETTURA; la scrittura via CalDAV resta spenta finché lo studio non la accende a mano. Whisper turbo rifiutato: resta large-v3.
 - Le correzioni umane non addestrano nulla in automatico: l'unico apprendimento è il dizionario
   confermato a mano nel cruscotto Qualità AI.
 - Ogni cambiamento va misurato (suite `prove-catastrofiche.py`, banchi, `npm run test:app`).
@@ -38,7 +38,7 @@ Regole d'uso in `docs/wiki/Wiki/Come si usa.md` (SilverBullet su :3400 in LAN la
 - Pagine che leggono dal DB: `export const dynamic = 'force-dynamic'`.
 - `src/lib/auth.ts` e `src/lib/storage.ts` sono `server-only`.
 - I prompt di `docs/trascrizione/SPEC.md` §6 non si riscrivono; `{testo}` con `str.replace`, mai `format`.
-- Migrazioni solo in avanti in `db/migrations/` (ultima: `079_misure_lavoro.sql`), appese anche a `db/schema.sql`.
+- Migrazioni solo in avanti in `db/migrations/` (ultima: `080_caldav_medionline.sql`), appese anche a `db/schema.sql`.
 - `audit.artifacts` e `audit.human_edits` sono immutabili.
 - Una tappa nuova della catena va aggiunta alla lista dell'endpoint `api/referti/bozza` o non arriva in tabella.
 

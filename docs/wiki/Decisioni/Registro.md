@@ -433,3 +433,12 @@ la segreteria nella revisione prima di scaricare. Il recupero dei Word già scar
 su 36 «senza correzioni»: erano stati corretti dentro Word, invisibili alla piattaforma; tolto,
 perché avrebbe mostrato una catena perfetta che non esiste. Il riepilogo del lunedì dice anche
 quanti Word escono senza correzioni qui, per vedere se l'abitudine regge.
+
+## 29.9.2026 — CalDAV di MediOnline nella piattaforma; scrittura pronta ma spenta
+L'utente vuole anche la scrittura. Il codice c'è (fissare e togliere un appuntamento su gesto di una
+persona, con anteprima, conferma e controllo dell'orario libero), ma resta **spento** finché nel
+file delle credenziali non si scrive a mano `CALDAV_SCRITTURA=attiva`, cosa da fare solo quando lo
+studio avrà l'utente MediOnline dedicato e l'agenda di prova chiesti il 23.9; `CALDAV_SOLO_CALENDARI`
+la limita al calendario di prova. Limite di 10 gesti l'ora per studio. La parte in sola lettura
+(calendari, controllo del robot, recupero del passato) è accesa. La regola «robot in sola lettura»
+non cambia.

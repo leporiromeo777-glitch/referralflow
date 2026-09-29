@@ -1,6 +1,6 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-09-23
+aggiornata: 2026-09-29
 ---
 # Cassa dei Medici: documenti e interfacce (ricerca del 23.9.2026)
 
@@ -124,3 +124,8 @@ indirizzi dei calendari stanno solo nel file locale delle credenziali, mai nel r
 
 Da vedere ancora come appare un evento così a chi lavora in MediOnline (colore, visibilità).
 Serve un'agenda di prova visibile, da chiedere alla Cassa insieme a un utente dedicato.
+
+## CalDAV nella piattaforma (29.9.2026)
+Nell'interfaccia nuova, pagina Agenda, riquadro «MediOnline» (`bridge/13-medionline.js`, `/api/prototipo/medionline`, `src/lib/caldav*.ts`, migrazione 080). Credenziali in `~/.referralflow-caldav.conf` (600, scritto a mano, mai nel repo).
+- **Sempre acceso (sola lettura)**, per amministrazione e tecnico: «Aggiorna i calendari» (elenco e abbinamento al medico, severo per nome, correggibile a mano), «Controlla il robot» (per giorno, appuntamenti visti dal CalDAV contro quelli del robot, 7 giorni indietro e 10 avanti), «Recupera il passato» (appuntamenti prima dell'inizio del robot in un feed a parte, spento, senza doppioni).
+- **Scrittura SPENTA di serie**: «Fissa in MediOnline» (dall'agenda e dalla scheda del paziente, con anteprima, conferma e controllo che l'orario sia libero nell'agenda vera) e «Togli» (solo eventi nati qui, UID `referralflow-…`) compaiono solo con `CALDAV_SCRITTURA=attiva` nel file delle credenziali. Da mettere a mano quando lo studio avrà un **utente MediOnline dedicato** e un'**agenda di prova**; `CALDAV_SOLO_CALENDARI=<nome>` limita la scrittura a quei calendari (all'inizio quello di prova). Mai in serie: al massimo 10 gesti l'ora per studio. PUT con `If-None-Match: *` (non sovrascrive mai).

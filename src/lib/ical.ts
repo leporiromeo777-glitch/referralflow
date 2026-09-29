@@ -98,6 +98,16 @@ function wallTimeToUtc(
   return new Date(naiveUtc + secondo);
 }
 
+// Un TZID che il motore non conosce (nomi Windows, sigle) faceva lanciare
+// un'eccezione a tutto il parser. Il CalDAV di MediOnline scrive i suoi
+// (23.9.2026): chi non si riconosce vale come ora dello studio, e le
+// virgolette attorno al nome si tolgono.
+function fusoValido(tzid: string | undefined): string {
+  const tz = String(tzid || '').replace(/^"|"$/g, '').trim();
+  if (!tz) return DEFAULT_TZ;
+  try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return tz; } catch { return DEFAULT_TZ; }
+}
+
 function parseDate(prop: RawProp): { date: Date; allDay: boolean } | null {
   const v = prop.value.trim();
   // Data intera: YYYYMMDD (mezzanotte nel fuso dello studio).
@@ -113,7 +123,7 @@ function parseDate(prop: RawProp): { date: Date; allDay: boolean } | null {
   if (z === 'Z') {
     return { date: new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +s)), allDay: false };
   }
-  const tz = prop.params.TZID || DEFAULT_TZ;
+  const tz = fusoValido(prop.params.TZID);
   return { date: wallTimeToUtc(+y, +mo, +d, +h, +mi, +s, tz), allDay: false };
 }
 

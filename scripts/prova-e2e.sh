@@ -114,6 +114,10 @@ C_MIS="$(sessione segretaria)" || C_MIS="$C_MEDICO"
 DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-misura.ts "http://localhost:$PORTA" "$C_MIS" "$STUDIO" > "$TMP/misura.txt" 2>&1 || { fallito "prova-misura"; cut -c1-300 "$TMP/misura.txt"; }
 grep -E "^NO" "$TMP/misura.txt"; echo "   $(grep -c '^ok' "$TMP/misura.txt") ok, $(grep -c '^NO' "$TMP/misura.txt") no"
 
+echo "→ MediOnline via CalDAV: scrittura spenta, nessuna chiamata"
+DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-medionline.ts "http://localhost:$PORTA" "$C_MIS" "$STUDIO" > "$TMP/medionline.txt" 2>&1 || { fallito "prova-medionline"; cut -c1-300 "$TMP/medionline.txt"; }
+grep -E "^NO" "$TMP/medionline.txt"; echo "   $(grep -c '^ok' "$TMP/medionline.txt") ok, $(grep -c '^NO' "$TMP/medionline.txt") no"
+
 echo "→ chi vede che cosa: menu dal server e rotte bloccate, ruolo per ruolo"
 B="http://localhost:$PORTA/api/prototipo"
 controlla() {   # ruolo  sezione-attesa-si  sezione-attesa-no  rotta-attesa-200  rotta-attesa-403

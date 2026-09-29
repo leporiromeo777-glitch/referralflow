@@ -58,7 +58,7 @@ function matchProvider(ev: ICalEvent, field: string, providers: Provider[]): str
 }
 
 // Nome paziente best-effort: parte del titolo prima di un separatore, senza il testo tra parentesi.
-function extractPatientName(summary: string): string {
+export function extractPatientName(summary: string): string {
   if (!summary) return '';
   let s = summary.split(/\s+[—–|;]\s+|\s+-\s+/)[0];
   s = s.replace(/\s*\(.*?\)\s*/g, ' ');
