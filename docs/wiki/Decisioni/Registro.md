@@ -424,3 +424,19 @@ Prima un blocco si scopriva solo quando un referto non arrivava. Scelta dell'ute
 telefono con ntfy (non email: sul server non c'è SMTP, e servirebbe una password da mettere a mano;
 non solo nell'app: la si vede solo aprendola). Il testo passa da ntfy.sh ed è sempre neutro. Di
 notte silenzio; il riepilogo delle 7:30 arriva ogni giorno così la sua assenza dice «Mac spento».
+
+## 29.9.2026 — Piattaforma su Next 16 e React 19
+Next 14.2 era fuori manutenzione e `npm audit` segnava 5 advisory (1 critica su Next, le altre su
+postcss e nanoid che Next si porta dietro). Passata a Next 16.3.7 e React 19.3.0, non a Next 15:
+le rotture (API di richiesta asincrone) sono le stesse e la 16 chiude tutte le advisory di Next.
+Che cosa è cambiato: `params`, `searchParams`, `cookies()` e `headers()` si attendono (codemod
+ufficiale, 31 pagine, 36 rotte, 6 azioni, `auth.ts`); `middleware.ts` → `src/proxy.ts` (runtime
+Node); `experimental.serverComponentsExternalPackages` → `serverExternalPackages` in cima (stessi
+pacchetti); `useFormState` → `useActionState`; `proxyClientMaxBodySize` a 12 MB come le server
+action (di serie il proxy tronca i corpi oltre 10 MB). Build con Turbopack: non c'era configurazione
+webpack da portare, quindi niente `--webpack`. Due scelte collaterali: `next-env.d.ts` non si
+traccia più (Next 16 lo riscrive a ogni build e dev, e un file tracciato sporco blocca
+l'aggiornamento `--ff-only` del servizio); il blocco `nextjs-agent-rules` che `next dev` aggiunge a
+CLAUDE.md quando lo lancia un agente è committato, per lo stesso motivo. React 19 svuota i moduli
+dopo un'azione: il login rimette l'email. Prove: tsc, build, 339 unitarie, 25 audit, e2e tutto ok
+([[Misure/Banchi]]).

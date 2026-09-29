@@ -1,6 +1,6 @@
 ---
 tipo: misure
-aggiornata: 2026-09-22
+aggiornata: 2026-09-29
 ---
 # Banchi e misure
 
@@ -267,3 +267,17 @@ Dal 27.9.2026 18/18: più «Allegati» — un automatico tolto non parte e si ri
 
 ## Base della misura delle correzioni — 29.9.2026
 Sul DB vero (solo conteggi): dal 31.8 13 revisioni misurate (tutte della segretaria), mediana per settimana 7,1 → 5,1 → 3,7 → 0,0 correzioni ogni 100 parole; ma nelle ultime due settimane 80 bozze arrivate e **1 sola confermata** — la misura parte alla conferma, quindi oggi vede pochissimo. Nessuna revisione misurata aveva ancora lettera aggiornata, istruzioni o seconda traccia: la base sbagliata non ha falsato numeri passati. End-to-end (`npm run test:e2e`): lettera aggiornata applicata e annullata → base giusta (2 controlli nuovi, 12/12), istruzioni annullate e «in fondo» (2 nuovi, 6/6), seconda traccia dall'endpoint vero della catena in fondo alla bozza e base = testo intero (2/2).
+
+## Next 16 e React 19 — 29.9.2026
+Worktree separato, DB demo, nessun servizio toccato. Stessi banchi prima (Next 14.2.35) e dopo (Next 16.3.7 + React 19.3.0).
+
+| Banco | Next 14 | Next 16 |
+|---|---|---|
+| `npx tsc --noEmit -p .` | 0 errori | 0 errori |
+| `npm run build` | — | ok (Turbopack, 8,2 s da `.next` vuota, 141 rotte dinamiche e 3 statiche, 14 avvisi di tracciamento attesi) |
+| `npm run test:app` | 339/339 | 339/339 |
+| `npm run test:audit` | 25/25 | 25/25 |
+| `npm run test:e2e` (porta 3011) | TUTTO OK | TUTTO OK — righello 42/42, segreteria 403, regressione misure, serie 19/19, giornata, e-mail 25/25, documenti 16/16 (OCR 2/2), lettera aggiornata 12/12, istruzioni 6/6, tracce 2/2, menu per ruolo 13/12/17/18/19 |
+| `next start` (porta 3012) | — | `/login` 200, `/prototipo/` 200 (dopo i redirect), `/` → `/prototipo/index.html`, `/referti` senza sessione → `/login?next=…`, `/api/cron/istruzioni` senza chiave 404 (scelta del codice, non 500), CSP e intestazioni invariate |
+| browser su `next start` | — | login sbagliato: «Credenziali non valide», email rimasta, 0 errori di console; prototipo disegnato |
+| `npm audit` | 5 (4 alte, 1 critica) | 2 alte (`nodemailer`, `@xmldom/xmldom`), nessuna su Next |

@@ -1,6 +1,6 @@
 ---
 tipo: indice
-aggiornata: 2026-09-16
+aggiornata: 2026-09-29
 ---
 # Wiki di ReferralFlow
 
@@ -14,7 +14,7 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 
 ## Piattaforma (Next.js)
 - [[Piattaforma/Stack e comandi]]
-- [[Piattaforma/Architettura]] — cartelle, recinto multi-studio, middleware, ciclo di vita referral
+- [[Piattaforma/Architettura]] — cartelle, recinto multi-studio, proxy (ex middleware), ciclo di vita referral
 - [[Piattaforma/Server Mac mini]] — servizi launchd, aggiornamento, backup
 - [[Piattaforma/Demo pubblica]] — la piattaforma vera con dati inventati, raggiungibile da fuori con un link
 - [[Piattaforma/Una interfaccia sola]] — l'interfaccia è quella nuova; che cosa resta nelle pagine vecchie

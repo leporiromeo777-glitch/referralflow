@@ -1,7 +1,7 @@
 # ReferralFlow — contesto per Claude Code
 
 Piattaforma multi-studio per la gestione delle referral tra studi medici svizzeri
-(Next.js 14 + PostgreSQL) più la catena locale di trascrizione dei referti
+(Next.js 16 + React 19 + PostgreSQL) più la catena locale di trascrizione dei referti
 (`pipeline-referti/`, Python 3.14, whisper + Voxtral + modelli Ollama, modello
 esterno con testo pseudonimizzato). Cliente pilota: Centro Cardiologico Ticino.
 Il Mac mini dello studio è il server e questo repo è il suo checkout.
@@ -33,8 +33,8 @@ Regole d'uso in `docs/wiki/Wiki/Come si usa.md` (SilverBullet su :3400 in LAN la
 - Ogni cambiamento va misurato (suite `prove-catastrofiche.py`, banchi, `npm run test:app`).
 
 ## NON rompere (dettaglio in `docs/wiki/Regole/NON rompere.md`)
-- `experimental.serverComponentsExternalPackages: ['@node-rs/argon2', 'pg']` in `next.config.mjs`.
-- Node 20+; `python3.14` di Homebrew per la catena; `timeout` non esiste su macOS.
+- `serverExternalPackages: ['@node-rs/argon2', 'pg', 'pdf-parse']` in `next.config.mjs` (in cima, non in `experimental`).
+- Node 20.9+ (Next 16); `python3.14` di Homebrew per la catena; `timeout` non esiste su macOS.
 - Pagine che leggono dal DB: `export const dynamic = 'force-dynamic'`.
 - `src/lib/auth.ts` e `src/lib/storage.ts` sono `server-only`.
 - I prompt di `docs/trascrizione/SPEC.md` §6 non si riscrivono; `{testo}` con `str.replace`, mai `format`.
@@ -54,3 +54,13 @@ Regole d'uso in `docs/wiki/Wiki/Come si usa.md` (SilverBullet su :3400 in LAN la
 ## Convenzioni
 UI e testi in italiano, sentence case, tono asciutto; palette verde `--cta` #0d5c48 su bianco caldo, niente nero;
 server components + server actions dove possibile. Dettaglio in `docs/wiki/Piattaforma/Convenzioni UI.md`.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

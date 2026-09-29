@@ -1,6 +1,6 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-09-23
+aggiornata: 2026-09-29
 ---
 # Accessi e ruoli
 
@@ -30,7 +30,7 @@ Negli stessi ruoli esiste anche la [[Piattaforma/Demo pubblica]], con una passwo
 **Un account per funzione non è un account per persona.** Finché i cinque cardiologi entrano tutti da `medico@`, la pagina Visite non può dire «i *tuoi* pazienti» senza chiederlo, e il registro dice «un medico», non quale. Il passo successivo è un utente per ogni cardiologo, collegato al suo `providers.user_id`: da lì la domanda «chi sei?» sparisce da sola e ogni gesto ha un nome.
 
 ## Chi vede che cosa (23.9.2026)
-Decisione dello studio: ogni ruolo vede le sezioni del suo lavoro e ha la sua home. **Il tecnico vede tutto**: è chi amministra la piattaforma (fino al 22.9 era tenuto fuori dai dati clinici; decisione cambiata dallo studio). Una tabella sola, `src/lib/permessi.ts`, usata da tre posti: il menu (le sezioni arrivano con `/api/prototipo/dati` → `sezioni`), le rotte del server (`vietato(ruolo, sezione)` → 403 in 25 rotte di `/api/prototipo/`) e il middleware per le pagine della vecchia interfaccia. Chi apre a mano l'indirizzo di una sezione non sua torna alla home.
+Decisione dello studio: ogni ruolo vede le sezioni del suo lavoro e ha la sua home. **Il tecnico vede tutto**: è chi amministra la piattaforma (fino al 22.9 era tenuto fuori dai dati clinici; decisione cambiata dallo studio). Una tabella sola, `src/lib/permessi.ts`, usata da tre posti: il menu (le sezioni arrivano con `/api/prototipo/dati` → `sezioni`), le rotte del server (`vietato(ruolo, sezione)` → 403 in 25 rotte di `/api/prototipo/`) e il proxy (`src/proxy.ts`, ex middleware) per le pagine della vecchia interfaccia. Chi apre a mano l'indirizzo di una sezione non sua torna alla home.
 
 | sezione | medico | aiuto medico | segreteria | amministrazione | tecnico |
 |---|---|---|---|---|---|

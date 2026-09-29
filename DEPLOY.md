@@ -46,7 +46,7 @@ npm run start        # dietro reverse proxy (nginx/caddy) con HTTPS
 - [ ] Reverse proxy con HTTPS, HSTS e limite dimensione upload coerente con gli allegati.
 
 ## 5. Sicurezza / nLPD — verifiche finali
-- [ ] Tutte le pagine interne redirigono a `/login` senza sessione (il middleware protegge
+- [ ] Tutte le pagine interne redirigono a `/login` senza sessione (il proxy, `src/proxy.ts`, protegge
       tutto tranne `/login`, `/invia/*`, `/portale/*`, `/api/*`).
 - [ ] I token dei link pubblici scadono (180 giorni) e si rigenerano dalla pagina Medici.
 - [ ] Le notifiche email non contengono dati clinici né nomi di pazienti (solo link al portale).
@@ -59,8 +59,7 @@ npm run start        # dietro reverse proxy (nginx/caddy) con HTTPS
 - [ ] Verificare la mappatura dei medici (alias) sul primo sync reale.
 
 ## 7. Debito noto (non blocca il go-live, da pianificare)
-- Next.js 14.2.35: le advisory residue di `npm audit` richiedono Next 16 (migrazione con
-  modifiche al codice). Riguardano feature non usate dall'app (Image Optimizer, WebSocket,
-  script `beforeInteractive`), ma la migrazione va messa in calendario.
+- Migrazione a Next 16 fatta il 29.9.2026 (Next 16.3.7, React 19.3): restano 2 advisory
+  alte fuori da Next (`nodemailer`, `@xmldom/xmldom` via `mammoth`), chiudibili con `npm audit fix`.
 - Sync automatico del feed agenda (oggi manuale con «Sincronizza ora»).
 - Rate limiting sul login e sulle pagine pubbliche (mitigato da token lunghi e argon2id).

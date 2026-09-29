@@ -1,20 +1,20 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-09-11
+aggiornata: 2026-09-29
 ---
 # Stack e comandi
 
 ReferralFlow è una piattaforma multi-studio per la gestione delle referral tra studi medici svizzeri. Ogni studio ha i suoi utenti, medici invianti, pazienti, referral e agenda (tabella `studios`, `studio_id` su tutte le anagrafiche, recinto in ogni query tramite `session.studioId`). Sta *sopra* gli strumenti già in uso (Cassa dei Medici per agenda/fatturazione, HIN per la comunicazione sicura). Cliente pilota reale: Centro Cardiologico Ticino (slug `centro-cardiologico-ticino`). Obiettivo: rivendere ad altri studi specialistici del Ticino.
 
 ## Stack
-- Next.js 14 (App Router) + TypeScript, server actions
+- Next.js 16 (App Router, build con Turbopack) + React 19 + TypeScript, server actions (dal 29.9.2026; prima Next 14.2)
 - PostgreSQL via `pg`
 - Auth: cookie httpOnly firmato con `jose`, password argon2id con `@node-rs/argon2`
 - Allegati: `@aws-sdk/client-s3` (object storage svizzero) con fallback su `./uploads` in dev
 
 ## Comandi
 - `npm run dev` — sviluppo su http://localhost:3000
-- `npm run build` — build di produzione
+- `npm run build` — build di produzione (Turbopack, circa 8 s sul Mac mini; `next dev` scrive in `.next/dev`, quindi dev e build non si pestano più i piedi). I 14 avvisi «Dynamic filesystem access causes tracing of the whole project» sono attesi: riguardano solo il tracciamento per `output: 'standalone'`, che non si usa
 - `npm run create-studio -- "<Nome>" <slug> [email-notifiche]`
 - `npm run create-user -- <email> <password> [ruolo] [slug-studio]` (ruoli: segretaria, medico, admin; l'admin gestisce gli accessi da `/impostazioni/utenti`)
 - Schema: `psql "$DATABASE_URL" -f db/schema.sql` (+ `db/seed-demo.sql`; il vecchio `db/seed.sql` è pre-migrazione 007 e non funziona più)

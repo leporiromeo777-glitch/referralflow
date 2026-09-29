@@ -1,13 +1,14 @@
 ---
 tipo: regola
-aggiornata: 2026-09-11
+aggiornata: 2026-09-29
 ---
 # NON rompere
 
-- Non toccare `experimental.serverComponentsExternalPackages: ['@node-rs/argon2', 'pg']` in `next.config.mjs`: senza, il build fallisce sui binari nativi (`pdf-parse` v2 sta nella stessa lista).
-- Serve Node 20+ (per `--env-file` e i binari argon2).
+- Non toccare `serverExternalPackages: ['@node-rs/argon2', 'pg', 'pdf-parse']` in `next.config.mjs` (chiave in cima, non dentro `experimental`: fino a Next 14 era `experimental.serverComponentsExternalPackages`): senza, il build fallisce sui binari nativi e `pdf-parse` v2 non trova i suoi file.
+- Serve Node 20.9+ (Next 16; `--env-file` e i binari argon2). Sul Mac dello studio c'è Node 26.
+- Next 16: `params`, `searchParams`, `cookies()` e `headers()` sono asincroni — sempre `await`, niente accesso sincrono (non esiste più). `next-env.d.ts` non si traccia (lo riscrive ogni build/dev).
 - Le pagine che leggono dal DB hanno `export const dynamic = 'force-dynamic'`: mantienilo, evita che Next provi a prerenderarle al build.
-- `src/lib/auth.ts` e `src/lib/storage.ts` sono lato server (`import 'server-only'`): non importarli in componenti client. Il middleware verifica il JWT da solo.
+- `src/lib/auth.ts` e `src/lib/storage.ts` sono lato server (`import 'server-only'`): non importarli in componenti client. Il proxy (`src/proxy.ts`, fino a Next 14 `middleware.ts`) verifica il JWT da solo.
 - I prompt di `docs/trascrizione/SPEC.md` §6 (`PROMPT_CORREZIONE`, `PROMPT_ESTRAZIONE`, …) sono validati su referti reali e copiati carattere per carattere: non riscriverli. I prompt nuovi (arbitro, omissioni, terapia, coerenza, lettera) hanno le loro pagine in [[Catena/Panoramica]].
 - Il segnaposto `{testo}` nei prompt si riempie con `str.replace`, mai con `format` (il testo può contenere graffe).
 - Le migrazioni sono solo in avanti (`db/migrations/0XX_*.sql`, ultima `067_referti_audio_aggiunge_a.sql`) e vanno appese anche a `db/schema.sql`. **Non è una formalità**: il 18.9.2026 si è scoperto che 025, 028, 029 e 030 non erano mai state appese, e un database nuovo nasceva senza `referti_eventi` — cioè con ogni conferma di referto che esplode. La prova era il database della demo, nato da quel file.
