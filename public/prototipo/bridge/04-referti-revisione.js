@@ -66,7 +66,7 @@ reportsQueue = function () {
     <div class="page-head"><div><h2 class="page-title">Referti</h2><div class="page-sub">${aperti.length} da controllare · ${tot} verifiche · ${crit} critiche · ${chiusi.length} confermati negli ultimi 30 giorni</div></div>
       <div class="actions"><div class="seg">${[['priority', 'Priorità'], ['time', 'Ora'], ['doctor', 'Medico'], ['patient', 'Paziente']].map(([k, l]) => `<button class="${sort === k ? 'active' : ''}" onclick="state.qSort='${k}';render()">${l}</button>`).join('')}</div><button class="btn" data-go="#/dittafono">${ICONS.mic || ''} Detta dal telefono</button></div></div>
     <div class="card mb-16" id="rf-intake">
-      <div class="card-head"><span class="section-title">Nuovo dettato</span><span class="caption">DS2, m4a, wav, mp3 · va alla coda della catena</span></div>
+      <div class="card-head"><span class="section-title">Nuovo dettato</span><span class="row" style="gap:10px;align-items:center"><span class="caption">DS2, m4a, wav, mp3 · va alla coda della catena</span><button class="btn sm" onclick="rfCartellaDettati()">Cartella sul computer</button></span></div>
       <div class="row wrap" style="gap:10px;align-items:center">
         <select id="rf-intake-medico" class="input sm">${medici.map(m => `<option value="${rfEsc(m.id)}">${rfEsc(m.nome)}</option>`).join('')}</select>
         <select id="rf-intake-tipo" class="input sm"><option value="referto">Referto</option><option value="visita">Visita registrata</option></select>
@@ -1379,4 +1379,39 @@ async function rfEmailPrepara(id) {
       toast('Mail pronta: aprila e premi Invia dal programma di posta');
     } catch { toast('Non riesco a raggiungere la piattaforma'); }
   };
+}
+
+
+/* ---------- «Cartella sul computer» (1.10.2026) ----------
+   Collega la cartella «Audio da trascrivere» del Mac server sulla Scrivania
+   di questo computer (solo nella rete dello studio): su Windows si scarica
+   un .bat, sul Mac si apre l'indirizzo smb:// e si tiene l'alias. Chi ci
+   mette un audio lo manda alla catena, come trascinarlo qui. */
+async function rfCartellaDettati() {
+  let d = null;
+  try {
+    const r = await fetch('/api/prototipo/cartella-dettati', { credentials: 'include', cache: 'no-store' });
+    d = await r.json().catch(() => null);
+    if (!r.ok) { toast((d && d.errore === 'non_permesso') ? 'Il tuo ruolo non può farlo.' : 'La piattaforma non risponde.'); return; }
+  } catch (e) { toast('La piattaforma non risponde.'); return; }
+  const win = /Windows/i.test(navigator.userAgent);
+  const mac = /Macintosh|Mac OS X/i.test(navigator.userAgent) && !('ontouchend' in document);
+  const nome = rfEsc(d.nome);
+  const comune = `<p class="meta" style="margin:0 0 10px;line-height:1.55">La cartella <b>${nome}</b> sta sul Mac dello studio ed è la stessa per tutti: un audio messo lì entra nella catena da solo, uno alla volta, e a lavoro finito passa in «Audio trascritti». Nelle sottocartelle con il nome del medico il dettato prende quel medico. Funziona solo nella rete dello studio.</p>`;
+  if (!d.condivisa) {
+    openModal('Cartella sul computer', comune + `<div class="alert important"><div><div class="a-title">Non ancora pronta</div><div class="a-body">Sul Mac server la cartella non è condivisa in rete. Va fatto una volta, da chi amministra il Mac: Impostazioni di Sistema → Generali → Condivisione → Condivisione documenti → «+» → la cartella «${nome}» sulla Scrivania, con lettura e scrittura per l’utente dello studio e nessun accesso agli ospiti.</div></div></div>`, '<button class="btn primary" data-close>Chiudi</button>');
+    return;
+  }
+  const passiWin = `<ol class="rf-mol-lista"><li>Scarica il file e aprilo (se Windows avvisa: «Ulteriori informazioni» → «Esegui comunque»).</li><li>La prima volta scrivi utente e password della condivisione dello studio: Windows li ricorda.</li><li>Sulla Scrivania compare <b>${nome}</b>.</li></ol>`;
+  const passiMac = `<ol class="rf-mol-lista"><li>«Apri nel Finder»: se lo chiede, scrivi utente e password della condivisione dello studio e spunta «Ricorda questa password nel portachiavi».</li><li>Nel Finder, a sinistra sotto «Posizioni», trascina la cartella <b>${nome}</b> sulla Scrivania tenendo premuti <b>⌘ e ⌥</b>: diventa un alias che si riapre con un doppio clic.</li></ol>`;
+  const corpo = comune
+    + (d.ospite ? '<div class="alert critical mb-16"><div><div class="a-title">Aperta anche agli ospiti</div><div class="a-body">Per dati di pazienti va tolto l’accesso «Ospite» nelle impostazioni di condivisione del Mac.</div></div></div>' : '')
+    + (win || !mac ? `<div class="mt-8"><b>Windows</b>${passiWin}</div>` : '')
+    + (mac || !win ? `<div class="mt-16"><b>Mac</b>${passiMac}<div class="caption mt-8">Se il nome non risponde: <span class="num">${rfEsc(d.smbIp || '')}</span></div></div>` : '');
+  const tasti = [
+    (win || !mac) ? `<a class="btn${win ? ' primary' : ''}" href="/api/prototipo/cartella-dettati?file=win" download>Scarica per Windows</a>` : '',
+    (mac || !win) ? `<a class="btn${mac ? ' primary' : ''}" href="${rfEsc(d.smb)}">Apri nel Finder</a>` : '',
+    '<button class="btn" data-close>Chiudi</button>',
+  ].join('');
+  openModal('Cartella sul computer', corpo, tasti);
 }

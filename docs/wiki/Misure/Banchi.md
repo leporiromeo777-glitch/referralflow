@@ -285,3 +285,5 @@ Worktree separato, DB demo, nessun servizio toccato. Stessi banchi prima (Next 1
 | `next start` (porta 3012) | — | `/login` 200, `/prototipo/` 200 (dopo i redirect), `/` → `/prototipo/index.html`, `/referti` senza sessione → `/login?next=…`, `/api/cron/istruzioni` senza chiave 404 (scelta del codice, non 500), CSP e intestazioni invariate |
 | browser su `next start` | — | login sbagliato: «Credenziali non valide», email rimasta, 0 errori di console; prototipo disegnato |
 | `npm audit` | 5 (4 alte, 1 critica) | 2 alte (`nodemailer`, `@xmldom/xmldom`), nessuna su Next |
+
+**Cartella sul computer** (1.10.2026): 4 prove pure (`prove-cartella-dettati.test.ts`: lettura di `sharing -l`, indirizzo smb con gli spazi, `.bat` CRLF con nome poi indirizzo e senza credenziali, valori che non escono dalle virgolette) — suite 355/355; end-to-end 3/3 (stato, nessun `.bat` se la cartella non è condivisa, 401 senza sessione).

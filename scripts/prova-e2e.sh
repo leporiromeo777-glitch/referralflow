@@ -118,6 +118,10 @@ echo "→ MediOnline via CalDAV: scrittura spenta, nessuna chiamata"
 DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-medionline.ts "http://localhost:$PORTA" "$C_MIS" "$STUDIO" > "$TMP/medionline.txt" 2>&1 || { fallito "prova-medionline"; cut -c1-300 "$TMP/medionline.txt"; }
 grep -E "^NO" "$TMP/medionline.txt"; echo "   $(grep -c '^ok' "$TMP/medionline.txt") ok, $(grep -c '^NO' "$TMP/medionline.txt") no"
 
+echo "→ cartella dei dettati sul computer: stato della condivisione, file per Windows"
+npx tsx scripts/e2e/prova-cartella-dettati.ts "http://localhost:$PORTA" "$C_MIS" > "$TMP/cartella.txt" 2>&1 || { fallito "prova-cartella-dettati"; cut -c1-300 "$TMP/cartella.txt"; }
+grep -E "^NO" "$TMP/cartella.txt"; echo "   $(grep -c '^ok' "$TMP/cartella.txt") ok, $(grep -c '^NO' "$TMP/cartella.txt") no"
+
 echo "→ chi vede che cosa: menu dal server e rotte bloccate, ruolo per ruolo"
 B="http://localhost:$PORTA/api/prototipo"
 controlla() {   # ruolo  sezione-attesa-si  sezione-attesa-no  rotta-attesa-200  rotta-attesa-403

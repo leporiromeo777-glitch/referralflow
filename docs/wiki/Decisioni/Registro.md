@@ -458,3 +458,12 @@ l'aggiornamento `--ff-only` del servizio); il blocco `nextjs-agent-rules` che `n
 CLAUDE.md quando lo lancia un agente è committato, per lo stesso motivo. React 19 svuota i moduli
 dopo un'azione: il login rimette l'email. Prove: tsc, build, 339 unitarie, 25 audit, e2e tutto ok
 ([[Misure/Banchi]]).
+
+## 1.10.2026 — La cartella dei dettati sulla Scrivania di tutti, solo in studio
+Richiesta dello studio: un tasto che metta sulla Scrivania una cartella collegata a ReferralFlow e
+condivisa fra tutti, per gli audio da trascrivere, su Windows e Mac. Un sito non può creare cartelle
+sul computer: il tasto dà un file per Windows e l'indirizzo per il Finder sul Mac, verso la
+cartella «Audio da trascrivere» già esistente. Solo nella rete dello studio (SMB del Mac), nessun
+cloud. La condivisione in rete la attiva a mano chi amministra il Mac (impostazioni di sistema);
+nessuna credenziale nei file scaricati. Visto il 1.10: sul Mac le «Cartelle pubbliche» sono
+condivise con accesso ospite in scrittura — da togliere.
