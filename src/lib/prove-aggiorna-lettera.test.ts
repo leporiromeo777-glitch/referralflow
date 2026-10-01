@@ -1,7 +1,7 @@
 // Aggiornamento della lettera vecchia (28.9.2026). Lettere e dettati inventati.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { aggiorna, confronta, dividi, eFemminile, frasePerIlControllo, mesiDelControllo } from './aggiorna-lettera';
+import { aggiorna, confronta, dividi, eFemminile, frasePerIlControllo, mesiDelControllo, ortografiaDallaLettera, stampella } from './aggiorna-lettera';
 
 const VECCHIA = `Caro Luca,
 
@@ -147,4 +147,37 @@ test('impaginazione come la lettera vecchia: paragrafi, righe a sé, conclusione
   // Una lettera vecchia in un paragrafo solo resta in un paragrafo solo.
   const unico = aggiorna({ lettera: vecchia.replace(/\n+/g, ' ').replace('Caro Luca, ', 'Caro Luca,\n\n'), dettato, oggi: '28.09.2026', femminile: false });
   assert.ok(!('errore' in unico) && !/\n/.test(unico.testo.replace(/^Caro Luca,\n\n/, '')));
+});
+
+// ── Lettera più recente come aiuto (1.10.2026) ──────────────────────────────
+const LETTERA_AIUTO = `Caro Luca,
+
+rivedo in data 05.06.2024 il Signor Rossetti in terapia con Bisoprololo e Rivaroxaban. FRCV: ipertensione arteriosa, dislipidemia. Comorbidità: ipertiroidismo.
+
+All'ECG ritmo sinusale.
+
+In conclusione situazione stabile. Cordiali saluti,`;
+
+test('aiuto: l\'ortografia dalla lettera, solo dove è sicura', () => {
+  const r = ortografiaDallaLettera('Rivedo il Signor Rosetti in terapia con bisoprorolo e Rivaroxaban 20 mg. Comorbidità: ipotiroidismo. I pazienti stanno bene.', LETTERA_AIUTO);
+  assert.match(r.testo, /Signor Rossetti/, 'il nome come nella lettera');
+  assert.match(r.testo, /con Bisoprololo/, 'il farmaco come nella lettera');
+  assert.match(r.testo, /ipotiroidismo/, 'ipo/iper: mai toccato');
+  assert.match(r.testo, /I pazienti/, 'una desinenza diversa non è un errore');
+  assert.match(r.testo, /20 mg/);
+  assert.deepEqual(r.correzioni.map((c) => c.a).sort(), ['Bisoprololo', 'Rossetti']);
+  // Due parole possibili nella lettera: non si indovina.
+  assert.equal(ortografiaDallaLettera('Carvedilolo', 'Carvedilola Carvedilolu').testo, 'Carvedilolo');
+});
+
+test('aiuto: impaginazione come la lettera, contenuto del dettato', () => {
+  const dettato = 'Caro Luca, rivedo il Signor Rosetti. FRCV: ipertensione arteriosa. Clinicamente PA 130/80 mmHg. All\'ECG ritmo sinusale. In conclusione quadro stabile.';
+  const r = stampella({ lettera: LETTERA_AIUTO, dettato });
+  assert.ok(r.impaginata);
+  assert.match(r.testo, /^Caro Luca,\n\n/);
+  assert.match(r.testo, /arteriosa\.\n\nClinicamente/, 'la visita in un paragrafo a sé, come nella lettera');
+  assert.match(r.testo, /\n\nIn conclusione quadro stabile\.$/, 'la conclusione a capo, come nella lettera');
+  assert.match(r.testo, /Rossetti/);
+  assert.match(r.testo, /PA 130\/80 mmHg/);
+  assert.doesNotMatch(r.testo, /Bisoprololo|05\.06\.2024/, 'niente contenuto preso dalla lettera');
 });

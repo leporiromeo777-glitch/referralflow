@@ -6,8 +6,8 @@ import { nomePerConfronto } from './referti-allegati';
 import { pazienteDelReferto } from './referti-inviante';
 import { formatoPerBozza } from './referti-medici';
 import { etichettaDocumento } from './referti-allegato-blocco';
-import { aggiorna, eFemminile, pulisciScansione, richiestaAggiornamento, type Proposta } from './aggiorna-lettera';
-import { cercaPagine, etichettaData, rxDataPagina, type DataCercata } from './cerca-in-cartella';
+import { aggiorna, eFemminile, pulisciScansione, richiestaAggiornamento, stampella, type Correzione, type Proposta } from './aggiorna-lettera';
+import { cercaPagine, etichettaData, lettereNellePagine, rxDataPagina, type DataCercata } from './cerca-in-cartella';
 import { registraTestoMacchina } from './audit/lineage';
 
 // Aggiornamento della lettera vecchia, lato piattaforma (28.9.2026). Parte
@@ -132,7 +132,9 @@ async function bozza(studioId: string, id: string): Promise<Bozza | null> {
 export type StatoAggiornamento = {
   abilitato: boolean;
   richiesta: { dal_dettato: boolean; data: string | null } | null;
-  applicato: { quando: string; fonte: Fonte; mesi: number; novita_aggiunte: number; automatico: boolean; novita: string[] } | null;
+  applicato: { quando: string; fonte: Fonte; mesi: number; novita_aggiunte: number; automatico: boolean; novita: string[]; stampella?: boolean; correzioni?: Correzione[]; avviso?: string | null } | null;
+  // La lettera chiesta non c'è: la più recente fa da aiuto (ortografia e impaginazione).
+  stampella: { fonte: Fonte; testo: string; correzioni: Correzione[]; impaginata: boolean } | null;
   fonte: Fonte | null;
   proposta: Proposta | null;
   errore: string | null;
@@ -149,11 +151,11 @@ export async function statoAggiornamento(studioId: string, bozzaId: string): Pro
   const b = await bozza(studioId, bozzaId);
   if (!b) return null;
   const p = b.payload ?? {};
-  const vuoto: StatoAggiornamento = { abilitato: false, richiesta: null, applicato: null, fonte: null, proposta: null, errore: null, scelte: [] };
+  const vuoto: StatoAggiornamento = { abilitato: false, richiesta: null, applicato: null, fonte: null, proposta: null, errore: null, scelte: [], stampella: null };
   if (!medicoAggiornaLettera(p.medico?.id) || b.stato !== 'bozza') return vuoto;
   const base = { ...vuoto, abilitato: true };
   const ag = p.aggiornamento_lettera;
-  if (ag?.applicato_il) return { ...base, applicato: { quando: ag.applicato_il, fonte: ag.fonte, mesi: ag.mesi, novita_aggiunte: ag.novita_aggiunte ?? 0, automatico: !!ag.automatico, novita: Array.isArray(ag.novita) ? ag.novita : [] } };
+  if (ag?.applicato_il) return { ...base, applicato: { quando: ag.applicato_il, fonte: ag.fonte, mesi: ag.mesi, novita_aggiunte: ag.novita_aggiunte ?? 0, automatico: !!ag.automatico, novita: Array.isArray(ag.novita) ? ag.novita : [], stampella: !!ag.stampella, correzioni: Array.isArray(ag.correzioni) ? ag.correzioni : [], avviso: ag.avviso ?? null } };
 
   const note = Array.isArray(p.note_segreteria) ? p.note_segreteria.filter((n: unknown): n is string => typeof n === 'string') : [];
   const quando = p.dettato_il && !Number.isNaN(Date.parse(p.dettato_il)) ? new Date(p.dettato_il) : new Date(b.created_at);
@@ -173,9 +175,17 @@ export async function statoAggiornamento(studioId: string, bozzaId: string): Pro
   if (!vecchia) {
     const tutte = await elencoLettere(studioId, bozzaId, nome);
     const msg = !nome ? 'Manca il nome del paziente nei campi: senza, la lettera vecchia non si trova.'
-      : data ? `Il medico chiede la lettera del ${etichettaData(data)}, ma non la trovo né tra i referti confermati né nella cartella. Sceglila a mano.`
+      : data ? `Il medico chiede la lettera del ${etichettaData(data)}, ma non la trovo né tra i referti confermati né nella cartella.`
       : 'Nessuna lettera vecchia di questo paziente, né tra i referti confermati né nella cartella.';
-    return { ...base, richiesta, errore: msg, scelte: tutte };
+    // Lettera chiesta che non c'è (1.10.2026, decisione dello studio): la più
+    // recente del paziente fa da aiuto per ortografia e impaginazione; il
+    // contenuto resta il dettato e l'avviso resta.
+    const piu = !scelta && nome ? await letteraPiuRecente(studioId, bozzaId, nome) : null;
+    if (piu) {
+      const s = stampella({ lettera: piu.testo, dettato: String(b.testo_finale ?? grezzo) });
+      return { ...base, richiesta, errore: msg, scelte: tutte, stampella: { fonte: piu.fonte, ...s } };
+    }
+    return { ...base, richiesta, errore: `${msg} Sceglila a mano.`, scelte: tutte };
   }
   const dettato = String(b.testo_finale ?? grezzo);
   let sesso: string | null = null;
@@ -248,8 +258,12 @@ export async function annullaAggiornamento(studioId: string, bozzaId: string): P
 // nuove, che restano da spuntare, e solo se le anamnesi si somigliano
 // abbastanza (se no resta una proposta con l'avviso). «Annulla» torna al
 // dettato. Best-effort: un intoppo qui non ferma la consegna.
-export async function aggiornamentoAutomatico(studioId: string, bozzaId: string): Promise<'applicato' | 'proposta' | 'niente'> {
+export async function aggiornamentoAutomatico(studioId: string, bozzaId: string): Promise<'applicato' | 'proposta' | 'niente' | 'stampella'> {
   const s = await statoAggiornamento(studioId, bozzaId);
+  if (s?.abilitato && s.richiesta && !s.proposta && s.stampella) {
+    const r = await applicaStampella(studioId, bozzaId, null, true);
+    return 'ok' in r ? 'stampella' : 'niente';
+  }
   if (!s?.abilitato || !s.richiesta || !s.proposta) return 'niente';
   if (s.proposta.somiglianza < 0.35) return 'proposta';
   const r = await applicaAggiornamento(studioId, bozzaId, null, [], true);
@@ -280,4 +294,62 @@ export async function aggiungiNovita(studioId: string, bozzaId: string, scelte: 
       where id = $1 and studio_id = $2 and stato = 'bozza' returning id`,
     [bozzaId, studioId, nuovo, JSON.stringify(resto), `${vecchia} ${frasi.join(' ')}`, (Number(ag.novita_aggiunte) || 0) + frasi.length]);
   return ok ? { ok: true } : { errore: 'La bozza non è più aperta.' };
+}
+
+
+// La lettera più recente del paziente, fra referti confermati, lettere in
+// cartella e lettere dentro le cartelle scansionate (con la loro data, letta
+// in testa alla lettera; se non c'è, la data del caricamento).
+export async function letteraPiuRecente(studioId: string, bozzaId: string, nome: string): Promise<Trovata | null> {
+  const cand: { t: Trovata; quando: number }[] = [];
+  const conData = (d: Date | null, alt: Date) => (d ?? alt).getTime();
+  for (const t of await lettereVecchie(studioId, bozzaId, nome, null)) {
+    let quando = Number.NaN;
+    if (t.fonte.tipo === 'referto') { const [g, m, a] = t.fonte.data.split('.').map(Number); quando = new Date(a, m - 1, g).getTime(); }
+    else { const [l] = lettereNellePagine([t.testo]); const [g, m, a] = t.fonte.data.split('.').map(Number); quando = conData(l?.data ?? null, new Date(a, m - 1, g)); }
+    if (!Number.isNaN(quando)) cand.push({ t: { ...t, fonte: { ...t.fonte, data: fmt(new Date(quando)) } }, quando });
+  }
+  const patientId = await pazienteDelReferto(studioId, bozzaId);
+  if (patientId) {
+    const docs = await query<{ id: string; filename: string; nota: string | null; storage_key: string; categoria: string | null }>(
+      `select id, filename, nota, storage_key, categoria from patient_documents
+        where patient_id = $1 and studio_id = $2 and (ocr_stato is null or ocr_stato <> 'da_fare') and lower(filename) like '%.pdf'
+          and coalesce(categoria, '') <> 'lettera'
+        order by uploaded_at desc limit 10`, [patientId, studioId]);
+    for (const d of docs) {
+      try {
+        const pagine = await testoDelFile(d.storage_key, d.filename);
+        if (pagine.length < 3) continue;
+        for (const l of lettereNellePagine(pagine)) {
+          if (!l.data) continue;
+          const testo = pulisciScansione(pagine.slice(l.pagina_da - 1, l.pagina_a).join('\n'));
+          if (testo.trim().length < 200) continue;
+          const pp = l.pagina_da === l.pagina_a ? `p. ${l.pagina_da}` : `pp. ${l.pagina_da}–${l.pagina_a}`;
+          cand.push({ t: { fonte: { tipo: 'pagine', id: d.id, etichetta: `${etichettaDocumento(d) || d.filename}, ${pp}`, data: fmt(l.data), da: l.pagina_da, a: l.pagina_a }, testo }, quando: l.data.getTime() });
+        }
+      } catch { /* file che non si legge */ }
+    }
+  }
+  cand.sort((x, y) => y.quando - x.quando);
+  return cand[0]?.t ?? null;
+}
+
+// Applica la lettera «stampella»: il dettato con l'ortografia e
+// l'impaginazione della lettera più recente. «Annulla» torna al dettato.
+export async function applicaStampella(studioId: string, bozzaId: string, utente: string | null, automatico = false): Promise<{ ok: true } | { errore: string }> {
+  const s = await statoAggiornamento(studioId, bozzaId);
+  if (!s?.abilitato || !s.stampella) return { errore: 'Nessuna lettera da usare come aiuto.' };
+  const b = await bozza(studioId, bozzaId);
+  const prima = b?.testo_finale ?? null;
+  const traccia = {
+    applicato_il: new Date().toISOString(), da: utente, automatico, stampella: true, fonte: s.stampella.fonte,
+    correzioni: s.stampella.correzioni, impaginata: s.stampella.impaginata, avviso: s.errore, prima, novita: [], novita_aggiunte: 0,
+  };
+  const [ok] = await query<{ id: string }>(
+    `update referti_bozze set testo_finale = $3, payload = jsonb_set(payload, '{aggiornamento_lettera}', $4::jsonb)
+      where id = $1 and studio_id = $2 and stato = 'bozza' returning id`, [bozzaId, studioId, s.stampella.testo, JSON.stringify(traccia)]);
+  if (!ok) return { errore: 'La bozza non è più aperta.' };
+  await registraTestoMacchina({ studioId, bozzaId, nome: 'aggiornamento_lettera', modello: 'regole', regole: `${REGOLE}: lettera più recente come aiuto (ortografia, impaginazione)`, prima: prima ?? String(b?.payload?.testo_corretto ?? ''), dopo: s.stampella.testo, metadata: { automatico, stampella: true, correzioni: s.stampella.correzioni.length } });
+  console.log(`[aggiorna-lettera] ${bozzaId.slice(0, 8)}: lettera più recente come aiuto${automatico ? ' dalla catena' : ''} (${s.stampella.fonte.tipo}, ${s.stampella.correzioni.length} correzioni, impaginata ${s.stampella.impaginata})`);
+  return { ok: true };
 }

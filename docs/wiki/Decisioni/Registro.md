@@ -467,3 +467,11 @@ cartella «Audio da trascrivere» già esistente. Solo nella rete dello studio (
 cloud. La condivisione in rete la attiva a mano chi amministra il Mac (impostazioni di sistema);
 nessuna credenziale nei file scaricati. Visto il 1.10: sul Mac le «Cartelle pubbliche» sono
 condivise con accesso ospite in scrittura — da togliere.
+
+## 1.10.2026 — Lettera chiesta che non c'è: la più recente come aiuto
+Sulle cartelle di prova (aggiornate fino al 2024) le lettere delle date dettate non esistono.
+Decisione dello studio, valida sempre: si usa la lettera più recente del paziente, ma come
+**stampella** — ortografia delle parole che la lettera scrive giuste e impaginazione — mai come
+contenuto (non si riprende la sua anamnesi). L'avviso che la lettera chiesta non c'è resta. Le
+correzioni d'ortografia sono solo dove una sola parola della lettera è vicina e il senso non può
+cambiare (niente desinenze, niente ipo/iper e simili), e si vedono una per una nella revisione.

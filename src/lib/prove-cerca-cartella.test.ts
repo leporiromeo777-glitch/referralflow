@@ -1,7 +1,7 @@
 // Ricerca nella cartella scansionata (28.9.2026). Cartelle e dettati inventati.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cercaPagine, dateInFrase, etichettaRichiesta, richiesteDalDettato } from './cerca-in-cartella';
+import { cercaPagine, dateInFrase, etichettaRichiesta, lettereNellePagine, richiesteDalDettato } from './cerca-in-cartella';
 
 const OGGI = new Date('2026-09-28T10:00:00');
 
@@ -67,4 +67,21 @@ test('la lettera che cita l\'eco non è l\'eco; senza data si propongono le pagi
   assert.deepEqual(cercaPagine(cartella, eco, occupate), [], 'fuori dalla lettera nessuna pagina ha eco e data');
   const sd = cercaSenzaData(cartella, eco, occupate);
   assert.deepEqual(sd.map((p) => [p.pagina_da, p.pagina_a, p.senza_data]), [[3, 3, true]]);
+});
+
+test('lettere nella cartella con la loro data: la data di nascita non vince, la più recente sì', () => {
+  const pagine = [
+    'Egregio collega,\nLugano, 12.03.2023\nConcerne: Rossi Mario, 01.02.1950\nrivedo il paziente per un controllo. Cordiali saluti',
+    'Elettrocardiogramma del 03.03.2023 ritmo sinusale',
+    'Lugano, 05.06.2024\nCaro collega,\nConcerne: Rossi Mario, 01.02.1950\nrivedo il paziente in controllo annuale.',
+    'seconda pagina della lettera con la terapia e la conclusione. Cordiali saluti',
+    'Laboratorio: emoglobina 14 g/dl',
+  ];
+  const l = lettereNellePagine(pagine, new Date(2026, 9, 1));
+  assert.equal(l.length, 2);
+  assert.deepEqual([l[0].pagina_da, l[0].pagina_a], [1, 1]);
+  assert.deepEqual([l[1].pagina_da, l[1].pagina_a], [3, 4]);
+  assert.equal(l[0].data?.getFullYear(), 2023);
+  assert.equal(l[1].data?.getFullYear(), 2024);
+  assert.equal(l[1].data?.getMonth(), 5);
 });

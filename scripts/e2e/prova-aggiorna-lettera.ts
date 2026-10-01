@@ -61,6 +61,21 @@ async function main() {
     ids.push(senza);
     const s3 = await (await fetch(`${base}/api/prototipo/referti/${senza}/aggiornamento`, { headers: h })).json();
     verifica(s3.richiesta == null && s3.proposta == null && (s3.scelte ?? []).some((f: any) => f.id === vecchia), 'senza richiesta nel dettato: nessuna proposta, la lettera c\'è tra le scelte a mano');
+    // Lettera chiesta che non c'è (1.10.2026): si usa la più recente come
+    // aiuto (ortografia e impaginazione), il contenuto resta il dettato e
+    // l'avviso resta.
+    const DETTATO_ASSENTE = "Lettera al dottor Luca Prova. Riprendimi la lettera del 3 febbraio 2026. Caro Luca, rivedo il paziente. FRCV: ipertensione arteriosa trattata. Comorbidità: ipotirodismo. Clinicamente PA 120/75 mmHg. Cordiali saluti.";
+    const [{ id: manca }] = await query<{ id: string }>(`insert into referti_bozze (studio_id, file_id, payload, tipo) values ($1, 'prova-agg-' || gen_random_uuid(), $2, 'referto') returning id`,
+      [S, JSON.stringify({ testo_corretto: DETTATO_ASSENTE, medico, dettato_il: '2026-09-28T09:00:00Z', campi_estratti: { nome_paziente: 'Aggiornaprova Paziente' } })]);
+    ids.push(manca);
+    const em = await aggiornamentoAutomatico(S, manca);
+    const [tm] = await query<{ t: string }>('select testo_finale as t from referti_bozze where id = $1', [manca]);
+    verifica(em === 'stampella' && /ipotiroidismo/.test(tm.t) && !/ipotirodismo/.test(tm.t) && /PA 120\/75 mmHg/.test(tm.t) && !/14\.03\.2025|80 Kg/.test(tm.t), `lettera chiesta assente: la più recente come aiuto, ortografia corretta, contenuto dettato (${em})`);
+    const sm = await (await fetch(`${base}/api/prototipo/referti/${manca}/aggiornamento`, { headers: h })).json();
+    verifica(sm.applicato?.stampella === true && /non la trovo/.test(sm.applicato?.avviso ?? '') && sm.applicato?.fonte?.id === vecchia && (sm.applicato?.correzioni ?? []).some((c: any) => c.a === 'ipotiroidismo'), 'lettera chiesta assente: l\'avviso resta, fonte e correzioni visibili');
+    const am = await fetch(`${base}/api/prototipo/referti/${manca}/aggiornamento`, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'annulla' }) });
+    const [tn] = await query<{ t: string | null }>('select testo_finale as t from referti_bozze where id = $1', [manca]);
+    verifica(am.status === 200 && tn.t == null, 'lettera chiesta assente: Annulla torna al dettato');
   } finally {
     await togliAudit(ids);
     await query('delete from referti_eventi where bozza_id = any($1::uuid[])', [ids]);

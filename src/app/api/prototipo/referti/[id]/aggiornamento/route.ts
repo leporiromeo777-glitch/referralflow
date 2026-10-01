@@ -3,7 +3,7 @@ import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
 import { vietato } from '@/lib/permessi';
 import { registraEvento } from '@/lib/referti-eventi';
-import { aggiungiNovita, annullaAggiornamento, applicaAggiornamento, scegliLettera, statoAggiornamento } from '@/lib/aggiorna-lettera-server';
+import { aggiungiNovita, annullaAggiornamento, applicaAggiornamento, applicaStampella, scegliLettera, statoAggiornamento } from '@/lib/aggiorna-lettera-server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -13,6 +13,7 @@ export const dynamic = 'force-dynamic';
 //   GET  → stato (richiesta del medico, lettera trovata, proposta, scelte)
 //   POST { azione: 'applica', novita: [indici] } | { azione: 'annulla' }
 //        { azione: 'scegli', fonte: { tipo, id } | null }
+//        { azione: 'stampella' }: la lettera più recente come aiuto (1.10.2026)
 const RUOLI = new Set(['segretaria', 'medico', 'admin', 'tecnico']);
 
 async function sessione(id: string) {
@@ -49,6 +50,12 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     const r = await applicaAggiornamento(sid, params.id, session.id, Array.isArray(c.novita) ? c.novita.map(Number) : []);
     if ('errore' in r) return NextResponse.json(r, { status: 409 });
     void registraEvento(sid, params.id, 'lettera_aggiornata', session.id, { novita: Array.isArray(c.novita) ? c.novita.length : 0 });
+    return NextResponse.json(r);
+  }
+  if (c?.azione === 'stampella') {
+    const r = await applicaStampella(sid, params.id, session.id);
+    if ('errore' in r) return NextResponse.json(r, { status: 409 });
+    void registraEvento(sid, params.id, 'lettera_aggiornata', session.id, { stampella: true });
     return NextResponse.json(r);
   }
   if (c?.azione === 'aggiungi') {

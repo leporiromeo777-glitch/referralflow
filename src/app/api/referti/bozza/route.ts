@@ -493,7 +493,7 @@ export async function POST(req: NextRequest) {
     // applicato qui, prima che qualcuno apra la bozza.
     if (tipo === 'referto' && !(payload as any).ombra) try {
       const esito = await aggiornamentoAutomatico(studio.id, inserita.id);
-      if (esito === 'applicato') await registraEvento(studio.id, inserita.id, 'lettera_aggiornata', null, { automatico: true });
+      if (esito === 'applicato' || esito === 'stampella') await registraEvento(studio.id, inserita.id, 'lettera_aggiornata', null, { automatico: true, stampella: esito === 'stampella' });
     } catch (e: any) { console.error(`[aggiorna-lettera] ${inserita.id.slice(0, 8)}: ${e?.code ?? e?.name ?? 'errore'}`); }
     // Inviante collegato alla rubrica, o segnalato se nuovo (26.9.2026).
     try { await collegaInviante(studio.id, inserita.id); } catch (e: any) { console.error('inviante:', e?.message || e); }
@@ -539,6 +539,9 @@ export async function POST(req: NextRequest) {
       await fusioneAutomatica(esistente.id);
       await registraAudit(esistente.id);
       await registraEvento(studio.id, esistente.id, 'bozza_rifatta', null, { motivo: rifaiBozza ? 'medico_cambiato' : 'scartata_ricaricata', medico: medicoId ?? '' });
+      // Rifatta da zero = come una bozza nuova: anche l'aggiornamento della
+      // lettera (prima partiva solo sulle bozze nuove, 1.10.2026).
+      try { await aggiornamentoAutomatico(studio.id, esistente.id); } catch (e: any) { console.error(`[aggiorna-lettera] ${e?.code ?? e?.name ?? 'errore'}`); }
     }
     await collega(esistente.id);
   }

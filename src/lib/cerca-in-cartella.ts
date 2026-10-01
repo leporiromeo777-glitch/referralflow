@@ -197,3 +197,38 @@ export function cercaSenzaData(pagine: string[], r: Richiesta, escludi: Set<numb
   }
   return out.sort((a, b) => b.punteggio - a.punteggio || a.pagina_da - b.pagina_da).slice(0, 2);
 }
+
+// Le lettere dentro una cartella scansionata, con la loro data (1.10.2026,
+// per la lettera «più recente»): comincia una lettera la pagina che in testa
+// ha un saluto («Egregio collega») o parole da lettera e una data completa;
+// finisce al saluto finale (al massimo 6 pagine). La data è la più recente
+// fra quelle complete in testa alla prima pagina, non oltre `oggi` (la data
+// di nascita del paziente, più vecchia, non vince).
+export function lettereNellePagine(pagine: string[], oggi = new Date()): { pagina_da: number; pagina_a: number; data: Date | null }[] {
+  const out: { pagina_da: number; pagina_a: number; data: Date | null }[] = [];
+  const dataInTesta = (testo: string): Date | null => {
+    let migliore: Date | null = null;
+    for (const m of testo.slice(0, 700).matchAll(RX_DATA_PIENA)) {
+      const g = Number(m[1]), me = Number(m[2]), a = anno4(Number(m[3]));
+      if (g < 1 || g > 31 || me < 1 || me > 12 || a < 1990) continue;
+      const d = new Date(a, me - 1, g);
+      if (d.getTime() > oggi.getTime()) continue;
+      if (!migliore || d > migliore) migliore = d;
+    }
+    return migliore;
+  };
+  for (let i = 0; i < pagine.length; i++) {
+    const testa = (pagine[i] ?? '').slice(0, 700);
+    const data = dataInTesta(testa);
+    if (!RX_APERTURA.test(testa) && !(data && contaTipo('lettera', pagine[i] ?? ''))) continue;
+    let fine = i;
+    while (fine + 1 < pagine.length && fine - i < 5 && !RX_CHIUSURA.test(pagine[fine] ?? '')) {
+      const dopo = (pagine[fine + 1] ?? '').slice(0, 400);
+      if (RX_APERTURA.test(dopo) || dataInTesta(dopo) || (pagine[fine + 1] ?? '').replace(/\s+/g, '').length <= 20) break;
+      fine++;
+    }
+    out.push({ pagina_da: i + 1, pagina_a: fine + 1, data });
+    i = fine;
+  }
+  return out;
+}

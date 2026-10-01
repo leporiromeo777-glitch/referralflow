@@ -287,3 +287,5 @@ Worktree separato, DB demo, nessun servizio toccato. Stessi banchi prima (Next 1
 | `npm audit` | 5 (4 alte, 1 critica) | 2 alte (`nodemailer`, `@xmldom/xmldom`), nessuna su Next |
 
 **Cartella sul computer** (1.10.2026): 4 prove pure (`prove-cartella-dettati.test.ts`: lettura di `sharing -l`, indirizzo smb con gli spazi, `.bat` CRLF con nome poi indirizzo e senza credenziali, valori che non escono dalle virgolette) — suite 355/355; end-to-end 3/3 (stato, nessun `.bat` se la cartella non è condivisa, 401 senza sessione).
+
+**Lettera più recente come aiuto** (1.10.2026): prove pure 2 nuove in `prove-aggiorna-lettera.test.ts` (nome e farmaco scritti come nella lettera; ipo/iper, desinenze e parole ambigue mai toccati; impaginazione come la lettera senza contenuto preso dalla lettera) e 1 in `prove-cerca-cartella.test.ts` (lettere di una cartella con la loro data, la data di nascita non vince) — suite 358/358; end-to-end 3 nuovi (15/15): lettera chiesta assente → la più recente come aiuto, «ipotirodismo» → «ipotiroidismo», niente della lettera nel testo, avviso e correzioni visibili, Annulla torna al dettato.

@@ -349,3 +349,90 @@ export function impagina(testo: string, aCapoDavanti: Set<string>, separatore: s
   }
   return out.trim();
 }
+
+// ── Lettera «stampella» (1.10.2026, richiesta dello studio) ────────────────
+// Il medico chiede la lettera di una data che non si trova (cartelle di
+// prova aggiornate fino al 2024, ma vale sempre): si usa la lettera PIÙ
+// RECENTE del paziente, ma solo come aiuto — l'ortografia delle parole che
+// la lettera scrive giuste (nomi, farmaci, diagnosi) e l'impaginazione. Il
+// contenuto resta il dettato; l'avviso che la lettera chiesta manca resta.
+
+export type Correzione = { da: string; a: string };
+
+const RX_PAROLA = /[A-Za-zÀ-ÖØ-öø-ÿ]+(?:['’][A-Za-zÀ-ÖØ-öø-ÿ]+)?/g;
+const senzaAccenti = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+// Distanza di Damerau-Levenshtein (scambi di due lettere vicine compresi).
+function distanza(a: string, b: string): number {
+  const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+    const c = a[i - 1] === b[j - 1] ? 0 : 1;
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + c);
+    if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+  }
+  return d[a.length][b.length];
+}
+
+// Coppie che cambiano il SENSO con una o due lettere: mai toccate.
+const OPPOSTI: [RegExp, RegExp][] = [
+  [/^ipo/, /^iper/], [/^ipo/, /^ipe/], [/^bradi/, /^tachi/], [/^destr/, /^sinistr/], [/^sopra/, /^sotto/],
+  [/^pre/, /^post/], [/^in/, /^ex/], [/^anti/, /^ante/], [/^de/, /^di/], [/^micro/, /^macro/], [/^mono/, /^bi/],
+];
+function sensoDiverso(a: string, b: string): boolean {
+  return OPPOSTI.some(([x, y]) => (x.test(a) && y.test(b)) || (y.test(a) && x.test(b)));
+}
+
+export function ortografiaDallaLettera(testo: string, lettera: string): { testo: string; correzioni: Correzione[] } {
+  // Le parole della lettera (≥ 5 lettere, senza cifre), con la loro forma scritta.
+  const forme = new Map<string, string>();
+  for (const m of String(lettera || '').matchAll(RX_PAROLA)) {
+    const w = m[0];
+    if (w.length >= 5 && !forme.has(w.toLowerCase())) forme.set(w.toLowerCase(), w);
+  }
+  const tutte = [...forme.keys()];
+  const correzioni = new Map<string, string>();
+  const out = String(testo || '').replace(RX_PAROLA, (w) => {
+    const lw = w.toLowerCase();
+    if (w.length < 5 || forme.has(lw)) return w;
+    if (correzioni.has(lw)) return conMaiuscola(w, correzioni.get(lw)!);
+    const max = w.length >= 8 ? 2 : 1;
+    const cand = tutte.filter((c) => {
+      if (c[0] !== lw[0] && senzaAccenti(c[0]) !== senzaAccenti(lw[0])) return false;
+      if (Math.abs(c.length - lw.length) > max) return false;
+      // Solo la desinenza diversa (paziente/pazienti, controllato/controllata,
+      // ricovero/ricoverò): è grammatica o senso, non ortografia.
+      let comune = 0;
+      while (comune < Math.min(c.length, lw.length) && c[comune] === lw[comune]) comune++;
+      if (comune >= Math.max(c.length, lw.length) - 2) return false;
+      if (sensoDiverso(lw, c)) return false;
+      return distanza(lw, c) <= max;
+    });
+    if (cand.length !== 1) return w;   // nessuna, o più di una: non si indovina
+    correzioni.set(lw, cand[0]);
+    return conMaiuscola(w, cand[0]);
+  });
+  return { testo: out, correzioni: [...correzioni.entries()].map(([da, a]) => ({ da, a: forme.get(a) ?? a })) };
+  function conMaiuscola(origine: string, nuova: string): string {
+    const scritta = forme.get(nuova) ?? nuova;
+    // Un nome proprio resta com'è scritto nella lettera; se no, la maiuscola del dettato.
+    if (/^[A-ZÀ-Ý]/.test(scritta)) return scritta;
+    return /^[A-ZÀ-Ý]/.test(origine) ? scritta[0].toUpperCase() + scritta.slice(1) : scritta;
+  }
+}
+
+export function stampella(opts: { lettera: string; dettato: string }): { testo: string; correzioni: Correzione[]; impaginata: boolean } {
+  const v = togliSaluto(opts.lettera);
+  const d = togliSaluto(opts.dettato);
+  const orto = ortografiaDallaLettera(d.corpo, v.corpo);
+  const forma = formaDellaLettera(v.corpo, dividi(v.corpo));
+  let corpo = orto.testo.trim();
+  if (forma.strutturata) {
+    const dd = dividi(corpo);
+    const imp = (s: string) => s.split(/\n/).map((r) => impagina(r, forma.aCapoDavanti, forma.separatore)).join('\n');
+    corpo = (dd.punto && dd.prima.trim()
+      ? `${imp(dd.prima.trim())}${forma.primaDellaVisita}${imp(dd.dopo.trim())}`
+      : imp(corpo)).replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+  return { testo: d.saluto ? `${d.saluto}\n\n${corpo}` : corpo, correzioni: orto.correzioni, impaginata: forma.strutturata };
+}

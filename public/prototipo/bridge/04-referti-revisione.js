@@ -1080,6 +1080,14 @@ function rfAggHtml() {
   if (RF.aggPer !== RF.loaded) { void rfCaricaAgg(); return ''; }
   const a = RF.agg; if (!a || !a.abilitato) return '';
   const scelteHtml = (lista, testo) => lista && lista.length ? `<div class="row" style="gap:6px;margin-top:4px"><select class="input sm grow" id="rf-agg-scelta">${lista.map(f => `<option value="${rfEsc(f.tipo)}|${rfEsc(f.id)}">${rfEsc(f.etichetta)}</option>`).join('')}</select><button class="btn sm" onclick="rfAggScegli()">${testo}</button></div>` : '';
+  if (a.applicato && a.applicato.stampella) {
+    // Lettera chiesta non trovata: la più recente ha fatto da aiuto (1.10.2026).
+    const cor = a.applicato.correzioni || [];
+    return `<div class="rf-campi rf-agg" ${cor.length ? 'open' : ''}><div class="row between"><b>Lettera più recente usata come aiuto</b><button class="btn sm ghost" onclick="rfAggAzione({ azione: 'annulla' })" title="Torna al testo dettato">Annulla</button></div>
+      ${a.applicato.avviso ? `<div class="rf-att-warn">${rfEsc(a.applicato.avviso)}</div>` : ''}
+      <div class="caption">${a.applicato.automatico ? 'Fatto dalla catena' : 'Applicato'} con ${rfEsc(a.applicato.fonte.etichetta)} (${rfEsc(a.applicato.fonte.data)}): il testo resta quello dettato, ${cor.length ? `${cor.length} ${cor.length === 1 ? 'parola scritta' : 'parole scritte'} come nella lettera` : 'nessuna parola da correggere'}, impaginazione come la lettera.</div>
+      ${cor.length ? `<div class="caption" style="margin-top:4px">${cor.map(c => `${rfEsc(c.da)} → <b>${rfEsc(c.a)}</b>`).join(' · ')}</div>` : ''}</div>`;
+  }
   if (a.applicato) {
     const q = new Date(a.applicato.quando);
     const restano = a.applicato.novita || [];
@@ -1094,6 +1102,13 @@ function rfAggHtml() {
   }
   const r = a.richiesta;
   const testa = `<div class="row between"><b>Aggiornamento della lettera</b>${r && r.dal_dettato ? `<span class="badge accent">chiesto nel dettato${r.data ? `: lettera del ${rfEsc(r.data)}` : ''}</span>` : '<span class="badge">scelta a mano</span>'}</div>`;
+  if (!a.proposta && a.stampella) {
+    const st = a.stampella, cor = st.correzioni || [];
+    return `<div class="rf-campi rf-agg">${testa}<div class="rf-att-warn">${rfEsc(a.errore || '')}</div>
+      <div class="caption">Come aiuto c'è la lettera più recente: ${rfEsc(st.fonte.etichetta)} (${rfEsc(st.fonte.data)}). Il testo resta quello dettato; ${cor.length ? `${cor.length} ${cor.length === 1 ? 'parola si scrive' : 'parole si scrivono'} come nella lettera (${cor.map(c => `${rfEsc(c.da)} → ${rfEsc(c.a)}`).join(', ')})` : 'nessuna parola da correggere'}${st.impaginata ? ', impaginazione come la lettera' : ''}.</div>
+      <div class="row" style="gap:6px;margin-top:6px"><button class="btn sm primary" onclick="rfAggAzione({ azione: 'stampella' })">Usala come aiuto</button></div>
+      ${scelteHtml(a.scelte, 'Usa questa')}</div>`;
+  }
   if (!a.proposta) return `<div class="rf-campi rf-agg">${testa}<div class="rf-att-warn">${rfEsc(a.errore || 'Nessuna proposta.')}</div>${scelteHtml(a.scelte, 'Usa questa')}</div>`;
   const p = a.proposta;
   const pct = Math.round((p.somiglianza || 0) * 100);
@@ -1113,7 +1128,7 @@ async function rfAggAzione(corpo) {
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { toast(j.errore || `Errore ${r.status}`); return false; }
   } catch { toast('Non riesco a raggiungere la piattaforma'); return false; }
-  if (corpo.azione === 'applica' || corpo.azione === 'annulla' || corpo.azione === 'aggiungi') {
+  if (corpo.azione === 'applica' || corpo.azione === 'annulla' || corpo.azione === 'aggiungi' || corpo.azione === 'stampella') {
     // Il testo della bozza è cambiato sul server: si ricarica la revisione.
     try { clearTimeout(rvSave._rf); rvSave._rf = null; localStorage.removeItem(RV_KEY); } catch { /* ignora */ }
     RF.aggPer = null; RF.loaded = null; closeModal(); render();
