@@ -53,7 +53,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     return NextResponse.json(r);
   }
   if (c?.azione === 'stampella') {
-    const r = await applicaStampella(sid, params.id, session.id);
+    const r = await applicaStampella(sid, params.id, session.id, false, true);
     if ('errore' in r) return NextResponse.json(r, { status: 409 });
     void registraEvento(sid, params.id, 'lettera_aggiornata', session.id, { stampella: true });
     return NextResponse.json(r);

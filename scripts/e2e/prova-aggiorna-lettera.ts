@@ -61,6 +61,9 @@ async function main() {
     ids.push(senza);
     const s3 = await (await fetch(`${base}/api/prototipo/referti/${senza}/aggiornamento`, { headers: h })).json();
     verifica(s3.richiesta == null && s3.proposta == null && (s3.scelte ?? []).some((f: any) => f.id === vecchia), 'senza richiesta nel dettato: nessuna proposta, la lettera c\'è tra le scelte a mano');
+    const fz = await fetch(`${base}/api/prototipo/referti/${senza}/aggiornamento`, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'stampella' }) });
+    const sf = await (await fetch(`${base}/api/prototipo/referti/${senza}/aggiornamento`, { headers: h })).json();
+    verifica(fz.status === 200 && sf.applicato?.stampella === true && /non dice quale lettera/.test(sf.applicato?.avviso ?? '') && sf.applicato?.fonte?.id === vecchia, 'senza richiesta: «Usa la più recente solo come aiuto» a mano');
     // Lettera chiesta che non c'è (1.10.2026): si usa la più recente come
     // aiuto (ortografia e impaginazione), il contenuto resta il dettato e
     // l'avviso resta.

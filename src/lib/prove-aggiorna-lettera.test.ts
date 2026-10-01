@@ -181,3 +181,13 @@ test('aiuto: impaginazione come la lettera, contenuto del dettato', () => {
   assert.match(r.testo, /PA 130\/80 mmHg/);
   assert.doesNotMatch(r.testo, /Bisoprololo|05\.06\.2024/, 'niente contenuto preso dalla lettera');
 });
+
+test('richiesta anche come «Detto la lettera del …» o «La lettera del …» in testa alla regia, solo con una data', async () => {
+  const { richiestaAggiornamento } = await import('./aggiorna-lettera');
+  const oggi = new Date(2026, 9, 1);
+  assert.deepEqual(richiestaAggiornamento('', ['Detto la lettera del 12 marzo 2025, Rossi Mario, lettera al dottor Bianchi.'], oggi), { data: { g: 12, m: 3, a: 2025 } });
+  assert.deepEqual(richiestaAggiornamento('', ['La lettera del 03.02.2024 va aggiornata.'], oggi), { data: { g: 3, m: 2, a: 2024 } });
+  assert.equal(richiestaAggiornamento('Caro Luca, come scritto nella lettera del 3.2.2024 il paziente sta bene.', [], oggi), null, 'citata dentro una frase: no');
+  assert.equal(richiestaAggiornamento('', ['La lettera al dottor Bianchi.'], oggi), null, 'senza data: no');
+  assert.deepEqual(richiestaAggiornamento('Caro Luca, il resto tutta la lettera come nel 12.03.2024 e poi la visita di oggi.', [], oggi), { data: { g: 12, m: 3, a: 2024 } });
+});

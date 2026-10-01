@@ -248,12 +248,24 @@ export function aggiorna(opts: { lettera: string; dettato: string; oggi: string;
 // Il punto fra due cifre (14.03.2025) non chiude la frase.
 const RX_RICHIESTA = /\b(?:riprend\w*|aggiorn\w*|riapr\w*|rifamm\w*|rifai|riusa\w*|ripart\w*\s+dalla)\b(?:[^.;\n]|(?<=\d)\.(?=\d)){0,40}?\blettera\b((?:[^.;\n]|(?<=\d)\.(?=\d)){0,60})/i;
 
+// Anche «Detto la lettera del 12 marzo 2025…» o «La lettera del 3.2.2024…»
+// all'inizio della regia (1.10.2026, visto su tre dettati di Moccetti: la
+// richiesta finiva nelle note per la segreteria in questa forma). Solo con
+// una data: «nella lettera del …» dentro una frase non conta.
+const RX_RICHIESTA_DATA = /(?:(?:^|[.;:!?\n]\s*|\bdett[oa]\s+)la\s+lettera\s+del\b|\bresto\s+(?:di\s+)?tutt[ao]\s+la\s+lettera\s+come\s+(?:nel|nella|in|del|della|da|dalla)\b)((?:[^.;\n]|(?<=\d)\.(?=\d)){0,40})/i;
+
 export function richiestaAggiornamento(primaFrase: string, note: string[], dettatoIl: Date): { data: DataCercata | null } | null {
   for (const fonte of [String(primaFrase || ''), ...note.map((n) => String(n || ''))]) {
     const m = RX_RICHIESTA.exec(fonte);
     if (!m) continue;
     const date = dateInFrase(m[0], dettatoIl);
     return { data: date[0] ?? null };
+  }
+  for (const fonte of [String(primaFrase || ''), ...note.map((n) => String(n || ''))]) {
+    const m = RX_RICHIESTA_DATA.exec(fonte.trim());
+    if (!m) continue;
+    const date = dateInFrase(m[0], dettatoIl);
+    if (date[0]) return { data: date[0] };
   }
   return null;
 }

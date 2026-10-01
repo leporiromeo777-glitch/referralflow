@@ -336,20 +336,34 @@ export async function letteraPiuRecente(studioId: string, bozzaId: string, nome:
 
 // Applica la lettera «stampella»: il dettato con l'ortografia e
 // l'impaginazione della lettera più recente. «Annulla» torna al dettato.
-export async function applicaStampella(studioId: string, bozzaId: string, utente: string | null, automatico = false): Promise<{ ok: true } | { errore: string }> {
+// `forza`: chi rivede lo chiede anche se il dettato non indica una lettera
+// (tasto «Usa la più recente come aiuto»).
+export async function applicaStampella(studioId: string, bozzaId: string, utente: string | null, automatico = false, forza = false): Promise<{ ok: true } | { errore: string }> {
   const s = await statoAggiornamento(studioId, bozzaId);
-  if (!s?.abilitato || !s.stampella) return { errore: 'Nessuna lettera da usare come aiuto.' };
+  if (!s?.abilitato || s.applicato) return { errore: 'Non previsto per questo referto, o già applicato.' };
   const b = await bozza(studioId, bozzaId);
+  let st = s.stampella;
+  let avviso = s.errore;
+  if (!st && forza && b) {
+    const p = b.payload ?? {};
+    const nome = String(b.campi_confermati?.nome_paziente ?? p.campi_estratti?.nome_paziente ?? '').trim();
+    const piu = nome ? await letteraPiuRecente(studioId, bozzaId, nome) : null;
+    if (!piu) return { errore: 'Nessuna lettera di questo paziente, né tra i referti confermati né nella cartella.' };
+    st = { fonte: piu.fonte, ...stampella({ lettera: piu.testo, dettato: String(b.testo_finale ?? p.testo_corretto ?? '') }) };
+    avviso = avviso ?? 'Il dettato non dice quale lettera riprendere: usata come aiuto la più recente.';
+  }
+  if (!st) return { errore: 'Nessuna lettera da usare come aiuto.' };
+  const s2 = { ...s, stampella: st };
   const prima = b?.testo_finale ?? null;
   const traccia = {
-    applicato_il: new Date().toISOString(), da: utente, automatico, stampella: true, fonte: s.stampella.fonte,
-    correzioni: s.stampella.correzioni, impaginata: s.stampella.impaginata, avviso: s.errore, prima, novita: [], novita_aggiunte: 0,
+    applicato_il: new Date().toISOString(), da: utente, automatico, stampella: true, fonte: st.fonte,
+    correzioni: st.correzioni, impaginata: st.impaginata, avviso, prima, novita: [], novita_aggiunte: 0,
   };
   const [ok] = await query<{ id: string }>(
     `update referti_bozze set testo_finale = $3, payload = jsonb_set(payload, '{aggiornamento_lettera}', $4::jsonb)
-      where id = $1 and studio_id = $2 and stato = 'bozza' returning id`, [bozzaId, studioId, s.stampella.testo, JSON.stringify(traccia)]);
+      where id = $1 and studio_id = $2 and stato = 'bozza' returning id`, [bozzaId, studioId, s2.stampella.testo, JSON.stringify(traccia)]);
   if (!ok) return { errore: 'La bozza non è più aperta.' };
-  await registraTestoMacchina({ studioId, bozzaId, nome: 'aggiornamento_lettera', modello: 'regole', regole: `${REGOLE}: lettera più recente come aiuto (ortografia, impaginazione)`, prima: prima ?? String(b?.payload?.testo_corretto ?? ''), dopo: s.stampella.testo, metadata: { automatico, stampella: true, correzioni: s.stampella.correzioni.length } });
-  console.log(`[aggiorna-lettera] ${bozzaId.slice(0, 8)}: lettera più recente come aiuto${automatico ? ' dalla catena' : ''} (${s.stampella.fonte.tipo}, ${s.stampella.correzioni.length} correzioni, impaginata ${s.stampella.impaginata})`);
+  await registraTestoMacchina({ studioId, bozzaId, nome: 'aggiornamento_lettera', modello: 'regole', regole: `${REGOLE}: lettera più recente come aiuto (ortografia, impaginazione)`, prima: prima ?? String(b?.payload?.testo_corretto ?? ''), dopo: s2.stampella.testo, metadata: { automatico, stampella: true, correzioni: s2.stampella.correzioni.length } });
+  console.log(`[aggiorna-lettera] ${bozzaId.slice(0, 8)}: lettera più recente come aiuto${automatico ? ' dalla catena' : ''} (${s2.stampella.fonte.tipo}, ${s2.stampella.correzioni.length} correzioni, impaginata ${s2.stampella.impaginata})`);
   return { ok: true };
 }

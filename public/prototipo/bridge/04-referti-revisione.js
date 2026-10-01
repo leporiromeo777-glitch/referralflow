@@ -1097,8 +1097,7 @@ function rfAggHtml() {
       ${restano.length ? `<div class="rf-att-tit" style="margin-top:6px">Nel dettato, non nella lettera vecchia</div><div class="caption">Non aggiunte: spunta quelle da mettere nell'anamnesi.</div>${novHtml}<div class="row" style="margin-top:4px"><button class="btn sm" onclick="rfAggAggiungi()">Aggiungi le spuntate</button></div>` : ''}</div>`;
   }
   if (!a.richiesta && !a.proposta) {
-    if (!a.scelte || !a.scelte.length) return '';
-    return `<details class="rf-campi rf-agg"><summary><b>Aggiorna una lettera vecchia…</b> <span class="caption">il medico non l'ha chiesto nel dettato</span></summary>${scelteHtml(a.scelte, 'Usa questa')}</details>`;
+    return `<details class="rf-campi rf-agg"><summary><b>Aggiorna una lettera vecchia…</b> <span class="caption">il medico non l'ha chiesto nel dettato</span></summary>${scelteHtml(a.scelte, 'Usa questa')}<div class="row" style="gap:6px;margin-top:6px"><button class="btn sm" onclick="rfAggAzione({ azione: 'stampella' })" title="Il testo resta il dettato: dalla lettera più recente solo ortografia e impaginazione">Usa la più recente solo come aiuto</button></div></details>`;
   }
   const r = a.richiesta;
   const testa = `<div class="row between"><b>Aggiornamento della lettera</b>${r && r.dal_dettato ? `<span class="badge accent">chiesto nel dettato${r.data ? `: lettera del ${rfEsc(r.data)}` : ''}</span>` : '<span class="badge">scelta a mano</span>'}</div>`;
