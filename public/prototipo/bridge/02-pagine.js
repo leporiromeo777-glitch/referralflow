@@ -877,3 +877,15 @@ function rfAiBenvenuto() {
     ${rfAiNota()}
   </div>`;
 }
+
+/* «Modifica» in testa alla scheda del paziente (1.10.2026, richiesta dello
+   studio): apre gli stessi campi della creazione (cognome, nome, nascita,
+   sesso, contatti, indirizzo, AVS, cassa, indicazione, percorso). Prima
+   stava solo, piccolo, nel riquadro «Anagrafica» in fondo alla colonna. */
+const rfPazientePrimaModifica = PAGES.patient;
+PAGES.patient = () => {
+  const html = rfPazientePrimaModifica();
+  const id = state.params && state.params.id;
+  if (!RF.live || !rfUuid(id)) return html;
+  return html.replace('<div class="actions">', `<div class="actions"><button class="btn" onclick="rfPazienteModifica('${rfEsc(id)}')">${ICONS.profile || ''} Modifica dati</button>`);
+};
