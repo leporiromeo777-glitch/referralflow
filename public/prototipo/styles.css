@@ -169,6 +169,8 @@ kbd { font: 11px/1 var(--font); color: var(--text-3); background: var(--surface-
 .caption { color: var(--text-3); font-size: 11.5px; }
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .page-head .actions { display: flex; gap: 8px; }
+/* Testata della scheda del paziente (fuori da .page-head): stessi tasti distanziati (1.10.2026). */
+.row.between > .actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 
 /* ---------- Layout helpers ---------- */
 .grid { display: grid; gap: 16px; }
