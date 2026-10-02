@@ -32,7 +32,11 @@ reportsQueue = function () {
         <div class="qm"><span class="v num">${r.issues}</span><span class="l">verifiche</span></div>
         <div class="qm"><span class="v num ${r.crit ? 'crit' : ''}">${r.crit}</span><span class="l">critiche</span></div>
         <div class="qm"><span class="v num">${r.audio}</span><span class="l">audio</span></div>
-        <button class="btn ${r.state === 'priority' ? 'primary' : ''}" data-go="#/review/${r.id}">${r.status === 'APPROVED' ? 'Rileggi' : r.rivisto ? 'Riprendi e conferma' : r.state === 'clean' ? 'Lettura rapida' : 'Apri revisione'}</button>${r.status !== 'APPROVED' ? `<button class="btn ghost" data-prefirma="${r.id}" title="Controllo prima della firma, con traccia">✓ Controllo</button>` : ''}<button class="btn" onclick="event.stopPropagation();rfWord('${rfEsc(r.id)}')" title="${r.status === 'APPROVED' ? 'Il Word del referto confermato' : 'Il Word della bozza com\'è adesso, con le correzioni già salvate'}">${ICONS.file} Scarica Word</button>${r.status === 'APPROVED' ? `<button class="btn" onclick="event.stopPropagation();rfEmailPrepara('${rfEsc(r.id)}')" title="La mail per il medico inviante con il Word e gli allegati, da aprire nel programma di posta">${ICONS.mail} Prepara e-mail</button>` : ''}
+        ${r.status === 'APPROVED' ? `<button class="btn primary" onclick="event.stopPropagation();rfEmailPrepara('${rfEsc(r.id)}')" title="La mail per il medico inviante con il Word e gli allegati, da aprire nel programma di posta">${ICONS.mail} Prepara e-mail</button>` : ''}<button class="btn ${r.state === 'priority' && r.status !== 'APPROVED' ? 'primary' : ''}" data-go="#/review/${r.id}">${r.status === 'APPROVED' ? 'Rivedi' : r.rivisto ? 'Riprendi e conferma' : r.state === 'clean' ? 'Lettura rapida' : 'Apri revisione'}</button>
+        <details class="rf-kebab" onclick="event.stopPropagation()"><summary class="btn ghost" title="Altro" aria-label="Altre azioni">⋯</summary><div class="rf-kebab-menu">
+          <button class="btn ghost" data-prefirma="${r.id}" title="Controllo prima della firma, con traccia">✓ Controllo</button>
+          <button class="btn ghost" onclick="rfWord('${rfEsc(r.id)}')" title="${r.status === 'APPROVED' ? 'Il Word del referto confermato' : 'Il Word della bozza com\'è adesso, con le correzioni già salvate'}">${ICONS.file} Scarica Word</button>
+        </div></details>
       </div>
     </div>`;
   };
@@ -1499,3 +1503,27 @@ async function rfPazAzione(corpo) {
   RF.pazPer = null; RF.aggPer = null; RF.attornoPer = null; RF.propostePer = null; RF.loaded = null; render();
   toast(corpo.azione === 'collega' ? 'Collegata alla cartella del paziente' : 'Collegamento tolto');
 }
+
+
+/* Menu «⋯» nelle schede della pagina Referti (2.10.2026): Controllo e
+   Scarica Word dentro, fuori solo Prepara e-mail (se confermato) e Rivedi. */
+(function () {
+  const st = document.createElement('style');
+  st.textContent = `
+.rf-kebab { position: relative; }
+.rf-kebab > summary { list-style: none; cursor: pointer; min-width: 36px; justify-content: center; }
+.rf-kebab > summary::-webkit-details-marker { display: none; }
+.rf-kebab-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; min-width: 190px; display: flex; flex-direction: column; gap: 2px; padding: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-2); }
+.rf-kebab-menu .btn { justify-content: flex-start; width: 100%; }
+`;
+  document.head.appendChild(st);
+  // Un clic fuori chiude il menu aperto.
+  // Un clic fuori chiude il menu aperto; un clic su una voce lo chiude dopo
+  // averla eseguita (in cattura: «Controllo» ferma la propagazione).
+  document.addEventListener('click', (e) => {
+    const voce = e.target && e.target.closest ? e.target.closest('.rf-kebab-menu .btn') : null;
+    document.querySelectorAll('details.rf-kebab[open]').forEach((d) => {
+      if (!d.contains(e.target) || voce) setTimeout(() => { d.open = false; }, 0);
+    });
+  }, true);
+})();
