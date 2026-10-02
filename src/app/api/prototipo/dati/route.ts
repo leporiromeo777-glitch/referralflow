@@ -256,10 +256,22 @@ export async function GET() {
 
   // Referti della catena.
   const bozze = await query<{ id: string; stato: string; tipo: string; created_at: string; testo_finale: string | null; payload: any; campi_confermati: any; inviante_stato: string | null; inviante_nome: string | null; inviante_manuale: boolean; inviante_rubrica: string | null }>(
-    `select id, stato, tipo, created_at::text, testo_finale, payload, campi_confermati, patient_id, inviante_stato, inviante_nome, inviante_manuale,
-            (select rd.nome from referring_doctors rd where rd.id = referti_bozze.referring_doctor_id) as inviante_rubrica from referti_bozze
-      where studio_id = $1 and stato in ('bozza', 'confermata') and coalesce((payload->>'ombra')::boolean, false) = false
-      order by (stato = 'bozza') desc, created_at desc limit 40`, [sid]);
+    // Tutte le bozze aperte (fino a 300) e i confermati degli ultimi 30 giorni
+    // (fino a 60), in due liste: prima erano 40 in tutto con le aperte davanti,
+    // e con 83 bozze aperte (2.10.2026) i confermati — e metà delle aperte —
+    // sparivano dalla pagina Referti.
+    `select * from (
+       (select id, stato, tipo, created_at::text, testo_finale, payload, campi_confermati, patient_id, inviante_stato, inviante_nome, inviante_manuale,
+               (select rd.nome from referring_doctors rd where rd.id = referti_bozze.referring_doctor_id) as inviante_rubrica from referti_bozze
+         where studio_id = $1 and stato = 'bozza' and coalesce((payload->>'ombra')::boolean, false) = false
+         order by created_at desc limit 300)
+       union all
+       (select id, stato, tipo, created_at::text, testo_finale, payload, campi_confermati, patient_id, inviante_stato, inviante_nome, inviante_manuale,
+               (select rd.nome from referring_doctors rd where rd.id = referti_bozze.referring_doctor_id) as inviante_rubrica from referti_bozze
+         where studio_id = $1 and stato = 'confermata' and coalesce((payload->>'ombra')::boolean, false) = false
+           and coalesce(reviewed_at, created_at) > now() - interval '30 days'
+         order by coalesce(reviewed_at, created_at) desc limit 60)
+     ) t order by (stato = 'bozza') desc, created_at desc`, [sid]);
   const reports = bozze.map((b) => {
     const p = b.payload ?? {};
     const campo = (k: string) => { const v = b.campi_confermati?.[k] ?? p.campi_estratti?.[k]; const s = typeof v === 'string' ? v.trim() : ''; return s && s.toLowerCase() !== 'non indicato' ? s : ''; };
