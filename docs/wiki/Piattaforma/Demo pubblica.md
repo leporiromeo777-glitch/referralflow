@@ -12,7 +12,7 @@ Il punto non è avere qualcosa da mostrare: è mostrare **la cosa vera**. Login,
 
 | pezzo | dove |
 |---|---|
-| codice | `~/referralflow-demo` — un *git worktree* dello stesso repo, staccato (`git worktree add --detach`), con `node_modules` in link simbolico a quello principale |
+| codice | `~/referralflow-demo` — un *git worktree* dello stesso repo, staccato (`git worktree add --detach`), con i **suoi** `node_modules` (dal 2.10.2026: prima erano un link simbolico a quelli principali, e col passaggio della piattaforma a Next 16 la demo, ferma su un commit con Next 14, non partiva più; se si sposta il worktree su un commit nuovo: `npm ci` lì dentro) |
 | configurazione | `~/referralflow-demo/.env` (fuori da git): `DATABASE_URL` sul database demo, `SESSION_SECRET` suo, `PORT=3100`; i modelli locali sono gli stessi dello studio, così Cleo e la dettatura funzionano |
 | database | `referralflow_demo` (Postgres locale) — **separato**: dal link pubblico il database dello studio non è raggiungibile |
 | servizio | `ch.referralflow.demo` (launchd, `mac/demo-avvio.sh`) sulla porta **3100** |
