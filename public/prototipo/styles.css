@@ -784,6 +784,17 @@ select.input { padding-right: 28px; }
 @media (max-width: 767px) {
   #app.with-doc .doc-viewer, #app.with-doc.with-ai .doc-viewer { right: 0; width: 100vw; height: 70vh; top: auto; border-radius: 20px 20px 0 0; }
 }
+/* Revisione con un documento aperto (2.10.2026, richiesta dello studio):
+   bozza a sinistra, documento in una barra a destra, tutti e due visibili.
+   La revisione nasconde la barra di navigazione: senza queste regole il
+   documento finiva nella colonna di mezzo e la bozza schiacciata a sinistra. */
+:root { --doc-w-rev: clamp(380px, 44vw, 820px); }
+#app.review-mode.with-doc { grid-template-columns: 1fr var(--doc-w-rev); }
+#app.review-mode.with-doc.with-ai { grid-template-columns: 1fr var(--doc-w-rev) var(--ai-w); }
+@media (min-width: 900px) and (max-width: 1199px) {
+  #app.review-mode.with-doc, #app.review-mode.with-doc.with-ai { grid-template-columns: 1fr var(--doc-w-rev) !important; }
+  #app.review-mode.with-doc .doc-viewer { position: static; width: auto; box-shadow: none; }
+}
 
 /* ---------- Sfera dell'assistente (stile ElevenLabs) ---------- */
 .ai-sphere { position: relative; width: 44px; height: 44px; flex: none; border-radius: 50%; isolation: isolate; }
