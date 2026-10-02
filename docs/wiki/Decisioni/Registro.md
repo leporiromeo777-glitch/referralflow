@@ -475,3 +475,12 @@ Decisione dello studio, valida sempre: si usa la lettera più recente del pazien
 contenuto (non si riprende la sua anamnesi). L'avviso che la lettera chiesta non c'è resta. Le
 correzioni d'ortografia sono solo dove una sola parola della lettera è vicina e il senso non può
 cambiare (niente desinenze, niente ipo/iper e simili), e si vedono una per una nella revisione.
+
+## 2.10.2026 — Il nome dettato si abbina anche se suona uguale, non solo se identico
+Decisione dello studio, con un dato nuovo rispetto al 22.9 («un omonimo non si indovina»): la catena
+trascrive i nomi a orecchio («Defendi» per «Deffendi») e solo 7 bozze aperte su 83 erano collegate
+a una cartella; senza cartella non funzionano lettera vecchia, allegati e storico. La prudenza resta:
+la bozza si collega da sola solo se il nome suona come UNA sola cartella che ha anche una visita in
+agenda nei giorni del dettato (o la stessa data di nascita); altrimenti è una proposta da confermare.
+Mai la sola ultima lettera diversa (Mario/Maria), mai con una data di nascita diversa. Il nome nel
+testo si scrive come in cartella.

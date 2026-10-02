@@ -855,6 +855,7 @@ rvRenderNav = function () {
       <details class="rf-campi" ${Object.values(c).some(v => !v) ? 'open' : ''}><summary><b>Campi estratti</b> <span class="caption">${['nome_paziente', 'data_nascita', 'medico_destinatario'].filter(k => c[k]).length}/3 · dalla catena, correggibili</span></summary>
         ${campo('nome_paziente', 'Paziente', 'Cognome Nome')}${campo('data_nascita', 'Nascita', 'gg.mm.aaaa')}${campo('medico_destinatario', 'Destinatario', 'Dr. …')}
         <div class="caption" style="margin-top:4px">Si salvano nella bozza appena li cambi; valgono per la lettera e per il Word.</div></details>
+      ${rfPazHtml()}
       ${rfIstrHtml()}
       ${rfAggHtml()}
       ${rfAttornoHtml()}
@@ -1446,4 +1447,55 @@ async function rfAggGuarda(tipo, id, da, etichetta) {
     if (!r.ok) { toast('Lettera non trovata'); return; }
     openModal(rfEsc(etichetta || 'Lettera'), `<div style="white-space:pre-wrap;line-height:1.55;max-height:65vh;overflow:auto">${rfEsc(j.testo || '')}</div>`, '<button class="btn primary" data-close>Chiudi</button>');
   } catch { toast('Non riesco a raggiungere la piattaforma'); }
+}
+
+
+/* ---------- Paziente della bozza (2.10.2026) ----------
+   La cartella collegata e come (stesso nome, nome simile + visita in agenda
+   o data di nascita, a mano), oppure le proposte quando il nome dettato
+   suona come una cartella ma manca un segnale sicuro. Collega / Cambia /
+   Scollega. Collegando, il nome nel testo si scrive come in cartella. */
+async function rfCaricaPaz(forza) {
+  const id = RF.loaded; if (!id) return;
+  if (!forza && (RF.pazPer === id || RF.pazCarica === id)) return;
+  RF.pazCarica = id;
+  try { const r = await fetch(`/api/prototipo/referti/${id}/paziente`, { credentials: 'include', cache: 'no-store' }); RF.paz = r.ok ? await r.json() : null; }
+  catch { RF.paz = null; }
+  RF.pazPer = id; RF.pazCarica = null;
+  if (typeof rvRenderNav === 'function' && state.route === 'review') rvRenderNav();
+}
+function rfPazHtml() {
+  if (!RF.live || !RF.loaded) return '';
+  if (RF.pazPer !== RF.loaded) { void rfCaricaPaz(); return ''; }
+  const z = RF.paz; if (!z) return '';
+  const MODO = { stesso_nome: 'stesso nome', simile_agenda: 'nome simile e visita in agenda', simile_nascita: 'nome simile e stessa data di nascita', a_mano: 'scelto a mano' };
+  const scegli = `<details class="rf-att-cambia"><summary class="caption">${z.paziente ? 'un altro paziente' : 'scegli un paziente'}</summary><div class="row" style="gap:6px;margin-top:4px"><input class="input sm grow" id="rf-paz-cerca" list="rf-paz-lista" placeholder="Cognome Nome" autocomplete="off"><datalist id="rf-paz-lista">${PATIENTS.filter(p => rfUuid(p.id)).map(p => `<option value="${rfEsc(fullName(p))}${p.dob ? ' · ' + rfEsc(p.dob) : ''}">`).join('')}</datalist><button class="btn sm" onclick="rfPazScegli()">Collega</button></div></details>`;
+  if (z.paziente) {
+    const diverso = z.nome_dettato && z.modo !== 'stesso_nome' && z.nome_dettato.toLowerCase() !== z.paziente.nome.toLowerCase();
+    return `<div class="rf-campi rf-paz"><div class="row between"><b>Paziente</b><span class="row" style="gap:4px"><button class="btn sm ghost" data-go="#/patients/${rfEsc(z.paziente.id)}">Scheda</button><button class="btn sm ghost" onclick="rfPazAzione({ azione: 'scollega' })" title="Togli il collegamento a questa cartella">Scollega</button></span></div>
+      <div class="caption"><b>${rfEsc(z.paziente.nome)}</b>${z.paziente.nascita ? ` · ${rfEsc(z.paziente.nascita)}` : ''} · ${rfEsc(MODO[z.modo] || z.modo || '')}</div>
+      ${diverso ? `<div class="caption">Dettato: «${rfEsc(z.nome_dettato)}»: nel testo il nome è scritto come in cartella.</div>` : ''}${scegli}</div>`;
+  }
+  const prop = (z.proposte || []).map(p => `<div class="row between" style="gap:6px;margin-top:4px"><span class="caption"><b>${rfEsc(p.nome)}</b>${p.nascita ? ` · ${rfEsc(p.nascita)}` : ''}${p.visita ? ` · visita del ${rfEsc(p.visita)}` : ''}</span><button class="btn sm primary" onclick="rfPazAzione({ azione: 'collega', patient_id: '${rfEsc(p.id)}' })">Collega</button></div>`).join('');
+  return `<div class="rf-campi rf-paz" ${prop ? 'open' : ''}><div class="row between"><b>Paziente</b><span class="caption">${z.modo === 'scollegato' ? 'scollegato a mano' : 'nessuna cartella collegata'}</span></div>
+    ${z.nome_dettato ? `<div class="caption">Dettato: «${rfEsc(z.nome_dettato)}»</div>` : ''}
+    ${prop ? `<div class="rf-att-tit" style="margin-top:6px">È forse…</div>${prop}` : ''}${scegli}</div>`;
+}
+function rfPazScegli() {
+  const v = ((document.getElementById('rf-paz-cerca') || {}).value || '').trim();
+  const p = PATIENTS.filter(x => rfUuid(x.id)).find(x => `${fullName(x)}${x.dob ? ' · ' + x.dob : ''}` === v) || PATIENTS.filter(x => rfUuid(x.id)).find(x => fullName(x).toLowerCase() === v.toLowerCase());
+  if (!p) { toast('Scegli un paziente dall\'elenco'); return; }
+  void rfPazAzione({ azione: 'collega', patient_id: p.id });
+}
+async function rfPazAzione(corpo) {
+  try {
+    const r = await fetch(`/api/prototipo/referti/${RF.loaded}/paziente`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(j.errore || `Errore ${r.status}`); return; }
+  } catch { toast('Non riesco a raggiungere la piattaforma'); return; }
+  // Il nome nel testo può essere cambiato: si ricarica la revisione, e con
+  // lei lettera vecchia e allegati che dipendono dalla cartella.
+  try { clearTimeout(rvSave._rf); rvSave._rf = null; localStorage.removeItem(RV_KEY); } catch { /* ignora */ }
+  RF.pazPer = null; RF.aggPer = null; RF.attornoPer = null; RF.propostePer = null; RF.loaded = null; render();
+  toast(corpo.azione === 'collega' ? 'Collegata alla cartella del paziente' : 'Collegamento tolto');
 }

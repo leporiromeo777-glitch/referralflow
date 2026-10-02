@@ -34,7 +34,8 @@ export async function riabbinaPazienti(studioId: string, solo?: { bozzaId?: stri
   const bozze = await query<{ id: string; nome: string | null; nascita: string | null }>(
     `select id, coalesce(nullif(campi_confermati->>'nome_paziente', ''), nullif(payload->'campi_estratti'->>'nome_paziente', '')) as nome,
             coalesce(nullif(campi_confermati->>'data_nascita', ''), nullif(payload->'campi_estratti'->>'data_nascita', '')) as nascita
-       from referti_bozze where studio_id = $1 and patient_id is null and stato <> 'scartata' and ($2::uuid is null or id = $2)`, [studioId, solo?.bozzaId ?? null]);
+       from referti_bozze where studio_id = $1 and patient_id is null and stato <> 'scartata' and ($2::uuid is null or id = $2)
+        and coalesce(payload->'paziente_abbinamento'->>'modo', '') <> 'scollegato'`, [studioId, solo?.bozzaId ?? null]);
   for (const b of bozze) {
     if (!b.nome || /^non indicato$/i.test(b.nome.trim())) continue;
     const e = abbina(b.nome, b.nascita, idx);
