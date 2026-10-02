@@ -134,3 +134,17 @@ export async function collegaPazienteAMano(studioId: string, bozzaId: string, pa
   await collega(b, p, 'a_mano', c?.coppie ?? [], utente);
   return { ok: true };
 }
+
+// Quando nasce o si importa una cartella: si riprova sulle bozze aperte
+// ancora senza cartella (anche col nome simile). Solo conteggi nei log.
+export async function abbinaBozzeAperte(studioId: string): Promise<number> {
+  const bozze = await query<{ id: string }>(
+    `select id from referti_bozze where studio_id = $1 and stato = 'bozza' and patient_id is null and coalesce(payload->>'ombra', 'false') <> 'true'`, [studioId]);
+  let collegate = 0;
+  for (const b of bozze) {
+    const e = await abbinaPazienteBozza(studioId, b.id).catch(() => 'niente' as const);
+    if (e === 'stesso_nome' || e === 'simile_agenda' || e === 'simile_nascita') collegate++;
+  }
+  if (collegate) console.log(`[paziente] bozze aperte collegate: ${collegate}`);
+  return collegate;
+}

@@ -5,6 +5,7 @@ import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { analizzaCsvPazienti, CAMPI_ANAGRAFICA, validaAnagrafica, type Anagrafica } from '@/lib/pazienti-import';
 import { vietato } from '@/lib/permessi';
+import { abbinaBozzeAperte } from '@/lib/paziente-bozza';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,6 +49,7 @@ export async function POST(req: NextRequest) {
       console.log(`[pazienti] creato ${id.slice(0, 8)}`);
       // La cartella nuova si prende subito i suoi appuntamenti e i suoi referti (abbinamento severo).
       const abbinati = await riabbinaPazienti(sid).catch(() => ({ appuntamenti: 0, referti: 0 }));
+      abbinati.referti += await abbinaBozzeAperte(sid).catch(() => 0);
       return NextResponse.json({ id, abbinati }, { status: 201 });
     }
     const id = String(c?.id ?? '');
@@ -59,6 +61,7 @@ export async function POST(req: NextRequest) {
     if (!r.length) return NextResponse.json({ errore: 'Paziente non trovato.' }, { status: 404 });
     console.log(`[pazienti] aggiornato ${id.slice(0, 8)}`);
     const abbinati = await riabbinaPazienti(sid).catch(() => ({ appuntamenti: 0, referti: 0 }));
+      abbinati.referti += await abbinaBozzeAperte(sid).catch(() => 0);
     return NextResponse.json({ id, abbinati });
   }
   if (azione === 'proponi') {
@@ -86,6 +89,7 @@ export async function POST(req: NextRequest) {
     console.log(`[pazienti] importati ${inseriti} su ${righe.length} righe (esistenti ${riepilogo.esistenti}, errori ${riepilogo.errori})`);
     // Con l'anagrafica dentro, agenda e referti trovano le loro cartelle in un colpo solo.
     const abbinati = inseriti ? await riabbinaPazienti(sid).catch(() => ({ appuntamenti: 0, referti: 0 })) : { appuntamenti: 0, referti: 0 };
+    if (inseriti) abbinati.referti += await abbinaBozzeAperte(sid).catch(() => 0);
     return NextResponse.json({ inseriti, riepilogo, abbinati });
   }
   return NextResponse.json({ errore: 'azione' }, { status: 400 });
