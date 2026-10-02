@@ -255,18 +255,18 @@ export async function GET() {
   }
 
   // Referti della catena.
-  const bozze = await query<{ id: string; stato: string; tipo: string; created_at: string; testo_finale: string | null; payload: any; campi_confermati: any; inviante_stato: string | null; inviante_nome: string | null; inviante_manuale: boolean; inviante_rubrica: string | null }>(
+  const bozze = await query<{ id: string; stato: string; tipo: string; created_at: string; reviewed_at: string | null; testo_finale: string | null; payload: any; campi_confermati: any; inviante_stato: string | null; inviante_nome: string | null; inviante_manuale: boolean; inviante_rubrica: string | null }>(
     // Tutte le bozze aperte (fino a 300) e i confermati degli ultimi 30 giorni
     // (fino a 60), in due liste: prima erano 40 in tutto con le aperte davanti,
     // e con 83 bozze aperte (2.10.2026) i confermati — e metà delle aperte —
     // sparivano dalla pagina Referti.
     `select * from (
-       (select id, stato, tipo, created_at::text, testo_finale, payload, campi_confermati, patient_id, inviante_stato, inviante_nome, inviante_manuale,
+       (select id, stato, tipo, created_at::text, reviewed_at::text, testo_finale, payload, campi_confermati, patient_id, inviante_stato, inviante_nome, inviante_manuale,
                (select rd.nome from referring_doctors rd where rd.id = referti_bozze.referring_doctor_id) as inviante_rubrica from referti_bozze
          where studio_id = $1 and stato = 'bozza' and coalesce((payload->>'ombra')::boolean, false) = false
          order by created_at desc limit 300)
        union all
-       (select id, stato, tipo, created_at::text, testo_finale, payload, campi_confermati, patient_id, inviante_stato, inviante_nome, inviante_manuale,
+       (select id, stato, tipo, created_at::text, reviewed_at::text, testo_finale, payload, campi_confermati, patient_id, inviante_stato, inviante_nome, inviante_manuale,
                (select rd.nome from referring_doctors rd where rd.id = referti_bozze.referring_doctor_id) as inviante_rubrica from referti_bozze
          where studio_id = $1 and stato = 'confermata' and coalesce((payload->>'ombra')::boolean, false) = false
            and coalesce(reviewed_at, created_at) > now() - interval '30 days'
@@ -304,6 +304,7 @@ export async function GET() {
     if (b.stato === 'bozza' && !tasks.some((t) => t.id === `boz-${b.id}`)) tasks.push({ id: `boz-${b.id}`, title: `Bozza di referto da rivedere: ${nomePaz || 'paziente non indicato'}${rev.riepilogo.crit ? ` · ${rev.riepilogo.crit} critiche` : ''}`, p: pid, assignee: 'secretary', prio: rev.riepilogo.crit ? 'high' : 'normal', status: 'TODO', due: dCh(b.created_at), cat: 'send', src: 'automation', href: `/referti/${b.id}` });
     return {
       id: b.id, p: pid, doc: docId, date: dCh(b.created_at), type: b.tipo === 'visita' ? 'Visita registrata' : p.medico?.formato === 'lettera' ? 'Lettera al collega' : 'Rapporto',
+      confermato_il: b.stato === 'confermata' ? b.reviewed_at : null,
       status: b.stato === 'confermata' ? 'APPROVED' : 'READY_FOR_FORMAL_REVIEW', version: b.stato === 'confermata' ? 'FINAL' : rivisto ? 'v2 rivisto' : 'v1 AI', rivisto,
       alerts: rev.riepilogo.crit, queue: rev.riepilogo.est,
       at: `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')} · ${ora(d.toISOString())}`,

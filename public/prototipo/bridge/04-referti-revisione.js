@@ -80,7 +80,7 @@ reportsQueue = function () {
       </div>
     </div>
     <div class="stack">${[...inCoda.filter(a => a.state !== 'ready').map(rigaAudio), ...ordina(aperti).map(riga)].join('') || '<div class="card"><div class="caption">Nessuna bozza da controllare.</div></div>'}</div>
-    ${chiusi.length ? `<div class="caption mt-16" style="margin-bottom:8px">Confermati</div><div class="stack">${ordina(chiusi).slice(0, 10).map(riga).join('')}</div>` : ''}`;
+    ${chiusi.length ? `<div class="caption mt-16" style="margin-bottom:8px">Confermati · dal più recente</div><div class="stack">${[...chiusi].sort((a, b) => String(b.confermatoIl || '').localeCompare(String(a.confermatoIl || ''))).slice(0, 20).map(riga).join('')}</div>` : ''}`;
 };
 document.addEventListener('click', async (e) => {
   const b = e.target.closest && e.target.closest('#rf-intake-invia');
