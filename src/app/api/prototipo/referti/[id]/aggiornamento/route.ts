@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
 import { vietato } from '@/lib/permessi';
 import { registraEvento } from '@/lib/referti-eventi';
+import { query } from '@/lib/db';
 import { aggiungiNovita, annullaAggiornamento, applicaAggiornamento, applicaStampella, scegliLettera, statoAggiornamento } from '@/lib/aggiorna-lettera-server';
 
 export const runtime = 'nodejs';
@@ -25,10 +26,19 @@ async function sessione(id: string) {
   return { session };
 }
 
-export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const { session, errore } = await sessione(params.id);
   if (errore) return errore;
+  // «Guarda» (2.10.2026): il testo della lettera vecchia quando è un referto
+  // confermato dello studio (le lettere in cartella si aprono nel visore).
+  const lettera = req.nextUrl.searchParams.get('lettera');
+  if (lettera) {
+    if (!isUuid(lettera)) return NextResponse.json({ errore: 'non_trovato' }, { status: 404 });
+    const [r] = await query<{ testo: string }>(`select testo_finale as testo from referti_bozze where id = $1 and studio_id = $2 and stato = 'confermata' and testo_finale is not null`, [lettera, session.studioId]);
+    if (!r) return NextResponse.json({ errore: 'non_trovato' }, { status: 404 });
+    return NextResponse.json({ testo: r.testo }, { headers: { 'Cache-Control': 'no-store' } });
+  }
   const s = await statoAggiornamento(session.studioId, params.id);
   if (!s) return NextResponse.json({ errore: 'non_trovato' }, { status: 404 });
   return NextResponse.json(s, { headers: { 'Cache-Control': 'no-store' } });

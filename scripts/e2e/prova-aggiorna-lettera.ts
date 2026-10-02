@@ -63,6 +63,10 @@ async function main() {
     verifica(s3.richiesta == null && s3.proposta == null && (s3.scelte ?? []).some((f: any) => f.id === vecchia), 'senza richiesta nel dettato: nessuna proposta, la lettera c\'è tra le scelte a mano');
     const fz = await fetch(`${base}/api/prototipo/referti/${senza}/aggiornamento`, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'stampella' }) });
     const sf = await (await fetch(`${base}/api/prototipo/referti/${senza}/aggiornamento`, { headers: h })).json();
+    const gl = await fetch(`${base}/api/prototipo/referti/${senza}/aggiornamento?lettera=${vecchia}`, { headers: h });
+    const gj = await gl.json().catch(() => ({}));
+    const gn = await fetch(`${base}/api/prototipo/referti/${senza}/aggiornamento?lettera=${senza}`, { headers: h });
+    verifica(gl.status === 200 && gj.testo === VECCHIA && gn.status === 404, '«Guarda»: il testo della lettera vecchia confermata; una bozza non confermata no (404)');
     verifica(fz.status === 200 && sf.applicato?.stampella === true && /non dice quale lettera/.test(sf.applicato?.avviso ?? '') && sf.applicato?.fonte?.id === vecchia, 'senza richiesta: «Usa la più recente solo come aiuto» a mano');
     // Lettera chiesta che non c'è (1.10.2026): si usa la più recente come
     // aiuto (ortografia e impaginazione), il contenuto resta il dettato e

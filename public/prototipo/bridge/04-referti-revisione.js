@@ -1085,7 +1085,7 @@ function rfAggHtml() {
     const cor = a.applicato.correzioni || [];
     return `<div class="rf-campi rf-agg" ${cor.length ? 'open' : ''}><div class="row between"><b>Lettera più recente usata come aiuto</b><button class="btn sm ghost" onclick="rfAggAzione({ azione: 'annulla' })" title="Torna al testo dettato">Annulla</button></div>
       ${a.applicato.avviso ? `<div class="rf-att-warn">${rfEsc(a.applicato.avviso)}</div>` : ''}
-      <div class="caption">${a.applicato.automatico ? 'Fatto dalla catena' : 'Applicato'} con ${rfEsc(a.applicato.fonte.etichetta)} (${rfEsc(a.applicato.fonte.data)}): il testo resta quello dettato, ${cor.length ? `${cor.length} ${cor.length === 1 ? 'parola scritta' : 'parole scritte'} come nella lettera` : 'nessuna parola da correggere'}, impaginazione come la lettera.</div>
+      <div class="caption">${a.applicato.automatico ? 'Fatto dalla catena' : 'Applicato'} con ${rfEsc(a.applicato.fonte.etichetta)} (${rfEsc(a.applicato.fonte.data)}) ${rfAggTastoGuarda(a.applicato.fonte)}: il testo resta quello dettato, ${cor.length ? `${cor.length} ${cor.length === 1 ? 'parola scritta' : 'parole scritte'} come nella lettera` : 'nessuna parola da correggere'}, impaginazione come la lettera.</div>
       ${cor.length ? `<div class="caption" style="margin-top:4px">${cor.map(c => `${rfEsc(c.da)} → <b>${rfEsc(c.a)}</b>`).join(' · ')}</div>` : ''}</div>`;
   }
   if (a.applicato) {
@@ -1093,7 +1093,7 @@ function rfAggHtml() {
     const restano = a.applicato.novita || [];
     const novHtml = restano.map((f, i) => `<label class="rf-agg-nov"><input type="checkbox" ${RF.aggNovita && RF.aggNovita[i] ? 'checked' : ''} onchange="RF.aggNovita[${i}]=this.checked"> <span>${rfEsc(f)}</span></label>`).join('');
     return `<div class="rf-campi rf-agg" ${restano.length ? 'open' : ''}><div class="row between"><b>Lettera aggiornata</b><button class="btn sm ghost" onclick="rfAggAzione({ azione: 'annulla' })" title="Torna al testo dettato">Annulla</button></div>
-      <div class="caption">${a.applicato.automatico ? 'Fatta dalla catena' : 'Applicata'} da ${rfEsc(a.applicato.fonte.etichetta)} · alle ${q.toLocaleTimeString('it-CH', { hour: '2-digit', minute: '2-digit' })} · controllo a ${a.applicato.mesi} mesi${a.applicato.novita_aggiunte ? ` · ${a.applicato.novita_aggiunte} frasi nuove aggiunte` : ''}</div>
+      <div class="caption">${a.applicato.automatico ? 'Fatta dalla catena' : 'Applicata'} da ${rfEsc(a.applicato.fonte.etichetta)} ${rfAggTastoGuarda(a.applicato.fonte)} · alle ${q.toLocaleTimeString('it-CH', { hour: '2-digit', minute: '2-digit' })} · controllo a ${a.applicato.mesi} mesi${a.applicato.novita_aggiunte ? ` · ${a.applicato.novita_aggiunte} frasi nuove aggiunte` : ''}</div>
       ${restano.length ? `<div class="rf-att-tit" style="margin-top:6px">Nel dettato, non nella lettera vecchia</div><div class="caption">Non aggiunte: spunta quelle da mettere nell'anamnesi.</div>${novHtml}<div class="row" style="margin-top:4px"><button class="btn sm" onclick="rfAggAggiungi()">Aggiungi le spuntate</button></div>` : ''}</div>`;
   }
   if (!a.richiesta && !a.proposta) {
@@ -1104,7 +1104,7 @@ function rfAggHtml() {
   if (!a.proposta && a.stampella) {
     const st = a.stampella, cor = st.correzioni || [];
     return `<div class="rf-campi rf-agg">${testa}<div class="rf-att-warn">${rfEsc(a.errore || '')}</div>
-      <div class="caption">Come aiuto c'è la lettera più recente: ${rfEsc(st.fonte.etichetta)} (${rfEsc(st.fonte.data)}). Il testo resta quello dettato; ${cor.length ? `${cor.length} ${cor.length === 1 ? 'parola si scrive' : 'parole si scrivono'} come nella lettera (${cor.map(c => `${rfEsc(c.da)} → ${rfEsc(c.a)}`).join(', ')})` : 'nessuna parola da correggere'}${st.impaginata ? ', impaginazione come la lettera' : ''}.</div>
+      <div class="caption">Come aiuto c'è la lettera più recente: ${rfEsc(st.fonte.etichetta)} (${rfEsc(st.fonte.data)}) ${rfAggTastoGuarda(st.fonte)}. Il testo resta quello dettato; ${cor.length ? `${cor.length} ${cor.length === 1 ? 'parola si scrive' : 'parole si scrivono'} come nella lettera (${cor.map(c => `${rfEsc(c.da)} → ${rfEsc(c.a)}`).join(', ')})` : 'nessuna parola da correggere'}${st.impaginata ? ', impaginazione come la lettera' : ''}.</div>
       <div class="row" style="gap:6px;margin-top:6px"><button class="btn sm primary" onclick="rfAggAzione({ azione: 'stampella' })">Usala come aiuto</button></div>
       ${scelteHtml(a.scelte, 'Usa questa')}</div>`;
   }
@@ -1113,7 +1113,7 @@ function rfAggHtml() {
   const pct = Math.round((p.somiglianza || 0) * 100);
   const nov = (p.novita || []).map((f, i) => `<label class="rf-agg-nov"><input type="checkbox" ${RF.aggNovita && RF.aggNovita[i] ? 'checked' : ''} onchange="RF.aggNovita[${i}]=this.checked"> <span>${rfEsc(f)}</span></label>`).join('');
   return `<div class="rf-campi rf-agg">${testa}
-    <div class="caption">Da ${rfEsc(a.fonte.etichetta)}${p.data_vecchia ? ` · data della visita ${rfEsc(p.data_vecchia)} → oggi` : ''}</div>
+    <div class="caption">Da ${rfEsc(a.fonte.etichetta)} ${rfAggTastoGuarda(a.fonte)}${p.data_vecchia ? ` · data della visita ${rfEsc(p.data_vecchia)} → oggi` : ''}</div>
     <div class="${pct < 35 ? 'rf-att-warn' : 'caption'}">Anamnesi e fattori di rischio dettati e della lettera vecchia: simili al <b>${pct}%</b>.</div>
     ${(p.avvisi || []).filter(x => !/si somigliano poco/.test(x)).map(x => `<div class="rf-att-warn">${rfEsc(x)}</div>`).join('')}
     ${nov ? `<div class="rf-att-tit" style="margin-top:6px">Nel dettato, non nella lettera vecchia</div><div class="caption">Spunta quelle da aggiungere all'anamnesi.</div>${nov}` : '<div class="caption">Nel dettato non c\'è niente che la lettera vecchia non abbia.</div>'}
@@ -1428,4 +1428,22 @@ async function rfCartellaDettati() {
     '<button class="btn" data-close>Chiudi</button>',
   ].join('');
   openModal('Cartella sul computer', corpo, tasti);
+}
+
+
+/* «Guarda» sulla lettera vecchia (2.10.2026, anche quando è la più recente
+   usata come aiuto): le lettere in cartella si aprono nel visore alla loro
+   pagina; un referto confermato si legge in una finestra. */
+function rfAggTastoGuarda(f) {
+  if (!f || !f.id) return '';
+  return `<button class="btn sm ghost" style="padding:1px 8px" onclick="rfAggGuarda('${rfEsc(f.tipo)}','${rfEsc(f.id)}',${Number(f.da) || 0},'${rfEsc(String(f.etichetta || '').replace(/'/g, '’'))}')">Guarda</button>`;
+}
+async function rfAggGuarda(tipo, id, da, etichetta) {
+  if (tipo === 'documento' || tipo === 'pagine') { rfGuarda(`/api/documents/${id}`, etichetta, da || null, id); return; }
+  try {
+    const r = await fetch(`/api/prototipo/referti/${RF.loaded}/aggiornamento?lettera=${encodeURIComponent(id)}`, { credentials: 'include', cache: 'no-store' });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { toast('Lettera non trovata'); return; }
+    openModal(rfEsc(etichetta || 'Lettera'), `<div style="white-space:pre-wrap;line-height:1.55;max-height:65vh;overflow:auto">${rfEsc(j.testo || '')}</div>`, '<button class="btn primary" data-close>Chiudi</button>');
+  } catch { toast('Non riesco a raggiungere la piattaforma'); }
 }
