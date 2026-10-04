@@ -7,8 +7,8 @@ dvOpen = function (idOrItem, source = '') {
   if (!d) { toast('Documento non trovato'); return; }
   const nome = String(d.filename || d.t || '').toLowerCase();
   DV.open = true; DV.source = source;
-  DV.item = { id: d.id, live: true, p: d.p, title: d.t, date: d.date || d.d || '', kind: d.type || d.k || 'exam', filename: d.filename || '', pdf: nome.endsWith('.pdf'), testo: null };
-  if (!DV.item.pdf) {
+  DV.item = { id: d.id, live: true, p: d.p, title: d.t, date: d.date || d.d || '', kind: d.type || d.k || 'exam', filename: d.filename || '', pdf: nome.endsWith('.pdf'), img: /\.(jpe?g|png)$/.test(nome), testo: null };
+  if (!DV.item.pdf && !DV.item.img) {
     fetch(`/api/prototipo/documenti/${d.id}/testo`, { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(j => { if (DV.item && DV.item.id === d.id) { DV.item.testo = j ? (j.testo || '(nessun testo estraibile)') : 'Testo non disponibile.'; renderDocViewer(); } }).catch(() => {});
   }
   render();
@@ -22,6 +22,8 @@ renderDocViewer = function () {
   const paz = a.p && P[a.p] ? fullName(P[a.p]) : '';
   const corpo = a.pdf
     ? `<div class="rf-pdf" id="rf-pdf" data-url="${rfEsc(a.src || `/api/documents/${a.id}`)}"></div>`
+    : a.img
+    ? `<div class="dv-page" style="padding:10px"><img src="${rfEsc(a.src || `/api/documents/${a.id}`)}" alt="${rfEsc(a.title || 'Immagine')}" style="max-width:100%;height:auto;display:block;margin:0 auto;border-radius:6px"></div>`
     : `<div class="dv-page"><div class="dv-head"><div><div class="dv-title">${rfEsc(a.title)}</div><div class="caption">${rfEsc(paz)}${a.date ? ' · ' + rfEsc(a.date) : ''}</div></div></div><pre style="white-space:pre-wrap;font:inherit;margin:12px 0 0">${a.testo == null ? 'Estraggo il testo…' : rfEsc(a.testo)}</pre></div>`;
   el.innerHTML = `
     <div class="dv-bar"><span class="section-title" style="margin:0">Documento</span><span class="badge">${rfEsc(DOC_TYPE[a.kind] || a.kind)}</span><span class="caption">${rfEsc(paz)}${a.date ? ' · ' + a.date : ''}</span>
