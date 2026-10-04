@@ -30,7 +30,7 @@ const TIPI: { tipo: Tipo; dettato: RegExp; pagina: RegExp; nome: string }[] = [
   { tipo: 'lettera', nome: 'lettera', dettato: /\b(?:lettera|rapporto|dimissione)\b/i, pagina: /\b(?:egregio|gentile|caro collega|cara collega|cari colleghi|lieber kollege|liebe kollegin|sehr geehrte|cher confrère|chère consœur|rapporto|dimissione|austrittsbericht|lettre de sortie)\b/gi },
 ];
 
-export const CATEGORIA_DI: Record<Tipo, string> = { ecg: 'ecg', holter: 'holter', eco: 'referto', ergometria: 'referto', laboratorio: 'laboratorio', imaging: 'imaging', lettera: 'lettera' };
+export const CATEGORIA_DI: Record<Tipo, string> = { ecg: 'ecg', holter: 'holter', eco: 'ett', ergometria: 'ciclo', laboratorio: 'laboratorio', imaging: 'imaging', lettera: 'lettera' };
 export const NOME_DI: Record<Tipo, string> = Object.fromEntries(TIPI.map((t) => [t.tipo, t.nome])) as Record<Tipo, string>;
 
 const INVITO_ALLEGATO = /\b(?:alleg\w*|come da|vedi|secondo (?:la|il|l')|riportat\w*|in copia)\b/i;

@@ -20,6 +20,8 @@ export const CATEGORIE: Record<string, string> = {
   laboratorio: 'Laboratorio',
   dimissione: 'Lettera di dimissione',
   holter: 'Holter',
+  ett: 'ETT (ecocardiogramma)',
+  ciclo: 'Ciclo (cicloergometria)',
   altro: 'Documento',
 };
 

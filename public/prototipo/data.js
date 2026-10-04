@@ -123,7 +123,7 @@ const DOCUMENTS = [
   { id: 'd5', t: 'Documento non identificato (PDF 3 pag.)', p: null, type: 'unknown', status: 'needs_confirmation', date: '09.09.2026', conf: 'Nessun candidato', src: 'Scansione' },
   { id: 'd6', t: 'Consenso informato — ergometria', p: 'p7', type: 'consent', date: '01.09.2026', status: 'confirmed', conf: 'Confermato', src: 'Upload' },
 ];
-const DOC_TYPE = { discharge: 'Dimissione', lab: 'Laboratorio', report: 'Referto', ecg: 'ECG', holter: 'Holter', unknown: 'Da classificare', consent: 'Consenso', imaging: 'Imaging', letter: 'Lettera', admin: 'Amministrativo' };
+const DOC_TYPE = { discharge: 'Dimissione', lab: 'Laboratorio', report: 'Referto', ecg: 'ECG', holter: 'Holter', echo: 'ETT', cycle: 'Ciclo', unknown: 'Da classificare', consent: 'Consenso', imaging: 'Imaging', letter: 'Lettera', admin: 'Amministrativo' };
 
 const INBOX = [
   { id: 'i1', kind: 'report', t: 'Referto Verdi approvato — pronto per invio', s: 'Segreteria · 11:10', p: 'p2', tags: ['today', 'mine'], acts: ['Invia', 'Assegna'] },

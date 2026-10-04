@@ -49,6 +49,8 @@ function mesiFa(oggi: Date, mesi: number): number {
 export function tipoEsame(d: { filename: string; nota: string | null; categoria: string }): 'ecg' | 'eco' | 'holter' | 'ergometria' | 'duplex' | 'laboratorio' | 'lettera' | 'referto' | 'altro' {
   const t = `${d.nota ?? ''} ${d.filename}`.toLowerCase();
   if (d.categoria === 'lettera') return 'lettera';
+  if (d.categoria === 'ett') return 'eco';
+  if (d.categoria === 'ciclo') return 'ergometria';
   if (/holter/.test(t)) return 'holter';
   if (/ergometr|da sforzo|cicloergometr/.test(t)) return 'ergometria';
   if (/duplex|doppler|carotid/.test(t)) return 'duplex';

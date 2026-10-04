@@ -602,7 +602,7 @@ PAGES.profile = () => {
    alla volta verso /api/prototipo/pazienti/<id>/documenti con l'avanzamento,
    e, per un PDF senza testo, l'OCR fatto dal Mac (src/lib/documenti-ocr.ts). */
 const RF_DOC_MAX_MB = 50;
-const RF_DOC_CAT = { altro: 'Documento', referto: 'Referto', ecg: 'ECG', holter: 'Holter', laboratorio: 'Laboratorio', imaging: 'Imaging', lettera: 'Lettera', dimissione: 'Lettera di dimissione', consenso: 'Consenso firmato' };
+const RF_DOC_CAT = { altro: 'Documento', referto: 'Referto', ecg: 'ECG', holter: 'Holter', ett: 'ETT (ecocardiogramma)', ciclo: 'Ciclo (cicloergometria)', laboratorio: 'Laboratorio', imaging: 'Imaging', lettera: 'Lettera', dimissione: 'Lettera di dimissione', consenso: 'Consenso firmato' };
 const rfDocUploadDemo = MODALS.upload;
 MODALS.upload = function () {
   if (!RF.live) return rfDocUploadDemo();
@@ -638,6 +638,8 @@ function rfDocPaziente() {
 function rfDocIndovina(nome) {
   const n = nome.toLowerCase();
   if (/holter/.test(n)) return 'holter';
+  if (/\bett\b|ecocardio|\beco\b|transtorac/.test(n)) return 'ett';
+  if (/\bciclo|ergometr|da sforzo/.test(n)) return 'ciclo';
   if (/\becg\b|elettrocardio/.test(n)) return 'ecg';
   if (/labor|sangue|emocromo/.test(n)) return 'laboratorio';
   if (/dimission/.test(n)) return 'dimissione';
