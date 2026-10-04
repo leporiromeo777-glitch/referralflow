@@ -10,6 +10,16 @@ const MIME_BY_EXT: Record<string, readonly string[]> = {
   '.jpeg': ['image/jpeg'],
   '.png': ['image/png'],
   '.dcm': ['application/dicom', 'application/octet-stream'],
+  // Cartella interna (4.10.2026): Word e testo (il messaggio d'errore li
+  // prometteva già, ma il server li rifiutava), TIFF degli scanner e foto
+  // HEIC dell'iPhone (questi due diventano PDF al caricamento).
+  '.docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+  '.doc': ['application/msword'],
+  '.txt': ['text/plain'],
+  '.tif': ['image/tiff'],
+  '.tiff': ['image/tiff'],
+  '.heic': ['image/heic', 'image/heif', 'image/heic-sequence'],
+  '.heif': ['image/heif', 'image/heic', 'image/heif-sequence'],
   '.xml': ['text/xml', 'application/xml'],
 };
 

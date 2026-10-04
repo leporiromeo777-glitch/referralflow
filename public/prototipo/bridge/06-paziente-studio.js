@@ -615,7 +615,7 @@ MODALS.upload = function () {
   openModal('Carica documento', `
     <div class="field"><label>Paziente</label>${chi}</div>
     <label class="rf-doc-drop mt-16" id="rf-doc-drop">${ICONS.upload}<span><b>Scegli i file</b> o trascinali qui</span><span class="caption">PDF, immagini, Word, DICOM · fino a ${RF_DOC_MAX_MB} MB l'uno · più file insieme</span>
-      <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx,.dcm" style="display:none" onchange="rfDocScegli(this.files)"></label>
+      <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.heic,.heif,.tif,.tiff,.docx,.doc,.txt,.dcm" style="display:none" onchange="rfDocScegli(this.files)"></label>
     <div id="rf-doc-lista"></div>
     <p class="caption mt-8">Per le scansioni: PDF in scala di grigi, 200–300 dpi. Se il PDF non ha il testo (niente OCR, o esportato da DocuWare), lo aggiunge il Mac da solo; le pagine scritte a mano restano immagini. Una cartella lunga si può dividere per contenuto (ECG, laboratorio, lettere…): si ritrova meglio.</p>`,
     `<button class="btn" data-close>Chiudi</button><button class="btn primary" id="rf-doc-ok" onclick="rfDocCarica()" disabled>Carica</button>`);

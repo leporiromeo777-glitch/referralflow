@@ -112,6 +112,19 @@ async function main() {
     verifica(d.status === 409, 'paziente solo d\'agenda: prima la scheda (409)');
     const e = await carica(paz!, Buffer.from('MZ'), 'programma.exe');
     verifica(e.status === 415, 'formato non ammesso (415)');
+    // Word e TIFF (4.10.2026): il Word si carica com'è, il TIFF diventa PDF.
+    const w = await carica(paz!, readFileSync(path.join(process.cwd(), 'modelli', 'referto-carta-intestata.docx')), 'lettera di prova.docx', 'lettera');
+    verifica(w.status === 201, `Word (.docx) accettato (${w.status})`);
+    const td = mkdtempSync(path.join(os.tmpdir(), 'rf-tiff-'));
+    try {
+      const png = path.join(td, 'p.png'), tif = path.join(td, 'scansione.tif');
+      writeFileSync(png, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64'));
+      execFileSync('/usr/bin/sips', ['-z', '800', '600', png], { stdio: 'ignore' });   // una pagina vera, non 1 pixel
+      execFileSync('/usr/bin/sips', ['-s', 'format', 'tiff', png, '--out', tif], { stdio: 'ignore' });
+      const t = await carica(paz!, readFileSync(tif), 'scansione.tif', 'ett');
+      const [rt] = await query<{ filename: string; categoria: string }>('select filename, categoria from patient_documents where id = $1', [t.j.id ?? '00000000-0000-0000-0000-000000000000']);
+      verifica(t.status === 201 && rt?.filename === 'scansione.pdf' && rt.categoria === 'ett' && t.j.pagine === 1, `TIFF dello scanner: diventa PDF di 1 pagina, categoria ETT (${t.status} ${rt?.filename} ${t.j.pagine})`);
+    } finally { rmSync(td, { recursive: true, force: true }); }
   } finally {
     if (paz) {
       const docs = await query<{ id: string; storage_key: string }>('select id, storage_key from patient_documents where patient_id = $1', [paz]);

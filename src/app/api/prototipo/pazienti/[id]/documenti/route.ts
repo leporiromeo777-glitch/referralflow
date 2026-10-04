@@ -1,3 +1,4 @@
+import { daConvertire, inPdf } from '@/lib/immagine-in-pdf';
 import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
 import { getSession } from '@/lib/auth';
@@ -32,17 +33,24 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   const file = form?.get('file');
   if (!(file instanceof File) || file.size === 0) return NextResponse.json({ errore: 'Nessun file.' }, { status: 400 });
   if (file.size > MAX_CARTELLA_SIZE) return NextResponse.json({ errore: `Il file supera i ${MAX_CARTELLA_SIZE / 1024 / 1024} MB: dividilo in più parti.` }, { status: 413 });
-  if (!isAllowedInternalUpload(file)) return NextResponse.json({ errore: 'Formato non ammesso: PDF, immagini, Word, DICOM.' }, { status: 415 });
+  if (!isAllowedInternalUpload(file)) return NextResponse.json({ errore: 'Formato non ammesso: PDF, immagini (JPG, PNG, HEIC, TIFF), Word, testo, DICOM.' }, { status: 415 });
   const categoriaRaw = String(form?.get('categoria') ?? '').trim();
   const categoria = categoriaRaw in CATEGORIE ? categoriaRaw : 'altro';
   const nota = String(form?.get('nota') ?? '').trim().slice(0, 200) || null;
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const ext = path.extname(file.name).toLowerCase();
-  const key = await putFile(buffer, file.type || 'application/octet-stream', ext);
+  let buffer = Buffer.from(await file.arrayBuffer());
+  let ext = path.extname(file.name).toLowerCase();
+  let nomeFile = file.name;
+  let tipo = file.type || 'application/octet-stream';
+  // TIFF e HEIC diventano PDF (si vedono nel visore e passano dall'OCR).
+  if (daConvertire(ext)) {
+    const pdf = await inPdf(buffer, ext);
+    if (pdf) { buffer = Buffer.from(pdf); nomeFile = `${file.name.slice(0, -ext.length)}.pdf`; ext = '.pdf'; tipo = 'application/pdf'; }
+  }
+  const key = await putFile(buffer, tipo, ext);
   const [doc] = await query<{ id: string }>(
     `insert into patient_documents (studio_id, patient_id, filename, storage_key, categoria, nota, uploaded_by)
-     values ($1, $2, $3, $4, $5, $6, $7) returning id`, [sid, params.id, file.name, key, categoria, nota, session.id]);
+     values ($1, $2, $3, $4, $5, $6, $7) returning id`, [sid, params.id, nomeFile, key, categoria, nota, session.id]);
   await logDocumento(doc.id, 'caricamento', { studioId: sid, userId: session.id });
 
   const v = await dopoCaricamento(doc.id, buffer, ext);
