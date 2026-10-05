@@ -16,6 +16,7 @@ reportsQueue = function () {
   const ordina = (l) => [...l].sort((a, b) => {
     if (sort === 'priority') return rank[a.state] - rank[b.state] || b.crit - a.crit;
     if (sort === 'time') return String(b.atIso || b.at).localeCompare(String(a.atIso || a.at));
+    if (sort === 'arrivo') return String(b.arrivoIso || '').localeCompare(String(a.arrivoIso || ''));
     if (sort === 'doctor') return (DOCTORS[a.doc] || '').localeCompare(DOCTORS[b.doc] || '');
     return fullName(P[a.p]).localeCompare(fullName(P[b.p]));
   });
@@ -25,7 +26,7 @@ reportsQueue = function () {
       <div class="row wrap" style="gap:12px">
         <div class="avatar-sm">${initials(P[r.p])}</div>
         <div class="grow" style="min-width:220px">
-          <div class="row" style="gap:8px"><b>${rfEsc(fullName(P[r.p]))}</b><span class="badge ${st[1]}">${st[0]}</span>${r.status === 'APPROVED' ? '<span class="badge success">confermato</span>' : r.rivisto ? `<span class="badge accent" title="${r.rivisto.correzioni} correzioni · ${r.rivisto.chiuse} verifiche chiuse">rivisto ${rfEsc(r.rivisto.quando)}</span>` : ''}${r.inviante ? `<span class="badge warning" title="${r.inviante.stato === 'nuovo' ? 'Il medico inviante non è nella rubrica: si aggiunge dalla revisione' : 'Più medici possibili in rubrica: si sceglie nella revisione'}">${r.inviante.stato === 'nuovo' ? 'inviante nuovo' : 'inviante da scegliere'}${r.inviante.nome ? ': ' + rfEsc(r.inviante.nome) : ''}</span>` : ''}</div>
+          <div class="row" style="gap:8px"><b>${rfEsc(fullName(P[r.p]))}</b><span class="badge ${st[1]}">${st[0]}</span>${rfArrivoBadge(r)}${r.status === 'APPROVED' ? '<span class="badge success">confermato</span>' : r.rivisto ? `<span class="badge accent" title="${r.rivisto.correzioni} correzioni · ${r.rivisto.chiuse} verifiche chiuse">rivisto ${rfEsc(r.rivisto.quando)}</span>` : ''}${r.inviante ? `<span class="badge warning" title="${r.inviante.stato === 'nuovo' ? 'Il medico inviante non è nella rubrica: si aggiunge dalla revisione' : 'Più medici possibili in rubrica: si sceglie nella revisione'}">${r.inviante.stato === 'nuovo' ? 'inviante nuovo' : 'inviante da scegliere'}${r.inviante.nome ? ': ' + rfEsc(r.inviante.nome) : ''}</span>` : ''}</div>
           <div class="caption">${rfEsc(DOCTORS[r.doc] || '')} · ${rfEsc(r.type)} · ${r.at}</div>
           <div class="sub" style="font-size:12.5px;color:var(--text-2);margin-top:2px">${rfEsc(r.note)}</div>
         </div>
@@ -68,7 +69,7 @@ reportsQueue = function () {
   const medici = RF.medici.length ? RF.medici : Object.entries(DOCTORS).map(([id, nome]) => ({ id, nome }));
   return `
     <div class="page-head"><div><h2 class="page-title">Referti</h2><div class="page-sub">${aperti.length} da controllare · ${tot} verifiche · ${crit} critiche · ${chiusi.length} confermati negli ultimi 30 giorni</div></div>
-      <div class="actions"><div class="seg">${[['priority', 'Priorità'], ['time', 'Ora'], ['doctor', 'Medico'], ['patient', 'Paziente']].map(([k, l]) => `<button class="${sort === k ? 'active' : ''}" onclick="state.qSort='${k}';render()">${l}</button>`).join('')}</div><button class="btn" data-go="#/dittafono">${ICONS.mic || ''} Detta dal telefono</button></div></div>
+      <div class="actions"><div class="seg">${[['priority', 'Priorità'], ['arrivo', 'Arrivo'], ['time', 'Data dettato'], ['doctor', 'Medico'], ['patient', 'Paziente']].map(([k, l]) => `<button class="${sort === k ? 'active' : ''}" onclick="state.qSort='${k}';render()" title="${k === 'arrivo' ? 'Le ultime consegnate dalla catena in cima' : k === 'time' ? 'Per data e ora del dettato' : ''}">${l}</button>`).join('')}</div><button class="btn" data-go="#/dittafono">${ICONS.mic || ''} Detta dal telefono</button></div></div>
     <div class="card mb-16" id="rf-intake">
       <div class="card-head"><span class="section-title">Nuovo dettato</span><span class="row" style="gap:10px;align-items:center"><span class="caption">DS2, m4a, wav, mp3 · va alla coda della catena</span><button class="btn sm" onclick="rfCartellaDettati()">Cartella sul computer</button></span></div>
       <div class="row wrap" style="gap:10px;align-items:center">
@@ -1532,3 +1533,17 @@ async function rfPazAzione(corpo) {
     });
   }, true);
 })();
+
+
+/* «arrivata oggi» (5.10.2026): la scheda mostra la data del DETTATO, che può
+   essere di mesi prima; l'etichetta dice quando la catena l'ha consegnata. */
+function rfArrivoBadge(r) {
+  if (!r.arrivoIso || r.status === 'APPROVED') return '';
+  const d = new Date(r.arrivoIso), ora = new Date();
+  if (Number.isNaN(d.getTime())) return '';
+  const hm = d.toLocaleTimeString('it-CH', { hour: '2-digit', minute: '2-digit' });
+  const ieri = new Date(ora); ieri.setDate(ora.getDate() - 1);
+  if (d.toDateString() === ora.toDateString()) return `<span class="badge accent" title="Consegnata dalla catena oggi alle ${hm}">arrivata oggi ${hm}</span>`;
+  if (d.toDateString() === ieri.toDateString()) return `<span class="badge" title="Consegnata dalla catena ieri alle ${hm}">arrivata ieri ${hm}</span>`;
+  return '';
+}

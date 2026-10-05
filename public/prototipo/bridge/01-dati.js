@@ -60,7 +60,7 @@ async function rfCaricaDati() {
   RF.queue = (d.reports || []).map(x => ({ ...x }));
   rfSvuota(RV_QUEUE);
   for (const x of RF.queue) {
-    RV_QUEUE.push({ id: x.id, p: x.p, doc: x.doc, type: x.type, at: x.at, audio: x.audio, issues: x.issues, crit: x.crit, est: x.est, state: x.state, note: x.note, blocked: false, status: x.status, confermatoIl: x.confermato_il || null, rivisto: x.rivisto || null, inviante: x.inviante || null });
+    RV_QUEUE.push({ id: x.id, p: x.p, doc: x.doc, type: x.type, at: x.at, audio: x.audio, issues: x.issues, crit: x.crit, est: x.est, state: x.state, note: x.note, blocked: false, status: x.status, confermatoIl: x.confermato_il || null, arrivoIso: x.arrivata_il || null, atIso: x.atIso || null, rivisto: x.rivisto || null, inviante: x.inviante || null });
   }
   // Niente residui demo nelle pagine raggiungibili: archivio storico della
   // palette, audit e job finti, knowledge, fatture.

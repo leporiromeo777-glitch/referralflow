@@ -70,3 +70,50 @@
 `;
   document.head.appendChild(st);
 })();
+
+
+/* ---------- Aggiornamento automatico dell'app (5.10.2026) ----------
+   1. Service worker /sw.js: se il sito non risponde (la piattaforma si sta
+      ricompilando) mostra una pagina che lo dice e riprova, invece della
+      schermata bianca. Non mette niente in cache.
+   2. Versione nuova: l'app confronta la propria versione (il ?v= di app.js)
+      con quella di index.html sul server — quando torna in primo piano, a
+      ogni cambio di pagina e ogni 5 minuti — e si ricarica da sola. Mai
+      mentre si lavora: in revisione, al dittafono, con una finestra aperta o
+      mentre si scrive in un campo si avvisa soltanto, e si ricarica dopo. */
+(function () {
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
+  const mia = (() => { const s = [...document.scripts].map(x => x.src).find(x => /\/app\.js\?v=\d+/.test(x)); return s ? Number(/v=(\d+)/.exec(s)[1]) : 0; })();
+  if (!mia) return;
+  let ultimo = 0, avvisato = false;
+  const occupato = () => {
+    if (typeof state !== 'undefined' && (state.route === 'review' || state.route === 'dittafono' || state.route === 'visit')) return true;
+    if (document.querySelector('#modal-overlay.show, #sheet.show')) return true;
+    const a = document.activeElement;
+    return !!(a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable));
+  };
+  async function controlla() {
+    if (Date.now() - ultimo < 60000) return;
+    ultimo = Date.now();
+    try {
+      const r = await fetch('/prototipo/index.html', { cache: 'no-store', credentials: 'include' });
+      if (!r.ok) return;
+      const m = /app\.js\?v=(\d+)/.exec(await r.text());
+      const nuova = m ? Number(m[1]) : 0;
+      if (!nuova || nuova <= mia) return;
+      if (occupato()) {
+        if (!avvisato && typeof toast === 'function') { avvisato = true; toast('C’è una versione nuova di ReferralFlow: si aggiorna da sola appena finisci qui'); }
+        ultimo = 0;   // si riprova al prossimo cambio di pagina
+        return;
+      }
+      // Una sola ricarica per versione: se qualcosa tiene in giro l'index vecchio non si gira a vuoto.
+      try { if (sessionStorage.getItem('rf-ricaricata') === String(nuova)) return; sessionStorage.setItem('rf-ricaricata', String(nuova)); } catch (e) { /* ignora */ }
+      location.reload();
+    } catch (e) { /* server giù: ci pensa la prossima volta */ }
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) void controlla(); });
+  window.addEventListener('hashchange', () => { void controlla(); });
+  setInterval(() => { void controlla(); }, 5 * 60 * 1000);
+})();
