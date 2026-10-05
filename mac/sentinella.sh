@@ -168,7 +168,8 @@ fi
 
 # Un dettato finito in errori/ resta lì finché qualcuno non lo guarda: si
 # avvisa quando ne arriva uno NUOVO (e ogni 6 ore finché ce ne sono).
-errori="$(conta_in errori)"
+# Accanto a ogni audio fallito la catena lascia il suo registro (.log): non è un dettato.
+errori="$(file_in errori | grep -v '\.log$' | grep -c . | tr -d ' ')"
 prima="$(cat "$STATO/errori.visti" 2> /dev/null || echo 0)"
 echo "$errori" > "$STATO/errori.visti"
 if [ "$errori" -gt 0 ]; then

@@ -856,6 +856,29 @@ def _prova_43() -> None:
         sh.rmtree(tmp, ignore_errors=True)
 
 
+@caso("44 · pertinenza e senso: tetto alla risposta e due tentativi; una risposta troncata non rompe; il modello muto non manda il dettato in errori")
+def _():
+    import inspect
+    viste = []
+    def finto(prompt, file_id, fase, formato_json=False, modello=None, max_gettoni=None, tentativi=None):
+        viste.append((fase, max_gettoni, tentativi))
+        return '{"fuori_tema": ["frase a met' if fase == "pertinenza" else '{"frasi": [{"frase": "tronc'
+    vecchio = m.chiama_ollama
+    m.chiama_ollama = finto
+    try:
+        assert m.trova_divagazioni("Il paziente sta bene. Controllo tra un anno.", "prova") == []
+        assert m.controlla_senso("Il paziente sta bene. Controllo tra un anno.", "", "prova") == []
+    finally:
+        m.chiama_ollama = vecchio
+    assert ("pertinenza", 1500, 2) in viste and ("senso", 4000, 2) in viste, viste
+    # In elabora le due fasi sono di sole segnalazioni: l'errore del modello si
+    # prende lì, con un avviso per chi rivede, invece di fermare il dettato.
+    src = inspect.getsource(m.elabora)
+    for fase in ("pertinenza", "senso"):
+        assert f'fase={fase} file=%s esito=saltata motivo=modello_non_risponde' in src, fase
+    assert src.count("except RuntimeError") >= 2
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0

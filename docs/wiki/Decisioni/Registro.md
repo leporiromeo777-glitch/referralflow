@@ -484,3 +484,9 @@ la bozza si collega da sola solo se il nome suona come UNA sola cartella che ha 
 agenda nei giorni del dettato (o la stessa data di nascita); altrimenti è una proposta da confermare.
 Mai la sola ultima lettera diversa (Mario/Maria), mai con una data di nascita diversa. Il nome nel
 testo si scrive come in cartella.
+
+## 5.10.2026 — «Pertinenza» e «senso» non fermano più un dettato
+Sono fasi di sole segnalazioni (frasi fuori tema, frasi senza senso): se il modello non risponde,
+la bozza esce lo stesso, senza quelle segnalazioni e con un avviso per chi rivede. Prima un blocco
+del modello in queste fasi mandava in errori un dettato già trascritto e corretto (4 in una notte).
+Più il tetto alla lunghezza della risposta, come le altre fasi corte.

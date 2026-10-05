@@ -73,7 +73,7 @@ rm -f "$R/lavorazione/abc"; giro > /dev/null
 verifica "bozza non consegnata da 70 min" "$(giro)" "non consegnate alla piattaforma da 70 minuti"
 rm -f "$R/output/b.json"; giro > /dev/null
 
-: > "$R/errori/e1"
+: > "$R/errori/e1"; : > "$R/errori/e1.log"
 verifica "un dettato in errori: avviso" "$(giro)" "1 dettati sono finiti in errori"
 verifica "stesso errore: non si ripete" "$(giro)" ""
 : > "$R/errori/e2"

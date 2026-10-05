@@ -4100,6 +4100,10 @@ def trova_divagazioni(testo: str, file_id: str) -> list[str]:
     uscita = chiama_ollama(
         PROMPT_PERTINENZA.replace("{testo}", testo), file_id, "pertinenza",
         formato_json=True, modello=MODELLO_PERTINENZA,
+        # Tetto alla risposta (5.10.2026): una notte quattro dettati sono
+        # finiti in errori/ per una risposta-fiume di 15 minuti a tentativo,
+        # tre volte. La risposta vera è corta (massimo visto: 861 gettoni).
+        max_gettoni=1500, tentativi=2,
     )
     frasi: list[str] = []
     try:
@@ -4166,7 +4170,10 @@ def controlla_senso(testo: str, glossario: str, file_id: str) -> list[dict]:
     segnalazione)."""
     inizio = time.monotonic()
     prompt = PROMPT_SENSO.replace("{glossario}", glossario or "(vuoto)").replace("{testo}", testo)
-    uscita = chiama_ollama(prompt, file_id, "senso", formato_json=True, modello=MODELLO_SENSO)
+    # Tetto alla risposta (5.10.2026), come per la pertinenza: massimo visto
+    # 3723 gettoni; a ~5 gettoni/s 4000 stanno sotto il tempo massimo.
+    uscita = chiama_ollama(prompt, file_id, "senso", formato_json=True, modello=MODELLO_SENSO,
+                           max_gettoni=4000, tentativi=2)
     grezzi: list = []
     try:
         dati = json.loads(uscita)
@@ -8081,7 +8088,16 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                 log.info("fase=pertinenza file=%s esito=compatta fuori_tema=%d",
                          file_id, len(divagazioni))
             else:
-                divagazioni = trova_divagazioni(finale, file_id)
+                # Fase di sole segnalazioni: se il modello non risponde il
+                # dettato NON va in errori/ (5.10.2026) — la bozza esce senza
+                # queste segnalazioni e lo dice a chi rivede.
+                try:
+                    divagazioni = trova_divagazioni(finale, file_id)
+                except RuntimeError:
+                    divagazioni = []
+                    log.warning("fase=pertinenza file=%s esito=saltata motivo=modello_non_risponde", file_id)
+                    avvisi.append("Il controllo delle frasi fuori tema non è riuscito su questo dettato "
+                                  "(il modello non ha risposto): rileggi il testo con più attenzione.")
             percorso(".divagazioni.json").write_text(
                 json.dumps(divagazioni, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",
@@ -8097,7 +8113,13 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
                 log.info("fase=senso file=%s esito=compatta segnalate=%d",
                          file_id, len(frasi_da_chiarire))
             else:
-                frasi_da_chiarire = controlla_senso(finale, vocab, file_id)
+                try:
+                    frasi_da_chiarire = controlla_senso(finale, vocab, file_id)
+                except RuntimeError:
+                    frasi_da_chiarire = []
+                    log.warning("fase=senso file=%s esito=saltata motivo=modello_non_risponde", file_id)
+                    avvisi.append("Il controllo delle frasi senza senso non è riuscito su questo dettato "
+                                  "(il modello non ha risposto): rileggi il testo con più attenzione.")
             # Una frase già segnalata come fuori tema non va anche «chiarita»:
             # è spenta dall'evidenziatore, il doppione confonderebbe.
             frasi_da_chiarire = [v for v in frasi_da_chiarire if v["frase"] not in divagazioni]
