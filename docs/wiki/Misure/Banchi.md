@@ -297,3 +297,5 @@ Stesso giorno: sui tre dettati veri di Moccetti la richiesta non scattava (solo 
 **Formati della cartella** (4.10.2026): end-to-end `prova-documenti.ts` 18/18 — in più Word (.docx) accettato e TIFF dello scanner trasformato in PDF di 1 pagina con la sua categoria (ETT). Il TIFF di prova va almeno a una pagina vera: un'immagine di 1 pixel img2pdf la rifiuta.
 
 **Catena, notte del 4–5.10.2026** (solo registro): 10 dettati in coda, 9 bozze consegnate, 4 in errori per risposta-fiume (3 in «senso», 1 in «pertinenza»; ogni tentativo 15 minuti, 3 tentativi). Tempi normali delle due fasi su ~100 chiamate: pertinenza media 24 s (max 151 s, 861 gettoni), senso media 126 s (max 622 s, 3723 gettoni). Dopo il tetto e la fase non più bloccante: suite catastrofica **44/44**. La sentinella contava 8 «dettati in errori» (4 audio + 4 registri): ora conta i soli audio, 25/25.
+
+Stesso giorno: consegna dopo ogni dettato, suite **45/45**. I quattro dettati rifatti durano 50–58 minuti l'uno (dettati lunghi), nessuno in errori, nessuna fase saltata.

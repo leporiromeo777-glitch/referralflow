@@ -9381,6 +9381,13 @@ def servizio(sostituzioni, controlli) -> int:
                 in_attesa.pop(f, None)
                 _processa_uno(f, cartelle, sostituzioni, controlli)
                 concludi_da_cartella(f.name, cartelle)
+                # Consegna subito, dettato per dettato (5.10.2026): con una
+                # coda lunga le bozze pronte aspettavano la fine del giro —
+                # una notte 8 bozze ferme sette ore, consegnate tutte insieme.
+                try:
+                    invia_bozze(cartelle)
+                except OSError as e:
+                    log.warning("fase=invio esito=rinviato tipo=%s", type(e).__name__)
             in_attesa = {p: d for p, d in in_attesa.items() if p.exists()}
             invia_bozze(cartelle)
             # Elenco dei medici che dettano alla piattaforma (solo se cambiato).

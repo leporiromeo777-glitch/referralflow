@@ -879,6 +879,16 @@ def _():
     assert src.count("except RuntimeError") >= 2
 
 
+@caso("45 · consegna dopo ogni dettato: nel giro del servizio la bozza parte appena pronta, non a fine coda")
+def _():
+    import inspect
+    src = inspect.getsource(m.servizio)
+    giro = src[src.index("for f in sorted(cartelle[\"ingresso\"].iterdir())"):]
+    dentro = giro[:giro.index("in_attesa = {p: d")]
+    assert "_processa_uno(f, cartelle, sostituzioni, controlli)" in dentro
+    assert dentro.index("invia_bozze(cartelle)") > dentro.index("_processa_uno("), "la consegna segue ogni dettato"
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0
