@@ -490,3 +490,12 @@ Sono fasi di sole segnalazioni (frasi fuori tema, frasi senza senso): se il mode
 la bozza esce lo stesso, senza quelle segnalazioni e con un avviso per chi rivede. Prima un blocco
 del modello in queste fasi mandava in errori un dettato già trascritto e corretto (4 in una notte).
 Più il tetto alla lunghezza della risposta, come le altre fasi corte.
+
+## 5.10.2026 — Il paziente si cerca nell'agenda, e la cartella nasce da sola
+Sulle 92 bozze aperte 21 non avevano il nome (la catena non l'aveva riconosciuto) e 58 avevano un
+nome senza cartella. Invece di «capire» il nome dal dettato si cerca chi, fra i pazienti in agenda
+nei 7 giorni prima, compare nel dettato: misurato, un solo candidato in 31 bozze su 79 (7 delle 21
+senza nome), più d'uno in 4. Decisione dello studio: con un solo candidato la bozza si collega da
+sola e, se la cartella non c'è, **si crea da sola** con nome e data di nascita dell'agenda (dati
+scritti dalla segreteria: così l'anagrafica si popola man mano). Con più candidati si propone. In
+più il paziente si può scegliere al caricamento del dettato.

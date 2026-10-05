@@ -57,6 +57,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ errore: 'medico_mancante' }, { status: 400 });
   }
 
+  // Il paziente, se chi carica lo sceglie (5.10.2026): la bozza nasce collegata.
+  const pazienteRaw = String(form?.get('patient_id') ?? '').trim();
+  let pazienteId: string | null = null;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pazienteRaw)) {
+    const [pz] = await query<{ id: string }>('select id from patients where id = $1 and studio_id = $2', [pazienteRaw, session.studioId]);
+    pazienteId = pz?.id ?? null;
+  }
+
   const buffer = Buffer.from(await file.arrayBuffer());
   const key = await putFile(buffer, TIPI[ext], ext);
   // File del dittafono: il WAV di riascolto si prepara subito in sottofondo
@@ -64,9 +72,9 @@ export async function POST(req: NextRequest) {
   // Best-effort: se fallisce, la rotta audio riprova alla prima richiesta.
   if (ESTENSIONI_DITTAFONO.has(ext)) void wavDaDittafono(key, buffer);
   const [row] = await query<{ id: string }>(
-    `insert into referti_audio (studio_id, filename, storage_key, content_type, uploaded_by, tipo, medico)
-     values ($1, $2, $3, $4, $5, $6, $7) returning id`,
-    [session.studioId, file.name.slice(0, 200), key, TIPI[ext], session.id, tipo, ids.has(medico) ? medico : null]
+    `insert into referti_audio (studio_id, filename, storage_key, content_type, uploaded_by, tipo, medico, patient_id)
+     values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
+    [session.studioId, file.name.slice(0, 200), key, TIPI[ext], session.id, tipo, ids.has(medico) ? medico : null, pazienteId]
   );
 
   // L'arrivo di un dettato è «visita finita» per quel medico (16.9.2026,

@@ -3,13 +3,15 @@ import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
 import { vietato } from '@/lib/permessi';
 import { registraEvento } from '@/lib/referti-eventi';
-import { collegaPazienteAMano, statoPaziente } from '@/lib/paziente-bozza';
+import { collegaDaAgendaAMano, collegaPazienteAMano, statoPaziente } from '@/lib/paziente-bozza';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 // La cartella della bozza (2.10.2026): GET → collegata a chi e come, o le
-// proposte; POST { azione: 'collega', patient_id } | { azione: 'scollega' }.
+// proposte; POST { azione: 'collega', patient_id } | { azione: 'scollega' }
+// | { azione: 'collega_agenda', indice } (proposta dall'agenda: la cartella
+// c'è o nasce dai dati dell'agenda, 5.10.2026).
 const RUOLI = new Set(['segretaria', 'medico', 'admin', 'tecnico']);
 
 async function sessione(id: string) {
@@ -36,6 +38,14 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   if (errore) return errore;
   if (!RUOLI.has(session.role)) return NextResponse.json({ errore: 'ruolo_non_ammesso' }, { status: 403 });
   const c = await req.json().catch(() => null);
+  if (c?.azione === 'collega_agenda') {
+    const k = Number(c.indice);
+    if (!Number.isInteger(k) || k < 0 || k > 5) return NextResponse.json({ errore: 'indice' }, { status: 400 });
+    const ra = await collegaDaAgendaAMano(session.studioId, id, k, session.id);
+    if ('errore' in ra) return NextResponse.json(ra, { status: 409 });
+    void registraEvento(session.studioId, id, 'paziente_collegato', session.id, { agenda: true });
+    return NextResponse.json(ra);
+  }
   if (c?.azione === 'collega' && !isUuid(String(c.patient_id ?? ''))) return NextResponse.json({ errore: 'paziente' }, { status: 400 });
   if (c?.azione !== 'collega' && c?.azione !== 'scollega') return NextResponse.json({ errore: 'azione' }, { status: 400 });
   const r = await collegaPazienteAMano(session.studioId, id, c.azione === 'collega' ? String(c.patient_id) : null, session.id);

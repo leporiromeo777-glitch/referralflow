@@ -75,6 +75,7 @@ reportsQueue = function () {
       <div class="row wrap" style="gap:10px;align-items:center">
         <select id="rf-intake-medico" class="input sm">${medici.map(m => `<option value="${rfEsc(m.id)}">${rfEsc(m.nome)}</option>`).join('')}</select>
         <select id="rf-intake-tipo" class="input sm"><option value="referto">Referto</option><option value="visita">Visita registrata</option></select>
+        <input class="input sm" id="rf-intake-paz" list="rf-paz-elenco" placeholder="Paziente (facoltativo)" autocomplete="off" style="max-width:240px" title="Se lo scegli, la bozza nasce già collegata alla sua cartella">${rfPazElenco()}
         <input type="file" id="rf-intake-file" accept=".ds2,.dss,.m4a,.mp3,.wav,.aac,.ogg,.flac,.caf,.mp4" class="input sm" style="max-width:320px">
         <button class="btn primary" id="rf-intake-invia">Invia alla catena</button>
         <span class="caption" id="rf-intake-esito"></span>
@@ -93,6 +94,10 @@ document.addEventListener('click', async (e) => {
   fd.append('audio', f.files[0]);
   fd.append('medico', document.getElementById('rf-intake-medico').value);
   fd.append('tipo', document.getElementById('rf-intake-tipo').value);
+  const pazTesto = ((document.getElementById('rf-intake-paz') || {}).value || '').trim();
+  const pazId = rfPazIdDa(pazTesto);
+  if (pazTesto && !pazId) { esito.textContent = 'Scegli il paziente dall’elenco, o lascia il campo vuoto.'; return; }
+  if (pazId) fd.append('patient_id', pazId);
   esito.textContent = 'Invio…'; b.disabled = true;
   try {
     const r = await fetch('/api/referti/upload', { method: 'POST', body: fd, credentials: 'include' });
@@ -1478,7 +1483,7 @@ function rfPazHtml() {
   if (!RF.live || !RF.loaded) return '';
   if (RF.pazPer !== RF.loaded) { void rfCaricaPaz(); return ''; }
   const z = RF.paz; if (!z) return '';
-  const MODO = { stesso_nome: 'stesso nome', simile_agenda: 'nome simile e visita in agenda', simile_nascita: 'nome simile e stessa data di nascita', a_mano: 'scelto a mano' };
+  const MODO = { stesso_nome: 'stesso nome', simile_agenda: 'nome simile e visita in agenda', simile_nascita: 'nome simile e stessa data di nascita', a_mano: 'scelto a mano', agenda: 'trovato nell’agenda dei giorni del dettato', agenda_nuova: 'trovato nell’agenda: cartella creata da lì', al_caricamento: 'scelto al caricamento del dettato' };
   const scegli = `<details class="rf-att-cambia"><summary class="caption">${z.paziente ? 'un altro paziente' : 'scegli un paziente'}</summary><div class="row" style="gap:6px;margin-top:4px"><input class="input sm grow" id="rf-paz-cerca" list="rf-paz-lista" placeholder="Cognome Nome" autocomplete="off"><datalist id="rf-paz-lista">${PATIENTS.filter(p => rfUuid(p.id)).map(p => `<option value="${rfEsc(fullName(p))}${p.dob ? ' · ' + rfEsc(p.dob) : ''}">`).join('')}</datalist><button class="btn sm" onclick="rfPazScegli()">Collega</button></div></details>`;
   if (z.paziente) {
     const diverso = z.nome_dettato && z.modo !== 'stesso_nome' && z.nome_dettato.toLowerCase() !== z.paziente.nome.toLowerCase();
@@ -1486,7 +1491,7 @@ function rfPazHtml() {
       <div class="caption"><b>${rfEsc(z.paziente.nome)}</b>${z.paziente.nascita ? ` · ${rfEsc(z.paziente.nascita)}` : ''} · ${rfEsc(MODO[z.modo] || z.modo || '')}</div>
       ${diverso ? `<div class="caption">Dettato: «${rfEsc(z.nome_dettato)}»: nel testo il nome è scritto come in cartella.</div>` : ''}${scegli}</div>`;
   }
-  const prop = (z.proposte || []).map(p => `<div class="row between" style="gap:6px;margin-top:4px"><span class="caption"><b>${rfEsc(p.nome)}</b>${p.nascita ? ` · ${rfEsc(p.nascita)}` : ''}${p.visita ? ` · visita del ${rfEsc(p.visita)}` : ''}</span><button class="btn sm primary" onclick="rfPazAzione({ azione: 'collega', patient_id: '${rfEsc(p.id)}' })">Collega</button></div>`).join('');
+  const prop = (z.proposte || []).map(p => `<div class="row between" style="gap:6px;margin-top:4px"><span class="caption"><b>${rfEsc(p.nome)}</b>${p.nascita ? ` · ${rfEsc(p.nascita)}` : ''}${p.visita ? (p.visita === 'in agenda' ? ' · in agenda nei giorni del dettato' : ` · visita del ${rfEsc(p.visita)}`) : ''}${p.id ? '' : (p.nuova ? ' · <i>cartella da creare</i>' : '')}</span><button class="btn sm primary" onclick="rfPazAzione(${p.id ? `{ azione: 'collega', patient_id: '${rfEsc(p.id)}' }` : `{ azione: 'collega_agenda', indice: ${Number(p.agenda) || 0} }`})">${p.id || !p.nuova ? 'Collega' : 'Crea e collega'}</button></div>`).join('');
   return `<div class="rf-campi rf-paz" ${prop ? 'open' : ''}><div class="row between"><b>Paziente</b><span class="caption">${z.modo === 'scollegato' ? 'scollegato a mano' : 'nessuna cartella collegata'}</span></div>
     ${z.nome_dettato ? `<div class="caption">Dettato: «${rfEsc(z.nome_dettato)}»</div>` : ''}
     ${prop ? `<div class="rf-att-tit" style="margin-top:6px">È forse…</div>${prop}` : ''}${scegli}</div>`;
@@ -1507,7 +1512,7 @@ async function rfPazAzione(corpo) {
   // lei lettera vecchia e allegati che dipendono dalla cartella.
   try { clearTimeout(rvSave._rf); rvSave._rf = null; localStorage.removeItem(RV_KEY); } catch { /* ignora */ }
   RF.pazPer = null; RF.aggPer = null; RF.attornoPer = null; RF.propostePer = null; RF.loaded = null; render();
-  toast(corpo.azione === 'collega' ? 'Collegata alla cartella del paziente' : 'Collegamento tolto');
+  toast(corpo.azione === 'scollega' ? 'Collegamento tolto' : 'Collegata alla cartella del paziente');
 }
 
 
@@ -1546,4 +1551,21 @@ function rfArrivoBadge(r) {
   if (d.toDateString() === ora.toDateString()) return `<span class="badge accent" title="Consegnata dalla catena oggi alle ${hm}">arrivata oggi ${hm}</span>`;
   if (d.toDateString() === ieri.toDateString()) return `<span class="badge" title="Consegnata dalla catena ieri alle ${hm}">arrivata ieri ${hm}</span>`;
   return '';
+}
+
+
+/* Il paziente scelto al caricamento del dettato (5.10.2026): elenco delle
+   cartelle e, dal testo scelto, l'id. Usato dalla pagina Referti e dal
+   Dittafono: la bozza nasce già collegata alla cartella. */
+function rfPazElenco() {
+  return `<datalist id="rf-paz-elenco">${PATIENTS.filter(p => rfUuid(p.id)).map(p => `<option value="${rfEsc(fullName(p))}${p.dob ? ' · ' + rfEsc(p.dob) : ''}">`).join('')}</datalist>`;
+}
+function rfPazIdDa(testo) {
+  const v = String(testo || '').trim();
+  if (!v) return null;
+  const veri = PATIENTS.filter(p => rfUuid(p.id));
+  const esatto = veri.find(p => `${fullName(p)}${p.dob ? ' · ' + p.dob : ''}` === v);
+  if (esatto) return esatto.id;
+  const perNome = veri.filter(p => fullName(p).toLowerCase() === v.toLowerCase());
+  return perNome.length === 1 ? perNome[0].id : null;
 }

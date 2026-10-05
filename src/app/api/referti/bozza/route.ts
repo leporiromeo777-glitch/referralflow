@@ -6,7 +6,7 @@ import { query } from '@/lib/db';
 import { registraEvento, impronta } from '@/lib/referti-eventi';
 import { RX_MEDICO_ID } from '@/lib/referti-medici';
 import { aggiornamentoAutomatico } from '@/lib/aggiorna-lettera-server';
-import { abbinaPazienteBozza } from '@/lib/paziente-bozza';
+import { abbinaPazienteBozza, collegaDalCaricamento } from '@/lib/paziente-bozza';
 import { sembraIstruzioni } from '@/lib/istruzioni-traccia';
 import { giroIstruzioni } from '@/lib/istruzioni-traccia-server';
 
@@ -494,7 +494,9 @@ export async function POST(req: NextRequest) {
     // applicato qui, prima che qualcuno apra la bozza.
     // La cartella del paziente, anche col nome trascritto a orecchio
     // (2.10.2026): prima della lettera vecchia, che si cerca in cartella.
-    if (!(payload as any).ombra) try { await abbinaPazienteBozza(studio.id, inserita.id); } catch (e: any) { console.error(`[paziente] ${e?.code ?? e?.name ?? 'errore'}`); }
+    if (!(payload as any).ombra) try {
+      if (!(await collegaDalCaricamento(studio.id, inserita.id, audioId))) await abbinaPazienteBozza(studio.id, inserita.id);
+    } catch (e: any) { console.error(`[paziente] ${e?.code ?? e?.name ?? 'errore'}`); }
     if (tipo === 'referto' && !(payload as any).ombra) try {
       const esito = await aggiornamentoAutomatico(studio.id, inserita.id);
       if (esito === 'applicato' || esito === 'stampella') await registraEvento(studio.id, inserita.id, 'lettera_aggiornata', null, { automatico: true, stampella: esito === 'stampella' });
@@ -545,7 +547,9 @@ export async function POST(req: NextRequest) {
       await registraEvento(studio.id, esistente.id, 'bozza_rifatta', null, { motivo: rifaiBozza ? 'medico_cambiato' : 'scartata_ricaricata', medico: medicoId ?? '' });
       // Rifatta da zero = come una bozza nuova: anche l'aggiornamento della
       // lettera (prima partiva solo sulle bozze nuove, 1.10.2026).
-      try { await abbinaPazienteBozza(studio.id, esistente.id); } catch (e: any) { console.error(`[paziente] ${e?.code ?? e?.name ?? 'errore'}`); }
+      try {
+        if (!(await collegaDalCaricamento(studio.id, esistente.id, audioId))) await abbinaPazienteBozza(studio.id, esistente.id);
+      } catch (e: any) { console.error(`[paziente] ${e?.code ?? e?.name ?? 'errore'}`); }
       try { await aggiornamentoAutomatico(studio.id, esistente.id); } catch (e: any) { console.error(`[aggiorna-lettera] ${e?.code ?? e?.name ?? 'errore'}`); }
     }
     await collega(esistente.id);

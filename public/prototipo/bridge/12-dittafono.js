@@ -155,15 +155,18 @@ async function rfDitInvia() {
   const tipo = (document.getElementById('rf-dit-tipo') || {}).value || d.tipo;
   // il medico è obbligatorio solo se lo studio ha un elenco di medici per la dettatura (la stessa regola del server)
   if (!medico && (RF.medici || []).length) { d.errore = 'Scegli il medico che ha dettato.'; render(); return; }
+  if ((d.paziente || '').trim() && typeof rfPazIdDa === 'function' && !rfPazIdDa(d.paziente)) { d.errore = 'Scegli il paziente dall’elenco, o lascia il campo vuoto.'; render(); return; }
   d.medico = medico; d.tipo = tipo; d.invio = true; d.errore = ''; render();
   try {
     const fd = new FormData();
     fd.append('audio', new File([RFDittafono.wav(d.pcm, RFDittafono.FREQUENZA)], RFDittafono.nomeFile(new Date()), { type: 'audio/wav' }));
     fd.append('medico', medico); fd.append('tipo', tipo);
+    const pazId = typeof rfPazIdDa === 'function' ? rfPazIdDa(d.paziente) : null;
+    if (pazId) fd.append('patient_id', pazId);
     const r = await fetch('/api/referti/upload', { method: 'POST', body: fd, credentials: 'include' });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { d.errore = j.errore === 'medico_mancante' ? 'Scegli il medico che ha dettato.' : j.errore === 'troppo_grande' ? 'Registrazione troppo lunga per un invio solo.' : 'Invio non riuscito: la registrazione resta qui, riprova.'; d.invio = false; render(); return; }
-    d.pcm = new Int16Array(0); d.stato = 'pronto'; d.invio = false; rfDitAudio(); rfDitRilasciaMicrofono(); void rfDitSvuota();
+    d.pcm = new Int16Array(0); d.stato = 'pronto'; d.invio = false; d.paziente = ''; rfDitAudio(); rfDitRilasciaMicrofono(); void rfDitSvuota();
     toast('Dettato in coda: la bozza arriva tra i referti in pochi minuti');
     render(); setTimeout(rfCaricaDati, 3000);
   } catch (_) { d.errore = 'Piattaforma non raggiungibile: la registrazione resta su questo dispositivo, riprova.'; d.invio = false; render(); }
@@ -201,6 +204,7 @@ PAGES.dittafono = () => {
       <div class="rf-dit-campi">
         <div class="field"><label for="rf-dit-medico">Chi detta</label><select class="input" id="rf-dit-medico" ${rec ? 'disabled' : ''} onchange="RF.dit.medico=this.value"><option value="">${(RF.medici || []).length ? '— scegli il medico —' : 'nessun medico configurato'}</option>${medici}</select></div>
         <div class="field"><label for="rf-dit-tipo">Che cosa</label><select class="input" id="rf-dit-tipo" ${rec ? 'disabled' : ''} onchange="RF.dit.tipo=this.value"><option value="referto" ${d.tipo === 'referto' ? 'selected' : ''}>Referto</option><option value="visita" ${d.tipo === 'visita' ? 'selected' : ''}>Visita registrata</option></select></div>
+        <div class="field"><label for="rf-dit-paz">Paziente <span class="caption">(facoltativo)</span></label><input class="input" id="rf-dit-paz" list="rf-paz-elenco" placeholder="Cognome Nome" autocomplete="off" value="${rfEsc(d.paziente || '')}" ${rec ? 'disabled' : ''} oninput="RF.dit.paziente=this.value">${typeof rfPazElenco === 'function' ? rfPazElenco() : ''}</div>
       </div>
       <div class="rf-dit-centro">
         <div class="rf-dit-tempo" id="rf-dit-tempo">${durata}</div>

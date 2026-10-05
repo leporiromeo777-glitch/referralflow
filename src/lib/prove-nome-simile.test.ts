@@ -50,3 +50,19 @@ test('il nome nel testo come in cartella', () => {
   assert.equal(r.testo, 'Concerne: ZEFFIRETTI Marcello. Il Signor Zeffiretti sta bene; zefirettiano no.');
   assert.equal(r.cambiate, 2);
 });
+
+test('agenda: il nome dell\'agenda cercato nel dettato, parole vicine e a orecchio', async () => {
+  const { cercaNellAgenda, nomeNelTesto } = await import('./nome-simile');
+  const dettato = 'Lettera al dottor Bianchi. Paziente Zefiretti Marcello, nato nel 1950. Caro Luca, rivedo il paziente in controllo.';
+  assert.ok(nomeNelTesto('ZEFFIRETTI Marcello', dettato), 'a orecchio e in maiuscolo');
+  assert.ok(nomeNelTesto('Marcello Zeffiretti', dettato), 'ordine libero');
+  assert.equal(nomeNelTesto('Zeffiretti Marco', dettato), null, 'altro nome');
+  assert.equal(nomeNelTesto('Zeffiretti', dettato), null, 'una parola sola non basta');
+  const lontani = 'Il signor Zefiretti sta bene. ' + 'parola '.repeat(20) + 'Saluti a Marcello.';
+  assert.equal(nomeNelTesto('Zeffiretti Marcello', lontani), null, 'cognome e nome lontani: no');
+  const agenda = [{ nome: 'ZEFFIRETTI Marcello' }, { nome: 'BONNACORSI Alfredo' }, { nome: 'ZEFFIRETTI Marcello' }, { nome: 'ROSSI Luca' }];
+  const r = cercaNellAgenda(agenda, dettato);
+  assert.equal(r.length, 1, 'uno solo, senza doppioni; «Luca» da solo non è Rossi Luca');
+  assert.equal(r[0].voce.nome, 'ZEFFIRETTI Marcello');
+  assert.deepEqual(r[0].coppie.map((c) => c[0]).sort(), ['marcello', 'zefiretti']);
+});

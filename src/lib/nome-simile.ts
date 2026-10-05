@@ -119,3 +119,47 @@ export function nomeComeInCartella(testo: string, coppie: [string, string][], ca
   }
   return { testo: out, cambiate };
 }
+
+// Il nome scritto in agenda compare nel dettato? (5.10.2026) Tutte le parole
+// del nome (almeno due, di almeno 3 lettere) devono trovarsi VICINE nel testo
+// — entro `finestra` parole — e suonare uguali: «Zefiretti Marcello» detto di
+// fila, non un «Marcello» qui e un cognome simile tre righe sotto. Rende le
+// coppie parola del dettato → parola dell'agenda, o null.
+export function nomeNelTesto(nomeAgenda: string, testo: string, finestra = 8): [string, string][] | null {
+  const tok = chiaveNome(nomeAgenda).split(' ').filter((w) => w.length >= 3);
+  if (tok.length < 2) return null;
+  const parole = chiaveNome(testo).split(' ').filter(Boolean);
+  for (let i = 0; i < parole.length; i++) {
+    if (!tok.some((t) => parolaSimile(parole[i], t) != null)) continue;
+    const usate = new Set<number>();
+    const coppie: [string, string][] = [];
+    let tutte = true;
+    for (const t of tok) {
+      let scelta = -1, meglio = 9;
+      for (let k = i; k < Math.min(parole.length, i + finestra); k++) {
+        if (usate.has(k)) continue;
+        const s = parolaSimile(parole[k], t);
+        if (s != null && s < meglio) { meglio = s; scelta = k; }
+      }
+      if (scelta < 0) { tutte = false; break; }
+      usate.add(scelta);
+      coppie.push([parole[scelta], t]);
+    }
+    if (tutte) return coppie;
+  }
+  return null;
+}
+
+// Fra i nomi dell'agenda dei giorni del dettato, quelli che compaiono nel
+// testo. Uno solo = è lui; più d'uno = si propone; nessuno = niente.
+export function cercaNellAgenda<T extends { nome: string }>(agenda: T[], testo: string): { voce: T; coppie: [string, string][] }[] {
+  const visti = new Set<string>();
+  const out: { voce: T; coppie: [string, string][] }[] = [];
+  for (const a of agenda) {
+    const k = chiaveNome(a.nome);
+    if (!k || visti.has(k)) continue;
+    const coppie = nomeNelTesto(a.nome, testo);
+    if (coppie) { visti.add(k); out.push({ voce: a, coppie }); }
+  }
+  return out;
+}

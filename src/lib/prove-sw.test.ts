@@ -16,7 +16,7 @@ function carica(fetchFinto: (r: any) => Promise<any>) {
   };
   const codice = readFileSync(path.join(process.cwd(), 'public', 'sw.js'), 'utf8');
   vm.runInNewContext(codice, ctx);
-  const apri = async (req: any) => {
+  const apri = async (req: any): Promise<any> => {
     let risposta: Promise<any> | null = null;
     ascoltatori.fetch({ request: req, respondWith: (p: Promise<any>) => { risposta = p; } });
     return risposta ? await risposta : 'non intercettata';

@@ -41,6 +41,8 @@ Tutto ciò che fai nel wizard si **salva da solo**: puoi chiudere e riaprire sen
 - Rileggi la lettera: saluto, corpo in minuscolo dopo il saluto, blocco terapia, chiusura e firma sono messi dal codice secondo la forma del medico. Le date sono in cifre.
 - Poi la card **Controllo della lettera** dice se qualcosa del testo di partenza è sparito o se la lettera dice qualcosa che nel testo non c'era.
 
+**Paziente al caricamento** (dal 5.10.2026): quando carichi un dettato nella pagina Referti, o detti dal Dittafono, puoi scegliere il **paziente** (facoltativo): la bozza nasce già collegata alla sua cartella. Se non lo scegli, la piattaforma lo cerca da sola nell'agenda dei giorni prima e, se serve, crea la cartella coi dati dell'agenda; nella revisione il riquadro «Paziente» dice com'è stato trovato e permette di cambiarlo.
+
 **Cartella dei dettati sul tuo computer** (dal 1.10.2026): pagina Referti → «Nuovo dettato» → **Cartella sul computer**. Su Windows scarichi un file e lo apri (se Windows avvisa: «Ulteriori informazioni» → «Esegui comunque»); sul Mac apri il Finder e trascini la cartella sulla Scrivania con ⌘⌥. La prima volta servono utente e password della condivisione dello studio. Gli audio messi lì (o nella sottocartella del medico) entrano nella catena da soli. Solo in studio.
 
 ## 6. Confermare e scaricare il Word

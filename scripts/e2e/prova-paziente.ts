@@ -52,6 +52,33 @@ async function main() {
     const b3 = await nuova('Zeffirettiprova Marco');
     const e4 = await abbinaPazienteBozza(S, b3);
     verifica(e4 === 'niente', `nome diverso (Marco, non Marcello): niente, nemmeno con la visita in agenda (${e4})`);
+    // L'agenda al contrario (5.10.2026): la catena non ha riconosciuto il nome,
+    // ma un solo paziente dell'agenda di quei giorni compare nel dettato.
+    const [{ id: ap2 }] = await query<{ id: string }>(`insert into appointments (studio_id, starts_at, external_uid, titolo, paziente_nome) values ($1, now() - interval '2 days', 'prova-paz-' || gen_random_uuid(), 'VERDIPROVA Giulia (12.03.1961 / N° 999001) · M.M.', 'VERDIPROVA Giulia') returning id`, [S]);
+    app.push(ap2);
+    const senzaNome = async (testo: string) => {
+      const [{ id }] = await query<{ id: string }>(`insert into referti_bozze (studio_id, file_id, payload, tipo) values ($1, 'prova-paz-' || gen_random_uuid(), $2, 'referto') returning id`,
+        [S, JSON.stringify({ testo_corretto: testo, testo_grezzo: testo, dettato_il: new Date().toISOString(), campi_estratti: { nome_paziente: 'non indicato', data_nascita: 'non indicato' } })]);
+      bozze.push(id);
+      return id;
+    };
+    const b4 = await senzaNome('Lettera al dottor Bianchi. Paziente Verdiprovva Giulia. Caro collega, rivedo la paziente in controllo.');
+    const e5 = await abbinaPazienteBozza(S, b4);
+    const [r5] = await query<{ pid: string | null; n: string; dn: string; t: string }>(`select patient_id as pid, payload->'campi_estratti'->>'nome_paziente' as n, payload->'campi_estratti'->>'data_nascita' as dn, payload->>'testo_corretto' as t from referti_bozze where id = $1`, [b4]);
+    const [nuovo] = await query<{ id: string; cognome: string; nome: string; nascita: string | null }>(`select id, cognome, nome, data_nascita::text as nascita from patients where studio_id = $1 and cognome = 'Verdiprova'`, [S]);
+    if (nuovo) pazienti.push(nuovo.id);
+    verifica(e5 === 'agenda_nuova' && !!nuovo && nuovo.nome === 'Giulia' && nuovo.nascita === '1961-03-12' && r5.pid === nuovo.id, `bozza senza nome: trovata nell'agenda, cartella creata con nome e data di nascita (${e5})`);
+    verifica(r5.n === 'Verdiprova Giulia' && r5.dn === '12.03.1961' && r5.t.includes('Paziente Verdiprova Giulia'), 'campi e testo col nome dell\'agenda');
+    const b5 = await senzaNome('Paziente Verdiprova Giulia. Caro collega, secondo controllo.');
+    verifica((await abbinaPazienteBozza(S, b5)) === 'agenda', 'seconda bozza della stessa paziente: cartella già esistente, collegata');
+    const b6 = await senzaNome('Paziente Verdiprova Giulia, accompagnata dal Signor Zeffirettiprova Marcello. Caro collega, controllo.');
+    const e6 = await abbinaPazienteBozza(S, b6);
+    const s6 = await (await fetch(`${base}/api/prototipo/referti/${b6}/paziente`, { headers: { cookie } })).json();
+    verifica(e6 === 'proposte' && s6.paziente == null && s6.proposte?.length === 2, `due nomi dell'agenda nel dettato: non si sceglie, due proposte (${e6}, ${s6.proposte?.length})`);
+    const k = (s6.proposte ?? []).find((x: any) => /Verdiprova/.test(x.nome));
+    const c6 = await fetch(`${base}/api/prototipo/referti/${b6}/paziente`, { method: 'POST', headers: h, body: JSON.stringify({ azione: 'collega_agenda', indice: k?.agenda }) });
+    const [r6] = await query<{ pid: string | null }>(`select patient_id as pid from referti_bozze where id = $1`, [b6]);
+    verifica(c6.status === 200 && r6.pid === nuovo?.id, 'proposta dall\'agenda collegata a mano');
   } finally {
     await togliAudit(bozze);
     await query('delete from referti_eventi where bozza_id = any($1::uuid[])', [bozze]);
