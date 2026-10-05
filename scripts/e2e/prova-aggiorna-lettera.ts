@@ -83,6 +83,19 @@ async function main() {
     const am = await fetch(`${base}/api/prototipo/referti/${manca}/aggiornamento`, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'annulla' }) });
     const [tn] = await query<{ t: string | null }>('select testo_finale as t from referti_bozze where id = $1', [manca]);
     verifica(am.status === 200 && tn.t == null, 'lettera chiesta assente: Annulla torna al dettato');
+    // Sempre come aiuto (5.10.2026): anche se il medico non chiede nessuna
+    // lettera, all'arrivo la più recente dà ortografia e impaginazione.
+    const [{ id: muta }] = await query<{ id: string }>(`insert into referti_bozze (studio_id, file_id, payload, tipo) values ($1, 'prova-agg-' || gen_random_uuid(), $2, 'referto') returning id`,
+      [S, JSON.stringify({ testo_corretto: 'Caro Luca, rivedo il paziente. FRCV: ipertensione arteriosa trattata. Comorbidità: ipotirodismo. Clinicamente PA 118/70 mmHg. Cordiali saluti.', medico, dettato_il: '2026-09-28T09:00:00Z', campi_estratti: { nome_paziente: 'Aggiornaprova Paziente' } })]);
+    ids.push(muta);
+    const eMuta = await aggiornamentoAutomatico(S, muta);
+    const sMuta = await (await fetch(`${base}/api/prototipo/referti/${muta}/aggiornamento`, { headers: h })).json();
+    const [tMuta] = await query<{ t: string | null }>('select testo_finale as t from referti_bozze where id = $1', [muta]);
+    verifica(eMuta === 'stampella' && sMuta.applicato?.stampella === true && sMuta.applicato?.automatico === true && /ipotiroidismo/.test(tMuta.t ?? '') && /PA 118\/70 mmHg/.test(tMuta.t ?? '') && !/80 Kg/.test(tMuta.t ?? ''), `senza richiesta nel dettato: la più recente usata da sola come aiuto (${eMuta})`);
+    const [{ id: sola }] = await query<{ id: string }>(`insert into referti_bozze (studio_id, file_id, payload, tipo) values ($1, 'prova-agg-' || gen_random_uuid(), $2, 'referto') returning id`,
+      [S, JSON.stringify({ testo_corretto: 'Caro Luca, rivedo il paziente. Bene.', medico, dettato_il: '2026-09-28T09:00:00Z', campi_estratti: { nome_paziente: 'Nessunalettera Prova' } })]);
+    ids.push(sola);
+    verifica((await aggiornamentoAutomatico(S, sola)) === 'niente', 'paziente senza lettere vecchie: niente, la bozza resta com\'è');
   } finally {
     await togliAudit(ids);
     await query('delete from referti_eventi where bozza_id = any($1::uuid[])', [ids]);

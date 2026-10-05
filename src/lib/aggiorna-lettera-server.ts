@@ -264,6 +264,13 @@ export async function aggiornamentoAutomatico(studioId: string, bozzaId: string)
     const r = await applicaStampella(studioId, bozzaId, null, true);
     return 'ok' in r ? 'stampella' : 'niente';
   }
+  // Il medico non chiede nessuna lettera (5.10.2026, decisione dello studio):
+  // la più recente del paziente fa lo stesso da aiuto per ortografia e
+  // impaginazione, se c'è e se cambia qualcosa. Il contenuto resta il dettato.
+  if (s?.abilitato && !s.richiesta && !s.applicato) {
+    const r = await applicaStampella(studioId, bozzaId, null, true, true);
+    return 'ok' in r ? 'stampella' : 'niente';
+  }
   if (!s?.abilitato || !s.richiesta || !s.proposta) return 'niente';
   if (s.proposta.somiglianza < 0.35) return 'proposta';
   const r = await applicaAggiornamento(studioId, bozzaId, null, [], true);
@@ -355,6 +362,11 @@ export async function applicaStampella(studioId: string, bozzaId: string, utente
   if (!st) return { errore: 'Nessuna lettera da usare come aiuto.' };
   const s2 = { ...s, stampella: st };
   const prima = b?.testo_finale ?? null;
+  // Se la lettera non cambia niente (né una parola né l'impaginazione) non si
+  // segna nulla: la bozza resta intatta.
+  if (st.testo.trim() === String(prima ?? b?.payload?.testo_corretto ?? '').trim()) {
+    return { errore: 'La lettera più recente non cambia niente in questo testo.' };
+  }
   const traccia = {
     applicato_il: new Date().toISOString(), da: utente, automatico, stampella: true, fonte: st.fonte,
     correzioni: st.correzioni, impaginata: st.impaginata, avviso, prima, novita: [], novita_aggiunte: 0,

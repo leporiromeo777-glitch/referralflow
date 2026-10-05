@@ -507,3 +507,10 @@ dispositivo medico fabbricato in studio, niente fascicolo di validazione da tene
 immagini non si archiviano qui: si prendono dal software Philips quando servono (Query/Retrieve
 DICOM), con al più una copia temporanea. La ricezione diretta dagli apparecchi (18.9.2026) resta
 un'alternativa, non la strada scelta.
+
+## 5.10.2026 — La lettera più recente fa da aiuto sempre, anche se il medico non la chiede
+Decisione dello studio. Prima l'aiuto (ortografia e impaginazione dalla lettera più recente del
+paziente) scattava da solo solo quando il medico chiedeva una lettera che non si trovava; senza
+richiesta era un tasto. Ora scatta all'arrivo di ogni bozza dei medici abilitati, se il paziente
+ha una lettera e se questa cambia qualcosa. Il contenuto resta sempre il dettato; l'aggiornamento
+vero della lettera (anamnesi ripresa dalla vecchia) resta solo su richiesta del medico.
