@@ -48,6 +48,18 @@ async function main() {
     if (j2.id) ids.push(j2.id);
     const [b2] = await query<{ pid: string | null; modo: string | null; n: string | null }>(`select patient_id as pid, payload->'paziente_abbinamento'->>'modo' as modo, payload->'campi_estratti'->>'nome_paziente' as n from referti_bozze where id = $1`, [j2.id ?? '00000000-0000-0000-0000-000000000000']);
     verifica(r2.status === 201 && b2?.pid === pz && b2.modo === 'al_caricamento' && b2.n === 'Caricaprova Elena', `paziente scelto al caricamento: bozza collegata alla cartella (${r2.status}, ${b2?.modo})`);
+    // Stesso audio ricaricato scegliendo il paziente: la bozza aperta resta, ma prende la cartella.
+    const F = `prova-tracce-4-${Date.now()}`;
+    const corpo = { file_id: F, testo_corretto: 'Caro collega, rivedo la paziente in controllo. Tutto bene.', richiede_revisione: true, campi_estratti: { nome_paziente: 'non indicato' } };
+    const r3 = await fetch(`${base}/api/referti/bozza`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+    const j3 = await r3.json().catch(() => ({}));
+    if (j3.id) ids.push(j3.id);
+    const [{ a: a3 }] = await query<{ a: string }>(`insert into referti_audio (studio_id, tipo, filename, storage_key, stato, patient_id) values ($1, 'referto', 'prova3.wav', 'prova/non-esiste-3', 'elaborazione', $2) returning id as a`, [S, pz]);
+    audio.push(a3);
+    const r4 = await fetch(`${base}/api/referti/bozza`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ ...corpo, audio_id: a3 }) });
+    const j4 = await r4.json().catch(() => ({}));
+    const [b4] = await query<{ pid: string | null; modo: string | null }>(`select patient_id as pid, payload->'paziente_abbinamento'->>'modo' as modo from referti_bozze where id = $1`, [j3.id ?? '00000000-0000-0000-0000-000000000000']);
+    verifica(r3.status === 201 && r4.status === 200 && j4.duplicato === true && j4.id === j3.id && b4?.pid === pz && b4.modo === 'al_caricamento', `stesso audio ricaricato col paziente scelto: stessa bozza, ora collegata (${r4.status}, ${b4?.modo})`);
   } finally {
     await query('update studios set referti_token_hash = $2 where id = $1', [S, vecchio]);
     await query('update referti_audio set aggiunge_a = null, bozza_id = null where id = any($1::uuid[])', [audio]);

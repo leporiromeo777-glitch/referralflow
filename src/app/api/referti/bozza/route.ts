@@ -553,6 +553,18 @@ export async function POST(req: NextRequest) {
       try { await aggiornamentoAutomatico(studio.id, esistente.id); } catch (e: any) { console.error(`[aggiorna-lettera] ${e?.code ?? e?.name ?? 'errore'}`); }
     }
     await collega(esistente.id);
+    // Stesso audio ricaricato su una bozza ancora aperta (5.10.2026): la bozza
+    // resta com'è, ma se chi ha ricaricato ha scelto il paziente e la bozza
+    // non aveva ancora una cartella, quella scelta vale — e con la cartella
+    // si riprova la lettera vecchia, solo se nessuno ha già corretto il testo.
+    if (esistente.stato === 'bozza' && !rifaiBozza) {
+      try {
+        if (await collegaDalCaricamento(studio.id, esistente.id, audioId)) {
+          await registraEvento(studio.id, esistente.id, 'paziente_collegato', null, { al_caricamento: true });
+          if (!esistente.toccata) await aggiornamentoAutomatico(studio.id, esistente.id);
+        }
+      } catch (e: any) { console.error(`[paziente] ${e?.code ?? e?.name ?? 'errore'}`); }
+    }
   }
   return NextResponse.json({ id: esistente?.id ?? null, duplicato: true }, { status: 200 });
 }
