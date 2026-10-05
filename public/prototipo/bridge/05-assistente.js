@@ -26,8 +26,8 @@ renderDocViewer = function () {
     ? `<div class="dv-page" style="padding:10px"><img src="${rfEsc(a.src || `/api/documents/${a.id}`)}" alt="${rfEsc(a.title || 'Immagine')}" style="max-width:100%;height:auto;display:block;margin:0 auto;border-radius:6px"></div>`
     : `<div class="dv-page"><div class="dv-head"><div><div class="dv-title">${rfEsc(a.title)}</div><div class="caption">${rfEsc(paz)}${a.date ? ' · ' + rfEsc(a.date) : ''}</div></div></div><pre style="white-space:pre-wrap;font:inherit;margin:12px 0 0">${a.testo == null ? 'Estraggo il testo…' : rfEsc(a.testo)}</pre></div>`;
   el.innerHTML = `
-    <div class="dv-bar"><span class="section-title" style="margin:0">Documento</span><span class="badge">${rfEsc(DOC_TYPE[a.kind] || a.kind)}</span><span class="caption">${rfEsc(paz)}${a.date ? ' · ' + a.date : ''}</span>
-      <span class="right row" style="gap:4px">
+    <div class="dv-bar rf-dv-bar"><span class="section-title" style="margin:0">Documento</span><span class="badge">${rfEsc(DOC_TYPE[a.kind] || a.kind)}</span><span class="caption rf-dv-chi" title="${rfEsc(paz)}${a.date ? ' · ' + a.date : ''}">${rfEsc(paz)}${a.date ? ' · ' + a.date : ''}</span>
+      <span class="right row rf-dv-tasti" style="gap:4px">
         ${a.pdf && !a.src ? `<button class="btn sm ghost" title="Taglia alcune pagine in un documento nuovo della cartella (per esempio un ECG da allegare)" onclick="rfEstraiPagine('${rfEsc(a.id)}')">Estrai pagine</button>` : ''}
         ${a.p ? `<button class="icon-btn" title="Scheda paziente" data-go="#/patients/${a.p}">${ICONS.patients}</button>` : ''}
         <button class="icon-btn" title="Chiedi all'assistente di riassumerlo" data-ai="Riassumi questo documento in poche righe">${ICONS.ai}</button>
@@ -97,6 +97,12 @@ async function rfPdfMostra(el, url, pagina) {
   }
 }
 (function () { const st = document.createElement('style'); st.textContent = `
+/* Testata del visore (5.10.2026): nella barra stretta i tasti (Estrai pagine,
+   scheda, assistente, scarica, chiudi) finivano fuori schermo. Ora il nome
+   del paziente si accorcia coi puntini e, se non basta, i tasti vanno a capo. */
+.rf-dv-bar { flex-wrap: wrap; row-gap: 6px; }
+.rf-dv-bar .rf-dv-chi { flex: 1 1 60px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rf-dv-bar .rf-dv-tasti { flex: 0 0 auto; margin-left: auto; flex-wrap: nowrap; }
 .rf-pdf { flex:1; min-height:70vh; overflow:auto; background:var(--surface-2, #eef0ec); border-radius:12px; padding:8px; display:flex; flex-direction:column; align-items:center; gap:8px; }
 .rf-pdf-pag { position:relative; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.12); max-width:100%; }
 .rf-pdf-pag canvas { display:block; max-width:100%; }
