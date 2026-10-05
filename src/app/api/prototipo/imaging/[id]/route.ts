@@ -1,3 +1,4 @@
+import { misureAccese } from '@/lib/imaging-misure-accese';
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
@@ -86,6 +87,6 @@ export async function GET(_req: Request, props: { params: Promise<{ id: string }
 
   return NextResponse.json(
     { esame, serie: serie.map((s) => ({ ...s, immagini: immagini.filter((i) => i.serie_id === s.id) })), finestre: finestreDi(esame.modalita), misure, misure_manuali: misureManuali, accessi,
-      mse: { caution_validati: cautionValidati(), versione_software: versioneSoftware(), puo_misurare: ['medico', 'admin', 'assistente'].includes(session.role), strumenti: Object.values(mse().misure.ALGORITMI).map((a) => ({ nome: a.nome, versione: a.versione, unita: a.unita, punti: a.punti, gesto: a.gesto })) } },
+      mse: { caution_validati: cautionValidati(), versione_software: versioneSoftware(), puo_misurare: misureAccese() && ['medico', 'admin', 'assistente'].includes(session.role), sola_consultazione: !misureAccese(), strumenti: Object.values(mse().misure.ALGORITMI).map((a) => ({ nome: a.nome, versione: a.versione, unita: a.unita, punti: a.punti, gesto: a.gesto })) } },
     { headers: { 'Cache-Control': 'no-store' } });
 }

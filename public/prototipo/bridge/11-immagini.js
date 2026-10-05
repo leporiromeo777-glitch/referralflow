@@ -159,7 +159,10 @@ function rfImgDropFile(e) {
 
 const RF_IMG_STATO = { da_verificare: ['warning', 'da verificare'], disponibile: ['success', 'in cartella'], nascosto: ['', 'nascosto'] };
 
-function rfMisPuo() { return ['doctor', 'assistant', 'org_admin'].includes(state.role); }
+// Sola consultazione (5.10.2026): il server dice se gli strumenti di misura
+// sono accesi; finché non lo dice, sono spenti.
+function rfMisSolaVista() { const m = RF.img && RF.img.dati && RF.img.dati.esame && RF.img.dati.esame.mse || (RF.img && RF.img.dati && RF.img.dati.mse); return !(m && m.sola_consultazione === false); }
+function rfMisPuo() { return !rfMisSolaVista() && ['doctor', 'assistant', 'org_admin'].includes(state.role); }
 function rfMisAttiva(sostituisce) {
   if (!rfMisPuo()) { toast('Misura chi cura: il tuo ruolo vede le immagini, non le misura'); return; }
   const st = rfMisStatoImmagine(rfImgCorrente());
@@ -210,6 +213,7 @@ function rfMisStatoImmagine(i) {
   return RFMSE.validazione.statoImmagine(rfMisContesto(i));
 }
 function rfMisIndicatore(i) {
+  if (rfMisSolaVista()) return '';   // senza strumenti di misura il semaforo della calibrazione non serve
   const st = rfMisStatoImmagine(i); if (!st) return '';
   if (st.stato === 'ATTESA') return `<span class="rf-mis-ind">… ${rfEsc(st.testi[0])}</span>`;
   const V = RFMSE.validazione;

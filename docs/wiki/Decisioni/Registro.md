@@ -499,3 +499,11 @@ senza nome), più d'uno in 4. Decisione dello studio: con un solo candidato la b
 sola e, se la cartella non c'è, **si crea da sola** con nome e data di nascita dell'agenda (dati
 scritti dalla segreteria: così l'anagrafica si popola man mano). Con più candidati si propone. In
 più il paziente si può scegliere al caricamento del dettato.
+
+## 5.10.2026 — Immagini: sola consultazione, l'archivio resta a Philips
+Decisione dello studio: la pagina Immagini serve solo a guardare. Gli strumenti di misura della
+piattaforma si spengono (restano nel codice, con le loro prove, dietro `IMAGING_MISURE=1`): niente
+dispositivo medico fabbricato in studio, niente fascicolo di validazione da tenere vivo. E le
+immagini non si archiviano qui: si prendono dal software Philips quando servono (Query/Retrieve
+DICOM), con al più una copia temporanea. La ricezione diretta dagli apparecchi (18.9.2026) resta
+un'alternativa, non la strada scelta.

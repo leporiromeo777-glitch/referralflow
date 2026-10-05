@@ -87,3 +87,15 @@ test('imaging: le finestre sono quelle della modalità, e non si inventano', () 
   assert.deepEqual(finestreDi('MR'), []);
   assert.deepEqual(finestreDi('boh'), []);
 });
+
+test('pagina Immagini di sola consultazione: gli strumenti di misura sono spenti se non li si accende', async () => {
+  const { misureAccese } = await import('./imaging-misure-accese');
+  const prima = process.env.IMAGING_MISURE;
+  try {
+    delete process.env.IMAGING_MISURE; assert.equal(misureAccese(), false, 'di serie spenti');
+    process.env.IMAGING_MISURE = 'si'; assert.equal(misureAccese(), false, 'solo «1» li accende');
+    process.env.IMAGING_MISURE = '1'; assert.equal(misureAccese(), true);
+  } finally {
+    if (prima === undefined) delete process.env.IMAGING_MISURE; else process.env.IMAGING_MISURE = prima;
+  }
+});

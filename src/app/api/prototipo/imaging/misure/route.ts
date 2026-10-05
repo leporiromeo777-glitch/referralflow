@@ -1,3 +1,4 @@
+import { misureAccese } from '@/lib/imaging-misure-accese';
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { query, transazione } from '@/lib/db';
@@ -33,6 +34,8 @@ export async function POST(req: NextRequest) {
   const nonPermesso = vietato(session.role, 'imaging');  // Accessi/permessi.ts (23.9.2026)
   if (nonPermesso) return nonPermesso;
   if (!MISURA.has(session.role)) return NextResponse.json({ errore: 'ruolo_non_ammesso' }, { status: 403 });
+  // Sola consultazione (5.10.2026): niente misure nuove, annullate o di riferimento.
+  if (!misureAccese()) return NextResponse.json({ errore: 'sola_consultazione', motivo: 'La pagina Immagini è di sola consultazione: gli strumenti di misura sono spenti.' }, { status: 403 });
   const sid = session.studioId;
   let corpo: any = {};
   try { corpo = await req.json(); } catch { return NextResponse.json({ errore: 'corpo_non_valido' }, { status: 400 }); }

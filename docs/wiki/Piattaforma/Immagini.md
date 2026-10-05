@@ -1,6 +1,6 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-09-20
+aggiornata: 2026-10-05
 ---
 # Immagini diagnostiche
 
@@ -27,6 +27,10 @@ Un esame si aggancia da solo a una persona della cartella **solo se nome e data 
 Non è prudenza formale. Attaccare le immagini di qualcuno alla cartella di qualcun altro è il danno peggiore che questa pagina possa fare, e il generatore di prova contiene apposta due «Rossi Mario» con date diverse.
 
 ## Che cos'è, e che cosa non è
+
+**Dal 5.10.2026 la pagina è di SOLA CONSULTAZIONE** (decisione dello studio): si guardano le immagini e le misure già fatte dall'apparecchio; gli strumenti di misura della piattaforma (il righello, sotto) sono **spenti** — il tasto «Misura», il semaforo della calibrazione e il salvataggio (`/api/prototipo/imaging/misure` risponde 403 `sola_consultazione`). Il codice e le prove del righello restano; si riaccende solo con `IMAGING_MISURE=1` nel `.env` del server (`src/lib/imaging-misure-accese.ts`) e riaprendo il fascicolo di validazione. Nelle prove end-to-end il server di prova lo accende apposta. Così la piattaforma resta un visore e non un dispositivo medico fabbricato in studio.
+
+**L'archivio resta a Philips** (stessa decisione): ReferralFlow deve solo *mostrare* gli esami prendendoli dal software Philips dello studio, non diventare l'archivio. Da fare quando il Mac sarà sulla rete degli apparecchi (192.168.0.x, cavo Ethernet): capire quale software è il nodo «ISP» (192.168.0.222:104) con una prova di collegamento DICOM, e se accetta la ricerca e il recupero dall'esterno (Query/Retrieve: C-FIND + C-MOVE) — allora la pagina cerca gli esami del paziente lì, li recupera quando si apre un esame e ne tiene solo una copia temporanea. Serve che un tecnico Philips registri il Mac fra le destinazioni. In alternativa l'ORTHANC già in rete (192.168.0.51:4242), se è dello studio.
 
 La pagina ha due parti, e la legge le tratta in modo diverso (`docs/legale/destinazione-uso-immagini.md`):
 

@@ -51,7 +51,9 @@ echo "→ DICOM sintetici"
 
 echo "→ server di prova sul database demo (porta $PORTA)"
 pulisci
-DATABASE_URL="$URL_DB" PORT="$PORTA" npx next dev -p "$PORTA" > "$TMP/server.log" 2>&1 &
+# Le prove del righello restano: sul server di prova gli strumenti di misura sono accesi
+# (in produzione la pagina Immagini è di sola consultazione, 5.10.2026).
+IMAGING_MISURE=1 DATABASE_URL="$URL_DB" PORT="$PORTA" npx next dev -p "$PORTA" > "$TMP/server.log" 2>&1 &
 SERVER_PID=$!
 for _ in $(seq 1 60); do curl -s -o /dev/null "http://localhost:$PORTA/login" && break; sleep 2; done
 curl -s -o /dev/null "http://localhost:$PORTA/login" || { fallito "il server di prova non è partito (vedi $TMP/server.log)"; tail -5 "$TMP/server.log"; exit 1; }
