@@ -148,7 +148,11 @@ PAGES.review = () => {
   // referto (19.9.2026). Le note già rimesse non si mostrano più.
   const rimesse = RF.noteRimesse || new Set();
   const daMostrare = note.map((n, k) => ({ n, k })).filter(x => !rimesse.has(x.k));
-  if (daMostrare.length) html = html.replace('<div class="rv-grid', `<div class="rf-note-seg">${ICONS.tasks || ''}<b>Note per la segreteria (${daMostrare.length})</b>${daMostrare.map(x => `<span class="badge" style="display:inline-flex;gap:6px;align-items:center">${rfEsc(x.n)}${m.stato === 'bozza' ? `<button class="btn sm ghost" style="padding:0 6px;height:20px" onclick="rfNotaRimetti(${x.k})" title="Riporta questa frase nel testo del referto">Rimetti</button>` : ''}</span>`).join('')}<span class="caption">Istruzioni dettate dal medico, tolte dal testo del referto.${rimesse.size ? ` ${rimesse.size === 1 ? 'Una rimessa' : `${rimesse.size} rimesse`} nel referto.` : ''}</span></div><div class="rv-grid`);
+  // A tendina (5.10.2026): la freccia chiude e riapre le note; la scelta
+  // resta fra una bozza e l'altra (e dopo ogni ridisegno della pagina).
+  let noteChiuse = false;
+  try { noteChiuse = localStorage.getItem('rf-note-chiuse') === '1'; } catch { /* ignora */ }
+  if (daMostrare.length) html = html.replace('<div class="rv-grid', `<details class="rf-note-seg" ${noteChiuse ? '' : 'open'} ontoggle="try{localStorage.setItem('rf-note-chiuse',this.open?'0':'1')}catch(e){}"><summary>${ICONS.tasks || ''}<b>Note per la segreteria (${daMostrare.length})</b><span class="caption">Istruzioni dettate dal medico, tolte dal testo del referto.${rimesse.size ? ` ${rimesse.size === 1 ? 'Una rimessa' : `${rimesse.size} rimesse`} nel referto.` : ''}</span></summary><div class="rf-note-corpo">${daMostrare.map(x => `<span class="badge" style="display:inline-flex;gap:6px;align-items:center">${rfEsc(x.n)}${m.stato === 'bozza' ? `<button class="btn sm ghost" style="padding:0 6px;height:20px" onclick="rfNotaRimetti(${x.k})" title="Riporta questa frase nel testo del referto">Rimetti</button>` : ''}</span>`).join('')}</div></details><div class="rv-grid`);
   return html;
 };
 async function rfCaricaRevisione(id) {

@@ -288,7 +288,12 @@ function rfRispostaImmediata(q) {
   .rf-brief .rf-riga{display:flex;gap:6px;align-items:baseline;margin:2px 0}.rf-brief .rf-riga .btn.sm{padding:0 6px;line-height:18px;font-size:11px}
   .rf-brief .rf-manc{margin-top:10px;padding:8px 10px;border-radius:8px;background:rgba(214,92,42,.10);border:1px solid rgba(214,92,42,.35)}
   .rf-brief .rf-sint{margin-bottom:6px;padding:8px 10px;border-radius:8px;background:rgba(13,92,72,.08);border:1px solid rgba(13,92,72,.25)}
-  .rf-note-seg{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--border);background:var(--warning-soft,rgba(214,150,42,.10));font-size:12.5px}
+  .rf-note-seg{padding:8px 14px;border-bottom:1px solid var(--border);background:var(--warning-soft,rgba(214,150,42,.10));font-size:12.5px}
+  .rf-note-seg>summary{display:flex;flex-wrap:wrap;gap:8px;align-items:center;cursor:pointer;list-style:none;user-select:none}
+  .rf-note-seg>summary::-webkit-details-marker{display:none}
+  .rf-note-seg>summary::before{content:'▸';display:inline-block;width:12px;color:var(--text-2);transition:transform .15s}
+  .rf-note-seg[open]>summary::before{transform:rotate(90deg)}
+  .rf-note-seg .rf-note-corpo{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
   .rf-note-seg svg{width:16px;height:16px}
   .rf-doc{border:1px solid var(--border);border-radius:12px;background:var(--surface);overflow:hidden;margin:2px 0}
   .rf-doc-testa{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;padding:14px 16px 12px;border-bottom:1px solid var(--border);background:rgba(13,92,72,.05)}
