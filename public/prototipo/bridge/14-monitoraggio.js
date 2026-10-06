@@ -26,12 +26,13 @@ if (typeof NAV !== 'undefined') for (const r of ['secretary', 'assistant', 'doct
 .rf-mon-kpi .s { font-size:12px; color:var(--text-3); margin-top:2px; padding-right:48px; }
 .rf-mon-kpi .ico { position:absolute; right:16px; bottom:16px; width:38px; height:38px; border-radius:12px; display:grid; place-items:center; color:var(--accent-text, #3D58DD); background:var(--accent-soft, rgba(79,110,247,.11)); }
 .rf-mon-kpi.alta .n { color:#D5383D; } .rf-mon-kpi.alta .ico { color:#D5383D; background:rgba(229,72,77,.12); } .rf-mon-kpi.att .n { color:#B37D06; } .rf-mon-kpi.att .ico { color:#B37D06; background:rgba(224,162,26,.15); }
-.rf-mon-dash { display:grid; gap:16px; margin-bottom:16px; } .rf-mon-dash.a { grid-template-columns:minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, .9fr); } .rf-mon-dash.b { grid-template-columns:minmax(0, 1fr) minmax(0, 1.55fr); }
+.rf-mon-dash { display:grid; gap:16px; margin-bottom:16px; } .rf-mon-dash.a { grid-template-columns:minmax(0, 1.55fr) minmax(0, 1fr); } .rf-mon-dash.b { grid-template-columns:minmax(0, 1fr) minmax(0, 1.55fr); }
 @media (max-width: 1200px) { .rf-mon-kpis { grid-template-columns:repeat(2, minmax(0, 1fr)); } .rf-mon-dash.a, .rf-mon-dash.b { grid-template-columns:1fr; } }
 .rf-mon-pan { border:1px solid var(--border); border-radius:20px; padding:18px 20px; background:var(--surface); box-shadow:var(--shadow-1); min-width:0; }
 .rf-mon-ph { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px; } .rf-mon-ph b { font-size:14.5px; font-weight:650; letter-spacing:-.01em; }
 .rf-mon-vedi { all:unset; cursor:pointer; font-size:12.5px; font-weight:600; color:var(--accent-text, #3D58DD); }
-.rf-mon-evs { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px; }
+.rf-mon-evs { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; }
+@media (max-width: 1500px) { .rf-mon-evs { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
 .rf-mon-ev { border:1px solid var(--border); border-radius:16px; padding:12px; cursor:pointer; background:var(--surface-2); display:flex; flex-direction:column; gap:8px; min-width:0; } .rf-mon-ev:hover { border-color:var(--border-2); }
 .rf-mon-ev .nome, .rf-mon-li .nome { font-weight:600; font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .rf-mon-ev .pp { display:grid; grid-template-columns:1fr 1fr; gap:8px; } .rf-mon-ev .p span { font-size:10.5px; color:var(--text-3); text-transform:uppercase; letter-spacing:.04em; display:block; }
@@ -40,8 +41,6 @@ if (typeof NAV !== 'undefined') for (const r of ['secretary', 'assistant', 'doct
 .rf-mon-q { width:36px; height:36px; flex:none; border-radius:12px; display:grid; place-items:center; color:var(--t); background:color-mix(in srgb, var(--t) 14%, transparent); }
 .rf-mon-li { display:flex; align-items:center; gap:12px; padding:10px 4px; border-top:1px solid var(--border); cursor:pointer; min-width:0; } .rf-mon-ph + .rf-mon-li { border-top:0; } .rf-mon-li:hover .nome { color:var(--accent-text, #3D58DD); }
 .rf-mon-li .ora { width:44px; flex:none; font-size:12.5px; font-weight:600; color:var(--text-2); font-variant-numeric:tabular-nums; }
-.rf-mon-ciambella { position:relative; width:150px; margin:4px auto 12px; } .rf-mon-ciambella .centro { position:absolute; inset:0; display:grid; place-content:center; text-align:center; } .rf-mon-ciambella .centro b { font-size:28px; font-weight:700; line-height:1; } .rf-mon-ciambella .centro span { font-size:11.5px; color:var(--text-2); }
-.rf-mon-legenda div { display:flex; align-items:center; gap:8px; font-size:13px; padding:4px 0; } .rf-mon-legenda i { width:9px; height:9px; border-radius:50%; flex:none; } .rf-mon-legenda span { flex:1; color:var(--text-2); } .rf-mon-legenda b { font-weight:600; font-variant-numeric:tabular-nums; }
 .rf-mon-grande { font-size:32px; font-weight:700; letter-spacing:-.03em; line-height:1; font-variant-numeric:tabular-nums; } .rf-mon-grande small { font-size:14px; font-weight:500; color:var(--text-2); letter-spacing:0; }
 .rf-mon-filtri { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px; }
 .rf-mon-filtri .input { height:34px; }
@@ -245,7 +244,7 @@ function rfMonRiga(p) {
 }
 /* Il cruscotto (6.10.2026, richiesta dello studio: disposto come l'immagine di
    riferimento): quattro numeri con l'icona, poi pannelli affiancati — pazienti
-   in evidenza, stato di tutti, distribuzione; avvisi aperti e copertura dei
+   in evidenza e stato di tutti; avvisi aperti e copertura dei
    dati; attività recente e problemi tecnici. Sotto resta l'elenco completo. */
 const RF_MON_ICO = {
   persone: '<path d="M16 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 17.5V19"/><circle cx="10" cy="8" r="3.2"/><path d="M20 19v-1.4a3.2 3.2 0 0 0-2.4-3.1M15.5 5a3.2 3.2 0 0 1 0 6"/>',
@@ -270,13 +269,6 @@ function rfMonStabili() {
 }
 function rfMonKpi(etichetta, valore, sotto, tono, ico) {
   return `<div class="rf-mon-kpi ${tono || ''}"><div class="l">${etichetta}</div><div class="n">${valore}</div><div class="s">${sotto}</div><span class="ico">${rfMonIco(ico)}</span></div>`;
-}
-function rfMonCiambella(voci, totale) {
-  const r = 52, C = 2 * Math.PI * r; let fatto = 0;
-  const archi = voci.filter(v => v.n > 0).map(v => { const l = (v.n / Math.max(1, totale)) * C; const a = `<circle cx="70" cy="70" r="${r}" fill="none" stroke="${v.colore}" stroke-width="13" stroke-dasharray="${l.toFixed(2)} ${(C - l).toFixed(2)}" stroke-dashoffset="${(-fatto).toFixed(2)}" stroke-linecap="butt"/>`; fatto += l; return a; }).join('');
-  return `<div class="rf-mon-ciambella"><svg viewBox="0 0 140 140" style="width:150px;height:150px"><g transform="rotate(-90 70 70)"><circle cx="70" cy="70" r="${r}" fill="none" style="stroke:var(--surface-3)" stroke-width="13"/>${archi}</g></svg>
-    <div class="centro"><b>${totale}</b><span>pazienti</span></div></div>
-    <div class="rf-mon-legenda">${voci.map(v => `<div><i style="background:${v.colore}"></i><span>${v.nome}</span><b>${v.n}${totale ? ` (${Math.round((v.n / totale) * 100)}%)` : ''}</b></div>`).join('')}</div>`;
 }
 // Quanti pazienti hanno mandato misure, minuto per minuto, nell'ultima mezz'ora: è la salute del flusso dei dati.
 function rfMonCopertura() {
@@ -312,11 +304,6 @@ function rfMonRiepilogoHtml() {
   }).join('');
   const elenco = tutti.slice(0, 6).map(p => `<div class="rf-mon-li" onclick="rfMonApri('${p.id}')"><span class="rf-mon-av" style="--t:${RF_MON_TONO[p.stato]}">${rfEsc(rfMonIniziali(p.nome))}</span>
       <div class="grow" style="min-width:0"><div class="nome">${rfEsc(String(p.nome || p.codice).replace(' (demo)', ''))}</div><div class="caption">${rfEsc(p.medico || p.codice)}</div></div>${stato(p)}</div>`).join('');
-  const conta = (s) => d.pazienti.filter(p => p.stato === s).length;
-  const ciambella = rfMonCiambella([
-    { nome: 'Nessun avviso', n: conta('nessun_avviso'), colore: RF_MON_TONO.nessun_avviso }, { nome: 'Attenzione', n: conta('avviso_attenzione'), colore: RF_MON_TONO.avviso_attenzione },
-    { nome: 'Alta priorità', n: conta('avviso_alta'), colore: RF_MON_TONO.avviso_alta }, { nome: 'Dati insufficienti', n: conta('dati_insufficienti'), colore: RF_MON_TONO.dati_insufficienti },
-    { nome: 'Non monitorati', n: conta('interrotto'), colore: RF_MON_TONO.interrotto }], d.pazienti.length);
   const clinici = (d.avvisi_aperti || []).filter(a => a.categoria === 'parametro'), tecnici = (d.avvisi_aperti || []).filter(a => a.categoria === 'tecnico');
   const riga = (a) => `<div class="rf-mon-li" onclick="rfMonApri('${a.paziente_id}')"><div class="ora">${rfMonOra(a.generato_il)}</div><div class="grow" style="min-width:0"><div class="nome">${rfEsc(a.nome)}</div><div class="caption">${rfEsc(String(a.paziente || '').replace(' (demo)', ''))} · ${rfEsc(a.codice || '')}</div></div>
       <span class="rf-mon-pill ${a.livello === 2 ? 'alta' : 'att'}">${a.rientrato ? 'rientrato' : a.stato === 'in_carico' ? 'in carico' : `livello ${a.livello}`}</span></div>`;
@@ -333,8 +320,7 @@ function rfMonRiepilogoHtml() {
     <div class="rf-mon-kpis">${rfMonKpi('Pazienti monitorati', r.monitorati, `su ${r.totale} in elenco`, '', 'persone')}${rfMonKpi('Alta priorità', r.alta_priorita, 'avvisi di livello 2', r.alta_priorita ? 'alta' : '', 'allarme')}
       ${rfMonKpi('Attenzione', r.attenzione, 'avvisi di livello 1', r.attenzione ? 'att' : '', 'occhio')}${rfMonKpi('Dati insufficienti', r.dati_insufficienti, `${r.dispositivi_disconnessi} ${r.dispositivi_disconnessi === 1 ? 'dispositivo scollegato' : 'dispositivi scollegati'} · ${r.con_avvisi_tecnici} con problemi tecnici`, '', 'segnale')}</div>
     <div class="rf-mon-dash a"><div class="rf-mon-pan">${testa('Pazienti in evidenza', '<span class="caption">per priorità</span>')}<div class="rf-mon-evs">${evidenza || vuoto('Nessun paziente in monitoraggio.')}</div></div>
-      <div class="rf-mon-pan">${testa('Stato dei pazienti', `<button class="rf-mon-vedi" onclick="document.getElementById('rf-mon-tutti').scrollIntoView({ behavior: 'smooth' })">Vedi tutti</button>`)}${elenco}</div>
-      <div class="rf-mon-pan">${testa('Distribuzione', '<span class="caption">adesso</span>')}${ciambella}</div></div>
+      <div class="rf-mon-pan">${testa('Stato dei pazienti', `<button class="rf-mon-vedi" onclick="document.getElementById('rf-mon-tutti').scrollIntoView({ behavior: 'smooth' })">Vedi tutti</button>`)}${elenco}</div></div>
     <div class="rf-mon-dash b"><div class="rf-mon-pan">${testa('Avvisi sui parametri', vedi('avvisi', 'Vedi tutti'))}${clinici.length ? clinici.slice(0, 5).map(riga).join('') : vuoto('Nessun avviso sui parametri aperto.')}</div>
       <div class="rf-mon-pan">${testa('Copertura dei dati', '<span class="caption">ultimi 30 minuti</span>')}${d.vista_tecnica ? vuoto('Vista tecnica: lo stato del flusso è nei problemi tecnici qui sotto.') : rfMonCopertura()}</div></div>
     <div class="rf-mon-dash b"><div class="rf-mon-pan">${testa('Attività recente', vedi('avvisi', 'Vedi tutti'))}${(d.attivita || []).length ? d.attivita.slice(0, 5).map(att).join('') : vuoto('Ancora nessuna azione registrata.')}</div>
