@@ -13,6 +13,7 @@ aggiornata: 2026-09-29
 - Il segnaposto `{testo}` nei prompt si riempie con `str.replace`, mai con `format` (il testo può contenere graffe).
 - Le migrazioni sono solo in avanti (`db/migrations/0XX_*.sql`, ultima `067_referti_audio_aggiunge_a.sql`) e vanno appese anche a `db/schema.sql`. **Non è una formalità**: il 18.9.2026 si è scoperto che 025, 028, 029 e 030 non erano mai state appese, e un database nuovo nasceva senza `referti_eventi` — cioè con ogni conferma di referto che esplode. La prova era il database della demo, nato da quel file.
 - Il pannello e la catena girano con `python3.14` di Homebrew, non con il `python3` di sistema. `timeout` non esiste su macOS.
+- La forma della lettera vecchia (grassetto, a capo) si legge con `gs` e `tesseract` di Homebrew (`/opt/homebrew/bin`, gli stessi di `ocrmypdf`; `GS_BIN`, `TESSERACT_BIN` per cambiarli). Se mancano non si rompe niente: resta il testo dell'OCR, senza grassetto.
 - Le tabelle `audit.artifacts` e `audit.human_edits` sono immutabili (trigger): mai UPDATE/DELETE.
 - Il tipo TypeScript `Filtri` delle pagine con querystring va aggiornato quando si aggiunge un parametro: il build del server è bloccato da `tsc`.
 - Caddy: la configurazione viva è `~/silverbullet/caddy/Caddyfile.dominio` (il `Caddyfile` la importa); non ricaricare Caddy con un file diverso e non aggiungere il nome Tailscale `…ts.net` ai blocchi con ACME ([[Piattaforma/Server Mac mini]]).

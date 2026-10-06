@@ -1091,7 +1091,86 @@ async function rfCaricaAgg(forza) {
   RF.aggPer = id; RF.aggCarica = null; RF.aggNovita = {};
   if (typeof rvRenderNav === 'function' && state.route === 'review') rvRenderNav();
 }
+// Grassetto come nella lettera vecchia (6.10.2026): le frasi che la lettera
+// vecchia aveva in grassetto e che ricompaiono in questo testo. Nel Word
+// escono in grassetto; qui si vedono nel testo e si possono togliere.
 function rfAggHtml() {
+  const corpo = rfAggCorpo();
+  rfGrassettoDipingi();
+  const a = RF.agg, f = a && a.abilitato && RF.aggPer === RF.loaded ? a.forma : null;
+  if (!f || !f.grassetti || !f.grassetti.length) return corpo;
+  const pres = f.presenti || [];
+  const pillole = pres.map(t => `<span class="rf-gr-pill"><b>${rfEsc(t)}</b><button type="button" title="Non in grassetto" onclick="rfFormaTogli(${f.grassetti.findIndex(g => g.testo === t)})">×</button></span>`).join('');
+  return `${corpo}<div class="rf-campi rf-agg rf-gr"><div class="row between"><b>Grassetto come nella lettera vecchia</b><button class="btn sm ghost" onclick="rfAggAzione({ azione: 'forma', spento: ${f.spento ? 'false' : 'true'} })">${f.spento ? 'Rimetti il grassetto' : 'Togli il grassetto'}</button></div>
+    ${f.fonte ? `<div class="caption">Da ${rfEsc(f.fonte.etichetta)} ${rfAggTastoGuarda(f.fonte)}${f.fonte.tipo === 'referto' ? '' : ' · letto dalla pagina: controlla'}</div>` : ''}
+    ${f.spento ? '<div class="caption">Spento: il Word esce senza grassetto.</div>' : pres.length ? `<div class="caption">Nel Word escono in grassetto:</div><div class="rf-gr-lista">${pillole}</div>` : '<div class="caption">Nessuna delle frasi in grassetto della lettera vecchia compare in questo testo.</div>'}</div>`;
+}
+function rfFormaTogli(i) {
+  const f = RF.agg && RF.agg.forma, g = f && f.grassetti[i];
+  if (g) void rfAggAzione({ azione: 'forma', togli: g.testo });
+}
+// Le stesse regole del server (`applicaGrassetti`): a parola intera, senza
+// badare a maiuscole e accenti; un'etichetta solo in testa alla riga o a
+// una frase. Rende le posizioni [da, a) nel testo.
+function rfGrassettoTrova(testo, grassetti) {
+  const acc = { a: '[aàáâä]', e: '[eèéêë]', i: '[iìíîï]', o: '[oòóôö]', u: '[uùúûü]', c: '[cç]' };
+  const segni = new Uint8Array(testo.length), out = [];
+  for (const g of grassetti) {
+    const k = String(g.testo || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s:;,.]+$/g, '').replace(/\s+/g, ' ').trim();
+    if (!k) continue;
+    const corpo = k.split(' ').map(w => w.split('').map(ch => acc[ch] || ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('')).join('\\s+');
+    const rx = new RegExp(`(?<![\\p{L}\\p{N}])${corpo}(?![\\p{L}\\p{N}])${/[:;,.]\s*$/.test(g.testo) ? '[:;,.]?' : ''}`, 'giu');
+    let m;
+    while ((m = rx.exec(testo))) {
+      if (!m[0].length) { rx.lastIndex++; continue; }
+      const riga = testo.slice(testo.lastIndexOf('\n', m.index - 1) + 1, m.index).replace(/^[\s•\-–]+/, '');
+      if (g.etichetta && !/(^|[.!?]\s+)$/.test(riga)) continue;
+      let libero = true;
+      for (let i = m.index; i < m.index + m[0].length; i++) if (segni[i]) { libero = false; break; }
+      if (!libero) continue;
+      segni.fill(1, m.index, m.index + m[0].length);
+      out.push([m.index, m.index + m[0].length]);
+    }
+  }
+  return out;
+}
+// Nel testo della revisione il grassetto si DIPINGE sopra (CSS highlight):
+// il testo e i suoi span non si toccano, quindi salvataggio e correzioni
+// restano come sono.
+function rfGrassettoDipingi() {
+  clearTimeout(rfGrassettoDipingi._t);
+  rfGrassettoDipingi._t = setTimeout(() => {
+    if (typeof CSS === 'undefined' || !CSS.highlights || typeof Highlight === 'undefined') return;
+    const f = RF.agg && RF.aggPer === RF.loaded && RF.agg.abilitato ? RF.agg.forma : null;
+    const doc = document.querySelector('#rv-main .rv-doc');
+    if (!doc || !f || f.spento || !f.grassetti || !f.grassetti.length) { CSS.highlights.delete('rf-grassetto'); return; }
+    const tratti = [];
+    doc.querySelectorAll('[data-sec-body]').forEach(el => {
+      const nodi = []; let testo = '';
+      const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+      for (let n = w.nextNode(); n; n = w.nextNode()) {
+        if (n.nodeType === 1) { if (n.nodeName === 'BR' || (n.nodeName === 'DIV' && testo && !testo.endsWith('\n'))) testo += '\n'; continue; }
+        if (n.parentElement && n.parentElement.closest('.rf-tolta')) continue;
+        nodi.push({ n, da: testo.length }); testo += n.nodeValue;
+      }
+      const punto = (pos, fine) => {
+        for (let i = nodi.length - 1; i >= 0; i--) {
+          const q = nodi[i], lung = q.n.nodeValue.length;
+          if (pos > q.da || (pos === q.da && !fine)) return pos - q.da <= lung ? [q.n, pos - q.da] : null;
+        }
+        return nodi.length && pos === 0 ? [nodi[0].n, 0] : null;
+      };
+      for (const [da, a] of rfGrassettoTrova(testo, f.grassetti)) {
+        const x = punto(da, false), y = punto(a, true);
+        if (!x || !y) continue;
+        try { const r = document.createRange(); r.setStart(x[0], x[1]); r.setEnd(y[0], y[1]); tratti.push(r); } catch { /* nodo cambiato */ }
+      }
+    });
+    CSS.highlights.set('rf-grassetto', new Highlight(...tratti));
+  }, 80);
+}
+document.addEventListener('input', (e) => { if (e.target && e.target.closest && e.target.closest('.rv-doc')) rfGrassettoDipingi(); });
+function rfAggCorpo() {
   if (!RF.live || !RF.loaded) return '';
   if (RF.aggPer !== RF.loaded) { void rfCaricaAgg(); return ''; }
   const a = RF.agg; if (!a || !a.abilitato) return '';
@@ -1362,6 +1441,12 @@ function rfAttornoCopia(indice, nuovo) {
 .rf-al-nome { min-width:0; overflow-wrap:anywhere; }
 .rf-agg { display:flex; flex-direction:column; gap:4px; }
 .rf-agg-nov { display:flex; gap:6px; align-items:flex-start; font-size:12.5px; }
+.rf-gr-lista { display:flex; flex-wrap:wrap; gap:4px; margin-top:4px; }
+.rf-gr-pill { display:inline-flex; align-items:center; gap:2px; font-size:12px; padding:1px 2px 1px 7px; border:1px solid var(--border); border-radius:10px; background:var(--surface); max-width:100%; }
+.rf-gr-pill b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:220px; }
+.rf-gr-pill button { border:0; background:none; cursor:pointer; color:inherit; opacity:.6; font-size:14px; line-height:1; padding:0 4px; }
+.rf-gr-pill button:hover { opacity:1; }
+::highlight(rf-grassetto) { -webkit-text-stroke: .55px currentColor; text-shadow: .25px 0 0 currentColor; }
 .rf-agg-blocco { border-left:3px solid var(--border-2); padding:4px 10px; margin-bottom:8px; font-size:13px; }
 .rf-agg-blocco.vecchia { border-color:var(--text-3); }
 .rf-agg-blocco.aggiunte { border-color:var(--warning, #b7791f); }

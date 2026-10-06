@@ -18,6 +18,7 @@
 //   non li dice) e «del paziente» / «della paziente».
 
 import { dateInFrase, type DataCercata } from './cerca-in-cartella';
+import { A_CAPO, type Grassetto } from './forma-lettera';
 
 export type Divisione = { prima: string; dopo: string; punto: string | null };
 export type Proposta = {
@@ -164,7 +165,7 @@ const RX_DATA_VISITA = /\b((?:rivedo|rivediamo|ho rivisto|vedo|visito|ho visitat
 
 // `unParagrafo`: la lettera di Moccetti è un paragrafo solo; il rapporto a
 // sezioni (Moschovitis) tiene i suoi a capo.
-export function aggiorna(opts: { lettera: string; dettato: string; oggi: string; femminile: boolean; unParagrafo?: boolean; dataLettera?: string | null }): Proposta | { errore: string } {
+export function aggiorna(opts: { lettera: string; dettato: string; oggi: string; femminile: boolean; unParagrafo?: boolean; dataLettera?: string | null; grassetti?: Grassetto[] }): Proposta | { errore: string } {
   const unParagrafo = opts.unParagrafo !== false;
   const avvisi: string[] = [];
   const v = togliSaluto(opts.lettera);
@@ -225,7 +226,7 @@ export function aggiorna(opts: { lettera: string; dettato: string; oggi: string;
   if (forma.strutturata) {
     // Le righe della parte dettata (intestazioni di sezione comprese) restano;
     // dentro ogni riga si va a capo come nella lettera vecchia.
-    const nuovaImpaginata = nuova.split(/\n/).map((r) => impagina(r, forma.aCapoDavanti, forma.separatore)).join('\n');
+    const nuovaImpaginata = nuova.split(/\n/).map((r) => impagina(r, forma.aCapoDavanti, forma.separatore, opts.grassetti)).join('\n');
     corpo = `${vecchia.replace(/[ \t]+/g, ' ').trim()}${forma.primaDellaVisita}${nuovaImpaginata}${forma.primaDellaFinale}${finale}`
       .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
   } else if (unParagrafo) {
@@ -299,6 +300,8 @@ export function pulisciScansione(testo: string): string {
   let unito = '';
   for (const r of tenute) {
     if (!r) { unito += '\n\n'; continue; }
+    // A capo voluto, letto dalla pagina (forma-lettera.ts): un a capo semplice.
+    if (r === A_CAPO) { if (unito && !unito.endsWith('\n')) unito += '\n'; continue; }
     if (/\p{L}-$/u.test(unito) && /^\p{Ll}/u.test(r)) unito = unito.slice(0, -1) + r;
     else unito += (unito && !unito.endsWith('\n') ? ' ' : '') + r;
   }
@@ -341,7 +344,9 @@ export function formaDellaLettera(corpo: string, dv: Divisione): Forma {
   // Davanti a quali tipi di frase la visita vecchia andava a capo.
   const aCapoDavanti = new Set<string>();
   const blocchi = dv.dopo.split(haParagrafi ? /\n\s*\n/ : /\n/).map((b) => b.trim()).filter(Boolean);
-  for (const b of blocchi.slice(1)) { const k = classeDi(b); if (k) aCapoDavanti.add(k); }
+  // Ogni riga conta, non solo i paragrafi: in una lettera a paragrafi le
+  // sezioni possono stare anche su righe semplici (6.10.2026).
+  for (const b of dv.dopo.split(/\n+/).map((x) => x.trim()).filter(Boolean).slice(1)) { const k = classeDi(b); if (k) aCapoDavanti.add(k); }
   // La conclusione o il controllo in un paragrafo a sé?
   const ultimo = blocchi[blocchi.length - 1] ?? '';
   const primaDellaFinale = blocchi.length > 1 && (classeDi(ultimo) === 'conclusione' || /prossimo controllo|rimanendo a disposizione/i.test(ultimo)) ? separatore : ' ';
@@ -350,17 +355,24 @@ export function formaDellaLettera(corpo: string, dv: Divisione): Forma {
 
 // La parte dettata, a capo davanti ai tipi di frase dove andava a capo la
 // lettera vecchia (mai due volte di fila per lo stesso tipo).
-export function impagina(testo: string, aCapoDavanti: Set<string>, separatore: string): string {
-  if (!aCapoDavanti.size) return testo.trim();
+export function impagina(testo: string, aCapoDavanti: Set<string>, separatore: string, grassetti: Grassetto[] = []): string {
+  // Le etichette che nella lettera vecchia aprivano una riga («Diagnosi:»,
+  // un titolo in grassetto): la frase che comincia così va a capo allo
+  // stesso modo (6.10.2026).
+  const etichette = grassetti.filter((g) => g.etichetta && g.stacco).map((g) => ({ k: chiaveEtichetta(g.testo), sep: g.stacco === 'vuota' ? '\n\n' : '\n' })).filter((e) => e.k.length >= 3);
+  if (!aCapoDavanti.size && !etichette.length) return testo.trim();
   let out = '', ultima: string | null = null;
   for (const f of frasi(testo)) {
     const k = classeDi(f);
+    const kf = chiaveEtichetta(f);
+    const e = etichette.find((x) => kf.startsWith(x.k) && !/[a-z0-9]/.test(kf[x.k.length] ?? ''));
     const aCapo = !!out && k != null && aCapoDavanti.has(k) && k !== ultima;
-    out += out ? (aCapo ? separatore : ' ') + f : f;
+    out += out ? (e ? e.sep : aCapo ? separatore : ' ') + f : f;
     if (k) ultima = k;
   }
   return out.trim();
 }
+const chiaveEtichetta = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 
 // ── Lettera «stampella» (1.10.2026, richiesta dello studio) ────────────────
 // Il medico chiede la lettera di una data che non si trova (cartelle di
@@ -433,18 +445,19 @@ export function ortografiaDallaLettera(testo: string, lettera: string): { testo:
   }
 }
 
-export function stampella(opts: { lettera: string; dettato: string }): { testo: string; correzioni: Correzione[]; impaginata: boolean } {
+export function stampella(opts: { lettera: string; dettato: string; grassetti?: Grassetto[] }): { testo: string; correzioni: Correzione[]; impaginata: boolean } {
   const v = togliSaluto(opts.lettera);
   const d = togliSaluto(opts.dettato);
   const orto = ortografiaDallaLettera(d.corpo, v.corpo);
   const forma = formaDellaLettera(v.corpo, dividi(v.corpo));
   let corpo = orto.testo.trim();
-  if (forma.strutturata) {
+  const etichette = (opts.grassetti ?? []).some((g) => g.etichetta && g.stacco);
+  if (forma.strutturata || etichette) {
     const dd = dividi(corpo);
-    const imp = (s: string) => s.split(/\n/).map((r) => impagina(r, forma.aCapoDavanti, forma.separatore)).join('\n');
+    const imp = (s: string) => s.split(/\n/).map((r) => impagina(r, forma.aCapoDavanti, forma.separatore, opts.grassetti)).join('\n');
     corpo = (dd.punto && dd.prima.trim()
       ? `${imp(dd.prima.trim())}${forma.primaDellaVisita}${imp(dd.dopo.trim())}`
       : imp(corpo)).replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
   }
-  return { testo: d.saluto ? `${d.saluto}\n\n${corpo}` : corpo, correzioni: orto.correzioni, impaginata: forma.strutturata };
+  return { testo: d.saluto ? `${d.saluto}\n\n${corpo}` : corpo, correzioni: orto.correzioni, impaginata: forma.strutturata || etichette };
 }

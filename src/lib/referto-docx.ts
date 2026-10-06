@@ -3,6 +3,7 @@ import 'server-only';
 import { promises as fs } from 'fs';
 import path from 'path';
 import JSZip from 'jszip';
+import { applicaGrassetti, type Grassetto } from './forma-lettera';
 
 // Referto in carta intestata: si parte dallo STAMPO Word dello studio
 // (modelli/referto-carta-intestata.docx — derivato da una lettera vera
@@ -46,23 +47,48 @@ function riempiSegnaposto(xml: string, valori: Record<string, string>): string {
 // Il paragrafo che contiene {{chiave}} viene clonato: un paragrafo per ogni
 // riga del valore (le righe vuote diventano paragrafi vuoti), tutti con la
 // stessa formattazione del segnaposto. Valore vuoto = paragrafo tolto.
-function espandi(xml: string, chiave: string, valore: string): string {
+const RUN = /<w:r[\s>](?:(?!<\/w:r>)[\s\S])*?<\/w:r>/g;
+
+// Un run in grassetto: <w:b/> al suo posto fra le proprietà (dopo stile e
+// font, come vuole lo schema), creandole se il run non ne ha.
+function inGrassetto(run: string): string {
+  if (/<w:b\/>|<w:b\s/.test(run)) return run;
+  if (run.includes('<w:rPr>')) return run.replace(/<w:rPr>((?:<w:rStyle[^>]*\/>)?(?:<w:rFonts[^>]*\/>)?)/, '<w:rPr>$1<w:b/><w:bCs/>');
+  return run.replace(/^<w:r(\s[^>]*)?>/, (m) => `${m}<w:rPr><w:b/><w:bCs/></w:rPr>`);
+}
+
+// `grassetti` (6.10.2026): le frasi che nella lettera vecchia erano in
+// grassetto. La riga si divide in pezzi e il run del segnaposto si ripete,
+// uno per pezzo, in grassetto dove serve.
+function espandi(xml: string, chiave: string, valore: string, grassetti: Grassetto[] = []): string {
   const segnaposto = `{{${chiave}}}`;
   return xml.replace(PARAGRAFO, (par) => {
     if (!par.includes(segnaposto)) return par;
     const pulito = valore.replace(/\r\n/g, '\n');
     if (!pulito.trim()) return '';
     const righe = pulito.split('\n');
+    const solo = new RegExp(`<w:t(?:\\s[^>]*)?>\\s*${segnaposto.replace(/[{}]/g, '\\$&')}\\s*</w:t>`).test(par);
     return righe
-      .map((riga) =>
-        par.replace(T_RUN, (intero, apre, corpo, chiude) => {
+      .map((riga) => {
+        const pezzi = grassetti.length && solo ? applicaGrassetti(riga, grassetti) : [];
+        if (pezzi.some((z) => z.b)) {
+          return par.replace(RUN, (run) => {
+            if (!run.includes(segnaposto)) return run.replace(T_RUN, (_i, apre, _c, chiude) => apre + chiude);
+            return pezzi.map((z) => {
+              const r = run.replace(T_RUN, (_i, apre: string, _c, chiude) =>
+                (apre.includes('xml:space') ? apre : apre.replace(/>$/, ' xml:space="preserve">')) + escapeXml(z.t) + chiude);
+              return z.b ? inGrassetto(r) : r;
+            }).join('');
+          });
+        }
+        return par.replace(T_RUN, (intero, apre, corpo, chiude) => {
           if (!corpo.includes(segnaposto)) return apre + chiude;
           const apre2 = apre.includes('xml:space')
             ? apre
             : apre.replace(/>$/, ' xml:space="preserve">');
           return apre2 + escapeXml(corpo.replace(segnaposto, riga)) + chiude;
-        })
-      )
+        });
+      })
       .join('');
   });
 }
@@ -193,6 +219,7 @@ export type DatiReferto = {
   testo: string;
   copia: string;             // riga finale «Copia: …» (vuoto = riga tolta)
   spaziDestinatario?: number; // paragrafi vuoti tra il destinatario e «Lugano» (default: lo stampo)
+  grassetti?: Grassetto[];    // frasi in grassetto nel testo, come nella lettera vecchia
 };
 
 export async function generaDocxReferto(dati: DatiReferto): Promise<Buffer> {
@@ -218,7 +245,7 @@ export async function generaDocxReferto(dati: DatiReferto): Promise<Buffer> {
     const file = zip.files[nome];
     if (!file) continue;
     let xml = await file.async('string');
-    for (const [chiave, valore] of Object.entries(multiriga)) xml = espandi(xml, chiave, valore);
+    for (const [chiave, valore] of Object.entries(multiriga)) xml = espandi(xml, chiave, valore, chiave === 'testo' ? dati.grassetti ?? [] : []);
     xml = riempiSegnaposto(xml, valori);
     if (nome === 'word/document.xml' && dati.spaziDestinatario !== undefined) {
       xml = limitaVuotiPrimaDi(xml, 'Lugano,', dati.spaziDestinatario);

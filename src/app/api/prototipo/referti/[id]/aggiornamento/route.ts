@@ -4,7 +4,7 @@ import { isUuid } from '@/lib/cartella';
 import { vietato } from '@/lib/permessi';
 import { registraEvento } from '@/lib/referti-eventi';
 import { query } from '@/lib/db';
-import { aggiungiNovita, annullaAggiornamento, applicaAggiornamento, applicaStampella, scegliLettera, statoAggiornamento } from '@/lib/aggiorna-lettera-server';
+import { aggiungiNovita, annullaAggiornamento, applicaAggiornamento, applicaStampella, cambiaForma, scegliLettera, statoAggiornamento } from '@/lib/aggiorna-lettera-server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,6 +15,7 @@ export const dynamic = 'force-dynamic';
 //   POST { azione: 'applica', novita: [indici] } | { azione: 'annulla' }
 //        { azione: 'scegli', fonte: { tipo, id } | null }
 //        { azione: 'stampella' }: la lettera più recente come aiuto (1.10.2026)
+//        { azione: 'forma', spento?: boolean, togli?: string }: il grassetto preso dalla lettera vecchia (6.10.2026)
 const RUOLI = new Set(['segretaria', 'medico', 'admin', 'tecnico']);
 
 async function sessione(id: string) {
@@ -72,6 +73,12 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     const r = await aggiungiNovita(sid, params.id, Array.isArray(c.novita) ? c.novita.map(Number) : []);
     if ('errore' in r) return NextResponse.json(r, { status: 409 });
     void registraEvento(sid, params.id, 'lettera_frasi_aggiunte', session.id, { frasi: Array.isArray(c.novita) ? c.novita.length : 0 });
+    return NextResponse.json(r);
+  }
+  // Grassetto come nella lettera vecchia (6.10.2026): spegnerlo, riaccenderlo, togliere una frase.
+  if (c?.azione === 'forma') {
+    const r = await cambiaForma(sid, params.id, { spento: typeof c.spento === 'boolean' ? c.spento : undefined, togli: typeof c.togli === 'string' ? c.togli.slice(0, 200) : undefined });
+    if ('errore' in r) return NextResponse.json(r, { status: 409 });
     return NextResponse.json(r);
   }
   if (c?.azione === 'annulla') {

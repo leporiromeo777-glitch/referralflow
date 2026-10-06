@@ -9,6 +9,8 @@ import { etichettaDocumento } from './referti-allegato-blocco';
 import { aggiorna, eFemminile, pulisciScansione, richiestaAggiornamento, stampella, type Correzione, type Proposta } from './aggiorna-lettera';
 import { cercaPagine, etichettaData, lettereNellePagine, rxDataPagina, type DataCercata } from './cerca-in-cartella';
 import { registraTestoMacchina } from './audit/lineage';
+import { applicaGrassetti, grassettiDelCorpo, stessoTesto, type Grassetto } from './forma-lettera';
+import { formaDelPdf, grassettiDelDocx } from './forma-lettera-server';
 
 // Aggiornamento della lettera vecchia, lato piattaforma (28.9.2026). Parte
 // SOLO se il medico lo chiede nel dettato («riprendimi la lettera del …») o
@@ -25,7 +27,48 @@ export function medicoAggiornaLettera(medicoId: string | null | undefined): bool
 }
 
 export type Fonte = { tipo: 'referto' | 'documento' | 'pagine'; id: string; etichetta: string; data: string; da?: number; a?: number };
-type Trovata = { fonte: Fonte; testo: string };
+type Trovata = { fonte: Fonte; testo: string; grassetti?: Grassetto[] };
+
+// La FORMA della lettera scelta (6.10.2026, richiesta dello studio: grassetto
+// e a capo come nella lettera vecchia). Da un referto confermato: il
+// grassetto che aveva lui. Dal Word: com'è scritto. Dal PDF: la pagina
+// riletta dall'immagine — grassetto dal tratto, righe vuote e a capo dalla
+// geometria; il testo riletto sostituisce quello dell'OCR solo se è lo stesso
+// testo (85% delle parole), se no resta com'era e si prende solo il grassetto.
+async function conForma(studioId: string, t: Trovata): Promise<Trovata> {
+  if (t.grassetti) return t;
+  try {
+    if (t.fonte.tipo === 'referto') {
+      const [r] = await query<{ forma: any }>(`select payload->'forma_lettera' as forma from referti_bozze where id = $1 and studio_id = $2`, [t.fonte.id, studioId]);
+      return { ...t, grassetti: !r?.forma?.spento && Array.isArray(r?.forma?.grassetti) ? grassettiDelCorpo(r.forma.grassetti, t.testo) : [] };
+    }
+    const [d] = await query<{ storage_key: string; filename: string }>('select storage_key, filename from patient_documents where id = $1 and studio_id = $2', [t.fonte.id, studioId]);
+    if (!d) return { ...t, grassetti: [] };
+    const n = d.filename.toLowerCase();
+    if (!n.endsWith('.docx') && !n.endsWith('.pdf')) return { ...t, grassetti: [] };
+    const { body } = await getFile(d.storage_key);
+    if (n.endsWith('.docx')) return { ...t, grassetti: grassettiDelCorpo(await grassettiDelDocx(body), t.testo) };
+    const f = await formaDelPdf(t.fonte.id, body, t.fonte.da ?? 1, t.fonte.a ?? 4);
+    if (!f) return { ...t, grassetti: [] };
+    const riletto = pulisciScansione(f.righe.join('\n'));
+    const testo = riletto.trim().length >= 200 && stessoTesto(t.testo, riletto) >= 0.85 ? riletto : t.testo;
+    return { ...t, testo, grassetti: grassettiDelCorpo(f.grassetti, testo) };
+  } catch (e: any) {
+    console.error(`[forma-lettera] ${t.fonte.id.slice(0, 8)}: ${e?.code ?? e?.name ?? 'errore'}`);
+    return { ...t, grassetti: [] };
+  }
+}
+
+// Il grassetto salvato con la bozza e, fra quelle frasi, quali ci sono nel
+// testo di adesso (la revisione mostra queste).
+export type FormaBozza = { grassetti: Grassetto[]; presenti: string[]; spento: boolean; fonte: Fonte | null };
+function formaSalvata(p: any, testo: string): FormaBozza | null {
+  const f = p?.forma_lettera;
+  if (!f || !Array.isArray(f.grassetti) || !f.grassetti.length) return null;
+  const grassetti: Grassetto[] = f.grassetti.filter((g: any) => g && typeof g.testo === 'string');
+  const presenti = grassetti.filter((g) => String(testo || '').split(/\n/).some((r) => applicaGrassetti(r, [g]).some((x) => x.b))).map((g) => g.testo);
+  return { grassetti, presenti, spento: !!f.spento, fonte: f.fonte ?? null };
+}
 
 const fmt = (d: Date | string) => new Intl.DateTimeFormat('it-CH', { timeZone: 'Europe/Zurich', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d));
 const stessaData = (quando: Date, d: DataCercata) => {
@@ -134,7 +177,10 @@ export type StatoAggiornamento = {
   richiesta: { dal_dettato: boolean; data: string | null } | null;
   applicato: { quando: string; fonte: Fonte; mesi: number; novita_aggiunte: number; automatico: boolean; novita: string[]; stampella?: boolean; correzioni?: Correzione[]; avviso?: string | null } | null;
   // La lettera chiesta non c'è: la più recente fa da aiuto (ortografia e impaginazione).
-  stampella: { fonte: Fonte; testo: string; correzioni: Correzione[]; impaginata: boolean } | null;
+  stampella: { fonte: Fonte; testo: string; correzioni: Correzione[]; impaginata: boolean; grassetti: Grassetto[] } | null;
+  // Il grassetto della lettera in gioco (proposta) e quello già salvato con la bozza.
+  grassetti: Grassetto[];
+  forma: FormaBozza | null;
   fonte: Fonte | null;
   proposta: Proposta | null;
   errore: string | null;
@@ -151,9 +197,9 @@ export async function statoAggiornamento(studioId: string, bozzaId: string): Pro
   const b = await bozza(studioId, bozzaId);
   if (!b) return null;
   const p = b.payload ?? {};
-  const vuoto: StatoAggiornamento = { abilitato: false, richiesta: null, applicato: null, fonte: null, proposta: null, errore: null, scelte: [], stampella: null };
+  const vuoto: StatoAggiornamento = { abilitato: false, richiesta: null, applicato: null, fonte: null, proposta: null, errore: null, scelte: [], stampella: null, grassetti: [], forma: null };
   if (!medicoAggiornaLettera(p.medico?.id) || b.stato !== 'bozza') return vuoto;
-  const base = { ...vuoto, abilitato: true };
+  const base = { ...vuoto, abilitato: true, forma: formaSalvata(p, String(b.testo_finale ?? p.testo_corretto ?? '')) };
   const ag = p.aggiornamento_lettera;
   if (ag?.applicato_il) return { ...base, applicato: { quando: ag.applicato_il, fonte: ag.fonte, mesi: ag.mesi, novita_aggiunte: ag.novita_aggiunte ?? 0, automatico: !!ag.automatico, novita: Array.isArray(ag.novita) ? ag.novita : [], stampella: !!ag.stampella, correzioni: Array.isArray(ag.correzioni) ? ag.correzioni : [], avviso: ag.avviso ?? null } };
 
@@ -171,7 +217,7 @@ export async function statoAggiornamento(studioId: string, bozzaId: string): Pro
   const richiesta = { dal_dettato: !!dalDettato, data: data ? etichettaData(data) : null };
   let trovate = await lettereVecchie(studioId, bozzaId, nome, scelta ? null : data);
   if (scelta) trovate = trovate.filter((t) => t.fonte.tipo === scelta.tipo && t.fonte.id === scelta.id);
-  const vecchia = trovate[0];
+  const vecchia = trovate[0] ? await conForma(studioId, trovate[0]) : undefined;
   if (!vecchia) {
     const tutte = await elencoLettere(studioId, bozzaId, nome);
     const msg = !nome ? 'Manca il nome del paziente nei campi: senza, la lettera vecchia non si trova.'
@@ -182,8 +228,8 @@ export async function statoAggiornamento(studioId: string, bozzaId: string): Pro
     // contenuto resta il dettato e l'avviso resta.
     const piu = !scelta && nome ? await letteraPiuRecente(studioId, bozzaId, nome) : null;
     if (piu) {
-      const s = stampella({ lettera: piu.testo, dettato: String(b.testo_finale ?? grezzo) });
-      return { ...base, richiesta, errore: msg, scelte: tutte, stampella: { fonte: piu.fonte, ...s } };
+      const s = stampella({ lettera: piu.testo, dettato: String(b.testo_finale ?? grezzo), grassetti: piu.grassetti });
+      return { ...base, richiesta, errore: msg, scelte: tutte, stampella: { fonte: piu.fonte, ...s, grassetti: piu.grassetti ?? [] } };
     }
     return { ...base, richiesta, errore: `${msg} Sceglila a mano.`, scelte: tutte };
   }
@@ -196,10 +242,10 @@ export async function statoAggiornamento(studioId: string, bozzaId: string): Pro
   // La data della visita vecchia, se la prima frase non la dice: quella del
   // referto confermato, o quella completa chiesta nel dettato.
   const dataLettera = vecchia.fonte.tipo === 'referto' ? vecchia.fonte.data : data?.g && data.m ? `${String(data.g).padStart(2, '0')}.${String(data.m).padStart(2, '0')}.${data.a}` : null;
-  const r = aggiorna({ lettera: vecchia.testo, dettato, oggi: fmt(quando), femminile: eFemminile(sesso, dettato), unParagrafo: formato === 'lettera', dataLettera });
+  const r = aggiorna({ lettera: vecchia.testo, dettato, oggi: fmt(quando), femminile: eFemminile(sesso, dettato), unParagrafo: formato === 'lettera', dataLettera, grassetti: vecchia.grassetti });
   const scelte = trovate.length > 1 ? trovate.map((t) => t.fonte) : [];
   if ('errore' in r) return { ...base, richiesta, fonte: vecchia.fonte, errore: r.errore, scelte };
-  return { ...base, richiesta, fonte: vecchia.fonte, proposta: r, scelte };
+  return { ...base, richiesta, fonte: vecchia.fonte, proposta: r, scelte, grassetti: vecchia.grassetti ?? [] };
 }
 
 // Scelta a mano della lettera vecchia (anche senza richiesta del medico).
@@ -236,6 +282,7 @@ export async function applicaAggiornamento(studioId: string, bozzaId: string, ut
             payload = jsonb_set(jsonb_set(payload, '{aggiornamento_lettera}', $4::jsonb), '{revisione_prototipo}', coalesce(payload->'revisione_prototipo', '{}'::jsonb) || '{"tolte": []}'::jsonb)
       where id = $1 and studio_id = $2 and stato = 'bozza' returning id`, [bozzaId, studioId, testo, JSON.stringify(traccia)]);
   if (!ok) return { errore: 'La bozza non è più aperta.' };
+  await salvaForma(studioId, bozzaId, s.grassetti, s.fonte);
   await registraTestoMacchina({ studioId, bozzaId, nome: 'aggiornamento_lettera', modello: 'regole', regole: REGOLE, prima: prima ?? String(b?.payload?.testo_corretto ?? ''), dopo: testo, metadata: { automatico, somiglianza: p.somiglianza, novita_aggiunte: aggiunte.length } });
   console.log(`[aggiorna-lettera] ${bozzaId.slice(0, 8)}: applicato${automatico ? ' dalla catena' : ''} (${s.fonte.tipo}, somiglianza ${p.somiglianza}, ${aggiunte.length} frasi nuove, ${p.mesi} mesi)`);
   return { ok: true };
@@ -244,7 +291,7 @@ export async function applicaAggiornamento(studioId: string, bozzaId: string, ut
 export async function annullaAggiornamento(studioId: string, bozzaId: string): Promise<{ ok: true } | { errore: string }> {
   const prima = (await bozza(studioId, bozzaId))?.testo_finale ?? null;
   const [ok] = await query<{ id: string; testo: string | null }>(
-    `update referti_bozze set testo_finale = payload->'aggiornamento_lettera'->>'prima', payload = payload - 'aggiornamento_lettera'
+    `update referti_bozze set testo_finale = payload->'aggiornamento_lettera'->>'prima', payload = payload - 'aggiornamento_lettera' - 'forma_lettera'
       where id = $1 and studio_id = $2 and stato = 'bozza' and payload ? 'aggiornamento_lettera' returning id, coalesce(testo_finale, payload->>'testo_corretto') as testo`, [bozzaId, studioId]);
   if (!ok) return { errore: 'Niente da annullare.' };
   await registraTestoMacchina({ studioId, bozzaId, nome: 'aggiornamento_annullato', modello: 'regole', regole: REGOLE, prima, dopo: ok.testo ?? '' });
@@ -338,7 +385,25 @@ export async function letteraPiuRecente(studioId: string, bozzaId: string, nome:
     }
   }
   cand.sort((x, y) => y.quando - x.quando);
-  return cand[0]?.t ?? null;
+  return cand[0] ? conForma(studioId, cand[0].t) : null;
+}
+
+// Il grassetto della lettera vecchia salvato con la bozza: il Word e la
+// revisione lo applicano dove le stesse frasi ricompaiono nel testo.
+async function salvaForma(studioId: string, bozzaId: string, grassetti: Grassetto[] | undefined, fonte: Fonte): Promise<void> {
+  if (!grassetti?.length) return;
+  await query(`update referti_bozze set payload = jsonb_set(payload, '{forma_lettera}', $3::jsonb) where id = $1 and studio_id = $2 and stato = 'bozza'`,
+    [bozzaId, studioId, JSON.stringify({ grassetti: grassetti.slice(0, 80), fonte, quando: new Date().toISOString() })]);
+}
+
+// La revisione spegne o riaccende il grassetto, o toglie una frase.
+export async function cambiaForma(studioId: string, bozzaId: string, c: { spento?: boolean; togli?: string }): Promise<{ ok: true } | { errore: string }> {
+  const b = await bozza(studioId, bozzaId);
+  const f = b?.payload?.forma_lettera;
+  if (!b || b.stato !== 'bozza' || !f || !Array.isArray(f.grassetti)) return { errore: 'Niente grassetto da cambiare.' };
+  const nuova = { ...f, ...(typeof c.spento === 'boolean' ? { spento: c.spento } : {}), ...(c.togli ? { grassetti: f.grassetti.filter((g: any) => g?.testo !== c.togli) } : {}) };
+  await query(`update referti_bozze set payload = jsonb_set(payload, '{forma_lettera}', $3::jsonb) where id = $1 and studio_id = $2 and stato = 'bozza'`, [bozzaId, studioId, JSON.stringify(nuova)]);
+  return { ok: true };
 }
 
 // Applica la lettera «stampella»: il dettato con l'ortografia e
@@ -356,7 +421,7 @@ export async function applicaStampella(studioId: string, bozzaId: string, utente
     const nome = String(b.campi_confermati?.nome_paziente ?? p.campi_estratti?.nome_paziente ?? '').trim();
     const piu = nome ? await letteraPiuRecente(studioId, bozzaId, nome) : null;
     if (!piu) return { errore: 'Nessuna lettera di questo paziente, né tra i referti confermati né nella cartella.' };
-    st = { fonte: piu.fonte, ...stampella({ lettera: piu.testo, dettato: String(b.testo_finale ?? p.testo_corretto ?? '') }) };
+    st = { fonte: piu.fonte, ...stampella({ lettera: piu.testo, dettato: String(b.testo_finale ?? p.testo_corretto ?? ''), grassetti: piu.grassetti }), grassetti: piu.grassetti ?? [] };
     avviso = avviso ?? 'Il dettato non dice quale lettera riprendere: usata come aiuto la più recente.';
   }
   if (!st) return { errore: 'Nessuna lettera da usare come aiuto.' };
@@ -365,6 +430,8 @@ export async function applicaStampella(studioId: string, bozzaId: string, utente
   // Se la lettera non cambia niente (né una parola né l'impaginazione) non si
   // segna nulla: la bozza resta intatta.
   if (st.testo.trim() === String(prima ?? b?.payload?.testo_corretto ?? '').trim()) {
+    // Il testo resta com'è, ma il grassetto della lettera vale lo stesso.
+    if (!b?.payload?.forma_lettera) await salvaForma(studioId, bozzaId, st.grassetti.filter((g) => st!.testo.split(/\n/).some((r) => applicaGrassetti(r, [g]).some((x) => x.b))), st.fonte);
     return { errore: 'La lettera più recente non cambia niente in questo testo.' };
   }
   const traccia = {
@@ -375,6 +442,7 @@ export async function applicaStampella(studioId: string, bozzaId: string, utente
     `update referti_bozze set testo_finale = $3, payload = jsonb_set(payload, '{aggiornamento_lettera}', $4::jsonb)
       where id = $1 and studio_id = $2 and stato = 'bozza' returning id`, [bozzaId, studioId, s2.stampella.testo, JSON.stringify(traccia)]);
   if (!ok) return { errore: 'La bozza non è più aperta.' };
+  await salvaForma(studioId, bozzaId, st.grassetti, st.fonte);
   await registraTestoMacchina({ studioId, bozzaId, nome: 'aggiornamento_lettera', modello: 'regole', regole: `${REGOLE}: lettera più recente come aiuto (ortografia, impaginazione)`, prima: prima ?? String(b?.payload?.testo_corretto ?? ''), dopo: s2.stampella.testo, metadata: { automatico, stampella: true, correzioni: s2.stampella.correzioni.length } });
   console.log(`[aggiorna-lettera] ${bozzaId.slice(0, 8)}: lettera più recente come aiuto${automatico ? ' dalla catena' : ''} (${s2.stampella.fonte.tipo}, ${s2.stampella.correzioni.length} correzioni, impaginata ${s2.stampella.impaginata})`);
   return { ok: true };

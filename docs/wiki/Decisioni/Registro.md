@@ -514,3 +514,15 @@ paziente) scattava da solo solo quando il medico chiedeva una lettera che non si
 richiesta era un tasto. Ora scatta all'arrivo di ogni bozza dei medici abilitati, se il paziente
 ha una lettera e se questa cambia qualcosa. Il contenuto resta sempre il dettato; l'aggiornamento
 vero della lettera (anamnesi ripresa dalla vecchia) resta solo su richiesta del medico.
+
+## 6.10.2026 — Grassetto e a capo come nella lettera vecchia, letti dalla pagina
+Richiesta dello studio: l'impaginazione della lettera nuova deve essere quella della vecchia
+(parole in grassetto, a capo). Le lettere vecchie sono quasi tutte scansioni e il testo dell'OCR
+non porta né il grassetto né gli a capo: si leggono dall'immagine della pagina (spessore del
+tratto parola per parola, geometria delle righe), in locale, con regole e senza AI. Il grassetto
+viaggia come elenco di frasi accanto alla bozza, non dentro il testo: il testo resta semplice per
+tutto ciò che lo legge (misura delle correzioni, controlli, e-mail). Scartato: segni tipo
+asterischi nel testo (sporcano revisione e misure); aggiungere da soli i titoli della lettera
+vecchia quando il medico non li detta (sarebbero parole non dettate). È una lettura dall'immagine:
+la revisione mostra le frasi e le lascia togliere.
+

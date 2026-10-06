@@ -7,6 +7,37 @@
 import { query, pool } from '../../src/lib/db';
 import { togliAudit, ultimoTestoAI } from './pulizia-audit';
 import { aggiornamentoAutomatico } from '../../src/lib/aggiorna-lettera-server';
+import { deleteFile, putFile } from '../../src/lib/storage';
+import { execFileSync } from 'child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import os from 'os';
+import path from 'path';
+import JSZip from 'jszip';
+
+// Una lettera di una pagina con etichette e una frase in grassetto, disegnata
+// da ghostscript: la piattaforma la rilegge dall'immagine (6.10.2026).
+function letteraPdf(): Buffer {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'rf-prova-forma-'));
+  try {
+    const n = '/Helvetica findfont 11 scalefont setfont', b = '/Helvetica-Bold findfont 11 scalefont setfont';
+    const righe: [number, string][] = [
+      [760, `${n} (Caro Luca,) show`],
+      [730, `${n} (rivedo in data 10.02.2024 il paziente a margine per il controllo annuale previsto presso il) show`],
+      [714, `${n} (nostro studio e riferisce di stare bene.) show`],
+      [684, `${b} (Diagnosi: ) show ${n} (cardiopatia ipertensiva con funzione sistolica conservata e stabile nel tempo.) show`],
+      [668, `${b} (Fattori di rischio: ) show ${n} (ipertensione arteriosa trattata, dislipidemia, ex fumatore.) show`],
+      [638, `${n} (Il paziente riferisce benessere, ) show ${b} (nessun dolore toracico) show ${n} ( sotto sforzo e nessuna dispnea da) show`],
+      [622, `${n} (sforzo nelle attivita quotidiane svolte regolarmente a domicilio.) show`],
+      [592, `${n} (Clinicamente peso 80 Kg, pressione arteriosa 125/80 mmHg, frequenza 64 battiti al minuto.) show`],
+      [576, `${n} (Itto in sede, toni cardiaci validi, polmoni liberi, nessun edema declive agli arti inferiori.) show`],
+      [546, `${b} (In conclusione) show ${n} ( il quadro rimane stabile e propongo un controllo fra dodici mesi.) show`],
+      [516, `${n} (Cordiali saluti.) show`],
+    ];
+    writeFileSync(path.join(dir, 'l.ps'), `%!PS\n${righe.map(([y, r]) => `72 ${y} moveto ${r}`).join('\n')}\nshowpage\n`);
+    execFileSync(process.env.GS_BIN || '/opt/homebrew/bin/gs', ['-q', '-dNOPAUSE', '-dBATCH', '-sDEVICE=pdfwrite', `-sOutputFile=${path.join(dir, 'l.pdf')}`, path.join(dir, 'l.ps')], { stdio: 'ignore' });
+    return readFileSync(path.join(dir, 'l.pdf'));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+}
 
 const [base, cookie, S] = process.argv.slice(2);
 let ok = 0, no = 0;
@@ -18,6 +49,7 @@ const DETTATO = "Lettera al dottor Luca Prova. Riprendimi la lettera del 14.03.2
 async function main() {
   if (!/referralflow_demo/.test(process.env.DATABASE_URL ?? '')) throw new Error('solo sul database demo');
   const ids: string[] = [];
+  const pazienti: string[] = [], chiavi: string[] = [];
   const h = { cookie };
   const medico = { id: 'moccetti', nome: 'Dr. med. Prova Moccetti', formato: 'lettera' };
   try {
@@ -96,10 +128,48 @@ async function main() {
       [S, JSON.stringify({ testo_corretto: 'Caro Luca, rivedo il paziente. Bene.', medico, dettato_il: '2026-09-28T09:00:00Z', campi_estratti: { nome_paziente: 'Nessunalettera Prova' } })]);
     ids.push(sola);
     verifica((await aggiornamentoAutomatico(S, sola)) === 'niente', 'paziente senza lettere vecchie: niente, la bozza resta com\'è');
+
+    // Grassetto e a capo come nella lettera vecchia (6.10.2026): la lettera è
+    // un PDF in cartella, riletto dall'immagine.
+    const [{ id: pf }] = await query<{ id: string }>(`insert into patients (studio_id, cognome, nome, data_nascita) values ($1, 'Formaprova', 'Paziente', '1955-05-05') returning id`, [S]);
+    pazienti.push(pf);
+    const chiave = await putFile(letteraPdf(), 'application/pdf', '.pdf');
+    chiavi.push(chiave);
+    await query(`insert into patient_documents (studio_id, patient_id, filename, storage_key, categoria, nota) values ($1, $2, 'Lettera Formaprova.pdf', $3, 'lettera', 'lettera del 10.02.2024')`, [S, pf, chiave]);
+    const [{ id: bf }] = await query<{ id: string }>(`insert into referti_bozze (studio_id, file_id, payload, tipo, patient_id) values ($1, 'prova-agg-' || gen_random_uuid(), $2, 'referto', $3) returning id`,
+      [S, JSON.stringify({ testo_corretto: 'Caro Luca, rivedo il paziente a margine. Diagnosi: cardiopatia ipertensiva stabile. Riferisce nessun dolore toracico sotto sforzo. Clinicamente peso 81 Kg. In conclusione quadro stabile. Cordiali saluti.', medico, dettato_il: '2026-10-06T09:00:00Z', campi_estratti: { nome_paziente: 'Formaprova Paziente' } }), pf]);
+    ids.push(bf);
+    const urlF = `${base}/api/prototipo/referti/${bf}/aggiornamento`;
+    const eF = await aggiornamentoAutomatico(S, bf);
+    const sF = await (await fetch(urlF, { headers: h })).json();
+    const [tF] = await query<{ t: string | null }>('select testo_finale as t from referti_bozze where id = $1', [bf]);
+    const pres: string[] = sF.forma?.presenti ?? [];
+    verifica(eF === 'stampella' && sF.applicato?.fonte?.tipo === 'documento' && /a margine\.\nDiagnosi: cardiopatia/.test(tF.t ?? ''), `lettera in PDF: l'etichetta «Diagnosi:» va a capo come nella lettera vecchia (${eF})`);
+    verifica(pres.includes('Diagnosi:') && pres.includes('nessun dolore toracico') && pres.includes('In conclusione') && !pres.some((x) => /Fattori/.test(x)) && pres.length === 3, `grassetto letto dall'immagine: solo le tre frasi che ricompaiono nel testo (${JSON.stringify(pres)})`);
+    const fortiNelWord = async () => {
+      const xml = await (await JSZip.loadAsync(Buffer.from(await (await fetch(`${base}/api/referti/docx/${bf}`, { headers: h })).arrayBuffer()))).files['word/document.xml'].async('string');
+      return [...xml.matchAll(/<w:r[\s>](?:(?!<\/w:r>)[\s\S])*?<\/w:r>/g)].map((m) => m[0]).filter((r) => /<w:b\/>/.test(r)).map((r) => /<w:t[^>]*>([^<]*)</.exec(r)?.[1] ?? '');
+    };
+    const w1 = await fortiNelWord();
+    verifica(w1.includes('Diagnosi:') && w1.includes('nessun dolore toracico') && w1.includes('In conclusione'), `Word: le tre frasi escono in grassetto (${JSON.stringify(w1.filter((x) => /Diagnosi|dolore|conclusione/i.test(x)))})`);
+    const tg = await fetch(urlF, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'forma', togli: 'In conclusione' }) });
+    const w2 = await fortiNelWord();
+    verifica(tg.status === 200 && !w2.includes('In conclusione') && w2.includes('Diagnosi:'), 'togliere una frase: nel Word non è più in grassetto, le altre sì');
+    const sp = await fetch(urlF, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'forma', spento: true }) });
+    const w3 = await fortiNelWord();
+    verifica(sp.status === 200 && !w3.includes('Diagnosi:') && !w3.includes('nessun dolore toracico'), '«Togli il grassetto»: il Word esce senza');
+    const anF = await fetch(urlF, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'annulla' }) });
+    const sF2 = await (await fetch(urlF, { headers: h })).json();
+    verifica(anF.status === 200 && sF2.forma == null && sF2.applicato == null, 'Annulla: via anche il grassetto');
   } finally {
+    for (const k of chiavi) await deleteFile(k).catch(() => null);
+    await query('delete from patient_documents where patient_id = any($1::uuid[])', [pazienti]).catch(() => null);
+    // Lo scaricamento del Word lascia una misura del lavoro: via prima dell'audit.
+    await query('delete from audit.misure_lavoro where bozza_id = any($1::uuid[])', [ids]).catch(() => null);
     await togliAudit(ids);
     await query('delete from referti_eventi where bozza_id = any($1::uuid[])', [ids]);
     await query('delete from referti_bozze where id = any($1::uuid[])', [ids]);
+    await query('delete from patients where id = any($1::uuid[])', [pazienti]).catch(() => null);
     await pool.end();
   }
   console.log(`${ok} ok, ${no} no`);

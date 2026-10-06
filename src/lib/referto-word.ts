@@ -161,6 +161,8 @@ export async function costruisciWord(sessione: { studioId: string; email?: strin
     copia,
     // Nella lettera due paragrafi vuoti tra destinatario e data (segretaria).
     spaziDestinatario: formato === 'lettera' ? 2 : undefined,
+    // Grassetto come nella lettera vecchia del paziente (6.10.2026).
+    grassetti: !b.payload?.forma_lettera?.spento && Array.isArray(b.payload?.forma_lettera?.grassetti) ? b.payload.forma_lettera.grassetti : [],
   });
 
   const nomeFile = `referto-${dataBase.replaceAll('.', '-') || 'bozza'}.docx`;
