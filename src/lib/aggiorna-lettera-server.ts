@@ -396,6 +396,25 @@ async function salvaForma(studioId: string, bozzaId: string, grassetti: Grassett
     [bozzaId, studioId, JSON.stringify({ grassetti: grassetti.slice(0, 80), fonte, quando: new Date().toISOString() })]);
 }
 
+// Per una bozza aperta dove la lettera vecchia è già stata usata PRIMA del
+// 6.10.2026: si rilegge la forma di quella lettera e si salva solo il
+// grassetto che ricompare nel testo. Il testo non si tocca.
+export async function recuperaForma(studioId: string, bozzaId: string): Promise<number | null> {
+  const b = await bozza(studioId, bozzaId);
+  const ag = b?.payload?.aggiornamento_lettera;
+  if (!b || b.stato !== 'bozza' || !ag?.fonte?.id || b.payload?.forma_lettera) return null;
+  const nome = String(b.campi_confermati?.nome_paziente ?? b.payload?.campi_estratti?.nome_paziente ?? '').trim();
+  const stessa = (f: Fonte) => f.tipo === ag.fonte.tipo && f.id === ag.fonte.id && (f.da ?? 0) === (ag.fonte.da ?? 0);
+  let t: Trovata | null | undefined = (await lettereVecchie(studioId, bozzaId, nome, null)).find((x) => stessa(x.fonte));
+  if (t) t = await conForma(studioId, t);
+  else { const piu = nome ? await letteraPiuRecente(studioId, bozzaId, nome) : null; t = piu && stessa(piu.fonte) ? piu : null; }
+  if (!t?.grassetti?.length) return 0;
+  const testo = String(b.testo_finale ?? b.payload?.testo_corretto ?? '');
+  const presenti = t.grassetti.filter((g) => testo.split(/\n/).some((r) => applicaGrassetti(r, [g]).some((x) => x.b)));
+  await salvaForma(studioId, bozzaId, presenti, t.fonte);
+  return presenti.length;
+}
+
 // La revisione spegne o riaccende il grassetto, o toglie una frase.
 export async function cambiaForma(studioId: string, bozzaId: string, c: { spento?: boolean; togli?: string }): Promise<{ ok: true } | { errore: string }> {
   const b = await bozza(studioId, bozzaId);
