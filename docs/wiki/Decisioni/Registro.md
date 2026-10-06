@@ -547,3 +547,13 @@ Dato nuovo, misurato: i dettati le categorie come etichette quasi non le hanno; 
 vecchia. APERTO, da decidere con lo studio: quando la lettera chiesta non si trova, la più recente
 resta un aiuto (decisione dell'1.10) o si aggiorna da quella?
 
+## 6.10.2026 — La lettera si aggiorna dalla più recente (cambia l'1.10 e il 5.10)
+Decisione dello studio, dopo il dato dei 108 dettati (le categorie come etichette quasi non ci sono:
+stanno nella lettera vecchia): quando la lettera chiesta non si trova, o il medico non ne chiede
+nessuna, la lettera si aggiorna dalla più recente del paziente — non resta più un semplice aiuto.
+Resta l'avviso, resta «Annulla», restano da spuntare le frasi nuove. Salvaguardie: solo da una
+lettera di visita (si divide in anamnesi e visita) fra le quattro più recenti, e solo se le anamnesi
+si somigliano almeno al 35%; altrimenti la più recente fa da aiuto come prima, con un tasto per
+provare l'aggiornamento a mano. Si spegne con `REFERTI_AGGIORNA_DALLA_RECENTE` (`richiesta`, `mai`).
+Le bozze già aperte non si toccano da sole.
+

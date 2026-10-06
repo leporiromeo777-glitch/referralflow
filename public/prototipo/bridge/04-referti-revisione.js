@@ -1196,7 +1196,7 @@ function rfAggCorpo() {
   if (a.applicato && a.applicato.stampella) {
     // Lettera chiesta non trovata: la più recente ha fatto da aiuto (1.10.2026).
     const cor = a.applicato.correzioni || [];
-    return `<div class="rf-campi rf-agg" ${cor.length ? 'open' : ''}><div class="row between"><b>Lettera più recente usata come aiuto</b><button class="btn sm ghost" onclick="rfAggAzione({ azione: 'annulla' })" title="Torna al testo dettato">Annulla</button></div>
+    return `<div class="rf-campi rf-agg" ${cor.length ? 'open' : ''}><div class="row between"><b>Lettera più recente usata come aiuto</b><span><button class="btn sm" onclick="rfAggAzione({ azione: 'applica', recente: true, sostituisci: true, novita: [] })" title="Anamnesi, fattori di rischio e comorbidità ripresi da questa lettera, con le loro categorie; sotto, la visita dettata">Aggiorna da questa lettera</button> <button class="btn sm ghost" onclick="rfAggAzione({ azione: 'annulla' })" title="Torna al testo dettato">Annulla</button></span></div>
       ${a.applicato.avviso ? `<div class="rf-att-warn">${rfEsc(a.applicato.avviso)}</div>` : ''}
       <div class="caption">${a.applicato.automatico ? 'Fatto dalla catena' : 'Applicato'} con ${rfEsc(a.applicato.fonte.etichetta)} (${rfEsc(a.applicato.fonte.data)}) ${rfAggTastoGuarda(a.applicato.fonte)}: il testo resta quello dettato, ${cor.length ? `${cor.length} ${cor.length === 1 ? 'parola scritta' : 'parole scritte'} come nella lettera` : 'nessuna parola da correggere'}, impaginazione come la lettera.</div>
       ${cor.length ? `<div class="caption" style="margin-top:4px">${cor.map(c => `${rfEsc(c.da)} → <b>${rfEsc(c.a)}</b>`).join(' · ')}</div>` : ''}</div>`;
@@ -1206,11 +1206,12 @@ function rfAggCorpo() {
     const restano = a.applicato.novita || [];
     const novHtml = restano.map((f, i) => `<label class="rf-agg-nov"><input type="checkbox" ${RF.aggNovita && RF.aggNovita[i] ? 'checked' : ''} onchange="RF.aggNovita[${i}]=this.checked"> <span>${rfEsc(f)}</span></label>`).join('');
     return `<div class="rf-campi rf-agg" ${restano.length ? 'open' : ''}><div class="row between"><b>Lettera aggiornata</b><button class="btn sm ghost" onclick="rfAggAzione({ azione: 'annulla' })" title="Torna al testo dettato">Annulla</button></div>
-      <div class="caption">${a.applicato.automatico ? 'Fatta dalla catena' : 'Applicata'} da ${rfEsc(a.applicato.fonte.etichetta)} ${rfAggTastoGuarda(a.applicato.fonte)} · alle ${q.toLocaleTimeString('it-CH', { hour: '2-digit', minute: '2-digit' })} · controllo a ${a.applicato.mesi} mesi${a.applicato.novita_aggiunte ? ` · ${a.applicato.novita_aggiunte} frasi nuove aggiunte` : ''}</div>
+      ${a.applicato.avviso ? `<div class="rf-att-warn">${rfEsc(a.applicato.avviso)}</div>` : ''}
+      <div class="caption">${a.applicato.automatico ? 'Fatta dalla catena' : 'Applicata'} da ${rfEsc(a.applicato.fonte.etichetta)}${a.applicato.avviso ? ` (${rfEsc(a.applicato.fonte.data)})` : ''} ${rfAggTastoGuarda(a.applicato.fonte)} · alle ${q.toLocaleTimeString('it-CH', { hour: '2-digit', minute: '2-digit' })} · controllo a ${a.applicato.mesi} mesi${a.applicato.novita_aggiunte ? ` · ${a.applicato.novita_aggiunte} frasi nuove aggiunte` : ''}</div>
       ${restano.length ? `<div class="rf-att-tit" style="margin-top:6px">Nel dettato, non nella lettera vecchia</div><div class="caption">Non aggiunte: spunta quelle da mettere nell'anamnesi.</div>${novHtml}<div class="row" style="margin-top:4px"><button class="btn sm" onclick="rfAggAggiungi()">Aggiungi le spuntate</button></div>` : ''}</div>`;
   }
   if (!a.richiesta && !a.proposta) {
-    return `<details class="rf-campi rf-agg"><summary><b>Aggiorna una lettera vecchia…</b> <span class="caption">il medico non l'ha chiesto nel dettato</span></summary>${scelteHtml(a.scelte, 'Usa questa')}<div class="row" style="gap:6px;margin-top:6px"><button class="btn sm" onclick="rfAggAzione({ azione: 'stampella' })" title="Il testo resta il dettato: dalla lettera più recente solo ortografia e impaginazione">Usa la più recente solo come aiuto</button></div></details>`;
+    return `<details class="rf-campi rf-agg"><summary><b>Aggiorna una lettera vecchia…</b> <span class="caption">il medico non l'ha chiesto nel dettato</span></summary>${scelteHtml(a.scelte, 'Usa questa')}<div class="row" style="gap:6px;margin-top:6px;flex-wrap:wrap"><button class="btn sm" onclick="rfAggAzione({ azione: 'applica', recente: true, novita: [] })" title="Anamnesi, fattori di rischio e comorbidità ripresi dalla lettera più recente, con le loro categorie; sotto, la visita dettata">Aggiorna dalla più recente</button><button class="btn sm ghost" onclick="rfAggAzione({ azione: 'stampella' })" title="Il testo resta il dettato: dalla lettera più recente solo ortografia e impaginazione">Usa la più recente solo come aiuto</button></div></details>`;
   }
   const r = a.richiesta;
   const testa = `<div class="row between"><b>Aggiornamento della lettera</b>${r && r.dal_dettato ? `<span class="badge accent">chiesto nel dettato${r.data ? `: lettera del ${rfEsc(r.data)}` : ''}</span>` : '<span class="badge">scelta a mano</span>'}</div>`;
@@ -1226,12 +1227,13 @@ function rfAggCorpo() {
   const pct = Math.round((p.somiglianza || 0) * 100);
   const nov = (p.novita || []).map((f, i) => `<label class="rf-agg-nov"><input type="checkbox" ${RF.aggNovita && RF.aggNovita[i] ? 'checked' : ''} onchange="RF.aggNovita[${i}]=this.checked"> <span>${rfEsc(f)}</span></label>`).join('');
   return `<div class="rf-campi rf-agg">${testa}
-    <div class="caption">Da ${rfEsc(a.fonte.etichetta)} ${rfAggTastoGuarda(a.fonte)}${p.data_vecchia ? ` · data della visita ${rfEsc(p.data_vecchia)} → oggi` : ''}</div>
+    ${a.dalla_recente && a.avviso ? `<div class="rf-att-warn">${rfEsc(a.avviso.replace(' Aggiornata dalla più recente.', ' Qui sotto la proposta dalla più recente.'))}</div>` : ''}
+    <div class="caption">Da ${rfEsc(a.fonte.etichetta)}${a.dalla_recente ? ` (${rfEsc(a.fonte.data)})` : ''} ${rfAggTastoGuarda(a.fonte)}${p.data_vecchia ? ` · data della visita ${rfEsc(p.data_vecchia)} → oggi` : ''}</div>
     <div class="${pct < 35 ? 'rf-att-warn' : 'caption'}">Anamnesi e fattori di rischio dettati e della lettera vecchia: simili al <b>${pct}%</b>.</div>
     ${(p.avvisi || []).filter(x => !/si somigliano poco/.test(x)).map(x => `<div class="rf-att-warn">${rfEsc(x)}</div>`).join('')}
     ${nov ? `<div class="rf-att-tit" style="margin-top:6px">Nel dettato, non nella lettera vecchia</div><div class="caption">Spunta quelle da aggiungere all'anamnesi.</div>${nov}` : '<div class="caption">Nel dettato non c\'è niente che la lettera vecchia non abbia.</div>'}
     <div class="caption" style="margin-top:6px">Controllo: ${p.mesi} mesi ${p.mesi_dal_dettato ? '(dal dettato)' : '(di serie: il dettato non lo dice)'} · ${p.femminile ? 'della paziente' : 'del paziente'}</div>
-    <div class="row" style="gap:6px;margin-top:6px"><button class="btn sm" onclick="rfAggAnteprima()">Anteprima</button><button class="btn sm primary" onclick="rfAggApplica()">Applica</button></div>
+    <div class="row" style="gap:6px;margin-top:6px"><button class="btn sm" onclick="rfAggAnteprima()">Anteprima</button><button class="btn sm primary" onclick="rfAggApplica()">Applica</button>${a.dalla_recente && a.stampella ? `<button class="btn sm ghost" onclick="rfAggAzione({ azione: 'stampella' })" title="Il testo resta il dettato: dalla lettera solo ortografia, a capo e grassetto">Solo come aiuto</button>` : ''}</div>
     ${a.scelte && a.scelte.length > 1 ? `<details class="rf-att-cambia"><summary class="caption">un'altra lettera</summary>${scelteHtml(a.scelte, 'Usa questa')}</details>` : ''}</div>`;
 }
 async function rfAggAzione(corpo) {

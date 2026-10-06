@@ -52,6 +52,10 @@ const DETTATO = "Lettera al dottor Luca Prova. Riprendimi la lettera del 14.03.2
 
 async function main() {
   if (!/referralflow_demo/.test(process.env.DATABASE_URL ?? '')) throw new Error('solo sul database demo');
+  // Le prove scritte prima del 6.10.2026 valgono per la lettera più recente
+  // usata SOLO COME AIUTO: quel modo resta (ripiego e scelta a mano), e qui
+  // lo si tiene acceso finché non si provano, in fondo, i casi di serie.
+  process.env.REFERTI_AGGIORNA_DALLA_RECENTE = 'mai';
   const ids: string[] = [];
   const pazienti: string[] = [], chiavi: string[] = [];
   const h = { cookie };
@@ -177,6 +181,57 @@ async function main() {
     const gC = (sC.forma?.grassetti ?? []).find((g: any) => /Fattori di rischio/.test(g.testo));
     verifica(eC === 'stampella' && /a margine\.\nFRCV: ipertensione/.test(tC.t ?? '') && (sC.forma?.presenti ?? []).some((x: string) => /Fattori di rischio/.test(x)) && typeof gC?.modello === 'string',
       `categorie: «FRCV:» del dettato va a capo e in grassetto come «Fattori di rischio:» delle lettere (${eC}, ${JSON.stringify(sC.forma?.presenti)})`);
+
+    // Di serie dal 6.10.2026 (decisione dello studio): la lettera si AGGIORNA
+    // dalla più recente — anamnesi e categorie riprese, sotto la visita dettata.
+    delete process.env.REFERTI_AGGIORNA_DALLA_RECENTE;
+    const nuovaBozza = async (testo: string) => {
+      const [{ id }] = await query<{ id: string }>(`insert into referti_bozze (studio_id, file_id, payload, tipo) values ($1, 'prova-agg-' || gen_random_uuid(), $2, 'referto') returning id`,
+        [S, JSON.stringify({ testo_corretto: testo, medico, dettato_il: '2026-09-28T09:00:00Z', campi_estratti: { nome_paziente: 'Aggiornaprova Paziente' } })]);
+      ids.push(id);
+      return id;
+    };
+    const statoDi = async (id: string) => (await fetch(`${base}/api/prototipo/referti/${id}/aggiornamento`, { headers: h })).json();
+    const testoDi = async (id: string) => (await query<{ t: string | null }>('select testo_finale as t from referti_bozze where id = $1', [id]))[0].t ?? '';
+    const r1 = await nuovaBozza(DETTATO.replace('14.03.2025', '01.01.2020'));
+    const er1 = await aggiornamentoAutomatico(S, r1);
+    const sr1 = await statoDi(r1), tr1 = await testoDi(r1);
+    verifica(er1 === 'applicato' && sr1.applicato?.stampella === false && sr1.applicato?.fonte?.id === vecchia && /non la trovo/.test(sr1.applicato?.avviso ?? '') && /più recente/.test(sr1.applicato?.avviso ?? ''),
+      `lettera chiesta assente: aggiornata dalla più recente, con l'avviso (${er1}, ${JSON.stringify(sr1.applicato?.avviso ?? null)})`);
+    verifica(tr1.includes('Rivedo in data 28.09.2026') && tr1.includes('non ritorno sull\'anamnesi') && tr1.includes('82 Kg') && !tr1.includes('80 Kg') && (sr1.applicato?.novita ?? []).length === 1,
+      'dalla più recente: anamnesi e fattori di rischio ripresi, data portata a oggi, visita di oggi sotto, la frase nuova da spuntare');
+    const anr1 = await fetch(`${base}/api/prototipo/referti/${r1}/aggiornamento`, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'annulla' }) });
+    const sr1b = await statoDi(r1);
+    verifica(anr1.status === 200 && (await testoDi(r1)) === '' && sr1b.dalla_recente === true && !!sr1b.proposta && !!sr1b.stampella && /non la trovo/.test(sr1b.avviso ?? ''), 'Annulla torna al dettato; la revisione ripropone la più recente (Applica, o «Solo come aiuto»)');
+
+    const r2 = await nuovaBozza(DETTATO.replace('Riprendimi la lettera del 14.03.2025. ', ''));
+    const er2 = await aggiornamentoAutomatico(S, r2);
+    const sr2 = await statoDi(r2);
+    verifica(er2 === 'applicato' && /non dice quale lettera/.test(sr2.applicato?.avviso ?? '') && (await testoDi(r2)).includes('non ritorno sull\'anamnesi'), `nessuna lettera chiesta: aggiornata lo stesso dalla più recente, e lo si dice (${er2})`);
+
+    const r3 = await nuovaBozza('Caro Luca, il paziente mi ha telefonato per un consiglio. Comorbidità: ipotirodismo. Nessuna novità di rilievo. Cordiali saluti.');
+    const er3 = await aggiornamentoAutomatico(S, r3);
+    const sr3 = await statoDi(r3), tr3 = await testoDi(r3);
+    verifica(er3 === 'stampella' && sr3.applicato?.stampella === true && /ipotiroidismo/.test(tr3) && !tr3.includes('non ritorno sull\'anamnesi'), `dettato senza una visita (non si sa dove attaccarla): la più recente resta un aiuto, il contenuto è il dettato (${er3})`);
+
+    const r4 = await nuovaBozza(DETTATO.replace('Riprendimi la lettera del 14.03.2025. ', ''));
+    const s4 = await statoDi(r4);
+    const ap4 = await fetch(`${base}/api/prototipo/referti/${r4}/aggiornamento`, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'applica', recente: true, novita: [] }) });
+    const sr4 = await statoDi(r4);
+    verifica(s4.proposta == null && s4.applicato == null && ap4.status === 200 && sr4.applicato?.automatico === false && /non dice quale lettera/.test(sr4.applicato?.avviso ?? ''), `tasto «Aggiorna dalla più recente» nella revisione (${ap4.status})`);
+
+    // Dall'aiuto all'aggiornamento con un tasto («Aggiorna da questa lettera»).
+    const sost = (id: string) => fetch(`${base}/api/prototipo/referti/${id}/aggiornamento`, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'applica', recente: true, sostituisci: true, novita: [] }) });
+    const no3 = await sost(r3);
+    const sr3b = await statoDi(r3);
+    verifica(no3.status === 409 && /visita/.test((await no3.json()).errore ?? '') && sr3b.applicato?.stampella === true && /ipotiroidismo/.test(await testoDi(r3)), `«Aggiorna da questa lettera» dove non si può: dice perché, e l'aiuto resta com'era (${no3.status})`);
+    process.env.REFERTI_AGGIORNA_DALLA_RECENTE = 'mai';
+    const r5 = await nuovaBozza(DETTATO.replace('Riprendimi la lettera del 14.03.2025. ', '').replace('ipotiroidismo', 'ipotirodismo'));
+    const er5 = await aggiornamentoAutomatico(S, r5);
+    delete process.env.REFERTI_AGGIORNA_DALLA_RECENTE;
+    const si5 = await sost(r5);
+    const sr5 = await statoDi(r5);
+    verifica(er5 === 'stampella' && si5.status === 200 && sr5.applicato?.stampella === false && (await testoDi(r5)).includes('non ritorno sull\'anamnesi'), `«Aggiorna da questa lettera» dove si può: dall'aiuto alla lettera aggiornata (${er5}, ${si5.status})`);
 
     // La lettera è DENTRO una cartella scansionata (tre pagine): la si sceglie
     // a mano e si aggiorna da lì — le categorie arrivano copiate, col grassetto.

@@ -182,6 +182,11 @@ export type StatoAggiornamento = {
   // Il grassetto della lettera in gioco (proposta) e quello già salvato con la bozza.
   grassetti: Grassetto[];
   forma: FormaBozza | null;
+  // La proposta viene dalla lettera PIÙ RECENTE, non da quella chiesta (6.10.2026); `avviso` dice perché.
+  dalla_recente?: boolean;
+  avviso?: string | null;
+  // Perché dalla più recente NON si può aggiornare (resta l'aiuto).
+  motivo?: string | null;
   fonte: Fonte | null;
   proposta: Proposta | null;
   errore: string | null;
@@ -194,7 +199,19 @@ function primaFrase(testo: string): string {
   return String(testo || '').replace(/\b(dr|dott|prof|med)\./gi, '$1 ').split(/(?<=[.!?])\s+|\n+/).slice(0, 3).join(' ');
 }
 
-export async function statoAggiornamento(studioId: string, bozzaId: string): Promise<StatoAggiornamento | null> {
+// Aggiornare dalla lettera più recente quando quella chiesta non si trova o
+// il medico non ne chiede nessuna (6.10.2026, decisione dello studio):
+// `sempre` (di serie), `richiesta` (solo se il medico ne ha chiesta una),
+// `mai` (la più recente resta un aiuto per ortografia e a capo, com'era).
+const modoRecente = (): 'sempre' | 'richiesta' | 'mai' => {
+  const v = (process.env.REFERTI_AGGIORNA_DALLA_RECENTE ?? 'sempre').trim().toLowerCase();
+  return v === 'mai' || v === 'richiesta' ? v : 'sempre';
+};
+const AVVISO_SENZA_RICHIESTA = 'Il dettato non dice quale lettera riprendere: aggiornata dalla più recente.';
+
+// `recente`: anche senza richiesta nel dettato si prepara la proposta dalla
+// lettera più recente (all'arrivo della bozza, o col tasto della revisione).
+export async function statoAggiornamento(studioId: string, bozzaId: string, opzioni: { recente?: boolean } = {}): Promise<StatoAggiornamento | null> {
   const b = await bozza(studioId, bozzaId);
   if (!b) return null;
   const p = b.payload ?? {};
@@ -215,37 +232,54 @@ export async function statoAggiornamento(studioId: string, bozzaId: string): Pro
 
   // Senza richiesta del medico né scelta a mano: solo l'elenco per il tasto
   // «Aggiorna una lettera vecchia…».
-  if (!dalDettato && !scelta) return { ...base, scelte: await scelteDi() };
+  if (!dalDettato && !scelta && !opzioni.recente) return { ...base, scelte: await scelteDi() };
+  const senzaRichiesta = !dalDettato && !scelta;
   const data = dalDettato?.data ?? null;
-  const richiesta = { dal_dettato: !!dalDettato, data: data ? etichettaData(data) : null };
-  let trovate = scelta?.tipo === 'pagine' && nome ? await lettereDelPaziente(studioId, bozzaId, nome) : await lettereVecchie(studioId, bozzaId, nome, scelta ? null : data);
+  const richiesta = senzaRichiesta ? null : { dal_dettato: !!dalDettato, data: data ? etichettaData(data) : null };
+  let trovate = senzaRichiesta ? [] : scelta?.tipo === 'pagine' && nome ? await lettereDelPaziente(studioId, bozzaId, nome) : await lettereVecchie(studioId, bozzaId, nome, scelta ? null : data);
   if (scelta) trovate = trovate.filter((t) => t.fonte.tipo === scelta.tipo && t.fonte.id === scelta.id && (scelta.tipo !== 'pagine' || t.fonte.da === scelta.da));
-  const vecchia = trovate[0] ? await conCategorie(studioId, trovate[0], nome ? await lettereDelPaziente(studioId, bozzaId, nome) : []) : undefined;
+  let vecchia = trovate[0] ? await conCategorie(studioId, trovate[0], nome ? await lettereDelPaziente(studioId, bozzaId, nome) : []) : undefined;
+  // La lettera chiesta non c'è, o il medico non ne chiede nessuna: si prende
+  // la PIÙ RECENTE del paziente. Dall'1.10.2026 faceva solo da aiuto
+  // (ortografia, a capo); dal 6.10.2026, decisione dello studio, la lettera
+  // si AGGIORNA da quella — anamnesi, fattori di rischio e comorbidità ripresi
+  // con le loro categorie, sotto la visita dettata — e l'avviso resta. Se
+  // l'aggiornamento non si può fare (non si trova dove comincia la visita),
+  // la più recente torna a fare da aiuto.
+  let recente: Trovata | null = null, avviso: string | null = null, tutte: Fonte[] = [];
   if (!vecchia) {
-    const tutte = await scelteDi();
-    const msg = !nome ? 'Manca il nome del paziente nei campi: senza, la lettera vecchia non si trova.'
+    tutte = await scelteDi();
+    avviso = senzaRichiesta ? AVVISO_SENZA_RICHIESTA
+      : !nome ? 'Manca il nome del paziente nei campi: senza, la lettera vecchia non si trova.'
       : data ? `Il medico chiede la lettera del ${etichettaData(data)}, ma non la trovo né tra i referti confermati né nella cartella.`
       : 'Nessuna lettera vecchia di questo paziente, né tra i referti confermati né nella cartella.';
-    // Lettera chiesta che non c'è (1.10.2026, decisione dello studio): la più
-    // recente del paziente fa da aiuto per ortografia e impaginazione; il
-    // contenuto resta il dettato e l'avviso resta.
-    const piu = !scelta && nome ? await letteraPiuRecente(studioId, bozzaId, nome) : null;
-    if (piu) {
-      const s = stampella({ lettera: piu.testo, dettato: String(b.testo_finale ?? grezzo), grassetti: piu.grassetti });
-      return { ...base, richiesta, errore: msg, scelte: tutte, stampella: { fonte: piu.fonte, ...s, grassetti: piu.grassetti ?? [] } };
-    }
-    return { ...base, richiesta, errore: `${msg} Sceglila a mano.`, scelte: tutte };
+    // Non una lettera qualunque: fra le più recenti, la prima che è una
+    // lettera di VISITA (si divide in anamnesi e visita) e somiglia al dettato.
+    recente = !scelta && nome ? (await perAggiornare(studioId, bozzaId, nome, String(b.testo_finale ?? grezzo), fmt(quando))) ?? (await letteraPiuRecente(studioId, bozzaId, nome)) : null;
+    if (!recente) return senzaRichiesta ? { ...base, scelte: tutte } : { ...base, richiesta, errore: `${avviso} Sceglila a mano.`, scelte: tutte };
+    if (!senzaRichiesta && data) avviso = `${avviso} Aggiornata dalla più recente.`;
+    vecchia = recente;
   }
   const dettato = String(b.testo_finale ?? grezzo);
+  const aiuto = recente ? { fonte: recente.fonte, ...stampella({ lettera: recente.testo, dettato, grassetti: recente.grassetti }), grassetti: recente.grassetti ?? [] } : null;
+  const soloAiuto = recente && (modoRecente() === 'mai' || (senzaRichiesta && modoRecente() === 'richiesta'));
+  if (recente && soloAiuto) return senzaRichiesta ? { ...base, scelte: tutte, stampella: aiuto } : { ...base, richiesta, errore: avviso!.replace(' Aggiornata dalla più recente.', ''), scelte: tutte, stampella: aiuto };
   let sesso: string | null = null;
   const patientId = await pazienteDelReferto(studioId, bozzaId);
   if (patientId) sesso = (await query<{ sesso: string | null }>('select sesso from patients where id = $1', [patientId]))[0]?.sesso ?? null;
   let formato: 'rapporto' | 'lettera' = 'lettera';
   try { formato = await formatoPerBozza(studioId, p.medico ?? null); } catch { /* lettera */ }
   // La data della visita vecchia, se la prima frase non la dice: quella del
-  // referto confermato, o quella completa chiesta nel dettato.
-  const dataLettera = vecchia.fonte.tipo === 'referto' ? vecchia.fonte.data : data?.g && data.m ? `${String(data.g).padStart(2, '0')}.${String(data.m).padStart(2, '0')}.${data.a}` : null;
+  // referto confermato (o della lettera trovata nella cartella scansionata),
+  // o quella completa chiesta nel dettato.
+  const dataLettera = vecchia.fonte.tipo === 'referto' || (recente && vecchia.fonte.tipo === 'pagine') ? vecchia.fonte.data
+    : !recente && data?.g && data.m ? `${String(data.g).padStart(2, '0')}.${String(data.m).padStart(2, '0')}.${data.a}` : null;
   const r = aggiorna({ lettera: vecchia.testo, dettato, oggi: fmt(quando), femminile: eFemminile(sesso, dettato), unParagrafo: formato === 'lettera', dataLettera, grassetti: vecchia.grassetti });
+  if (recente) {
+    // L'aggiornamento dalla più recente non riesce: resta l'aiuto, con l'avviso di prima.
+    if ('errore' in r) return senzaRichiesta ? { ...base, scelte: tutte, stampella: aiuto, motivo: r.errore } : { ...base, richiesta, errore: avviso!.replace(' Aggiornata dalla più recente.', ''), scelte: tutte, stampella: aiuto, motivo: r.errore };
+    return { ...base, richiesta, fonte: vecchia.fonte, proposta: r, scelte: tutte, grassetti: vecchia.grassetti ?? [], stampella: aiuto, dalla_recente: true, avviso };
+  }
   const scelte = trovate.length > 1 ? trovate.map((t) => t.fonte) : [];
   if ('errore' in r) return { ...base, richiesta, fonte: vecchia.fonte, errore: r.errore, scelte };
   return { ...base, richiesta, fonte: vecchia.fonte, proposta: r, scelte, grassetti: vecchia.grassetti ?? [] };
@@ -263,11 +297,11 @@ export async function scegliLettera(studioId: string, bozzaId: string, fonte: { 
 
 // Applica: le frasi nuove scelte entrano in fondo alla parte ripresa dalla
 // lettera vecchia (dopo anamnesi e rischi, prima della visita di oggi).
-export async function applicaAggiornamento(studioId: string, bozzaId: string, utente: string | null, scelte: number[], automatico = false): Promise<{ ok: true } | { errore: string }> {
-  const s = await statoAggiornamento(studioId, bozzaId);
+export async function applicaAggiornamento(studioId: string, bozzaId: string, utente: string | null, scelte: number[], automatico = false, opzioni: { recente?: boolean } = {}): Promise<{ ok: true } | { errore: string }> {
+  const s = await statoAggiornamento(studioId, bozzaId, opzioni);
   if (!s?.abilitato) return { errore: 'Non previsto per questo referto.' };
   if (s.applicato) return { errore: 'Già applicato.' };
-  if (!s.proposta || !s.fonte) return { errore: s.errore ?? 'Nessuna proposta.' };
+  if (!s.proposta || !s.fonte) return { errore: s.motivo ?? s.errore ?? 'Nessuna proposta.' };
   const p = s.proposta;
   const aggiunte = scelte.filter((i) => Number.isInteger(i) && i >= 0 && i < p.novita.length).map((i) => p.novita[i]);
   let testo = p.testo;
@@ -279,7 +313,7 @@ export async function applicaAggiornamento(studioId: string, bozzaId: string, ut
   const prima = b?.testo_finale ?? null;
   // Le frasi nuove NON aggiunte restano scritte: dopo l'applicazione (anche
   // automatica) la revisione le mostra ancora, da aggiungere a mano.
-  const traccia = { applicato_il: new Date().toISOString(), da: utente, automatico, fonte: s.fonte, mesi: p.mesi, novita_aggiunte: aggiunte.length, novita: p.novita.filter((f) => !aggiunte.includes(f)), vecchia: p.vecchia, somiglianza: p.somiglianza, prima };
+  const traccia = { applicato_il: new Date().toISOString(), da: utente, automatico, fonte: s.fonte, mesi: p.mesi, novita_aggiunte: aggiunte.length, novita: p.novita.filter((f) => !aggiunte.includes(f)), vecchia: p.vecchia, somiglianza: p.somiglianza, prima, ...(s.dalla_recente ? { dalla_recente: true, avviso: s.avviso ?? null } : {}) };
   const [ok] = await query<{ id: string }>(
     `update referti_bozze set testo_finale = $3,
             payload = jsonb_set(jsonb_set(payload, '{aggiornamento_lettera}', $4::jsonb), '{revisione_prototipo}', coalesce(payload->'revisione_prototipo', '{}'::jsonb) || '{"tolte": []}'::jsonb)
@@ -287,7 +321,7 @@ export async function applicaAggiornamento(studioId: string, bozzaId: string, ut
   if (!ok) return { errore: 'La bozza non è più aperta.' };
   await salvaForma(studioId, bozzaId, s.grassetti, s.fonte);
   await registraTestoMacchina({ studioId, bozzaId, nome: 'aggiornamento_lettera', modello: 'regole', regole: REGOLE, prima: prima ?? String(b?.payload?.testo_corretto ?? ''), dopo: testo, metadata: { automatico, somiglianza: p.somiglianza, novita_aggiunte: aggiunte.length } });
-  console.log(`[aggiorna-lettera] ${bozzaId.slice(0, 8)}: applicato${automatico ? ' dalla catena' : ''} (${s.fonte.tipo}, somiglianza ${p.somiglianza}, ${aggiunte.length} frasi nuove, ${p.mesi} mesi)`);
+  console.log(`[aggiorna-lettera] ${bozzaId.slice(0, 8)}: applicato${automatico ? ' dalla catena' : ''}${s.dalla_recente ? ' dalla più recente' : ''} (${s.fonte.tipo}, somiglianza ${p.somiglianza}, ${aggiunte.length} frasi nuove, ${p.mesi} mesi)`);
   return { ok: true };
 }
 
@@ -309,19 +343,24 @@ export async function annullaAggiornamento(studioId: string, bozzaId: string): P
 // abbastanza (se no resta una proposta con l'avviso). «Annulla» torna al
 // dettato. Best-effort: un intoppo qui non ferma la consegna.
 export async function aggiornamentoAutomatico(studioId: string, bozzaId: string): Promise<'applicato' | 'proposta' | 'niente' | 'stampella'> {
-  const s = await statoAggiornamento(studioId, bozzaId);
-  if (s?.abilitato && s.richiesta && !s.proposta && s.stampella) {
-    const r = await applicaStampella(studioId, bozzaId, null, true);
+  let s = await statoAggiornamento(studioId, bozzaId);
+  if (!s?.abilitato || s.applicato) return 'niente';
+  // Il medico non chiede nessuna lettera: dal 6.10.2026 (decisione dello
+  // studio) la lettera si aggiorna lo stesso dalla più recente del paziente.
+  const senzaRichiesta = !s.richiesta;
+  if (senzaRichiesta && modoRecente() === 'sempre') s = (await statoAggiornamento(studioId, bozzaId, { recente: true })) ?? s;
+  // Dalla più recente si applica solo se le anamnesi si somigliano; se no, o
+  // se l'aggiornamento non si può fare, la più recente fa da aiuto
+  // (ortografia, a capo, grassetto) e il contenuto resta il dettato.
+  if (s.proposta && s.dalla_recente && s.proposta.somiglianza >= 0.35) {
+    const r = await applicaAggiornamento(studioId, bozzaId, null, [], true, { recente: senzaRichiesta });
+    if ('ok' in r) return 'applicato';
+  }
+  if (s.dalla_recente || (s.richiesta && !s.proposta && s.stampella) || senzaRichiesta) {
+    const r = await applicaStampella(studioId, bozzaId, null, true, senzaRichiesta);
     return 'ok' in r ? 'stampella' : 'niente';
   }
-  // Il medico non chiede nessuna lettera (5.10.2026, decisione dello studio):
-  // la più recente del paziente fa lo stesso da aiuto per ortografia e
-  // impaginazione, se c'è e se cambia qualcosa. Il contenuto resta il dettato.
-  if (s?.abilitato && !s.richiesta && !s.applicato) {
-    const r = await applicaStampella(studioId, bozzaId, null, true, true);
-    return 'ok' in r ? 'stampella' : 'niente';
-  }
-  if (!s?.abilitato || !s.richiesta || !s.proposta) return 'niente';
+  if (!s.richiesta || !s.proposta) return 'niente';
   if (s.proposta.somiglianza < 0.35) return 'proposta';
   const r = await applicaAggiornamento(studioId, bozzaId, null, [], true);
   return 'ok' in r ? 'applicato' : 'proposta';
@@ -426,6 +465,21 @@ async function conCategorie(studioId: string, prima: Trovata, tutte: Trovata[]):
   return { ...base, grassetti: riordinaGrassetti([...(base.grassetti ?? []), ...nuove.values()], 200) };
 }
 
+// La lettera da cui AGGIORNARE (6.10.2026): la più recente del paziente può
+// essere un biglietto, un referto d'esame o la lettera di un altro medico, e
+// da quelle non si riprende un'anamnesi. Fra le quattro più recenti si prende
+// la prima da cui l'aggiornamento riesce (anamnesi e visita si trovano) e la
+// cui anamnesi somiglia a quella dettata almeno al 35%. null = nessuna.
+export async function perAggiornare(studioId: string, bozzaId: string, nome: string, dettato: string, oggi: string): Promise<Trovata | null> {
+  const tutte = await lettereDelPaziente(studioId, bozzaId, nome);
+  for (const t of tutte.slice(0, LETTERE_PER_LE_CATEGORIE)) {
+    const con = await conForma(studioId, t);
+    const r = aggiorna({ lettera: con.testo, dettato, oggi, femminile: false });
+    if (!('errore' in r) && r.somiglianza >= 0.35) return conCategorie(studioId, t, tutte);
+  }
+  return null;
+}
+
 export async function letteraPiuRecente(studioId: string, bozzaId: string, nome: string): Promise<Trovata | null> {
   const tutte = await lettereDelPaziente(studioId, bozzaId, nome);
   return tutte[0] ? conCategorie(studioId, tutte[0], tutte) : null;
@@ -478,7 +532,7 @@ export async function applicaStampella(studioId: string, bozzaId: string, utente
   if (!s?.abilitato || s.applicato) return { errore: 'Non previsto per questo referto, o già applicato.' };
   const b = await bozza(studioId, bozzaId);
   let st = s.stampella;
-  let avviso = s.errore;
+  let avviso = s.errore ?? (s.avviso && s.richiesta ? s.avviso.replace(' Aggiornata dalla più recente.', '') : null);
   if (!st && forza && b) {
     const p = b.payload ?? {};
     const nome = String(b.campi_confermati?.nome_paziente ?? p.campi_estratti?.nome_paziente ?? '').trim();

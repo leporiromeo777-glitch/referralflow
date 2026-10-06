@@ -61,8 +61,16 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     return NextResponse.json({ ok: true });
   }
   if (c?.azione === 'applica') {
-    const r = await applicaAggiornamento(sid, params.id, session.id, Array.isArray(c.novita) ? c.novita.map(Number) : []);
-    if ('errore' in r) return NextResponse.json(r, { status: 409 });
+    // `recente`: il dettato non chiede nessuna lettera e chi rivede aggiorna dalla più recente (6.10.2026).
+    // `sostituisci`: la lettera era stata usata solo come aiuto; si torna al dettato e si aggiorna da
+    // quella. Se l'aggiornamento non riesce, l'aiuto torna com'era.
+    const eraAiuto = c.sostituisci === true && !!(await statoAggiornamento(sid, params.id))?.applicato?.stampella;
+    if (eraAiuto) await annullaAggiornamento(sid, params.id);
+    const r = await applicaAggiornamento(sid, params.id, session.id, Array.isArray(c.novita) ? c.novita.map(Number) : [], false, { recente: c.recente === true });
+    if ('errore' in r) {
+      if (eraAiuto) await applicaStampella(sid, params.id, session.id, false, true).catch(() => null);
+      return NextResponse.json(r, { status: 409 });
+    }
     void registraEvento(sid, params.id, 'lettera_aggiornata', session.id, { novita: Array.isArray(c.novita) ? c.novita.length : 0 });
     return NextResponse.json(r);
   }
