@@ -12,12 +12,14 @@
 :root {
   --font: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
-  --bg: #EEF1F9;
-  --bg-tint-1: rgba(79,110,247,.16);
-  --bg-tint-2: rgba(139,92,246,.12);
-  --surface: #FFFFFF; --surface-2: #F6F8FD; --surface-3: #ECEFF8;
-  --glass: rgba(255,255,255,.66); --glass-strong: rgba(255,255,255,.86);
-  --border: rgba(40,54,120,.09); --border-2: rgba(40,54,120,.16);
+  /* Di giorno il fondo è BIANCO (richiesta dello studio): niente velature colorate, le carte si
+     staccano con bordo e ombra. */
+  --bg: #FFFFFF;
+  --bg-tint-1: transparent;
+  --bg-tint-2: transparent;
+  --surface: #FFFFFF; --surface-2: #F7F8FB; --surface-3: #EFF1F6;
+  --glass: #FFFFFF; --glass-strong: #FFFFFF;
+  --border: rgba(30,40,90,.10); --border-2: rgba(30,40,90,.18);
   --highlight: inset 0 1px 0 rgba(255,255,255,.9);
   --shadow-1: 0 1px 2px rgba(24,34,84,.04), 0 12px 32px rgba(24,34,84,.08);
   --shadow-2: 0 28px 70px rgba(24,34,84,.20), 0 2px 8px rgba(24,34,84,.08);
@@ -51,7 +53,8 @@
   --ai-soft: rgba(130,120,255,.18);
 }
 body { background: var(--bg); letter-spacing: -.003em; }
-body::before { display: block; background:
+body::before { display: none; }
+:root[data-theme="dark"] body::before { display: block; background:
   radial-gradient(1100px 700px at 6% -12%, var(--bg-tint-1), transparent 62%),
   radial-gradient(900px 620px at 104% 104%, var(--bg-tint-2), transparent 60%),
   radial-gradient(700px 500px at 70% -10%, rgba(79,141,251,.10), transparent 60%); }

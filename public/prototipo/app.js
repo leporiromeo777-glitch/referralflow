@@ -1,6 +1,9 @@
 // ReferralFlow prototype — core: state, router, shell, palette, AI panel, sheet, modal, toast
+// Tema bianco di serie (6.10.2026, richiesta dello studio): una volta sola si riparte dal chiaro, anche
+// su un computer impostato sul buio; chi poi sceglie la notte col tasto in alto la tiene.
+try { if (localStorage.getItem('rf-tema') !== 'bianco') { localStorage.setItem('rf-theme', 'light'); localStorage.setItem('rf-tema', 'bianco'); } } catch (e) { /* niente */ }
 const state = {
-  role: 'doctor', route: 'home', params: {}, theme: localStorage.getItem('rf-theme') || 'system',
+  role: 'doctor', route: 'home', params: {}, theme: localStorage.getItem('rf-theme') || 'light',
   aiOpen: false, sidebarCollapsed: false, patientCtx: null, visitMode: false, aiMessages: [], aiState: 'idle',
   aiRunning: 2, reportChoice: null, proposalsDone: false,
 };
