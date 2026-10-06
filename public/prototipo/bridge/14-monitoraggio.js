@@ -20,6 +20,29 @@ if (typeof NAV !== 'undefined') for (const r of ['secretary', 'assistant', 'doct
 .rf-mon-tile .n { font-size:26px; font-weight:650; font-variant-numeric:tabular-nums; line-height:1.1; }
 .rf-mon-tile .t { font-size:12px; color:var(--text-2); margin-top:2px; }
 .rf-mon-tile.alta .n { color:#b3261e; } .rf-mon-tile.att .n { color:#9a6200; } .rf-mon-tile.grigio .n { color:var(--text-2); }
+.rf-mon-kpis { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:16px; margin-bottom:16px; }
+.rf-mon-kpi { position:relative; border:1px solid var(--border); border-radius:20px; padding:18px 20px 16px; background:var(--surface); box-shadow:var(--shadow-1); min-height:118px; }
+.rf-mon-kpi .l { font-size:13px; font-weight:550; color:var(--text-2); } .rf-mon-kpi .n { font-size:34px; font-weight:700; letter-spacing:-.03em; line-height:1.15; margin-top:6px; font-variant-numeric:tabular-nums; }
+.rf-mon-kpi .s { font-size:12px; color:var(--text-3); margin-top:2px; padding-right:48px; }
+.rf-mon-kpi .ico { position:absolute; right:16px; bottom:16px; width:38px; height:38px; border-radius:12px; display:grid; place-items:center; color:var(--accent-text, #3D58DD); background:var(--accent-soft, rgba(79,110,247,.11)); }
+.rf-mon-kpi.alta .n { color:#D5383D; } .rf-mon-kpi.alta .ico { color:#D5383D; background:rgba(229,72,77,.12); } .rf-mon-kpi.att .n { color:#B37D06; } .rf-mon-kpi.att .ico { color:#B37D06; background:rgba(224,162,26,.15); }
+.rf-mon-dash { display:grid; gap:16px; margin-bottom:16px; } .rf-mon-dash.a { grid-template-columns:minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, .9fr); } .rf-mon-dash.b { grid-template-columns:minmax(0, 1fr) minmax(0, 1.55fr); }
+@media (max-width: 1200px) { .rf-mon-kpis { grid-template-columns:repeat(2, minmax(0, 1fr)); } .rf-mon-dash.a, .rf-mon-dash.b { grid-template-columns:1fr; } }
+.rf-mon-pan { border:1px solid var(--border); border-radius:20px; padding:18px 20px; background:var(--surface); box-shadow:var(--shadow-1); min-width:0; }
+.rf-mon-ph { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:10px; } .rf-mon-ph b { font-size:14.5px; font-weight:650; letter-spacing:-.01em; }
+.rf-mon-vedi { all:unset; cursor:pointer; font-size:12.5px; font-weight:600; color:var(--accent-text, #3D58DD); }
+.rf-mon-evs { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px; }
+.rf-mon-ev { border:1px solid var(--border); border-radius:16px; padding:12px; cursor:pointer; background:var(--surface-2); display:flex; flex-direction:column; gap:8px; min-width:0; } .rf-mon-ev:hover { border-color:var(--border-2); }
+.rf-mon-ev .nome, .rf-mon-li .nome { font-weight:600; font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rf-mon-ev .pp { display:grid; grid-template-columns:1fr 1fr; gap:8px; } .rf-mon-ev .p span { font-size:10.5px; color:var(--text-3); text-transform:uppercase; letter-spacing:.04em; display:block; }
+.rf-mon-ev .p b { font-size:20px; font-weight:650; font-variant-numeric:tabular-nums; } .rf-mon-ev .p.oltre b { color:#B37D06; } .rf-mon-ev .p svg { display:block; width:100% !important; height:22px !important; }
+.rf-mon-av { width:36px; height:36px; flex:none; border-radius:50%; display:grid; place-items:center; font-size:12px; font-weight:700; color:var(--text); background:color-mix(in srgb, var(--t, #98A0BE) 16%, var(--surface)); box-shadow:0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--t, #98A0BE) 70%, transparent); }
+.rf-mon-q { width:36px; height:36px; flex:none; border-radius:12px; display:grid; place-items:center; color:var(--t); background:color-mix(in srgb, var(--t) 14%, transparent); }
+.rf-mon-li { display:flex; align-items:center; gap:12px; padding:10px 4px; border-top:1px solid var(--border); cursor:pointer; min-width:0; } .rf-mon-ph + .rf-mon-li { border-top:0; } .rf-mon-li:hover .nome { color:var(--accent-text, #3D58DD); }
+.rf-mon-li .ora { width:44px; flex:none; font-size:12.5px; font-weight:600; color:var(--text-2); font-variant-numeric:tabular-nums; }
+.rf-mon-ciambella { position:relative; width:150px; margin:4px auto 12px; } .rf-mon-ciambella .centro { position:absolute; inset:0; display:grid; place-content:center; text-align:center; } .rf-mon-ciambella .centro b { font-size:28px; font-weight:700; line-height:1; } .rf-mon-ciambella .centro span { font-size:11.5px; color:var(--text-2); }
+.rf-mon-legenda div { display:flex; align-items:center; gap:8px; font-size:13px; padding:4px 0; } .rf-mon-legenda i { width:9px; height:9px; border-radius:50%; flex:none; } .rf-mon-legenda span { flex:1; color:var(--text-2); } .rf-mon-legenda b { font-weight:600; font-variant-numeric:tabular-nums; }
+.rf-mon-grande { font-size:32px; font-weight:700; letter-spacing:-.03em; line-height:1; font-variant-numeric:tabular-nums; } .rf-mon-grande small { font-size:14px; font-weight:500; color:var(--text-2); letter-spacing:0; }
 .rf-mon-filtri { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px; }
 .rf-mon-filtri .input { height:34px; }
 .rf-mon-riga { display:grid; grid-template-columns:minmax(170px, 1.1fr) minmax(360px, 3fr) minmax(170px, 1.2fr) minmax(150px, 1fr); gap:14px; align-items:center; padding:12px 14px; border:1px solid var(--border); border-radius:14px;
@@ -220,13 +243,102 @@ function rfMonRiga(p) {
       <div>Batteria: ${p.batteria == null ? 'non disponibile' : `${p.batteria}%${p.batteria < 15 ? ' · bassa' : ''}`} · ${p.dispositivi.length} ${p.dispositivi.length === 1 ? 'dispositivo' : 'dispositivi'}</div>
       <div>Ultima misura: ${p.ultimo_dato ? `${rfMonOra(p.ultimo_dato, true)} · ${rfMonFa(p.eta_s)}` : 'nessuna'}</div></div></div>`;
 }
+/* Il cruscotto (6.10.2026, richiesta dello studio: disposto come l'immagine di
+   riferimento): quattro numeri con l'icona, poi pannelli affiancati — pazienti
+   in evidenza, stato di tutti, distribuzione; avvisi aperti e copertura dei
+   dati; attività recente e problemi tecnici. Sotto resta l'elenco completo. */
+const RF_MON_ICO = {
+  persone: '<path d="M16 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 17.5V19"/><circle cx="10" cy="8" r="3.2"/><path d="M20 19v-1.4a3.2 3.2 0 0 0-2.4-3.1M15.5 5a3.2 3.2 0 0 1 0 6"/>',
+  allarme: '<path d="M12 4l9 15.5H3z"/><path d="M12 10v4.5M12 17.2v.3"/>',
+  occhio: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>',
+  segnale: '<path d="M4 18v-3M9 18v-6M14 18V9M19 18V5"/>',
+  scollegato: '<path d="M9 7V3M15 7V3M7 7h10v4a5 5 0 0 1-10 0z"/><path d="M12 16v5M4 4l16 16"/>',
+  batteria: '<rect x="3" y="8" width="16" height="9" rx="2"/><path d="M22 11v3M6.5 11v3"/>',
+  orologio: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  cerotto: '<rect x="3" y="9" width="18" height="6" rx="3" transform="rotate(-45 12 12)"/><path d="M11 11h.01M13 13h.01M11 13h.01M13 11h.01"/>',
+  guasto: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v5M12 15.8v.3"/>',
+};
+const rfMonIco = (n) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px">${RF_MON_ICO[n] || RF_MON_ICO.guasto}</svg>`;
+const rfMonIniziali = (nome) => String(nome || '?').replace(/\(.*\)/, '').trim().split(/\s+/).slice(0, 2).map(x => x[0] || '').join('').toUpperCase();
+const RF_MON_TONO = { avviso_alta: '#E5484D', avviso_attenzione: '#E0A21A', nessun_avviso: '#12A979', dati_insufficienti: '#98A0BE', interrotto: '#C3C9DD' };
+// L'ordine fermo dei pazienti (quello di priorità fissato all'apertura), senza i filtri dell'elenco.
+function rfMonStabili() {
+  const d = RF.mon.dati; if (!d) return [];
+  if (!RF.mon.ordineIds) RF.mon.ordineIds = d.pazienti.slice().sort((a, b) => rfMonPeso(a) - rfMonPeso(b) || a.codice.localeCompare(b.codice)).map(p => p.id);
+  const pos = new Map(RF.mon.ordineIds.map((id, i) => [id, i]));
+  return d.pazienti.slice().sort((a, b) => (pos.has(a.id) ? pos.get(a.id) : 1e6) - (pos.has(b.id) ? pos.get(b.id) : 1e6));
+}
+function rfMonKpi(etichetta, valore, sotto, tono, ico) {
+  return `<div class="rf-mon-kpi ${tono || ''}"><div class="l">${etichetta}</div><div class="n">${valore}</div><div class="s">${sotto}</div><span class="ico">${rfMonIco(ico)}</span></div>`;
+}
+function rfMonCiambella(voci, totale) {
+  const r = 52, C = 2 * Math.PI * r; let fatto = 0;
+  const archi = voci.filter(v => v.n > 0).map(v => { const l = (v.n / Math.max(1, totale)) * C; const a = `<circle cx="70" cy="70" r="${r}" fill="none" stroke="${v.colore}" stroke-width="13" stroke-dasharray="${l.toFixed(2)} ${(C - l).toFixed(2)}" stroke-dashoffset="${(-fatto).toFixed(2)}" stroke-linecap="butt"/>`; fatto += l; return a; }).join('');
+  return `<div class="rf-mon-ciambella"><svg viewBox="0 0 140 140" style="width:150px;height:150px"><g transform="rotate(-90 70 70)"><circle cx="70" cy="70" r="${r}" fill="none" style="stroke:var(--surface-3)" stroke-width="13"/>${archi}</g></svg>
+    <div class="centro"><b>${totale}</b><span>pazienti</span></div></div>
+    <div class="rf-mon-legenda">${voci.map(v => `<div><i style="background:${v.colore}"></i><span>${v.nome}</span><b>${v.n}${totale ? ` (${Math.round((v.n / totale) * 100)}%)` : ''}</b></div>`).join('')}</div>`;
+}
+// Quanti pazienti hanno mandato misure, minuto per minuto, nell'ultima mezz'ora: è la salute del flusso dei dati.
+function rfMonCopertura() {
+  const d = RF.mon.dati, attivi = d.pazienti.filter(p => p.programma === 'attivo');
+  const t1 = Math.floor(rfMonAdesso() / 60000) * 60000, serie = [];
+  for (let k = 29; k >= 1; k--) {
+    const t = t1 - k * 60000;
+    serie.push([t, attivi.filter(p => Object.values(p.andamenti || {}).some(a => a.some(q => q[0] === t))).length]);
+  }
+  const adesso = attivi.filter(p => p.connessione === 'in_aggiornamento').length, prima = serie.length > 15 ? serie[serie.length - 15][1] : adesso;
+  const max = Math.max(1, attivi.length), W = 600, H = 150, X = (i) => 34 + (i / (serie.length - 1)) * (W - 44), Y = (v) => 12 + (1 - v / max) * (H - 38);
+  const linea = serie.map((q, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(q[1]).toFixed(1)}`).join(' ');
+  const diff = adesso - prima;
+  return `<div class="row" style="gap:18px;align-items:flex-end"><div><div class="rf-mon-grande">${adesso}<small> su ${attivi.length}</small></div><div class="caption">pazienti che stanno trasmettendo</div></div>
+      <div class="caption" style="color:${diff < 0 ? 'var(--danger)' : 'var(--success)'}">${diff === 0 ? 'come 15 minuti fa' : `${diff > 0 ? '↑' : '↓'} ${Math.abs(diff)} rispetto a 15 minuti fa`}</div></div>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:150px;display:block;margin-top:6px">
+      <defs><linearGradient id="rf-mon-sf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5B6CF6" stop-opacity=".28"/><stop offset="1" stop-color="#5B6CF6" stop-opacity="0"/></linearGradient></defs>
+      ${[0, Math.round(max / 2), max].map(v => `<line x1="34" x2="${W - 10}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" style="stroke:var(--border)" stroke-width=".7"/><text x="28" y="${(Y(v) + 3).toFixed(1)}" text-anchor="end" style="font-size:10px;fill:var(--text-3)">${v}</text>`).join('')}
+      <path d="${linea} L${X(serie.length - 1).toFixed(1)} ${Y(0).toFixed(1)} L${X(0).toFixed(1)} ${Y(0).toFixed(1)} Z" fill="url(#rf-mon-sf)"/>
+      <path d="${linea}" fill="none" stroke="#5B6CF6" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
+      ${[[0, '30 min fa'], [0.5, '15 min fa'], [1, 'un minuto fa']].map(([f, t]) => `<text x="${(34 + f * (W - 44)).toFixed(1)}" y="${H - 6}" text-anchor="${f === 0 ? 'start' : f === 1 ? 'end' : 'middle'}" style="font-size:10px;fill:var(--text-3)">${t}</text>`).join('')}</svg>`;
+}
 function rfMonRiepilogoHtml() {
-  const d = RF.mon.dati, r = d.riepilogo, m = d.motore;
-  const tile = (n, t, cl) => `<div class="rf-mon-tile ${cl || ''}"><div class="n">${n}</div><div class="t">${t}</div></div>`;
+  const d = RF.mon.dati, r = d.riepilogo, m = d.motore, tutti = rfMonStabili();
   const fermo = !m.attivo ? 'Simulatore spento: non arrivano dati nuovi.' : m.ritardo_s == null || m.ritardo_s > 30 ? `Il motore del server non gira da ${rfMonFa(m.ritardo_s)}: i valori non si stanno aggiornando.` : '';
+  const stato = (p) => { const s = RF_MON_STATO[p.stato] || ['', p.stato]; return `<span class="rf-mon-pill ${s[0]}"><i></i>${p.stato === 'interrotto' ? (p.programma === 'terminato' ? 'Terminato' : 'In pausa') : s[1].replace(' rilevato', '')}</span>`; };
+  // In evidenza: i quattro pazienti in cima all'ordine di priorità, coi due parametri che hanno un andamento.
+  const evidenza = tutti.filter(p => p.programma === 'attivo').slice(0, 4).map(p => {
+    const v = (c) => p.parametri.find(x => x.codice === c);
+    const cella = (c, nome) => { const x = v(c); return `<div class="p ${x && x.oltre ? 'oltre' : ''}"><span>${nome}</span><b>${!x || d.vista_tecnica ? '—' : x.valore == null ? 'n.d.' : rfMonNum(x.valore, x.decimali)}</b>${x && p.andamenti[c] ? rfMonSpark(p.andamenti[c], x.oltre) : ''}</div>`; };
+    return `<div class="rf-mon-ev" onclick="rfMonApri('${p.id}')"><div class="row between" style="gap:6px"><div class="row" style="gap:8px;min-width:0"><span class="rf-mon-av" style="--t:${RF_MON_TONO[p.stato]}">${rfEsc(rfMonIniziali(p.nome))}</span><div style="min-width:0"><div class="nome">${rfEsc(String(p.nome || p.codice).replace(' (demo)', ''))}</div><div class="caption">${rfEsc(p.codice)}</div></div></div></div>
+      <div class="pp">${cella('fc', 'FC')}${cella('spo2', 'SpO₂')}</div><div>${stato(p)}</div></div>`;
+  }).join('');
+  const elenco = tutti.slice(0, 6).map(p => `<div class="rf-mon-li" onclick="rfMonApri('${p.id}')"><span class="rf-mon-av" style="--t:${RF_MON_TONO[p.stato]}">${rfEsc(rfMonIniziali(p.nome))}</span>
+      <div class="grow" style="min-width:0"><div class="nome">${rfEsc(String(p.nome || p.codice).replace(' (demo)', ''))}</div><div class="caption">${rfEsc(p.medico || p.codice)}</div></div>${stato(p)}</div>`).join('');
+  const conta = (s) => d.pazienti.filter(p => p.stato === s).length;
+  const ciambella = rfMonCiambella([
+    { nome: 'Nessun avviso', n: conta('nessun_avviso'), colore: RF_MON_TONO.nessun_avviso }, { nome: 'Attenzione', n: conta('avviso_attenzione'), colore: RF_MON_TONO.avviso_attenzione },
+    { nome: 'Alta priorità', n: conta('avviso_alta'), colore: RF_MON_TONO.avviso_alta }, { nome: 'Dati insufficienti', n: conta('dati_insufficienti'), colore: RF_MON_TONO.dati_insufficienti },
+    { nome: 'Non monitorati', n: conta('interrotto'), colore: RF_MON_TONO.interrotto }], d.pazienti.length);
+  const clinici = (d.avvisi_aperti || []).filter(a => a.categoria === 'parametro'), tecnici = (d.avvisi_aperti || []).filter(a => a.categoria === 'tecnico');
+  const riga = (a) => `<div class="rf-mon-li" onclick="rfMonApri('${a.paziente_id}')"><div class="ora">${rfMonOra(a.generato_il)}</div><div class="grow" style="min-width:0"><div class="nome">${rfEsc(a.nome)}</div><div class="caption">${rfEsc(String(a.paziente || '').replace(' (demo)', ''))} · ${rfEsc(a.codice || '')}</div></div>
+      <span class="rf-mon-pill ${a.livello === 2 ? 'alta' : 'att'}">${a.rientrato ? 'rientrato' : a.stato === 'in_carico' ? 'in carico' : `livello ${a.livello}`}</span></div>`;
+  const icoTec = { disconnesso: ['scollegato', '#E5484D'], assenza_dati: ['orologio', '#E0A21A'], ritardo: ['orologio', '#E0A21A'], batteria: ['batteria', '#E0A21A'], segnale: ['segnale', '#5B6CF6'], sensore: ['cerotto', '#5B6CF6'], integrazione: ['guasto', '#E5484D'] };
+  const tec = (a) => { const [ico, col] = icoTec[a.problema] || ['guasto', '#98A0BE']; return `<div class="rf-mon-li" onclick="rfMonApri('${a.paziente_id}')"><span class="rf-mon-q" style="--t:${col}">${rfMonIco(ico)}</span>
+      <div class="grow" style="min-width:0"><div class="nome">${rfEsc(a.nome)}</div><div class="caption">${rfEsc(String(a.paziente || '').replace(' (demo)', ''))}${a.rientrato ? ' · risolto, da chiudere' : a.stato === 'in_carico' ? ` · in carico${a.responsabile ? ` a ${rfEsc(a.responsabile)}` : ''}` : ''}</div></div><div class="caption">${rfMonFa((rfMonAdesso() - new Date(a.generato_il).getTime()) / 1000)}</div></div>`; };
+  const nomiAz = { 'sistema:generato': 'avviso generato', 'sistema:rientrato': 'parametro rientrato', 'sistema:ricaduta': 'anomalia tornata', preso_in_carico: 'ha preso in carico', chiuso: 'ha chiuso', nota: 'ha aggiunto una nota' };
+  const att = (z) => `<div class="rf-mon-li" onclick="rfMonApri('${z.paziente_id}')"><span class="rf-mon-av" style="--t:${z.categoria === 'tecnico' ? '#5B6CF6' : z.livello === 2 ? '#E5484D' : '#E0A21A'}">${rfEsc(rfMonIniziali(z.paziente))}</span>
+      <div class="grow" style="min-width:0"><div class="nome">${z.chi ? `${rfEsc(z.chi)} ${nomiAz[z.azione] || rfEsc(z.azione)}` : `${(nomiAz[z.azione] || rfEsc(z.azione)).replace(/^./, c => c.toUpperCase())}`}: ${rfEsc(z.regola)}</div><div class="caption">${rfEsc(String(z.paziente || '').replace(' (demo)', ''))}</div></div><div class="caption">${rfMonFa((rfMonAdesso() - new Date(z.quando).getTime()) / 1000)}</div></div>`;
+  const vuoto = (t) => `<div class="caption" style="padding:14px 4px">${t}</div>`;
+  const testa = (t, destra) => `<div class="rf-mon-ph"><b>${t}</b>${destra || ''}</div>`;
+  const vedi = (scheda, testo) => `<button class="rf-mon-vedi" onclick="rfMonScheda('${scheda}')">${testo}</button>`;
   return `${fermo ? `<div class="rf-manc mb-16">${fermo}</div>` : ''}${RF.mon.errore ? `<div class="rf-manc mb-16">${rfEsc(RF.mon.errore)}</div>` : ''}
-    <div class="rf-mon-tiles">${tile(r.monitorati, `pazienti monitorati su ${r.totale}`)}${tile(r.alta_priorita, 'con avviso di alta priorità (livello 2)', r.alta_priorita ? 'alta' : 'grigio')}${tile(r.attenzione, 'con avviso di attenzione (livello 1)', r.attenzione ? 'att' : 'grigio')}
-      ${tile(r.con_avvisi_tecnici, 'con problemi tecnici aperti', 'grigio')}${tile(r.dispositivi_disconnessi, 'dispositivi disconnessi', 'grigio')}${tile(r.dati_insufficienti, 'con dati assenti, vecchi o di qualità insufficiente', 'grigio')}</div>`;
+    <div class="rf-mon-kpis">${rfMonKpi('Pazienti monitorati', r.monitorati, `su ${r.totale} in elenco`, '', 'persone')}${rfMonKpi('Alta priorità', r.alta_priorita, 'avvisi di livello 2', r.alta_priorita ? 'alta' : '', 'allarme')}
+      ${rfMonKpi('Attenzione', r.attenzione, 'avvisi di livello 1', r.attenzione ? 'att' : '', 'occhio')}${rfMonKpi('Dati insufficienti', r.dati_insufficienti, `${r.dispositivi_disconnessi} ${r.dispositivi_disconnessi === 1 ? 'dispositivo scollegato' : 'dispositivi scollegati'} · ${r.con_avvisi_tecnici} con problemi tecnici`, '', 'segnale')}</div>
+    <div class="rf-mon-dash a"><div class="rf-mon-pan">${testa('Pazienti in evidenza', '<span class="caption">per priorità</span>')}<div class="rf-mon-evs">${evidenza || vuoto('Nessun paziente in monitoraggio.')}</div></div>
+      <div class="rf-mon-pan">${testa('Stato dei pazienti', `<button class="rf-mon-vedi" onclick="document.getElementById('rf-mon-tutti').scrollIntoView({ behavior: 'smooth' })">Vedi tutti</button>`)}${elenco}</div>
+      <div class="rf-mon-pan">${testa('Distribuzione', '<span class="caption">adesso</span>')}${ciambella}</div></div>
+    <div class="rf-mon-dash b"><div class="rf-mon-pan">${testa('Avvisi sui parametri', vedi('avvisi', 'Vedi tutti'))}${clinici.length ? clinici.slice(0, 5).map(riga).join('') : vuoto('Nessun avviso sui parametri aperto.')}</div>
+      <div class="rf-mon-pan">${testa('Copertura dei dati', '<span class="caption">ultimi 30 minuti</span>')}${d.vista_tecnica ? vuoto('Vista tecnica: lo stato del flusso è nei problemi tecnici qui sotto.') : rfMonCopertura()}</div></div>
+    <div class="rf-mon-dash b"><div class="rf-mon-pan">${testa('Attività recente', vedi('avvisi', 'Vedi tutti'))}${(d.attivita || []).length ? d.attivita.slice(0, 5).map(att).join('') : vuoto('Ancora nessuna azione registrata.')}</div>
+      <div class="rf-mon-pan">${testa('Problemi tecnici', vedi('dispositivi', 'Dispositivi'))}${tecnici.length ? tecnici.slice(0, 5).map(tec).join('') : vuoto('Nessun problema tecnico aperto.')}</div></div>`;
 }
 function rfMonElencoHtml() {
   const l = rfMonOrdinati();
@@ -266,6 +378,7 @@ PAGES.monitoraggio = () => {
   if (RF.mon.scheda === 'simulatore') return testa + rfMonSimulatoreHtml();
   if (RF.mon.scheda === 'info') return testa + rfMonInfoHtml();
   return `${testa}<div id="rf-mon-riepilogo">${rfMonRiepilogoHtml()}</div>
+    <div class="rf-mon-ph" id="rf-mon-tutti" style="margin:22px 2px 10px"><b>Tutti i pazienti</b><span class="caption">parametri, andamenti e stato di ognuno</span></div>
     <div class="rf-mon-filtri"><input class="input grow" placeholder="Cerca per nome o codice" value="${rfEsc(f.q)}" oninput="rfMonFiltro('q', this.value)" style="min-width:200px">
       ${sel('medico', [['', 'Tutti i medici'], ...d.medici.map(m => [m, m])])}
       ${sel('stato', [['', 'Ogni stato del programma'], ['attivo', 'Monitoraggio attivo'], ['in_pausa', 'In pausa'], ['terminato', 'Terminato']])}

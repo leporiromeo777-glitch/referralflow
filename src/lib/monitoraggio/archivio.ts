@@ -113,6 +113,15 @@ export async function panoramica(studioId: string, ruolo: string, adesso = new D
     };
   });
   const attivi = righe.filter((r) => r.programma === 'attivo');
+  // Per il cruscotto: tutti gli avvisi non chiusi (in ordine di priorità) e le ultime azioni registrate.
+  const nomePaz = new Map(pazienti.map((p) => [p.id, p]));
+  const avvisiAperti = avvisi.slice().sort((a, b) => peso(a) - peso(b) || b.generato_il.getTime() - a.generato_il.getTime()).map((a) => ({
+    id: a.id, paziente_id: a.paziente_id, paziente: nomePaz.get(a.paziente_id)?.nome ?? null, codice: nomePaz.get(a.paziente_id)?.codice ?? null, categoria: a.categoria, livello: a.livello,
+    nome: regole.find((r) => r.chiave === a.regola_chiave)?.definizione.nome ?? a.codice, problema: a.categoria === 'tecnico' ? a.codice : null, stato: a.stato, rientrato: !!a.rientrato_il, generato_il: a.generato_il, responsabile: a.responsabile }));
+  const attivita = await query<{ quando: Date; azione: string; chi: string | null; paziente_id: string; nome: string; livello: number | null; categoria: string; chiave: string }>(
+    `select z.quando, z.azione, split_part(u.email, '@', 1) as chi, a.paziente_id, p.nome, a.livello, a.categoria, a.regola_chiave as chiave
+       from mon_azioni z join mon_avvisi a on a.id = z.avviso_id join mon_pazienti p on p.id = a.paziente_id left join users u on u.id = z.autore
+      where a.studio_id = $1 and a.ambiente = $2 order by z.quando desc, z.id desc limit 8`, [studioId, AMB]);
   return {
     ambiente: AMB, ora: adesso, vista_tecnica: tecnica,
     motore: { attivo: !!conf?.attivo, ultimo_giro: conf?.ultimo_giro ?? null, ritardo_s: conf?.ultimo_giro ? Math.round((ora - conf.ultimo_giro.getTime()) / 1000) : null, errore: conf?.ultimo_errore ?? null, conservazione: conf ? { misure_ore: conf.misure_ore, tracce_min: conf.tracce_min } : null },
@@ -124,6 +133,8 @@ export async function panoramica(studioId: string, ruolo: string, adesso = new D
       dati_insufficienti: righe.filter((r) => r.stato === 'dati_insufficienti').length, interrotti: righe.filter((r) => r.stato === 'interrotto').length,
     },
     medici: [...new Set(righe.map((r) => r.medico).filter(Boolean))],
+    avvisi_aperti: avvisiAperti,
+    attivita: attivita.map((z) => ({ quando: z.quando, azione: z.azione, chi: z.chi, paziente_id: z.paziente_id, paziente: z.nome, regola: regole.find((r) => r.chiave === z.chiave)?.definizione.nome ?? z.chiave, livello: z.livello, categoria: z.categoria })),
     pazienti: righe,
     puo: { prendere: puoMon(ruolo, 'prendere_in_carico'), regole: puoMon(ruolo, 'modificare_regole'), dispositivi: puoMon(ruolo, 'gestire_dispositivi'), simulatore: puoMon(ruolo, 'usare_simulatore'), consultare: puoMon(ruolo, 'consultare') },
   };
