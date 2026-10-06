@@ -1,6 +1,6 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-09-11
+aggiornata: 2026-10-06
 ---
 # Convenzioni UI
 
@@ -20,7 +20,11 @@ aggiornata: 2026-09-11
 - **Lista d'attesa** (STORICO, ora scheda Disdette): layout «foglio» `.sheet-top.sheet-green` + `.sheet`; le classi restano in CSS.
 - **Qualità AI** (`/referti/qualita/pipeline`): struttura per domande, classi `.aq-*`.
 
-## Interfaccia nuova (prototipo): tema «minimale» (14.9.2026)
+## Interfaccia nuova (prototipo): tema «vetro» (6.10.2026)
+Richiesta dello studio, con un'immagine di riferimento: l'interfaccia nuova passa dal tema «minimale» al tema **«vetro»**, lo strato `public/prototipo/vetro.css` caricato dopo `styles.css` al posto di `minimal.css`. Che cosa porta: carte molto arrotondate (20 px) con ombra morbida su uno sfondo sfumato azzurro-lilla; barra laterale chiara, staccata dal bordo, con la voce attiva a pillola e un filetto d'accento; accento **blu che sfuma nel viola** (`--accent`, `--accent-2`, `--accent-grad` sul bottone principale e sui contatori); numeri e titoli grandi; campi e bottoni a 12 px di raggio. **Di notte** un blu profondo (`--bg` #070B1E), non nero, con le stesse carte in versione scura; si cambia col tasto giorno/notte in alto. `--cta` ora vale l'accento: i moduli che la usano seguono il tema. La leggibilità dei dati viene prima dell'effetto: testo pieno, contrasto alto.
+La regola del 15.9 qui sotto resta: la **sfocatura** sta solo sulla cornice fissa (barra laterale, ricerca, barra di stato); le carte sono traslucide **senza** `backdrop-filter`. I colori di significato (successo, attenzione, pericolo; livelli degli avvisi) non cambiano ruolo. Per tornare al tema di prima basta rimettere `minimal.css` in `index.html`: il file resta nel repo.
+
+## Il tema di prima: «minimale» (14.9.2026, sostituito il 6.10.2026)
 Lo strato `public/prototipo/minimal.css` (caricato dopo `styles.css`, si toglie con una riga in `index.html`) porta l'interfaccia nuova a un aspetto piatto e tipografico, richiesto dall'utente dopo il confronto con CardioOS: **IBM Plex Sans/Mono ospitati sul Mac** (`public/prototipo/fonts/`, nessuna richiesta a Google dai browser dello studio), niente sfumature né vetro né ombre sulle carte (ombra solo per finestre e menu), bordi sottili, angoli 6-10 px, **barra laterale scura** (`--side-bg` #14231E) a sezioni con etichetta maiuscola (Operatività, Clinico, AI, Amministrazione: `RF_NAV_GRUPPI` nel ponte), etichette maiuscole piccole sopra i numeri delle tessere, riga «eyebrow» sopra il titolo della Home. Accento = **verde dello studio** `--accent` #0D5C48 (lo stesso `--cta` della piattaforma), mai nero puro (testo #1E2622). I bottoni AI non hanno più il gradiente viola-blu: bianco con bordo verde. Il tema scuro ridefinisce gli stessi token in fondo al file. Regola: i componenti nuovi usano SOLO i token; non si scrivono colori nel ponte.
 
 ## Vetro smerigliato: sì sulla cornice, no su quel che compare e sparisce (15.9.2026)

@@ -52,7 +52,7 @@ Regole d'uso in `docs/wiki/Wiki/Come si usa.md` (SilverBullet su :3400 in LAN la
   (branch `claude/ai-chain-collaboration-prompt-heacx2`).
 
 ## Convenzioni
-UI e testi in italiano, sentence case, tono asciutto; palette verde `--cta` #0d5c48 su bianco caldo, niente nero;
+UI e testi in italiano, sentence case, tono asciutto; interfaccia nuova col tema «vetro» (`public/prototipo/vetro.css`: accento blu-viola, carte arrotondate, notte in blu profondo; sfocatura solo sulla cornice fissa);
 server components + server actions dove possibile. Dettaglio in `docs/wiki/Piattaforma/Convenzioni UI.md`.
 
 <!-- BEGIN:nextjs-agent-rules -->

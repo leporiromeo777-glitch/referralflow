@@ -575,3 +575,10 @@ non vede i valori. Scartato: generare i valori nel browser (gli avvisi dipendere
 aperta); soglie «universali» presentate come cliniche; promettere compatibilità con prodotti.
 Resta fuori, e scritto in [[Piattaforma/Monitoraggio]]: tutto ciò che serve prima di un uso reale.
 
+## 6.10.2026 — Interfaccia: dal tema «minimale» al tema «vetro»
+Richiesta dello studio con un'immagine di riferimento (cruscotto a carte di vetro, giorno e notte).
+Cambia il verde su bianco caldo del 14.9: accento blu-viola, carte arrotondate con ombra morbida,
+barra laterale chiara e staccata, notte in blu profondo. È uno strato (`vetro.css`) al posto di
+`minimal.css`: nessuna pagina è stata riscritta e si torna indietro con una riga. Tenuta la regola
+del 15.9 sulla sfocatura (solo cornice fissa): le carte non usano `backdrop-filter`.
+

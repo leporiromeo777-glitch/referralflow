@@ -14,9 +14,9 @@ if (typeof NAV !== 'undefined') for (const r of ['secretary', 'assistant', 'doct
 }
 (function () { const st = document.createElement('style'); st.textContent = `
 .rf-mon-demo { position:sticky; top:0; z-index:5; margin:0 0 14px; padding:8px 14px; border-radius:12px; font-size:12.5px; font-weight:600; letter-spacing:.02em; text-align:center;
-  color:#7a4b00; background:rgba(255,232,178,.90); border:1px solid rgba(190,130,20,.35); backdrop-filter:saturate(160%) blur(14px); -webkit-backdrop-filter:saturate(160%) blur(14px); }
+  color:#7a4b00; background:rgba(255,232,178,.90); border:1px solid rgba(190,130,20,.35); }
 .rf-mon-tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin-bottom:14px; }
-.rf-mon-tile { border:1px solid var(--border); border-radius:14px; padding:12px 14px; background:color-mix(in srgb, var(--surface) 82%, transparent); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
+.rf-mon-tile { border:1px solid var(--border); border-radius:14px; padding:12px 14px; background:color-mix(in srgb, var(--surface) 82%, transparent); }
 .rf-mon-tile .n { font-size:26px; font-weight:650; font-variant-numeric:tabular-nums; line-height:1.1; }
 .rf-mon-tile .t { font-size:12px; color:var(--text-2); margin-top:2px; }
 .rf-mon-tile.alta .n { color:#b3261e; } .rf-mon-tile.att .n { color:#9a6200; } .rf-mon-tile.grigio .n { color:var(--text-2); }
@@ -506,7 +506,7 @@ function rfMonEcgDisegna() {
   for (let t = Math.ceil(inizio / 200) * 200; t < fine; t += 200) { g.strokeStyle = t % 1000 === 0 ? 'rgba(200,120,110,.42)' : 'rgba(200,120,110,.18)'; g.beginPath(); g.moveTo(X(t), 0); g.lineTo(X(t), h); g.stroke(); }
   for (let v = -2; v <= 2.5; v += 0.5) { g.strokeStyle = 'rgba(200,120,110,.22)'; g.beginPath(); g.moveTo(0, Y(v)); g.lineTo(w, Y(v)); g.stroke(); }
   let coperto = false, scarso = false;
-  g.strokeStyle = '#1d2b26'; g.lineWidth = 1.3; g.lineJoin = 'round';
+  g.strokeStyle = getComputedStyle(c).color || '#1d2b26'; g.lineWidth = 1.3; g.lineJoin = 'round';
   for (const p of e.pezzi) {
     const durata = (p.v.length / p.hz) * 1000;
     if (p.inizio + durata < inizio || p.inizio > fine) continue;
@@ -516,11 +516,12 @@ function rfMonEcgDisegna() {
     g.stroke();
   }
   // Dove manca un pezzo il tracciato NON si raccorda: resta vuoto, e lo si scrive.
-  g.fillStyle = 'rgba(90,90,90,.75)'; g.font = '11px system-ui';
+  const inchiostro = getComputedStyle(c).color || '#444';
+  g.globalAlpha = 0.7; g.fillStyle = inchiostro; g.font = '11px system-ui';
   if (!coperto) g.fillText(e.pezzi.length ? 'Nessun tracciato in questo intervallo' : 'In attesa del tracciato…', 12, h / 2);
-  g.fillStyle = 'rgba(90,90,90,.9)';
   g.fillText(`${rfMonOra(inizio, true)}`, 6, h - 6); const tf = rfMonOra(fine, true); g.fillText(tf, w - g.measureText(tf).width - 6, h - 6);
   if (scarso) g.fillText('segnale di qualità insufficiente', w / 2 - 80, 14);
+  g.globalAlpha = 1;
   const pa = document.getElementById('rf-mon-ecg-stato');
   if (pa) {
     const arrivati = e.pausa != null ? Math.max(0, Math.round((rfMonAdesso() - RF_MON_ECG_RITARDO - e.pausa) / 1000)) : 0;
