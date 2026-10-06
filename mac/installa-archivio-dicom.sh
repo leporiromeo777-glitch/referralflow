@@ -52,7 +52,8 @@ VOCE="*@$HOST"
 if grep -E '^CONSENTITI=' "$CONF" | grep -qF "$VOCE"; then
   echo "  era già aperta."
 else
-  perl -pi -e 'BEGIN { $v = shift } s/^CONSENTITI=\s*$/CONSENTITI=$v/ or s/^CONSENTITI=(.*\S)\s*$/CONSENTITI=$1, $v/' "$VOCE" "$CONF"
+  # Solo spazi e tabulazioni in coda: «\s» si mangerebbe l'a capo e incollerebbe la riga dopo.
+  perl -pi -e 'BEGIN { $v = shift } s/^CONSENTITI=[ \t]*$/CONSENTITI=$v/ or s/^CONSENTITI=(.*\S)[ \t]*$/CONSENTITI=$1, $v/' "$VOCE" "$CONF"
   echo "  aggiunto $VOCE."
 fi
 launchctl kickstart -k "$SERVIZIO"
