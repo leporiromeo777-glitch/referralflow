@@ -29,9 +29,17 @@ ESAMI = [  # nome, nascita, id, modalità, data, descrizione, immagini
 ]
 
 
-def costruisci():
+# Un SECONDO archivio (il centro radiologico di un altro): la stessa paziente
+# ha lì una TAC che il primo non ha, più un esame di un'altra persona.
+ESAMI_DUE = [
+    ("PROVARCHIVIO^ANNA", "19500101", "RX-9", "CT", "20260410", "TAC del centro radiologico", 1),
+    ("TERZAPROVA^ELENA", "19710707", "RX-8", "MR", "20260411", "Risonanza di un'altra persona", 1),
+]
+
+
+def costruisci(esami=None):
     studi = []
-    for nome, nascita, pid, mod, data, descr, n in ESAMI:
+    for nome, nascita, pid, mod, data, descr, n in (esami or ESAMI):
         study, series = generate_uid(), generate_uid()
         sop = pydicom.uid.UltrasoundImageStorage if mod == "US" else pydicom.uid.CTImageStorage
         immagini = []
@@ -60,6 +68,7 @@ def main() -> int:
     ap.add_argument("--porta", type=int, default=11150)
     ap.add_argument("--ae", default="ARCHIVIOPROVA")
     ap.add_argument("--dest", action="append", default=[], help="AE=host:porta (le destinazioni che l'archivio conosce)")
+    ap.add_argument("--variante", type=int, default=1, help="2 = gli esami del secondo archivio")
     a = ap.parse_args()
     destinazioni = {}
     for d in a.dest:
@@ -70,7 +79,7 @@ def main() -> int:
     from pynetdicom import AE, StoragePresentationContexts, evt
     from pynetdicom.sop_class import (StudyRootQueryRetrieveInformationModelFind as FIND,
                                       StudyRootQueryRetrieveInformationModelMove as MOVE, Verification)
-    studi = costruisci()
+    studi = costruisci(ESAMI_DUE if a.variante == 2 else None)
 
     def corrisponde(s, q) -> bool:
         nome = str(getattr(q, "PatientName", "") or "")

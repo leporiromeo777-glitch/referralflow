@@ -557,3 +557,9 @@ si somigliano almeno al 35%; altrimenti la più recente fa da aiuto come prima, 
 provare l'aggiornamento a mano. Si spegne con `REFERTI_AGGIORNA_DALLA_RECENTE` (`richiesta`, `mai`).
 Le bozze già aperte non si toccano da sole.
 
+## 6.10.2026 — L'archivio GE del centro radiologico: pronto il codice, non il collegamento
+Lo studio vuole vedere in piattaforma anche gli esami dell'AW Server del centro radiologico sotto lo
+studio. La piattaforma ora cerca su più archivi, ma quello è il sistema di un'altra struttura: non lo
+si interroga e non lo si prova finché il centro non lo consente per iscritto e il suo tecnico non
+registra il Mac. Da chiarire con loro anche il perimetro (tutti i pazienti o solo quelli in comune).
+

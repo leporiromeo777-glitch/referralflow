@@ -37,7 +37,7 @@ pulisci() {
 }
 spegni() {
   [ -n "${SERVER_PID:-}" ] && pkill -P "$SERVER_PID" 2> /dev/null; [ -n "${SERVER_PID:-}" ] && kill "$SERVER_PID" 2> /dev/null
-  [ -n "${ARCH_PID:-}" ] && kill "$ARCH_PID" 2> /dev/null; [ -n "${RIC_PID:-}" ] && kill "$RIC_PID" 2> /dev/null
+  [ -n "${ARCH_PID:-}" ] && kill "$ARCH_PID" 2> /dev/null; [ -n "${RIC_PID:-}" ] && kill "$RIC_PID" 2> /dev/null; [ -n "${ARCH2_PID:-}" ] && kill "$ARCH2_PID" 2> /dev/null
   pkill -f "next dev -p $PORTA" 2> /dev/null
   pulisci
   rm -rf "$TMP"
@@ -61,6 +61,10 @@ printf 'AE_TITLE=REFERRALFLOW\nPORTA=11113\nCONSENTITI=*@127.0.0.1\nFLOW_URL=\n'
 printf 'NOME=Archivio di prova\nHOST=127.0.0.1\nPORTA=11150\nAE=ARCHIVIOPROVA\nNOSTRO_AE=REFERRALFLOW\nGIORNI_COPIA=7\n' > "$ARCH/archivio.conf"
 "$PY" imaging/archivio-finto.py --porta 11150 --ae ARCHIVIOPROVA --dest REFERRALFLOW=127.0.0.1:11113 > "$TMP/archivio-finto.log" 2>&1 &
 ARCH_PID=$!
+# …e un secondo archivio finto (il centro radiologico di un altro): si cerca su tutti e due.
+printf 'NOME=Radiologia di prova\nHOST=127.0.0.1\nPORTA=11151\nAE=ARCHIVIODUE\nNOSTRO_AE=REFERRALFLOW\nGIORNI_COPIA=7\n' > "$ARCH/archivio-radiologia.conf"
+"$PY" imaging/archivio-finto.py --porta 11151 --ae ARCHIVIODUE --variante 2 --dest REFERRALFLOW=127.0.0.1:11113 > "$TMP/archivio-finto-2.log" 2>&1 &
+ARCH2_PID=$!
 REFERTI_IMAGING_BASE="$ARCH" "$PY" imaging/ricevi-dicom.py > "$TMP/ricezione.log" 2>&1 &
 RIC_PID=$!
 REFERTI_IMAGING_BASE="$ARCH" IMAGING_MISURE=1 DATABASE_URL="$URL_DB" PORT="$PORTA" npx next dev -p "$PORTA" > "$TMP/server.log" 2>&1 &

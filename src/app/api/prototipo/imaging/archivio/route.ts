@@ -15,7 +15,7 @@ export const maxDuration = 120;
 //   GET ?q=<testo>       ricerca libera: un cognome o una data di nascita
 //   GET ?richiesta=<id>  a che punto è un recupero
 //   GET ?prova=1         l'archivio risponde? la ricezione è accesa?
-//   POST { azione: 'recupera', study_uid, patient_id? }
+//   POST { azione: 'recupera', study_uid, patient_id?, archivio? }   (archivio: da quale, se sono più d'uno)
 // Chi cura, come per l'esame aperto: il tecnico no. Ogni ricerca finisce nel
 // registro degli accessi, senza dire chi si è cercato.
 const RUOLI = new Set(['segretaria', 'medico', 'admin', 'assistente']);
@@ -31,6 +31,8 @@ async function sessione() {
 const registra = (studioId: string, userId: string, azione: string) =>
   query(`insert into imaging_accessi (studio_id, esame_id, user_id, azione) values ($1,null,$2,$3)`, [studioId, userId, azione]).catch(() => null);
 const no = { headers: { 'Cache-Control': 'no-store' } };
+// Uno degli archivi non ha risposto: gli altri sì, e lo si dice.
+const muti = (nomi?: string[]) => (nomi?.length ? `${nomi.join(', ')} non risponde: qui ci sono solo gli esami degli altri archivi.` : null);
 
 export async function GET(req: NextRequest) {
   const { session, errore } = await sessione();
@@ -50,13 +52,13 @@ export async function GET(req: NextRequest) {
     const r = await cercaPerPaziente(sid, paziente);
     if (r.errore === 'paziente') return NextResponse.json({ errore: 'non_trovato' }, { status: 404 });
     await registra(sid, session.id, 'archivio_cerca');
-    return NextResponse.json({ esami: r.esami, errore: r.errore ?? null, messaggio: r.errore ? spiegaErrore(r.errore) : null }, no);
+    return NextResponse.json({ esami: r.esami, errore: r.errore ?? null, messaggio: r.errore ? spiegaErrore(r.errore) : muti(r.muti) }, no);
   }
   const q = (p.get('q') ?? '').slice(0, 80);
   const r = await cercaLibera(sid, q);
   if (r.errore === 'cosa_cercare') return NextResponse.json({ esami: [], errore: r.errore, messaggio: 'Scrivi un cognome (almeno tre lettere) o una data di nascita.' }, no);
   await registra(sid, session.id, 'archivio_cerca');
-  return NextResponse.json({ esami: r.esami, troncata: !!r.troncata, errore: r.errore ?? null, messaggio: r.errore ? spiegaErrore(r.errore) : null }, no);
+  return NextResponse.json({ esami: r.esami, troncata: !!r.troncata, errore: r.errore ?? null, messaggio: r.errore ? spiegaErrore(r.errore) : muti(r.muti) }, no);
 }
 
 export async function POST(req: NextRequest) {
@@ -67,7 +69,8 @@ export async function POST(req: NextRequest) {
   if (!uidValido(c.study_uid)) return NextResponse.json({ errore: 'study_uid' }, { status: 400 });
   const pid = c.patient_id ? String(c.patient_id) : null;
   if (pid && !isUuid(pid)) return NextResponse.json({ errore: 'paziente' }, { status: 400 });
-  const r = await chiediEsame(session.studioId, session.id, c.study_uid, pid);
+  const archivio = typeof c.archivio === 'string' && /^[a-z0-9]{1,20}$/.test(c.archivio) ? c.archivio : null;
+  const r = await chiediEsame(session.studioId, session.id, c.study_uid, pid, archivio);
   if ('errore' in r) return NextResponse.json({ errore: r.errore, messaggio: spiegaErrore(r.errore) }, { status: r.errore === 'paziente' ? 404 : 409 });
   return NextResponse.json(r);
 }

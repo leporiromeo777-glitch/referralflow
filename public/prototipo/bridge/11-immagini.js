@@ -667,15 +667,16 @@ function rfArchRiga(e, pid) {
   const chi = `${rfEsc(e.paziente || 'senza nome')}${e.nascita ? `, ${rfEsc(rfImgData(e.nascita))}` : ', senza data di nascita'}`;
   const tasto = e.esame_id ? `<button class="btn sm ghost" onclick="go('#/imaging');rfImgApri('${e.esame_id}')">Apri</button>`
     : a && a.stato === 'in_corso' ? `<span class="caption">in arrivo${a.in_arrivo ? ` (${a.in_arrivo})` : ''}…</span>`
-    : `<button class="btn sm" onclick="rfArchApri('${e.study_uid}', ${pid ? `'${pid}'` : 'null'})">Prendi e apri</button>`;
+    : `<button class="btn sm" onclick="rfArchApri('${e.study_uid}', ${pid ? `'${pid}'` : 'null'}, '${rfEsc(e.archivio || '')}')">Prendi e apri</button>`;
+  const piu = RF.arch.stato && (RF.arch.stato.archivi || []).length > 1;
   return `<div class="list-item"><div class="grow">
       <div class="name">${rfEsc(e.descrizione || 'Esame')} <span class="badge">${rfEsc(e.modalita || '—')}</span>${e.esame_id ? ' <span class="badge success">già qui</span>' : ''}${e.certezza === 'da_controllare' ? ' <span class="badge warning">da controllare</span>' : ''}</div>
-      <div class="sub">${rfEsc(rfImgData(e.data))}${e.ora ? ` ${rfEsc(e.ora)}` : ''}${e.immagini != null ? ` · ${e.immagini} immagini` : ''}${e.certezza === 'sicuro' ? '' : ` · nell'archivio: ${chi}`}</div>
+      <div class="sub">${piu && e.archivio_nome ? `<span class="badge">${rfEsc(e.archivio_nome)}</span> ` : ''}${rfEsc(rfImgData(e.data))}${e.ora ? ` ${rfEsc(e.ora)}` : ''}${e.immagini != null ? ` · ${e.immagini} immagini` : ''}${e.certezza === 'sicuro' ? '' : ` · nell'archivio: ${chi}`}</div>
       ${e.certezza === 'da_controllare' ? '<div class="caption">Il nome corrisponde ma manca una data di nascita: si apre, ma non si aggancia da solo alla cartella.</div>' : ''}
       ${a && a.errore ? `<div class="rf-manc" style="margin-top:6px">${rfEsc(a.errore)}</div>` : ''}</div>${tasto}</div>`;
 }
 
-async function rfArchApri(uid, pid) {
+async function rfArchApri(uid, pid, archivio) {
   const gia = RF.arch.attese[uid];
   if (gia && gia.stato === 'in_corso') return;
   RF.arch.attese[uid] = { stato: 'in_corso', in_arrivo: 0 }; render();
@@ -687,7 +688,7 @@ async function rfArchApri(uid, pid) {
     RF.img.lista = null; go('#/imaging'); void rfImgApri(id);
   };
   try {
-    const r = await fetch(RF_ARCH_URL, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'recupera', study_uid: uid, patient_id: pid || undefined }) });
+    const r = await fetch(RF_ARCH_URL, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'recupera', study_uid: uid, patient_id: pid || undefined, archivio: archivio || undefined }) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) return fine({ errore: j.messaggio || `Errore ${r.status}` });
     if (j.esame_id) return arrivato(j.esame_id);
@@ -748,7 +749,7 @@ function rfArchScheda() {
   return `<div class="card mt-16"><div class="card-head"><span class="section-title">Archivio dello studio · ${rfEsc(a.nome || '')}</span>
       <span>${a.ricezione ? (a.aperta ? '<span class="badge success">pronto a ricevere</span>' : '<span class="badge warning">ricezione chiusa all’archivio</span>') : '<span class="badge warning">ricezione spenta</span>'}
       <button class="btn sm ghost" onclick="rfArchProva()">${p === 'carico' ? 'Provo…' : 'Prova collegamento'}</button></span></div>
-    ${p && p !== 'carico' ? `<div class="${p.risponde ? 'caption' : 'rf-manc'}" style="margin-top:6px">${p.errore ? 'Non riesco a fare la prova.' : p.risponde ? 'L\'archivio risponde.' : 'L\'archivio non risponde: è acceso? Il Mac è collegato alla rete degli apparecchi?'}</div>` : ''}
+    ${p && p !== 'carico' ? `<div class="${p.risponde ? 'caption' : 'rf-manc'}" style="margin-top:6px">${p.errore ? 'Non riesco a fare la prova.' : (p.archivi || []).length > 1 ? p.archivi.map(x => `${rfEsc(x.nome)}: ${x.risponde ? 'risponde' : 'non risponde'}`).join(' · ') : p.risponde ? 'L\'archivio risponde.' : 'L\'archivio non risponde: è acceso? Il Mac è collegato alla rete degli apparecchi?'}</div>` : ''}
     <p class="meta" style="margin:8px 0 10px;line-height:1.55">Gli esami restano nell'archivio: qui se ne prende una <b>copia temporanea</b> per guardarli, che sparisce dopo ${a.giorni || 7} giorni senza aperture. Dalla cartella di un paziente «Cerca nell'archivio» trova i suoi; qui sotto si cerca per cognome o data di nascita.</p>
     <div class="row" style="gap:8px"><input class="input grow" id="rf-arch-q" placeholder="Cognome, oppure data di nascita (12.03.1961)" value="${rfEsc(RF.arch.q || '')}" onkeydown="if(event.key==='Enter')rfArchCerca()"><button class="btn" onclick="rfArchCerca()">${RF.arch.carico ? 'Cerco…' : 'Cerca'}</button></div>
     ${RF.arch.messaggio ? `<div class="rf-manc" style="margin-top:8px">${rfEsc(RF.arch.messaggio)}</div>` : ''}

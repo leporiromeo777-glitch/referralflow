@@ -1,8 +1,10 @@
 #!/bin/bash
 # ReferralFlow — collegare la pagina Immagini all'archivio dello studio.
 #
-#   bash mac/installa-archivio-dicom.sh <indirizzo> <porta> <nome AE> ["nome da mostrare"]
+#   bash mac/installa-archivio-dicom.sh <indirizzo> <porta> <nome AE> ["nome da mostrare"] [chiave]
 #   es.  bash mac/installa-archivio-dicom.sh 192.168.0.222 104 ISP "IntelliSpace Portal"
+#   Un SECONDO archivio (un altro centro, col suo permesso) si aggiunge con una chiave breve:
+#        bash mac/installa-archivio-dicom.sh <indirizzo> <porta> <nome AE> "Centro radiologico" radiologia
 #
 # L'archivio resta dov'è (il software Philips): la piattaforma ci CERCA gli
 # esami e se li fa MANDARE quando qualcuno li apre; la copia qui è temporanea.
@@ -15,7 +17,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [ $# -ge 3 ] || { sed -n 2,6p "$0" | sed 's/^# \{0,1\}//'; exit 2; }
-HOST="$1"; PORTA="$2"; AE="$3"; NOME="${4:-Archivio dello studio}"
+HOST="$1"; PORTA="$2"; AE="$3"; NOME="${4:-Archivio dello studio}"; CHIAVE="${5:-}"
+case "$CHIAVE" in ""|principale) FILE="archivio.conf" ;; *[!a-z0-9]*) echo "La chiave può avere solo lettere minuscole e cifre."; exit 2 ;; *) FILE="archivio-$CHIAVE.conf" ;; esac
 BASE="$HOME/referti-imaging"
 CONF="$BASE/ricezione.conf"
 PY="$HOME/.referralflow-imaging/bin/python"
@@ -31,8 +34,8 @@ else
 fi
 
 echo "2/4 · dove sta l'archivio"
-GIORNI="$(grep -E '^GIORNI_COPIA=' "$BASE/archivio.conf" 2> /dev/null | head -1 | cut -d= -f2 || true)"
-cat > "$BASE/archivio.conf" <<CONFFILE
+GIORNI="$(grep -E '^GIORNI_COPIA=' "$BASE/$FILE" 2> /dev/null | head -1 | cut -d= -f2 || true)"
+cat > "$BASE/$FILE" <<CONFFILE
 # L'archivio dello studio: la piattaforma ci cerca gli esami e se li fa
 # mandare quando qualcuno li apre. Qui non ci sono chiavi né dati di pazienti.
 NOME=$NOME
@@ -44,8 +47,8 @@ NOSTRO_AE=$(grep -E '^AE_TITLE=' "$CONF" | head -1 | cut -d= -f2)
 # Dopo quanti giorni senza aperture la copia di un esame sparisce da qui.
 GIORNI_COPIA=${GIORNI:-7}
 CONFFILE
-chmod 600 "$BASE/archivio.conf"
-echo "  scritto $BASE/archivio.conf"
+chmod 600 "$BASE/$FILE"
+echo "  scritto $BASE/$FILE"
 
 echo "3/4 · la ricezione si apre all'archivio (solo al suo indirizzo)"
 VOCE="*@$HOST"
@@ -61,7 +64,7 @@ sleep 2
 
 echo "4/4 · prova"
 PORTA_NOSTRA="$(grep -E '^PORTA=' "$CONF" | head -1 | cut -d= -f2)"
-NOSTRO="$(grep -E '^NOSTRO_AE=' "$BASE/archivio.conf" | cut -d= -f2)"
+NOSTRO="$(grep -E '^NOSTRO_AE=' "$BASE/$FILE" | cut -d= -f2)"
 if lsof -iTCP:"$PORTA_NOSTRA" -sTCP:LISTEN > /dev/null 2>&1; then echo "  la ricezione ascolta sulla porta $PORTA_NOSTRA."; else echo "  ATTENZIONE: la ricezione non ascolta sulla porta $PORTA_NOSTRA (vedi ~/Library/Logs/ReferralFlow/imaging-scp.log)."; fi
 ESITO="$(printf '{"azione":"eco","host":"%s","porta":%s,"ae_archivio":"%s","ae_nostro":"%s"}' "$HOST" "$PORTA" "$AE" "$NOSTRO" | "$PY" imaging/archivio-dicom.py)"
 case "$ESITO" in

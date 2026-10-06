@@ -27,7 +27,8 @@ const STRUMENTO = path.join(process.cwd(), 'imaging', 'archivio-dicom.py');
 const CACHE = path.join(process.cwd(), 'uploads', 'imaging-cache');
 const base = () => process.env.REFERTI_IMAGING_BASE ?? path.join(os.homedir(), 'referti-imaging');
 
-export type ConfArchivio = { nome: string; host: string; porta: number; ae: string; nostroAe: string; giorni: number };
+// `chiave`: «principale» per `archivio.conf`, il suffisso per `archivio-<chiave>.conf`.
+export type ConfArchivio = { chiave: string; nome: string; host: string; porta: number; ae: string; nostroAe: string; giorni: number };
 
 async function leggiConf(file: string): Promise<Record<string, string>> {
   const v: Record<string, string> = {};
@@ -42,15 +43,29 @@ async function leggiConf(file: string): Promise<Record<string, string>> {
   return v;
 }
 
-// `~/referti-imaging/archivio.conf`, scritto da `mac/installa-archivio-dicom.sh`.
-export async function confArchivio(): Promise<ConfArchivio | null> {
-  const v = await leggiConf('archivio.conf');
-  if (!v.HOST || !v.AE) return null;
-  return {
-    nome: v.NOME || 'Archivio dello studio', host: v.HOST, porta: Number(v.PORTA || 104), ae: v.AE,
-    nostroAe: v.NOSTRO_AE || 'REFERRALFLOW', giorni: Math.max(1, Math.min(90, Number(v.GIORNI_COPIA || 7) || 7)),
-  };
+// Gli archivi (6.10.2026: non uno solo — il software Philips dello studio, e
+// può aggiungersi quello di un altro centro che lo consente). Il primo è
+// `~/referti-imaging/archivio.conf`, gli altri `archivio-<chiave>.conf`; li
+// scrive `mac/installa-archivio-dicom.sh`.
+export async function confArchivi(): Promise<ConfArchivio[]> {
+  let nomi: string[] = [];
+  try { nomi = (await fs.readdir(base())).filter((n) => /^archivio(-[a-z0-9]{1,20})?\.conf$/.test(n)).sort((x, y) => Number(y === 'archivio.conf') - Number(x === 'archivio.conf') || x.localeCompare(y)); } catch { return []; }
+  const out: ConfArchivio[] = [];
+  for (const n of nomi) {
+    const v = await leggiConf(n);
+    if (!v.HOST || !v.AE) continue;
+    out.push({
+      chiave: n === 'archivio.conf' ? 'principale' : n.slice('archivio-'.length, -'.conf'.length),
+      nome: v.NOME || 'Archivio dello studio', host: v.HOST, porta: Number(v.PORTA || 104), ae: v.AE,
+      nostroAe: v.NOSTRO_AE || 'REFERRALFLOW', giorni: Math.max(1, Math.min(90, Number(v.GIORNI_COPIA || 7) || 7)),
+    });
+  }
+  return out;
 }
+export const confArchivio = async (chiave?: string | null): Promise<ConfArchivio | null> => {
+  const tutti = await confArchivi();
+  return (chiave ? tutti.find((c) => c.chiave === chiave) : tutti[0]) ?? null;
+};
 
 function chiama(c: ConfArchivio, richiesta: Record<string, unknown>, ms: number): Promise<any> {
   return new Promise((risolvi) => {
@@ -70,7 +85,7 @@ async function trova(c: ConfArchivio, filtri: Record<string, string>, massimo = 
 // La nostra ricezione è in ascolto? (senza, l'archivio non saprebbe dove mandare)
 export async function ricezioneInAscolto(): Promise<{ accesa: boolean; porta: number; apreAllArchivio: boolean }> {
   const v = await leggiConf('ricezione.conf');
-  const c = await confArchivio();
+  const archivi = await confArchivi();
   const porta = Number(v.PORTA || 11112);
   const accesa = await new Promise<boolean>((risolvi) => {
     const s = net.connect({ host: '127.0.0.1', port: porta });
@@ -78,29 +93,33 @@ export async function ricezioneInAscolto(): Promise<{ accesa: boolean; porta: nu
     s.setTimeout(700, () => fine(false)); s.once('connect', () => fine(true)); s.once('error', () => fine(false));
   });
   const ammessi = (v.CONSENTITI || '').split(/[,;]/).map((x) => x.trim().toUpperCase()).filter(Boolean);
-  const apreAllArchivio = !!c && ammessi.some((x) => x === `*@${c.host}`.toUpperCase() || x === c.ae.toUpperCase() || x === `${c.ae}@${c.host}`.toUpperCase());
+  const apreAllArchivio = archivi.length > 0 && archivi.every((c) => ammessi.some((x) => x === `*@${c.host}`.toUpperCase() || x === c.ae.toUpperCase() || x === `${c.ae}@${c.host}`.toUpperCase()));
   return { accesa, porta, apreAllArchivio };
 }
 
-export type StatoArchivio = { configurato: boolean; nome?: string; risponde?: boolean; ricezione?: boolean; aperta?: boolean; ae?: string; porta?: number; giorni?: number };
+export type StatoArchivio = { configurato: boolean; nome?: string; archivi?: { chiave: string; nome: string; risponde?: boolean }[]; risponde?: boolean; ricezione?: boolean; aperta?: boolean; ae?: string; porta?: number; giorni?: number };
 
-// Per la pagina: è configurato? E, a richiesta, risponde (C-ECHO)?
+// Per la pagina: quali archivi ci sono? E, a richiesta, rispondono (C-ECHO)?
 export async function statoArchivio(prova = false): Promise<StatoArchivio> {
-  const c = await confArchivio();
-  if (!c) return { configurato: false };
+  const tutti = await confArchivi();
+  if (!tutti.length) return { configurato: false };
   const r = await ricezioneInAscolto();
-  const s: StatoArchivio = { configurato: true, nome: c.nome, ricezione: r.accesa, aperta: r.apreAllArchivio, ae: c.nostroAe, porta: r.porta, giorni: c.giorni };
-  if (prova) s.risponde = !!(await chiama(c, { azione: 'eco' }, 20_000))?.ok;
-  return s;
+  const archivi: { chiave: string; nome: string; risponde?: boolean }[] = tutti.map((c) => ({ chiave: c.chiave, nome: c.nome }));
+  if (prova) await Promise.all(tutti.map(async (c, i) => { archivi[i].risponde = !!(await chiama(c, { azione: 'eco' }, 20_000))?.ok; }));
+  return {
+    configurato: true, nome: tutti.map((c) => c.nome).join(' · '), archivi, ricezione: r.accesa, aperta: r.apreAllArchivio, ae: tutti[0].nostroAe, porta: r.porta, giorni: tutti[0].giorni,
+    ...(prova ? { risponde: archivi.every((x) => x.risponde) } : {}),
+  };
 }
 
-export type Trovato = EsameArchivio & { esame_id: string | null };
+export type Trovato = EsameArchivio & { esame_id: string | null; archivio: string; archivio_nome: string };
 
-async function conLocali(studioId: string, esami: EsameArchivio[]): Promise<Trovato[]> {
+
+async function conLocali(studioId: string, esami: EsameArchivio[], da: Map<string, ConfArchivio>): Promise<Trovato[]> {
   if (!esami.length) return [];
   const qui = await query<{ id: string; study_uid: string }>(`select id, study_uid from imaging_esami where studio_id = $1 and study_uid = any($2::text[]) and stato <> 'nascosto'`, [studioId, esami.map((e) => e.study_uid)]);
   const mappa = new Map(qui.map((x) => [x.study_uid, x.id]));
-  return esami.map((e) => ({ ...e, esame_id: mappa.get(e.study_uid) ?? null }));
+  return esami.map((e) => ({ ...e, esame_id: mappa.get(e.study_uid) ?? null, archivio: da.get(e.study_uid)?.chiave ?? 'principale', archivio_nome: da.get(e.study_uid)?.nome ?? '' }));
 }
 
 type Paziente = { cognome: string; nome: string; data_nascita: string | null };
@@ -109,48 +128,71 @@ type Paziente = { cognome: string; nome: string; data_nascita: string | null };
 // nomi sugli apparecchi sono battuti a mano) e per cognome (per gli esami
 // senza data di nascita); poi si tengono solo quelli che sono suoi, con le
 // regole di `sceltiPerPaziente`.
-export async function cercaPerPaziente(studioId: string, patientId: string): Promise<{ esami: Trovato[]; errore?: string }> {
-  const c = await confArchivio();
-  if (!c) return { esami: [], errore: 'non_configurato' };
+// Una ricerca su TUTTI gli archivi: ogni risposta ricorda da dove viene (il
+// primo archivio che ha un esame vince). Un archivio che non risponde non
+// ferma gli altri: lo si dice e basta.
+async function suTutti(cerca: (c: ConfArchivio) => Promise<{ studi: StudioArchivio[]; troncata: boolean; errore?: string }>): Promise<{ studi: StudioArchivio[]; da: Map<string, ConfArchivio>; troncata: boolean; errore?: string; muti: string[]; risposte: number }> {
+  const tutti = await confArchivi();
+  const da = new Map<string, ConfArchivio>();
+  if (!tutti.length) return { studi: [], da, troncata: false, errore: 'non_configurato', muti: [], risposte: 0 };
+  const studi: StudioArchivio[] = [], muti: string[] = [];
+  let troncata = false, errore: string | undefined, risposte = 0;
+  for (const c of tutti) {
+    const r = await cerca(c);
+    if (r.errore) { muti.push(c.nome); errore = errore ?? r.errore; continue; }
+    risposte += r.studi.length; troncata = troncata || r.troncata;
+    for (const x of r.studi) { if (!da.has(x.StudyInstanceUID)) da.set(x.StudyInstanceUID, c); studi.push(x); }
+  }
+  return { studi, da, troncata, errore: muti.length === tutti.length ? errore : undefined, muti, risposte };
+}
+
+// Gli esami di UN paziente della cartella. Si chiede per data di nascita (i
+// nomi sugli apparecchi sono battuti a mano) e per cognome (per gli esami
+// senza data di nascita); poi si tengono solo quelli che sono suoi, con le
+// regole di `sceltiPerPaziente`.
+export async function cercaPerPaziente(studioId: string, patientId: string): Promise<{ esami: Trovato[]; errore?: string; muti?: string[] }> {
   const [p] = await query<Paziente>(`select cognome, nome, data_nascita::text from patients where id = $1 and studio_id = $2`, [patientId, studioId]);
   if (!p) return { esami: [], errore: 'paziente' };
   const nascita = dataDicom(p.data_nascita);
-  const studi: StudioArchivio[] = [];
-  let risposte = 0;
-  if (nascita) {
-    const r = await trova(c, { nascita });
-    if (r.errore) return { esami: [], errore: r.errore };
-    risposte += r.studi.length;
-    // Troncata = l'archivio non filtra per data di nascita: quelle risposte non servono.
-    if (!r.troncata) studi.push(...r.studi);
-  }
-  for (const nome of modelliNome(p.cognome)) {
-    const r = await trova(c, { nome });
-    if (r.errore) { if (!studi.length) return { esami: [], errore: r.errore }; break; }
-    risposte += r.studi.length;
-    studi.push(...r.studi);
-  }
-  const esami = sceltiPerPaziente(studi, p);
-  console.log(`[archivio] ricerca per paziente: risposte=${risposte} tenuti=${esami.length}`);
-  return { esami: await conLocali(studioId, esami) };
+  const r = await suTutti(async (c) => {
+    const studi: StudioArchivio[] = [];
+    if (nascita) {
+      const x = await trova(c, { nascita });
+      if (x.errore) return x;
+      // Troncata = l'archivio non filtra per data di nascita: quelle risposte non servono.
+      if (!x.troncata) studi.push(...x.studi);
+    }
+    for (const nome of modelliNome(p.cognome)) {
+      const x = await trova(c, { nome });
+      if (x.errore) { if (!studi.length) return x; break; }
+      studi.push(...x.studi);
+    }
+    return { studi, troncata: false };
+  });
+  if (r.errore) return { esami: [], errore: r.errore };
+  const esami = sceltiPerPaziente(r.studi, p);
+  console.log(`[archivio] ricerca per paziente: archivi=${r.da.size ? new Set([...r.da.values()].map((c) => c.chiave)).size : 0} risposte=${r.risposte} tenuti=${esami.length} muti=${r.muti.length}`);
+  return { esami: await conLocali(studioId, esami, r.da), muti: r.muti };
 }
 
 // Ricerca libera dalla pagina Immagini: un cognome o una data di nascita.
-export async function cercaLibera(studioId: string, testo: string): Promise<{ esami: Trovato[]; troncata?: boolean; errore?: string }> {
-  const c = await confArchivio();
-  if (!c) return { esami: [], errore: 'non_configurato' };
+export async function cercaLibera(studioId: string, testo: string): Promise<{ esami: Trovato[]; troncata?: boolean; errore?: string; muti?: string[] }> {
   const f = filtriDaTesto(testo);
   if (!f) return { esami: [], errore: 'cosa_cercare' };
-  const studi: StudioArchivio[] = [];
-  let troncata = false;
-  for (const nome of f.nome ?? [undefined]) {
-    const r = await trova(c, { ...(nome ? { nome } : {}), ...(f.nascita ? { nascita: f.nascita } : {}) }, 100);
-    if (r.errore) { if (!studi.length) return { esami: [], errore: r.errore }; break; }
-    studi.push(...r.studi); troncata = troncata || r.troncata;
-  }
-  const esami = tutti(studi).slice(0, 100);
-  console.log(`[archivio] ricerca libera: tenuti=${esami.length} troncata=${troncata}`);
-  return { esami: await conLocali(studioId, esami), troncata };
+  const r = await suTutti(async (c) => {
+    const studi: StudioArchivio[] = [];
+    let troncata = false;
+    for (const nome of f.nome ?? [undefined]) {
+      const x = await trova(c, { ...(nome ? { nome } : {}), ...(f.nascita ? { nascita: f.nascita } : {}) }, 100);
+      if (x.errore) { if (!studi.length) return x; break; }
+      studi.push(...x.studi); troncata = troncata || x.troncata;
+    }
+    return { studi, troncata };
+  });
+  if (r.errore) return { esami: [], errore: r.errore };
+  const esami = tutti(r.studi).slice(0, 100);
+  console.log(`[archivio] ricerca libera: tenuti=${esami.length} troncata=${r.troncata} muti=${r.muti.length}`);
+  return { esami: await conLocali(studioId, esami, r.da), troncata: r.troncata, muti: r.muti };
 }
 
 // ── lo spool della ricezione → gli esami in piattaforma ─────────────────────
@@ -217,8 +259,8 @@ async function segnaDallArchivio(studioId: string, ids: string[]): Promise<void>
 }
 
 // ── chiedere un esame all'archivio ──────────────────────────────────────────
-export async function chiediEsame(studioId: string, userId: string, studyUid: string, patientId: string | null): Promise<{ richiesta: string } | { esame_id: string } | { errore: string }> {
-  const c = await confArchivio();
+export async function chiediEsame(studioId: string, userId: string, studyUid: string, patientId: string | null, archivio?: string | null): Promise<{ richiesta: string } | { esame_id: string } | { errore: string }> {
+  const c = await confArchivio(archivio);
   if (!c) return { errore: 'non_configurato' };
   if (!uidValido(studyUid)) return { errore: 'study_uid' };
   const [qui] = await query<{ id: string }>(`select id from imaging_esami where studio_id = $1 and study_uid = $2 and stato <> 'nascosto'`, [studioId, studyUid]);
