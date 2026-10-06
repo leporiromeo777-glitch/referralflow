@@ -526,3 +526,14 @@ asterischi nel testo (sporcano revisione e misure); aggiungere da soli i titoli 
 vecchia quando il medico non li detta (sarebbero parole non dettate). È una lettura dall'immagine:
 la revisione mostra le frasi e le lascia togliere.
 
+## 6.10.2026 — Gli esami si prendono dall'archivio Philips e qui restano solo in copia temporanea
+Seguito della decisione del 5.10 («l'archivio resta a Philips, la piattaforma mostra»). L'IntelliSpace
+Portal offre al Mac ricerca e invio a un altro nodo, non il recupero diretto: quindi la piattaforma
+cerca, chiede all'archivio di mandare l'esame alla sua ricezione, lo mostra, e dopo 7 giorni senza
+aperture lo toglie. Si aggancia da solo alla cartella solo con nome che suona uguale E stessa data di
+nascita, ricontrollati dal server. La ricerca nella cartella parte con un tasto, non da sola: ogni
+ricerca interroga l'archivio e finisce nel registro. Scartato: tenere qui una seconda copia stabile
+(sarebbe un secondo archivio); sfogliare l'archivio senza un cognome o una data di nascita. La
+ricezione ammette l'archivio per indirizzo, non per nome. Le prove usano un archivio finto: sull'ISP
+vero nessuna ricerca è stata fatta da chi scrive il codice.
+

@@ -20,6 +20,8 @@ Che cosa fa, e solo questo:
 
 Chi può mandare: solo gli AE Title elencati in `CONSENTITI`, e — se è scritto
 l'indirizzo — solo da quell'indirizzo. Tutto il resto si rifiuta e si annota.
+`*@indirizzo` ammette qualunque AE Title da quell'indirizzo (l'archivio dello
+studio quando consegna un esame chiesto dalla piattaforma).
 
 Nei log non entra mai niente del paziente: AE Title, indirizzo, conteggi,
 durate. Nemmeno gli identificativi dello studio.
@@ -155,7 +157,13 @@ def main() -> int:
         return aet, ip
 
     def autorizzato(aet: str, ip: str) -> bool:
-        if aet not in ammessi:
+        # «*@indirizzo» (6.10.2026): da quell'indirizzo va bene qualunque AE
+        # Title — serve per l'archivio dello studio, che nelle consegne si
+        # presenta col nome che vuole lui. Un «*» senza indirizzo non vale.
+        for atteso in ammessi.get("*", ()):
+            if ip in indirizzi(atteso):
+                return True
+        if aet not in ammessi or aet == "*":
             return False
         attesi = ammessi[aet]
         if not attesi:

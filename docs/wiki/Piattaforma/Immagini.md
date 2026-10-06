@@ -1,6 +1,6 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-10-05
+aggiornata: 2026-10-06
 ---
 # Immagini diagnostiche
 
@@ -30,13 +30,7 @@ Non è prudenza formale. Attaccare le immagini di qualcuno alla cartella di qual
 
 **Dal 5.10.2026 la pagina è di SOLA CONSULTAZIONE** (decisione dello studio): si guardano le immagini e le misure già fatte dall'apparecchio; gli strumenti di misura della piattaforma (il righello, sotto) sono **spenti** — il tasto «Misura», il semaforo della calibrazione e il salvataggio (`/api/prototipo/imaging/misure` risponde 403 `sola_consultazione`). Il codice e le prove del righello restano; si riaccende solo con `IMAGING_MISURE=1` nel `.env` del server (`src/lib/imaging-misure-accese.ts`) e riaprendo il fascicolo di validazione. Nelle prove end-to-end il server di prova lo accende apposta. Così la piattaforma resta un visore e non un dispositivo medico fabbricato in studio.
 
-**L'archivio resta a Philips** (stessa decisione): ReferralFlow deve solo *mostrare* gli esami prendendoli dal software Philips dello studio, non diventare l'archivio. Da fare quando il Mac sarà sulla rete degli apparecchi (192.168.0.x, cavo Ethernet): capire quale software è il nodo «ISP» (192.168.0.222:104) con una prova di collegamento DICOM, e se accetta la ricerca e il recupero dall'esterno (Query/Retrieve: C-FIND + C-MOVE) — allora la pagina cerca gli esami del paziente lì, li recupera quando si apre un esame e ne tiene solo una copia temporanea. Serve che un tecnico Philips registri il Mac fra le destinazioni. In alternativa l'ORTHANC già in rete (192.168.0.51:4242), se è dello studio.
-
-**Misurato il 6.10.2026**, col Mac collegato via cavo alla rete degli apparecchi (indirizzo dal DHCP, da rendere fisso; le reti 192.168.0.x e 192.168.20.x si parlano). Solo presentazione DICOM, nessuna ricerca e nessun dato di pazienti:
-- Il nodo «ISP» (porta 104, AE chiamato `ISP`; altri nomi vengono rifiutati) è **IntelliSpace Portal 11** (`PORTAL_11.0`) e **accetta il collegamento dal Mac anche senza registrarlo** (AE chiamante `REFERRALFLOW`).
-- Servizi offerti al Mac: verifica **sì**, **ricerca per studio (C-FIND) sì**, **invio a un altro nodo (C-MOVE) sì**, recupero diretto (C-GET) **no**, ricerca per paziente no, lista di lavoro sì, archiviazione sì.
-- Conseguenza: cercare gli esami si può subito; per *averli* serve il C-MOVE, cioè che l'ISP conosca il Mac come destinazione (nome, indirizzo fisso, porta 11112: una voce nella configurazione dell'ISP) e che sul Mac giri la ricezione (`mac/installa-ricezione-dicom.sh`), aperta al solo ISP.
-- L'EPIQ (192.168.0.218) non rispondeva (spento o in riposo); l'ORTHANC a 192.168.0.51 non è in rete.
+**L'archivio resta a Philips** (stessa decisione): ReferralFlow *mostra* gli esami prendendoli dal software Philips dello studio, non diventa l'archivio. Com'è fatto è scritto sotto, in «Dall'archivio dello studio».
 
 La pagina ha due parti, e la legge le tratta in modo diverso (`docs/legale/destinazione-uso-immagini.md`):
 
@@ -93,6 +87,22 @@ Si accende una volta sola con `bash mac/installa-ricezione-dicom.sh`, e la pagin
 **Provato** il 18.9.2026 con un apparecchio simulato: C-ECHO da un AE in elenco → `0x0000`; da uno sconosciuto → `0x0124` rifiutato; sette immagini su sette accettate (RLE e deflated comprese), spool svuotato, due esami in cartella e il fotogramma disegnato. Poi cancellato tutto: era roba sintetica su un database vero.
 
 Quello che la ricezione **non** fa ancora: **MPPS** (l'apparecchio che dichiara inizio e fine dell'esame), **Storage Commitment** (la conferma formale che ce lo siamo tenuto, dopo la quale la modalità può cancellare), **TLS con certificato** — oggi la rete degli apparecchi si assume segmentata — e la **worklist** (DICOM MWL: l'apparecchio che chiede «chi ho in lista oggi?»). Sono in `imaging-server` e sono il passo dopo: la worklist in particolare toglierebbe la digitazione del nome sull'ecografo, che è dove nascono gli omonimi.
+
+## Dall'archivio dello studio (6.10.2026)
+
+Il software Philips dello studio è un **IntelliSpace Portal 11** (nodo `ISP`, porta 104, sulla rete degli apparecchi 192.168.0.x a cui il Mac è collegato col cavo). Misurato il 6.10.2026 con una sola prova di presentazione, senza chiedere dati: accetta il collegamento dal Mac (AE chiamante `REFERRALFLOW`) anche senza registrarlo, e offre verifica, **ricerca per studio (C-FIND)** e **invio a un altro nodo (C-MOVE)**; il recupero diretto (C-GET) no. Quindi cercare si può subito; per *avere* un esame l'ISP deve conoscere il Mac come destinazione.
+
+**Che cosa fa la piattaforma.**
+- **Cerca** (`imaging/archivio-dicom.py`, un processo a sé; `src/lib/imaging-archivio.ts`): dalla cartella di un paziente «Cerca nell'archivio» chiede all'archivio gli esami con la sua data di nascita e quelli col suo cognome, poi tiene **solo i suoi** (`sceltiPerPaziente`, puro, in `imaging-archivio-regole.ts`): date di nascita diverse mai; nome che non suona uguale mai, nemmeno con la stessa data; stessa data e nome che suona uguale (un cognome battuto male sull'ecografo compreso) = **sicuro**; nome giusto ma una delle due date che manca = **da controllare**. Dalla pagina Immagini c'è anche la ricerca libera, per cognome (almeno tre lettere) o data di nascita: l'archivio intero non si sfoglia, e oltre cento risposte l'elenco si taglia.
+- **Prende** («Prendi e apri»): chiede all'archivio di mandare l'esame alla nostra ricezione (`ricevi-dicom.py`), svuota lo spool appena finito (`svuotaSpool`, lo stesso giro del quarto d'ora, uno alla volta) e apre l'esame. Chiesto dalla cartella di un paziente, l'esame **si aggancia a lui solo se è «sicuro»** — lo ricontrolla il server chiedendo di nuovo all'archivio nome e nascita di quell'esame; se è «da controllare» arriva ma resta «da verificare».
+- **Non archivia**: l'esame arrivato è una **copia temporanea** (`origine = 'archivio'`, `scade_il`, migrazione 082). Ogni apertura la allunga di `GIORNI_COPIA` (7); scaduta, `api/cron/imaging` toglie righe, file e immagini già disegnate (`scadutiVia`) — mai un esame su cui qualcuno ha misurato. L'originale è nell'archivio e si riprende quando serve. Un esame arrivato per conto suo dall'apparecchio, o importato a mano, non diventa temporaneo.
+- **Dice perché non va**: archivio spento o Mac fuori dalla sua rete, ricezione spenta, e soprattutto «l'archivio non conosce ancora questo Mac» (stato `0xA801`), che è la situazione di partenza.
+
+**Chi.** Segreteria, medico, aiuto medico, amministrazione; il tecnico no. Ogni ricerca e ogni richiesta finiscono in `imaging_accessi` (`archivio_cerca`, `archivio_richiesta`, `copia_scaduta`) senza dire chi si è cercato; nei log solo conteggi.
+
+**Come si accende.** `bash mac/installa-archivio-dicom.sh <indirizzo> <porta> <nome AE> ["nome"]`: accende la ricezione se manca, scrive `~/referti-imaging/archivio.conf` (indirizzo, porta, AE, giorni della copia: nessuna chiave) e apre la ricezione all'archivio **per indirizzo** (`*@indirizzo` in `CONSENTITI`: l'archivio nelle consegne si presenta col nome che vuole lui; un `*` senza indirizzo non vale niente). Poi, nell'archivio, va aggiunto il Mac fra i dispositivi DICOM: nome `REFERRALFLOW`, indirizzo del Mac sulla rete degli apparecchi (**fisso**), porta 11112. Il firewall del Mac deve lasciar entrare le connessioni al Python della ricezione.
+
+**Che cosa non è stato provato.** Tutto questo è provato contro un archivio **finto** (`imaging/archivio-finto.py`, cinque esami inventati: stessa persona, cognome battuto male, omonima, un altro nato lo stesso giorno). Sull'ISP vero è stata fatta solo la presentazione: la prima ricerca vera la fa lo studio dalla pagina. Da vedere lì: se l'ISP filtra per data di nascita (se non lo fa la ricerca ripiega sul cognome), se bada alle maiuscole nei nomi (si chiede in tutti e due i modi), con che nome si presenta quando consegna (per questo la ricezione lo ammette per indirizzo).
 
 ## Quello che ancora non c'è
 

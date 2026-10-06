@@ -37,6 +37,7 @@ pulisci() {
 }
 spegni() {
   [ -n "${SERVER_PID:-}" ] && pkill -P "$SERVER_PID" 2> /dev/null; [ -n "${SERVER_PID:-}" ] && kill "$SERVER_PID" 2> /dev/null
+  [ -n "${ARCH_PID:-}" ] && kill "$ARCH_PID" 2> /dev/null; [ -n "${RIC_PID:-}" ] && kill "$RIC_PID" 2> /dev/null
   pkill -f "next dev -p $PORTA" 2> /dev/null
   pulisci
   rm -rf "$TMP"
@@ -53,7 +54,16 @@ echo "→ server di prova sul database demo (porta $PORTA)"
 pulisci
 # Le prove del righello restano: sul server di prova gli strumenti di misura sono accesi
 # (in produzione la pagina Immagini è di sola consultazione, 5.10.2026).
-IMAGING_MISURE=1 DATABASE_URL="$URL_DB" PORT="$PORTA" npx next dev -p "$PORTA" > "$TMP/server.log" 2>&1 &
+# L'archivio dello studio (6.10.2026): uno FINTO con esami inventati, e la ricezione vera, in una
+# cartella temporanea — il server di prova non tocca mai la ricezione né l'archivio dello studio.
+ARCH="$TMP/imaging-base"; mkdir -p "$ARCH/ingresso" "$ARCH/scartati"
+printf 'AE_TITLE=REFERRALFLOW\nPORTA=11113\nCONSENTITI=*@127.0.0.1\nFLOW_URL=\n' > "$ARCH/ricezione.conf"
+printf 'NOME=Archivio di prova\nHOST=127.0.0.1\nPORTA=11150\nAE=ARCHIVIOPROVA\nNOSTRO_AE=REFERRALFLOW\nGIORNI_COPIA=7\n' > "$ARCH/archivio.conf"
+"$PY" imaging/archivio-finto.py --porta 11150 --ae ARCHIVIOPROVA --dest REFERRALFLOW=127.0.0.1:11113 > "$TMP/archivio-finto.log" 2>&1 &
+ARCH_PID=$!
+REFERTI_IMAGING_BASE="$ARCH" "$PY" imaging/ricevi-dicom.py > "$TMP/ricezione.log" 2>&1 &
+RIC_PID=$!
+REFERTI_IMAGING_BASE="$ARCH" IMAGING_MISURE=1 DATABASE_URL="$URL_DB" PORT="$PORTA" npx next dev -p "$PORTA" > "$TMP/server.log" 2>&1 &
 SERVER_PID=$!
 for _ in $(seq 1 60); do curl -s -o /dev/null "http://localhost:$PORTA/login" && break; sleep 2; done
 curl -s -o /dev/null "http://localhost:$PORTA/login" || { fallito "il server di prova non è partito (vedi $TMP/server.log)"; tail -5 "$TMP/server.log"; exit 1; }
@@ -127,6 +137,10 @@ grep -E "^NO" "$TMP/cartella.txt"; echo "   $(grep -c '^ok' "$TMP/cartella.txt")
 echo "→ cartella della bozza: nome simile + agenda, proposte, collega, scollega"
 DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-paziente.ts "http://localhost:$PORTA" "$C_MIS" "$STUDIO" > "$TMP/paziente.txt" 2>&1 || { fallito "prova-paziente"; cut -c1-300 "$TMP/paziente.txt"; }
 grep -E "^NO" "$TMP/paziente.txt"; echo "   $(grep -c '^ok' "$TMP/paziente.txt") ok, $(grep -c '^NO' "$TMP/paziente.txt") no"
+
+echo "→ archivio dello studio (finto): cerca, prendi e apri, copia temporanea, scadenza"
+DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-archivio.ts "http://localhost:$PORTA" "$C_MEDICO" "$STUDIO" "$ARCH" > "$TMP/archivio.txt" 2>&1 || { fallito "prova-archivio"; cut -c1-300 "$TMP/archivio.txt"; }
+grep -E "^NO" "$TMP/archivio.txt"; echo "   $(grep -c '^ok' "$TMP/archivio.txt") ok, $(grep -c '^NO' "$TMP/archivio.txt") no"
 
 echo "→ chi vede che cosa: menu dal server e rotte bloccate, ruolo per ruolo"
 B="http://localhost:$PORTA/api/prototipo"

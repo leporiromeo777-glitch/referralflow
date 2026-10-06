@@ -7,6 +7,7 @@ import { finestreDi } from '@/lib/imaging-ordina';
 import { cautionValidati, versioneSoftware, mse } from '@/lib/imaging-misura';
 import { aggiornaGeometriaSerie, pianoVirtuale } from '@/lib/imaging-serie';
 import { vietato } from '@/lib/permessi';
+import { allunga } from '@/lib/imaging-archivio';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,15 +30,17 @@ export async function GET(_req: Request, props: { params: Promise<{ id: string }
     id: string; data_esame: string | null; ora_esame: string | null; descrizione: string | null; modalita: string;
     stato: string; n_serie: number; n_immagini: number; byte: string; istituto: string | null; inviante: string | null;
     accession: string | null; paziente_dicom: string | null; paziente_nascita: string | null;
-    patient_id: string | null; paziente: string | null; created_at: string;
+    patient_id: string | null; paziente: string | null; created_at: string; origine: string; scade_il: string | null;
   }>(
     `select e.id, e.data_esame::text, e.ora_esame, e.descrizione, e.modalita, e.stato, e.n_serie, e.n_immagini,
             e.byte::text, e.istituto, e.inviante, e.accession, e.paziente_dicom, e.paziente_nascita::text,
             e.patient_id, case when p.id is null then null else (p.cognome || ' ' || p.nome) end as paziente,
-            e.created_at::text
+            e.created_at::text, e.origine, e.scade_il::text
        from imaging_esami e left join patients p on p.id = e.patient_id
       where e.id = $1 and e.studio_id = $2`, [params.id, sid]);
   if (!esame) return NextResponse.json({ errore: 'non_trovato' }, { status: 404 });
+  // Copia temporanea di un esame dell'archivio: ogni apertura la tiene in vita (6.10.2026).
+  if (esame.scade_il) await allunga(esame.id);
 
   const serie = await query<{ id: string; modalita: string | null; descrizione: string | null; numero: number | null; parte_corpo: string | null; n_immagini: number; geometria: any }>(
     `select id, modalita, descrizione, numero, parte_corpo, n_immagini, geometria from imaging_serie where esame_id = $1 order by numero nulls last, id`, [params.id]);

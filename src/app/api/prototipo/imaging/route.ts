@@ -4,6 +4,7 @@ import { query } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
 import { lettoreDisponibile, statoRicezione } from '@/lib/imaging';
 import { ingestaDicom } from '@/lib/imaging-ingest';
+import { statoArchivio } from '@/lib/imaging-archivio';
 import { vietato } from '@/lib/permessi';
 
 export const dynamic = 'force-dynamic';
@@ -37,12 +38,12 @@ export async function GET(req: NextRequest) {
     id: string; data_esame: string | null; ora_esame: string | null; descrizione: string | null; modalita: string;
     stato: string; origine: string; n_serie: number; n_immagini: number; byte: string; paziente_dicom: string | null;
     paziente_nascita: string | null; patient_id: string | null; paziente: string | null; istituto: string | null;
-    inviante: string | null; accession: string | null; created_at: string;
+    inviante: string | null; accession: string | null; created_at: string; scade_il: string | null;
   }>(
     `select e.id, e.data_esame::text, e.ora_esame, e.descrizione, e.modalita, e.stato, e.origine, e.n_serie, e.n_immagini,
             e.byte::text, e.paziente_dicom, e.paziente_nascita::text, e.patient_id,
             case when p.id is null then null else (p.cognome || ' ' || p.nome) end as paziente,
-            e.istituto, e.inviante, e.accession, e.created_at::text
+            e.istituto, e.inviante, e.accession, e.created_at::text, e.scade_il::text
        from imaging_esami e left join patients p on p.id = e.patient_id
       where e.studio_id = $1 and e.stato <> 'nascosto'
         and ($2 = '' or e.patient_id = $2::uuid)
@@ -55,7 +56,7 @@ export async function GET(req: NextRequest) {
        from imaging_esami where studio_id = $1 and stato <> 'nascosto'`, [sid]);
 
   return NextResponse.json(
-    { esami, conta, lettore: await lettoreDisponibile(), ricezione: await statoRicezione() },
+    { esami, conta, lettore: await lettoreDisponibile(), ricezione: await statoRicezione(), archivio: await statoArchivio() },
     { headers: { 'Cache-Control': 'no-store' } });
 }
 

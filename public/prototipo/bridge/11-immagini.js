@@ -66,7 +66,7 @@ async function rfImgCarica(rendi = true) {
     if (!r.ok) { RF.img.errore = r.status === 403 ? 'Le immagini le vede chi cura: il tuo ruolo non ci accede.' : `Non riesco a leggere gli esami (${r.status}).`; if (rendi) render(); return; }
     const j = await r.json();
     RF.img.lista = j.esami || []; RF.img.conta = j.conta || {}; RF.img.lettore = j.lettore !== false;
-    RF.img.ricezione = j.ricezione || null; RF.img.errore = null;
+    RF.img.ricezione = j.ricezione || null; RF.img.errore = null; RF.arch.stato = j.archivio || null;
   } catch { RF.img.errore = 'Piattaforma non raggiungibile.'; }
   if (rendi) render();
 }
@@ -630,7 +630,7 @@ PAGES.imaging = () => {
     const st = RF_IMG_STATO[e.stato] || ['', e.stato];
     return `<div class="list-item" style="cursor:pointer" onclick="rfImgApri('${e.id}')">
       <div class="grow"><div class="name">${rfEsc(e.descrizione || 'Esame')} <span class="badge">${rfEsc(e.modalita || '—')}</span> ${st[1] ? `<span class="badge ${st[0]}">${st[1]}</span>` : ''}</div>
-        <div class="sub">${e.origine === 'rete' ? '<span class="badge">dall’apparecchio</span> ' : ''}${rfEsc(rfImgData(e.data_esame))}${e.ora_esame ? ` ${rfEsc(e.ora_esame.slice(0, 2))}:${rfEsc(e.ora_esame.slice(2, 4))}` : ''} · ${e.n_serie} ${e.n_serie === 1 ? 'serie' : 'serie'} · ${e.n_immagini} immagini · ${rfImgPeso(e.byte)}${e.istituto ? ` · ${rfEsc(e.istituto)}` : ''}</div></div>
+        <div class="sub">${e.origine === 'rete' ? '<span class="badge">dall’apparecchio</span> ' : e.origine === 'archivio' ? '<span class="badge">copia dall’archivio</span> ' : ''}${rfEsc(rfImgData(e.data_esame))}${e.ora_esame ? ` ${rfEsc(e.ora_esame.slice(0, 2))}:${rfEsc(e.ora_esame.slice(2, 4))}` : ''} · ${e.n_serie} ${e.n_serie === 1 ? 'serie' : 'serie'} · ${e.n_immagini} immagini · ${rfImgPeso(e.byte)}${e.istituto ? ` · ${rfEsc(e.istituto)}` : ''}</div></div>
       <div style="text-align:right"><div class="name">${e.paziente ? rfEsc(e.paziente) : `<span class="meta">${rfEsc(e.paziente_dicom || 'senza nome')}</span>`}</div>
         <div class="sub">${e.patient_id ? 'in cartella' : 'non abbinato'}</div></div></div>`;
   };
@@ -643,6 +643,7 @@ PAGES.imaging = () => {
     <p class="rf-img-limite">Le immagini si <b>consultano</b> nel contesto della cartella e si <b>misurano</b> (distanze, polilinee, angoli, aree di rettangoli, ellissi e poligoni, perimetri, punti: dalla calibrazione scritta nel file dall'apparecchio). Il righello è un dispositivo medico fabbricato e usato dentro lo studio (ODmed art. 9 e 18): fascicolo, validazione e notifica sono in <code>docs/legale/dispositivo-in-house/</code>. La diagnosi resta del medico, e il referto nasce dal dettato come sempre.</p>
     <div class="card mt-16"><div class="card-head"><span class="section-title">Esami</span><span class="caption">dal più recente</span></div>
       <div class="list">${mostrati.length ? mostrati.map(riga).join('') : '<div class="caption">Nessun esame.</div>'}</div></div>
+    ${rfArchScheda()}
     ${rfImgRicezione()}
     <div class="card mt-16"><div class="section-title">Portare dentro un esame a mano</div>
       <div id="rf-img-drop" class="rf-img-drop mt-8" ondragover="rfImgDrop(event, true)" ondragleave="rfImgDrop(event, false)" ondrop="rfImgDropFile(event)">
@@ -654,6 +655,118 @@ PAGES.imaging = () => {
       </div>
       <p class="meta" style="margin:10px 0 0;line-height:1.55">I file restano su questo Mac e non escono mai: il browser riceve un'immagine già pronta, non il DICOM. L'esame si aggancia da solo al paziente quando <b>nome e data di nascita</b> del file combaciano con una persona sola della cartella; se no resta «da verificare», e lo abbina qualcuno.</p></div>`;
 };
+
+/* L'archivio dello studio (6.10.2026). L'archivio RESTA al software Philips:
+   qui si chiede «che esami hai di questa persona?» e, quando se ne apre uno,
+   ce lo si fa mandare. La copia che arriva è temporanea. */
+RF.arch = { stato: null, q: '', esiti: null, carico: false, messaggio: null, prova: null, attese: {}, perPaz: {} };
+const RF_ARCH_URL = '/api/prototipo/imaging/archivio';
+
+function rfArchRiga(e, pid) {
+  const a = RF.arch.attese[e.study_uid];
+  const chi = `${rfEsc(e.paziente || 'senza nome')}${e.nascita ? `, ${rfEsc(rfImgData(e.nascita))}` : ', senza data di nascita'}`;
+  const tasto = e.esame_id ? `<button class="btn sm ghost" onclick="go('#/imaging');rfImgApri('${e.esame_id}')">Apri</button>`
+    : a && a.stato === 'in_corso' ? `<span class="caption">in arrivo${a.in_arrivo ? ` (${a.in_arrivo})` : ''}…</span>`
+    : `<button class="btn sm" onclick="rfArchApri('${e.study_uid}', ${pid ? `'${pid}'` : 'null'})">Prendi e apri</button>`;
+  return `<div class="list-item"><div class="grow">
+      <div class="name">${rfEsc(e.descrizione || 'Esame')} <span class="badge">${rfEsc(e.modalita || '—')}</span>${e.esame_id ? ' <span class="badge success">già qui</span>' : ''}${e.certezza === 'da_controllare' ? ' <span class="badge warning">da controllare</span>' : ''}</div>
+      <div class="sub">${rfEsc(rfImgData(e.data))}${e.ora ? ` ${rfEsc(e.ora)}` : ''}${e.immagini != null ? ` · ${e.immagini} immagini` : ''}${e.certezza === 'sicuro' ? '' : ` · nell'archivio: ${chi}`}</div>
+      ${e.certezza === 'da_controllare' ? '<div class="caption">Il nome corrisponde ma manca una data di nascita: si apre, ma non si aggancia da solo alla cartella.</div>' : ''}
+      ${a && a.errore ? `<div class="rf-manc" style="margin-top:6px">${rfEsc(a.errore)}</div>` : ''}</div>${tasto}</div>`;
+}
+
+async function rfArchApri(uid, pid) {
+  const gia = RF.arch.attese[uid];
+  if (gia && gia.stato === 'in_corso') return;
+  RF.arch.attese[uid] = { stato: 'in_corso', in_arrivo: 0 }; render();
+  const fine = (x) => { RF.arch.attese[uid] = x; render(); };
+  const arrivato = (id) => {
+    delete RF.arch.attese[uid];
+    if (pid) { delete RF.imgPaz[pid]; delete RF.arch.perPaz[pid]; }
+    for (const e of (RF.arch.esiti || [])) if (e.study_uid === uid) e.esame_id = id;
+    RF.img.lista = null; go('#/imaging'); void rfImgApri(id);
+  };
+  try {
+    const r = await fetch(RF_ARCH_URL, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'recupera', study_uid: uid, patient_id: pid || undefined }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) return fine({ errore: j.messaggio || `Errore ${r.status}` });
+    if (j.esame_id) return arrivato(j.esame_id);
+    for (let n = 0; n < 500; n++) {
+      await new Promise(ok => setTimeout(ok, 2000));
+      const q = await fetch(`${RF_ARCH_URL}?richiesta=${j.richiesta}`, { credentials: 'include', cache: 'no-store' }).then(x => (x.ok ? x.json() : null)).catch(() => null);
+      if (!q) continue;
+      if (q.stato === 'arrivato' && q.esame_id) return arrivato(q.esame_id);
+      if (q.stato === 'fallito') return fine({ errore: q.messaggio || 'Il recupero dall\'archivio non è riuscito.' });
+      const a = RF.arch.attese[uid];
+      if (a && a.in_arrivo !== q.in_arrivo) { a.in_arrivo = q.in_arrivo; render(); }
+    }
+    fine({ errore: 'L\'archivio non ha finito in tempo.' });
+  } catch { fine({ errore: 'Piattaforma non raggiungibile.' }); }
+}
+
+async function rfArchCerca() {
+  const campo = document.getElementById('rf-arch-q');
+  RF.arch.q = campo ? campo.value.trim() : RF.arch.q;
+  if (!RF.arch.q || RF.arch.carico) return;
+  RF.arch.carico = true; RF.arch.messaggio = null; render();
+  try {
+    const r = await fetch(`${RF_ARCH_URL}?q=${encodeURIComponent(RF.arch.q)}`, { credentials: 'include', cache: 'no-store' });
+    const j = await r.json().catch(() => ({}));
+    RF.arch.esiti = r.ok ? (j.esami || []) : null;
+    RF.arch.messaggio = !r.ok ? `Errore ${r.status}` : j.messaggio || (j.troncata ? 'Troppi risultati: l\'elenco è tagliato, cerca con più precisione.' : null);
+  } catch { RF.arch.messaggio = 'Piattaforma non raggiungibile.'; }
+  RF.arch.carico = false; render();
+}
+
+async function rfArchProva() {
+  RF.arch.prova = 'carico'; render();
+  try { const r = await fetch(`${RF_ARCH_URL}?prova=1`, { credentials: 'include', cache: 'no-store' }); RF.arch.prova = r.ok ? await r.json() : { errore: true }; if (r.ok) RF.arch.stato = RF.arch.prova; }
+  catch { RF.arch.prova = { errore: true }; }
+  render();
+}
+
+async function rfArchPaziente(pid) {
+  RF.arch.perPaz[pid] = 'carico'; render();
+  try {
+    const r = await fetch(`${RF_ARCH_URL}?paziente=${encodeURIComponent(pid)}`, { credentials: 'include', cache: 'no-store' });
+    const j = await r.json().catch(() => ({}));
+    RF.arch.perPaz[pid] = r.ok ? { esami: j.esami || [], messaggio: j.messaggio || null } : { esami: [], messaggio: `Errore ${r.status}` };
+  } catch { RF.arch.perPaz[pid] = { esami: [], messaggio: 'Piattaforma non raggiungibile.' }; }
+  render();
+}
+
+// Nella pagina Immagini: lo stato, la prova del collegamento, la ricerca.
+function rfArchScheda() {
+  const a = RF.arch.stato;
+  if (!a || !a.configurato) {
+    return `<div class="card mt-16"><div class="section-title">Archivio dello studio</div>
+      <p class="meta" style="margin:8px 0 0;line-height:1.55">Gli esami possono restare nell'archivio dello studio (il software Philips) ed essere solo <b>mostrati</b> qui: la piattaforma li cerca lì e se li fa mandare quando se ne apre uno. Si accende una volta sola, da Terminale, con indirizzo, porta e nome dell'archivio:
+      <br><code>bash mac/installa-archivio-dicom.sh &lt;indirizzo&gt; &lt;porta&gt; &lt;nome AE&gt;</code></p></div>`;
+  }
+  const p = RF.arch.prova;
+  const esiti = RF.arch.esiti;
+  return `<div class="card mt-16"><div class="card-head"><span class="section-title">Archivio dello studio · ${rfEsc(a.nome || '')}</span>
+      <span>${a.ricezione ? (a.aperta ? '<span class="badge success">pronto a ricevere</span>' : '<span class="badge warning">ricezione chiusa all’archivio</span>') : '<span class="badge warning">ricezione spenta</span>'}
+      <button class="btn sm ghost" onclick="rfArchProva()">${p === 'carico' ? 'Provo…' : 'Prova collegamento'}</button></span></div>
+    ${p && p !== 'carico' ? `<div class="${p.risponde ? 'caption' : 'rf-manc'}" style="margin-top:6px">${p.errore ? 'Non riesco a fare la prova.' : p.risponde ? 'L\'archivio risponde.' : 'L\'archivio non risponde: è acceso? Il Mac è collegato alla rete degli apparecchi?'}</div>` : ''}
+    <p class="meta" style="margin:8px 0 10px;line-height:1.55">Gli esami restano nell'archivio: qui se ne prende una <b>copia temporanea</b> per guardarli, che sparisce dopo ${a.giorni || 7} giorni senza aperture. Dalla cartella di un paziente «Cerca nell'archivio» trova i suoi; qui sotto si cerca per cognome o data di nascita.</p>
+    <div class="row" style="gap:8px"><input class="input grow" id="rf-arch-q" placeholder="Cognome, oppure data di nascita (12.03.1961)" value="${rfEsc(RF.arch.q || '')}" onkeydown="if(event.key==='Enter')rfArchCerca()"><button class="btn" onclick="rfArchCerca()">${RF.arch.carico ? 'Cerco…' : 'Cerca'}</button></div>
+    ${RF.arch.messaggio ? `<div class="rf-manc" style="margin-top:8px">${rfEsc(RF.arch.messaggio)}</div>` : ''}
+    ${esiti ? `<div class="list mt-8">${esiti.length ? esiti.map(e => rfArchRiga(e, null)).join('') : '<div class="caption" style="padding:8px 6px">Nell\'archivio non c\'è niente con questi dati.</div>'}</div>` : ''}
+    <p class="meta" style="margin:10px 0 0;line-height:1.55">Perché l'archivio possa mandare gli esami deve conoscere questo Mac: fra i suoi dispositivi va scritto il nome <b>${rfEsc(a.ae || 'REFERRALFLOW')}</b>, l'indirizzo di questo Mac sulla rete degli apparecchi e la porta <b>${a.porta || 11112}</b>.</p></div>`;
+}
+
+// Nella cartella del paziente: i suoi esami nell'archivio, a richiesta.
+function rfArchDelPaziente(pid) {
+  if (!RF.arch.stato || !RF.arch.stato.configurato) return '';
+  const x = RF.arch.perPaz[pid];
+  if (x === undefined) return `<div class="row" style="margin-top:8px"><button class="btn sm" onclick="rfArchPaziente('${pid}')">Cerca nell'archivio</button><span class="caption">gli esami restano nell'archivio dello studio: qui si guardano</span></div>`;
+  if (x === 'carico') return '<div class="caption" style="margin-top:8px">Cerco nell\'archivio…</div>';
+  return `<div class="caption" style="margin-top:10px;text-transform:uppercase;letter-spacing:.04em">Nell'archivio dello studio</div>
+    ${x.messaggio ? `<div class="rf-manc" style="margin-top:6px">${rfEsc(x.messaggio)}</div>` : ''}
+    <div class="list">${x.esami.length ? x.esami.map(e => rfArchRiga(e, pid)).join('') : (x.messaggio ? '' : '<div class="caption" style="padding:8px 6px">Nell\'archivio non c\'è nessun esame di questo paziente.</div>')}</div>
+    <div class="row" style="margin-top:6px"><button class="btn sm ghost" onclick="rfArchPaziente('${pid}')">Cerca di nuovo</button></div>`;
+}
 
 // «Dagli apparecchi»: quello che serve al tecnico che installa l'ecografo, e
 // nient'altro. Il DICOM è uno standard pubblico dal 1993: l'apparecchio manda
@@ -730,6 +843,7 @@ function rfImgDettaglio() {
         ${e.patient_id ? `<button class="btn" data-go="#/patients/${e.patient_id}">Cartella di ${rfEsc(e.paziente || '')}</button>` : `<button class="btn primary" onclick="rfImgAbbina('${e.id}')">Abbina a un paziente</button>`}
         <button class="btn" onclick="rfImgChiudi()">Indietro</button></div></div>
 
+    ${e.origine === 'archivio' ? `<p class="rf-img-limite" style="margin:0 0 12px">Copia temporanea presa dall'archivio dello studio, dove resta l'originale${e.scade_il ? `: qui resta fino al ${rfEsc(rfImgData(String(e.scade_il).slice(0, 10)))}, e ogni apertura la allunga` : ''}.</p>` : ''}
     ${e.patient_id ? '' : `<div class="rf-manc mb-16"><b>Non abbinato a nessuno.</b> Nel file c'è scritto «${rfEsc(e.paziente_dicom || 'niente')}»${e.paziente_nascita ? `, nato/a ${rfEsc(rfImgData(e.paziente_nascita))}` : ''}: non basta per riconoscerlo senza indovinare.</div>`}
 
     <div class="rf-img-corpo">
@@ -779,7 +893,9 @@ async function rfImgDelPaziente(pid) {
   RF.imgPaz[pid] = null;
   try {
     const r = await fetch(`/api/prototipo/imaging?paziente=${encodeURIComponent(pid)}`, { credentials: 'include', cache: 'no-store' });
-    RF.imgPaz[pid] = r.ok ? ((await r.json()).esami || []) : [];
+    const j = r.ok ? await r.json() : null;
+    RF.imgPaz[pid] = j ? (j.esami || []) : [];
+    if (j && j.archivio) RF.arch.stato = j.archivio;
   } catch { RF.imgPaz[pid] = []; }
   render();
 }
@@ -794,7 +910,7 @@ if (rfPatientDocsImg) patientDocs = function (p) {
     <div class="list">${mie.length ? mie.map(e => `<div class="list-item" style="cursor:pointer" onclick="go('#/imaging');rfImgApri('${e.id}')">
       <div class="grow"><div class="name">${rfEsc(e.descrizione || 'Esame')} <span class="badge">${rfEsc(e.modalita || '—')}</span></div>
         <div class="sub">${rfEsc(rfImgData(e.data_esame))} · ${e.n_immagini} immagini${e.istituto ? ` · ${rfEsc(e.istituto)}` : ''}</div></div>
-      <button class="btn sm ghost">Apri</button></div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessun esame per immagini in cartella.</div>'}</div></div>`;
+      <button class="btn sm ghost">Apri</button></div>`).join('') : '<div class="caption" style="padding:8px 6px">Nessun esame per immagini in cartella.</div>'}</div>${rfArchDelPaziente(p.id)}</div>`;
 };
 
 
