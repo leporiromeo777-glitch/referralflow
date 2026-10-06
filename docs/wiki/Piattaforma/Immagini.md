@@ -32,6 +32,12 @@ Non è prudenza formale. Attaccare le immagini di qualcuno alla cartella di qual
 
 **L'archivio resta a Philips** (stessa decisione): ReferralFlow deve solo *mostrare* gli esami prendendoli dal software Philips dello studio, non diventare l'archivio. Da fare quando il Mac sarà sulla rete degli apparecchi (192.168.0.x, cavo Ethernet): capire quale software è il nodo «ISP» (192.168.0.222:104) con una prova di collegamento DICOM, e se accetta la ricerca e il recupero dall'esterno (Query/Retrieve: C-FIND + C-MOVE) — allora la pagina cerca gli esami del paziente lì, li recupera quando si apre un esame e ne tiene solo una copia temporanea. Serve che un tecnico Philips registri il Mac fra le destinazioni. In alternativa l'ORTHANC già in rete (192.168.0.51:4242), se è dello studio.
 
+**Misurato il 6.10.2026**, col Mac collegato via cavo alla rete degli apparecchi (indirizzo dal DHCP, da rendere fisso; le reti 192.168.0.x e 192.168.20.x si parlano). Solo presentazione DICOM, nessuna ricerca e nessun dato di pazienti:
+- Il nodo «ISP» (porta 104, AE chiamato `ISP`; altri nomi vengono rifiutati) è **IntelliSpace Portal 11** (`PORTAL_11.0`) e **accetta il collegamento dal Mac anche senza registrarlo** (AE chiamante `REFERRALFLOW`).
+- Servizi offerti al Mac: verifica **sì**, **ricerca per studio (C-FIND) sì**, **invio a un altro nodo (C-MOVE) sì**, recupero diretto (C-GET) **no**, ricerca per paziente no, lista di lavoro sì, archiviazione sì.
+- Conseguenza: cercare gli esami si può subito; per *averli* serve il C-MOVE, cioè che l'ISP conosca il Mac come destinazione (nome, indirizzo fisso, porta 11112: una voce nella configurazione dell'ISP) e che sul Mac giri la ricezione (`mac/installa-ricezione-dicom.sh`), aperta al solo ISP.
+- L'EPIQ (192.168.0.218) non rispondeva (spento o in riposo); l'ORTHANC a 192.168.0.51 non è in rete.
+
 La pagina ha due parti, e la legge le tratta in modo diverso (`docs/legale/destinazione-uso-immagini.md`):
 
 - **Consultare** — ricevere, archiviare, abbinare, guardare, e mostrare le misure che l'apparecchio ha già fatto. Non produce un numero clinico e resta fuori dal perimetro del dispositivo medico.
