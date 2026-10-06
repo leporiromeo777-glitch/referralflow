@@ -8,12 +8,14 @@ import { NextResponse } from 'next/server';
 
 export const SEZIONI = [
   'agenda', 'visite', 'richiami', 'sale', 'prestazioni', 'invianti', 'patients', 'percorsi',
-  'documents', 'moduli', 'imaging', 'reports', 'dittafono', 'converti', 'anonymize', 'inbox', 'ai',
+  'documents', 'moduli', 'imaging', 'monitoraggio', 'reports', 'dittafono', 'converti', 'anonymize', 'inbox', 'ai',
   'fatturazione', 'administration',
 ] as const;
 export type Sezione = (typeof SEZIONI)[number];
 
-const CURA: Sezione[] = ['agenda', 'visite', 'richiami', 'sale', 'patients', 'percorsi', 'documents', 'moduli', 'imaging', 'inbox', 'ai'];
+// 'monitoraggio' (6.10.2026): la sezione la vede chi cura; dentro, quattro capacità
+// distinte (consultare, prendere in carico, regole, dispositivi) in monitoraggio/catalogo.ts.
+const CURA: Sezione[] = ['agenda', 'visite', 'richiami', 'sale', 'patients', 'percorsi', 'documents', 'moduli', 'imaging', 'monitoraggio', 'inbox', 'ai'];
 const SEGRETERIA: Sezione[] = [...CURA, 'prestazioni', 'invianti', 'reports', 'converti', 'anonymize', 'fatturazione'];
 
 // Ruoli del database (users.role).

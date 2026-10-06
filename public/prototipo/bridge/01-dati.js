@@ -67,7 +67,7 @@ async function rfCaricaDati() {
   for (const nome of ['ARCHIVE', 'AUDIT', 'AIJOBS', 'KNOWLEDGE', 'INVOICES']) { try { if (Array.isArray(window[nome])) rfSvuota(window[nome]); } catch { /* assente */ } }
   // Voci per ruolo (14.9.2026: Percorsi, Moduli, Da fatturare). Questa riga
   // vince su qualunque aggiunta fatta al caricamento dello script.
-  const nav = ['home', 'agenda', 'visite', 'richiami', 'sale', 'prestazioni', 'patients', 'invianti', 'percorsi', 'reports', 'dittafono', 'converti', 'documents', 'imaging', 'moduli', 'anonymize', 'inbox', 'ai', 'fatturazione', 'administration'];
+  const nav = ['home', 'agenda', 'visite', 'richiami', 'sale', 'prestazioni', 'patients', 'invianti', 'percorsi', 'reports', 'dittafono', 'converti', 'documents', 'imaging', 'monitoraggio', 'moduli', 'anonymize', 'inbox', 'ai', 'fatturazione', 'administration'];
   const nascosti = new Set(Array.isArray(RF.data.moduli_nascosti) ? RF.data.moduli_nascosti : []);
   // Chi vede che cosa (23.9.2026): le sezioni del ruolo arrivano dal server
   // (src/lib/permessi.ts, la stessa tabella che blocca le rotte). Una voce di
@@ -199,7 +199,7 @@ body:has(#app.rf-modo-accesso){background:#eef2f7}
 /* Chi apre a mano l'indirizzo di una sezione non sua torna alla home (il
    server risponderebbe comunque 403). Rotte senza sezione (home, profilo…)
    sempre aperte. */
-const RF_SEZIONE_ROTTA = { agenda: 'agenda', visite: 'visite', richiami: 'richiami', sale: 'sale', prestazioni: 'prestazioni', patients: 'patients', patient: 'patients', invianti: 'invianti', percorsi: 'percorsi', reports: 'reports', report: 'reports', review: 'reports', dittafono: 'dittafono', converti: 'converti', documents: 'documents', imaging: 'imaging', moduli: 'moduli', anonymize: 'anonymize', inbox: 'inbox', tasks: 'inbox', ai: 'ai', fatturazione: 'fatturazione', administration: 'administration' };
+const RF_SEZIONE_ROTTA = { monitoraggio: 'monitoraggio', agenda: 'agenda', visite: 'visite', richiami: 'richiami', sale: 'sale', prestazioni: 'prestazioni', patients: 'patients', patient: 'patients', invianti: 'invianti', percorsi: 'percorsi', reports: 'reports', report: 'reports', review: 'reports', dittafono: 'dittafono', converti: 'converti', documents: 'documents', imaging: 'imaging', moduli: 'moduli', anonymize: 'anonymize', inbox: 'inbox', tasks: 'inbox', ai: 'ai', fatturazione: 'fatturazione', administration: 'administration' };
 function rfRottaPermessa(route) {
   if (!RF.live || !RF.data || !Array.isArray(RF.data.sezioni)) return true;
   const sez = RF_SEZIONE_ROTTA[route];
@@ -220,7 +220,7 @@ const rfRenderSidebarOrig = renderSidebar;
 // raggruppate con un'etichetta; una voce fuori da ogni gruppo finisce in coda.
 const RF_NAV_GRUPPI = [
   ['Operatività', ['home', 'agenda', 'visite', 'richiami', 'sale', 'prestazioni', 'inbox']],
-  ['Clinico', ['patients', 'invianti', 'percorsi', 'visits', 'reports', 'dittafono', 'documents', 'imaging', 'moduli']],
+  ['Clinico', ['patients', 'invianti', 'percorsi', 'visits', 'reports', 'dittafono', 'documents', 'imaging', 'monitoraggio', 'moduli']],
   ['AI', ['ai', 'anonymize', 'converti']],   // Converti audio sotto Anonimizzazione; Cleo resta prima (19.9.2026, richiesta utente)
   ['Amministrazione', ['fatturazione', 'communications', 'statistics', 'administration', 'system']],
 ];

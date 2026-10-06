@@ -316,3 +316,5 @@ Stesso giorno: consegna dopo ogni dettato, suite **45/45**. I quattro dettati ri
 
 **Più archivi** (6.10.2026): end-to-end `prova-archivio.ts` 18/18 con DUE archivi finti — stato dei due, la TAC che sta solo nel secondo trovata col nome dell'archivio (l'esame dell'altra persona no), «Prendi e apri» dal secondo, un archivio che non risponde non ferma l'altro. `npm run test:e2e` TUTTO OK, suite 383/383.
 
+**Monitoraggio remoto, modulo dimostrativo** (6.10.2026): 9 prove pure in `prove-monitoraggio.test.ts` — suite 392/392. End-to-end `prova-monitoraggio.ts` 23/23 (motore guidato a mano col tempo simulato, AI spenta): 13 pazienti finti negli stati attesi, 0 misure fuori dall'abbinamento del loro dispositivo su oltre 6000, lo stesso intervallo rimandato aggiunge 0 misure, 206 misure recuperate tenute come storia, un solo avviso per paziente e regola dopo molti giri, 403 dove il ruolo non può. `npm run test:e2e` TUTTO OK. Tempi sul database demo: semina con un'ora di storia 0,2 s (6500 misure, 168 pezzi di tracciato), un giro 23 ms, panoramica 6 ms. Volume atteso con la demo accesa: circa 8600 misure l'ora, tenute 24 ore.
+

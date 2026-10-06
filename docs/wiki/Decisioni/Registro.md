@@ -563,3 +563,15 @@ studio. La piattaforma ora cerca su più archivi, ma quello è il sistema di un'
 si interroga e non lo si prova finché il centro non lo consente per iscritto e il suo tecnico non
 registra il Mac. Da chiarire con loro anche il perimetro (tutti i pazienti o solo quelli in comune).
 
+## 6.10.2026 — Monitoraggio remoto: prima una demo vera, coi dati separati
+Richiesta dello studio, che non ha ancora scelto i dispositivi: un modulo funzionante in modalità
+dimostrativa, pronto a ricevere adattatori reali. Scelte: il simulatore è il primo adattatore e passa
+dalla stessa strada dei futuri dispositivi (normalizzazione, archivio, regole, notifiche); demo e
+reale stanno nelle stesse tabelle ma con l'ambiente dentro le chiavi, così il database stesso
+rifiuta un dato sintetico in una cartella vera; il motore gira nel server e non nel browser; le
+regole sono deterministiche, a versioni, e l'AI non le tocca; l'assistente scrive solo da fatti
+calcolati e si dichiara «modello fisso» quando l'AI non c'è; il tecnico gestisce i dispositivi ma
+non vede i valori. Scartato: generare i valori nel browser (gli avvisi dipenderebbero da una pagina
+aperta); soglie «universali» presentate come cliniche; promettere compatibilità con prodotti.
+Resta fuori, e scritto in [[Piattaforma/Monitoraggio]]: tutto ciò che serve prima di un uso reale.
+
