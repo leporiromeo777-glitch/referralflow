@@ -14,11 +14,26 @@ DOM="referralflow.ch"; HOST="cct"
 # passato al Wi-Fi con un altro indirizzo e il dominio puntava nel vuoto.
 # Si può forzare: attiva-dominio.sh 192.168.1.146
 IP="${1:-}"
-if [ -z "$IP" ]; then
+# Quale indirizzo pubblicare nel dominio (6.10.2026): il Mac può stare su due
+# reti — quella dello studio, da cui i computer aprono la piattaforma, e
+# quella degli apparecchi (cavo), che serve solo alle immagini. Il dominio
+# deve puntare alla PRIMA: dall'altra i computer non arrivano. Le reti da non
+# pubblicare stanno in ~/.referralflow-dominio.conf (NON_PUBBLICARE="192.168.0."
+# — prefissi separati da spazio); se resta solo una di quelle, si usa quella.
+indirizzo_del_mac() {
+  local evita="" ripiego="" ip pref salta
+  [ -f "$HOME/.referralflow-dominio.conf" ] && evita="$(grep -E '^NON_PUBBLICARE=' "$HOME/.referralflow-dominio.conf" | head -1 | cut -d= -f2- | tr -d '"')"
   for IF in $(route -n get default 2>/dev/null | awk '/interface:/{print $2}') en0 en1; do
-    IP=$(ipconfig getifaddr "$IF" 2>/dev/null) && [ -n "$IP" ] && break
+    ip=$(ipconfig getifaddr "$IF" 2>/dev/null) || continue
+    [ -n "$ip" ] || continue
+    [ -n "$ripiego" ] || ripiego="$ip"
+    salta=""
+    for pref in $evita; do case "$ip" in "$pref"*) salta=1 ;; esac; done
+    [ -n "$salta" ] || { echo "$ip"; return; }
   done
-fi
+  echo "$ripiego"
+}
+[ -n "$IP" ] || IP="$(indirizzo_del_mac)"
 [ -n "$IP" ] || { echo "nessun indirizzo LAN trovato"; exit 1; }
 API="https://api.infomaniak.com"
 echo "1/3 · record DNS $HOST.$DOM → $IP"

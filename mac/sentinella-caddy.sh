@@ -18,10 +18,26 @@ ULTIMO_IP="$HOME/referti/log/sentinella-caddy.ip"
 mkdir -p "$(dirname "$LOG")"
 
 # ── Indirizzo del Mac contro il record DNS ──────────────────────────────────
-IP=""
-for IF in $(route -n get default 2>/dev/null | awk '/interface:/{print $2}') en0 en1; do
-  IP=$(ipconfig getifaddr "$IF" 2>/dev/null) && [ -n "$IP" ] && break
-done
+# Quale indirizzo pubblicare nel dominio (6.10.2026): il Mac può stare su due
+# reti — quella dello studio, da cui i computer aprono la piattaforma, e
+# quella degli apparecchi (cavo), che serve solo alle immagini. Il dominio
+# deve puntare alla PRIMA: dall'altra i computer non arrivano. Le reti da non
+# pubblicare stanno in ~/.referralflow-dominio.conf (NON_PUBBLICARE="192.168.0."
+# — prefissi separati da spazio); se resta solo una di quelle, si usa quella.
+indirizzo_del_mac() {
+  local evita="" ripiego="" ip pref salta
+  [ -f "$HOME/.referralflow-dominio.conf" ] && evita="$(grep -E '^NON_PUBBLICARE=' "$HOME/.referralflow-dominio.conf" | head -1 | cut -d= -f2- | tr -d '"')"
+  for IF in $(route -n get default 2>/dev/null | awk '/interface:/{print $2}') en0 en1; do
+    ip=$(ipconfig getifaddr "$IF" 2>/dev/null) || continue
+    [ -n "$ip" ] || continue
+    [ -n "$ripiego" ] || ripiego="$ip"
+    salta=""
+    for pref in $evita; do case "$ip" in "$pref"*) salta=1 ;; esac; done
+    [ -n "$salta" ] || { echo "$ip"; return; }
+  done
+  echo "$ripiego"
+}
+IP="$(indirizzo_del_mac)"
 DNS_IP=$(dig +short +time=3 +tries=1 @nsany1.infomaniak.com "$HOST" 2>/dev/null | head -1)
 if [ -n "$IP" ] && [ -n "$DNS_IP" ] && [ "$IP" != "$DNS_IP" ] && [ "$IP" != "$(cat "$ULTIMO_IP" 2>/dev/null)" ]; then
   echo "$(date '+%Y-%m-%dT%H:%M') il Mac è su $IP ma il dominio punta a $DNS_IP: aggiorno il record" >> "$LOG"
