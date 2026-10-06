@@ -75,6 +75,16 @@ export const PAZIENTI_DEMO: PazienteDemo[] = [
   { codice: 'DEMO-013', nome: 'Piera Sangalli (demo)', medico: M1, nota: 'Monitoraggio in pausa.', base: B(69, 97, 14, 33.5, 119, 75), dispositivi: [bracciale()], programma: 'in_pausa' },
 ];
 
+// La demo che si vede ha QUATTRO pazienti (6.10.2026, richiesta dello studio: i
+// monitorati veri saranno circa quattro al mese): uno senza avvisi, uno con
+// l'avviso di attenzione, uno con l'alta priorità, uno col dispositivo
+// scollegato. Gli altri restano nel catalogo per le prove (`MONITORAGGIO_DEMO=
+// completa`) e si possono riprodurre su questi quattro col simulatore.
+const DEMO_BREVE = ['DEMO-001', 'DEMO-003', 'DEMO-004', 'DEMO-005'];
+export function pazientiDaSeminare(): PazienteDemo[] {
+  return process.env.MONITORAGGIO_DEMO === 'completa' ? PAZIENTI_DEMO : PAZIENTI_DEMO.filter((p) => DEMO_BREVE.includes(p.codice));
+}
+
 export function statoIniziale(avviato_il: number): StatoSim {
   const pazienti: Record<string, StatoPazienteSim> = {};
   for (const p of PAZIENTI_DEMO) {

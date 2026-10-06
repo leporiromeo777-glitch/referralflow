@@ -67,8 +67,9 @@ printf 'NOME=Radiologia di prova\nHOST=127.0.0.1\nPORTA=11151\nAE=ARCHIVIODUE\nN
 ARCH2_PID=$!
 REFERTI_IMAGING_BASE="$ARCH" "$PY" imaging/ricevi-dicom.py > "$TMP/ricezione.log" 2>&1 &
 RIC_PID=$!
-# Monitoraggio: sul server di prova il motore è spento (lo guidano le prove, col tempo simulato) e l'AI pure.
-MONITORAGGIO_MOTORE=spento MONITORAGGIO_AI=spenta REFERTI_IMAGING_BASE="$ARCH" IMAGING_MISURE=1 DATABASE_URL="$URL_DB" PORT="$PORTA" npx next dev -p "$PORTA" > "$TMP/server.log" 2>&1 &
+# Monitoraggio: sul server di prova il motore è spento (lo guidano le prove, col tempo simulato) e l'AI pure;
+# la demo è quella COMPLETA (13 pazienti, tutte le situazioni), non i quattro che si vedono di serie.
+MONITORAGGIO_DEMO=completa MONITORAGGIO_MOTORE=spento MONITORAGGIO_AI=spenta REFERTI_IMAGING_BASE="$ARCH" IMAGING_MISURE=1 DATABASE_URL="$URL_DB" PORT="$PORTA" npx next dev -p "$PORTA" > "$TMP/server.log" 2>&1 &
 SERVER_PID=$!
 for _ in $(seq 1 60); do curl -s -o /dev/null "http://localhost:$PORTA/login" && break; sleep 2; done
 curl -s -o /dev/null "http://localhost:$PORTA/login" || { fallito "il server di prova non è partito (vedi $TMP/server.log)"; tail -5 "$TMP/server.log"; exit 1; }
@@ -149,7 +150,7 @@ grep -E "^NO" "$TMP/archivio.txt"; echo "   $(grep -c '^ok' "$TMP/archivio.txt")
 
 echo "→ monitoraggio remoto (demo): stati, isolamento, doppioni, avvisi, permessi, AI spenta"
 C_TEC="$(sessione tecnico)"; C_ADM="$(sessione admin)"; C_SEGR="$(sessione segretaria)"
-DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-monitoraggio.ts "http://localhost:$PORTA" "$STUDIO" "$C_MEDICO" "$C_SEGR" "$C_TEC" "$C_ADM" > "$TMP/monitoraggio.txt" 2>&1 || { fallito "prova-monitoraggio"; cut -c1-300 "$TMP/monitoraggio.txt" | tail -5; }
+MONITORAGGIO_DEMO=completa DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-monitoraggio.ts "http://localhost:$PORTA" "$STUDIO" "$C_MEDICO" "$C_SEGR" "$C_TEC" "$C_ADM" > "$TMP/monitoraggio.txt" 2>&1 || { fallito "prova-monitoraggio"; cut -c1-300 "$TMP/monitoraggio.txt" | tail -5; }
 grep -E "^NO" "$TMP/monitoraggio.txt"; echo "   $(grep -c '^ok' "$TMP/monitoraggio.txt") ok, $(grep -c '^NO' "$TMP/monitoraggio.txt") no"
 
 echo "→ chi vede che cosa: menu dal server e rotte bloccate, ruolo per ruolo"

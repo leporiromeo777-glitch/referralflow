@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizza, puoMon, vistaTecnica, parametro, type Capacita, type DispositivoAbbinato } from './monitoraggio/catalogo';
 import { REGOLE_DEMO, conProfilo, controllaRegola, decidi, rientrato, statoConnessione, statoPaziente, valutaParametro, valutaTecnica, type MisuraVista, type Regola, type StatoTecnico } from './monitoraggio/regole';
-import { PAZIENTI_DEMO, ecgPezzo, genera, statoIniziale, valore, type StatoSim } from './monitoraggio/simulatore';
+import { PAZIENTI_DEMO, ecgPezzo, genera, pazientiDaSeminare, statoIniziale, valore, type StatoSim } from './monitoraggio/simulatore';
 import { rispostaAmmessa, testoFisso, type Fatti } from './monitoraggio/assistente';
 
 const T = Date.UTC(2026, 9, 6, 12, 0, 0);
@@ -113,7 +113,14 @@ const P1 = PAZIENTI_DEMO.find((p) => p.codice === 'DEMO-001')!;
 const disp = (codice: string): DispositivoAbbinato[] => PAZIENTI_DEMO.find((p) => p.codice === codice)!.dispositivi.map((d, i) => ({ id: `${codice}-${i}`, seriale: `SIM-${codice}-${d.chiave}`, modello: d.modello, tipo: d.tipo, capacita: d.capacita, paziente_id: codice, paziente_codice: codice }));
 
 test('simulatore: ripetibile, coerente, graduale; tredici pazienti con le situazioni richieste', () => {
-  assert.ok(PAZIENTI_DEMO.length >= 12);
+  assert.ok(PAZIENTI_DEMO.length >= 12, 'il catalogo delle situazioni, per le prove');
+  // La demo che si vede: quattro pazienti, come saranno i monitorati veri in un mese.
+  const ambientePrima = process.env.MONITORAGGIO_DEMO;
+  delete process.env.MONITORAGGIO_DEMO;
+  assert.deepEqual(pazientiDaSeminare().map((p) => p.codice), ['DEMO-001', 'DEMO-003', 'DEMO-004', 'DEMO-005']);
+  process.env.MONITORAGGIO_DEMO = 'completa';
+  assert.equal(pazientiDaSeminare().length, PAZIENTI_DEMO.length);
+  if (ambientePrima == null) delete process.env.MONITORAGGIO_DEMO; else process.env.MONITORAGGIO_DEMO = ambientePrima;
   assert.ok(PAZIENTI_DEMO.some((p) => p.dispositivi.length >= 3) && PAZIENTI_DEMO.some((p) => p.programma === 'terminato'));
   const stato: StatoSim = { avviato_il: T - 3600_000, pazienti: {} };
   const a = genera(disp('DEMO-001'), T - 300_000, T, stato), b = genera(disp('DEMO-001'), T - 300_000, T, stato);

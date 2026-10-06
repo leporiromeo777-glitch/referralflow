@@ -35,8 +35,12 @@ if (typeof NAV !== 'undefined') for (const r of ['secretary', 'assistant', 'doct
 @media (max-width: 900px) { .rf-mon-evs { grid-template-columns:1fr; } }
 .rf-mon-ev { border:1px solid var(--border); border-radius:16px; padding:14px 16px; cursor:pointer; background:var(--surface-2); display:flex; flex-direction:column; gap:8px; min-width:0; } .rf-mon-ev:hover { border-color:var(--border-2); }
 .rf-mon-ev .nome, .rf-mon-li .nome { font-weight:600; font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.rf-mon-ev .pp { display:grid; grid-template-columns:1fr 1fr; gap:18px; } .rf-mon-ev .p span { font-size:10.5px; color:var(--text-3); text-transform:uppercase; letter-spacing:.04em; display:block; }
-.rf-mon-ev .p b { font-size:20px; font-weight:650; font-variant-numeric:tabular-nums; } .rf-mon-ev .p.oltre b { color:#B37D06; } .rf-mon-ev .p svg { display:block; width:100% !important; height:34px !important; margin-top:4px; }
+.rf-mon-ev .rf-mon-par { margin-top:2px; } .rf-mon-ev .avv { font-size:12.5px; line-height:1.5; } .rf-mon-ev .tec { font-size:11.5px; color:var(--text-2); line-height:1.5; } .rf-mon-ev .tec b { font-weight:600; color:var(--text); }
+.rf-mon-ev.nuovo { animation:rfMonNuovo 2.4s ease-out 1; }
+.rf-mon-ev .rf-mon-p svg { height:30px !important; }
+.rf-mon-ev .rf-mon-par { grid-template-columns:minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1.5fr); gap:10px; }
+.rf-mon-ev .rf-mon-p { overflow:hidden; } .rf-mon-ev .rf-mon-p .v { font-size:18px; } .rf-mon-ev .rf-mon-p .v small { font-size:10px; margin-left:1px; }
+.rf-mon-ev .rf-mon-p.assente .v { font-size:11px; white-space:normal; line-height:1.2; padding-top:3px; } .rf-mon-ev .rf-mon-p .l { font-size:10px; } .rf-mon-ev .p span { font-size:10.5px; color:var(--text-3); text-transform:uppercase; letter-spacing:.04em; display:block; }
 .rf-mon-av { width:36px; height:36px; flex:none; border-radius:50%; display:grid; place-items:center; font-size:12px; font-weight:700; color:var(--text); background:color-mix(in srgb, var(--t, #98A0BE) 16%, var(--surface)); box-shadow:0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--t, #98A0BE) 70%, transparent); }
 .rf-mon-q { width:36px; height:36px; flex:none; border-radius:12px; display:grid; place-items:center; color:var(--t); background:color-mix(in srgb, var(--t) 14%, transparent); }
 .rf-mon-li { display:flex; align-items:center; gap:12px; padding:10px 4px; border-top:1px solid var(--border); cursor:pointer; min-width:0; } .rf-mon-ph + .rf-mon-li { border-top:0; } .rf-mon-li:hover .nome { color:var(--accent-text, #3D58DD); }
@@ -166,39 +170,13 @@ if (!RF.mon._timer) RF.mon._timer = setInterval(() => { void rfMonGiro(); }, 500
 
 /* ---------- panoramica ---------- */
 function rfMonPeso(p) { return { avviso_alta: 0, avviso_attenzione: 1, dati_insufficienti: 2, nessun_avviso: 3, interrotto: 4 }[p.stato] * 10 + (p.avvisi.tecnici ? 0 : 1); }
-function rfMonOrdinati() {
-  const d = RF.mon.dati; if (!d) return [];
-  const tutti = d.pazienti.slice();
-  const m = RF.mon.ordine;
-  if (m === 'nome') tutti.sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
-  else if (m === 'ultimo') tutti.sort((a, b) => (a.eta_s == null ? 1e12 : a.eta_s) - (b.eta_s == null ? 1e12 : b.eta_s));
-  else {
-    // Priorità o manuale: l'ordine è una lista di id che NON cambia da sola.
-    const chiave = m === 'manuale' ? 'manuale' : 'ordineIds';
-    if (!RF.mon[chiave]) RF.mon[chiave] = tutti.slice().sort((a, b) => rfMonPeso(a) - rfMonPeso(b) || a.codice.localeCompare(b.codice)).map(p => p.id);
-    const pos = new Map(RF.mon[chiave].map((id, i) => [id, i]));
-    tutti.sort((a, b) => (pos.has(a.id) ? pos.get(a.id) : 1e6) - (pos.has(b.id) ? pos.get(b.id) : 1e6));
-  }
-  const f = RF.mon.filtri, q = f.q.trim().toLowerCase();
-  return tutti.filter(p => (!q || `${p.nome} ${p.codice}`.toLowerCase().includes(q)) && (!f.medico || p.medico === f.medico)
-    && (!f.stato || p.programma === f.stato)
-    && (!f.avvisi || (f.avvisi === 'alta' ? p.stato === 'avviso_alta' : f.avvisi === 'attenzione' ? p.stato === 'avviso_attenzione' : f.avvisi === 'tecnici' ? p.avvisi.tecnici > 0 : f.avvisi === 'nessuno' ? p.avvisi.aperti === 0 : true))
-    && (!f.conn || p.connessione === f.conn));
-}
 // L'ordine di priorità mostrato è ancora quello vero? Se no lo si dice, ma non si sposta niente da soli.
 function rfMonOrdineVecchio() {
-  const d = RF.mon.dati; if (!d || RF.mon.ordine !== 'priorita' || !RF.mon.ordineIds) return false;
+  const d = RF.mon.dati; if (!d || !RF.mon.ordineIds) return false;
   const vero = d.pazienti.slice().sort((a, b) => rfMonPeso(a) - rfMonPeso(b) || a.codice.localeCompare(b.codice)).map(p => p.id);
   return vero.join() !== RF.mon.ordineIds.join();
 }
 function rfMonRiordina() { RF.mon.ordineIds = null; rfMonDipingiElenco(); }
-function rfMonSposta(id, d) {
-  const l = RF.mon.manuale || []; const i = l.indexOf(id), j = i + d;
-  if (i < 0 || j < 0 || j >= l.length) return;
-  [l[i], l[j]] = [l[j], l[i]];
-  try { localStorage.setItem('rf-mon-ordine', JSON.stringify(l)); } catch { /* niente */ }
-  rfMonDipingiElenco();
-}
 function rfMonSpark(punti, oltre) {
   if (!punti || punti.length < 2) return '<svg viewBox="0 0 100 22" preserveAspectRatio="none"></svg>';
   const t0 = rfMonAdesso() - 30 * 60000, t1 = rfMonAdesso();
@@ -224,28 +202,10 @@ function rfMonCella(p, codice) {
   return `<div class="rf-mon-p ${v.oltre ? 'oltre' : ''} ${v.vecchio ? 'vecchio' : ''}" title="${rfEsc(v.nome)} · ${rfEsc(v.dispositivo || '')}${v.fonte ? ` · ${rfEsc(v.fonte)}` : ''}${v.oltre ? ' · oltre una soglia configurata' : ''}">
     <div class="l">${def}</div><div class="v">${testo}<small>${rfEsc(unita)}</small></div><div class="m">${meta}</div>${p.andamenti[codice] ? rfMonSpark(p.andamenti[codice], v.oltre) : ''}</div>`;
 }
-function rfMonRiga(p) {
-  const a = p.avvisi.prioritario;
-  const avviso = a ? `<div>${rfMonLivello(a)}</div><div style="font-size:12.5px;margin-top:4px;font-weight:600">${rfEsc(a.nome)}${a.rientrato ? ' <span class="caption">· rientrato</span>' : ''}</div>
-      <div class="caption">${RF_MON_STATO_AVV[a.stato]}${a.responsabile ? ` da ${rfEsc(a.responsabile)}` : ''} · dalle ${rfMonOra(a.generato_il)}${p.avvisi.aperti > 1 ? ` · <b>${p.avvisi.aperti} avvisi aperti</b>` : ''}</div>`
-    : p.stato === 'dati_insufficienti' ? '<div class="caption">Nessun avviso, ma i dati non bastano per dirlo: non è «tutto bene».</div>'
-    : p.stato === 'interrotto' ? '<div class="caption">Non si sta monitorando.</div>' : '<div class="caption">Nessun avviso aperto.</div>';
-  const conn = p.connessione === 'in_aggiornamento' ? `In aggiornamento${p.latenza_s != null ? ` · latenza ${p.latenza_s} s` : ''}` : RF_MON_CONN[p.connessione];
-  const man = RF.mon.ordine === 'manuale' ? `<span class="rf-mon-ord" onclick="event.stopPropagation()"><button title="Su" onclick="rfMonSposta('${p.id}',-1)">▲</button><button title="Giù" onclick="rfMonSposta('${p.id}',1)">▼</button></span>` : '';
-  return `<div class="rf-mon-riga ${RF.mon.nuovi && a && RF.mon.nuovi.has(a.id) ? 'nuovo' : ''}" onclick="rfMonApri('${p.id}')">
-    <div class="rf-mon-chi"><div class="row" style="gap:6px;align-items:flex-start">${man}<div><div class="name">${rfEsc(p.nome || p.codice)}</div><div class="sub">${rfEsc(p.codice)} · ${rfEsc(p.medico || 'senza medico')}</div></div></div>
-      <div style="margin-top:6px">${rfMonPillStato(p)}</div></div>
-    <div class="rf-mon-par">${p.in_riga.map(c => rfMonCella(p, c)).join('')}</div>
-    <div>${avviso}${p.silenzio_fino ? `<div class="caption">🔕 richiami silenziati fino alle ${rfMonOra(p.silenzio_fino)}</div>` : ''}</div>
-    <div class="rf-mon-tec"><div><b>${conn}</b></div>
-      <div>Segnale: ${p.qualita == null ? 'non dichiarato' : `${p.qualita}/100${p.qualita < 45 ? ' · insufficiente' : ''}`}</div>
-      <div>Batteria: ${p.batteria == null ? 'non disponibile' : `${p.batteria}%${p.batteria < 15 ? ' · bassa' : ''}`} · ${p.dispositivi.length} ${p.dispositivi.length === 1 ? 'dispositivo' : 'dispositivi'}</div>
-      <div>Ultima misura: ${p.ultimo_dato ? `${rfMonOra(p.ultimo_dato, true)} · ${rfMonFa(p.eta_s)}` : 'nessuna'}</div></div></div>`;
-}
 /* Il cruscotto (6.10.2026, richiesta dello studio: disposto come l'immagine di
-   riferimento): quattro numeri con l'icona, poi pannelli affiancati — pazienti
-   in evidenza e stato di tutti; avvisi aperti e copertura dei
-   dati; attività recente e problemi tecnici. Sotto resta l'elenco completo. */
+   riferimento): quattro numeri con l'icona, poi pannelli affiancati — tutti i
+   pazienti e il loro stato; avvisi aperti e copertura dei
+   dati; attività recente e problemi tecnici. */
 const RF_MON_ICO = {
   persone: '<path d="M16 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 17.5V19"/><circle cx="10" cy="8" r="3.2"/><path d="M20 19v-1.4a3.2 3.2 0 0 0-2.4-3.1M15.5 5a3.2 3.2 0 0 1 0 6"/>',
   allarme: '<path d="M12 4l9 15.5H3z"/><path d="M12 10v4.5M12 17.2v.3"/>',
@@ -295,14 +255,22 @@ function rfMonRiepilogoHtml() {
   const d = RF.mon.dati, r = d.riepilogo, m = d.motore, tutti = rfMonStabili();
   const fermo = !m.attivo ? 'Simulatore spento: non arrivano dati nuovi.' : m.ritardo_s == null || m.ritardo_s > 30 ? `Il motore del server non gira da ${rfMonFa(m.ritardo_s)}: i valori non si stanno aggiornando.` : '';
   const stato = (p) => { const s = RF_MON_STATO[p.stato] || ['', p.stato]; return `<span class="rf-mon-pill ${s[0]}"><i></i>${p.stato === 'interrotto' ? (p.programma === 'terminato' ? 'Terminato' : 'In pausa') : s[1].replace(' rilevato', '')}</span>`; };
-  // In evidenza: i quattro pazienti in cima all'ordine di priorità, coi due parametri che hanno un andamento.
-  const evidenza = tutti.filter(p => p.programma === 'attivo').slice(0, 4).map(p => {
-    const v = (c) => p.parametri.find(x => x.codice === c);
-    const cella = (c, nome) => { const x = v(c); return `<div class="p ${x && x.oltre ? 'oltre' : ''}"><span>${nome}</span><b>${!x || d.vista_tecnica ? '—' : x.valore == null ? 'n.d.' : rfMonNum(x.valore, x.decimali)}</b>${x && p.andamenti[c] ? rfMonSpark(p.andamenti[c], x.oltre) : ''}</div>`; };
-    return `<div class="rf-mon-ev" onclick="rfMonApri('${p.id}')"><div class="row between" style="gap:6px"><div class="row" style="gap:8px;min-width:0"><span class="rf-mon-av" style="--t:${RF_MON_TONO[p.stato]}">${rfEsc(rfMonIniziali(p.nome))}</span><div style="min-width:0"><div class="nome">${rfEsc(String(p.nome || p.codice).replace(' (demo)', ''))}</div><div class="caption">${rfEsc(p.codice)}</div></div></div></div>
-      <div class="pp">${cella('fc', 'FC')}${cella('spo2', 'SpO₂')}</div><div>${stato(p)}</div></div>`;
+  // «Pazienti» (6.10.2026, richiesta dello studio: i monitorati saranno pochi, niente elenco a parte):
+  // TUTTI i pazienti qui, ognuno con ciò che stava nella riga dell'elenco — parametri con unità e
+  // andamento, avviso prioritario e numero di avvisi, segnale, connessione, batteria, ultima misura.
+  const evidenza = tutti.map(p => {
+    const a = p.avvisi.prioritario;
+    const avviso = a ? `${rfMonLivello(a)} <b>${rfEsc(a.nome)}</b>${a.rientrato ? ' · rientrato' : ''} <span class="caption">· ${RF_MON_STATO_AVV[a.stato]}${a.responsabile ? ` da ${rfEsc(a.responsabile)}` : ''} · dalle ${rfMonOra(a.generato_il)}${p.avvisi.aperti > 1 ? ` · ${p.avvisi.aperti} avvisi aperti` : ''}</span>`
+      : `<span class="caption">${p.stato === 'dati_insufficienti' ? 'Nessun avviso, ma i dati non bastano per dirlo: non è «tutto bene».' : p.stato === 'interrotto' ? 'Non si sta monitorando.' : 'Nessun avviso aperto.'}</span>`;
+    const conn = p.connessione === 'in_aggiornamento' ? `In aggiornamento${p.latenza_s != null ? ` · latenza ${p.latenza_s} s` : ''}` : RF_MON_CONN[p.connessione];
+    return `<div class="rf-mon-ev ${RF.mon.nuovi && a && RF.mon.nuovi.has(a.id) ? 'nuovo' : ''}" onclick="rfMonApri('${p.id}')">
+      <div class="row between" style="gap:8px;align-items:flex-start"><div class="row" style="gap:10px;min-width:0"><span class="rf-mon-av" style="--t:${RF_MON_TONO[p.stato]}">${rfEsc(rfMonIniziali(p.nome))}</span>
+        <div style="min-width:0"><div class="nome">${rfEsc(String(p.nome || p.codice).replace(' (demo)', ''))}</div><div class="caption">${rfEsc(p.codice)} · ${rfEsc(p.medico || 'senza medico')}</div></div></div>${stato(p)}</div>
+      <div class="rf-mon-par">${p.in_riga.map(c => rfMonCella(p, c)).join('')}</div>
+      <div class="avv">${avviso}${p.silenzio_fino ? ` <span class="caption">· 🔕 richiami silenziati fino alle ${rfMonOra(p.silenzio_fino)}</span>` : ''}</div>
+      <div class="tec"><b>${conn}</b> · segnale ${p.qualita == null ? 'non dichiarato' : `${p.qualita}/100${p.qualita < 45 ? ' (insufficiente)' : ''}`} · batteria ${p.batteria == null ? 'non disponibile' : `${p.batteria}%${p.batteria < 15 ? ' (bassa)' : ''}`} · ${p.dispositivi.length} ${p.dispositivi.length === 1 ? 'dispositivo' : 'dispositivi'} · ultima misura ${p.ultimo_dato ? `${rfMonOra(p.ultimo_dato, true)} (${rfMonFa(p.eta_s)})` : 'nessuna'}</div></div>`;
   }).join('');
-  const elenco = tutti.slice(0, 6).map(p => `<div class="rf-mon-li" onclick="rfMonApri('${p.id}')"><span class="rf-mon-av" style="--t:${RF_MON_TONO[p.stato]}">${rfEsc(rfMonIniziali(p.nome))}</span>
+  const elenco = tutti.map(p => `<div class="rf-mon-li" onclick="rfMonApri('${p.id}')"><span class="rf-mon-av" style="--t:${RF_MON_TONO[p.stato]}">${rfEsc(rfMonIniziali(p.nome))}</span>
       <div class="grow" style="min-width:0"><div class="nome">${rfEsc(String(p.nome || p.codice).replace(' (demo)', ''))}</div><div class="caption">${rfEsc(p.medico || p.codice)}</div></div>${stato(p)}</div>`).join('');
   const clinici = (d.avvisi_aperti || []).filter(a => a.categoria === 'parametro'), tecnici = (d.avvisi_aperti || []).filter(a => a.categoria === 'tecnico');
   const riga = (a) => `<div class="rf-mon-li" onclick="rfMonApri('${a.paziente_id}')"><div class="ora">${rfMonOra(a.generato_il)}</div><div class="grow" style="min-width:0"><div class="nome">${rfEsc(a.nome)}</div><div class="caption">${rfEsc(String(a.paziente || '').replace(' (demo)', ''))} · ${rfEsc(a.codice || '')}</div></div>
@@ -319,25 +287,19 @@ function rfMonRiepilogoHtml() {
   return `${fermo ? `<div class="rf-manc mb-16">${fermo}</div>` : ''}${RF.mon.errore ? `<div class="rf-manc mb-16">${rfEsc(RF.mon.errore)}</div>` : ''}
     <div class="rf-mon-kpis">${rfMonKpi('Pazienti monitorati', r.monitorati, `su ${r.totale} in elenco`, '', 'persone')}${rfMonKpi('Alta priorità', r.alta_priorita, 'avvisi di livello 2', r.alta_priorita ? 'alta' : '', 'allarme')}
       ${rfMonKpi('Attenzione', r.attenzione, 'avvisi di livello 1', r.attenzione ? 'att' : '', 'occhio')}${rfMonKpi('Dati insufficienti', r.dati_insufficienti, `${r.dispositivi_disconnessi} ${r.dispositivi_disconnessi === 1 ? 'dispositivo scollegato' : 'dispositivi scollegati'} · ${r.con_avvisi_tecnici} con problemi tecnici`, '', 'segnale')}</div>
-    <div class="rf-mon-dash a"><div class="rf-mon-pan">${testa('Pazienti in evidenza', '<span class="caption">per priorità</span>')}<div class="rf-mon-evs">${evidenza || vuoto('Nessun paziente in monitoraggio.')}</div></div>
-      <div class="rf-mon-pan">${testa('Stato dei pazienti', `<button class="rf-mon-vedi" onclick="document.getElementById('rf-mon-tutti').scrollIntoView({ behavior: 'smooth' })">Vedi tutti</button>`)}${elenco}</div></div>
+    <div class="rf-mon-dash a"><div class="rf-mon-pan">${testa(`Pazienti <span class="badge count" style="margin-left:6px">${tutti.length}</span>`, rfMonOrdineVecchio() ? '<span><span class="caption">la priorità è cambiata: i riquadri non si spostano da soli · </span><button class="rf-mon-vedi" onclick="rfMonRiordina()">Riordina</button></span>' : '<span class="caption">in ordine di priorità</span>')}<div class="rf-mon-evs">${evidenza || vuoto('Nessun paziente.')}</div></div>
+      <div class="rf-mon-pan">${testa('Stato dei pazienti', '<span class="caption">adesso</span>')}${elenco}</div></div>
     <div class="rf-mon-dash b"><div class="rf-mon-pan">${testa('Avvisi sui parametri', vedi('avvisi', 'Vedi tutti'))}${clinici.length ? clinici.slice(0, 5).map(riga).join('') : vuoto('Nessun avviso sui parametri aperto.')}</div>
       <div class="rf-mon-pan">${testa('Copertura dei dati', '<span class="caption">ultimi 30 minuti</span>')}${d.vista_tecnica ? vuoto('Vista tecnica: lo stato del flusso è nei problemi tecnici qui sotto.') : rfMonCopertura()}</div></div>
     <div class="rf-mon-dash b"><div class="rf-mon-pan">${testa('Attività recente', vedi('avvisi', 'Vedi tutti'))}${(d.attivita || []).length ? d.attivita.slice(0, 5).map(att).join('') : vuoto('Ancora nessuna azione registrata.')}</div>
       <div class="rf-mon-pan">${testa('Problemi tecnici', vedi('dispositivi', 'Dispositivi'))}${tecnici.length ? tecnici.slice(0, 5).map(tec).join('') : vuoto('Nessun problema tecnico aperto.')}</div></div>`;
 }
-function rfMonElencoHtml() {
-  const l = rfMonOrdinati();
-  const nota = rfMonOrdineVecchio() ? `<div class="row between" style="margin-bottom:8px"><span class="caption">L'ordine di priorità è cambiato da quando hai aperto l'elenco: le righe non si spostano da sole.</span><button class="btn sm" onclick="rfMonRiordina()">Riordina</button></div>` : '';
-  return nota + (l.length ? l.map(rfMonRiga).join('') : '<div class="card"><div class="caption">Nessun paziente con questi filtri.</div></div>');
-}
 function rfMonDipingiElenco() {
-  const a = document.getElementById('rf-mon-riepilogo'), b = document.getElementById('rf-mon-elenco');
-  if (!a || !b || !RF.mon.dati) return;
-  a.innerHTML = rfMonRiepilogoHtml(); b.innerHTML = rfMonElencoHtml();
+  const a = document.getElementById('rf-mon-riepilogo');
+  if (!a || !RF.mon.dati) return;
+  a.innerHTML = rfMonRiepilogoHtml();
   const o = document.getElementById('rf-mon-agg'); if (o) o.textContent = `aggiornato alle ${rfMonOra(RF.mon.dati.ora, true)}`;
 }
-function rfMonFiltro(k, v) { RF.mon.filtri[k] = v; rfMonDipingiElenco(); }
 function rfMonSchede() {
   const d = RF.mon.dati, puo = (d && d.puo) || {};
   const voci = [['pazienti', 'Pazienti'], ['avvisi', 'Avvisi'], ...(d && d.vista_tecnica ? [] : [['regole', 'Regole']]), ['dispositivi', 'Dispositivi'], ...(puo.simulatore ? [['simulatore', 'Simulatore']] : []), ['info', 'Che cos\'è']];
@@ -354,8 +316,7 @@ PAGES.monitoraggio = () => {
   if (!RF.mon.dati && !RF.mon.errore) { void rfMonCarica().then(() => render()); return `${RF_MON_DEMO}<div class="page-head"><div><h2 class="page-title">Monitoraggio</h2></div></div><div class="card"><div class="caption">Carico…</div></div>`; }
   if (!RF.mon.dati) return `${RF_MON_DEMO}<div class="page-head"><div><h2 class="page-title">Monitoraggio</h2></div></div><div class="rf-manc">${rfEsc(RF.mon.errore)}</div>`;
   if (RF.mon.aperto) return rfMonDettaglio();
-  const d = RF.mon.dati, f = RF.mon.filtri;
-  const sel = (k, voci) => `<select class="input" onchange="rfMonFiltro('${k}', this.value)">${voci.map(([v, t]) => `<option value="${rfEsc(v)}" ${f[k] === v ? 'selected' : ''}>${rfEsc(t)}</option>`).join('')}</select>`;
+  const d = RF.mon.dati;
   const testa = `${RF_MON_DEMO}<div class="page-head"><div><h2 class="page-title">Monitoraggio</h2><div class="page-sub">Monitoraggio remoto multiparametrico · <span id="rf-mon-agg">aggiornato alle ${rfMonOra(d.ora, true)}</span></div></div>
     <div class="actions"><label class="caption" style="display:flex;gap:6px;align-items:center"><input type="checkbox" ${RF.mon.suoni ? 'checked' : ''} onchange="rfMonSuoni(this.checked)"> Suono per i nuovi avvisi di livello 2</label></div></div>${rfMonSchede()}`;
   if (RF.mon.scheda === 'avvisi') return `${testa}<div id="rf-mon-avvisi">${rfMonAvvisiHtml()}</div>`;
@@ -363,15 +324,7 @@ PAGES.monitoraggio = () => {
   if (RF.mon.scheda === 'dispositivi') return testa + rfMonDispositiviHtml();
   if (RF.mon.scheda === 'simulatore') return testa + rfMonSimulatoreHtml();
   if (RF.mon.scheda === 'info') return testa + rfMonInfoHtml();
-  return `${testa}<div id="rf-mon-riepilogo">${rfMonRiepilogoHtml()}</div>
-    <div class="rf-mon-ph" id="rf-mon-tutti" style="margin:22px 2px 10px"><b>Tutti i pazienti</b><span class="caption">parametri, andamenti e stato di ognuno</span></div>
-    <div class="rf-mon-filtri"><input class="input grow" placeholder="Cerca per nome o codice" value="${rfEsc(f.q)}" oninput="rfMonFiltro('q', this.value)" style="min-width:200px">
-      ${sel('medico', [['', 'Tutti i medici'], ...d.medici.map(m => [m, m])])}
-      ${sel('stato', [['', 'Ogni stato del programma'], ['attivo', 'Monitoraggio attivo'], ['in_pausa', 'In pausa'], ['terminato', 'Terminato']])}
-      ${sel('avvisi', [['', 'Ogni livello di avviso'], ['alta', 'Alta priorità (livello 2)'], ['attenzione', 'Attenzione (livello 1)'], ['tecnici', 'Problemi tecnici'], ['nessuno', 'Senza avvisi aperti']])}
-      ${sel('conn', [['', 'Ogni connessione'], ['in_aggiornamento', 'In aggiornamento'], ['in_ritardo', 'Dati in ritardo'], ['interrotta', 'Connessione interrotta'], ['terminato', 'Monitoraggio non attivo']])}
-      <select class="input" onchange="RF.mon.ordine=this.value;rfMonDipingiElenco()" title="Ordine delle righe">${[['priorita', 'Ordina per priorità'], ['nome', 'Ordina per nome'], ['ultimo', 'Ordina per ultima misura'], ['manuale', 'Ordine manuale']].map(([v, t]) => `<option value="${v}" ${RF.mon.ordine === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
-    <div id="rf-mon-elenco">${rfMonElencoHtml()}</div>`;
+  return `${testa}<div id="rf-mon-riepilogo">${rfMonRiepilogoHtml()}</div>`;
 };
 
 /* ---------- avvisi ---------- */

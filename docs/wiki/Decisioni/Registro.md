@@ -582,3 +582,11 @@ barra laterale chiara e staccata, notte in blu profondo. È uno strato (`vetro.c
 `minimal.css`: nessuna pagina è stata riscritta e si torna indietro con una riga. Tenuta la regola
 del 15.9 sulla sfocatura (solo cornice fissa): le carte non usano `backdrop-filter`.
 
+## 6.10.2026 — Monitoraggio: quattro pazienti, tutti nel cruscotto, niente elenco a parte
+Lo studio prevede circa quattro pazienti monitorati al mese. Quindi: la pagina è un cruscotto
+(disposto come l'immagine di riferimento, solo qui) e i pazienti stanno TUTTI in un riquadro
+«Pazienti», ognuno con ciò che prima stava nella riga dell'elenco; via l'elenco con ricerca e filtri,
+via la ciambella della distribuzione; la demo che si vede ha quattro pazienti e non tredici (il
+catalogo completo resta per le prove). Se un giorno i monitorati diventassero decine, ricerca e
+filtri vanno rimessi: con tanti riquadri la pagina non si legge più.
+

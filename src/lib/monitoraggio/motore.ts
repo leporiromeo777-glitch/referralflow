@@ -2,7 +2,7 @@ import 'server-only';
 import { query, transazione } from '../db';
 import { normalizza, type Adattatore, type Capacita, type DispositivoAbbinato, type Lotto } from './catalogo';
 import { REGOLE_DEMO, conProfilo, decidi, rientrato, valutaParametro, valutaTecnica, type Esito, type MisuraVista, type Regola, type StatoTecnico } from './regole';
-import { PAZIENTI_DEMO, creaSimulatore, serialeDi, statoIniziale, type Evento, type StatoPazienteSim, type StatoSim } from './simulatore';
+import { creaSimulatore, pazientiDaSeminare, serialeDi, statoIniziale, type Evento, type StatoPazienteSim, type StatoSim } from './simulatore';
 
 // Il MOTORE del monitoraggio (6.10.2026), lato server. A ogni giro:
 //   1. acquisizione — chiede agli adattatori ciò che è arrivato dall'ultimo giro;
@@ -45,7 +45,7 @@ async function semina(q: Q, studioId: string, ora: Date): Promise<void> {
   for (const r of REGOLE_DEMO) {
     await q(`insert into mon_regole (studio_id, ambiente, chiave, versione, definizione, attiva, illustrativa) values ($1, $2, $3, 1, $4, true, true)`, [studioId, AMB, r.chiave, JSON.stringify(r)]);
   }
-  for (const p of PAZIENTI_DEMO) {
+  for (const p of pazientiDaSeminare()) {
     const [{ id }] = await q<{ id: string }>(
       `insert into mon_pazienti (studio_id, ambiente, codice, nome, medico, programma, iniziato_il, terminato_il)
        values ($1, $2, $3, $4, $5, $6, $7::timestamptz - interval '3 days', case when $6 = 'terminato' then $7::timestamptz - interval '20 hours' end) returning id`,
