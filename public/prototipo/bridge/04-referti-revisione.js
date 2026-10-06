@@ -1132,6 +1132,24 @@ function rfGrassettoTrova(testo, grassetti) {
       out.push([m.index, m.index + m[0].length]);
     }
   }
+  // Le categorie (FRCV, comorbidità, terapia…): l'etichetta della stessa
+  // categoria di una in grassetto nelle lettere del paziente, in testa a una
+  // frase e coi due punti. Il modello della categoria lo manda il server.
+  const cat = grassetti.filter(g => g.etichetta && g.modello);
+  if (cat.length) {
+    for (const m of testo.matchAll(/(^|[.!?]\s+)([\s•\-–]*)([^\n:.!?;]{2,45}):/gmu)) {
+      const k = m[3].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+      if (!k || k.length > 48) continue;
+      const g = cat.find(x => new RegExp(x.modello).test(k));
+      if (!g) continue;
+      const da = m.index + m[1].length + m[2].length, a = da + m[3].length + (/:\s*$/.test(g.testo) ? 1 : 0);
+      let libero = true;
+      for (let i = da; i < a; i++) if (segni[i]) { libero = false; break; }
+      if (!libero) continue;
+      segni.fill(1, da, a);
+      out.push([da, a]);
+    }
+  }
   return out;
 }
 // Nel testo della revisione il grassetto si DIPINGE sopra (CSS highlight):
@@ -1174,7 +1192,7 @@ function rfAggCorpo() {
   if (!RF.live || !RF.loaded) return '';
   if (RF.aggPer !== RF.loaded) { void rfCaricaAgg(); return ''; }
   const a = RF.agg; if (!a || !a.abilitato) return '';
-  const scelteHtml = (lista, testo) => lista && lista.length ? `<div class="row" style="gap:6px;margin-top:4px"><select class="input sm grow" id="rf-agg-scelta">${lista.map(f => `<option value="${rfEsc(f.tipo)}|${rfEsc(f.id)}">${rfEsc(f.etichetta)}</option>`).join('')}</select><button class="btn sm" onclick="rfAggScegli()">${testo}</button></div>` : '';
+  const scelteHtml = (lista, testo) => lista && lista.length ? `<div class="row" style="gap:6px;margin-top:4px"><select class="input sm grow" id="rf-agg-scelta">${lista.map(f => `<option value="${rfEsc(f.tipo)}|${rfEsc(f.id)}|${f.da || ''}|${f.a || ''}">${rfEsc(f.etichetta)}${f.tipo === 'pagine' ? ` · lettera del ${rfEsc(f.data)}` : ''}</option>`).join('')}</select><button class="btn sm" onclick="rfAggScegli()">${testo}</button></div>` : '';
   if (a.applicato && a.applicato.stampella) {
     // Lettera chiesta non trovata: la più recente ha fatto da aiuto (1.10.2026).
     const cor = a.applicato.correzioni || [];
@@ -1232,8 +1250,8 @@ async function rfAggAzione(corpo) {
 }
 function rfAggScegli() {
   const v = (document.getElementById('rf-agg-scelta') || {}).value || '';
-  const [tipo, id] = v.split('|');
-  if (id) void rfAggAzione({ azione: 'scegli', fonte: { tipo, id } });
+  const [tipo, id, da, a] = v.split('|');
+  if (id) void rfAggAzione({ azione: 'scegli', fonte: { tipo, id, da: Number(da) || undefined, a: Number(a) || undefined } });
 }
 function rfAggAggiungi() {
   const novita = Object.entries(RF.aggNovita || {}).filter(([, v]) => v).map(([k]) => Number(k));

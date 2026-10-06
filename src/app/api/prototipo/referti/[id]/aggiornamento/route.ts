@@ -53,7 +53,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   const c = await req.json().catch(() => null);
   const sid = session.studioId;
   if (c?.azione === 'scegli') {
-    const f = c.fonte && typeof c.fonte === 'object' && isUuid(String(c.fonte.id ?? '')) && ['referto', 'documento'].includes(String(c.fonte.tipo)) ? { tipo: String(c.fonte.tipo), id: String(c.fonte.id) } : null;
+    const pag = (x: unknown) => (Number.isInteger(Number(x)) && Number(x) > 0 && Number(x) < 5000 ? Number(x) : undefined);
+    const f = c.fonte && typeof c.fonte === 'object' && isUuid(String(c.fonte.id ?? '')) && ['referto', 'documento', 'pagine'].includes(String(c.fonte.tipo))
+      ? { tipo: String(c.fonte.tipo), id: String(c.fonte.id), da: pag(c.fonte.da), a: pag(c.fonte.a) } : null;
+    if (f?.tipo === 'pagine' && !f.da) return NextResponse.json({ errore: 'pagine' }, { status: 400 });
     await scegliLettera(sid, params.id, f);
     return NextResponse.json({ ok: true });
   }

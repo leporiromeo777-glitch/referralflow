@@ -9,7 +9,7 @@ import { etichettaDocumento } from './referti-allegato-blocco';
 import { aggiorna, eFemminile, pulisciScansione, richiestaAggiornamento, stampella, type Correzione, type Proposta } from './aggiorna-lettera';
 import { cercaPagine, etichettaData, lettereNellePagine, rxDataPagina, type DataCercata } from './cerca-in-cartella';
 import { registraTestoMacchina } from './audit/lineage';
-import { applicaGrassetti, grassettiDelCorpo, stessoTesto, type Grassetto } from './forma-lettera';
+import { applicaGrassetti, famigliaDi, grassettiDelCorpo, modelloFamiglia, riordinaGrassetti, stessoTesto, type Grassetto } from './forma-lettera';
 import { formaDelPdf, grassettiDelDocx } from './forma-lettera-server';
 
 // Aggiornamento della lettera vecchia, lato piattaforma (28.9.2026). Parte
@@ -61,13 +61,14 @@ async function conForma(studioId: string, t: Trovata): Promise<Trovata> {
 
 // Il grassetto salvato con la bozza e, fra quelle frasi, quali ci sono nel
 // testo di adesso (la revisione mostra queste).
-export type FormaBozza = { grassetti: Grassetto[]; presenti: string[]; spento: boolean; fonte: Fonte | null };
+export type FormaBozza = { grassetti: (Grassetto & { modello?: string })[]; presenti: string[]; spento: boolean; fonte: Fonte | null };
 function formaSalvata(p: any, testo: string): FormaBozza | null {
   const f = p?.forma_lettera;
   if (!f || !Array.isArray(f.grassetti) || !f.grassetti.length) return null;
   const grassetti: Grassetto[] = f.grassetti.filter((g: any) => g && typeof g.testo === 'string');
   const presenti = grassetti.filter((g) => String(testo || '').split(/\n/).some((r) => applicaGrassetti(r, [g]).some((x) => x.b))).map((g) => g.testo);
-  return { grassetti, presenti, spento: !!f.spento, fonte: f.fonte ?? null };
+  // `modello`: la categoria dell'etichetta, perché la pagina dipinga con la stessa regola del Word.
+  return { grassetti: grassetti.map((g) => { const m = g.etichetta ? modelloFamiglia(famigliaDi(g.testo)) : null; return m ? { ...g, modello: m } : g; }), presenti, spento: !!f.spento, fonte: f.fonte ?? null };
 }
 
 const fmt = (d: Date | string) => new Intl.DateTimeFormat('it-CH', { timeZone: 'Europe/Zurich', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d));
@@ -208,18 +209,20 @@ export async function statoAggiornamento(studioId: string, bozzaId: string): Pro
   const grezzo = String(p.testo_corretto ?? '');
   const dalDettato = richiestaAggiornamento(primaFrase(grezzo), note, quando);
   const scelta = p.aggiornamento_scelta && typeof p.aggiornamento_scelta === 'object' ? p.aggiornamento_scelta as { tipo: string; id: string; da?: number; a?: number } : null;
+  // Tutte le lettere fra cui scegliere a mano: anche quelle dentro le cartelle scansionate (6.10.2026).
+  const scelteDi = async (): Promise<Fonte[]> => (nome ? (await lettereDelPaziente(studioId, bozzaId, nome).catch(() => [])).map((t) => t.fonte) : await elencoLettere(studioId, bozzaId, nome));
   const nome = String(b.campi_confermati?.nome_paziente ?? p.campi_estratti?.nome_paziente ?? '').trim();
 
   // Senza richiesta del medico né scelta a mano: solo l'elenco per il tasto
   // «Aggiorna una lettera vecchia…».
-  if (!dalDettato && !scelta) return { ...base, scelte: await elencoLettere(studioId, bozzaId, nome) };
+  if (!dalDettato && !scelta) return { ...base, scelte: await scelteDi() };
   const data = dalDettato?.data ?? null;
   const richiesta = { dal_dettato: !!dalDettato, data: data ? etichettaData(data) : null };
-  let trovate = await lettereVecchie(studioId, bozzaId, nome, scelta ? null : data);
-  if (scelta) trovate = trovate.filter((t) => t.fonte.tipo === scelta.tipo && t.fonte.id === scelta.id);
-  const vecchia = trovate[0] ? await conForma(studioId, trovate[0]) : undefined;
+  let trovate = scelta?.tipo === 'pagine' && nome ? await lettereDelPaziente(studioId, bozzaId, nome) : await lettereVecchie(studioId, bozzaId, nome, scelta ? null : data);
+  if (scelta) trovate = trovate.filter((t) => t.fonte.tipo === scelta.tipo && t.fonte.id === scelta.id && (scelta.tipo !== 'pagine' || t.fonte.da === scelta.da));
+  const vecchia = trovate[0] ? await conCategorie(studioId, trovate[0], nome ? await lettereDelPaziente(studioId, bozzaId, nome) : []) : undefined;
   if (!vecchia) {
-    const tutte = await elencoLettere(studioId, bozzaId, nome);
+    const tutte = await scelteDi();
     const msg = !nome ? 'Manca il nome del paziente nei campi: senza, la lettera vecchia non si trova.'
       : data ? `Il medico chiede la lettera del ${etichettaData(data)}, ma non la trovo né tra i referti confermati né nella cartella.`
       : 'Nessuna lettera vecchia di questo paziente, né tra i referti confermati né nella cartella.';
@@ -249,13 +252,13 @@ export async function statoAggiornamento(studioId: string, bozzaId: string): Pro
 }
 
 // Scelta a mano della lettera vecchia (anche senza richiesta del medico).
-export async function scegliLettera(studioId: string, bozzaId: string, fonte: { tipo: string; id: string } | null): Promise<void> {
+export async function scegliLettera(studioId: string, bozzaId: string, fonte: { tipo: string; id: string; da?: number; a?: number } | null): Promise<void> {
   if (!fonte) {
     await query(`update referti_bozze set payload = payload - 'aggiornamento_scelta' where id = $1 and studio_id = $2 and stato = 'bozza'`, [bozzaId, studioId]);
     return;
   }
   await query(`update referti_bozze set payload = jsonb_set(payload, '{aggiornamento_scelta}', $3::jsonb) where id = $1 and studio_id = $2 and stato = 'bozza'`,
-    [bozzaId, studioId, JSON.stringify({ tipo: fonte.tipo, id: fonte.id })]);
+    [bozzaId, studioId, JSON.stringify({ tipo: fonte.tipo, id: fonte.id, ...(fonte.tipo === 'pagine' ? { da: fonte.da, a: fonte.a } : {}) })]);
 }
 
 // Applica: le frasi nuove scelte entrano in fondo alla parte ripresa dalla
@@ -354,7 +357,19 @@ export async function aggiungiNovita(studioId: string, bozzaId: string, scelte: 
 // La lettera più recente del paziente, fra referti confermati, lettere in
 // cartella e lettere dentro le cartelle scansionate (con la loro data, letta
 // in testa alla lettera; se non c'è, la data del caricamento).
-export async function letteraPiuRecente(studioId: string, bozzaId: string, nome: string): Promise<Trovata | null> {
+// Le lettere del paziente si rileggono spesso (stato della revisione,
+// proposta, applicazione): per tre minuti valgono quelle già lette.
+const lette = new Map<string, { quando: number; lista: Promise<Trovata[]> }>();
+function lettereDelPaziente(studioId: string, bozzaId: string, nome: string): Promise<Trovata[]> {
+  const k = `${studioId}:${bozzaId}:${nome}`;
+  const c = lette.get(k);
+  if (c && Date.now() - c.quando < 180_000) return c.lista;
+  const lista = leggiLettereDelPaziente(studioId, bozzaId, nome).catch((e) => { lette.delete(k); throw e; });
+  lette.set(k, { quando: Date.now(), lista });
+  if (lette.size > 20) lette.delete(lette.keys().next().value as string);
+  return lista;
+}
+async function leggiLettereDelPaziente(studioId: string, bozzaId: string, nome: string): Promise<Trovata[]> {
   const cand: { t: Trovata; quando: number }[] = [];
   const conData = (d: Date | null, alt: Date) => (d ?? alt).getTime();
   for (const t of await lettereVecchie(studioId, bozzaId, nome, null)) {
@@ -385,7 +400,35 @@ export async function letteraPiuRecente(studioId: string, bozzaId: string, nome:
     }
   }
   cand.sort((x, y) => y.quando - x.quando);
-  return cand[0] ? conForma(studioId, cand[0].t) : null;
+  return cand.map((c) => c.t);
+}
+
+// Le CATEGORIE in grassetto nelle lettere del paziente (6.10.2026,
+// precisazione dello studio: «sono sempre le stesse, e vanno prese dalle
+// lettere già nella documentazione del paziente»). Non basta la lettera più
+// recente: una può essere un biglietto senza sezioni, o un referto confermato
+// in piattaforma che il grassetto non ce l'ha. Si leggono le QUATTRO lettere
+// più recenti e da quelle dopo la prima si tengono solo le etichette di
+// categoria (FRCV, comorbidità, terapia…), non le altre frasi in grassetto.
+const LETTERE_PER_LE_CATEGORIE = 4;
+async function conCategorie(studioId: string, prima: Trovata, tutte: Trovata[]): Promise<Trovata> {
+  const base = await conForma(studioId, prima);
+  const stessa = (a: Fonte, b: Fonte) => a.tipo === b.tipo && a.id === b.id && (a.da ?? 0) === (b.da ?? 0);
+  const altre: Grassetto[] = [];
+  for (const t of tutte.filter((x) => !stessa(x.fonte, prima.fonte)).slice(0, LETTERE_PER_LE_CATEGORIE - 1)) {
+    for (const g of (await conForma(studioId, t)).grassetti ?? []) if (g.etichetta && famigliaDi(g.testo)) altre.push(g);
+  }
+  if (!altre.length) return base;
+  // Una categoria che la lettera scelta ha già resta com'è scritta lì.
+  const mie = new Set((base.grassetti ?? []).filter((g) => g.etichetta).map((g) => famigliaDi(g.testo)).filter(Boolean));
+  const nuove = new Map<string, Grassetto>();
+  for (const g of altre) { const f = famigliaDi(g.testo)!; if (!mie.has(f) && !nuove.has(f)) nuove.set(f, g); else if (!mie.has(f) && g.stacco && !nuove.get(f)!.stacco) nuove.set(f, g); }
+  return { ...base, grassetti: riordinaGrassetti([...(base.grassetti ?? []), ...nuove.values()], 200) };
+}
+
+export async function letteraPiuRecente(studioId: string, bozzaId: string, nome: string): Promise<Trovata | null> {
+  const tutte = await lettereDelPaziente(studioId, bozzaId, nome);
+  return tutte[0] ? conCategorie(studioId, tutte[0], tutte) : null;
 }
 
 // Il grassetto della lettera vecchia salvato con la bozza: il Word e la
@@ -402,16 +445,17 @@ async function salvaForma(studioId: string, bozzaId: string, grassetti: Grassett
 export async function recuperaForma(studioId: string, bozzaId: string): Promise<number | null> {
   const b = await bozza(studioId, bozzaId);
   const ag = b?.payload?.aggiornamento_lettera;
-  if (!b || b.stato !== 'bozza' || !ag?.fonte?.id || b.payload?.forma_lettera) return null;
+  // Mai sopra una scelta di chi rivede (grassetto spento o frasi tolte).
+  if (!b || b.stato !== 'bozza' || !medicoAggiornaLettera(b.payload?.medico?.id) || b.payload?.ombra || b.payload?.forma_lettera?.spento || b.payload?.forma_lettera?.toccata) return null;
   const nome = String(b.campi_confermati?.nome_paziente ?? b.payload?.campi_estratti?.nome_paziente ?? '').trim();
-  const stessa = (f: Fonte) => f.tipo === ag.fonte.tipo && f.id === ag.fonte.id && (f.da ?? 0) === (ag.fonte.da ?? 0);
-  let t: Trovata | null | undefined = (await lettereVecchie(studioId, bozzaId, nome, null)).find((x) => stessa(x.fonte));
-  if (t) t = await conForma(studioId, t);
-  else { const piu = nome ? await letteraPiuRecente(studioId, bozzaId, nome) : null; t = piu && stessa(piu.fonte) ? piu : null; }
+  const stessa = (f: Fonte) => !!ag?.fonte?.id && f.tipo === ag.fonte.tipo && f.id === ag.fonte.id && (f.da ?? 0) === (ag.fonte.da ?? 0);
+  const tutte = nome ? await lettereDelPaziente(studioId, bozzaId, nome) : [];
+  const scelta = tutte.find((x) => stessa(x.fonte)) ?? tutte[0];
+  const t = scelta ? await conCategorie(studioId, scelta, tutte) : null;
   if (!t?.grassetti?.length) return 0;
   const testo = String(b.testo_finale ?? b.payload?.testo_corretto ?? '');
   const presenti = t.grassetti.filter((g) => testo.split(/\n/).some((r) => applicaGrassetti(r, [g]).some((x) => x.b)));
-  await salvaForma(studioId, bozzaId, presenti, t.fonte);
+  if (presenti.length) await salvaForma(studioId, bozzaId, presenti, t.fonte);
   return presenti.length;
 }
 
@@ -420,7 +464,7 @@ export async function cambiaForma(studioId: string, bozzaId: string, c: { spento
   const b = await bozza(studioId, bozzaId);
   const f = b?.payload?.forma_lettera;
   if (!b || b.stato !== 'bozza' || !f || !Array.isArray(f.grassetti)) return { errore: 'Niente grassetto da cambiare.' };
-  const nuova = { ...f, ...(typeof c.spento === 'boolean' ? { spento: c.spento } : {}), ...(c.togli ? { grassetti: f.grassetti.filter((g: any) => g?.testo !== c.togli) } : {}) };
+  const nuova = { ...f, ...(typeof c.spento === 'boolean' ? { spento: c.spento } : {}), ...(c.togli ? { grassetti: f.grassetti.filter((g: any) => g?.testo !== c.togli), toccata: true } : {}) };
   await query(`update referti_bozze set payload = jsonb_set(payload, '{forma_lettera}', $3::jsonb) where id = $1 and studio_id = $2 and stato = 'bozza'`, [bozzaId, studioId, JSON.stringify(nuova)]);
   return { ok: true };
 }

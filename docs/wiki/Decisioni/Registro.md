@@ -537,3 +537,13 @@ ricerca interroga l'archivio e finisce nel registro. Scartato: tenere qui una se
 ricezione ammette l'archivio per indirizzo, non per nome. Le prove usano un archivio finto: sull'ISP
 vero nessuna ricerca è stata fatta da chi scrive il codice.
 
+## 6.10.2026 — Il grassetto sono le categorie, prese dalle lettere del paziente
+Precisazione dello studio: le parole in grassetto sono sempre le stesse (fattori di rischio
+cardiovascolari, comorbidità…), sono categorie, e vanno prese dalle lettere già nella documentazione
+del paziente. Quindi: categorie riconosciute comunque scritte, lette dalle quattro lettere più recenti
+del paziente, applicate all'etichetta che apre una frase coi due punti. Scartato: mettere in grassetto
+la parola ovunque compaia («terapia» è in 73 punti dei dettati, quasi sempre in mezzo a una frase).
+Dato nuovo, misurato: i dettati le categorie come etichette quasi non le hanno; stanno nella lettera
+vecchia. APERTO, da decidere con lo studio: quando la lettera chiesta non si trova, la più recente
+resta un aiuto (decisione dell'1.10) o si aggiorna da quella?
+

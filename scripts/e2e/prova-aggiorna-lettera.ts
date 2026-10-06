@@ -16,12 +16,13 @@ import JSZip from 'jszip';
 
 // Una lettera di una pagina con etichette e una frase in grassetto, disegnata
 // da ghostscript: la piattaforma la rilegge dall'immagine (6.10.2026).
-function letteraPdf(): Buffer {
+function letteraPdf(dentroUnaCartella = false): Buffer {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'rf-prova-forma-'));
   try {
     const n = '/Helvetica findfont 11 scalefont setfont', b = '/Helvetica-Bold findfont 11 scalefont setfont';
     const righe: [number, string][] = [
-      [760, `${n} (Caro Luca,) show`],
+      [790, `${n} (Lugano, 10.02.2024) show`],
+      [760, `${n} (${dentroUnaCartella ? 'Egregio collega,' : 'Caro Luca,'}) show`],
       [730, `${n} (rivedo in data 10.02.2024 il paziente a margine per il controllo annuale previsto presso il) show`],
       [714, `${n} (nostro studio e riferisce di stare bene.) show`],
       [684, `${b} (Diagnosi: ) show ${n} (cardiopatia ipertensiva con funzione sistolica conservata e stabile nel tempo.) show`],
@@ -33,7 +34,10 @@ function letteraPdf(): Buffer {
       [546, `${b} (In conclusione) show ${n} ( il quadro rimane stabile e propongo un controllo fra dodici mesi.) show`],
       [516, `${n} (Cordiali saluti.) show`],
     ];
-    writeFileSync(path.join(dir, 'l.ps'), `%!PS\n${righe.map(([y, r]) => `72 ${y} moveto ${r}`).join('\n')}\nshowpage\n`);
+    const lettera = `${righe.map(([y, r]) => `72 ${y} moveto ${r}`).join('\n')}\nshowpage\n`;
+    // Dentro una cartella scansionata: una pagina d'altro prima e una dopo.
+    const altra = (t: string) => `72 760 moveto ${n} (${t}) show\n72 740 moveto ${n} (Valori nella norma senza variazioni rispetto al controllo precedente del paziente.) show\nshowpage\n`;
+    writeFileSync(path.join(dir, 'l.ps'), `%!PS\n${dentroUnaCartella ? altra('Esami di laboratorio di prova') : ''}${lettera}${dentroUnaCartella ? altra('Tracciato di prova allegato') : ''}`);
     execFileSync(process.env.GS_BIN || '/opt/homebrew/bin/gs', ['-q', '-dNOPAUSE', '-dBATCH', '-sDEVICE=pdfwrite', `-sOutputFile=${path.join(dir, 'l.pdf')}`, path.join(dir, 'l.ps')], { stdio: 'ignore' });
     return readFileSync(path.join(dir, 'l.pdf'));
   } finally { rmSync(dir, { recursive: true, force: true }); }
@@ -161,6 +165,44 @@ async function main() {
     const anF = await fetch(urlF, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'annulla' }) });
     const sF2 = await (await fetch(urlF, { headers: h })).json();
     verifica(anF.status === 200 && sF2.forma == null && sF2.applicato == null, 'Annulla: via anche il grassetto');
+
+    // Le CATEGORIE (6.10.2026): il dettato scrive «FRCV:», le lettere del
+    // paziente hanno in grassetto «Fattori di rischio:» → stessa categoria.
+    const [{ id: bc }] = await query<{ id: string }>(`insert into referti_bozze (studio_id, file_id, payload, tipo, patient_id) values ($1, 'prova-agg-' || gen_random_uuid(), $2, 'referto', $3) returning id`,
+      [S, JSON.stringify({ testo_corretto: 'Caro Luca, rivedo il paziente a margine. FRCV: ipertensione arteriosa trattata. Clinicamente peso 81 Kg. Cordiali saluti.', medico, dettato_il: '2026-10-06T10:00:00Z', campi_estratti: { nome_paziente: 'Formaprova Paziente' } }), pf]);
+    ids.push(bc);
+    const eC = await aggiornamentoAutomatico(S, bc);
+    const sC = await (await fetch(`${base}/api/prototipo/referti/${bc}/aggiornamento`, { headers: h })).json();
+    const [tC] = await query<{ t: string | null }>('select testo_finale as t from referti_bozze where id = $1', [bc]);
+    const gC = (sC.forma?.grassetti ?? []).find((g: any) => /Fattori di rischio/.test(g.testo));
+    verifica(eC === 'stampella' && /a margine\.\nFRCV: ipertensione/.test(tC.t ?? '') && (sC.forma?.presenti ?? []).some((x: string) => /Fattori di rischio/.test(x)) && typeof gC?.modello === 'string',
+      `categorie: «FRCV:» del dettato va a capo e in grassetto come «Fattori di rischio:» delle lettere (${eC}, ${JSON.stringify(sC.forma?.presenti)})`);
+
+    // La lettera è DENTRO una cartella scansionata (tre pagine): la si sceglie
+    // a mano e si aggiorna da lì — le categorie arrivano copiate, col grassetto.
+    const [{ id: ps }] = await query<{ id: string }>(`insert into patients (studio_id, cognome, nome, data_nascita) values ($1, 'Formascan', 'Paziente', '1956-06-06') returning id`, [S]);
+    pazienti.push(ps);
+    const chiave2 = await putFile(letteraPdf(true), 'application/pdf', '.pdf');
+    chiavi.push(chiave2);
+    const [{ id: docS }] = await query<{ id: string }>(`insert into patient_documents (studio_id, patient_id, filename, storage_key, categoria, nota) values ($1, $2, 'Cartella Formascan.pdf', $3, 'altro', 'cartella scansionata') returning id`, [S, ps, chiave2]);
+    const [{ id: bs }] = await query<{ id: string }>(`insert into referti_bozze (studio_id, file_id, payload, tipo, patient_id) values ($1, 'prova-agg-' || gen_random_uuid(), $2, 'referto', $3) returning id`,
+      [S, JSON.stringify({ testo_corretto: 'Lettera al dottor Luca Prova. Caro Luca, rivedo in data odierna il paziente a margine per il controllo annuale e riferisce di stare bene. Clinicamente peso 82 Kg, pressione arteriosa 120/75 mmHg. Propongo un controllo fra 6 mesi. Cordiali saluti.', medico, dettato_il: '2026-10-06T11:00:00Z', campi_estratti: { nome_paziente: 'Formascan Paziente' } }), ps]);
+    ids.push(bs);
+    const urlS = `${base}/api/prototipo/referti/${bs}/aggiornamento`;
+    const posta = (corpo: unknown) => fetch(urlS, { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+    const s0 = await (await fetch(urlS, { headers: h })).json();
+    const voce = (s0.scelte ?? []).find((f: any) => f.tipo === 'pagine' && f.id === docS);
+    verifica(!!voce && voce.da === 2 && voce.a === 2 && voce.data === '10.02.2024', `fra le lettere da scegliere c'è quella dentro la cartella scansionata, alla sua pagina (${JSON.stringify(voce ?? null)})`);
+    const sc = await posta({ azione: 'scegli', fonte: { tipo: 'pagine', id: docS, da: voce?.da, a: voce?.a } });
+    const s1 = await (await fetch(urlS, { headers: h })).json();
+    const apS = await posta({ azione: 'applica', novita: [] });
+    const [tS] = await query<{ t: string | null }>('select testo_finale as t from referti_bozze where id = $1', [bs]);
+    const sS = await (await fetch(urlS, { headers: h })).json();
+    verifica(sc.status === 200 && s1.fonte?.tipo === 'pagine' && !!s1.proposta && apS.status === 200 && /\nDiagnosi: cardiopatia ipertensiva[^\n]*\nFattori di rischio: ipertensione/.test(tS.t ?? '') && /82 Kg/.test(tS.t ?? '') && !/80 Kg/.test(tS.t ?? ''),
+      `aggiornata dalla lettera scansionata: le categorie arrivano copiate, ognuna sulla sua riga, e sotto la visita di oggi (${sc.status}, ${apS.status})`);
+    const xmlS = await (await JSZip.loadAsync(Buffer.from(await (await fetch(`${base}/api/referti/docx/${bs}`, { headers: h })).arrayBuffer()))).files['word/document.xml'].async('string');
+    const fortiS = [...xmlS.matchAll(/<w:r[\s>](?:(?!<\/w:r>)[\s\S])*?<\/w:r>/g)].map((m) => m[0]).filter((r) => /<w:b\/>/.test(r)).map((r) => /<w:t[^>]*>([^<]*)</.exec(r)?.[1] ?? '');
+    verifica(fortiS.includes('Diagnosi:') && fortiS.includes('Fattori di rischio:') && (sS.forma?.presenti ?? []).length >= 2, `Word: «Diagnosi:» e «Fattori di rischio:» in grassetto come nella lettera vecchia (${JSON.stringify(fortiS.filter((x) => /:/.test(x)))})`);
   } finally {
     for (const k of chiavi) await deleteFile(k).catch(() => null);
     await query('delete from patient_documents where patient_id = any($1::uuid[])', [pazienti]).catch(() => null);

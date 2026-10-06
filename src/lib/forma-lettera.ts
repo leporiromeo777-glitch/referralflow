@@ -152,7 +152,9 @@ export function leggiPagina(pg: Pagina, parole: Parola[], quanto = 1.3): { righe
       // grassetto resta nella frase.
       while (j + 1 < riga.m.length && (forte(riga.m[j + 1]) || (riga.m[j + 1].r === 0 && j + 2 < riga.m.length && forte(riga.m[j + 2])))) j++;
       const testo = riga.m.slice(k, j + 1).map((m) => m.p.t).join(' ').trim();
-      const inizio = k === 0 && stacco != null;
+      // In testa a un paragrafo; oppure in testa a una riga e chiusa dai due
+      // punti («Fattori di rischio:» sotto una riga piena è un'etichetta lo stesso).
+      const inizio = k === 0 && (stacco != null || /:$/.test(testo));
       const sicura = j > k || inizio || forte(riga.m[k], quanto + 0.15);
       // Fa andare a capo nella lettera nuova solo ciò che è davvero
       // un'etichetta: finisce coi due punti o è la riga intera (un titolo).
@@ -160,6 +162,9 @@ export function leggiPagina(pg: Pagina, parole: Parola[], quanto = 1.3): { righe
       if (sicura && soloLettere(testo).length >= 3) grassetti.push({ testo, etichetta: inizio, ...(titolo ? { stacco: stacco ?? 'capo' } : {}) });
       k = j + 1;
     }
+    // Una riga che si apre con un'etichetta in grassetto coi due punti è una
+    // riga a sé anche se quella sopra arrivava al margine.
+    if (!stacco && grassetti[0]?.etichetta && grassetti[0].stacco) stacco = 'capo';
     out.push({ testo: riga.m.map((m) => m.p.t).join(' '), stacco, grassetti });
   });
   return { righe: out, misurate: tutti.length };
@@ -250,6 +255,42 @@ export function riordinaGrassetti(tutti: Grassetto[], max = 40): Grassetto[] {
 
 const chiave = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[\s:;,.]+$/g, '').replace(/\s+/g, ' ').trim();
 
+// Le CATEGORIE (6.10.2026, precisazione dello studio): il grassetto delle
+// lettere è quasi sempre l'etichetta di una categoria — fattori di rischio
+// cardiovascolari, comorbidità, allergie, terapia… — e le categorie sono
+// sempre le stesse anche se scritte in modi diversi («FRCV», «Fattori di
+// rischio cardiovascolari»). Se le lettere del paziente hanno in grassetto
+// l'etichetta di una categoria, nella lettera nuova va in grassetto (e a
+// capo allo stesso modo) l'etichetta di QUELLA categoria comunque sia
+// scritta, purché apra una frase e finisca coi due punti.
+const FAMIGLIE: [string, RegExp][] = [
+  ['frcv', /^(?:frcv|fdrcv|fdr cv|fr cv|fattori di rischio(?: cardio ?vascolar[ei]| cv)?|rischio cardiovascolare|profilo di rischio(?: cardiovascolare)?)$/],
+  ['comorbidita', /^(?:comorbidita|comorbilita|co morbidita|comorbidita note|patologie associate|patologie concomitanti|altre patologie|malattie associate|altre diagnosi|diagnosi secondarie)$/],
+  ['allergie', /^(?:allergi[ae]|allergie note|intolleranze|allergie e intolleranze|allergie intolleranze)$/],
+  ['terapia', /^(?:terapia|terapia attuale|terapia in atto|terapia in corso|terapia abituale|terapia farmacologica|terapia domiciliare|terapia medicamentosa|terapia cardiologica|farmaci|medicamenti)$/],
+  ['diagnosi', /^(?:diagnosi|diagnosi principale|diagnosi principali|diagnosi cardiologic[ah]e?|diagnosi cardiovascolar[ei]|lista dei problemi|problemi)$/],
+  ['anamnesi_familiare', /^(?:anamnesi familiare|familiarita)$/],
+  ['anamnesi', /^(?:anamnesi|anamnesi attuale|anamnesi recente|anamnesi intermedia|anamnesi cardiologica|anamnesi remota|anamnesi patologica(?: remota| prossima)?|anamnesi personale|anamnesi sociale|motivo della visita|motivo della consultazione|motivo del controllo|motivo)$/],
+  ['esame', /^(?:esame clinico|esame obiettivo|esame fisico|status|stato clinico|obiettivita|parametri|parametri vitali|clinicamente)$/],
+  ['ecg', /^(?:ecg|ecg a riposo|ecg basale|elettrocardiogramma(?: a riposo| basale)?)$/],
+  ['eco', /^(?:eco|ett|ecocardiogramma(?: transtoracico| doppler| color ?doppler)?|ecocardiografia(?: transtoracica| doppler)?|eco ?color ?doppler cardiaco)$/],
+  ['sforzo', /^(?:ergometria|cicloergometria|spiroergometria|test da sforzo|prova da sforzo|ecg da sforzo|test ergometrico)$/],
+  ['holter', /^(?:holter|holter ecg|ecg holter|ecg dinamico|holter pressorio|mapa)$/],
+  ['laboratorio', /^(?:laboratorio|esami di laboratorio|esami ematici|esami ematochimici|esami del sangue|esami)$/],
+  ['conclusione', /^(?:conclusion[ei]|in conclusione|valutazione|giudizio|giudizio clinico|sintesi|riassunto|commento|discussione|epicrisi)$/],
+  ['procedere', /^(?:procedere|proposte|proposta|programma|piano|raccomandazioni|consigli|prossimo controllo|controllo|controlli)$/],
+];
+export function famigliaDi(testo: string): string | null {
+  const k = chiaveLarga(testo);
+  if (!k || k.length > 48) return null;
+  for (const [nome, rx] of FAMIGLIE) if (rx.test(k)) return nome;
+  return null;
+}
+// Il modello della categoria, per la pagina (che dipinge con la stessa regola).
+export const modelloFamiglia = (famiglia: string | null): string | null => FAMIGLIE.find(([n]) => n === famiglia)?.[1].source ?? null;
+// L'etichetta in testa a una frase: fino a 45 caratteri, poi i due punti.
+const RX_ETICHETTA_IN_TESTA = /(^|[.!?]\s+)([\s•\-–]*)([^\n:.!?;]{2,45}):/gu;
+
 export type Pezzo = { t: string; b: boolean };
 
 // Una riga della lettera nuova divisa in pezzi normali e in grassetto.
@@ -274,6 +315,21 @@ export function applicaGrassetti(riga: string, grassetti: Grassetto[]): Pezzo[] 
       let libero = true;
       for (let i = m.index; i < m.index + m[0].length; i++) if (segni[i]) { libero = false; break; }
       if (libero) segni.fill(1, m.index, m.index + m[0].length);
+    }
+  }
+  // Le categorie: un'etichetta della stessa famiglia di una in grassetto
+  // nelle lettere vecchie, in testa a una frase e coi due punti.
+  const famiglie = new Map<string, Grassetto>();
+  for (const g of grassetti) { if (!g.etichetta) continue; const f = famigliaDi(g.testo); if (f && !famiglie.has(f)) famiglie.set(f, g); }
+  if (famiglie.size) {
+    for (const m of s.matchAll(RX_ETICHETTA_IN_TESTA)) {
+      const g = famiglie.get(famigliaDi(m[3]) ?? '');
+      if (!g) continue;
+      const da = (m.index ?? 0) + m[1].length + m[2].length;
+      const a = da + m[3].length + (/:\s*$/.test(g.testo) ? 1 : 0);
+      let libero = true;
+      for (let i = da; i < a; i++) if (segni[i]) { libero = false; break; }
+      if (libero) segni.fill(1, da, a);
     }
   }
   const out: Pezzo[] = [];

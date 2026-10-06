@@ -7,7 +7,7 @@ import JSZip from 'jszip';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import {
-  A_CAPO, applicaGrassetti, grassettiDaHtml, grassettiDelCorpo, leggiPagina, leggiPgm, leggiTsv, righePerIlTesto,
+  A_CAPO, applicaGrassetti, famigliaDi, grassettiDaHtml, modelloFamiglia, grassettiDelCorpo, leggiPagina, leggiPgm, leggiTsv, righePerIlTesto,
   riordinaGrassetti, stessoTesto, type Grassetto, type Pagina, type Parola,
 } from './forma-lettera';
 import { impagina, pulisciScansione, stampella } from './aggiorna-lettera';
@@ -156,11 +156,34 @@ test('revisione: la pagina dipinge il grassetto con la stessa regola del server'
   const da = src.indexOf('function rfGrassettoTrova'), a = src.indexOf('// Nel testo della revisione il grassetto si DIPINGE');
   assert.ok(da > 0 && a > da);
   const trova = vm.runInNewContext(`(${src.slice(da, a).trim()})`) as (t: string, g: Grassetto[]) => [number, number][];
-  const g: Grassetto[] = [...G, { testo: 'già visto (2024)', etichetta: false }];
-  for (const t of ['Diagnosi: cardiopatia. La diagnosi è nota. Diagnosi: stabile.', 'Riga uno.\nFattori di rischio: ipertensione, a rischio elevato.\n• Diagnosi: x', 'Riferisce NESSUN dolore toracico; gia visto (2024) e arischio.']) {
+  const cat = (testo: string) => ({ testo, etichetta: true, stacco: 'capo' as const, modello: modelloFamiglia(famigliaDi(testo)) ?? undefined });
+  const g: (Grassetto & { modello?: string })[] = [...G, { testo: 'già visto (2024)', etichetta: false }, cat('Fattori di rischio cardiovascolari:'), cat('Comorbidità'), cat('Terapia attuale:')];
+  for (const t of ['FRCV: ipertensione. Comorbilità: nessuna. Sulle comorbidità: niente.\n– Terapia in atto: ramipril. Allergie: nessuna.','Diagnosi: cardiopatia. La diagnosi è nota. Diagnosi: stabile.', 'Riga uno.\nFattori di rischio: ipertensione, a rischio elevato.\n• Diagnosi: x', 'Riferisce NESSUN dolore toracico; gia visto (2024) e arischio.']) {
     const server = t.split('\n').flatMap((r) => applicaGrassetti(r, g).filter((p) => p.b).map((p) => p.t)).sort();
     const pagina = trova(t, g).map(([x, y]) => t.slice(x, y)).sort();
     assert.ok(server.length > 0);
     assert.equal(JSON.stringify(pagina), JSON.stringify(server));
   }
+});
+
+test('categorie: la stessa categoria scritta in un altro modo va in grassetto e a capo', () => {
+  assert.equal(famigliaDi('FRCV:'), 'frcv');
+  assert.equal(famigliaDi('Fattori di rischio cardiovascolari'), 'frcv');
+  assert.equal(famigliaDi('Fattori di rischio cardio-vascolare:'), 'frcv');
+  assert.equal(famigliaDi('Comorbilità:'), 'comorbidita');
+  assert.equal(famigliaDi('Terapia in atto'), 'terapia');
+  assert.equal(famigliaDi('Elettrocardiogramma:'), 'ecg');
+  for (const no of ['Il paziente', 'ipertensione arteriosa', 'Diagnosi di cardiopatia ischemica cronica stabile', '']) assert.equal(famigliaDi(no), null, no);
+  const vecchie: Grassetto[] = [
+    { testo: 'Fattori di rischio cardiovascolari:', etichetta: true, stacco: 'capo' },
+    { testo: 'Comorbidità', etichetta: true, stacco: 'vuota' },      // in grassetto senza i due punti
+    { testo: 'ipertensione', etichetta: false },                      // una frase qualunque: non è una categoria
+  ];
+  const unisci = (r: string) => applicaGrassetti(r, vecchie).map((p) => (p.b ? `[${p.t}]` : p.t)).join('');
+  assert.equal(unisci('FRCV: ipertensione arteriosa, dislipidemia.'), '[FRCV:] [ipertensione] arteriosa, dislipidemia.');
+  assert.equal(unisci('Rivedo il paziente. Comorbilità: ipotiroidismo.'), 'Rivedo il paziente. [Comorbilità]: ipotiroidismo.', 'i due punti in grassetto solo se lo erano nella lettera');
+  assert.equal(unisci('Sui fattori di rischio cardiovascolari: nulla di nuovo.'), 'Sui fattori di rischio cardiovascolari: nulla di nuovo.', 'solo se l\'etichetta è tutta la testa della frase');
+  assert.equal(unisci('Terapia: ramipril.'), 'Terapia: ramipril.', 'una categoria che le lettere del paziente non hanno in grassetto resta normale');
+  assert.equal(impagina('Rivedo il paziente. FRCV: ipertensione. Comorbilità: ipotiroidismo. Terapia: ramipril.', new Set(), ' ', vecchie),
+    'Rivedo il paziente.\nFRCV: ipertensione.\n\nComorbilità: ipotiroidismo. Terapia: ramipril.');
 });

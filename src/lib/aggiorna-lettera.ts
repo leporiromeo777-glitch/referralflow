@@ -18,7 +18,7 @@
 //   non li dice) e «del paziente» / «della paziente».
 
 import { dateInFrase, type DataCercata } from './cerca-in-cartella';
-import { A_CAPO, type Grassetto } from './forma-lettera';
+import { A_CAPO, famigliaDi, type Grassetto } from './forma-lettera';
 
 export type Divisione = { prima: string; dopo: string; punto: string | null };
 export type Proposta = {
@@ -360,12 +360,18 @@ export function impagina(testo: string, aCapoDavanti: Set<string>, separatore: s
   // un titolo in grassetto): la frase che comincia così va a capo allo
   // stesso modo (6.10.2026).
   const etichette = grassetti.filter((g) => g.etichetta && g.stacco).map((g) => ({ k: chiaveEtichetta(g.testo), sep: g.stacco === 'vuota' ? '\n\n' : '\n' })).filter((e) => e.k.length >= 3);
-  if (!aCapoDavanti.size && !etichette.length) return testo.trim();
+  // …e le CATEGORIE: «FRCV:» va a capo come andava «Fattori di rischio
+  // cardiovascolari:» nelle lettere del paziente.
+  const famiglie = new Map<string, string>();
+  for (const g of grassetti) { if (!g.etichetta || !g.stacco) continue; const fa = famigliaDi(g.testo); if (fa && !famiglie.has(fa)) famiglie.set(fa, g.stacco === 'vuota' ? '\n\n' : '\n'); }
+  if (!aCapoDavanti.size && !etichette.length && !famiglie.size) return testo.trim();
   let out = '', ultima: string | null = null;
   for (const f of frasi(testo)) {
     const k = classeDi(f);
     const kf = chiaveEtichetta(f);
-    const e = etichette.find((x) => kf.startsWith(x.k) && !/[a-z0-9]/.test(kf[x.k.length] ?? ''));
+    const inTesta = famiglie.size ? /^[\s•\-–]*([^\n:.!?;]{2,45}):/u.exec(f) : null;
+    const sepFamiglia = inTesta ? famiglie.get(famigliaDi(inTesta[1]) ?? '') : undefined;
+    const e = etichette.find((x) => kf.startsWith(x.k) && !/[a-z0-9]/.test(kf[x.k.length] ?? '')) ?? (sepFamiglia ? { k: '', sep: sepFamiglia } : undefined);
     const aCapo = !!out && k != null && aCapoDavanti.has(k) && k !== ultima;
     out += out ? (e ? e.sep : aCapo ? separatore : ' ') + f : f;
     if (k) ultima = k;
