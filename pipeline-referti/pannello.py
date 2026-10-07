@@ -489,7 +489,7 @@ def sez_suggerimenti() -> str:
             f'<li class="sug-item"><span class="sug-pair"><s>{e(da)}</s> → <b>{e(a)}</b></span>'
             f'<span class="sug-n">×{n}</span>'
             f'<form method="post" action="/suggerimenti/aggiungi">'
-            f'<input type="hidden" name="tipo" value="{html.escape(str(v.get("tipo", "parola")))}">'
+            f'<input type="hidden" name="tipo" value="{e(str(s.get("tipo", "parola")))}">'
             f'<input type="hidden" name="da" value="{e(da)}">'
             f'<input type="hidden" name="a" value="{e(a)}">'
             f'<button class="btn" type="submit">Aggiungi al dizionario</button></form></li>'
