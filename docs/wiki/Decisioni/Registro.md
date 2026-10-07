@@ -615,3 +615,10 @@ disco quando c'è. La destinazione sull'ecografo la imposta lo studio, guidato. 
 (da comprare prima che il primo si riempia), il Mac che non deve più uscire dallo studio, i filmati che
 nel visore ancora non si riproducono da soli, e la prima prova con un esame vero.
 
+## 7.10.2026 — Il Mac sta sulla rete del cavo, e il dominio punta lì
+Lo studio ha spostato il Wi-Fi del Mac sulla rete nascosta, che è la stessa del cavo (`192.168.0.`): il Mac
+non è più sulla rete Wi-Fi dell'ufficio. Il dominio è passato a `192.168.0.188` (l'indirizzo fisso del cavo)
+e lo studio ha ammesso `192.168.0.0/24` nel filtro del Mac. I PC fissi, che hanno il cavo su quella rete,
+aprono l'app senza Wi-Fi. Aperto: chi è solo sul Wi-Fi dell'ufficio (`192.168.20.`) non arriva all'app; se
+serve, un secondo nome per quella rete e il Wi-Fi del Mac di nuovo lì.
+
