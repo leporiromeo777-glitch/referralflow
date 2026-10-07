@@ -597,3 +597,10 @@ Dallo studio nessun PC apriva `cct.referralflow.ch` (timeout). Non era il domini
 solo via Tailscale e la rete degli apparecchi resta fuori. Provato da un PC dell'ufficio: si apre.
 Lezione per le diagnosi: una prova fatta dal Mac verso sé stesso non dice niente su chi entra da fuori.
 Lo stesso giorno lo studio ha ammesso nel firewall delle applicazioni il Python del ricevitore DICOM (3.14.7).
+
+## 7.10.2026 — Il ruolo non si cambia dall'interfaccia
+Richiesta dello studio: chi entra col profilo di un medico resta medico. Tolto dalla barra in alto il menu
+«Cambia ruolo (demo)», residuo della demo, che cambiava la vista senza cambiare account; al suo posto la
+scritta fissa del ruolo. I permessi veri erano già del server (ruolo della sessione): qui sparisce la
+possibilità di vedere l'interfaccia di un altro ruolo. Per un altro ruolo si esce e si entra con l'altro account.
+

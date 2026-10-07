@@ -145,6 +145,8 @@ kbd { font: 11px/1 var(--font); color: var(--text-3); background: var(--surface-
 .ai-btn:hover { box-shadow: var(--shadow-1); }
 .avatar { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(135deg, #C7D2FE, #A5B4FC); color: #1e1b4b; display: grid; place-items: center; font-size: 11px; font-weight: 700; }
 .role-select { height: 34px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); font-size: 13px; font-weight: 500; }
+/* Il ruolo è quello dell'account: si legge, non si cambia (7.10.2026). */
+.role-fisso { display: inline-flex; align-items: center; cursor: default; user-select: none; color: var(--text-2, inherit); }
 
 .safety-bar {
   height: var(--safety-h); display: none; align-items: center; gap: 14px; padding: 0 20px; font-size: 12.5px; flex: none;

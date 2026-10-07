@@ -132,7 +132,7 @@ function renderTopbar() {
     <button class="icon-btn" id="va-top" title="Assistente vocale (Ctrl+Shift+V)">${ICONS.mic}</button>
     <button class="icon-btn" id="notif-btn" title="Notifiche">${ICONS.bell}<span class="notif-dot"></span></button>
     <button class="icon-btn" id="theme-btn" title="Tema: ${state.theme}">${themeIcon}</button>
-    <select class="role-select" id="role-select" title="Cambia ruolo (demo)">${Object.entries(ROLES).map(([k, v]) => `<option value="${k}" ${k === state.role ? 'selected' : ''}>${v.label}</option>`).join('')}</select>
+    <span class="role-select role-fisso" id="ruolo-fisso" title="Il ruolo con cui sei entrato">${esc(role.label)}</span>
     <div class="avatar" title="${esc(role.name)}">${role.initials}</div>`;
   $('#open-palette').onclick = openPalette;
   $('#open-palette').onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') openPalette(); };
@@ -142,7 +142,6 @@ function renderTopbar() {
   $('#notif-btn').onclick = () => openSheet('Notifiche', `
     <div class="list">${INBOX.slice(0, 5).map(i => `<div class="list-item"><i class="dot ${i.kind === 'alert' ? 'warning' : i.kind === 'ai' ? 'ai' : 'accent'}"></i><div><div class="name">${esc(i.t)}</div><div class="sub">${esc(i.s)}</div></div></div>`).join('')}</div>
     <div class="caption">Notifiche simili vengono aggregate. Mute e snooze per regola nelle Impostazioni.</div>`, `<button class="btn" data-go="#/inbox">Apri Attività</button>`);
-  $('#role-select').onchange = e => { state.role = e.target.value; state.aiMessages = []; go('#/home'); render(); toast(`Ruolo demo: ${ROLES[state.role].label}`); };
 }
 function renderSafetyBar() {
   const bar = $('#safetybar');
