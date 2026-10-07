@@ -122,3 +122,47 @@ export function finestreDi(modalita: string): { nome: string; ww: number; wl: nu
   const m = String(modalita ?? '').toUpperCase().split(/[,\s]+/)[0];
   return FINESTRE[m] ?? [];
 }
+
+// ── L'archivio che cresce (7.10.2026) ───────────────────────────────────────
+// L'ecografo manda gli esami direttamente al Mac: cinque-dieci al giorno, che
+// restano. Due cose pure servono a reggerlo.
+
+// Quali file dello spool entrano nel prossimo lotto: in ordine, non più di
+// `perGiro`, e fermandosi al peso dato — ma almeno uno, per grande che sia
+// (un filmato da mezzo gigabyte deve poter entrare).
+export function scegliLotto(file: { nome: string; byte: number }[], perGiro: number, peso: number): string[] {
+  const presi: string[] = []; let somma = 0;
+  for (const f of file) {
+    if (presi.length >= perGiro) break;
+    if (presi.length && somma + f.byte > peso) break;
+    presi.push(f.nome); somma += f.byte;
+  }
+  return presi;
+}
+
+// Che cosa si sta cercando nell'elenco degli esami: una data (dell'esame o di
+// nascita: 3.5.1950, 03/05/1950, 1950-05-03), un anno, oppure parole che devono
+// comparire TUTTE nel nome (della cartella o scritto nel file) o nella
+// descrizione. Niente di più furbo: una ricerca che indovina sbaglia persona.
+export type Ricerca = { data: string | null; anno: number | null; parole: string[] };
+export function leggiRicerca(testo: string): Ricerca {
+  const fuori: Ricerca = { data: null, anno: null, parole: [] };
+  for (const pezzo of String(testo ?? '').trim().slice(0, 80).split(/\s+/).filter(Boolean)) {
+    let m = /^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/.exec(pezzo);
+    if (m) { const d = dataValida(+m[3], +m[2], +m[1]); if (d && !fuori.data) { fuori.data = d; continue; } }
+    m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(pezzo);
+    if (m) { const d = dataValida(+m[1], +m[2], +m[3]); if (d && !fuori.data) { fuori.data = d; continue; } }
+    if (/^(19|20)\d{2}$/.test(pezzo) && fuori.anno === null) { fuori.anno = +pezzo; continue; }
+    const parola = pezzo.replace(/[%_\\^]/g, '').toLowerCase();
+    if (parola.length >= 2 && fuori.parole.length < 4) fuori.parole.push(parola);
+  }
+  return fuori;
+}
+function dataValida(a: number, m: number, g: number): string | null {
+  if (a < 1900 || a > 2100 || m < 1 || m > 12 || g < 1 || g > 31) return null;
+  const d = new Date(Date.UTC(a, m - 1, g));
+  if (d.getUTCMonth() !== m - 1) return null;
+  return `${a}-${String(m).padStart(2, '0')}-${String(g).padStart(2, '0')}`;
+}
+export const ricercaVuota = (r: Ricerca): boolean => !r.data && r.anno === null && !r.parole.length;
+

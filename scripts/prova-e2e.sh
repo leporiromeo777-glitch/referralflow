@@ -148,6 +148,10 @@ echo "→ archivio dello studio (finto): cerca, prendi e apri, copia temporanea,
 DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-archivio.ts "http://localhost:$PORTA" "$C_MEDICO" "$STUDIO" "$ARCH" > "$TMP/archivio.txt" 2>&1 || { fallito "prova-archivio"; cut -c1-300 "$TMP/archivio.txt"; }
 grep -E "^NO" "$TMP/archivio.txt"; echo "   $(grep -c '^ok' "$TMP/archivio.txt") ok, $(grep -c '^NO' "$TMP/archivio.txt") no"
 
+echo "→ ecografo (finto) che manda direttamente al Mac: arriva, resta, non si raddoppia, si guarda, si trova"
+DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-ecografo.ts "http://localhost:$PORTA" "$C_MEDICO" "$STUDIO" "$ARCH" "$PY" 11113 > "$TMP/ecografo.txt" 2>&1 || { fallito "prova-ecografo"; cut -c1-300 "$TMP/ecografo.txt"; }
+grep -E "^NO" "$TMP/ecografo.txt"; echo "   $(grep -c '^ok' "$TMP/ecografo.txt") ok, $(grep -c '^NO' "$TMP/ecografo.txt") no"
+
 echo "→ monitoraggio remoto (demo): stati, isolamento, doppioni, avvisi, permessi, AI spenta"
 C_TEC="$(sessione tecnico)"; C_ADM="$(sessione admin)"; C_SEGR="$(sessione segretaria)"
 MONITORAGGIO_DEMO=completa DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-monitoraggio.ts "http://localhost:$PORTA" "$STUDIO" "$C_MEDICO" "$C_SEGR" "$C_TEC" "$C_ADM" > "$TMP/monitoraggio.txt" 2>&1 || { fallito "prova-monitoraggio"; cut -c1-300 "$TMP/monitoraggio.txt" | tail -5; }

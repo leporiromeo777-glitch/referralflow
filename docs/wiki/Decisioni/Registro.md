@@ -604,3 +604,14 @@ Richiesta dello studio: chi entra col profilo di un medico resta medico. Tolto d
 scritta fissa del ruolo. I permessi veri erano già del server (ruolo della sessione): qui sparisce la
 possibilità di vedere l'interfaccia di un altro ruolo. Per un altro ruolo si esce e si entra con l'altro account.
 
+## 7.10.2026 — Le ecografie arrivano anche al Mac, e lì restano
+Lo studio cambia la decisione del 5.10 («l'archivio resta a Philips»): l'ecografo manda ogni esame **a tutti
+e due** — al software Philips come prima e direttamente al Mac — e la piattaforma tiene i suoi: un archivio
+delle immagini dentro ReferralFlow, che si cerca per nome, data, anno. Philips resta la seconda copia.
+Stimati 5–10 ecocardiogrammi al giorno, circa 2 GB al giorno: il disco del Mac basta per qualche mese.
+Conseguenze scritte nel codice: lettore che decodifica un fotogramma solo, spool a lotti, niente doppioni
+sul disco, il backup notturno non raddoppia più le immagini sullo stesso disco e le copia su un secondo
+disco quando c'è. La destinazione sull'ecografo la imposta lo studio, guidato. Aperti: il secondo disco
+(da comprare prima che il primo si riempia), il Mac che non deve più uscire dallo studio, i filmati che
+nel visore ancora non si riproducono da soli, e la prima prova con un esame vero.
+

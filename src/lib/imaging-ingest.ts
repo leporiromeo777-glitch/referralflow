@@ -1,7 +1,7 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { query, transazione } from './db';
-import { putFileAtKey } from './storage';
+import { deleteFile, putFileAtKey } from './storage';
 import { leggiMeta, leggiMisure } from './imaging';
 import { aggiornaGeometriaSerie } from './imaging-serie';
 import { abbinaPaziente, raggruppa, type MetaMinima } from './imaging-ordina';
@@ -18,7 +18,8 @@ const SOP_SR = ['1.2.840.10008.5.1.4.1.1.88'];
 // due prenderebbe polvere — e sarebbe quella che nessuno guarda mentre scrive
 // il codice, cioè quella degli apparecchi.
 
-export type Riepilogo = { esami: string[]; nuovi: number; immagini: number; scartati: number };
+// `conNuove`: gli esami in cui è entrata almeno un'immagine che non c'era; `doppioni`: le immagini già presenti.
+export type Riepilogo = { esami: string[]; nuovi: number; immagini: number; scartati: number; doppioni: number; conNuove: string[] };
 
 export async function ingestaDicom(
   studioId: string,
@@ -36,13 +37,13 @@ export async function ingestaDicom(
     lette.push({ indice: buoni.length, meta: meta as unknown as MetaMinima });
     buoni.push(b);
   }
-  if (!lette.length) return { esami: [], nuovi: 0, immagini: 0, scartati };
+  if (!lette.length) return { esami: [], nuovi: 0, immagini: 0, scartati, doppioni: 0, conNuove: [] };
 
   const pazienti = await query<{ id: string; cognome: string; nome: string; data_nascita: string | null }>(
     `select id, cognome, nome, data_nascita::text from patients where studio_id = $1`, [studioId]);
 
   const esami = raggruppa(lette);
-  const ids: string[] = []; let nuovi = 0; let immagini = 0;
+  const ids: string[] = []; let nuovi = 0; let immagini = 0; let doppioni = 0; const conNuove: string[] = [];
 
   for (const e of esami) {
     const abbinato = abbinaPaziente(e.paziente_nome, e.paziente_nascita, pazienti);
@@ -60,6 +61,7 @@ export async function ingestaDicom(
     }
 
     const serieToccate: string[] = [];
+    const giaPresenti: string[] = []; let entrate = 0;
     const id = await transazione(async (q) => {
       const [esame] = await q<{ id: string; nuovo: boolean }>(
         `insert into imaging_esami (studio_id, patient_id, study_uid, accession, data_esame, ora_esame, descrizione,
@@ -91,7 +93,7 @@ export async function ingestaDicom(
              i.calibrazione ? JSON.stringify(i.calibrazione) : null,
              i.geometria ? JSON.stringify(i.geometria) : null,
              (i.geometria as { sha256_file?: string } | null)?.sha256_file ?? null]);
-          if (img) immagini++;
+          if (img) { immagini++; entrate++; } else giaPresenti.push(chiavi.get(i.sop_uid)!);
         }
         await q(`update imaging_serie set n_immagini = (select count(*) from imaging_immagini where serie_id = $1) where id = $1`, [serie.id]);
         serieToccate.push(serie.id);
@@ -105,6 +107,13 @@ export async function ingestaDicom(
          where id = $1`, [esame.id]);
       return esame.id;
     });
+    // Un'immagine che c'era già (l'ecografo che rimanda l'esame, lo stesso esame
+    // preso anche dall'archivio) non è entrata: il file appena scritto per lei
+    // è un doppione senza riga, e su un ecocardiogramma sono centinaia di
+    // megabyte a ogni rinvio. Si toglie, dopo che la transazione è andata.
+    for (const k of giaPresenti) { try { await deleteFile(k); } catch { /* resta spazio occupato, non un danno */ } }
+    doppioni += giaPresenti.length;
+    if (entrate) conNuove.push(id);
     // La geometria di serie (fase 9) si calcola dopo, fuori dalla transazione:
     // se fallisce, l'esame è dentro lo stesso e la si rifà alla prima apertura.
     for (const sid2 of serieToccate) {
@@ -134,5 +143,5 @@ export async function ingestaDicom(
         [studioId, id, opzioni.userId ?? null, opzioni.origine === 'rete' ? 'ricevuto' : 'importato']);
     } catch (e) { console.error(`[imaging] registro accessi: ${(e as Error)?.message ?? e}`); }
   }
-  return { esami: ids, nuovi, immagini, scartati };
+  return { esami: ids, nuovi, immagini, scartati, doppioni, conNuove };
 }

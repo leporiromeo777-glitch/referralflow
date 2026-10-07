@@ -4,6 +4,7 @@ import { query } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
 import { lettoreDisponibile, statoRicezione } from '@/lib/imaging';
 import { ingestaDicom } from '@/lib/imaging-ingest';
+import { leggiRicerca, ricercaVuota } from '@/lib/imaging-ordina';
 import { statoArchivio } from '@/lib/imaging-archivio';
 import { vietato } from '@/lib/permessi';
 
@@ -50,9 +51,12 @@ export async function GET(req: NextRequest) {
       order by e.data_esame desc nulls last, e.created_at desc limit 200`,
     [sid, isUuid(paziente) ? paziente : '']);
 
-  const [conta] = await query<{ da_verificare: number; senza_paziente: number }>(
+  // `totale` e `byte`: l'elenco mostra gli ultimi 200, l'archivio può averne
+  // migliaia (7.10.2026): quanti sono e quanto pesano si dice sempre.
+  const [conta] = await query<{ da_verificare: number; senza_paziente: number; totale: number; byte: string }>(
     `select count(*) filter (where stato = 'da_verificare')::int as da_verificare,
-            count(*) filter (where patient_id is null)::int as senza_paziente
+            count(*) filter (where patient_id is null)::int as senza_paziente,
+            count(*)::int as totale, coalesce(sum(byte), 0)::text as byte
        from imaging_esami where studio_id = $1 and stato <> 'nascosto'`, [sid]);
 
   return NextResponse.json(
@@ -73,6 +77,31 @@ export async function POST(req: NextRequest) {
   if (!tipo.includes('multipart/form-data')) {
     const c = await req.json().catch(() => null);
     const azione = String(c?.azione ?? '');
+    // Cercare nell'archivio delle immagini (7.10.2026). In POST e non in GET:
+    // quello che si cerca è il nome di una persona, e un nome non va in un URL.
+    if (azione === 'cerca') {
+      const r = leggiRicerca(String(c?.q ?? ''));
+      if (ricercaVuota(r)) return NextResponse.json({ errore: 'Scrivi un cognome, una data o un anno.' }, { status: 400 });
+      const da = Math.max(0, Math.min(5000, Number(c?.da) || 0));
+      const PAGINA = 50;
+      const righe = await query<Record<string, unknown>>(
+        `select e.id, e.data_esame::text, e.ora_esame, e.descrizione, e.modalita, e.stato, e.origine, e.n_serie, e.n_immagini,
+                e.byte::text, e.paziente_dicom, e.paziente_nascita::text, e.patient_id,
+                case when p.id is null then null else (p.cognome || ' ' || p.nome) end as paziente,
+                e.istituto, e.inviante, e.accession, e.created_at::text, e.scade_il::text
+           from imaging_esami e left join patients p on p.id = e.patient_id
+          where e.studio_id = $1 and e.stato <> 'nascosto'
+            and ($2::date is null or e.data_esame = $2::date or e.paziente_nascita = $2::date or p.data_nascita = $2::date)
+            and ($3::int is null or extract(year from e.data_esame) = $3::int)
+            and not exists (
+              select 1 from unnest($4::text[]) w
+               where position(w in lower(coalesce(p.cognome, '') || ' ' || coalesce(p.nome, '') || ' ' ||
+                                         replace(coalesce(e.paziente_dicom, ''), '^', ' ') || ' ' || coalesce(e.descrizione, ''))) = 0)
+          order by e.data_esame desc nulls last, e.created_at desc limit $5 offset $6`,
+        [sid, r.data, r.anno, r.parole, PAGINA + 1, da]);
+      await query(`insert into imaging_accessi (studio_id, esame_id, user_id, azione) values ($1, null, $2, 'elenco_cerca')`, [sid, session.id]).catch(() => null);
+      return NextResponse.json({ esami: righe.slice(0, PAGINA), altri: righe.length > PAGINA, da }, { headers: { 'Cache-Control': 'no-store' } });
+    }
     const id = String(c?.id ?? '');
     if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 });
 

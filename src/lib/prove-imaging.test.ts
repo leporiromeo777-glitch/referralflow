@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { abbinaPaziente, etichetta, finestreDi, raggruppa, slugNome, type MetaMinima } from './imaging-ordina';
+import { abbinaPaziente, etichetta, finestreDi, leggiRicerca, raggruppa, ricercaVuota, scegliLotto, slugNome, type MetaMinima } from './imaging-ordina';
 
 const base: MetaMinima = {
   study_uid: 'S1', series_uid: 'SE1', sop_uid: 'I1', modalita: 'ct', data_esame: '2026-09-11',
@@ -98,4 +98,29 @@ test('pagina Immagini di sola consultazione: gli strumenti di misura sono spenti
   } finally {
     if (prima === undefined) delete process.env.IMAGING_MISURE; else process.env.IMAGING_MISURE = prima;
   }
+});
+
+
+test('imaging: lo spool si svuota a lotti, per numero e per peso, e un file enorme passa da solo', () => {
+  const MB = 1024 * 1024;
+  const file = [{ nome: 'a', byte: 100 * MB }, { nome: 'b', byte: 200 * MB }, { nome: 'c', byte: 150 * MB }, { nome: 'd', byte: 10 * MB }];
+  assert.deepEqual(scegliLotto(file, 400, 384 * MB), ['a', 'b']);            // il terzo sforerebbe
+  assert.deepEqual(scegliLotto(file, 1, 384 * MB), ['a']);                    // il numero vince
+  assert.deepEqual(scegliLotto([{ nome: 'x', byte: 900 * MB }, { nome: 'y', byte: MB }], 400, 384 * MB), ['x']);  // mai zero
+  assert.deepEqual(scegliLotto([], 400, 384 * MB), []);
+});
+
+test('imaging: la ricerca nell’elenco capisce date, anni e parole, e non indovina', () => {
+  assert.deepEqual(leggiRicerca('3.5.1950'), { data: '1950-05-03', anno: null, parole: [] });
+  assert.deepEqual(leggiRicerca('03/05/1950'), { data: '1950-05-03', anno: null, parole: [] });
+  assert.deepEqual(leggiRicerca('1950-05-03'), { data: '1950-05-03', anno: null, parole: [] });
+  assert.deepEqual(leggiRicerca('Rossi 2026'), { data: null, anno: 2026, parole: ['rossi'] });
+  assert.deepEqual(leggiRicerca('  De   Luca '), { data: null, anno: null, parole: ['de', 'luca'] });
+  // Una data che non esiste non diventa una data: resta una parola che non trova niente.
+  assert.equal(leggiRicerca('31.2.2020').data, null);
+  // I caratteri jolly non passano, e una lettera sola non è una ricerca.
+  assert.deepEqual(leggiRicerca('%_ a ros%si').parole, ['rossi']);
+  assert.ok(ricercaVuota(leggiRicerca('  ')));
+  assert.ok(ricercaVuota(leggiRicerca('a')));
+  assert.ok(!ricercaVuota(leggiRicerca('2025')));
 });

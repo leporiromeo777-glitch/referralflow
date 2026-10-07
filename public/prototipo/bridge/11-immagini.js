@@ -51,7 +51,7 @@ if (typeof NAV !== 'undefined') for (const r of ['secretary', 'assistant', 'doct
 .rf-mis-stato.st-CAUTION { color:#8a5a00; } .rf-mis-stato.st-VALIDATED { color:#0d5c48; }
 `; document.head.appendChild(st); })();
 
-RF.img = { lista: null, conta: {}, errore: null, lettore: true, aperto: null, dati: null, serie: 0, idx: 0, frame: 0, ww: null, wl: null, carico: false, filtro: '' };
+RF.img = { lista: null, conta: {}, errore: null, lettore: true, aperto: null, dati: null, serie: 0, idx: 0, frame: 0, ww: null, wl: null, carico: false, filtro: '', q: '', trovati: null, altri: false, cerco: false, erroreCerca: null };
 /* Il righello (19.9.2026): è la parte della piattaforma che è un dispositivo
    medico in-house dello studio (docs/legale/dispositivo-in-house/). La
    matematica sta in misura.js, uguale per browser e server; qui c'è solo il
@@ -70,6 +70,24 @@ async function rfImgCarica(rendi = true) {
   } catch { RF.img.errore = 'Piattaforma non raggiungibile.'; }
   if (rendi) render();
 }
+
+/* Cercare nell'archivio delle immagini (7.10.2026): l'elenco mostra gli ultimi
+   200, e con l'ecografo che manda ogni esame al Mac gli altri si cercano. In
+   POST: quello che si scrive è un nome, e un nome non va in un indirizzo. */
+async function rfImgCerca(da) {
+  const q = (RF.img.q || '').trim();
+  if (!q) { rfImgCercaVia(); return; }
+  if (RF.img.cerco) return;
+  RF.img.cerco = true; RF.img.erroreCerca = null; render();
+  try {
+    const r = await fetch('/api/prototipo/imaging', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'cerca', q, da: da || 0 }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) RF.img.erroreCerca = j.errore || `La ricerca non è riuscita (${r.status}).`;
+    else { RF.img.trovati = da ? (RF.img.trovati || []).concat(j.esami || []) : (j.esami || []); RF.img.altri = !!j.altri; }
+  } catch { RF.img.erroreCerca = 'Piattaforma non raggiungibile.'; }
+  RF.img.cerco = false; render();
+}
+function rfImgCercaVia() { RF.img.q = ''; RF.img.trovati = null; RF.img.altri = false; RF.img.erroreCerca = null; render(); }
 
 async function rfImgApri(id) {
   RF.img.aperto = id; RF.img.dati = null; RF.img.serie = 0; RF.img.idx = 0; RF.img.frame = 0; RF.img.ww = null; RF.img.wl = null; RF.mpr.piano = null; RF.mpr.indice = 0;
@@ -623,7 +641,8 @@ PAGES.imaging = () => {
   if (RF.img.lista === null && !RF.img.errore) { void rfImgCarica(); return `<div class="page-head"><div><h2 class="page-title">Immagini</h2></div></div><div class="card"><div class="caption">Carico…</div></div>`; }
   if (RF.img.aperto) return rfImgDettaglio();
 
-  const l = RF.img.lista || [];
+  const cercato = RF.img.trovati !== null;
+  const l = cercato ? RF.img.trovati : (RF.img.lista || []);
   const f = RF.img.filtro;
   const mostrati = f === 'verifica' ? l.filter(e => e.stato === 'da_verificare') : f === 'senza' ? l.filter(e => !e.patient_id) : l;
   const riga = (e) => {
@@ -636,13 +655,20 @@ PAGES.imaging = () => {
   };
   const c = RF.img.conta || {};
   return `
-    <div class="page-head"><div><h2 class="page-title">Immagini</h2><div class="page-sub">${l.length} esami${c.da_verificare ? ` · ${c.da_verificare} da verificare` : ''}${c.senza_paziente ? ` · ${c.senza_paziente} senza paziente` : ''}</div></div>
+    <div class="page-head"><div><h2 class="page-title">Immagini</h2><div class="page-sub">${c.totale != null ? c.totale : l.length} esami${c.byte && Number(c.byte) ? ` · ${rfImgPeso(c.byte)}` : ''}${c.da_verificare ? ` · ${c.da_verificare} da verificare` : ''}${c.senza_paziente ? ` · ${c.senza_paziente} senza paziente` : ''}</div></div>
       <div class="actions"><div class="seg"><button class="${!f ? 'active' : ''}" onclick="RF.img.filtro='';render()">Tutti</button><button class="${f === 'verifica' ? 'active' : ''}" onclick="RF.img.filtro='verifica';render()">Da verificare</button><button class="${f === 'senza' ? 'active' : ''}" onclick="RF.img.filtro='senza';render()">Senza paziente</button></div></div></div>
     ${RF.img.errore ? `<div class="rf-manc mb-16">${rfEsc(RF.img.errore)}</div>` : ''}
     ${RF.img.lettore ? '' : '<div class="rf-manc mb-16">Il lettore DICOM non è installato su questo server: gli esami si vedono, ma non si importano e non si disegnano.</div>'}
-    <p class="rf-img-limite">Le immagini si <b>consultano</b> nel contesto della cartella e si <b>misurano</b> (distanze, polilinee, angoli, aree di rettangoli, ellissi e poligoni, perimetri, punti: dalla calibrazione scritta nel file dall'apparecchio). Il righello è un dispositivo medico fabbricato e usato dentro lo studio (ODmed art. 9 e 18): fascicolo, validazione e notifica sono in <code>docs/legale/dispositivo-in-house/</code>. La diagnosi resta del medico, e il referto nasce dal dettato come sempre.</p>
-    <div class="card mt-16"><div class="card-head"><span class="section-title">Esami</span><span class="caption">dal più recente</span></div>
-      <div class="list">${mostrati.length ? mostrati.map(riga).join('') : '<div class="caption">Nessun esame.</div>'}</div></div>
+    <p class="rf-img-limite">Le immagini si <b>consultano</b> nel contesto della cartella, con le misure già fatte dall'apparecchio. Gli esami che l'ecografo manda qui <b>restano</b> su questo Mac e si ritrovano con la ricerca; quelli presi dall'archivio Philips sono copie temporanee, e l'originale resta lì. La diagnosi resta del medico, e il referto nasce dal dettato come sempre.</p>
+    <div class="card mt-16"><div class="card-head"><span class="section-title">Esami</span><span class="caption">${cercato ? `${l.length}${RF.img.altri ? '+' : ''} trovati` : (c.totale > l.length ? `gli ultimi ${l.length} di ${c.totale}: gli altri si cercano` : 'dal più recente')}</span></div>
+      <div class="row mb-8" style="gap:8px;align-items:center">
+        <input class="input" id="rf-img-q" style="flex:1;min-width:0" placeholder="Cerca: cognome, data dell’esame o di nascita (3.5.1950), anno" value="${rfEsc(RF.img.q)}" oninput="RF.img.q=this.value" onkeydown="if(event.key==='Enter')rfImgCerca(0)">
+        <button class="btn sm" onclick="rfImgCerca(0)" ${RF.img.cerco ? 'disabled' : ''}>${RF.img.cerco ? 'Cerco…' : 'Cerca'}</button>
+        ${cercato || RF.img.q ? '<button class="btn sm ghost" onclick="rfImgCercaVia()">Tutti</button>' : ''}
+      </div>
+      ${RF.img.erroreCerca ? `<div class="rf-manc mb-8">${rfEsc(RF.img.erroreCerca)}</div>` : ''}
+      <div class="list">${mostrati.length ? mostrati.map(riga).join('') : `<div class="caption">${cercato ? 'Nessun esame con questi dati.' : 'Nessun esame.'}</div>`}</div>
+      ${cercato && RF.img.altri ? '<div class="row mt-8" style="justify-content:center"><button class="btn sm ghost" onclick="rfImgCerca(RF.img.trovati.length)">Mostra altri</button></div>' : ''}</div>
     ${rfArchScheda()}
     ${rfImgRicezione()}
     <div class="card mt-16"><div class="section-title">Portare dentro un esame a mano</div>
@@ -656,9 +682,10 @@ PAGES.imaging = () => {
       <p class="meta" style="margin:10px 0 0;line-height:1.55">I file restano su questo Mac e non escono mai: il browser riceve un'immagine già pronta, non il DICOM. L'esame si aggancia da solo al paziente quando <b>nome e data di nascita</b> del file combaciano con una persona sola della cartella; se no resta «da verificare», e lo abbina qualcuno.</p></div>`;
 };
 
-/* L'archivio dello studio (6.10.2026). L'archivio RESTA al software Philips:
-   qui si chiede «che esami hai di questa persona?» e, quando se ne apre uno,
-   ce lo si fa mandare. La copia che arriva è temporanea. */
+/* L'archivio dello studio (6.10.2026). Al software Philips si chiede «che
+   esami hai di questa persona?» e, quando se ne apre uno, ce lo si fa mandare:
+   la copia che arriva così è temporanea. Dal 7.10.2026 l'ecografo manda gli
+   esami ANCHE direttamente qui, e quelli restano (vedi rfImgCerca). */
 RF.arch = { stato: null, q: '', esiti: null, carico: false, messaggio: null, prova: null, attese: {}, perPaz: {} };
 const RF_ARCH_URL = '/api/prototipo/imaging/archivio';
 

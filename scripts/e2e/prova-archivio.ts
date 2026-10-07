@@ -33,7 +33,7 @@ async function prendi(study_uid: string, patient_id: string | null, archivio?: s
 async function main() {
   if (!/referralflow_demo/.test(process.env.DATABASE_URL ?? '')) throw new Error('solo sul database demo');
   const pazienti: string[] = [];
-  const mieiEsami = () => query<{ id: string; study_uid: string }>(`select id, study_uid from imaging_esami where studio_id = $1 and (paziente_dicom like 'PROVARCHIV%' or paziente_dicom like 'ALTRAPROVA%' or paziente_dicom like 'TERZAPROVA%')`, [S]);
+  const mieiEsami = () => query<{ id: string; study_uid: string }>(`select id, study_uid from imaging_esami where studio_id = $1 and (paziente_dicom ilike 'PROVARCHIV%' or paziente_dicom ilike 'ALTRAPROVA%' or paziente_dicom ilike 'TERZAPROVA%')`, [S]);
   try {
     const [{ id: pa }] = await query<{ id: string }>(`insert into patients (studio_id, cognome, nome, data_nascita) values ($1, 'Provarchivio', 'Anna', '1950-01-01') returning id`, [S]);
     const [{ id: pl }] = await query<{ id: string }>(`insert into patients (studio_id, cognome, nome) values ($1, 'Altraprova', 'Luca') returning id`, [S]);

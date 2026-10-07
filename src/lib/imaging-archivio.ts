@@ -7,6 +7,7 @@ import path from 'node:path';
 import { query } from './db';
 import { deleteFile } from './storage';
 import { ingestaDicom } from './imaging-ingest';
+import { scegliLotto } from './imaging-ordina';
 import { dataDicom, filtriDaTesto, modelliNome, sceltiPerPaziente, tutti, uidValido, type EsameArchivio, type StudioArchivio } from './imaging-archivio-regole';
 
 // Gli esami dell'archivio dello studio (6.10.2026, decisione del 5.10: «deve
@@ -200,6 +201,12 @@ export async function cercaLibera(studioId: string, testo: string): Promise<{ es
 // e all'avviso della ricezione, e il recupero dall'archivio appena finisce.)
 // Un giro alla volta: due insieme leggerebbero gli stessi file.
 const PER_GIRO = 400;
+// Un ecocardiogramma sono decine di filmati da decine di megabyte: letti tutti
+// insieme sono gigabyte in memoria (7.10.2026). Un lotto si ferma a questo peso
+// (un file solo passa sempre, per grande che sia) e il giro continua coi lotti
+// successivi finché lo spool non è vuoto.
+const PESO_LOTTO = 384 * 1024 * 1024;
+const LOTTI_PER_GIRO = 60;
 export type EsitoSpool = { file: number; esami: number; nuovi: number; immagini: number; scartati: number; spool?: 'assente' };
 let coda: Promise<unknown> = Promise.resolve();
 export function svuotaSpool(): Promise<EsitoSpool> {
@@ -210,31 +217,57 @@ export function svuotaSpool(): Promise<EsitoSpool> {
 
 async function giro(): Promise<EsitoSpool> {
   const SPOOL = path.join(base(), 'ingresso'), SCARTATI = path.join(base(), 'scartati');
-  const vuoto = { file: 0, esami: 0, nuovi: 0, immagini: 0, scartati: 0 };
-  let nomi: string[] = [];
-  try { nomi = (await fs.readdir(SPOOL)).filter((n) => n.endsWith('.dcm')).sort().slice(0, PER_GIRO); } catch { return { ...vuoto, spool: 'assente' }; }
-  if (!nomi.length) return vuoto;
-  // Un solo studio, oggi; il giorno che ce ne fossero due, l'apparecchio si
-  // dichiara con l'AE Title e la scelta si farà da lì.
-  const [studio] = await query<{ id: string }>(`select id from studios where attivo order by created_at limit 1`);
-  if (!studio) throw new Error('nessuno studio');
-  const file: Buffer[] = [], letti: string[] = [];
-  for (const n of nomi) {
-    try { file.push(await fs.readFile(path.join(SPOOL, n))); letti.push(n); } catch { /* sparito mentre leggevamo: pazienza */ }
+  const tot: EsitoSpool = { file: 0, esami: 0, nuovi: 0, immagini: 0, scartati: 0 };
+  const esamiVisti = new Set<string>();
+  for (let lotto = 0; lotto < LOTTI_PER_GIRO; lotto++) {
+    let nomi: string[] = [];
+    try { nomi = (await fs.readdir(SPOOL)).filter((n) => n.endsWith('.dcm')).sort(); } catch { return lotto ? tot : { ...tot, spool: 'assente' }; }
+    if (!nomi.length) break;
+    const pesati: { nome: string; byte: number }[] = [];
+    for (const n of nomi.slice(0, PER_GIRO)) {
+      try { pesati.push({ nome: n, byte: (await fs.stat(path.join(SPOOL, n))).size }); } catch { /* sparito mentre guardavamo */ }
+    }
+    const scelti = scegliLotto(pesati, PER_GIRO, PESO_LOTTO);
+    if (!scelti.length) break;
+    // Un solo studio, oggi; il giorno che ce ne fossero due, l'apparecchio si
+    // dichiara con l'AE Title e la scelta si farà da lì.
+    const [studio] = await query<{ id: string }>(`select id from studios where attivo order by created_at limit 1`);
+    if (!studio) throw new Error('nessuno studio');
+    const file: Buffer[] = [], letti: string[] = [];
+    for (const n of scelti) {
+      try { file.push(await fs.readFile(path.join(SPOOL, n))); letti.push(n); } catch { /* sparito mentre leggevamo: pazienza */ }
+    }
+    if (!file.length) break;
+    const r = await ingestaDicom(studio.id, file, { origine: 'rete', userId: null });
+    // Cancellare solo ciò che è entrato davvero. Se non è entrato niente, i file
+    // si mettono da parte: capirà una persona che cosa sono.
+    if (r.esami.length) {
+      for (const n of letti) { try { await fs.rm(path.join(SPOOL, n), { force: true }); } catch { /* al prossimo giro */ } }
+      try { await segnaDallArchivio(studio.id, r.esami); } catch (e: any) { console.error(`[archivio] segno: ${e?.code ?? e?.name ?? 'errore'}`); }
+      try { await restaQui(studio.id, r.esami, r.conNuove); } catch (e: any) { console.error(`[imaging] resta: ${e?.code ?? e?.name ?? 'errore'}`); }
+    } else {
+      await fs.mkdir(SCARTATI, { recursive: true }).catch(() => {});
+      for (const n of letti) { try { await fs.rename(path.join(SPOOL, n), path.join(SCARTATI, n)); } catch { /* al prossimo giro */ } }
+    }
+    console.log(`[imaging] ricezione file=${letti.length} esami=${r.esami.length} nuovi=${r.nuovi} immagini=${r.immagini} scartati=${r.scartati} doppioni=${r.doppioni}`);
+    for (const id of r.esami) esamiVisti.add(id);
+    tot.file += letti.length; tot.nuovi += r.nuovi; tot.immagini += r.immagini; tot.scartati += r.scartati;
   }
-  if (!file.length) return vuoto;
-  const r = await ingestaDicom(studio.id, file, { origine: 'rete', userId: null });
-  // Cancellare solo ciò che è entrato davvero. Se non è entrato niente, i file
-  // si mettono da parte: capirà una persona che cosa sono.
-  if (r.esami.length) {
-    for (const n of letti) { try { await fs.rm(path.join(SPOOL, n), { force: true }); } catch { /* al prossimo giro */ } }
-    try { await segnaDallArchivio(studio.id, r.esami); } catch (e: any) { console.error(`[archivio] segno: ${e?.code ?? e?.name ?? 'errore'}`); }
-  } else {
-    await fs.mkdir(SCARTATI, { recursive: true }).catch(() => {});
-    for (const n of letti) { try { await fs.rename(path.join(SPOOL, n), path.join(SCARTATI, n)); } catch { /* al prossimo giro */ } }
-  }
-  console.log(`[imaging] ricezione file=${letti.length} esami=${r.esami.length} nuovi=${r.nuovi} immagini=${r.immagini} scartati=${r.scartati}`);
-  return { file: letti.length, esami: r.esami.length, nuovi: r.nuovi, immagini: r.immagini, scartati: r.scartati };
+  tot.esami = esamiVisti.size;
+  return tot;
+}
+
+// Una copia temporanea presa dall'archivio diventa un esame che RESTA quando
+// l'apparecchio manda per conto suo immagini di quello stesso esame (7.10.2026:
+// l'ecografo spedisce anche al Mac). Non vale se le immagini sono arrivate
+// perché qualcuno le ha appena chieste all'archivio: quella è ancora la copia.
+async function restaQui(studioId: string, ids: string[], conNuove: string[]): Promise<void> {
+  if (!conNuove.length) return;
+  await query(
+    `update imaging_esami e set origine = 'rete', scade_il = null, updated_at = now()
+      where e.studio_id = $1 and e.id = any($2::uuid[]) and e.id = any($3::uuid[]) and e.origine = 'archivio'
+        and not exists (select 1 from imaging_richieste r where r.studio_id = e.studio_id and r.study_uid = e.study_uid
+                         and r.chiesto_il > now() - interval '1 day')`, [studioId, ids, conNuove]);
 }
 
 // Gli esami appena entrati che qualcuno aveva CHIESTO all'archivio: sono copie
