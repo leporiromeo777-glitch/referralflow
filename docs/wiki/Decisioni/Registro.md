@@ -596,4 +596,4 @@ Dallo studio nessun PC apriva `cct.referralflow.ch` (timeout). Non era il domini
 `192.168.20.0/24` (Wi-Fi dell'ufficio) con l'utente amministratore; le porte d'amministrazione restano
 solo via Tailscale e la rete degli apparecchi resta fuori. Provato da un PC dell'ufficio: si apre.
 Lezione per le diagnosi: una prova fatta dal Mac verso sé stesso non dice niente su chi entra da fuori.
-Aperto: il Python del ricevitore DICOM è ancora su «Blocca» nel firewall delle applicazioni.
+Lo stesso giorno lo studio ha ammesso nel firewall delle applicazioni il Python del ricevitore DICOM (3.14.7).
