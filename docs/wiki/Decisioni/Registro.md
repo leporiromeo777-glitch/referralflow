@@ -590,3 +590,10 @@ via la ciambella della distribuzione; la demo che si vede ha quattro pazienti e 
 catalogo completo resta per le prove). Se un giorno i monitorati diventassero decine, ricerca e
 filtri vanno rimessi: con tanti riquadri la pagina non si legge più.
 
+## 7.10.2026 — L'app si apre dalla rete dell'ufficio: era il filtro di rete del Mac
+Dallo studio nessun PC apriva `cct.referralflow.ch` (timeout). Non era il dominio né il PC: il filtro pf
+«weblinkx» del Mac ammetteva le porte dell'app solo dalla rete `192.168.1.0/24`. Lo studio ha aggiunto
+`192.168.20.0/24` (Wi-Fi dell'ufficio) con l'utente amministratore; le porte d'amministrazione restano
+solo via Tailscale e la rete degli apparecchi resta fuori. Provato da un PC dell'ufficio: si apre.
+Lezione per le diagnosi: una prova fatta dal Mac verso sé stesso non dice niente su chi entra da fuori.
+Aperto: il Python del ricevitore DICOM è ancora su «Blocca» nel firewall delle applicazioni.
