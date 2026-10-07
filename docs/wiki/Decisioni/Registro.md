@@ -622,3 +622,22 @@ e lo studio ha ammesso `192.168.0.0/24` nel filtro del Mac. I PC fissi, che hann
 aprono l'app senza Wi-Fi. Aperto: chi è solo sul Wi-Fi dell'ufficio (`192.168.20.`) non arriva all'app; se
 serve, un secondo nome per quella rete e il Wi-Fi del Mac di nuovo lì.
 
+## 7.10.2026 — Pagina Pressione: mostra subito, propone solo dopo la validazione
+Lo studio vuole una pagina col profilo pressorio delle 24 ore e la terapia, che arrivi a proporre gli
+orari dei farmaci per tenere la pressione il più regolare possibile. Deciso così:
+- **Si fa in due tempi.** La pagina che mostra (profilo, terapia, finestre d'azione, fasce scoperte,
+  punteggio, prima e dopo) è in uso da oggi. Le **proposte di orario** sono scritte ma **spente**
+  (`PRESSIONE_PROPOSTE=1` per accenderle): sono un dispositivo medico interno dello studio, come il
+  righello, con fascicolo in `docs/legale/dispositivo-in-house-pressione/` — da validare e notificare prima.
+- **Solo l'orario.** Il software non propone farmaci, dosi, aggiunte o sospensioni; se nessuno
+  spostamento basta lo dice con una frase fissa che descrive i dati, e si ferma.
+- **«Regolare» non vuol dire piatto**: il punteggio premia le ore in bersaglio e il calo notturno.
+- **I farmaci**: niente Compendium né altre banche dati. Una tabella dello studio, una cinquantina di
+  principi attivi, quattro numeri ciascuno; nasce in bozza e una riga vale solo dopo la conferma di
+  un medico sul testo ufficiale.
+- **Le proposte le calcola codice ripetibile**, non un modello linguistico.
+- Detto allo studio e da non dimenticare: il beneficio sugli esiti di uno spostamento di orario non è
+  dimostrato. La conferma di una proposta è il monitoraggio dopo.
+Aperti: quale apparecchio fa il monitoraggio e come esporta; chi è il medico che conferma la tabella e
+fa la validazione; terapia presa dalla cartella; commento per il referto.
+

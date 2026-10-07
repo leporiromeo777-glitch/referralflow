@@ -69,7 +69,7 @@ REFERTI_IMAGING_BASE="$ARCH" "$PY" imaging/ricevi-dicom.py > "$TMP/ricezione.log
 RIC_PID=$!
 # Monitoraggio: sul server di prova il motore è spento (lo guidano le prove, col tempo simulato) e l'AI pure;
 # la demo è quella COMPLETA (13 pazienti, tutte le situazioni), non i quattro che si vedono di serie.
-MONITORAGGIO_DEMO=completa MONITORAGGIO_MOTORE=spento MONITORAGGIO_AI=spenta REFERTI_IMAGING_BASE="$ARCH" IMAGING_MISURE=1 DATABASE_URL="$URL_DB" PORT="$PORTA" npx next dev -p "$PORTA" > "$TMP/server.log" 2>&1 &
+MONITORAGGIO_DEMO=completa MONITORAGGIO_MOTORE=spento MONITORAGGIO_AI=spenta PRESSIONE_PROPOSTE=1 REFERTI_IMAGING_BASE="$ARCH" IMAGING_MISURE=1 DATABASE_URL="$URL_DB" PORT="$PORTA" npx next dev -p "$PORTA" > "$TMP/server.log" 2>&1 &
 SERVER_PID=$!
 for _ in $(seq 1 60); do curl -s -o /dev/null "http://localhost:$PORTA/login" && break; sleep 2; done
 curl -s -o /dev/null "http://localhost:$PORTA/login" || { fallito "il server di prova non è partito (vedi $TMP/server.log)"; tail -5 "$TMP/server.log"; exit 1; }
@@ -156,6 +156,10 @@ echo "→ monitoraggio remoto (demo): stati, isolamento, doppioni, avvisi, perme
 C_TEC="$(sessione tecnico)"; C_ADM="$(sessione admin)"; C_SEGR="$(sessione segretaria)"
 MONITORAGGIO_DEMO=completa DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-monitoraggio.ts "http://localhost:$PORTA" "$STUDIO" "$C_MEDICO" "$C_SEGR" "$C_TEC" "$C_ADM" > "$TMP/monitoraggio.txt" 2>&1 || { fallito "prova-monitoraggio"; cut -c1-300 "$TMP/monitoraggio.txt" | tail -5; }
 grep -E "^NO" "$TMP/monitoraggio.txt"; echo "   $(grep -c '^ok' "$TMP/monitoraggio.txt") ok, $(grep -c '^NO' "$TMP/monitoraggio.txt") no"
+
+echo "→ pressione: profilo delle 24 ore, terapia, tabella dei farmaci da confermare, fasce scoperte, proposte, permessi"
+DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-pressione.ts "http://localhost:$PORTA" "$STUDIO" "$C_MEDICO" "$C_SEGR" "$C_TEC" > "$TMP/pressione.txt" 2>&1 || { fallito "prova-pressione"; cut -c1-300 "$TMP/pressione.txt"; }
+grep -E "^NO" "$TMP/pressione.txt"; echo "   $(grep -c '^ok' "$TMP/pressione.txt") ok, $(grep -c '^NO' "$TMP/pressione.txt") no"
 
 echo "→ chi vede che cosa: menu dal server e rotte bloccate, ruolo per ruolo"
 B="http://localhost:$PORTA/api/prototipo"
