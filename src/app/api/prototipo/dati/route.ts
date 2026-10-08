@@ -519,12 +519,17 @@ export async function GET() {
     referrals: (p.referrals ?? []).map((r: any) => ({ ...r, quesito: '' })),
   }));
 
+  // L'agenda letta in parte (8.10.2026): se MediOnline mostra meno agende del
+  // solito, il feed lo scrive nel suo stato e la pagina Agenda lo dice in cima.
+  const [feedAvviso] = await query<{ last_status: string | null }>(
+    `select last_status from agenda_feeds where studio_id = $1 and attivo and last_status like '%⚠%' order by last_synced_at desc nulls last limit 1`, [session.studioId]).catch(() => []);
+  const agendaAvviso = feedAvviso?.last_status ? feedAvviso.last_status.slice(feedAvviso.last_status.indexOf('⚠') + 1).trim().slice(0, 400) : null;
   return NextResponse.json({
     utente: { role: RUOLO[session.role] ?? 'secretary', name: nome, initials: iniz, studio: session.studioNome, email: session.email },
     // Sezioni del ruolo (permessi.ts): il menu si costruisce da qui; la coda
     // dei referti non parte verso chi non ha la sezione Referti.
     sezioni: sezioniDi(session.role),
-    today, doctors, patients: pazientiFuori, appts: apptsOggi, agenda, tasks, reports: puo(session.role, 'reports') ? reports : [], documents, inbox, audioInbox, stats, sale, agendeMedico, ruoliMedici, pianoSale: piano, capienzaSale: { ...cap, stanze: sale.length },
+    today, agendaAvviso, doctors, patients: pazientiFuori, appts: apptsOggi, agenda, tasks, reports: puo(session.role, 'reports') ? reports : [], documents, inbox, audioInbox, stats, sale, agendeMedico, ruoliMedici, pianoSale: piano, capienzaSale: { ...cap, stanze: sale.length },
     risorse: risorse.map((r) => ({ id: r.id, tipo: r.tipo, nome: r.nome, posti: r.posti })),
     catalogo, coloriMedici, daChiamare, moduli_nascosti: stud?.moduli_nascosti ?? [],
   });

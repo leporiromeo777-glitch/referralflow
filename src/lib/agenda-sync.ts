@@ -3,8 +3,7 @@ import { readFile, stat } from 'fs/promises';
 import path from 'path';
 import { query } from './db';
 import { riabbinaPazienti } from './pazienti-abbina';
-import { parseICal, type ICalEvent } from './ical';
-
+import { parseICal, type ICalEvent, avvisoColonne, colonneLette } from './ical';
 // Sincronizzazione di un feed iCal (agenda Cassa dei Medici) verso la tabella appointments.
 // Server-side: scarica l'URL, mappa il medico dagli alias, abbina le referral,
 // fa upsert idempotente e allinea le cancellazioni.
@@ -209,7 +208,27 @@ export async function syncFeed(feedId: string): Promise<SyncResult> {
   // Allinea le cancellazioni: rimuove gli appuntamenti futuri di questo feed non più presenti.
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
-  if (seen.length > 0) {
+  // Se il robot dice quali colonne aveva davanti (8.10.2026), si cancella solo
+  // DENTRO quelle: di un'agenda che MediOnline non stava mostrando non si sa
+  // niente, e «non l'ho vista» non vuol dire «è vuota». Restano com'erano
+  // finché la vista torna completa. Le righe senza colonna seguono la regola
+  // di prima; le agende chiuse davvero (non viste da 14 giorni) si svuotano.
+  const colonne = colonneLette(text);
+  if (colonne) {
+    if (colonne.lette.length) {
+      await query(
+        `delete from appointments
+          where feed_id = $1 and starts_at >= $2 and not (external_uid = any($3))
+            and (coalesce(luogo, '') = '' or luogo = any($4))`,
+        [feed.id, startOfToday.toISOString(), seen, colonne.lette]
+      );
+    }
+    if (colonne.chiuse.length) {
+      await query('delete from appointments where feed_id = $1 and starts_at >= $2 and luogo = any($3)', [feed.id, startOfToday.toISOString(), colonne.chiuse]);
+    }
+    avviso += avvisoColonne(colonne);
+    if (colonne.mancanti.length) console.log(`[agenda] vista ridotta: lette ${colonne.lette.length} agende su ${colonne.note.length}`);
+  } else if (seen.length > 0) {
     await query(
       `delete from appointments
         where feed_id = $1 and starts_at >= $2 and not (external_uid = any($3))`,

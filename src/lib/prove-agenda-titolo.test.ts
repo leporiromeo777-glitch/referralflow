@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { avvisoColonne, colonneLette } from './ical';
 import { leggiTitolo, nomePulito } from './agenda-titolo';
 
 test('titolo: nome, data di nascita, numero paziente e sigla', () => {
@@ -44,4 +45,22 @@ test('nome: il cognome ripetuto si toglie una volta sola, il doppio cognome rest
   assert.equal(nomePulito('Rossi Rossi Mario Luca'), 'Rossi Mario Luca');
   assert.equal(nomePulito('Blasi Frallicciardi Giovanna'), 'Blasi Frallicciardi Giovanna');
   assert.equal(nomePulito('Verdi Giuseppe'), 'Verdi Giuseppe');
+});
+
+
+test('agenda: il calendario del robot dichiara quali agende aveva davanti, e si capisce quali mancano', () => {
+  const cal = (testa: string[]) => ['BEGIN:VCALENDAR', 'VERSION:2.0', ...testa, 'END:VCALENDAR'].join('\r\n');
+  // Robot di prima, o un feed qualunque: nessuna dichiarazione, si fa come sempre.
+  assert.equal(colonneLette(cal([])), null);
+  assert.equal(avvisoColonne(null), '');
+  const piena = colonneLette(cal(['X-RF-COLONNE:M.M.,P-E%20V,DG', 'X-RF-COLONNE-NOTE:M.M.,P-E%20V,DG']))!;
+  assert.deepEqual(piena.lette, ['M.M.', 'P-E V', 'DG']);
+  assert.deepEqual(piena.mancanti, []);
+  assert.equal(avvisoColonne(piena), '');
+  const ridotta = colonneLette(cal(['X-RF-COLONNE:DG', 'X-RF-COLONNE-NOTE:M.M.,P-E%20V,DG', 'X-RF-COLONNE-CHIUSE:VECCHIA']))!;
+  assert.deepEqual(ridotta.mancanti, ['M.M.', 'P-E V']);
+  assert.deepEqual(ridotta.chiuse, ['VECCHIA']);
+  assert.match(avvisoColonne(ridotta), /⚠ MediOnline mostra 1 agenda su 3.*mancano: M\.M\., P-E V/);
+  // Dichiarazione presente ma vuota: non si è visto niente, e si sa.
+  assert.deepEqual(colonneLette(cal(['X-RF-COLONNE:']))!.lette, []);
 });

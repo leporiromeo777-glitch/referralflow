@@ -161,6 +161,10 @@ echo "→ pressione: profilo delle 24 ore, terapia, tabella dei farmaci da confe
 DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-pressione.ts "http://localhost:$PORTA" "$STUDIO" "$C_MEDICO" "$C_SEGR" "$C_TEC" > "$TMP/pressione.txt" 2>&1 || { fallito "prova-pressione"; cut -c1-300 "$TMP/pressione.txt"; }
 grep -E "^NO" "$TMP/pressione.txt"; echo "   $(grep -c '^ok' "$TMP/pressione.txt") ok, $(grep -c '^NO' "$TMP/pressione.txt") no"
 
+echo "→ agenda: quando MediOnline mostra meno agende, quelle nascoste non si svuotano"
+DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-agenda-colonne.ts "$STUDIO" > "$TMP/agenda-colonne.txt" 2>&1 || { fallito "prova-agenda-colonne"; cut -c1-300 "$TMP/agenda-colonne.txt"; }
+grep -E "^NO" "$TMP/agenda-colonne.txt"; echo "   $(grep -c '^ok' "$TMP/agenda-colonne.txt") ok, $(grep -c '^NO' "$TMP/agenda-colonne.txt") no"
+
 echo "→ chi vede che cosa: menu dal server e rotte bloccate, ruolo per ruolo"
 B="http://localhost:$PORTA/api/prototipo"
 controlla() {   # ruolo  sezione-attesa-si  sezione-attesa-no  rotta-attesa-200  rotta-attesa-403

@@ -127,7 +127,7 @@ async function estraiGiorno(p) {
       });
     }
     const date = [...new Set(fuori.map((x) => x.data))];
-    return { data: date.length === 1 ? date[0] : null, appuntamenti: fuori, via: 'struttura' };
+    return { data: date.length === 1 ? date[0] : null, appuntamenti: fuori, via: 'struttura', colonne: [...new Set(sigle.values())] };
   });
   if (dalla && dalla.appuntamenti.length) return dalla;
   return p.evaluate(() => {
@@ -253,6 +253,7 @@ async function estraiGiorno(p) {
     return {
       data: md ? `${md[3]}-${md[2]}-${md[1]}` : null,
       appuntamenti,
+      colonne: [...new Set((colonne.length ? colonne.map((c) => c.sigla) : sigle).filter(Boolean))],
     };
   });
 }
@@ -419,6 +420,7 @@ try {
   const perGiorno = [];
   const censimentoColori = new Map();
   const censimentoIcone = new Map();
+  const colonneViste = new Set();   // le agende che MediOnline mostrava in questo giro
   let scartatiPerColore = 0;
   for (let g = 0; g < TOTALE; g++) {
     await p.waitForSelector('.WeekGrid_main', { timeout: 30_000 });
@@ -428,6 +430,7 @@ try {
       log(`giorno ${g + 1}: lettura non riuscita (${giorno.errore})`);
       if (g === 0) await scriviDiagnosi(context, 'griglia non leggibile');
     } else {
+      for (const c of giorno.colonne ?? []) colonneViste.add(c);
       const dataISO = giorno.data ?? dataFallback.toISOString().slice(0, 10);
       if (giorno.data) dataFallback = new Date(giorno.data + 'T12:00:00');
       for (const a of giorno.appuntamenti) {
@@ -463,10 +466,32 @@ try {
   // ICS: un evento per appuntamento. La sigla dell'agenda va in LOCATION
   // (nel feed di ReferralFlow scegliere «location» come campo del medico e
   // mettere le sigle negli alias dei medici).
+  // Quali agende avevamo davanti (8.10.2026). MediOnline mostra quelle spuntate
+  // e ricorda la scelta per account: se qualcuno ne lascia una sola, qui si
+  // legge una colonna sola. La piattaforma deve saperlo, per non prendere «non
+  // l'ho vista» per «è vuota» e cancellare gli appuntamenti degli altri medici.
+  // Si tiene memoria delle colonne viste negli ultimi 14 giorni: quelle che
+  // mancano oggi si dichiarano, quelle sparite da 14 giorni si danno per chiuse.
+  const MEMORIA = path.join(DEST_DIR, 'colonne-viste.json');
+  const GIORNI_MEMORIA = 14;
+  let memoria = {};
+  try { memoria = JSON.parse(readFileSync(MEMORIA, 'utf-8')) ?? {}; } catch { /* primo giro */ }
+  const adessoMs = Date.now();
+  const chiuse = [];
+  for (const c of colonneViste) memoria[c] = adessoMs;
+  for (const [c, visto] of Object.entries(memoria)) {
+    if (adessoMs - Number(visto) > GIORNI_MEMORIA * 86_400_000) { chiuse.push(c); delete memoria[c]; }
+  }
+  const note = Object.keys(memoria).sort();
+  const lette = [...colonneViste].sort();
+  const mancanti = note.filter((c) => !colonneViste.has(c));
+  const sigle = (v) => v.map((c) => encodeURIComponent(c)).join(',');
   const righe = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
     'PRODID:-//ReferralFlow//robot-agenda-medionline//IT',
+    // Senza nessuna colonna riconosciuta non si dichiara niente: la piattaforma fa come sempre.
+    ...(lette.length ? [`X-RF-COLONNE:${sigle(lette)}`, `X-RF-COLONNE-NOTE:${sigle(note)}`, ...(chiuse.length ? [`X-RF-COLONNE-CHIUSE:${sigle(chiuse)}`] : [])] : []),
   ];
   let totale = 0;
   for (const giorno of perGiorno) {
@@ -510,6 +535,13 @@ try {
   mkdirSync(DEST_DIR, { recursive: true });
   writeFileSync(DEST + '.parziale', righe.join('\r\n') + '\r\n', 'utf-8');
   renameSync(DEST + '.parziale', DEST);
+  if (lette.length) { try { writeFileSync(MEMORIA, JSON.stringify(memoria), 'utf-8'); } catch { /* al prossimo giro */ } }
+  if (mancanti.length) {
+    log(`ATTENZIONE vista ridotta: MediOnline mostra ${lette.length} agende su ${note.length} note (mancano: ${mancanti.join(', ')}). Gli appuntamenti di quelle agende NON vengono toccati; in MediOnline vanno rimesse tutte in vista.`);
+  } else if (lette.length) {
+    log(`agende lette: ${lette.length} (${lette.join(', ')})`);
+  }
+  if (chiuse.length) log(`agende non più viste da ${GIORNI_MEMORIA} giorni, date per chiuse: ${chiuse.join(', ')}`);
   log(`scritto medionline.ics: ${totale} appuntamenti su ${perGiorno.length} giorni` +
     (scartatiPerColore ? ` (${scartatiPerColore} scartati per colore)` : ''));
   // Censimento dei colori visti (per decidere quali ignorare): solo colori

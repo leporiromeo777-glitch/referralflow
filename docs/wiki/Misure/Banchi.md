@@ -324,3 +324,5 @@ Stesso giorno: consegna dopo ogni dettato, suite **45/45**. I quattro dettati ri
 
 **Sale: l'aiuto medico** (8.10.2026): 1 prova pura in `prove-permessi.test.ts` (chi opera, chi decide, parametri, durate) — suite 408/408. Sul server di prova, con un aiuto medico finto: stato e piano 200; evento con tipo inventato 400 ed evento su appuntamento inesistente 409 (cioè ammesso, non rifiutato per ruolo); comando che cambia il piano, piano del mattino, proposte e parametri 403; senza sessione 401.
 
+**Agenda letta in parte** (8.10.2026): 1 prova pura (`colonneLette`, `avvisoColonne`) — suite 409/409. `scripts/e2e/prova-agenda-colonne.ts` 7/7 sul demo con un calendario inventato a due agende: vista ridotta → l'agenda mostrata si aggiorna e quella nascosta non si svuota, lo stato lo dice; vista di nuovo completa → tutto riallineato, nessun avviso; agenda mostrata e vuota → si svuota; agenda chiusa da 14 giorni → si svuota; calendario senza dichiarazione → regola di prima. Misura del guasto reale: 673 appuntamenti letti alle 08:32, 40 alle 08:46.
+

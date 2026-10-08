@@ -1,6 +1,6 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-09-18
+aggiornata: 2026-10-08
 ---
 # Robot agenda MediOnline (operativo dal 2026-08-14)
 
@@ -19,6 +19,13 @@ Catalogo colori dello studio: tenere verde #2ecc40 (visite), verde acceso #01ff7
 Da verificare col tempo: qualità dell'estrazione del nome paziente dai riquadri e aggancio alle referral.
 
 Dal 14.9.2026 ogni evento dell'ICS porta anche `X-RF-COLORE:#rrggbb` (il colore del riquadro nell'agenda originale); la piattaforma lo conserva in `appointments.colore` e l'interfaccia nuova lo mostra ([[Piattaforma/Prototipo stack]]).
+
+## Se in piattaforma «c'è solo un medico»: la vista di MediOnline (8.10.2026)
+Il robot non sceglie quali agende guardare: MediOnline mostra quelle **spuntate**, e ricorda la scelta **per account**. L'8.10.2026, fra le 08:32 e le 08:46, con l'account che usa anche il robot qualcuno ha lasciato spuntata una sola agenda: il robot è passato da 673 appuntamenti letti a 40, e la sincronizzazione — che prendeva «non l'ho visto» per «non c'è più» — ha **cancellato dalla piattaforma gli appuntamenti futuri di tutti gli altri medici**. In MediOnline non è successo niente (sola lettura).
+
+**La protezione.** Il robot scrive nel calendario quali agende aveva davanti: `X-RF-COLONNE` (quelle mostrate in questo giro), `X-RF-COLONNE-NOTE` (tutte quelle viste negli ultimi 14 giorni, memoria in `agenda-locale/colonne-viste.json`), `X-RF-COLONNE-CHIUSE` (non più viste da 14 giorni: agenda tolta davvero). `syncFeed` cancella gli appuntamenti futuri **solo dentro le agende mostrate** (`appointments.luogo` è la sigla della colonna): quelle nascoste restano com'erano finché la vista torna completa; un'agenda mostrata e vuota si svuota davvero; una chiusa da 14 giorni anche. Lo stato del feed dice «⚠ MediOnline mostra N agende su M … (mancano: …)», la pagina Agenda lo mostra in cima («Agenda letta in parte»), e il registro del robot scrive `ATTENZIONE vista ridotta`. Un calendario senza la dichiarazione (altri feed) si comporta come prima.
+
+**Che cosa NON fa**: non rimette le agende in vista (il robot non clicca niente oltre alla navigazione), e gli appuntamenti delle agende nascoste restano fermi all'ultima lettura completa — niente nuovi, niente spostati, niente cambi di stato. **Il rimedio vero è in MediOnline**: rimettere tutte le agende in vista, o meglio dare al robot **un account suo**, che nessuno usa a mano.
 
 ## Stato dell'appuntamento (dal 14.9.2026)
 MediOnline segna lo stato con un'icona in alto a destra del riquadro: non è un `<img>` ma un `<i class="stN">` con l'immagine nello **sfondo CSS**. I nomi dei file sono in francese e parlanti, quindi il riconoscimento è sul nome del file (più stabile del numero della classe); tabella `STATI` in `leggi-agenda.mjs`, rimediabile senza toccare il codice con `AGENDA_STATI=ag_nuovo_16:fatturato` nel conf.

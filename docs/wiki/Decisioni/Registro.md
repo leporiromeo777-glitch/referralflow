@@ -648,3 +648,11 @@ gli rifiutava tutto. Non dà i comandi che cambiano il piano, non rifà il piano
 le proposte: quelli restano a segreteria, medico e amministrazione. Provato con un aiuto medico finto sul
 server di prova: guardare 200, evento accettato, comando/piano/proposte/parametri 403.
 
+## 8.10.2026 — L'agenda non si svuota più quando MediOnline mostra meno medici
+Stamattina in piattaforma «c'era solo Regoli»: con l'account del robot qualcuno ha cambiato la vista
+dell'agenda in MediOnline, e la sincronizzazione ha cancellato gli appuntamenti futuri degli altri medici.
+Deciso con lo studio: il robot dichiara quali agende aveva davanti, la piattaforma aggiorna solo quelle e
+non tocca le altre, e lo dice in cima alla pagina Agenda. Niente blocco totale: chi è in vista continua
+ad aggiornarsi. Resta da fare, dello studio: rimettere tutte le agende in vista in MediOnline, e dare al
+robot un account solo suo.
+

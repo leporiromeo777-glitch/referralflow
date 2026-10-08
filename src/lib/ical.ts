@@ -177,3 +177,34 @@ function buildEvent(props: RawProp[]): ICalEvent {
     status: (get('STATUS')?.value || '').toUpperCase(),
   };
 }
+
+// ── Le colonne che il robot ha VISTO (8.10.2026) ────────────────────────────
+// MediOnline mostra le agende spuntate, e ricorda la scelta per account: se
+// qualcuno ne lascia spuntata una sola, il robot legge una colonna sola. Senza
+// saperlo, la sincronizzazione prendeva «non l'ho visto» per «non c'è più» e
+// cancellava gli appuntamenti futuri di tutti gli altri medici (successo l'8.10).
+// Il robot ora scrive nel calendario, una volta, quali colonne aveva davanti:
+//   X-RF-COLONNE:        quelle mostrate in questo giro
+//   X-RF-COLONNE-NOTE:   tutte quelle viste negli ultimi 14 giorni
+//   X-RF-COLONNE-CHIUSE: quelle non più viste da 14 giorni (agenda tolta davvero)
+// Ogni sigla è codificata (encodeURIComponent) e separata da virgole.
+export type ColonneLette = { lette: string[]; note: string[]; chiuse: string[]; mancanti: string[] };
+export function colonneLette(text: string): ColonneLette | null {
+  const righe = unfold(text);
+  const leggi = (nome: string): string[] | null => {
+    const r = righe.find((x) => x.startsWith(`${nome}:`));
+    if (r === undefined) return null;
+    return r.slice(nome.length + 1).split(',').map((s) => { try { return decodeURIComponent(s.trim()); } catch { return ''; } }).filter(Boolean);
+  };
+  const lette = leggi('X-RF-COLONNE');
+  if (lette === null) return null;          // robot di prima, o feed di un altro tipo: tutto come sempre
+  const note = leggi('X-RF-COLONNE-NOTE') ?? lette;
+  const chiuse = leggi('X-RF-COLONNE-CHIUSE') ?? [];
+  return { lette, note, chiuse, mancanti: note.filter((c) => !lette.includes(c)) };
+}
+// La frase per lo stato del feed quando la vista è ridotta; '' se è completa.
+export function avvisoColonne(c: ColonneLette | null): string {
+  if (!c || !c.mancanti.length) return '';
+  return ` · ⚠ MediOnline mostra ${c.lette.length} ${c.lette.length === 1 ? 'agenda' : 'agende'} su ${c.note.length}: le altre non si aggiornano finché non si rimettono tutte in vista (mancano: ${c.mancanti.slice(0, 20).join(', ')})`;
+}
+
