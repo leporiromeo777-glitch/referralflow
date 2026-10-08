@@ -701,3 +701,8 @@ notificato sotto la responsabilità dello studio. Lo studio ha scelto «Accendil
 `PRESSIONE_PROPOSTE=1` nel `.env` del server. Restano le difese del software: nessuna proposta senza riga
 del farmaco confermata da un medico, solo l'orario, decide sempre il medico, registro di chi decide.
 Le quattro cose restano da fare. Per spegnere: togliere la riga dal `.env` e riavviare.
+
+## 8.10.2026 — Pressione: il grafico tutto insieme o un giorno alla volta
+Richiesta dello studio: i rapporti veri coprono più giorni e in un grafico solo non si leggono. Si sceglie
+«Tutto» o un giorno; è una vista, i conti (medie, fasce, punteggio, proposte) restano su tutta la
+registrazione, e la legenda lo dice.

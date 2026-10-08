@@ -51,6 +51,7 @@ const RF_PA_CLASSE = { ace_inibitore: 'ACE-inibitori', sartano: 'Sartani', calci
 
 const rfPaQuando = (s) => (s ? `${s.slice(8, 10)}.${s.slice(5, 7)}.${s.slice(0, 4)} ${s.slice(11, 16)}` : '—');
 const rfPaGiorno = (s) => (s ? `${s.slice(8, 10)}.${s.slice(5, 7)}.${s.slice(0, 4)}` : '—');
+const rfPaNomeGiorno = (g) => `${new Date(`${g}T00:00:00Z`).toLocaleDateString('it-CH', { weekday: 'short', timeZone: 'UTC' })} ${g.slice(8, 10)}.${g.slice(5, 7)}`;
 const rfPaN = (x, dec = 0) => (x === null || x === undefined ? '—' : Number(x).toFixed(dec).replace('.', ','));
 const rfPaOra = (h) => `${String(h % 24).padStart(2, '0')}:00`;
 
@@ -81,7 +82,7 @@ async function rfPaCaricaFarmaci(rendi = true) {
   if (rendi) render();
 }
 async function rfPaApri(id, rendi = true) {
-  RF.pa.aperto = id; RF.pa.terapia = null; RF.pa.imp = null;
+  RF.pa.aperto = id; RF.pa.terapia = null; RF.pa.imp = null; RF.pa.giornoGraf = null;
   if (rendi) { RF.pa.dati = null; render(); }
   try {
     const r = await fetch(`${RF_PA_URL}/${id}`, { credentials: 'include', cache: 'no-store' });
@@ -266,14 +267,20 @@ async function rfPaFarmacoTogli(principio) {
 
 /* ---------- il grafico ---------- */
 function rfPaGrafico(d) {
-  const m = d.misure, imp = d.impostazioni, s = imp.soglie;
-  if (!m.length) return '';
+  const ogni = d.misure, imp = d.impostazioni, s = imp.soglie;
+  if (!ogni.length) return '';
   const t = (q) => Date.parse(`${q}:00Z`);
-  const t0 = Math.floor(t(m[0].quando) / 3600000) * 3600000, t1 = Math.ceil(t(m[m.length - 1].quando) / 3600000) * 3600000;
+  // Tutta la registrazione, o un giorno solo (da mezzanotte a mezzanotte, sulla stessa scala: i giorni si confrontano a occhio).
+  const giorni = [...new Set(ogni.map(q => q.quando.slice(0, 10)))];
+  const gSel = giorni.length > 1 && giorni.includes(RF.pa.giornoGraf) ? RF.pa.giornoGraf : null;
+  const m = gSel ? ogni.filter(q => q.quando.slice(0, 10) === gSel) : ogni;
+  const t0 = gSel ? Date.parse(`${gSel}T00:00:00Z`) : Math.floor(t(m[0].quando) / 3600000) * 3600000;
+  const t1 = gSel ? t0 + 86400000 : Math.ceil(t(m[m.length - 1].quando) / 3600000) * 3600000;
   const durata = Math.max(3600000, t1 - t0);
   const W = 980, SX = 46, DX = 14, larg = W - SX - DX;
   const buone = m.filter(x => x.valida);
-  const tutte = buone.length ? buone : m;
+  const perScala = ogni.filter(x => x.valida);
+  const tutte = perScala.length ? perScala : ogni;
   // La scala comprende anche il profilo precedente, se lo si mostra: una linea che esce dal grafico non dice niente.
   const prima = RF.pa.mostraPrec && d.precedente ? d.precedente.orarie.filter(o => o.sis !== null).map(o => o.sis) : [];
   const yMin = Math.max(30, Math.floor((Math.min(...tutte.map(x => x.dia), s.notte_dia) - 12) / 10) * 10), yMax = Math.ceil((Math.max(...tutte.map(x => x.sis), s.giorno_sis, ...prima) + 12) / 10) * 10;
@@ -301,6 +308,12 @@ function rfPaGrafico(d) {
     const h = oraOrologio(ms);
     if (h % passo === 0) g += `<line x1="${x(ms)}" x2="${x(ms)}" y1="${SU + ALT}" y2="${SU + ALT + 5}" style="stroke:var(--text-2);stroke-width:1"/><text x="${x(ms)}" y="${SU + ALT + 18}" text-anchor="middle" style="fill:var(--text-2);font-size:11px">${String(h).padStart(2, '0')}:00</text>`;
   }
+  // Più giorni insieme: a ogni mezzanotte una riga e la data.
+  const conDate = !gSel && giorni.length > 1;
+  if (conDate) for (let ms = Math.ceil(t0 / 86400000) * 86400000; ms < t1; ms += 86400000) {
+    const gg = new Date(ms).toISOString().slice(0, 10);
+    g += `<line x1="${x(ms)}" x2="${x(ms)}" y1="${SU}" y2="${SU + ALT}" style="stroke:var(--text-2);stroke-width:1;opacity:.35"/><text x="${x(ms) + (x(ms) > W - DX - 70 ? -4 : 4)}" y="${SU + ALT + 31}" text-anchor="${x(ms) > W - DX - 70 ? 'end' : 'start'}" style="fill:var(--text);font-size:10.5px;font-weight:600">${rfPaNomeGiorno(gg)}</text>`;
+  }
   // Il profilo precedente, ora per ora, tratteggiato.
   if (RF.pa.mostraPrec && d.precedente) {
     const pr = {}; d.precedente.orarie.forEach(o => { pr[o.ora] = o; });
@@ -316,7 +329,7 @@ function rfPaGrafico(d) {
   g += linea('sis', 'var(--accent)') + linea('dia', 'var(--accent-2, #8b6cf6)');
   m.filter(q => !q.valida).forEach(q => { g += `<text x="${x(t(q.quando)).toFixed(1)}" y="${SU + ALT - 4}" text-anchor="middle" style="fill:var(--text-2);font-size:10px">×<title>${q.quando.slice(11, 16)} · misura non valida</title></text>`; });
   // Sotto, sulla stessa scala del tempo: una riga per farmaco con la sua finestra d'azione.
-  let yy = SU + ALT + 46; let righe = '';
+  let yy = SU + ALT + (conDate ? 58 : 46); let righe = '';
   (d.copertura || []).forEach((c) => {
     righe += `<text x="${SX}" y="${yy - 6}" style="fill:var(--text);font-size:11.5px;font-weight:600">${rfEsc(c.principio)} <tspan style="font-weight:400;fill:var(--text-2)">· ${rfEsc(c.nome)} · ${c.orari.join(', ')}</tspan></text>`;
     for (let ms = t0; ms < t1; ms += 3600000) {
@@ -335,10 +348,22 @@ function rfPaGrafico(d) {
     yy += 44;
   });
   const H = yy - 14;
-  return `<div class="rf-pa-graf"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Profilo pressorio delle 24 ore con le finestre d'azione dei farmaci">${g}${righe}</svg></div>
+  // La scelta: tutto, o un giorno. Del giorno scelto, le sue medie (semplici, sulle misure valide di quel giorno).
+  let scelta = '';
+  if (giorni.length > 1) {
+    const med = (a, c) => (a.length ? Math.round(a.reduce((z, q) => z + q[c], 0) / a.length) : null);
+    const oraQ = (q) => Number(q.quando.slice(11, 13)) + Number(q.quando.slice(14, 16)) / 60;
+    const pa = (a) => (a.length ? `${med(a, 'sis')}/${med(a, 'dia')}` : '—');
+    const dg = buone.filter(q => !notte(oraQ(q))), dn = buone.filter(q => notte(oraQ(q)));
+    const riass = gSel ? `${buone.length} misure valide · media ${pa(buone)} · di giorno ${pa(dg)} (${dg.length}) · di notte ${pa(dn)} (${dn.length})` : `${giorni.length} giorni di registrazione · ${ogni.length} misure`;
+    scelta = `<div class="row" style="gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:10px"><div class="seg" style="flex-wrap:wrap">
+      <button class="${gSel ? '' : 'active'}" onclick="RF.pa.giornoGraf=null;render()">Tutto</button>${giorni.map(gg => `<button class="${gSel === gg ? 'active' : ''}" onclick="RF.pa.giornoGraf='${gg}';render()">${rfPaNomeGiorno(gg)}</button>`).join('')}</div>
+      <span class="caption">${riass}</span></div>`;
+  }
+  return `${scelta}<div class="rf-pa-graf"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Profilo pressorio con le finestre d'azione dei farmaci">${g}${righe}</svg></div>
     <div class="rf-pa-leg"><span><i style="background:var(--accent)"></i>sistolica</span><span><i style="background:var(--accent-2, #8b6cf6)"></i>diastolica</span>
       <span><i style="background:#c0392b;opacity:.6"></i>soglie (giorno ${s.giorno_sis}/${s.giorno_dia}, notte ${s.notte_sis}/${s.notte_dia})</span>
-      <span><i style="background:#c0392b;height:5px"></i>fascia sopra soglia (piena = nessun farmaco a metà effetto)</span>
+      <span><i style="background:#c0392b;height:5px"></i>fascia sopra soglia${giorni.length > 1 ? ', sulle medie orarie di tutti i giorni' : ''} (piena = nessun farmaco a metà effetto)</span>
       ${(d.fasce || []).some(f => f.stato === 'bassa') ? '<span><i style="background:#2c6fbb;height:5px"></i>fascia troppo bassa</span>' : ''}
       <span><i style="background:var(--text);opacity:.2;height:9px"></i>notte (${rfEsc(imp.sonno)}–${rfEsc(imp.sveglia)})</span>
       ${d.precedente ? `<span><i style="background:var(--text-2)"></i>profilo precedente (${rfPaGiorno(d.precedente.inizio)}) <a href="javascript:void 0" onclick="RF.pa.mostraPrec=!RF.pa.mostraPrec;render()">${RF.pa.mostraPrec ? 'nascondi' : 'mostra'}</a></span>` : ''}</div>`;

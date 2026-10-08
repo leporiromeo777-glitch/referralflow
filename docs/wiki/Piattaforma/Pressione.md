@@ -21,7 +21,7 @@ Il confine che il codice fa rispettare: **solo l'orario** di farmaci che il medi
 
 1. **Nuovo profilo**: si sceglie il paziente e il file esportato dal programma dell'apparecchio (CSV o testo; da Excel «Salva con nome → CSV»), oppure si incollano le righe. Con la riga d'intestazione le colonne si riconoscono dal nome in qualunque ordine (data, ora, sistolica, diastolica, frequenza — anche in tedesco e inglese; le colonne in più si ignorano). Senza intestazione valgono solo tre colonne nell'ordine atteso: di più non si indovina. Se nel file manca la data si indica il giorno d'inizio.
 2. **Terapia**: nome come lo scrive lo studio, dose, orari delle prese (`08:00, 20:00`). Al secondo profilo dello stesso paziente la terapia si riprende dal precedente: è un punto di partenza da controllare.
-3. **Si guarda**: i numeri in alto, il grafico, le fasce.
+3. **Si guarda**: i numeri in alto, il grafico, le fasce. Quando la registrazione copre **più giorni** il grafico si guarda **tutto insieme** (una riga e la data a ogni mezzanotte) oppure **un giorno alla volta** (da mezzanotte a mezzanotte, sempre sulla stessa scala verticale, con accanto le medie semplici di quel giorno: tutte, di giorno, di notte). La scelta è solo della vista (`RF.pa.giornoGraf`, nel browser): numeri in alto, fasce e proposte restano calcolati su tutta la registrazione.
 
 ## La cartella condivisa (8.10.2026)
 
