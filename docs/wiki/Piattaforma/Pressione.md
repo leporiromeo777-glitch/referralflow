@@ -66,7 +66,7 @@ La conferma di una proposta non è il software: è **il monitoraggio dopo**, e i
 | | segreteria | aiuto medico | medico | amministrazione | tecnico |
 |---|---|---|---|---|---|
 | vedere | sì | sì | sì | sì | no |
-| caricare un profilo | sì | sì | sì | no | no |
+| caricare un profilo, assegnare un file arrivato, creare la cartella da lì | sì | sì | sì | sì | no |
 | terapia, giorno e notte, eliminare | no | sì | sì | no | no |
 | soglie, conferma dei farmaci, proposte | no | no | sì | no | no |
 

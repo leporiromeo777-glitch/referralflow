@@ -20,7 +20,7 @@ import {
 // Chi fa che cosa. Il tecnico tiene in piedi il sistema e non vede dati clinici.
 export const PUO_PA = {
   vedere: ['medico', 'assistente', 'segretaria', 'admin'],
-  caricare: ['medico', 'assistente', 'segretaria'],
+  caricare: ['medico', 'assistente', 'segretaria', 'admin'],   // admin dall'8.10.2026: ha già tutte le sezioni della segreteria, pazienti compresi
   terapia: ['medico', 'assistente'],
   decidere: ['medico'],        // soglie, tabella dei farmaci, proposte
 } as const;
