@@ -75,6 +75,57 @@ function rfDitComponi() {
   if (d.modo === 'sovrascrivi') return RFDittafono.sovrascrivi(d.pcm, d.punto, nuovo);
   return RFDittafono.unisci([d.pcm, nuovo]);
 }
+/* Il tasto delle cuffie (8.10.2026): con le cuffie col filo, il tasto al centro
+   del telecomando mette in pausa e riprende la dettatura. Quel tasto, per il
+   sistema, è «play/pausa» di chi sta suonando: perché arrivi a questa pagina
+   mentre si registra, si tiene in ciclo un secondo di SILENZIO e ci si
+   dichiara al sistema come lettore (Media Session). È un'opzione da accendere,
+   per dispositivo, e spenta di serie: far suonare qualcosa — anche il silenzio —
+   mentre si registra è una cosa che ogni telefono tratta a modo suo. */
+const RF_DIT_CUFFIE = 'rf-dit-cuffie';
+function rfDitCuffiePossibile() { return 'mediaSession' in navigator && typeof Audio === 'function'; }
+function rfDitCuffieAcceso() { try { return rfDitCuffiePossibile() && localStorage.getItem(RF_DIT_CUFFIE) === '1'; } catch (_) { return false; } }
+function rfDitCuffieImposta(si) { try { localStorage.setItem(RF_DIT_CUFFIE, si ? '1' : '0'); } catch (_) { /* resta per questa pagina */ } if (!si) rfDitCuffieFerma(); render(); }
+function rfDitSilenzio() {
+  if (RF.dit.silenzio) return RF.dit.silenzio;
+  const n = 8000, b = new Uint8Array(44 + n), v = new DataView(b.buffer);
+  const scrivi = (o, testo) => { for (let i = 0; i < testo.length; i++) b[o + i] = testo.charCodeAt(i); };
+  scrivi(0, 'RIFF'); v.setUint32(4, 36 + n, true); scrivi(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, 8000, true); v.setUint32(28, 8000, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true); scrivi(36, 'data'); v.setUint32(40, n, true); b.fill(128, 44);
+  const a = new Audio(URL.createObjectURL(new Blob([b], { type: 'audio/wav' }))); a.loop = true; a.preload = 'auto';
+  RF.dit.silenzio = a; return a;
+}
+// Va chiamata DENTRO il gesto di chi tocca «Registra»: fuori da un gesto il browser non fa partire niente.
+function rfDitCuffieAvvia() {
+  if (!rfDitCuffieAcceso()) return;
+  try {
+    const p = rfDitSilenzio().play(); if (p && p.catch) p.catch(() => {});
+    if (typeof MediaMetadata === 'function') navigator.mediaSession.metadata = new MediaMetadata({ title: 'Dittafono', artist: 'ReferralFlow' });
+    navigator.mediaSession.setActionHandler('pause', rfDitCuffieTasto);
+    navigator.mediaSession.setActionHandler('play', rfDitCuffieTasto);
+    // Doppio e triplo clic (brano dopo, brano prima) non devono fare niente.
+    for (const x of ['nexttrack', 'previoustrack', 'seekbackward', 'seekforward', 'stop']) { try { navigator.mediaSession.setActionHandler(x, () => {}); } catch (_) { /* azione non prevista da questo browser */ } }
+  } catch (_) { /* senza Media Session il dittafono funziona come sempre */ }
+}
+function rfDitCuffieTasto() {
+  const d = RF.dit, lettore = document.getElementById('rf-dit-audio');
+  // Se si sta riascoltando, il tasto ferma l'ascolto e basta: non fa partire una registrazione per sbaglio.
+  if (lettore && !lettore.paused) { lettore.pause(); return; }
+  if (d.invio) return;
+  if (d.stato === 'registra') rfDitPausa(); else void rfDitRegistra('aggiungi');
+}
+// Il silenzio suona solo mentre si registra, e il sistema lo sa: così il tasto dopo vuol dire «riprendi».
+function rfDitCuffieStato() {
+  const a = RF.dit.silenzio; if (!a || !rfDitCuffieAcceso()) return;
+  const rec = RF.dit.stato === 'registra';
+  try { if (rec) { const p = a.play(); if (p && p.catch) p.catch(() => {}); } else a.pause(); navigator.mediaSession.playbackState = rec ? 'playing' : 'paused'; } catch (_) { /* niente */ }
+}
+function rfDitCuffieFerma() {
+  try {
+    if (RF.dit.silenzio) RF.dit.silenzio.pause();
+    if ('mediaSession' in navigator) { for (const x of ['play', 'pause']) navigator.mediaSession.setActionHandler(x, null); navigator.mediaSession.playbackState = 'none'; }
+  } catch (_) { /* niente */ }
+}
 function rfDitAudio() {
   const d = RF.dit; if (d.url) { URL.revokeObjectURL(d.url); d.url = null; }
   if (d.pcm.length) d.url = URL.createObjectURL(new Blob([RFDittafono.wav(d.pcm, RFDittafono.FREQUENZA)], { type: 'audio/wav' }));
@@ -115,14 +166,16 @@ function rfDitRilasciaMicrofono() {
 async function rfDitRegistra(modo) {
   const d = RF.dit; if (d.stato === 'registra' || d.invio) return;
   d.errore = '';
+  rfDitCuffieAvvia();   // prima di ogni attesa: deve stare dentro il gesto
   const lettore = document.getElementById('rf-dit-audio');
   const pos = lettore && isFinite(lettore.currentTime) ? lettore.currentTime : 0;
   if (lettore) lettore.pause();
-  if (!(await rfDitMicrofono())) { render(); return; }
+  if (!(await rfDitMicrofono())) { rfDitCuffieStato(); render(); return; }
   d.modo = modo || 'aggiungi';
   d.punto = d.modo === 'aggiungi' ? d.pcm.length : Math.round(pos * RFDittafono.FREQUENZA);
   d.nuovi = []; d.stato = 'registra'; d.iniziata = Date.now();
   try { if (navigator.wakeLock) d.blocco = await navigator.wakeLock.request('screen'); } catch (_) { /* lo schermo può spegnersi: si registra lo stesso */ }
+  rfDitCuffieStato();
   render();
   d.orologio = setInterval(rfDitAggiorna, 100);
   d.salvataggio = setInterval(() => void rfDitSalva(), 15000);
@@ -134,7 +187,7 @@ function rfDitPausa() {
   try { if (d.blocco) void d.blocco.release(); } catch (_) { /* niente */ } d.blocco = null;
   // il microfono resta pronto due minuti per riprendere subito, poi si rilascia da solo
   d.rilascio = setTimeout(rfDitRilasciaMicrofono, 120000);
-  rfDitAudio(); void rfDitSalva(); render();
+  rfDitAudio(); void rfDitSalva(); rfDitCuffieStato(); render();
 }
 function rfDitAggiorna() {
   const d = RF.dit; if (d.stato !== 'registra') return;
@@ -147,7 +200,7 @@ function rfDitAggiorna() {
 function rfDitScarta() {
   if (!confirm('Scartare questa registrazione? Non si può recuperare.')) return;
   const d = RF.dit; d.pcm = new Int16Array(0); d.nuovi = []; d.stato = 'pronto'; d.errore = '';
-  rfDitAudio(); rfDitRilasciaMicrofono(); void rfDitSvuota(); render();
+  rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota(); render();
 }
 async function rfDitInvia() {
   const d = RF.dit; if (d.invio || !d.pcm.length) return;
@@ -166,7 +219,7 @@ async function rfDitInvia() {
     const r = await fetch('/api/referti/upload', { method: 'POST', body: fd, credentials: 'include' });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { d.errore = j.errore === 'medico_mancante' ? 'Scegli il medico che ha dettato.' : j.errore === 'troppo_grande' ? 'Registrazione troppo lunga per un invio solo.' : 'Invio non riuscito: la registrazione resta qui, riprova.'; d.invio = false; render(); return; }
-    d.pcm = new Int16Array(0); d.stato = 'pronto'; d.invio = false; d.paziente = ''; rfDitAudio(); rfDitRilasciaMicrofono(); void rfDitSvuota();
+    d.pcm = new Int16Array(0); d.stato = 'pronto'; d.invio = false; d.paziente = ''; rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota();
     toast('Dettato in coda: la bozza arriva tra i referti in pochi minuti');
     render(); setTimeout(rfCaricaDati, 3000);
   } catch (_) { d.errore = 'Piattaforma non raggiungibile: la registrazione resta su questo dispositivo, riprova.'; d.invio = false; render(); }
@@ -212,6 +265,7 @@ PAGES.dittafono = () => {
         <div class="rf-dit-livello" aria-hidden="true"><i id="rf-dit-liv"></i></div>
         <button class="rf-dit-rec ${rec ? 'attivo' : ''}" onclick="${rec ? 'rfDitPausa()' : "rfDitRegistra('aggiungi')"}" aria-label="${rec ? 'Metti in pausa' : d.pcm.length ? 'Riprendi in coda' : 'Registra'}" title="${rec ? 'Pausa' : d.pcm.length ? 'Riprendi in coda' : 'Registra'}">${rec ? pausa : mic}</button>
         <div class="caption">${rec ? 'tocca per la pausa' : d.pcm.length ? 'tocca per riprendere in coda' : 'tocca per registrare'}</div>
+        ${rfDitCuffiePossibile() ? `<label class="caption" style="display:flex;gap:8px;align-items:center;margin-top:10px;cursor:pointer"><input type="checkbox" ${rfDitCuffieAcceso() ? 'checked' : ''} ${rec ? 'disabled' : ''} onchange="rfDitCuffieImposta(this.checked)"> Pausa e ripresa col tasto delle cuffie <span title="In prova. Con le cuffie col filo, il tasto al centro mette in pausa e riprende. Se la registrazione ha problemi, spegnilo.">(in prova)</span></label>` : ''}
       </div>
       ${d.errore ? `<div class="rf-manc mt-8">${rfEsc(d.errore)}</div>` : ''}
       ${!rec && d.pcm.length ? `<div class="mt-16">

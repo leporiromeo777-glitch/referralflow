@@ -656,3 +656,8 @@ non tocca le altre, e lo dice in cima alla pagina Agenda. Niente blocco totale: 
 ad aggiornarsi. Resta da fare, dello studio: rimettere tutte le agende in vista in MediOnline, e dare al
 robot un account solo suo.
 
+## 8.10.2026 — Dittafono: pausa e ripresa col tasto delle cuffie, come opzione in prova
+Richiesta dello studio (cuffie Apple col filo). Aggiunta come casella da accendere, spenta di serie e per
+dispositivo: non cambia niente per chi non la accende. Va provata col tasto vero sul dispositivo con cui
+si detta; se disturba la registrazione si spegne.
+
