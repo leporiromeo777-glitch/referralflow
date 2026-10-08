@@ -8,7 +8,7 @@ import path from 'path';
 import { indirizzoSmb, leggiCondivisioni, scriptWindows } from '@/lib/cartella-dettati';
 import { cartellaPressione, daFile } from '@/lib/pressione/cartella-server';
 import {
-  assegnaArrivo, elencoArrivi, scartaArrivo,
+  assegnaArrivo, creaCartellaEAssegna, elencoArrivi, scartaArrivo,
   caricaProfilo, decidiProposta, elencoFarmaci, elencoProfili, eliminaProfilo, generaProposte, proposteAccese, puoPa,
   salvaFarmaco, salvaImpostazioni, salvaTerapia, togliConferma,
 } from '@/lib/pressione/archivio';
@@ -100,9 +100,15 @@ export async function POST(req: NextRequest) {
   }
   if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 });
   // Un file arrivato dalla cartella e non agganciato da solo: lo assegna (o lo scarta) chi può caricare un profilo.
-  if (azione === 'assegna' || azione === 'scarta_arrivo') {
+  if (azione === 'assegna' || azione === 'scarta_arrivo' || azione === 'crea_cartella') {
     if (!puoPa(session.role, 'caricare')) return nonPuoi('Il tuo ruolo non assegna i file arrivati.');
     if (azione === 'scarta_arrivo') return esito(await scartaArrivo(sid, uid, id));
+    // La persona non ha ancora la cartella: nasce da qui (serve anche il permesso sui pazienti).
+    if (azione === 'crea_cartella') {
+      const no = vietato(session.role, 'patients');
+      if (no) return no;
+      return esito(await creaCartellaEAssegna(sid, uid, id, { cognome: c?.cognome, nome: c?.nome, data_nascita: c?.data_nascita }));
+    }
     if (!isUuid(String(c?.patient_id ?? ''))) return NextResponse.json({ errore: 'Scegli il paziente.' }, { status: 400 });
     return esito(await assegnaArrivo(sid, uid, id, String(c.patient_id)));
   }

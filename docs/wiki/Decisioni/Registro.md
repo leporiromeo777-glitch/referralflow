@@ -689,3 +689,5 @@ nomi né valori: contiene l'elenco delle misure e i dati del paziente, quindi si
 La cartella ha un collegamento sulla Scrivania del Mac (la cartella vera resta nella casa dell'utente, per
 i permessi di macOS). Un profilo può coprire più giorni.
 
+## 8.10.2026 — Pressione: la cartella del paziente nasce dall'arrivo
+Il primo rapporto vero era di una persona senza cartella in piattaforma, e la pagina chiedeva solo «di chi è?»: allo studio non era chiaro come andare avanti. Ora dal riquadro degli arrivi si crea la cartella coi dati letti dal file, **confermati da una persona** (non nasce mai da sola: un nome letto male farebbe una cartella sbagliata). Data di nascita obbligatoria, niente doppioni.

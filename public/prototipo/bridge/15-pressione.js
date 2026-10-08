@@ -149,6 +149,20 @@ async function rfPaArrivoAssegna(id) {
   if (j.errore) { toast(j.errore); return; }
   delete RF.pa.scelte[id]; toast('Profilo creato'); RF.pa.lista = null; await rfPaApri(j.id);
 }
+// La persona non ha ancora la cartella: nasce da qui, coi dati letti dal file (da confermare).
+function rfPaArrivoNuova(id) {
+  const x = (RF.pa.arrivi || []).find(a => a.id === id) || {};
+  RF.pa.scelte[id] = { nuova: true, cognome: (x.proposta && x.proposta.cognome) || '', nome: (x.proposta && x.proposta.nome) || '', nascita: x.nascita_letta ? rfPaGiorno(x.nascita_letta) : '' };
+  render();
+}
+async function rfPaArrivoCrea(id) {
+  const s = RF.pa.scelte[id]; if (!s || !s.nuova) return;
+  if (!s.cognome.trim() || !s.nome.trim() || !s.nascita.trim()) { toast('Servono cognome, nome e data di nascita'); return; }
+  const j = await rfPaChiedi({ azione: 'crea_cartella', id, cognome: s.cognome, nome: s.nome, data_nascita: s.nascita });
+  if (j.errore) { toast(j.errore === 'non_permesso' ? 'Il tuo ruolo non crea cartelle' : j.errore); return; }
+  delete RF.pa.scelte[id]; toast(j.nuova ? 'Cartella e profilo creati' : 'La cartella c’era già: profilo creato');
+  RF.pa.lista = null; rfCaricaDati(); await rfPaApri(j.id);
+}
 async function rfPaArrivoScarta(id) {
   if (!confirm('Scartare questo file? Le misure che conteneva non si recuperano da qui.')) return;
   const j = await rfPaChiedi({ azione: 'scarta_arrivo', id });
@@ -164,8 +178,9 @@ function rfPaArriviHtml(puoCaricare) {
       <div><b>${rfEsc(x.nome_file)}</b> · ${x.misure} misure · dal ${rfPaQuando(x.inizio)} al ${rfPaQuando(x.fine)}</div>
       <div class="caption">Non agganciato da solo: ${rfEsc(RF_PA_MOTIVO[x.motivo] || 'da assegnare')}${x.nome_letto ? ` · letto: ${rfEsc(x.nome_letto)}${x.nascita_letta ? `, ${rfPaGiorno(x.nascita_letta)}` : ''}` : ''}.</div>
       ${puoCaricare ? `<div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
-        ${s.pid ? `<span class="badge accent">${rfEsc(s.nome)}</span><button class="btn sm ghost" onclick="delete RF.pa.scelte['${x.id}'];render()">Cambia</button><button class="btn sm primary" onclick="rfPaArrivoAssegna('${x.id}')">Crea il profilo</button>`
-          : `<input class="input rf-pa-st" id="rf-pa-ac-${x.id}" style="width:220px;height:32px" placeholder="Di chi è? Scrivi il cognome" value="${rfEsc(s.cerca || '')}" oninput="rfPaArrivoCerca('${x.id}', this.value)">${trovati.map(p => `<button class="btn sm" onclick="rfPaArrivoScegli('${x.id}','${p.id}')">${rfEsc(fullName(p))}${p.dob ? ` · ${rfEsc(p.dob)}` : ''}</button>`).join('')}`}
+        ${s.nuova ? `<input class="input rf-pa-st" style="width:150px;height:32px" placeholder="Cognome" value="${rfEsc(s.cognome)}" oninput="RF.pa.scelte['${x.id}'].cognome=this.value"><input class="input rf-pa-st" style="width:150px;height:32px" placeholder="Nome" value="${rfEsc(s.nome)}" oninput="RF.pa.scelte['${x.id}'].nome=this.value"><input class="input rf-pa-st" style="width:120px;height:32px" placeholder="31.12.1950" value="${rfEsc(s.nascita)}" oninput="RF.pa.scelte['${x.id}'].nascita=this.value"><button class="btn sm primary" onclick="rfPaArrivoCrea('${x.id}')">Crea cartella e profilo</button><button class="btn sm ghost" onclick="delete RF.pa.scelte['${x.id}'];render()">Annulla</button>`
+          : s.pid ? `<span class="badge accent">${rfEsc(s.nome)}</span><button class="btn sm ghost" onclick="delete RF.pa.scelte['${x.id}'];render()">Cambia</button><button class="btn sm primary" onclick="rfPaArrivoAssegna('${x.id}')">Crea il profilo</button>`
+          : `<input class="input rf-pa-st" id="rf-pa-ac-${x.id}" style="width:220px;height:32px" placeholder="Di chi è? Scrivi il cognome" value="${rfEsc(s.cerca || '')}" oninput="rfPaArrivoCerca('${x.id}', this.value)">${trovati.map(p => `<button class="btn sm" onclick="rfPaArrivoScegli('${x.id}','${p.id}')">${rfEsc(fullName(p))}${p.dob ? ` · ${rfEsc(p.dob)}` : ''}</button>`).join('')}<button class="btn sm" onclick="rfPaArrivoNuova('${x.id}')">Non ha ancora la cartella: creala</button>`}
         <span class="grow"></span><button class="btn sm ghost" onclick="rfPaArrivoScarta('${x.id}')">Scarta</button></div>` : ''}</div>`;
   };
   return `<div class="card mt-16"><div class="card-head"><span class="section-title">Arrivati dalla cartella, da assegnare</span><span class="badge warning">${a.length}</span></div>${a.map(riga).join('')}</div>`;

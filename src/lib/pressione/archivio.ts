@@ -1,6 +1,9 @@
 import 'server-only';
 import { query, transazione } from '../db';
 import { proposteAccese } from './accese';
+import { proponiAnagrafica } from '../pazienti-abbina-regole';
+import { riabbinaPazienti } from '../pazienti-abbina';
+import { validaAnagrafica } from '../pazienti-import';
 import { FARMACI_BOZZA, FONTE_BOZZA, controllaFarmaco, orario, riconosci, type Classe, type Farmaco } from './farmaci';
 import {
   IMPOSTAZIONI_BASE, SOGLIE_BASE, avvisoFasce, confronta, copertura, fasce, leggiFile, proponi, punteggio, segnaScoperte, statistiche,
@@ -315,9 +318,42 @@ export async function decidiProposta(studioId: string, userId: string, propostaI
 // Un file letto dalla cartella che non si è potuto agganciare da solo a un
 // paziente aspetta qui: lo assegna, o lo scarta, una persona.
 export async function elencoArrivi(studioId: string) {
-  return query<{ id: string; nome_file: string; misure: number; inizio: string | null; fine: string | null; nome_letto: string | null; nascita_letta: string | null; motivo: string | null; quando: string }>(
+  const r = await query<{ id: string; nome_file: string; misure: number; inizio: string | null; fine: string | null; nome_letto: string | null; nascita_letta: string | null; motivo: string | null; quando: string }>(
     `select id, nome_file, misure, to_char(inizio, 'YYYY-MM-DD"T"HH24:MI') as inizio, to_char(fine, 'YYYY-MM-DD"T"HH24:MI') as fine, nome_letto, nascita_letta::text, motivo, quando::text
        from pa_arrivi where studio_id = $1 and stato = 'in_attesa' order by quando desc limit 50`, [studioId]);
+  // Cognome e nome proposti per «Crea la cartella» (li conferma chi assegna).
+  return r.map((x) => {
+    const a = x.nome_letto ? proponiAnagrafica(x.nome_letto) : null;
+    return { ...x, proposta: a && a.cognome ? { cognome: a.cognome, nome: a.nome } : null };
+  });
+}
+// Il file è di una persona che non ha ancora la cartella (8.10.2026): la
+// cartella nasce qui, coi dati confermati da chi assegna, e il profilo ci va
+// dentro. Se una cartella con lo stesso nome e la stessa data di nascita c'è
+// già, si usa quella: mai un doppione.
+export async function creaCartellaEAssegna(studioId: string, userId: string, arrivoId: string, c: { cognome?: unknown; nome?: unknown; data_nascita?: unknown }): Promise<Esito<{ ok: true; id: string; patient_id: string; nuova: boolean }>> {
+  const [a] = await query<{ id: string }>(`select id from pa_arrivi where id = $1 and studio_id = $2 and stato = 'in_attesa'`, [arrivoId, studioId]);
+  if (!a) return err('Arrivo non trovato, o già assegnato.', 404);
+  const { dati, errori } = validaAnagrafica({ cognome: c.cognome, nome: c.nome, data_nascita: c.data_nascita });
+  if (!dati.cognome || !dati.nome) return err('Cognome e nome sono obbligatori.');
+  if (errori.data_nascita || !dati.data_nascita) return err('Scrivi la data di nascita (31.12.1950).');
+  const [gia] = await query<{ id: string }>(
+    `select id from patients where studio_id = $1 and lower(btrim(cognome)) = lower($2) and lower(btrim(nome)) = lower($3) and data_nascita = $4::date limit 1`,
+    [studioId, dati.cognome, dati.nome, dati.data_nascita]);
+  let pid = gia?.id ?? '';
+  if (!pid) {
+    const [p] = await query<{ id: string }>(`insert into patients (studio_id, cognome, nome, data_nascita) values ($1, $2, $3, $4::date) returning id`, [studioId, dati.cognome, dati.nome, dati.data_nascita]);
+    pid = p.id;
+    console.log(`[pressione] cartella ${pid.slice(0, 8)} creata da un file arrivato`);
+  }
+  const r = await assegnaArrivo(studioId, userId, arrivoId, pid);
+  if ('errore' in r) return r;
+  if (!gia) {
+    await registra(studioId, userId, 'cartella_creata', r.id);
+    // La cartella nuova si prende i suoi appuntamenti e i referti con lo stesso nome.
+    try { await riabbinaPazienti(studioId); } catch { /* best-effort */ }
+  }
+  return { ok: true, id: r.id, patient_id: pid, nuova: !gia };
 }
 export async function assegnaArrivo(studioId: string, userId: string, arrivoId: string, patientId: string): Promise<Esito<{ ok: true; id: string }>> {
   const [a] = await query<{ testo: string }>(`select testo from pa_arrivi where id = $1 and studio_id = $2 and stato = 'in_attesa'`, [arrivoId, studioId]);

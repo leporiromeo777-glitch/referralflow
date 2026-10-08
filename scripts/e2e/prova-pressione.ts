@@ -193,6 +193,22 @@ async function main() {
     const doppioPdf = await manda(C_SEG, { azione: 'carica', patient_id: pa, pdf: pdf64 });
     const nonPdf = await manda(C_SEG, { azione: 'carica', patient_id: pa, pdf: Buffer.from('%PDF-1.4 niente').toString('base64') });
     verifica(doppioPdf.stato === 409 && nonPdf.stato === 400, `dalla pagina il PDF si legge allo stesso modo (già caricato → 409; PDF senza misure → 400) (${doppioPdf.stato}, ${nonPdf.stato})`);
+    // e3) la persona non ha ancora la cartella: nasce dall'arrivo, coi dati confermati da chi assegna.
+    await fs.writeFile(path.join(CARTELLA, 'Provanuova Dario 03.04.1961.csv'), giorno(20));
+    const g7 = await giroCartella({ fermoDaMs: 0 });
+    const nuovo = ((await leggi(C_SEG)).j.arrivi ?? []).find((x: any) => x.nome_file === 'Provanuova Dario 03.04.1961.csv');
+    const cTec = await manda(C_TEC, { azione: 'crea_cartella', id: nuovo?.id, cognome: 'Provanuova', nome: 'Dario', data_nascita: '03.04.1961' });
+    const cSenza = await manda(C_SEG, { azione: 'crea_cartella', id: nuovo?.id, cognome: 'Provanuova', nome: 'Dario' });
+    const cSeg = await manda(C_SEG, { azione: 'crea_cartella', id: nuovo?.id, cognome: 'Provanuova', nome: 'Dario', data_nascita: '03.04.1961' });
+    const cBis = await manda(C_SEG, { azione: 'crea_cartella', id: nuovo?.id, cognome: 'Provanuova', nome: 'Dario', data_nascita: '03.04.1961' });
+    const [nn] = await query<{ n: number; p: number }>(`select count(*)::int as n, (select count(*) from pa_profili x where x.patient_id = any(array_agg(p.id)))::int as p from patients p where studio_id = $1 and cognome = 'Provanuova'`, [S]);
+    verifica(g7.in_attesa === 1 && nuovo?.motivo === 'nessuno' && nuovo?.proposta?.cognome === 'Provanuova' && nuovo?.proposta?.nome === 'Dario'
+      && cTec.stato === 403 && cSenza.stato === 400 && cSeg.stato === 200 && cSeg.j.nuova === true && cBis.stato === 404 && nn.n === 1 && nn.p === 1,
+      `chi non ha ancora la cartella: l'arrivo propone cognome e nome, il tecnico non crea, senza data di nascita no, la segreteria crea cartella e profilo insieme, due volte no (${cTec.stato}, ${cSenza.stato}, ${cSeg.stato}, ${cBis.stato}, cartelle ${nn.n})`);
+    await fs.writeFile(path.join(CARTELLA, 'Provanuova Dario 03.04.1961.csv'), giorno(22));
+    const g8 = await giroCartella({ fermoDaMs: 0 });
+    const [nn2] = await query<{ n: number }>(`select count(*)::int as n from patients where studio_id = $1 and cognome = 'Provanuova'`, [S]);
+    verifica(g8.profili === 1 && g8.in_attesa === 0 && nn2.n === 1, `nata la cartella, il file successivo della stessa persona va a posto da solo, senza una cartella doppia (${g8.profili}, ${nn2.n})`);
     // f) la pagina sa dov'è la cartella e se è condivisa; il file per Windows esiste solo se lo è.
     const win = await fetch(`${url}?cartella=win`, { headers: { cookie: C_SEG } });
     verifica(lista.cartella?.nome === path.basename(CARTELLA) && lista.cartella?.condivisa === false && win.status === 409, `la pagina dice che la cartella non è ancora condivisa in rete, e non dà un collegamento che non funzionerebbe (${win.status})`);
@@ -200,6 +216,7 @@ async function main() {
     await query(`delete from pa_arrivi where studio_id = $1`, [S]).catch(() => null);
     await fs.rm(CARTELLA, { recursive: true, force: true }).catch(() => null);
     await query('delete from patients where id = any($1::uuid[])', [pazienti]);
+    await query(`delete from patients where studio_id = $1 and cognome = 'Provanuova'`, [S]).catch(() => null);
     await query(`delete from pa_registro where studio_id = $1`, [S]).catch(() => null);
     await query(`delete from pa_farmaci where studio_id = $1`, [S]).catch(() => null);
     await pool.end();
