@@ -4,10 +4,10 @@ Stato: **bozza tecnica, 7 ottobre 2026**. Scritta da chi sviluppa; **non è un p
 legale né regolatorio** e va riletta da un consulente regolatorio prima della
 notifica. Non contiene dati di pazienti.
 
-**Il dispositivo è SPENTO.** Nel software le proposte si accendono solo scrivendo
-`PRESSIONE_PROPOSTE=1` nel `.env` del server (`src/lib/pressione/accese.ts`), e questo
-si fa solo dopo: tabella dei farmaci confermata, validazione chiusa, fascicolo riletto,
-notifica fatta.
+**Stato dell'interruttore: ACCESO dall'8 ottobre 2026**, per decisione dello studio presa prima
+che tabella dei farmaci, validazione, rilettura del fascicolo e notifica fossero chiuse (wiki,
+Decisioni/Registro). Questo fascicolo descrive ciò che andava fatto prima e resta da fare.
+L'interruttore è `PRESSIONE_PROPOSTE=1` nel `.env` del server (`src/lib/pressione/accese.ts`).
 
 ## Di che cosa parla questo fascicolo
 

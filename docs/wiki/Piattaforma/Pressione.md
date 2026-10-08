@@ -11,7 +11,7 @@ Il profilo pressorio delle 24 ore di un paziente con **sopra** la terapia che pr
 Due parti, e la legge le tratta in modo diverso — come per le immagini.
 
 - **La pagina che mostra** (in uso): profilo, medie, calo notturno, fasce fuori dai valori, finestre d'azione dei farmaci, punteggio, prima e dopo. Non propone niente.
-- **Le proposte di orario** (**SPENTE**): il software propone a che ora prendere un farmaco già prescritto. È un **dispositivo medico fabbricato e usato dentro lo studio** (ODmed art. 9 e 18), come il righello: fascicolo in `docs/legale/dispositivo-in-house-pressione/`. Si accendono solo con `PRESSIONE_PROPOSTE=1` nel `.env` del server (`src/lib/pressione/accese.ts`), dopo tabella confermata, validazione, rilettura regolatoria e notifica. Sul server di prova sono accese apposta.
+- **Le proposte di orario** (**ACCESE dall'8.10.2026, per decisione dello studio, prima che validazione, rilettura regolatoria e notifica fossero fatte** — vedi Decisioni/Registro): il software propone a che ora prendere un farmaco già prescritto. Una proposta nasce solo per i farmaci la cui riga è confermata dal medico nella tabella (quel giorno: 0 su 45) e la decide sempre il medico. È un **dispositivo medico fabbricato e usato dentro lo studio** (ODmed art. 9 e 18), come il righello: fascicolo in `docs/legale/dispositivo-in-house-pressione/`. Si accendono solo con `PRESSIONE_PROPOSTE=1` nel `.env` del server (`src/lib/pressione/accese.ts`); per spegnerle si toglie la riga e si riavvia. Tabella confermata, validazione, rilettura regolatoria e notifica restano **da fare**.
 
 Il confine che il codice fa rispettare: **solo l'orario** di farmaci che il medico ha già scelto. Mai farmaci, dosi, aggiunte, sospensioni. Se nessuno spostamento basta, la frase fissa «Con qualunque orario dei farmaci attuali la pressione resta sopra la soglia in queste fasce … Valutazione del medico» — descrive i dati, non giudica la terapia.
 
@@ -77,7 +77,7 @@ La conferma di una proposta non è il software: è **il monitoraggio dopo**, e i
 - **Il formato vero dell'apparecchio dello studio**: non si sa ancora quale sia né come esporti. Il lettore è generico; al primo file vero si vede se serve un adattatore.
 - **La terapia presa dalla cartella**: oggi si scrive nella pagina (in cartella non c'è una terapia strutturata per tutti i medici).
 - **Il commento per il referto** scritto dall'AI dai numeri già calcolati.
-- **Tabella confermata, validazione, notifica**: tutto il lavoro prima di accendere le proposte.
+- **Tabella confermata, validazione, rilettura regolatoria, notifica a Swissmedic**: ancora aperte, a proposte già accese (8.10.2026).
 
 ## Le prove
 

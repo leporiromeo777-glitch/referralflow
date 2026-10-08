@@ -692,3 +692,12 @@ i permessi di macOS). Un profilo può coprire più giorni.
 ## 8.10.2026 — Pressione: la cartella del paziente nasce dall'arrivo
 Il primo rapporto vero era di una persona senza cartella in piattaforma, e la pagina chiedeva solo «di chi è?»: allo studio non era chiaro come andare avanti. Ora dal riquadro degli arrivi si crea la cartella coi dati letti dal file, **confermati da una persona** (non nasce mai da sola: un nome letto male farebbe una cartella sbagliata). Data di nascita obbligatoria, niente doppioni.
 Lo stesso giorno: anche l'**amministrazione** carica e assegna (prima vedeva gli arrivi senza nessun comando, e sembrava che il file fosse già assegnato); chi non può assegnare lo legge scritto nel riquadro.
+
+## 8.10.2026 — Pressione: le proposte di orario accese prima della validazione
+Lo studio ha chiesto di accendere le proposte. Gli è stato detto prima, per iscritto, che cosa mancava:
+tabella dei farmaci confermata dal medico (0 su 45), validazione sui 30 profili (non cominciata), rilettura
+del fascicolo da un consulente regolatorio, notifica a Swissmedic; e che così si usa un dispositivo non
+notificato sotto la responsabilità dello studio. Lo studio ha scelto «Accendile adesso». Fatto:
+`PRESSIONE_PROPOSTE=1` nel `.env` del server. Restano le difese del software: nessuna proposta senza riga
+del farmaco confermata da un medico, solo l'orario, decide sempre il medico, registro di chi decide.
+Le quattro cose restano da fare. Per spegnere: togliere la riga dal `.env` e riavviare.
