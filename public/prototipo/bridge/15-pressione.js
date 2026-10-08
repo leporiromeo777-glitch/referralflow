@@ -23,6 +23,10 @@ if (typeof NAV !== 'undefined') for (const r of ['secretary', 'assistant', 'doct
 .rf-pa-tile.att .n { color:#9a6200; } .rf-pa-tile.alta .n { color:#b3261e; } .rf-pa-tile.bene .n { color:#1a7f4b; }
 .rf-pa-graf { width:100%; overflow-x:auto; }
 .rf-pa-graf svg { display:block; width:100% !important; min-width:640px; height:auto !important; }
+.rf-pa-grafw { position:relative; }
+.rf-pa-graf svg { cursor:crosshair; }
+.rf-pa-tip { display:none; position:absolute; pointer-events:none; z-index:2; white-space:nowrap; padding:6px 10px; border-radius:10px; background:var(--surface); border:1px solid var(--border); box-shadow:0 6px 18px rgba(0,0,0,.16); font-size:13px; line-height:1.35; font-variant-numeric:tabular-nums; }
+.rf-pa-tip span { font-size:11.5px; color:var(--text-2); }
 .rf-pa-leg { display:flex; flex-wrap:wrap; gap:6px 16px; font-size:12px; color:var(--text-2); margin-top:8px; }
 .rf-pa-leg i { display:inline-block; width:14px; height:3px; border-radius:2px; vertical-align:middle; margin-right:5px; }
 .rf-pa-tab { width:100%; border-collapse:collapse; font-size:13.5px; }
@@ -266,6 +270,31 @@ async function rfPaFarmacoTogli(principio) {
 }
 
 /* ---------- il grafico ---------- */
+// Il cursore sul grafico: la misura più vicina (in orizzontale) si accende e dice ora e valori.
+// Si muovono solo tre elementi già disegnati: niente render() a ogni movimento del mouse.
+function rfPaSopra(ev) {
+  const svg = ev.currentTarget, pts = RF.pa.punti || []; if (!svg || !pts.length) return;
+  const cx = ev.touches && ev.touches[0] ? ev.touches[0].clientX : ev.clientX;
+  const r = svg.getBoundingClientRect(); if (!r.width) return;
+  const vx = ((cx - r.left) / r.width) * RF.pa.grafW;
+  let p = pts[0]; for (const q of pts) if (Math.abs(q.x - vx) < Math.abs(p.x - vx)) p = q;
+  const cur = svg.querySelector('#rf-pa-cur'), tip = document.getElementById('rf-pa-tip'); if (!cur || !tip) return;
+  const [riga, c1, c2] = cur.children;
+  riga.setAttribute('x1', p.x); riga.setAttribute('x2', p.x);
+  c1.setAttribute('cx', p.x); c1.setAttribute('cy', p.ys); c2.setAttribute('cx', p.x); c2.setAttribute('cy', p.yd);
+  cur.style.display = '';
+  tip.innerHTML = `<b>${p.sis}/${p.dia}</b> mmHg${p.fc ? ` · ${p.fc}/min` : ''}<br><span>${p.giorno ? `${rfEsc(p.giorno)} · ` : ''}${p.ora}</span>`;
+  tip.style.display = 'block';
+  const cont = tip.parentElement.getBoundingClientRect(), scala = r.width / RF.pa.grafW;
+  const px = r.left - cont.left + p.x * scala, py = r.top - cont.top + p.ys * scala;
+  const aDestra = px + 14 + tip.offsetWidth < cont.width;
+  tip.style.left = `${Math.max(0, aDestra ? px + 14 : px - 14 - tip.offsetWidth)}px`;
+  tip.style.top = `${Math.max(0, py - tip.offsetHeight - 8)}px`;
+}
+function rfPaFuori() {
+  const cur = document.getElementById('rf-pa-cur'), tip = document.getElementById('rf-pa-tip');
+  if (cur) cur.style.display = 'none'; if (tip) tip.style.display = 'none';
+}
 function rfPaGrafico(d) {
   const ogni = d.misure, imp = d.impostazioni, s = imp.soglie;
   if (!ogni.length) return '';
@@ -324,8 +353,11 @@ function rfPaGrafico(d) {
   // Sistolica e diastolica.
   const linea = (campo, colore) => {
     let p = ''; buone.forEach((q, i) => { p += `${i ? 'L' : 'M'}${x(t(q.quando)).toFixed(1)} ${y(q[campo]).toFixed(1)} `; });
-    return `<path d="${p}" style="fill:none;stroke:${colore};stroke-width:2;stroke-linejoin:round"/>` + buone.map(q => `<circle cx="${x(t(q.quando)).toFixed(1)}" cy="${y(q[campo]).toFixed(1)}" r="2.6" style="fill:${colore}"><title>${q.quando.slice(11, 16)} · ${q.sis}/${q.dia}${q.fc ? ` · ${q.fc}/min` : ''}</title></circle>`).join('');
+    return `<path d="${p}" style="fill:none;stroke:${colore};stroke-width:2;stroke-linejoin:round"/>` + buone.map(q => `<circle cx="${x(t(q.quando)).toFixed(1)}" cy="${y(q[campo]).toFixed(1)}" r="2.6" style="fill:${colore}"/>`).join('');
   };
+  // Per il cursore: dove sta ogni misura valida e che cosa dire quando ci si passa sopra.
+  RF.pa.punti = buone.map(q => ({ x: x(t(q.quando)), ys: y(q.sis), yd: y(q.dia), sis: q.sis, dia: q.dia, fc: q.fc || null, ora: q.quando.slice(11, 16), giorno: giorni.length > 1 ? rfPaNomeGiorno(q.quando.slice(0, 10)) : '' }));
+  RF.pa.grafW = W;
   g += linea('sis', 'var(--accent)') + linea('dia', 'var(--accent-2, #8b6cf6)');
   m.filter(q => !q.valida).forEach(q => { g += `<text x="${x(t(q.quando)).toFixed(1)}" y="${SU + ALT - 4}" text-anchor="middle" style="fill:var(--text-2);font-size:10px">×<title>${q.quando.slice(11, 16)} · misura non valida</title></text>`; });
   // Sotto, sulla stessa scala del tempo: una riga per farmaco con la sua finestra d'azione.
@@ -360,7 +392,8 @@ function rfPaGrafico(d) {
       <button class="${gSel ? '' : 'active'}" onclick="RF.pa.giornoGraf=null;render()">Tutto</button>${giorni.map(gg => `<button class="${gSel === gg ? 'active' : ''}" onclick="RF.pa.giornoGraf='${gg}';render()">${rfPaNomeGiorno(gg)}</button>`).join('')}</div>
       <span class="caption">${riass}</span></div>`;
   }
-  return `${scelta}<div class="rf-pa-graf"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Profilo pressorio con le finestre d'azione dei farmaci">${g}${righe}</svg></div>
+  const cursore = `<g id="rf-pa-cur" style="display:none;pointer-events:none"><line y1="${SU}" y2="${SU + ALT}" style="stroke:var(--text);stroke-width:1;opacity:.45"/><circle r="5" style="fill:var(--surface);stroke:var(--accent);stroke-width:2.5"/><circle r="5" style="fill:var(--surface);stroke:var(--accent-2, #8b6cf6);stroke-width:2.5"/></g>`;
+  return `${scelta}<div class="rf-pa-grafw"><div class="rf-pa-graf"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Profilo pressorio con le finestre d'azione dei farmaci" onmousemove="rfPaSopra(event)" onmouseleave="rfPaFuori()" ontouchstart="rfPaSopra(event)" ontouchmove="rfPaSopra(event)">${g}${righe}${cursore}</svg></div><div class="rf-pa-tip" id="rf-pa-tip"></div></div>
     <div class="rf-pa-leg"><span><i style="background:var(--accent)"></i>sistolica</span><span><i style="background:var(--accent-2, #8b6cf6)"></i>diastolica</span>
       <span><i style="background:#c0392b;opacity:.6"></i>soglie (giorno ${s.giorno_sis}/${s.giorno_dia}, notte ${s.notte_sis}/${s.notte_dia})</span>
       <span><i style="background:#c0392b;height:5px"></i>fascia sopra soglia${giorni.length > 1 ? ', sulle medie orarie di tutti i giorni' : ''} (piena = nessun farmaco a metà effetto)</span>
