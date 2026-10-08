@@ -35,11 +35,11 @@ const sicuro = (s: string) => String(s || '').replace(/[^A-Za-z0-9 ._()-]/g, '')
 // di adesso; la prima volta Windows chiede utente e password della
 // condivisione e li ricorda; poi mette il collegamento sulla Scrivania e apre
 // la cartella. Righe con CRLF.
-export function scriptWindows(o: { host: string; ip: string | null; nome: string }): string {
+export function scriptWindows(o: { host: string; ip: string | null; nome: string; cosa?: string }): string {
   const host = sicuro(o.host), ip = sicuro(o.ip ?? ''), nome = sicuro(o.nome);
   const righe = [
     '@echo off',
-    'rem ReferralFlow: collega la cartella dei dettati sulla Scrivania (solo nella rete dello studio).',
+    `rem ReferralFlow: collega la cartella ${sicuro(o.cosa ?? 'dei dettati')} sulla Scrivania (solo nella rete dello studio).`,
     `set "CARTELLA=\\\\${host}\\${nome}"`,
     'dir "%CARTELLA%" >nul 2>&1 && goto collegata',
     'echo Collego la cartella: se Windows lo chiede, scrivi utente e password della condivisione dello studio.',

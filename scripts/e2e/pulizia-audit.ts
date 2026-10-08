@@ -18,6 +18,10 @@ export async function togliAudit(ids: string[]): Promise<void> {
     await c.query('begin');
     await c.query('alter table audit.artifacts disable trigger artifacts_immutabili');
     await c.query('alter table audit.human_edits disable trigger human_edits_immutabili');
+    // Le misure del lavoro puntano agli artefatti: via prima loro, anche quelle senza bozza scritta
+    // (8.10.2026: la pulizia falliva a intermittenza sulla chiave misure_lavoro_from_artifact_id_fkey
+    // e lasciava nel demo bozze di prova che facevano fallire il giro dopo).
+    await c.query(`delete from audit.misure_lavoro where bozza_id = any($1::uuid[]) or from_artifact_id in (select id from audit.artifacts where bozza_id = any($1::uuid[]))`, [ids]);
     await c.query('delete from audit.pipeline_steps where bozza_id = any($1::uuid[])', [ids]);
     await c.query('delete from audit.human_edits where bozza_id = any($1::uuid[])', [ids]);
     await c.query('delete from audit.artifacts where bozza_id = any($1::uuid[])', [ids]);

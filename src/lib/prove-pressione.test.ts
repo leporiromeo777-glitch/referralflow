@@ -4,6 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { proposteAccese } from './pressione/accese';
+import { daIgnorare, decodifica, estensione, identitaDaFile, perNonLeggerlo } from './pressione/cartella';
 import { FARMACI_BOZZA, controllaFarmaco, orario, riconosci, type Farmaco } from './pressione/farmaci';
 import {
   IMPOSTAZIONI_BASE, avvisoFasce, caloTipo, copertura, effetto, fasce, leggiFile, livelli, orarie, proponi, punteggio, segnaScoperte, statistiche,
@@ -174,3 +175,34 @@ test('pressione: le proposte di orario sono spente di serie, e le accende solo P
   assert.equal(proposteAccese({ PRESSIONE_PROPOSTE: 'si' }), false);
   assert.equal(proposteAccese({ PRESSIONE_PROPOSTE: '1' }), true);
 });
+
+test('pressione, cartella: di chi è un file si legge dal nome del file o dalle prime righe, senza indovinare', () => {
+  assert.deepEqual(identitaDaFile('Rossi Maria 12.06.1955.csv', 'Data;Ora;Sys;Dia\n'), { nome: 'Rossi Maria', nascita: '1955-06-12', da: 'nome_del_file' });
+  assert.deepEqual(identitaDaFile('rossi_maria_1955-06-12.txt', ''), { nome: 'rossi maria', nascita: '1955-06-12', da: 'nome_del_file' });
+  // Scritto dentro il file, sopra la tabella: vince sul nome del file.
+  const dentro = 'Paziente: Bianchi Luca\nData di nascita: 03.02.1948\nApparecchio: X\n\nData;Ora;Sys;Dia\n01.03.2026;08:00;140;85\n';
+  assert.deepEqual(identitaDaFile('export_0042.csv', dentro), { nome: 'Bianchi Luca', nascita: '1948-02-03', da: 'file' });
+  assert.deepEqual(identitaDaFile('x.csv', 'Nachname;Müller\nVorname;Anna\nGeburtsdatum;1960-11-30\n'), { nome: 'Müller Anna', nascita: '1960-11-30', da: 'file' });
+  // Senza data di nascita o senza nome non c'è un'identità completa: lo deciderà una persona.
+  assert.equal(identitaDaFile('Rossi Maria.csv', '').nascita, null);
+  assert.deepEqual(identitaDaFile('export_0042.csv', 'Data;Ora;Sys;Dia\n'), { nome: 'export', nascita: null, da: 'nome_del_file' });
+  assert.equal(identitaDaFile('31.02.1955 Rossi.csv', '').nascita, null, 'una data che non esiste non è una data');
+  // Una riga di misure non viene presa per un nome.
+  assert.equal(identitaDaFile('a.csv', 'Name;08:00 140/85\n').nome, 'a');
+});
+
+test('pressione, cartella: che cosa si legge, che cosa si ignora, e perché no', () => {
+  assert.equal(estensione('Rossi.CSV'), 'csv');
+  assert.equal(perNonLeggerlo('profilo.csv', 5000), null);
+  assert.match(perNonLeggerlo('profilo.xlsx', 5000) ?? '', /salvalo come CSV/);
+  assert.match(perNonLeggerlo('referto.pdf', 5000) ?? '', /PDF/);
+  assert.match(perNonLeggerlo('foto.jpg', 5000) ?? '', /non letto/);
+  assert.match(perNonLeggerlo('profilo.csv', 900_000) ?? '', /troppo grande/);
+  assert.match(perNonLeggerlo('profilo.csv', 0) ?? '', /vuoto/);
+  for (const n of ['.DS_Store', '~$profilo.csv', 'Thumbs.db', 'desktop.ini', 'x.csv.crdownload', 'a.csv.perche.txt', '._Rossi.csv']) assert.ok(daIgnorare(n), n);
+  assert.ok(!daIgnorare('Rossi Maria 12.06.1955.csv'));
+  // Un file di Windows con gli accenti in Latin-1 si legge lo stesso.
+  assert.equal(decodifica(new Uint8Array([0x4d, 0xfc, 0x6c, 0x6c, 0x65, 0x72])), 'Müller');
+  assert.equal(decodifica(new TextEncoder().encode('\uFEFFMüller')), 'Müller');
+});
+

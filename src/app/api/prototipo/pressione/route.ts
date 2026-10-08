@@ -2,7 +2,13 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
 import { vietato } from '@/lib/permessi';
+import { execFile } from 'child_process';
+import os from 'os';
+import path from 'path';
+import { indirizzoSmb, leggiCondivisioni, scriptWindows } from '@/lib/cartella-dettati';
+import { cartellaPressione } from '@/lib/pressione/cartella-server';
 import {
+  assegnaArrivo, elencoArrivi, scartaArrivo,
   caricaProfilo, decidiProposta, elencoFarmaci, elencoProfili, eliminaProfilo, generaProposte, proposteAccese, puoPa,
   salvaFarmaco, salvaImpostazioni, salvaTerapia, togliConferma,
 } from '@/lib/pressione/archivio';
@@ -31,6 +37,20 @@ const esito = (r: { errore: string; stato?: number } | Record<string, unknown>) 
   ('errore' in r ? NextResponse.json({ errore: r.errore }, { status: (r as { stato?: number }).stato ?? 400 }) : NextResponse.json(r, no));
 const nonPuoi = (che: string) => NextResponse.json({ errore: che }, { status: 403 });
 
+// La cartella condivisa (8.10.2026): dov'è, se il Mac la condivide in rete e con che nome.
+// Nessuna credenziale: utente e password li chiede il computer che si collega.
+const nomeHost = (): string => { const h = process.env.CARTELLA_DETTATI_HOST || os.hostname(); return h.endsWith('.local') || process.env.CARTELLA_DETTATI_HOST ? h : `${h}.local`; };
+function ipLocale(): string | null {
+  for (const lista of Object.values(os.networkInterfaces())) for (const a of lista ?? []) if (a.family === 'IPv4' && !a.internal && /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(a.address)) return a.address;
+  return null;
+}
+const condivisioni = (): Promise<string> => new Promise((ok) => execFile('/usr/sbin/sharing', ['-l'], { timeout: 10_000 }, (_e, out) => ok(String(out ?? ''))));
+async function statoCartella() {
+  const percorso = cartellaPressione();
+  const c = leggiCondivisioni(await condivisioni()).find((x) => path.resolve(x.percorso) === path.resolve(percorso)) ?? null;
+  return { nome: path.basename(percorso), percorso, condivisa: !!c, nome_rete: c?.nome ?? null, mac: c ? indirizzoSmb(nomeHost(), c.nome) : null, ip: ipLocale() };
+}
+
 export async function GET(req: NextRequest) {
   const { session, errore } = await sessione();
   if (errore) return errore;
@@ -38,10 +58,17 @@ export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams;
   const puo = { caricare: puoPa(session.role, 'caricare'), terapia: puoPa(session.role, 'terapia'), decidere: puoPa(session.role, 'decidere') };
   if (q.get('vista') === 'farmaci') return NextResponse.json({ ...(await elencoFarmaci(sid)), puo }, no);
+  // Il file per collegare la cartella da un PC Windows (solo quando il Mac la condivide davvero).
+  if (q.get('cartella') === 'win') {
+    const c = await statoCartella();
+    if (!c.condivisa || !c.nome_rete) return NextResponse.json({ errore: 'La cartella non è ancora condivisa in rete dal Mac.' }, { status: 409 });
+    return new NextResponse(scriptWindows({ host: nomeHost(), ip: c.ip, nome: c.nome_rete, cosa: 'della pressione' }), { headers: { 'Content-Type': 'application/x-bat; charset=utf-8', 'Content-Disposition': 'attachment; filename="collega-pressione.bat"', 'Cache-Control': 'no-store' } });
+  }
   const paziente = q.get('paziente');
   if (paziente && !isUuid(paziente)) return NextResponse.json({ errore: 'paziente' }, { status: 400 });
   const f = await elencoFarmaci(sid);
-  return NextResponse.json({ ...(await elencoProfili(sid, paziente)), farmaci: { confermati: f.confermati, totale: f.totale }, proposte_accese: proposteAccese(), puo }, no);
+  return NextResponse.json({ ...(await elencoProfili(sid, paziente)), farmaci: { confermati: f.confermati, totale: f.totale }, proposte_accese: proposteAccese(), puo,
+    arrivi: paziente ? [] : await elencoArrivi(sid), cartella: await statoCartella() }, no);
 }
 
 export async function POST(req: NextRequest) {
@@ -64,6 +91,13 @@ export async function POST(req: NextRequest) {
     return esito(await salvaFarmaco(sid, uid, principio, { inizio_h: c?.inizio_h, picco_h: c?.picco_h, durata_h: c?.durata_h, emivita_h: c?.emivita_h, orario_rilevante: c?.orario_rilevante, nota: c?.nota, fonte: c?.fonte, conferma: c?.conferma === true }));
   }
   if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 });
+  // Un file arrivato dalla cartella e non agganciato da solo: lo assegna (o lo scarta) chi può caricare un profilo.
+  if (azione === 'assegna' || azione === 'scarta_arrivo') {
+    if (!puoPa(session.role, 'caricare')) return nonPuoi('Il tuo ruolo non assegna i file arrivati.');
+    if (azione === 'scarta_arrivo') return esito(await scartaArrivo(sid, uid, id));
+    if (!isUuid(String(c?.patient_id ?? ''))) return NextResponse.json({ errore: 'Scegli il paziente.' }, { status: 400 });
+    return esito(await assegnaArrivo(sid, uid, id, String(c.patient_id)));
+  }
   if (azione === 'terapia') {
     if (!puoPa(session.role, 'terapia')) return nonPuoi('La terapia la scrive il medico o l’aiuto medico.');
     return esito(await salvaTerapia(sid, uid, id, c?.righe));

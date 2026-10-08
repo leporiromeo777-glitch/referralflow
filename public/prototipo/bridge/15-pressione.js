@@ -67,7 +67,7 @@ async function rfPaCarica(rendi = true) {
     const r = await fetch(RF_PA_URL, { credentials: 'include', cache: 'no-store' });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) RF.pa.errore = j.errore && r.status === 403 ? j.errore : `Non riesco a leggere i profili (${r.status}).`;
-    else { RF.pa.lista = j.profili || []; RF.pa.info = { farmaci: j.farmaci || {}, proposte_accese: !!j.proposte_accese, puo: j.puo || {} }; RF.pa.errore = null; }
+    else { RF.pa.lista = j.profili || []; RF.pa.info = { farmaci: j.farmaci || {}, proposte_accese: !!j.proposte_accese, puo: j.puo || {} }; RF.pa.arrivi = j.arrivi || []; RF.pa.cartella = j.cartella || null; RF.pa.errore = null; }
   } catch { RF.pa.errore = 'Piattaforma non raggiungibile.'; }
   if (RF.pa.lista === null) RF.pa.lista = [];
   if (rendi) render();
@@ -124,6 +124,53 @@ async function rfPaInvia() {
   RF.pa.nuovo = { pid: '', nome: '', cerca: '', testo: '', data: '', apparecchio: '', carico: false, errore: null };
   toast(`Profilo caricato: ${j.misure} misure${j.scartate ? `, ${j.scartate} righe scartate` : ''}`);
   RF.pa.lista = null; await rfPaApri(j.id);
+}
+
+/* ---------- la cartella condivisa (8.10.2026) ---------- */
+// Un file messo nella cartella «Pressione da leggere» si legge da solo. Qui: gli
+// arrivi che non si sono agganciati da soli a un paziente, e come collegare la
+// cartella dagli altri computer.
+RF.pa.arrivi = []; RF.pa.cartella = null; RF.pa.scelte = {};
+const RF_PA_MOTIVO = { senza_dati: 'nel file e nel suo nome non ci sono nome e data di nascita', senza_nome: 'manca il nome', nessuno: 'nessuna cartella con questo nome', omonimi: 'più persone con questo nome', nascita_diversa: 'la data di nascita non combacia', non_caricato: 'il profilo non si è potuto caricare' };
+function rfPaArrivoCerca(id, v) { (RF.pa.scelte[id] = RF.pa.scelte[id] || {}).cerca = v; render(); const e = document.getElementById(`rf-pa-ac-${id}`); if (e) { e.focus(); e.setSelectionRange(e.value.length, e.value.length); } }
+function rfPaArrivoScegli(id, pid) { const p = (RF.data.patients || []).find(x => x.id === pid); RF.pa.scelte[id] = { pid, nome: p ? `${fullName(p)}${p.dob ? ` · ${p.dob}` : ''}` : '', cerca: '' }; render(); }
+async function rfPaArrivoAssegna(id) {
+  const s = RF.pa.scelte[id]; if (!s || !s.pid) { toast('Scegli il paziente'); return; }
+  const j = await rfPaChiedi({ azione: 'assegna', id, patient_id: s.pid });
+  if (j.errore) { toast(j.errore); return; }
+  delete RF.pa.scelte[id]; toast('Profilo creato'); RF.pa.lista = null; await rfPaApri(j.id);
+}
+async function rfPaArrivoScarta(id) {
+  if (!confirm('Scartare questo file? Le misure che conteneva non si recuperano da qui.')) return;
+  const j = await rfPaChiedi({ azione: 'scarta_arrivo', id });
+  if (j.errore) { toast(j.errore); return; }
+  toast('File scartato'); await rfPaCarica();
+}
+function rfPaArriviHtml(puoCaricare) {
+  const a = RF.pa.arrivi || []; if (!a.length) return '';
+  const riga = (x) => {
+    const s = RF.pa.scelte[x.id] || {}; const q = (s.cerca || '').trim().toLowerCase();
+    const trovati = q.length >= 2 ? (RF.data.patients || []).filter(p => rfUuid(p.id) && fullName(p).toLowerCase().includes(q)).slice(0, 6) : [];
+    return `<div class="rf-pa-fascia" style="flex-direction:column;gap:6px;align-items:stretch">
+      <div><b>${rfEsc(x.nome_file)}</b> · ${x.misure} misure · dal ${rfPaQuando(x.inizio)} al ${rfPaQuando(x.fine)}</div>
+      <div class="caption">Non agganciato da solo: ${rfEsc(RF_PA_MOTIVO[x.motivo] || 'da assegnare')}${x.nome_letto ? ` · letto: ${rfEsc(x.nome_letto)}${x.nascita_letta ? `, ${rfPaGiorno(x.nascita_letta)}` : ''}` : ''}.</div>
+      ${puoCaricare ? `<div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
+        ${s.pid ? `<span class="badge accent">${rfEsc(s.nome)}</span><button class="btn sm ghost" onclick="delete RF.pa.scelte['${x.id}'];render()">Cambia</button><button class="btn sm primary" onclick="rfPaArrivoAssegna('${x.id}')">Crea il profilo</button>`
+          : `<input class="input rf-pa-st" id="rf-pa-ac-${x.id}" style="width:220px;height:32px" placeholder="Di chi è? Scrivi il cognome" value="${rfEsc(s.cerca || '')}" oninput="rfPaArrivoCerca('${x.id}', this.value)">${trovati.map(p => `<button class="btn sm" onclick="rfPaArrivoScegli('${x.id}','${p.id}')">${rfEsc(fullName(p))}${p.dob ? ` · ${rfEsc(p.dob)}` : ''}</button>`).join('')}`}
+        <span class="grow"></span><button class="btn sm ghost" onclick="rfPaArrivoScarta('${x.id}')">Scarta</button></div>` : ''}</div>`;
+  };
+  return `<div class="card mt-16"><div class="card-head"><span class="section-title">Arrivati dalla cartella, da assegnare</span><span class="badge warning">${a.length}</span></div>${a.map(riga).join('')}</div>`;
+}
+function rfPaCartellaHtml() {
+  const c = RF.pa.cartella; if (!c) return '';
+  const stato = c.condivisa ? '<span class="badge success">condivisa in rete</span>' : '<span class="badge warning">non ancora condivisa</span>';
+  const come = c.condivisa
+    ? `<div class="row mt-8" style="gap:8px;flex-wrap:wrap"><a class="btn sm" href="${RF_PA_URL}?cartella=win" download>Collegala da un PC Windows</a><a class="btn sm" href="${rfEsc(c.mac)}">Collegala da un Mac</a></div>
+       <p class="caption mt-8">Su Windows si scarica un piccolo file: aprilo una volta e sulla Scrivania compare il collegamento alla cartella. Utente e password li chiede il computer, la prima volta. Funziona solo dentro la rete dello studio.</p>`
+    : `<p class="meta" style="margin:8px 0 0;line-height:1.55">Per usarla dagli altri computer va condivisa una volta dal Mac del server: <b>Impostazioni di Sistema → Generali → Condivisione → Condivisione file</b>, accesa, e con il «+» si aggiunge la cartella <code>${rfEsc(c.percorso)}</code>. Finché non è condivisa funziona lo stesso per chi mette il file direttamente sul Mac.</p>`;
+  return `<div class="card mt-16"><div class="card-head"><span class="section-title">Cartella «${rfEsc(c.nome)}»</span>${stato}</div>
+    <p class="meta" style="margin:0;line-height:1.55">Metti qui il file delle misure e la piattaforma lo legge da sola entro pochi secondi. Se il file si chiama <b>Cognome Nome e data di nascita</b> (per esempio <code>Rossi Maria 12.06.1955.csv</code>), o porta nome e data di nascita nelle prime righe, il profilo va da solo nella cartella del paziente; altrimenti compare qui sopra «da assegnare». I file letti passano in «Letti» e dopo sette giorni si cancellano; quelli che non si leggono finiscono in «Non letti» con accanto il perché.</p>
+    ${come}</div>`;
 }
 
 /* ---------- terapia e impostazioni ---------- */
@@ -438,6 +485,8 @@ PAGES.pressione = () => {
   return `${testa}
     <div class="card"><div class="card-head"><span class="section-title">Profili</span><span class="caption">dal più recente</span></div>
       <div class="list">${l.length ? l.map(riga).join('') : '<div class="caption">Nessun profilo caricato.</div>'}</div></div>
+    ${rfPaArriviHtml(info.puo.caricare)}
     ${nuovo}
+    ${rfPaCartellaHtml()}
     <p class="rf-img-limite mt-16">La pagina <b>mostra</b>: il profilo delle 24 ore, la terapia e quando ogni farmaco è al massimo dell’effetto secondo la tabella confermata dallo studio. Non sceglie farmaci né dosi. ${info.proposte_accese ? 'Le proposte di orario sono accese: sono stime, le decide il medico.' : 'Le proposte di orario sono spente finché non sono validate.'}</p>`;
 };

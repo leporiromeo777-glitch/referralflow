@@ -8,4 +8,10 @@ export async function register() {
     const { avviaMotore } = await import('./lib/monitoraggio/motore');
     avviaMotore();
   }
+  // La cartella condivisa della pressione (8.10.2026): un file messo lì viene letto da solo.
+  // Si spegne con PRESSIONE_CARTELLA_GIRO=spento (le prove chiamano il giro a mano).
+  if (process.env.NEXT_RUNTIME === 'nodejs' && process.env.PRESSIONE_CARTELLA_GIRO !== 'spento') {
+    const { avviaCartella } = await import('./lib/pressione/cartella-server');
+    avviaCartella();
+  }
 }

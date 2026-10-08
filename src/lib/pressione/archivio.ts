@@ -95,7 +95,7 @@ export async function togliConferma(studioId: string, userId: string, principio:
 // ── I profili ───────────────────────────────────────────────────────────────
 const MINIMO_MISURE = 10;
 
-export async function caricaProfilo(studioId: string, userId: string, patientId: string, x: { testo: string; data_inizio?: string; apparecchio?: string }): Promise<Esito<{ id: string; misure: number; scartate: number }>> {
+export async function caricaProfilo(studioId: string, userId: string | null, patientId: string, x: { testo: string; data_inizio?: string; apparecchio?: string }): Promise<Esito<{ id: string; misure: number; scartate: number }>> {
   const [paz] = await query<{ id: string }>(`select id from patients where id = $1 and studio_id = $2`, [patientId, studioId]);
   if (!paz) return err('Paziente non trovato.', 404);
   if (String(x.testo ?? '').length > 400_000) return err('Il file è troppo grande per essere un profilo delle 24 ore.');
@@ -309,3 +309,29 @@ export async function decidiProposta(studioId: string, userId: string, propostaI
   await registra(studioId, userId, `proposta_${stato}`, r.profilo_id);
   return { ok: true };
 }
+
+// ── Gli arrivi dalla cartella condivisa (8.10.2026) ─────────────────────────
+// Un file letto dalla cartella che non si è potuto agganciare da solo a un
+// paziente aspetta qui: lo assegna, o lo scarta, una persona.
+export async function elencoArrivi(studioId: string) {
+  return query<{ id: string; nome_file: string; misure: number; inizio: string | null; fine: string | null; nome_letto: string | null; nascita_letta: string | null; motivo: string | null; quando: string }>(
+    `select id, nome_file, misure, to_char(inizio, 'YYYY-MM-DD"T"HH24:MI') as inizio, to_char(fine, 'YYYY-MM-DD"T"HH24:MI') as fine, nome_letto, nascita_letta::text, motivo, quando::text
+       from pa_arrivi where studio_id = $1 and stato = 'in_attesa' order by quando desc limit 50`, [studioId]);
+}
+export async function assegnaArrivo(studioId: string, userId: string, arrivoId: string, patientId: string): Promise<Esito<{ ok: true; id: string }>> {
+  const [a] = await query<{ testo: string }>(`select testo from pa_arrivi where id = $1 and studio_id = $2 and stato = 'in_attesa'`, [arrivoId, studioId]);
+  if (!a) return err('Arrivo non trovato, o già assegnato.', 404);
+  const c = await caricaProfilo(studioId, userId, patientId, { testo: a.testo, apparecchio: 'dalla cartella' });
+  if ('errore' in c) return c;
+  // Assegnato: il testo del file non serve più qui, le misure stanno nel profilo.
+  await query(`update pa_arrivi set stato = 'assegnato', profilo_id = $2, deciso_da = $3, deciso_il = now(), testo = '' where id = $1`, [arrivoId, c.id, userId]);
+  await registra(studioId, userId, 'arrivo_assegnato', c.id);
+  return { ok: true, id: c.id };
+}
+export async function scartaArrivo(studioId: string, userId: string, arrivoId: string): Promise<Esito<{ ok: true }>> {
+  const [a] = await query<{ id: string }>(`update pa_arrivi set stato = 'scartato', deciso_da = $3, deciso_il = now(), testo = '' where id = $1 and studio_id = $2 and stato = 'in_attesa' returning id`, [arrivoId, studioId, userId]);
+  if (!a) return err('Arrivo non trovato, o già deciso.', 404);
+  await registra(studioId, userId, 'arrivo_scartato');
+  return { ok: true };
+}
+

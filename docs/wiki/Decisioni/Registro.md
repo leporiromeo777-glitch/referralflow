@@ -675,3 +675,11 @@ NAS); la password del NAS, finita in una foto, da cambiare; gli esami da metà 2
 Alle 12:52 sono arrivati dall'EPIQ tre filmati (27,6 MB), letti e disegnati. La configurazione sull'ecografo
 è scritta in [[Piattaforma/Immagini]].
 
+## 8.10.2026 — Pressione: una cartella condivisa che si legge da sola
+Richiesta dello studio: i dati arriveranno come file; oltre al caricamento dalla pagina, una cartella in cui
+basta mettere il documento, e che si possa condividere con gli altri computer. Fatta sul modello della
+cartella dei dettati. Il paziente si riconosce dal nome del file o dalle prime righe, con la regola severa
+(nome e data di nascita, una persona sola); se no il file aspetta «da assegnare». La cartella sta nella
+casa dell'utente e non sulla Scrivania (permessi di macOS). Aperti: accendere la condivisione file sul Mac
+(lo fa lo studio); il formato vero dell'apparecchio, ancora sconosciuto.
+

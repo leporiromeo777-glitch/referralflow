@@ -1,6 +1,6 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-10-07
+aggiornata: 2026-10-08
 ---
 # Pressione
 
@@ -22,6 +22,17 @@ Il confine che il codice fa rispettare: **solo l'orario** di farmaci che il medi
 1. **Nuovo profilo**: si sceglie il paziente e il file esportato dal programma dell'apparecchio (CSV o testo; da Excel «Salva con nome → CSV»), oppure si incollano le righe. Con la riga d'intestazione le colonne si riconoscono dal nome in qualunque ordine (data, ora, sistolica, diastolica, frequenza — anche in tedesco e inglese; le colonne in più si ignorano). Senza intestazione valgono solo tre colonne nell'ordine atteso: di più non si indovina. Se nel file manca la data si indica il giorno d'inizio.
 2. **Terapia**: nome come lo scrive lo studio, dose, orari delle prese (`08:00, 20:00`). Al secondo profilo dello stesso paziente la terapia si riprende dal precedente: è un punto di partenza da controllare.
 3. **Si guarda**: i numeri in alto, il grafico, le fasce.
+
+## La cartella condivisa (8.10.2026)
+
+Oltre a caricarlo dalla pagina, il file delle misure si può **mettere in una cartella** e la piattaforma lo legge da sola entro pochi secondi (`src/lib/pressione/cartella-server.ts`, giro ogni 10 secondi avviato da `src/instrumentation.ts`; si spegne con `PRESSIONE_CARTELLA_GIRO=spento`).
+
+- **Dov'è**: `~/Pressione da leggere` sul Mac del server (`PRESSIONE_CARTELLA` per cambiarla). **Non sulla Scrivania**: macOS non lascia leggere Scrivania e Documenti ai servizi in sottofondo senza un permesso dato a mano.
+- **Di chi è il file** (`identitaDaFile`, puro): dal **nome del file** — `Rossi Maria 12.06.1955.csv`, dove la data è quella di **nascita** — oppure dalle **prime righe** (`Paziente: …`, `Data di nascita: …`, anche in tedesco e inglese), che vincono sul nome del file. Poi la regola severa delle immagini: nome **e** data di nascita, **una persona sola**. Se combacia nasce subito il profilo; se no il file entra fra gli **«Arrivati dalla cartella, da assegnare»** in cima alla pagina (tabella `pa_arrivi`, migrazione 086) e una persona sceglie il paziente o lo scarta. Non si indovina mai.
+- **Che cosa si legge**: `.csv`, `.txt`, `.tsv`, fino a 400 KB, almeno 10 misure. Un foglio Excel, un PDF, un file senza misure finiscono in **«Non letti»** con accanto un file `….perche.txt` che dice che cosa fare. I file di sistema (`.DS_Store`, `Thumbs.db`, quelli in copia) non si toccano; un file modificato da meno di 8 secondi si lascia stare, perché lo stanno ancora copiando.
+- **Dopo**: il file letto passa in **«Letti»**, e dopo **sette giorni** si cancella da solo (anche da «Non letti»): è un dato sanitario e ormai sta nel database. Lo stesso profilo rimesso nella cartella non si carica due volte. Assegnato o scartato, il testo del file non resta in `pa_arrivi`.
+- **Condivisa**: la pagina mostra se il Mac condivide la cartella in rete (`sharing -l`) e, quando sì, dà il file `.bat` per collegarla da Windows e l'indirizzo `smb://` per il Mac — lo stesso meccanismo della cartella dei dettati, senza credenziali dentro. La condivisione si accende **dal Mac**: Impostazioni di Sistema → Generali → Condivisione → Condivisione file, e col «+» si aggiunge la cartella. Solo nella rete dello studio, mai su servizi di sincronizzazione.
+- **Chi**: assegna o scarta un arrivo chi può caricare un profilo (segreteria, aiuto medico, medico).
 
 ## Che cosa calcola (tutto in `src/lib/pressione/calcolo.ts`, puro)
 
@@ -69,4 +80,4 @@ La conferma di una proposta non è il software: è **il monitoraggio dopo**, e i
 
 ## Le prove
 
-`src/lib/prove-pressione.test.ts` — 13 casi: lettura del file, medie e qualità, fasce a cavallo della mezzanotte, finestra d'azione, fascia scoperta, punteggio (il piatto non vince), proposta coi suoi numeri e ripetibile, limiti (qualità, diuretici, più prese, avviso che non giudica), riconoscimento dei nomi, coerenza della tabella, interruttore. `scripts/e2e/prova-pressione.ts` — 22 casi sul database demo con profili inventati: permessi ruolo per ruolo, doppioni, conferma dei farmaci, proposte e decisioni, prima e dopo, registro senza valori, eliminazione.
+`src/lib/prove-pressione.test.ts` — 15 casi (due sulla cartella: identità dal file, che cosa si legge e perché no): lettura del file, medie e qualità, fasce a cavallo della mezzanotte, finestra d'azione, fascia scoperta, punteggio (il piatto non vince), proposta coi suoi numeri e ripetibile, limiti (qualità, diuretici, più prese, avviso che non giudica), riconoscimento dei nomi, coerenza della tabella, interruttore. `scripts/e2e/prova-pressione.ts` — 29 casi sul database demo (dall'8.10 anche la cartella: profilo da solo dal nome del file o dalle prime righe, niente doppioni, «da assegnare», assegna e scarta coi permessi, «Non letti» col perché, stato della condivisione) con profili inventati: permessi ruolo per ruolo, doppioni, conferma dei farmaci, proposte e decisioni, prima e dopo, registro senza valori, eliminazione.

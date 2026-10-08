@@ -4,9 +4,13 @@
 // prima e dopo, le proposte di orario (accese sul server di prova) e chi può
 // fare che cosa. Poi toglie tutto.
 //   DATABASE_URL=…demo NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-pressione.ts <base> <studio> <medico> <segretaria> <tecnico>
+import { promises as fs } from 'fs';
+import path from 'path';
 import { query, pool } from '../../src/lib/db';
+import { giroCartella } from '../../src/lib/pressione/cartella-server';
 
-const [base, S, C_MED, C_SEG, C_TEC] = process.argv.slice(2);
+const [base, S, C_MED, C_SEG, C_TEC, CARTELLA] = process.argv.slice(2);
+process.env.PRESSIONE_CARTELLA = CARTELLA;
 let ok = 0, no = 0;
 const verifica = (cond: boolean, cosa: string) => { if (cond) { ok++; console.log(`ok ${cosa}`); } else { no++; console.log(`NO ${cosa}`); } };
 const url = `${base}/api/prototipo/pressione`;
@@ -125,7 +129,55 @@ async function main() {
     const eMed = await manda(C_MED, { azione: 'elimina', id: P2 });
     const [{ n }] = await query<{ n: number }>(`select count(*)::int as n from pa_misure where profilo_id = $1`, [P2]);
     verifica(eSeg.stato === 403 && eMed.stato === 200 && n === 0 && (await leggi(C_MED, `/${P2}`)).stato === 404, `eliminare: la segreteria no, il medico sì, e le misure non restano (${eSeg.stato}, ${eMed.stato})`);
+
+    // 11 — la cartella condivisa: un file messo lì si legge da solo.
+    await fs.rm(CARTELLA, { recursive: true, force: true }); await fs.mkdir(CARTELLA, { recursive: true });
+    const esiste = async (...p: string[]) => fs.access(path.join(CARTELLA, ...p)).then(() => true, () => false);
+    const giorno = (g: number) => csv(g, (h) => (notte(h) ? 112 : 130), (h) => (notte(h) ? 62 : 76));
+    // a) il nome del file dice chi è: nome e data di nascita combaciano con una persona sola → profilo, da solo.
+    await fs.writeFile(path.join(CARTELLA, 'Provapressione Carla 12.06.1955.csv'), giorno(24));
+    const presto = await giroCartella();                                   // appena scritto: lo stanno forse ancora copiando
+    const g1 = await giroCartella({ fermoDaMs: 0 });
+    const [n1] = await query<{ n: number }>(`select count(*)::int as n from pa_profili where patient_id = $1 and inizio::date = '2026-03-24'`, [pa]);
+    verifica(presto.visti === 0 && g1.profili === 1 && n1.n === 1 && await esiste('Letti', 'Provapressione Carla 12.06.1955.csv') && !(await esiste('Provapressione Carla 12.06.1955.csv')),
+      `cartella: un file appena scritto si lascia stare; poi «Cognome Nome data di nascita» diventa un profilo da solo e passa in «Letti» (${g1.profili})`);
+    // b) lo stesso file rimesso: non raddoppia.
+    await fs.writeFile(path.join(CARTELLA, 'Provapressione Carla 12.06.1955.csv'), giorno(24));
+    const g2 = await giroCartella({ fermoDaMs: 0 });
+    verifica(g2.gia_caricati === 1 && g2.profili === 0, 'lo stesso profilo rimesso nella cartella non si carica due volte');
+    // c) chi è scritto DENTRO il file, sopra la tabella, vale come il nome del file.
+    await fs.writeFile(path.join(CARTELLA, 'export_0007.csv'), `Paziente: Provapressione Carla\nData di nascita: 12.06.1955\n\n${giorno(26)}`);
+    const g3 = await giroCartella({ fermoDaMs: 0 });
+    verifica(g3.profili === 1, 'nome e data di nascita nelle prime righe del file: profilo da solo anche con un nome di file qualunque');
+    // d) niente che dica di chi è → «da assegnare»; un omonimo senza data di nascita pure.
+    await fs.writeFile(path.join(CARTELLA, 'export_0042.csv'), giorno(28));
+    await fs.writeFile(path.join(CARTELLA, 'Provapressione Carla.csv'), giorno(30));
+    const g4 = await giroCartella({ fermoDaMs: 0 });
+    const lista = (await leggi(C_SEG)).j;
+    verifica(g4.in_attesa === 2 && g4.profili === 0 && (lista.arrivi ?? []).length === 2 && lista.arrivi.every((x: any) => x.misure === 48 && x.motivo === 'senza_dati'),
+      `senza nome e data di nascita completi il file aspetta «da assegnare», non si indovina (${g4.in_attesa})`);
+    const arrivo = lista.arrivi.find((x: any) => x.nome_file === 'export_0042.csv'), altro = lista.arrivi.find((x: any) => x.nome_file === 'Provapressione Carla.csv');
+    const aTec = await manda(C_TEC, { azione: 'assegna', id: arrivo.id, patient_id: pa });
+    const aSenza = await manda(C_SEG, { azione: 'assegna', id: arrivo.id });
+    const aSeg = await manda(C_SEG, { azione: 'assegna', id: arrivo.id, patient_id: pa });
+    const aBis = await manda(C_SEG, { azione: 'assegna', id: arrivo.id, patient_id: pa });
+    verifica(aTec.stato === 403 && aSenza.stato === 400 && aSeg.stato === 200 && !!aSeg.j.id && aBis.stato === 404, `assegnare: il tecnico no, senza paziente no, la segreteria sì e nasce il profilo, due volte no (${aTec.stato}, ${aSenza.stato}, ${aSeg.stato}, ${aBis.stato})`);
+    const sc = await manda(C_SEG, { azione: 'scarta_arrivo', id: altro.id });
+    const [vuoti] = await query<{ n: number }>(`select count(*)::int as n from pa_arrivi where studio_id = $1 and stato <> 'in_attesa' and testo <> ''`, [S]);
+    verifica(sc.stato === 200 && ((await leggi(C_SEG)).j.arrivi ?? []).length === 0 && vuoti.n === 0, 'scartare toglie il file dalla lista; assegnato o scartato, il testo del file non resta negli arrivi');
+    // e) ciò che non si legge va in «Non letti», col perché scritto accanto.
+    await fs.writeFile(path.join(CARTELLA, 'profilo.xlsx'), 'PK finto');
+    await fs.writeFile(path.join(CARTELLA, 'appunti.csv'), 'ciao\nmondo\n');
+    await fs.writeFile(path.join(CARTELLA, '.DS_Store'), 'x');
+    const g5 = await giroCartella({ fermoDaMs: 0 });
+    const perche = await fs.readFile(path.join(CARTELLA, 'Non letti', 'profilo.xlsx.perche.txt'), 'utf-8').catch(() => '');
+    verifica(g5.non_letti === 2 && /salvalo come CSV/.test(perche) && await esiste('Non letti', 'appunti.csv') && await esiste('.DS_Store'), `un foglio Excel e un file senza misure vanno in «Non letti» col perché; i file di sistema non si toccano (${g5.non_letti})`);
+    // f) la pagina sa dov'è la cartella e se è condivisa; il file per Windows esiste solo se lo è.
+    const win = await fetch(`${url}?cartella=win`, { headers: { cookie: C_SEG } });
+    verifica(lista.cartella?.nome === path.basename(CARTELLA) && lista.cartella?.condivisa === false && win.status === 409, `la pagina dice che la cartella non è ancora condivisa in rete, e non dà un collegamento che non funzionerebbe (${win.status})`);
   } finally {
+    await query(`delete from pa_arrivi where studio_id = $1`, [S]).catch(() => null);
+    await fs.rm(CARTELLA, { recursive: true, force: true }).catch(() => null);
     await query('delete from patients where id = any($1::uuid[])', [pazienti]);
     await query(`delete from pa_registro where studio_id = $1`, [S]).catch(() => null);
     await query(`delete from pa_farmaci where studio_id = $1`, [S]).catch(() => null);
