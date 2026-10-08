@@ -6,7 +6,7 @@ import { query } from '../db';
 import { abbinaPaziente } from '../imaging-ordina';
 import { leggiFile } from './calcolo';
 import { caricaProfilo } from './archivio';
-import { daIgnorare, decodifica, identitaDaFile, perNonLeggerlo } from './cartella';
+import { daIgnorare, decodifica, estensione, identitaDaFile, perNonLeggerlo, rapportoDaTesto, type Identita } from './cartella';
 
 // Pressione: la cartella condivisa (8.10.2026, [[Piattaforma/Pressione]]).
 // Chi ha il file delle misure lo mette nella cartella «Pressione da leggere»
@@ -35,6 +35,28 @@ async function sposta(da: string, cartella: string, nome: string): Promise<void>
   try { await fs.rename(da, dest); } catch { await fs.copyFile(da, dest); await fs.rm(da, { force: true }); }
 }
 
+// Il testo di un PDF (lo stesso estrattore dei documenti della cartella). '' se non si legge.
+export async function testoDelPdf(b: Buffer | Uint8Array): Promise<string> {
+  try {
+    const { PDFParse } = await import('pdf-parse');
+    const parser = new PDFParse({ data: b });
+    const r = await parser.getText();
+    try { await parser.destroy(); } catch { /* ignora */ }
+    return typeof r === 'string' ? r : String((r as { text?: string })?.text ?? '');
+  } catch { return ''; }
+}
+// Da un file (CSV, testo o rapporto in PDF) al testo che `leggiFile` sa leggere, con chi è il paziente.
+export async function daFile(nome: string, b: Buffer): Promise<{ testo: string; chi: Identita } | { errore: string }> {
+  if (estensione(nome) === 'pdf') {
+    const r = rapportoDaTesto(await testoDelPdf(b));
+    if (!r) return { errore: 'In questo PDF non trovo l’elenco delle misure (una riga per misura, con data, ora, sistolica e diastolica): è un referto stampato, o una scansione.' };
+    const daNome = identitaDaFile(nome, '');
+    return { testo: r.csv, chi: { nome: r.nome || daNome.nome, nascita: r.nascita ?? daNome.nascita, da: r.nome || r.nascita ? 'file' : daNome.da } };
+  }
+  const testo = decodifica(b);
+  return { testo, chi: identitaDaFile(nome, testo) };
+}
+
 let inCorso = false;
 export async function giroCartella(opzioni: { fermoDaMs?: number } = {}): Promise<EsitoGiro> {
   const r: EsitoGiro = { visti: 0, profili: 0, in_attesa: 0, non_letti: 0, gia_caricati: 0 };
@@ -52,7 +74,10 @@ export async function giroCartella(opzioni: { fermoDaMs?: number } = {}): Promis
     for (const nome of nomi.slice(0, 20)) {
       const p = path.join(base, nome);
       let st; try { st = await fs.stat(p); } catch { continue; }
-      if (Date.now() - st.mtimeMs < (opzioni.fermoDaMs ?? FERMO_DA_MS)) continue;      // lo stanno ancora copiando
+      // Lo stanno ancora copiando? Con attesa zero (le prove) non si guarda l'orologio: l'ora di modifica
+      // di un file ha i decimi di millisecondo e può risultare un soffio DOPO «adesso».
+      const attesa = opzioni.fermoDaMs ?? FERMO_DA_MS;
+      if (attesa > 0 && Date.now() - st.mtimeMs < attesa) continue;
       r.visti++;
       const rifiuta = async (perche: string) => {
         await sposta(p, path.join(base, NON_LETTI), nome);
@@ -61,12 +86,15 @@ export async function giroCartella(opzioni: { fermoDaMs?: number } = {}): Promis
       };
       const no = perNonLeggerlo(nome, st.size);
       if (no) { await rifiuta(no); continue; }
-      let testo: string;
-      try { testo = decodifica(await fs.readFile(p)); } catch { await rifiuta('Non riesco ad aprire il file.'); continue; }
+      let contenuto: Buffer;
+      try { contenuto = await fs.readFile(p); } catch { await rifiuta('Non riesco ad aprire il file.'); continue; }
+      const dal = await daFile(nome, contenuto);
+      if ('errore' in dal) { await rifiuta(dal.errore); continue; }
+      const testo = dal.testo;
       const letto = leggiFile(testo);
       if (letto.errore) { await rifiuta(letto.errore); continue; }
       if (letto.misure.length < 10) { await rifiuta(`Nel file ci sono solo ${letto.misure.length} misure: troppo poche per un profilo.`); continue; }
-      const chi = identitaDaFile(nome, testo);
+      const chi = dal.chi;
       const abbinato = chi.nome && chi.nascita ? abbinaPaziente(chi.nome, chi.nascita, pazienti) : { id: null, motivo: 'senza_dati' as const };
       const inizio = letto.misure[0].quando, fine = letto.misure[letto.misure.length - 1].quando;
       let stato: 'in_attesa' | 'assegnato' = 'in_attesa', profiloId: string | null = null, motivo: string = abbinato.id ? '' : abbinato.motivo;

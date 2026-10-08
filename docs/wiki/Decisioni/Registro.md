@@ -683,3 +683,9 @@ cartella dei dettati. Il paziente si riconosce dal nome del file o dalle prime r
 casa dell'utente e non sulla Scrivania (permessi di macOS). Aperti: accendere la condivisione file sul Mac
 (lo fa lo studio); il formato vero dell'apparecchio, ancora sconosciuto.
 
+## 8.10.2026 — Pressione: il file dello studio è un rapporto in PDF, e si legge
+Il primo file vero messo nella cartella era un PDF, non un CSV. Si è guardata la sua forma senza leggere
+nomi né valori: contiene l'elenco delle misure e i dati del paziente, quindi si legge dal testo del PDF.
+La cartella ha un collegamento sulla Scrivania del Mac (la cartella vera resta nella casa dell'utente, per
+i permessi di macOS). Un profilo può coprire più giorni.
+

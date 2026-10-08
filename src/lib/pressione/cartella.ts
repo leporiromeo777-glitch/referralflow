@@ -5,8 +5,9 @@
 // manca il nome o la data di nascita, o se non c'è UNA persona sola che
 // combacia, il file aspetta che qualcuno scelga il paziente.
 
-export const ESTENSIONI_LETTE = ['csv', 'txt', 'tsv'];
+export const ESTENSIONI_LETTE = ['csv', 'txt', 'tsv', 'pdf'];
 export const PESO_MASSIMO = 400_000;
+export const PESO_MASSIMO_PDF = 8_000_000;
 
 export function estensione(nome: string): string {
   const m = /\.([A-Za-z0-9]{1,6})$/.exec(String(nome ?? ''));
@@ -19,9 +20,8 @@ export const daIgnorare = (nome: string): boolean => /^(\.|~\$)|^(thumbs\.db|des
 export function perNonLeggerlo(nome: string, byte: number): string | null {
   const e = estensione(nome);
   if (['xlsx', 'xls', 'ods', 'numbers'].includes(e)) return 'È un foglio di calcolo: dal programma (o da Excel) salvalo come CSV e rimettilo nella cartella.';
-  if (e === 'pdf') return 'È un PDF: serve il file con le misure una per riga (CSV o testo), non il referto stampato.';
   if (!ESTENSIONI_LETTE.includes(e)) return `Tipo di file non letto (.${e || 'senza estensione'}): servono CSV o testo, una misura per riga.`;
-  if (byte > PESO_MASSIMO) return 'Il file è troppo grande per essere un profilo pressorio.';
+  if (byte > (e === 'pdf' ? PESO_MASSIMO_PDF : PESO_MASSIMO)) return 'Il file è troppo grande per essere un profilo pressorio.';
   if (byte === 0) return 'Il file è vuoto.';
   return null;
 }
@@ -79,3 +79,41 @@ export function decodifica(b: Uint8Array): string {
   const utf = new TextDecoder('utf-8', { fatal: false }).decode(b);
   return utf.includes('�') ? new TextDecoder('latin1').decode(b) : utf.replace(/^﻿/, '');
 }
+
+// ── Il rapporto in PDF (8.10.2026) ──────────────────────────────────────────
+// Il programma del misuratore dello studio non esporta un CSV: stampa un
+// «Rapporto misurazione pressione» in PDF, con in testa il paziente e in fondo
+// l'«Elenco» di tutte le misure — «No. Data - Ora SIS DIA FC», una per riga:
+// «12. 2026-03-01 08:30:00 132 84 71». Dal TESTO del PDF si ricavano le misure
+// (riscritte come le righe che `leggiFile` già sa leggere) e chi è il paziente.
+// Si cercano le righe con un'espressione sola su tutto il testo, perché a
+// seconda di chi estrae il testo le celle arrivano separate da spazi o da a capo,
+// e la data può avere uno spazio dentro («2026- 03-01»).
+export type Rapporto = { csv: string; misure: number; nome: string; nascita: string | null };
+const MESI: Record<string, number> = { gennaio: 1, febbraio: 2, marzo: 3, aprile: 4, maggio: 5, giugno: 6, luglio: 7, agosto: 8, settembre: 9, ottobre: 10, novembre: 11, dicembre: 12 };
+
+export function rapportoDaTesto(testo: string): Rapporto | null {
+  const t = String(testo ?? '').replace(/\r/g, '');
+  const righe: string[] = [];
+  const re = /(?:^|\s)\d{1,4}\.\s+(\d{4})-\s*(\d{2})-\s*(\d{2})\s+(\d{2}):(\d{2})(?::\d{2})?\s+(\d{2,3})\s+(\d{2,3})(?:\s+(\d{2,3}))?(?=\s|$)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(t)) !== null) righe.push(`${m[1]}-${m[2]}-${m[3]};${m[4]}:${m[5]};${m[6]};${m[7]};${m[8] ?? ''}`);
+  if (!righe.length) return null;
+  // Il paziente: il nome sta sulla riga di «data rapporto:», prima di quelle parole.
+  let nome = '';
+  const rn = /^[ \t]*(.*?)[ \t]+data rapporto\s*:/im.exec(t);
+  if (rn) nome = rn[1].replace(/[^A-Za-zÀ-ÿ '’-]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+  // La data di nascita: la prima data dopo l'intestazione «data di nascita» (i valori stanno
+  // sulla riga sotto, o più giù se le celle sono andate a capo), scritta «gg-mm-aaaa» o «12 marzo, 1950».
+  let nascita: string | null = null;
+  const dove = t.search(/data di nascita/i);
+  if (dove >= 0) {
+    const dopo = t.slice(dove, dove + 400);
+    const a = /(\d{1,2})[-.\/](\d{1,2})[-.\/](\d{4})/.exec(dopo);
+    const b = /(\d{1,2})\s+([a-zà-ÿ]+),?\s+(\d{4})/i.exec(dopo);
+    if (a) nascita = data(+a[1], +a[2], +a[3]);
+    else if (b && MESI[b[2].toLowerCase()]) nascita = data(+b[1], MESI[b[2].toLowerCase()], +b[3]);
+  }
+  return { csv: `Data;Ora;Sistolica;Diastolica;Frequenza\n${righe.join('\n')}\n`, misure: righe.length, nome, nascita };
+}
+

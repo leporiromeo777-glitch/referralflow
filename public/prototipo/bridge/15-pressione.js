@@ -107,6 +107,15 @@ function rfPaScegli(id) {
 }
 function rfPaFile(files) {
   const f = files && files[0]; if (!f) return;
+  // Il rapporto in PDF del misuratore: non è testo, lo legge il server.
+  if (/\.pdf$/i.test(f.name) || f.type === 'application/pdf') {
+    if (f.size > 8000000) { RF.pa.nuovo.errore = 'Il PDF è troppo grande.'; render(); return; }
+    const lp = new FileReader();
+    lp.onload = () => { RF.pa.nuovo.pdf = String(lp.result || '').replace(/^data:[^,]*,/, ''); RF.pa.nuovo.pdfNome = f.name; RF.pa.nuovo.testo = ''; RF.pa.nuovo.errore = null; render(); };
+    lp.onerror = () => { RF.pa.nuovo.errore = 'Non riesco a leggere il file.'; render(); };
+    lp.readAsDataURL(f); return;
+  }
+  RF.pa.nuovo.pdf = ''; RF.pa.nuovo.pdfNome = '';
   if (f.size > 400000) { RF.pa.nuovo.errore = 'Il file è troppo grande per essere un profilo delle 24 ore.'; render(); return; }
   const lettore = new FileReader();
   lettore.onload = () => { RF.pa.nuovo.testo = String(lettore.result || ''); RF.pa.nuovo.errore = null; render(); };
@@ -116,9 +125,9 @@ function rfPaFile(files) {
 async function rfPaInvia() {
   const n = RF.pa.nuovo;
   if (!n.pid) { n.errore = 'Scegli il paziente.'; render(); return; }
-  if (!n.testo.trim()) { n.errore = 'Scegli il file delle misure, o incollale.'; render(); return; }
+  if (!n.testo.trim() && !n.pdf) { n.errore = 'Scegli il file delle misure, o incollale.'; render(); return; }
   n.carico = true; n.errore = null; render();
-  const j = await rfPaChiedi({ azione: 'carica', patient_id: n.pid, testo: n.testo, data_inizio: n.data || undefined, apparecchio: n.apparecchio || undefined });
+  const j = await rfPaChiedi({ azione: 'carica', patient_id: n.pid, testo: n.testo, pdf: n.pdf || undefined, data_inizio: n.data || undefined, apparecchio: n.apparecchio || undefined });
   n.carico = false;
   if (j.errore) { n.errore = j.errore; render(); return; }
   RF.pa.nuovo = { pid: '', nome: '', cerca: '', testo: '', data: '', apparecchio: '', carico: false, errore: null };
@@ -169,7 +178,7 @@ function rfPaCartellaHtml() {
        <p class="caption mt-8">Su Windows si scarica un piccolo file: aprilo una volta e sulla Scrivania compare il collegamento alla cartella. Utente e password li chiede il computer, la prima volta. Funziona solo dentro la rete dello studio.</p>`
     : `<p class="meta" style="margin:8px 0 0;line-height:1.55">Per usarla dagli altri computer va condivisa una volta dal Mac del server: <b>Impostazioni di Sistema → Generali → Condivisione → Condivisione file</b>, accesa, e con il «+» si aggiunge la cartella <code>${rfEsc(c.percorso)}</code>. Finché non è condivisa funziona lo stesso per chi mette il file direttamente sul Mac.</p>`;
   return `<div class="card mt-16"><div class="card-head"><span class="section-title">Cartella «${rfEsc(c.nome)}»</span>${stato}</div>
-    <p class="meta" style="margin:0;line-height:1.55">Metti qui il file delle misure e la piattaforma lo legge da sola entro pochi secondi. Se il file si chiama <b>Cognome Nome e data di nascita</b> (per esempio <code>Rossi Maria 12.06.1955.csv</code>), o porta nome e data di nascita nelle prime righe, il profilo va da solo nella cartella del paziente; altrimenti compare qui sopra «da assegnare». I file letti passano in «Letti» e dopo sette giorni si cancellano; quelli che non si leggono finiscono in «Non letti» con accanto il perché.</p>
+    <p class="meta" style="margin:0;line-height:1.55">Metti qui il rapporto in PDF del misuratore (o un CSV con le misure) e la piattaforma lo legge da sola entro pochi secondi. Dal rapporto in PDF prende da sola anche nome e data di nascita. Se il file si chiama <b>Cognome Nome e data di nascita</b> (per esempio <code>Rossi Maria 12.06.1955.csv</code>), o porta nome e data di nascita nelle prime righe, il profilo va da solo nella cartella del paziente; altrimenti compare qui sopra «da assegnare». I file letti passano in «Letti» e dopo sette giorni si cancellano; quelli che non si leggono finiscono in «Non letti» con accanto il perché.</p>
     ${come}</div>`;
 }
 
@@ -473,8 +482,8 @@ PAGES.pressione = () => {
           : `<input class="input" id="rf-pa-cerca" placeholder="Scrivi il cognome" value="${rfEsc(n.cerca)}" oninput="RF.pa.nuovo.cerca=this.value;render();const e=document.getElementById('rf-pa-cerca');if(e){e.focus();e.setSelectionRange(e.value.length,e.value.length)}">
              <div class="esiti">${trovati.map(p => `<button class="btn sm" onclick="rfPaScegli('${p.id}')">${rfEsc(fullName(p))}${p.dob ? ` · ${rfEsc(p.dob)}` : ''}</button>`).join('')}</div>`}</div>
       <div class="field mt-8"><label>Misure esportate dal programma dell’apparecchio</label>
-        <div class="row" style="gap:8px;flex-wrap:wrap"><label class="btn sm">Scegli il file… <input type="file" accept=".csv,.txt,.tsv,text/csv,text/plain" style="display:none" onchange="rfPaFile(this.files)"></label>
-          <span class="caption">${n.testo ? `${n.testo.split('\n').filter(x => x.trim()).length} righe pronte` : 'CSV o testo, una riga per misura: data, ora, sistolica, diastolica, frequenza'}</span></div>
+        <div class="row" style="gap:8px;flex-wrap:wrap"><label class="btn sm">Scegli il file… <input type="file" accept=".pdf,.csv,.txt,.tsv,application/pdf,text/csv,text/plain" style="display:none" onchange="rfPaFile(this.files)"></label>
+          <span class="caption">${n.pdf ? `PDF pronto: ${rfEsc(n.pdfNome || 'rapporto')}` : n.testo ? `${n.testo.split('\n').filter(x => x.trim()).length} righe pronte` : 'il rapporto in PDF del misuratore, oppure CSV o testo con una riga per misura'}</span></div>
         <textarea class="input mt-8" style="width:100%;min-height:86px;font-family:ui-monospace,Menlo,monospace;font-size:12px" placeholder="…oppure incolla qui le righe" oninput="RF.pa.nuovo.testo=this.value">${rfEsc(n.testo)}</textarea></div>
       <div class="row mt-8" style="gap:12px;flex-wrap:wrap;align-items:flex-end">
         <label class="caption" style="display:flex;flex-direction:column;gap:3px">Giorno d’inizio (solo se nel file manca la data)<input class="input rf-pa-st" type="date" style="height:32px" value="${rfEsc(n.data)}" oninput="RF.pa.nuovo.data=this.value"></label>

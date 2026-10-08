@@ -104,7 +104,8 @@ export async function caricaProfilo(studioId: string, userId: string | null, pat
   if (letto.misure.length < MINIMO_MISURE) return err(`Nel file ci sono solo ${letto.misure.length} misure: troppo poche per un profilo.`);
   const inizio = letto.misure[0].quando, fine = letto.misure[letto.misure.length - 1].quando;
   const ore = (Date.parse(`${fine}:00Z`) - Date.parse(`${inizio}:00Z`)) / 3_600_000;
-  if (ore > 80) return err('Le misure coprono più di tre giorni: non è un profilo delle 24 ore.');
+  // Il rapporto del misuratore dello studio copre anche più giorni (il primo vero: 67 ore): si accetta fino a otto.
+  if (ore > 200) return err('Le misure coprono più di otto giorni: non è un profilo pressorio.');
   const [gia] = await query<{ id: string }>(`select id from pa_profili where studio_id = $1 and patient_id = $2 and inizio = $3::timestamp`, [studioId, patientId, inizio]);
   if (gia) return err('Questo profilo è già stato caricato per questo paziente.', 409);
   const id = await transazione(async (q) => {

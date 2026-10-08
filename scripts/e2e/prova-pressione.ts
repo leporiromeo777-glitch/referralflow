@@ -5,6 +5,7 @@
 // fare che cosa. Poi toglie tutto.
 //   DATABASE_URL=…demo NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-pressione.ts <base> <studio> <medico> <segretaria> <tecnico>
 import { promises as fs } from 'fs';
+import { execFileSync } from 'child_process';
 import path from 'path';
 import { query, pool } from '../../src/lib/db';
 import { giroCartella } from '../../src/lib/pressione/cartella-server';
@@ -172,6 +173,26 @@ async function main() {
     const g5 = await giroCartella({ fermoDaMs: 0 });
     const perche = await fs.readFile(path.join(CARTELLA, 'Non letti', 'profilo.xlsx.perche.txt'), 'utf-8').catch(() => '');
     verifica(g5.non_letti === 2 && /salvalo come CSV/.test(perche) && await esiste('Non letti', 'appunti.csv') && await esiste('.DS_Store'), `un foglio Excel e un file senza misure vanno in «Non letti» col perché; i file di sistema non si toccano (${g5.non_letti})`);
+    // e2) il rapporto in PDF del misuratore (finto, fatto qui con ghostscript): testata col paziente, elenco delle misure.
+    const righePdf: string[] = []; let yy = 770;
+    const riga = (x: string) => { righePdf.push(`50 ${yy} moveto (${x}) show`); yy -= 14; };
+    riga('Rapporto misurazione pressione'); riga('periodo di monitoraggio: 05-04-2026 - 06-04-2026'); riga('Provapressione Carla          data rapporto: 8 ottobre, 2026');
+    riga('e-mail sesso data di nascita altezza peso'); riga('----- F 12-06-1955 165 cm 62 kg'); riga('Elenco misurazioni'); riga('No. Data - Ora SIS DIA FC');
+    for (let k = 0; k < 44; k++) { const min = 8 * 60 + k * 30, g = min >= 1440 ? 6 : 5, hh = Math.floor((min % 1440) / 60), mm = (min % 1440) % 60; riga(`${k + 1}.    2026-04-0${g} ${due(hh)}:${due(mm)}:00          ${notte(hh) ? 114 : 131}                 ${notte(hh) ? 63 : 77}                    70`); }
+    await fs.writeFile(path.join(CARTELLA, 'r.ps'), `%!PS\n/Helvetica findfont 10 scalefont setfont\n${righePdf.join('\n')}\nshowpage\n`);
+    execFileSync(process.env.GS_BIN || '/opt/homebrew/bin/gs', ['-q', '-dNOPAUSE', '-dBATCH', '-sDEVICE=pdfwrite', `-sOutputFile=${path.join(CARTELLA, '260408 Rapporto di prova.pdf')}`, path.join(CARTELLA, 'r.ps')], { stdio: 'ignore' });
+    await fs.rm(path.join(CARTELLA, 'r.ps'), { force: true });
+    await fs.writeFile(path.join(CARTELLA, 'referto.pdf'), '%PDF-1.4 non un rapporto');
+    const g6 = await giroCartella({ fermoDaMs: 0 });
+    const [nPdf] = await query<{ n: number; m: number }>(`select count(*)::int as n, coalesce(max((select count(*) from pa_misure x where x.profilo_id = p.id)), 0)::int as m from pa_profili p where patient_id = $1 and inizio::date = '2026-04-05'`, [pa]);
+    const perchePdf = await fs.readFile(path.join(CARTELLA, 'Non letti', 'referto.pdf.perche.txt'), 'utf-8').catch(() => '');
+    verifica(g6.profili === 1 && nPdf.n === 1 && nPdf.m === 44 && g6.non_letti === 1 && /non trovo l.elenco delle misure/.test(perchePdf),
+      `il rapporto in PDF si legge: 44 misure e il paziente presi dal PDF, profilo da solo; un PDF senza elenco va in «Non letti» col perché (${g6.profili}, ${nPdf.m})`);
+    // …e lo stesso PDF caricato dalla pagina, scegliendo il paziente.
+    const pdf64 = (await fs.readFile(path.join(CARTELLA, 'Letti', '260408 Rapporto di prova.pdf'))).toString('base64');
+    const doppioPdf = await manda(C_SEG, { azione: 'carica', patient_id: pa, pdf: pdf64 });
+    const nonPdf = await manda(C_SEG, { azione: 'carica', patient_id: pa, pdf: Buffer.from('%PDF-1.4 niente').toString('base64') });
+    verifica(doppioPdf.stato === 409 && nonPdf.stato === 400, `dalla pagina il PDF si legge allo stesso modo (già caricato → 409; PDF senza misure → 400) (${doppioPdf.stato}, ${nonPdf.stato})`);
     // f) la pagina sa dov'è la cartella e se è condivisa; il file per Windows esiste solo se lo è.
     const win = await fetch(`${url}?cartella=win`, { headers: { cookie: C_SEG } });
     verifica(lista.cartella?.nome === path.basename(CARTELLA) && lista.cartella?.condivisa === false && win.status === 409, `la pagina dice che la cartella non è ancora condivisa in rete, e non dà un collegamento che non funzionerebbe (${win.status})`);

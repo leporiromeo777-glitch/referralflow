@@ -6,7 +6,7 @@ import { execFile } from 'child_process';
 import os from 'os';
 import path from 'path';
 import { indirizzoSmb, leggiCondivisioni, scriptWindows } from '@/lib/cartella-dettati';
-import { cartellaPressione } from '@/lib/pressione/cartella-server';
+import { cartellaPressione, daFile } from '@/lib/pressione/cartella-server';
 import {
   assegnaArrivo, elencoArrivi, scartaArrivo,
   caricaProfilo, decidiProposta, elencoFarmaci, elencoProfili, eliminaProfilo, generaProposte, proposteAccese, puoPa,
@@ -82,7 +82,15 @@ export async function POST(req: NextRequest) {
   if (azione === 'carica') {
     if (!puoPa(session.role, 'caricare')) return nonPuoi('Il tuo ruolo non carica profili.');
     if (!isUuid(String(c?.patient_id ?? ''))) return NextResponse.json({ errore: 'Scegli il paziente.' }, { status: 400 });
-    return esito(await caricaProfilo(sid, uid, String(c.patient_id), { testo: String(c?.testo ?? ''), data_inizio: c?.data_inizio ? String(c.data_inizio) : undefined, apparecchio: c?.apparecchio ? String(c.apparecchio) : undefined }));
+    // Il rapporto in PDF arriva come base64 (un PDF non è testo): se ne ricava l'elenco delle misure.
+    let testo = String(c?.testo ?? '');
+    if (typeof c?.pdf === 'string' && c.pdf) {
+      if (c.pdf.length > 11_500_000) return NextResponse.json({ errore: 'Il PDF è troppo grande.' }, { status: 400 });
+      const dal = await daFile('rapporto.pdf', Buffer.from(c.pdf, 'base64'));
+      if ('errore' in dal) return NextResponse.json({ errore: dal.errore }, { status: 400 });
+      testo = dal.testo;
+    }
+    return esito(await caricaProfilo(sid, uid, String(c.patient_id), { testo, data_inizio: c?.data_inizio ? String(c.data_inizio) : undefined, apparecchio: c?.apparecchio ? String(c.apparecchio) : undefined }));
   }
   if (azione === 'farmaco' || azione === 'farmaco_togli') {
     if (!puoPa(session.role, 'decidere')) return nonPuoi('La tabella dei farmaci la conferma il medico.');

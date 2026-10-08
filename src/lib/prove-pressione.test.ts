@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { proposteAccese } from './pressione/accese';
-import { daIgnorare, decodifica, estensione, identitaDaFile, perNonLeggerlo } from './pressione/cartella';
+import { daIgnorare, decodifica, estensione, identitaDaFile, perNonLeggerlo, rapportoDaTesto } from './pressione/cartella';
 import { FARMACI_BOZZA, controllaFarmaco, orario, riconosci, type Farmaco } from './pressione/farmaci';
 import {
   IMPOSTAZIONI_BASE, avvisoFasce, caloTipo, copertura, effetto, fasce, leggiFile, livelli, orarie, proponi, punteggio, segnaScoperte, statistiche,
@@ -195,7 +195,8 @@ test('pressione, cartella: che cosa si legge, che cosa si ignora, e perché no',
   assert.equal(estensione('Rossi.CSV'), 'csv');
   assert.equal(perNonLeggerlo('profilo.csv', 5000), null);
   assert.match(perNonLeggerlo('profilo.xlsx', 5000) ?? '', /salvalo come CSV/);
-  assert.match(perNonLeggerlo('referto.pdf', 5000) ?? '', /PDF/);
+  assert.equal(perNonLeggerlo('rapporto.pdf', 700_000), null, 'il rapporto in PDF si prova a leggere');
+  assert.match(perNonLeggerlo('rapporto.pdf', 9_000_000) ?? '', /troppo grande/);
   assert.match(perNonLeggerlo('foto.jpg', 5000) ?? '', /non letto/);
   assert.match(perNonLeggerlo('profilo.csv', 900_000) ?? '', /troppo grande/);
   assert.match(perNonLeggerlo('profilo.csv', 0) ?? '', /vuoto/);
@@ -204,5 +205,26 @@ test('pressione, cartella: che cosa si legge, che cosa si ignora, e perché no',
   // Un file di Windows con gli accenti in Latin-1 si legge lo stesso.
   assert.equal(decodifica(new Uint8Array([0x4d, 0xfc, 0x6c, 0x6c, 0x65, 0x72])), 'Müller');
   assert.equal(decodifica(new TextEncoder().encode('\uFEFFMüller')), 'Müller');
+});
+
+test('pressione: il rapporto in PDF del misuratore — misure dall’elenco, paziente dalla testata', () => {
+  // Il testo come esce dal PDF (inventato): testata, e l'elenco «No. Data - Ora SIS DIA FC».
+  const testata = 'Rapporto misurazione pressione\nperiodo di monitoraggio: 01-03-2026 – 02-03-2026\nProva Paziente          data rapporto: 8 ottobre, 2026\ne-mail sesso data di nascita altezza peso\n----- M 12-06-1955 175 cm 80 kg\n';
+  const elenco = 'Elenco misurazioni\nNo. Data - Ora SIS DIA FC\n   1.    2026-03-01 08:00:00          132                 84                    71\n   2.    2026-03-01 08:30:00          128                 80                    69\n 100.    2026- 03-02 07:30:00          119                 72                    64\n';
+  const r = rapportoDaTesto(testata + elenco)!;
+  assert.equal(r.misure, 3);
+  assert.deepEqual([r.nome, r.nascita], ['Prova Paziente', '1955-06-12']);
+  assert.equal(r.csv.split('\n')[1], '2026-03-01;08:00;132;84;71');
+  assert.equal(r.csv.split('\n')[3], '2026-03-02;07:30;119;72;64', 'la data con uno spazio dentro si legge lo stesso');
+  // Lo stesso elenco con le celle andate a capo (un altro estrattore di testo) dà le stesse misure.
+  const aCapo = elenco.replace(/ {2,}/g, '\n');
+  assert.equal(rapportoDaTesto(testata + aCapo)!.misure, 3);
+  // Quello che `leggiFile` riceve è leggibile, e senza frequenza la riga vale lo stesso.
+  assert.equal(leggiFile(r.csv).misure.length, 3);
+  assert.equal(rapportoDaTesto('1. 2026-03-01 08:00:00 132 84\n')!.csv.split('\n')[1], '2026-03-01;08:00;132;84;');
+  // La data di nascita scritta a parole.
+  assert.equal(rapportoDaTesto('Rossi Maria data rapporto: 1 marzo, 2026\ndata di nascita\n3 febbraio, 1948\n1. 2026-03-01 08:00:00 132 84 70\n')!.nascita, '1948-02-03');
+  // Un PDF senza elenco delle misure non è un rapporto: niente da leggere.
+  assert.equal(rapportoDaTesto('Referto di visita cardiologica. Pressione 130/80 il 01.03.2026.'), null);
 });
 
