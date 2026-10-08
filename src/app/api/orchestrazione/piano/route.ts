@@ -4,7 +4,7 @@ import { sessioneStudio, senzaCache } from '../_comune';
 export const dynamic = 'force-dynamic';
 // Il piano del giorno: la versione corrente o una specifica, con le sue righe.
 export async function GET(req: NextRequest) {
-  const a = await sessioneStudio(); if ('r' in a) return a.r;
+  const a = await sessioneStudio('operare'); if ('r' in a) return a.r;
   const v = req.nextUrl.searchParams.get('versione');
   const [p] = await query<{ id: string; versione: number; motivo: string; motore: string; ms: number; costo: unknown; comunicata_at: string | null; created_at: string }>(
     v != null

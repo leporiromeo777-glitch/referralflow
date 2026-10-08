@@ -7,7 +7,7 @@ const FONTI = new Set(['ui', 'tablet', 'stanza', 'cleo']);
 // Un evento dal tablet, dai pulsanti in stanza o dalla mappa. Il corpo porta
 // tipo e riferimenti: mai un dato clinico.
 export async function POST(req: NextRequest) {
-  const a = await sessioneStudio(); if ('r' in a) return a.r;
+  const a = await sessioneStudio('operare'); if ('r' in a) return a.r;
   const c = await req.json().catch(() => null);
   const tipo = String(c?.tipo ?? '');
   // La correzione di uno stato messo per sbaglio: la fa solo una persona, e

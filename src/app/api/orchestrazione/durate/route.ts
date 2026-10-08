@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 // «Durate misurate» (§9): prestazione × medico, quanti casi, mediana; e la
 // parola dello studio che vince sulla misura.
 export async function GET() {
-  const a = await sessioneStudio(); if ('r' in a) return a.r;
+  const a = await sessioneStudio('operare'); if ('r' in a) return a.r;
   const [oss, fissate] = await Promise.all([
     query<{ prestazione: string; medico: string; ora: number; minuti: number }>('select prestazione, medico, ora, minuti from durate_osservate where studio_id = $1 and giorno > current_date - 120', [a.s.studioId]),
     query('select prestazione, medico, minuti, at::text from durate_fissate where studio_id = $1 order by 1, 2', [a.s.studioId]),
@@ -14,7 +14,7 @@ export async function GET() {
   return NextResponse.json({ misurate: riepilogoDurate(oss), fissate, casi: oss.length }, senzaCache);
 }
 export async function PUT(req: NextRequest) {
-  const a = await sessioneStudio(['medico', 'admin']); if ('r' in a) return a.r;
+  const a = await sessioneStudio('durate'); if ('r' in a) return a.r;
   const c = await req.json().catch(() => null);
   const prestazione = String(c?.prestazione ?? '').trim(), medico = String(c?.medico ?? '').trim(), minuti = Number(c?.minuti);
   if (!prestazione) return NextResponse.json({ errore: 'prestazione mancante' }, { status: 400 });

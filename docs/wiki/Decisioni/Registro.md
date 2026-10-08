@@ -641,3 +641,10 @@ orari dei farmaci per tenere la pressione il più regolare possibile. Deciso cos
 Aperti: quale apparecchio fa il monitoraggio e come esporta; chi è il medico che conferma la tabella e
 fa la validazione; terapia presa dalla cartella; commento per il referto.
 
+## 8.10.2026 — L'aiuto medico registra gli arrivi e la preparazione
+Richiesta dello studio. L'aiuto medico ora segna ciò che succede coi pazienti (arrivato, in sala d'attesa,
+chiamato, in preparazione, pronto, in visita, uscito) e legge stato e piano delle sale: prima il server
+gli rifiutava tutto. Non dà i comandi che cambiano il piano, non rifà il piano del mattino e non decide
+le proposte: quelli restano a segreteria, medico e amministrazione. Provato con un aiuto medico finto sul
+server di prova: guardare 200, evento accettato, comando/piano/proposte/parametri 403.
+

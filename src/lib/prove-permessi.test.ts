@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SEZIONI, sezioniDi, puo, vietato } from './permessi';
 
+import { puoOrch } from './orchestrazione/ruoli';
 test('permessi: il tecnico vede tutto, l’amministrazione tutto tranne il dittafono', () => {
   assert.deepEqual(sezioniDi('tecnico'), [...SEZIONI]);
   assert.ok(puo('admin', 'administration') && puo('admin', 'fatturazione'));
@@ -26,4 +27,12 @@ test('permessi: la segreteria lavora referti e fatture ma non amministra; ruoli 
   assert.equal(vietato('segretaria', 'reports'), null);
   assert.equal(vietato('assistente', 'reports')?.status, 403);
   assert.equal(vietato('assistente', 'reports', 'agenda'), null, 'basta una delle sezioni');
+});
+
+test('sale: l’aiuto medico registra ciò che succede coi pazienti, ma non cambia il piano', () => {
+  for (const r of ['segretaria', 'medico', 'assistente', 'admin']) assert.ok(puoOrch(r, 'operare'), r);
+  assert.ok(!puoOrch('tecnico', 'operare') && !puoOrch(null, 'operare') && !puoOrch('inviante', 'operare'));
+  assert.ok(!puoOrch('assistente', 'decidere') && puoOrch('segretaria', 'decidere') && puoOrch('medico', 'decidere'));
+  assert.ok(puoOrch('admin', 'parametri') && !puoOrch('medico', 'parametri') && !puoOrch('assistente', 'parametri'));
+  assert.ok(puoOrch('medico', 'durate') && !puoOrch('assistente', 'durate') && !puoOrch('segretaria', 'durate'));
 });

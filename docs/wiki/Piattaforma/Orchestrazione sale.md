@@ -491,6 +491,8 @@ flowchart TD
 
 ## 11. Il controllo umano
 
+**Chi** (8.10.2026): gli eventi li registra chiunque stia coi pazienti, aiuto medico compreso; i comandi di questa sezione li dà segreteria, medico o amministrazione. Tabella in [[Piattaforma/Accessi e ruoli]].
+
 Ogni comando diventa un **vincolo con autore e scadenza** (fine giornata, salvo detto altrimenti) in `orchestrazione_comandi`, e il solver ripianifica il resto attorno. Un comando non si discute: se rende impossibile un altro, il sistema lo dice e chiede quale dei due togliere.
 
 | Comando | Vincolo che produce |
