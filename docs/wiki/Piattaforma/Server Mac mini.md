@@ -27,6 +27,9 @@ Seconda cosa da guardare, quando l'indirizzo del dominio è giusto ma da un altr
 - Cambiare il filtro è un'impostazione di sicurezza e chiede l'amministratore del Mac (`adminrfea`: l'utente di lavoro `centrocardiologicoticino` non è amministratore). Dopo la modifica: `sudo pfctl -f /etc/pf.conf`.
 - Il firewall delle applicazioni di macOS è un'altra cosa (`socketfilterfw --listapps`): l'app passa anche senza una riga per `caddy-infomaniak`; il Python del ricevitore DICOM invece va ammesso a mano, e la riga è legata alla versione di Python (a ogni aggiornamento torna bloccato).
 
+## La cartella del NAS (8.10.2026)
+`/Volumes/Archivio-Dati-Philips` è la cartella condivisa `smb://archivio@192.168.0.243/Archivio-Dati-Philips` del NAS dello studio (Synology, `nas-sa3600.cardioticino.local`). La tiene collegata `ch.referralflow.nas` (`mac/monta-nas.sh`, ogni due minuti; registro in `~/Library/Logs/ReferralFlow/nas.log`), con la password del portachiavi. Indirizzo e cartella stanno in `~/referti-imaging/archivio-file.conf`: mai la password. Un servizio in sottofondo legge un volume di rete solo dopo che macOS gliene ha dato il permesso (Privacy e sicurezza → File e cartelle): se nel registro compare «Operation not permitted», manca quello, non il collegamento. Dettaglio in [[Piattaforma/Immagini]].
+
 ## Servizi launchd sul Mac
 | servizio | cosa fa |
 |---|---|

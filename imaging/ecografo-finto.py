@@ -26,7 +26,8 @@ QUI = Path(__file__).resolve().parent
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="127.0.0.1")
-    ap.add_argument("--porta", type=int, required=True)
+    ap.add_argument("--porta", type=int, default=0)
+    ap.add_argument("--scrivi", default="", help="invece di spedire, scrive i file in questa cartella (come li archivia il software dell'ecografo)")
     ap.add_argument("--ae", default="ECOPROVA")
     ap.add_argument("--verso", default="REFERRALFLOW")
     ap.add_argument("--studio", required=True, help="Study Instance UID")
@@ -73,6 +74,17 @@ def main() -> int:
         ds.save_as(b)
         b.seek(0)
         scelti.append(pydicom.dcmread(b))
+
+    if a.scrivi:
+        from pathlib import Path as _P
+        dove = _P(a.scrivi); dove.mkdir(parents=True, exist_ok=True)
+        for ds in scelti:
+            ds.save_as(str(dove / f"{ds.SOPInstanceUID}_image.dcm"))
+        print(json.dumps({"ok": True, "scritte": len(scelti)}))
+        return 0
+    if not a.porta:
+        print(json.dumps({"ok": False, "errore": "manca --porta"}))
+        return 2
 
     ae = AE(ae_title=a.ae)
     for sop, sintassi in {(str(d.SOPClassUID), str(d.file_meta.TransferSyntaxUID)) for d in scelti}:

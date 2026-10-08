@@ -38,7 +38,10 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     anteprima: q.get('anteprima') === '1',
   });
   if (!Buffer.isBuffer(esito)) {
-    console.error(`[imaging] disegno fallito: ${(esito as { errore: string }).errore}`);
+    const perche = (esito as { errore: string }).errore;
+    // L'immagine sta sul NAS dello studio e la cartella non è collegata al Mac: non è un file rotto.
+    if (perche === 'archivio_non_collegato') return new NextResponse('archivio non collegato', { status: 503, headers: { 'X-RF-Motivo': 'archivio_non_collegato' } });
+    console.error(`[imaging] disegno fallito: ${perche}`);
     return new NextResponse('immagine non leggibile', { status: 422 });
   }
   return new NextResponse(esito as any, {

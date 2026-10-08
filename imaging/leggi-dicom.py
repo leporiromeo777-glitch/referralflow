@@ -128,7 +128,41 @@ def comando_meta(percorso: Path) -> int:
         ds = pydicom.dcmread(str(percorso), stop_before_pixels=True, force=False)
     except Exception as e:  # noqa: BLE001 — qualunque file non DICOM finisce qui
         return _uscita({"errore": "non_dicom", "tipo": type(e).__name__}, 1)
+    return _uscita(_meta_di(ds, percorso))
 
+
+def comando_meta_cartella(cartella: Path) -> int:
+    """I metadati di TUTTI i DICOM di una cartella d'esame, in un colpo solo
+    (8.10.2026): serve a catalogare un archivio già scritto su disco — migliaia
+    di cartelle — senza aprire un processo per file e senza leggere i pixel.
+    L'impronta SHA-256 qui non si calcola (vorrebbe dire leggere ogni file per
+    intero): si farà, se serve, alla prima apertura."""
+    import os
+    import pydicom
+
+    fuori, non_dicom, altri = [], 0, 0
+    for radice, _cartelle, nomi in os.walk(str(cartella)):
+        for nome in sorted(nomi):
+            if not nome.lower().endswith(".dcm"):
+                altri += 1
+                continue
+            p = Path(radice) / nome
+            try:
+                ds = pydicom.dcmread(str(p), stop_before_pixels=True, force=False)
+                m = _meta_di(ds, None)
+            except Exception:  # noqa: BLE001 — un file rotto non ferma la cartella
+                non_dicom += 1
+                continue
+            m["percorso"] = str(p.relative_to(cartella))
+            try:
+                m["byte"] = p.stat().st_size
+            except OSError:
+                m["byte"] = 0
+            fuori.append(m)
+    return _uscita({"file": fuori, "non_dicom": non_dicom, "altri": altri})
+
+
+def _meta_di(ds, percorso) -> dict:
     sop_class = str(getattr(ds, "SOPClassUID", "") or "")
     righe = int(getattr(ds, "Rows", 0) or 0)
     colonne = int(getattr(ds, "Columns", 0) or 0)
@@ -147,7 +181,7 @@ def comando_meta(percorso: Path) -> int:
     from geometria import calibrazione_da, geometria_di
     geom = geometria_di(ds, percorso) if immagine else None
 
-    return _uscita({
+    return {
         "study_uid": _testo(ds, "StudyInstanceUID", 128),
         "series_uid": _testo(ds, "SeriesInstanceUID", 128),
         "sop_uid": _testo(ds, "SOPInstanceUID", 128),
@@ -173,7 +207,7 @@ def comando_meta(percorso: Path) -> int:
         "trasferimento": str(getattr(getattr(ds, "file_meta", None), "TransferSyntaxUID", "") or ""),
         "calibrazione": calibrazione_da(geom) if immagine and geom else None,
         "geometria": geom,
-    })
+    }
 
 
 def comando_misure(percorso: Path) -> int:
@@ -325,6 +359,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(add_help=True)
     sub = ap.add_subparsers(dest="comando", required=True)
     m = sub.add_parser("meta"); m.add_argument("file")
+    mc = sub.add_parser("meta-cartella"); mc.add_argument("file")
     mi = sub.add_parser("misure"); mi.add_argument("file")
     c = sub.add_parser("calibrazione"); c.add_argument("file")
     g = sub.add_parser("geometria"); g.add_argument("file")
@@ -339,6 +374,8 @@ def main() -> int:
     a = ap.parse_args()
 
     percorso = Path(a.file)
+    if a.comando == "meta-cartella":
+        return comando_meta_cartella(percorso) if percorso.is_dir() else _uscita({"errore": "cartella_assente"}, 1)
     if not percorso.is_file():
         return _uscita({"errore": "file_assente"}, 1)
     if a.comando == "meta":

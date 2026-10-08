@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { chiaveNas, eSulNas, leggiConfNas, percorsoNas, relativoSicuro } from './imaging-esterno';
 import { abbinaPaziente, etichetta, finestreDi, leggiRicerca, raggruppa, ricercaVuota, scegliLotto, slugNome, type MetaMinima } from './imaging-ordina';
 
 const base: MetaMinima = {
@@ -123,4 +124,26 @@ test('imaging: la ricerca nell’elenco capisce date, anni e parole, e non indov
   assert.ok(ricercaVuota(leggiRicerca('  ')));
   assert.ok(ricercaVuota(leggiRicerca('a')));
   assert.ok(!ricercaVuota(leggiRicerca('2025')));
+});
+
+
+test('imaging: le chiavi delle immagini sul NAS non possono uscire dalla cartella collegata', () => {
+  assert.equal(chiaveNas('2024/3fa9/77b1/1.2.3_image.dcm'), 'nas:2024/3fa9/77b1/1.2.3_image.dcm');
+  assert.ok(eSulNas('nas:2024/x.dcm') && !eSulNas('imaging/studio/x.dcm') && !eSulNas(null));
+  assert.equal(percorsoNas('nas:2024/a/b.dcm', '/Volumes/Archivio/'), '/Volumes/Archivio/2024/a/b.dcm');
+  for (const cattivo of ['../etc/passwd', '2024/../../x', '/assoluto/x', '2024//x', '2024/./x', '', 'a\0b']) assert.equal(relativoSicuro(cattivo), null, cattivo);
+  assert.equal(percorsoNas('nas:../x', '/Volumes/Archivio'), null);
+  assert.equal(percorsoNas('imaging/x.dcm', '/Volumes/Archivio'), null, 'una chiave normale non si risolve sul NAS');
+  assert.equal(percorsoNas('nas:2024/x.dcm', ''), null);
+  assert.equal(percorsoNas('nas:2024/x.dcm', 'relativa'), null);
+});
+
+test('imaging: la configurazione del NAS porta indirizzo e cartella, mai una password', () => {
+  const c = leggiConfNas('# commento\nURL=smb://archivio@192.168.0.243/Archivio-Dati\nRADICE=/Volumes/Archivio-Dati/\n');
+  assert.deepEqual(c, { radice: '/Volumes/Archivio-Dati', url: 'smb://archivio@192.168.0.243/Archivio-Dati' });
+  // Un indirizzo con la password dentro non si accetta: non deve stare in un file.
+  assert.equal(leggiConfNas('URL=smb://archivio:segreta@192.168.0.243/Archivio\nRADICE=/Volumes/A').url, null);
+  assert.equal(leggiConfNas('RADICE=Volumes/relativa').radice, null);
+  assert.equal(leggiConfNas('RADICE=/Volumes/../etc').radice, null);
+  assert.deepEqual(leggiConfNas(''), { radice: null, url: null });
 });

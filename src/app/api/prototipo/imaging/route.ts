@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
-import { lettoreDisponibile, statoRicezione } from '@/lib/imaging';
+import { lettoreDisponibile, statoRicezione, statoNas } from '@/lib/imaging';
 import { ingestaDicom } from '@/lib/imaging-ingest';
 import { leggiRicerca, ricercaVuota } from '@/lib/imaging-ordina';
 import { statoArchivio } from '@/lib/imaging-archivio';
@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
        from imaging_esami where studio_id = $1 and stato <> 'nascosto'`, [sid]);
 
   return NextResponse.json(
-    { esami, conta, lettore: await lettoreDisponibile(), ricezione: await statoRicezione(), archivio: await statoArchivio() },
+    { esami, conta, lettore: await lettoreDisponibile(), ricezione: await statoRicezione(), archivio: await statoArchivio(), nas: await statoNas() },
     { headers: { 'Cache-Control': 'no-store' } });
 }
 

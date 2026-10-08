@@ -66,7 +66,7 @@ async function rfImgCarica(rendi = true) {
     if (!r.ok) { RF.img.errore = r.status === 403 ? 'Le immagini le vede chi cura: il tuo ruolo non ci accede.' : `Non riesco a leggere gli esami (${r.status}).`; if (rendi) render(); return; }
     const j = await r.json();
     RF.img.lista = j.esami || []; RF.img.conta = j.conta || {}; RF.img.lettore = j.lettore !== false;
-    RF.img.ricezione = j.ricezione || null; RF.img.errore = null; RF.arch.stato = j.archivio || null;
+    RF.img.ricezione = j.ricezione || null; RF.img.nas = j.nas || null; RF.img.errore = null; RF.arch.stato = j.archivio || null;
   } catch { RF.img.errore = 'Piattaforma non raggiungibile.'; }
   if (rendi) render();
 }
@@ -649,7 +649,7 @@ PAGES.imaging = () => {
     const st = RF_IMG_STATO[e.stato] || ['', e.stato];
     return `<div class="list-item" style="cursor:pointer" onclick="rfImgApri('${e.id}')">
       <div class="grow"><div class="name">${rfEsc(e.descrizione || 'Esame')} <span class="badge">${rfEsc(e.modalita || '—')}</span> ${st[1] ? `<span class="badge ${st[0]}">${st[1]}</span>` : ''}</div>
-        <div class="sub">${e.origine === 'rete' ? '<span class="badge">dall’apparecchio</span> ' : e.origine === 'archivio' ? '<span class="badge">copia dall’archivio</span> ' : ''}${rfEsc(rfImgData(e.data_esame))}${e.ora_esame ? ` ${rfEsc(e.ora_esame.slice(0, 2))}:${rfEsc(e.ora_esame.slice(2, 4))}` : ''} · ${e.n_serie} ${e.n_serie === 1 ? 'serie' : 'serie'} · ${e.n_immagini} immagini · ${rfImgPeso(e.byte)}${e.istituto ? ` · ${rfEsc(e.istituto)}` : ''}</div></div>
+        <div class="sub">${e.origine === 'rete' ? '<span class="badge">dall’apparecchio</span> ' : e.origine === 'archivio' ? '<span class="badge">copia dall’archivio</span> ' : e.origine === 'nas' ? '<span class="badge">sul NAS</span> ' : ''}${rfEsc(rfImgData(e.data_esame))}${e.ora_esame ? ` ${rfEsc(e.ora_esame.slice(0, 2))}:${rfEsc(e.ora_esame.slice(2, 4))}` : ''} · ${e.n_serie} ${e.n_serie === 1 ? 'serie' : 'serie'} · ${e.n_immagini} immagini · ${rfImgPeso(e.byte)}${e.istituto ? ` · ${rfEsc(e.istituto)}` : ''}</div></div>
       <div style="text-align:right"><div class="name">${e.paziente ? rfEsc(e.paziente) : `<span class="meta">${rfEsc(e.paziente_dicom || 'senza nome')}</span>`}</div>
         <div class="sub">${e.patient_id ? 'in cartella' : 'non abbinato'}</div></div></div>`;
   };
@@ -658,6 +658,7 @@ PAGES.imaging = () => {
     <div class="page-head"><div><h2 class="page-title">Immagini</h2><div class="page-sub">${c.totale != null ? c.totale : l.length} esami${c.byte && Number(c.byte) ? ` · ${rfImgPeso(c.byte)}` : ''}${c.da_verificare ? ` · ${c.da_verificare} da verificare` : ''}${c.senza_paziente ? ` · ${c.senza_paziente} senza paziente` : ''}</div></div>
       <div class="actions"><div class="seg"><button class="${!f ? 'active' : ''}" onclick="RF.img.filtro='';render()">Tutti</button><button class="${f === 'verifica' ? 'active' : ''}" onclick="RF.img.filtro='verifica';render()">Da verificare</button><button class="${f === 'senza' ? 'active' : ''}" onclick="RF.img.filtro='senza';render()">Senza paziente</button></div></div></div>
     ${RF.img.errore ? `<div class="rf-manc mb-16">${rfEsc(RF.img.errore)}</div>` : ''}
+    ${RF.img.nas && RF.img.nas.configurato && !RF.img.nas.collegato ? '<div class="rf-manc mb-16"><b>L’archivio sul NAS non è collegato a questo server.</b> Gli esami d’archivio restano in elenco, ma le loro immagini non si aprono finché la cartella del NAS non torna collegata.</div>' : ''}
     ${RF.img.lettore ? '' : '<div class="rf-manc mb-16">Il lettore DICOM non è installato su questo server: gli esami si vedono, ma non si importano e non si disegnano.</div>'}
     <p class="rf-img-limite">Le immagini si <b>consultano</b> nel contesto della cartella, con le misure già fatte dall'apparecchio. Gli esami che l'ecografo manda qui <b>restano</b> su questo Mac e si ritrovano con la ricerca; quelli presi dall'archivio Philips sono copie temporanee, e l'originale resta lì. La diagnosi resta del medico, e il referto nasce dal dettato come sempre.</p>
     <div class="card mt-16"><div class="card-head"><span class="section-title">Esami</span><span class="caption">${cercato ? `${l.length}${RF.img.altri ? '+' : ''} trovati` : (c.totale > l.length ? `gli ultimi ${l.length} di ${c.totale}: gli altri si cercano` : 'dal più recente')}</span></div>

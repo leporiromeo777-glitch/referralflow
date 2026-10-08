@@ -661,3 +661,17 @@ Richiesta dello studio (cuffie Apple col filo). Aggiunta come casella da accende
 dispositivo: non cambia niente per chi non la accende. Va provata col tasto vero sul dispositivo con cui
 si detta; se disturba la registrazione si spegne.
 
+## 8.10.2026 — Gli esami vecchi si leggono dal NAS dello studio, senza copiarli
+Lo studio ha collegato al Mac la cartella del NAS in cui Philips ha archiviato 3022 esami (2023–2024,
+1,2 TB). Deciso: la piattaforma li **cataloga dove sono** — legge le intestazioni, scrive nel database che
+cosa c'è e dov'è — e li apre dal NAS quando servono. Niente copia (sul Mac non ci starebbero), e sul NAS
+non si scrive mai. La cartella resta collegata da sola (password nel portachiavi, mai in un file). Gli
+esami senza paziente non riempiono i «da verificare»: si cercano, e si agganciano da soli quando nasce la
+cartella del paziente. Aperti: il permesso di macOS perché il servizio dell'app legga i volumi di rete (lo
+dà lo studio); una cartella a parte sul NAS per gli esami NUOVI dell'ecografo (la crea chi gestisce il
+NAS); la password del NAS, finita in una foto, da cambiare; gli esami da metà 2024 a oggi, ancora solo in Philips.
+
+## 8.10.2026 — L'ecografo manda al Mac: primo invio riuscito
+Alle 12:52 sono arrivati dall'EPIQ tre filmati (27,6 MB), letti e disegnati. La configurazione sull'ecografo
+è scritta in [[Piattaforma/Immagini]].
+

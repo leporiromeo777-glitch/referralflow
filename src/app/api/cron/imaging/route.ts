@@ -4,6 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { chiaveCronValida } from '@/lib/cron-chiave';
 import { scadutiVia, svuotaSpool } from '@/lib/imaging-archivio';
+import { riabbinaEsami } from '@/lib/imaging-catalogo';
+import { query } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -31,7 +33,15 @@ export async function POST(req: NextRequest) {
   // Le copie temporanee degli esami presi dall'archivio, scadute (6.10.2026).
   let scadute = 0;
   try { scadute = await scadutiVia(); } catch (e: any) { console.error(`[archivio] scadenze: ${e?.code ?? e?.name ?? 'errore'}`); }
-  return NextResponse.json({ ok: true, ...r, scadute });
+  // Gli esami senza paziente (quelli catalogati dal NAS soprattutto) riprovano ad agganciarsi
+  // alle cartelle nate nel frattempo (8.10.2026): stessa regola severa, solo conteggi nel registro.
+  let riabbinati = 0;
+  try {
+    const [studio] = await query<{ id: string }>(`select id from studios where attivo order by created_at limit 1`);
+    if (studio) riabbinati = await riabbinaEsami(studio.id);
+    if (riabbinati) console.log(`[imaging] esami agganciati a una cartella nata dopo: ${riabbinati}`);
+  } catch (e: any) { console.error(`[imaging] riabbinamento: ${e?.code ?? e?.name ?? 'errore'}`); }
+  return NextResponse.json({ ok: true, ...r, scadute, riabbinati });
 }
 
 // Il GET dice solo quanto c'è in coda: serve alla pagina Immagini.

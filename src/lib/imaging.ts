@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { eSulNas, leggiConfNas, percorsoNas } from './imaging-esterno';
 import { getFile } from './storage';
 import type { Calibrazione, Geometria } from './imaging-misura';
 
@@ -47,7 +48,42 @@ function esegui(args: string[]): Promise<{ uscita: string; codice: number }> {
 // Il lettore gira su un FILE, e con S3 il file non è qui: in quel caso lo si
 // tira giù in una copia temporanea che sparisce subito. Su disco locale — che
 // è come gira in studio — si legge dov'è, senza copiare niente.
+// La cartella del NAS collegata al Mac (8.10.2026): la radice sta in
+// ~/referti-imaging/archivio-file.conf. Si rilegge al più ogni mezzo minuto.
+let confNas: { quando: number; radice: string | null; url: string | null } | null = null;
+export async function radiceNas(): Promise<string | null> {
+  if (!confNas || Date.now() - confNas.quando > 30_000) {
+    const base = process.env.REFERTI_IMAGING_BASE ?? path.join(os.homedir(), 'referti-imaging');
+    let c = { radice: null as string | null, url: null as string | null };
+    try { c = leggiConfNas(await fs.readFile(path.join(base, 'archivio-file.conf'), 'utf-8')); } catch { /* non configurato */ }
+    confNas = { quando: Date.now(), ...c };
+  }
+  return confNas.radice;
+}
+// Configurato? Collegato adesso? (La cartella c'è e si legge.)
+export async function statoNas(): Promise<{ configurato: boolean; collegato: boolean }> {
+  const radice = await radiceNas();
+  if (!radice) return { configurato: false, collegato: false };
+  let collegato = true, motivo = '';
+  try { await fs.readdir(radice); } catch (e) { collegato = false; motivo = String((e as NodeJS.ErrnoException)?.code ?? 'errore'); }
+  // Nel registro solo quando cambia, e col motivo: ENOENT = cartella non collegata;
+  // EPERM = collegata, ma macOS non ha dato a questo servizio il permesso sui volumi di rete.
+  const ora = collegato ? 'si' : motivo;
+  if (ora !== ultimoNas) { ultimoNas = ora; console.log(`[imaging] nas collegato=${collegato}${motivo ? ` motivo=${motivo}` : ''}`); }
+  return { configurato: true, collegato };
+}
+let ultimoNas = '';
+export class NasNonCollegato extends Error { constructor() { super('archivio_non_collegato'); } }
+
 async function conFile<T>(key: string, fn: (percorso: string) => Promise<T>): Promise<T> {
+  // Un'immagine catalogata sul NAS si legge DOV'È: niente copia, e mai una scrittura.
+  if (eSulNas(key)) {
+    const radice = await radiceNas();
+    const p = radice ? percorsoNas(key, radice) : null;
+    if (!p) throw new NasNonCollegato();
+    try { await fs.access(p); } catch { throw new NasNonCollegato(); }
+    return fn(p);
+  }
   const locale = path.join(LOCALE, key);
   try {
     await fs.access(locale);
@@ -57,6 +93,19 @@ async function conFile<T>(key: string, fn: (percorso: string) => Promise<T>): Pr
   const { body } = await getFile(key);
   await fs.writeFile(tmp, body);
   try { return await fn(tmp); } finally { await fs.rm(tmp, { force: true }); }
+}
+
+// Tutti i DICOM di una cartella d'esame già su disco, in un processo solo (per il catalogo del NAS).
+export type MetaSuDisco = MetaDicom & { percorso: string; byte: number };
+export async function leggiMetaCartella(cartella: string): Promise<{ file: MetaSuDisco[]; non_dicom: number; altri: number } | { errore: string }> {
+  return new Promise((risolvi) => {
+    execFile(PY, [STRUMENTO, 'meta-cartella', cartella], { timeout: 300_000, maxBuffer: 64 * 1024 * 1024 }, (_errore, stdout) => {
+      try {
+        const j = JSON.parse(String(stdout ?? '') || '{}');
+        risolvi(j?.errore ? { errore: String(j.errore) } : Array.isArray(j?.file) ? { file: j.file, non_dicom: Number(j.non_dicom) || 0, altri: Number(j.altri) || 0 } : { errore: 'lettore_non_disponibile' });
+      } catch { risolvi({ errore: 'lettore_non_disponibile' }); }
+    });
+  });
 }
 
 export async function leggiMeta(buffer: Buffer): Promise<MetaDicom | { errore: string }> {
@@ -87,6 +136,8 @@ export async function fotogrammaPng(
   const inCache = path.join(CACHE, nome);
   try { return await fs.readFile(inCache); } catch { /* si disegna */ }
 
+  // Il file sta sul NAS e il NAS non è collegato: lo si dice, non «immagine illeggibile».
+  if (eSulNas(key) && !(await statoNas()).collegato) return { errore: 'archivio_non_collegato' };
   return conFile(key, async (percorso) => {
     await fs.mkdir(CACHE, { recursive: true });
     const args = ['png', percorso, '--frame', String(frame), '--out', inCache, '--lato', String(lato)];

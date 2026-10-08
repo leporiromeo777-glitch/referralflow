@@ -59,6 +59,9 @@ pulisci
 ARCH="$TMP/imaging-base"; mkdir -p "$ARCH/ingresso" "$ARCH/scartati"
 printf 'AE_TITLE=REFERRALFLOW\nPORTA=11113\nCONSENTITI=*@127.0.0.1\nFLOW_URL=\n' > "$ARCH/ricezione.conf"
 printf 'NOME=Archivio di prova\nHOST=127.0.0.1\nPORTA=11150\nAE=ARCHIVIOPROVA\nNOSTRO_AE=REFERRALFLOW\nGIORNI_COPIA=7\n' > "$ARCH/archivio.conf"
+# Il NAS dello studio (8.10.2026): uno FINTO, una cartella temporanea che la prova riempie di esami sintetici.
+NAS_FINTO="$TMP/nas-finto"; mkdir -p "$NAS_FINTO"
+printf 'URL=smb://prova@127.0.0.1/finto\nRADICE=%s\n' "$NAS_FINTO" > "$ARCH/archivio-file.conf"
 "$PY" imaging/archivio-finto.py --porta 11150 --ae ARCHIVIOPROVA --dest REFERRALFLOW=127.0.0.1:11113 > "$TMP/archivio-finto.log" 2>&1 &
 ARCH_PID=$!
 # …e un secondo archivio finto (il centro radiologico di un altro): si cerca su tutti e due.
@@ -151,6 +154,10 @@ grep -E "^NO" "$TMP/archivio.txt"; echo "   $(grep -c '^ok' "$TMP/archivio.txt")
 echo "→ ecografo (finto) che manda direttamente al Mac: arriva, resta, non si raddoppia, si guarda, si trova"
 DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-ecografo.ts "http://localhost:$PORTA" "$C_MEDICO" "$STUDIO" "$ARCH" "$PY" 11113 > "$TMP/ecografo.txt" 2>&1 || { fallito "prova-ecografo"; cut -c1-300 "$TMP/ecografo.txt"; }
 grep -E "^NO" "$TMP/ecografo.txt"; echo "   $(grep -c '^ok' "$TMP/ecografo.txt") ok, $(grep -c '^NO' "$TMP/ecografo.txt") no"
+
+echo "→ esami sul NAS (finto): catalogo senza copiare, si guardano, NAS staccato e riattaccato"
+DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-nas.ts "http://localhost:$PORTA" "$C_MEDICO" "$STUDIO" "$ARCH" "$PY" "$NAS_FINTO" > "$TMP/nas.txt" 2>&1 || { fallito "prova-nas"; cut -c1-300 "$TMP/nas.txt"; }
+grep -E "^NO" "$TMP/nas.txt"; echo "   $(grep -c '^ok' "$TMP/nas.txt") ok, $(grep -c '^NO' "$TMP/nas.txt") no"
 
 echo "→ monitoraggio remoto (demo): stati, isolamento, doppioni, avvisi, permessi, AI spenta"
 C_TEC="$(sessione tecnico)"; C_ADM="$(sessione admin)"; C_SEGR="$(sessione segretaria)"
