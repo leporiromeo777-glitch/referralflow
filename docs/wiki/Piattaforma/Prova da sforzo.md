@@ -35,10 +35,15 @@ Sulla ciclo, nei dati del paziente, scrivere **cognome, nome e data di nascita**
 
 ## Quello che è stato provato e non funziona (9.10.2026)
 
-La licenza di CubeStress ha attive le opzioni «Connettività, DICOM, GDT», ma:
-- **DICOM**: con «URL Archiviazione» = `REFERRALFLOW@192.168.0.188:11112` (formato preso dal manuale di un altro programma Cardioline) al Mac non è arrivato nessun tentativo di collegamento. Il PC è comunque fra gli apparecchi ammessi (`ricezione.conf`).
-- **GDT**: la prova fatta non vale — nei campi era scritto `Y:\`, e su quel PC il disco del Mac è `R:` (visto dopo, configurando touchECG). Da rifare con `R:\ciclo-richieste\` e `R:\ciclo-gdt\` (le cartelle ci sono). In touchECG, dello stesso produttore, GDT ha funzionato al primo colpo.
-Il modo esatto di configurarli lo sa il tecnico Cardioline: se un giorno servisse mandare i dati del paziente **da** ReferralFlow **alla** ciclo, la strada è GDT.
+La licenza di CubeStress ha attive le opzioni «Connettività, DICOM, GDT», ma senza il manuale (non è pubblico: Cardioline lo dà su richiesta) nessuna strada automatica è riuscita. Per non rifare lo stesso giro:
+- **Com'è fatto il programma**: il collegamento «Cubestress» apre `C:\Program Files (x86)\Cardioline\StressArchiver\StressArchiver.exe` (finestra «Stress Archiver»); l'acquisizione è `CubeStress\StressManagement.exe`. Nella cartella c'è la libreria `Cardioline.GDT`, quindi la funzione esiste. I file `.config` accanto ai programmi contengono solo impostazioni tecniche di .NET: niente su GDT o DICOM.
+- **DICOM**: «URL Archiviazione» = `REFERRALFLOW@192.168.0.188:11112` → nessun tentativo di collegamento arrivato al Mac. Quel campo, da quanto dicono i manuali Cardioline, è per il loro servizio ECGWebApp. Il PC resta fra gli apparecchi ammessi (`ricezione.conf`).
+- **GDT in uscita**: cartelle su `R:\…`, sigle `CUBE`/`RFLW`; refertato e premuto «Report PDF» su un paziente di prova → nessun file scritto.
+- **GDT in ingresso**: richiesta 6302 per un paziente inventato nella cartella di input, coi due nomi possibili (`CUBERFLW.GDT`, `RFLWCUBE.GDT`) → non letta né all'avvio, né aprendo «Lista di lavoro» (la schermata «Worklist» resta vuota: ha le colonne «Data prevista» e «N. Ordine», da lista scaricata da un server), né col tasto sotto.
+- **Avvio con `/GDT`** (lo indica il manuale della generazione precedente, 2005–2007): il programma parte normalmente, nessun effetto.
+- Un errore nostro lungo la strada: le prime prove erano con `Y:\`, ma su quel PC il disco del Mac è `R:`.
+
+**Per riprovarci serve Cardioline** (sede 0461 96821): manuale di CubeStress 5.5.1, come si attiva lo scambio GDT (avvio, nomi dei file, quando scrive il risultato) e dove si configura il server DICOM. Con GDT funzionante si potrebbero anche mandare i dati del paziente **da** ReferralFlow **alla** ciclo.
 
 ## Quello che ancora non c'è
 
