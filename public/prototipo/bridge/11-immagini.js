@@ -819,11 +819,11 @@ PAGES.imaging = () => {
     ${RF.img.lettore ? '' : '<div class="rf-manc mb-16">Il lettore DICOM non è installato su questo server: gli esami si vedono, ma non si importano e non si disegnano.</div>'}
     <p class="rf-img-limite">Le immagini si <b>consultano</b> nel contesto della cartella, con le misure già fatte dall'apparecchio. Gli esami che l'ecografo manda qui <b>restano</b> su questo Mac e si ritrovano con la ricerca; quelli presi dall'archivio Philips sono copie temporanee, e l'originale resta lì. La diagnosi resta del medico, e il referto nasce dal dettato come sempre.</p>
     <div class="card mt-16"><div class="card-head"><span class="section-title">Esami</span><span class="caption">${cercato ? `${l.length}${RF.img.altri ? '+' : ''} trovati` : (c.totale > l.length ? `gli ultimi ${gg} giorni: ${l.length} di ${c.totale}. Gli altri si trovano coi filtri` : `gli ultimi ${gg} giorni, dal più recente`)}</span></div>
-      <div class="row mb-8" style="gap:8px;align-items:center">
+      <div class="row" style="gap:12px;align-items:center;margin-top:6px">
         <input class="input" id="rf-img-q" style="flex:1;min-width:0" placeholder="Cerca: cognome, data dell’esame o di nascita (3.5.1950), anno" value="${rfEsc(RF.img.q)}" oninput="RF.img.q=this.value" onkeydown="if(event.key==='Enter')rfImgCerca(0)">
         <button class="btn sm" onclick="rfImgCerca(0)" ${RF.img.cerco ? 'disabled' : ''}>${RF.img.cerco ? 'Cerco…' : 'Cerca'}</button>
       </div>
-      <div class="row mb-8" style="gap:10px 14px;align-items:center;flex-wrap:wrap">
+      <div class="row" style="gap:12px 14px;align-items:center;flex-wrap:wrap;margin:16px 0 18px">
         <span class="caption">Filtri</span>
         <select class="input rf-img-fl" onchange="rfImgFiltro('anno', this.value)" aria-label="Anno dell’esame"><option value="">Qualsiasi anno</option>${(RF.img.anni || []).map(a => `<option value="${a.anno}" ${String(RF.img.anno) === String(a.anno) ? 'selected' : ''}>${a.anno} · ${a.n}</option>`).join('')}</select>
         <select class="input rf-img-fl" onchange="rfImgFiltro('origine', this.value)" aria-label="Da dove viene l’esame"><option value="">Qualsiasi provenienza</option>${(RF.img.origini || []).map(o => `<option value="${rfEsc(o.origine)}" ${RF.img.origine === o.origine ? 'selected' : ''}>${rfEsc(RF_IMG_ORIGINE[o.origine] || o.origine)} · ${o.n}</option>`).join('')}</select>
