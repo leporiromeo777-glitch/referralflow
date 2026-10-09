@@ -25,7 +25,7 @@ Che cosa è vero oggi (9.10.2026). Una cartella completa arriva spesso come **un
 - **tipo** dal titolo in cima (dimissione, consenso, laboratorio, Holter, prova da sforzo, ecocardiogramma, ECG, imaging), poi «lettera» se c'è un saluto, poi «referto», altrimenti «documento»; «ECG» scritto nel corpo di una lettera non ne fa un ECG;
 - **data** da «Luogo, data», se no la prima in cima che non sia una data di nascita. Non si inventa: se non c'è, resta vuota.
 
-Un PDF **senza testo** (scansione non ancora letta dall'OCR) è proposto come un pezzo solo, e la pagina lo dice: i tagli li mette la persona, o si riprova quando il Mac ha finito di leggerlo.
+Un PDF **senza testo** (scansione non ancora letta dall'OCR) è proposto come un pezzo solo, e la pagina **aspetta da sola**: dice che il Mac sta leggendo la scansione, chiede ogni 5 secondi a che punto è (`GET ?stato=<id>`: solo lo stato, il file non si apre e nel registro non si scrive) e a lettura finita rifà la proposta. Se nel frattempo la persona ha già cominciato a tagliare a mano, i suoi tagli **non si toccano**: compare «il Mac ha finito: passa ai tagli proposti», e sceglie lei. La lettura parte solo a catena ferma ([[Piattaforma/Documenti]]): se il Mac sta trascrivendo un referto l'attesa si allunga. Se dopo la lettura più di metà delle pagine resta senza testo (scritte a mano, sbiadite) la pagina lo dice, e lì i tagli li mette la persona.
 
 **La conferma è sempre di una persona.** Una regola che taglia male divide una lettera in due o ne incolla due: per questo niente nasce prima di «Crea».
 
@@ -49,4 +49,4 @@ Le regole sono state scritte e provate su testi **inventati**: non si leggono ca
 
 ## Prove
 
-`src/lib/prove-dividi.test.ts` (7, con la lettura del paziente dal PDF: cartella di otto pagine in quattro documenti con tipi e date, segnali, testata ripetuta, niente inventato, PDF senza testo, controllo dei pezzi confermati). `scripts/e2e/prova-dividi.ts` (7, sul demo con una cartella fatta con ghostscript): caricamento e proposta, permessi e intervalli sbagliati, creazione con una correzione, pezzi veri con le loro pagine e originale intatto, registro coi soli numeri, zip.
+`src/lib/prove-dividi.test.ts` (7, con la lettura del paziente dal PDF: cartella di otto pagine in quattro documenti con tipi e date, segnali, testata ripetuta, niente inventato, PDF senza testo, controllo dei pezzi confermati). `scripts/e2e/prova-dividi.ts` (8, con lo stato della lettura di una scansione; sul demo con una cartella fatta con ghostscript): caricamento e proposta, permessi e intervalli sbagliati, creazione con una correzione, pezzi veri con le loro pagine e originale intatto, registro coi soli numeri, zip.

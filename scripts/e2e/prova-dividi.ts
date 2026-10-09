@@ -101,6 +101,17 @@ async function main() {
       && ignoto.letto?.nome === 'Sconosciuto' && ignoto.trovato === null && vuoto.letto === null && chiFuori.status === 401 && quanti.n === 1,
       `di chi è il PDF: nome e data di nascita letti dalle pagine e cartella trovata se c'è; chi non c'è resta da creare (e chiedere non crea niente); senza testo nessuna proposta; senza sessione no (${chiFuori.status})`);
 
+    // 3c — una scansione che il Mac sta leggendo: la pagina chiede a che punto è, senza aprire il file né scrivere nel registro.
+    const [regPrima] = await query<{ n: number }>(`select count(*)::int as n from document_access_log where document_id = $1`, [doc]);
+    const st0 = await leggi(C_SEG, `?stato=${doc}`);
+    await query(`update patient_documents set ocr_stato = 'da_fare' where id = $1`, [doc]);
+    const st1 = await leggi(C_SEG, `?stato=${doc}`), pr1 = await leggi(C_SEG, `?documento=${doc}`);
+    await query(`update patient_documents set ocr_stato = null where id = $1`, [doc]);
+    const stFuori = await leggi('', `?stato=${doc}`), stFinto = await leggi(C_SEG, `?stato=00000000-0000-4000-8000-000000000000`);
+    const [regDopo] = await query<{ n: number }>(`select count(*)::int as n from document_access_log where document_id = $1`, [doc]);
+    verifica(st0.stato === 200 && st0.j.ocr === null && st1.j.ocr === 'da_fare' && pr1.j.ocr === 'da_fare' && stFuori.stato === 401 && stFinto.stato === 404 && regDopo.n === regPrima.n + 1,
+      `lettura di una scansione: lo stato si chiede a parte (${st0.j.ocr} → ${st1.j.ocr}) e chiederlo non scrive nel registro; senza sessione o su un documento che non c'è no (${stFuori.stato}, ${stFinto.stato})`);
+
     // 4 — tutti insieme in uno zip; e solo documenti dello studio.
     const z = await manda(C_SEG, { azione: 'zip', ids: creati.map((x) => x.id) });
     const zb = Buffer.from(await z.arrayBuffer());

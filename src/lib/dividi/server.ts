@@ -60,6 +60,13 @@ export async function chiE(studioId: string, testi: unknown) {
   return { letto: { cognome: an.cognome, nome: an.nome, nascita: letto.nascita }, trovato };
 }
 
+// A che punto è la lettura (OCR) di una scansione: la pagina lo chiede ogni pochi secondi mentre aspetta,
+// e per questo non apre il file e non scrive nel registro.
+export async function statoLettura(studioId: string, id: string): Promise<{ ocr: string | null } | null> {
+  const [d] = await query<{ ocr_stato: string | null }>(`select ocr_stato from patient_documents where id = $1 and studio_id = $2`, [id, studioId]);
+  return d ? { ocr: d.ocr_stato } : null;
+}
+
 // I PDF di un paziente, per scegliere quale dividere.
 export async function elencoPdf(studioId: string, patientId: string) {
   return query<{ id: string; filename: string; categoria: string; caricato: string; ocr_stato: string | null }>(

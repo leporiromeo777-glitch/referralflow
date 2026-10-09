@@ -161,8 +161,35 @@ async function rfDivApri(id) {
   RF.div.proposti = (j.pezzi || []).map(p => [p.da, p.a]);
   RF.div.pezzi = (j.pezzi || []).map(p => ({ da: p.da, a: p.a, categoria: p.categoria, data: rfDivGiorno(p.data), titolo: '', auto: true, sicurezza: p.sicurezza, escluso: false }));
   RF.div.pezzi.forEach(p => { p.titolo = rfDivTitolo(p); });
+  RF.div.toccato = false;
   render();
   void rfDivPdf();
+  rfDivAspetta();
+}
+// Una scansione senza testo il Mac la legge da sé (OCR), di solito in un minuto o due: la pagina aspetta
+// e, a lettura finita, rifà la proposta da sola. Se nel frattempo si è già cominciato a tagliare a mano,
+// non tocca niente e lo dice: si sceglie se passare ai tagli proposti.
+let rfDivTimer = null;
+const rfDivPochi = (d) => d.con_testo < d.pagine * 0.5;
+function rfDivAvvisoHtml() {
+  const d = RF.div.doc; if (!d || !rfDivPochi(d)) return '';
+  const quante = d.con_testo ? `Solo ${d.con_testo} pagine su ${d.pagine} hanno un testo leggibile` : 'Questo PDF non ha testo leggibile';
+  if (d.ocr === 'da_fare') return `<div class="rf-manc mb-16"><b>È una scansione: il Mac la sta leggendo.</b> Per ${d.pagine} pagine ci vuole circa ${rfDivStima(d.pagine)} (di più se sta trascrivendo un referto: quello ha la precedenza). <b>La pagina si aggiorna da sola</b> e propone i tagli appena ha finito; intanto puoi guardare le pagine o tagliare a mano.</div>`;
+  if (d.ocr === 'pronta') return `<div class="rf-manc mb-16"><b>Il Mac ha finito di leggere la scansione.</b> Hai già cominciato a tagliare a mano: <a href="javascript:void 0" onclick="rfDivDaCapo()">passa ai tagli proposti</a> (le tue correzioni si perdono) oppure continua così.</div>`;
+  return `<div class="rf-manc mb-16"><b>${quante}${d.ocr === 'fatto' ? ', anche dopo la lettura del Mac' : ''}.</b> ${d.ocr === 'fallito' ? 'La lettura automatica non è riuscita. ' : d.ocr === 'fatto' ? 'Il resto è scritto a mano o troppo sbiadito. ' : ''}Dove manca il testo i tagli non si possono proporre: mettili tu con le forbici fra le pagine.</div>`;
+}
+const rfDivStima = (pagine) => { const m = Math.max(1, Math.ceil(pagine * 0.5 / 60)); return m === 1 ? 'un minuto' : `${m} minuti`; };
+function rfDivAspetta() {
+  clearTimeout(rfDivTimer); rfDivTimer = null;
+  const d = RF.div.doc; if (!d || d.ocr !== 'da_fare' || !rfDivPochi(d)) return;
+  rfDivTimer = setTimeout(async () => {
+    if (RF.div.doc !== d || !document.getElementById('rf-div-avviso')) return;      // si è cambiato documento o pagina
+    const j = await rfDivChiedi(`${RF_DIV_URL}?stato=${encodeURIComponent(d.id)}`);
+    if (RF.div.doc !== d) return;
+    if (j.ocr === 'fatto' && !RF.div.toccato) { void rfDivApri(d.id); return; }
+    if (j.ocr === 'fatto' || j.ocr === 'fallito') { d.ocr = j.ocr === 'fatto' ? 'pronta' : 'fallito'; const el = document.getElementById('rf-div-avviso'); if (el) el.innerHTML = rfDivAvvisoHtml(); return; }
+    rfDivAspetta();
+  }, 5000);
 }
 function rfDivLiberaPdf() { try { if (RF.div.pdf) RF.div.pdf.destroy(); } catch { /* già chiuso */ } RF.div.pdf = null; RF.div.pdfId = null; RF.div.mini = {}; RF.div.zoom = 0; }
 // Il PDF si apre una volta nel browser, per le miniature e per guardare una pagina in grande.
@@ -209,15 +236,17 @@ function rfDivAggiorna() {
   rfDivOsserva();
 }
 function rfDivTaglia(n) {
+  RF.div.toccato = true;
   const k = RF.div.pezzi.findIndex(p => p.da < n && n <= p.a); if (k < 0) return;
   const p = RF.div.pezzi[k];
   const nuovo = { da: n, a: p.a, categoria: 'altro', data: '', titolo: '', auto: true, sicurezza: 'tua', escluso: p.escluso };
   nuovo.titolo = rfDivTitolo(nuovo); p.a = n - 1;
   RF.div.pezzi.splice(k + 1, 0, nuovo); rfDivAggiorna();
 }
-function rfDivUnisci(k) { if (k < 1) return; RF.div.pezzi[k - 1].a = RF.div.pezzi[k].a; RF.div.pezzi.splice(k, 1); rfDivAggiorna(); }
-function rfDivEscludi(k) { RF.div.pezzi[k].escluso = !RF.div.pezzi[k].escluso; rfDivAggiorna(); }
+function rfDivUnisci(k) { if (k < 1) return; RF.div.toccato = true; RF.div.pezzi[k - 1].a = RF.div.pezzi[k].a; RF.div.pezzi.splice(k, 1); rfDivAggiorna(); }
+function rfDivEscludi(k) { RF.div.toccato = true; RF.div.pezzi[k].escluso = !RF.div.pezzi[k].escluso; rfDivAggiorna(); }
 function rfDivCampo(k, campo, v) {
+  RF.div.toccato = true;
   const p = RF.div.pezzi[k]; if (!p) return;
   p[campo] = v;
   if (campo === 'titolo') { p.auto = false; return; }
@@ -318,10 +347,10 @@ PAGES.dividi = () => {
   }
   // 2 — la proposta da controllare.
   if (v.doc) {
-    const d = v.doc, pochi = d.con_testo < d.pagine * 0.5;
+    const d = v.doc;
     return `${testa(`${rfEsc(v.nome)} · ${rfEsc(d.filename)} · ${d.pagine} pagine`, `<button class="btn" onclick="rfDivDaCapo()">Torna ai tagli proposti</button><button class="btn" onclick="rfDivCambia()">Cambia cartella</button>`)}
       ${errore}
-      ${pochi ? `<div class="rf-manc mb-16"><b>${d.con_testo ? `Solo ${d.con_testo} pagine su ${d.pagine} hanno un testo leggibile` : 'Questo PDF non ha testo leggibile'}.</b> ${d.ocr === 'da_fare' ? 'È una scansione: il Mac la sta leggendo, e ci vuole qualche minuto. ' : d.ocr === 'fallito' ? 'La lettura automatica non è riuscita. ' : ''}Senza testo i tagli non si possono proporre: mettili tu con le forbici fra le pagine${d.ocr === 'da_fare' ? `, oppure <a href="javascript:void 0" onclick="rfDivApri('${d.id}')">riprova fra poco</a>` : ''}.</div>` : ''}
+      <div id="rf-div-avviso">${rfDivAvvisoHtml()}</div>
       <div class="card"><div class="card-head"><span class="section-title">Documenti trovati</span><span class="caption">clicca una pagina per guardarla in grande · ✂ fra due pagine per tagliare</span></div>
         <div id="rf-div-pezzi">${rfDivPezziHtml()}</div>
         <div class="row mt-16" style="gap:12px;justify-content:flex-end;align-items:center"><span class="caption">I documenti nascono nella cartella di ${rfEsc(v.nome)}; l’originale resta.</span><button class="btn primary" id="rf-div-crea" onclick="rfDivCrea()">${rfDivTastoCrea()}</button></div></div>

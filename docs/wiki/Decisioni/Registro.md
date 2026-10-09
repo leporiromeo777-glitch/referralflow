@@ -756,3 +756,5 @@ separati. Deciso così:
 - Le regole sono nate su testi inventati: la prima cartella vera è la prova che manca.
 - Lo stesso giorno, richiesta dello studio: **si può trascinare la cartella di chi non è ancora in piattaforma**. Nome e
   data di nascita si leggono dal PDF e si propongono; la cartella nasce solo dopo la conferma di una persona.
+
+**Aggiunta (9.10.2026, dopo la prima cartella vera):** una scansione senza testo non si dichiara «illeggibile»: la pagina aspetta la lettura del Mac e rifà la proposta da sola. I tagli messi a mano nel frattempo valgono più della proposta arrivata dopo: non si sovrascrivono mai, si offre di passare.
