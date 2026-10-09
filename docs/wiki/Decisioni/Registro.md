@@ -724,3 +724,15 @@ sparivano dentro. Richiesta dello studio: vedere solo i più recenti, gli altri 
 «Recente» = ultimi 30 giorni, per data dell'esame o per arrivo (non per il catalogo del NAS). Filtri per
 anno, provenienza e stato, applicati dal server su tutti gli esami. Nella cartella del paziente niente
 cambia: lì si vedono tutti i suoi.
+
+## 9.10.2026 — Prova da sforzo: il referto arriva come PDF, non via DICOM né GDT
+Lo studio vuole collegare la ciclo (Cardioline CubeStress). La licenza ha DICOM e GDT, ma in un'ora di
+prove nessuno dei due ha mandato niente al Mac, e il manuale non si trova: la configurazione giusta la sa
+il tecnico Cardioline. Quello che funziona subito è il tasto «Report PDF», che crea il referto in una
+cartella del PC. Deciso così:
+- **Si copia quel PDF** sul Mac con uno strumento di Windows (robocopy) che lavora **nascosto** — lo studio
+  non vuole finestre aperte sul PC di chi lavora — e si toglie con un doppio clic.
+- **Regola severa come per immagini e pressione**: in cartella da solo solo con nome e data di nascita di
+  una persona sola; se no «da assegnare», con il PDF da guardare prima di decidere.
+- **Resta il PDF**, senza estrarre numeri: è il referto firmato dal medico, non una fonte di dati.
+- I file arrivati non si spostano (la copia li rimanderebbe): si tolgono dopo sette giorni.

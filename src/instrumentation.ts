@@ -14,4 +14,10 @@ export async function register() {
     const { avviaCartella } = await import('./lib/pressione/cartella-server');
     avviaCartella();
   }
+  // I referti PDF della ciclo (9.10.2026): arrivano in «Ciclo da leggere/referti» e vanno nella cartella del paziente.
+  // Si spegne con CICLO_CARTELLA_GIRO=spento (le prove chiamano il giro a mano).
+  if (process.env.NEXT_RUNTIME === 'nodejs' && process.env.CICLO_CARTELLA_GIRO !== 'spento') {
+    const { avviaCiclo } = await import('./lib/ciclo/cartella-server');
+    avviaCiclo();
+  }
 }

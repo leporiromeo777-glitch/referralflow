@@ -34,6 +34,7 @@ if (typeof NAV !== 'undefined') for (const r of ['secretary', 'assistant', 'doct
 .rf-img-barra .seg button { padding:0 14px; }
 .rf-img-barra input[type=range] { flex:1; min-width:160px; }
 .rf-img-fl { width:auto; min-width:0; height:34px; padding:0 10px; }
+.rf-cic-riga { display:flex; flex-direction:column; gap:8px; padding:12px 0; border-top:1px solid var(--border); }
 .rf-img-col.pieno { position:fixed; inset:0; z-index:45; background:#000; padding:8px 12px 10px; display:flex; flex-direction:column; overflow:auto; }
 .rf-img-col.pieno .rf-img-vista { flex:1; min-height:0; border-radius:0; }
 .rf-img-col.pieno .rf-img-vista img { max-width:none; max-height:none; }
@@ -76,6 +77,7 @@ async function rfImgCarica(rendi = true) {
     const j = await r.json();
     RF.img.lista = j.esami || []; RF.img.conta = j.conta || {}; RF.img.lettore = j.lettore !== false;
     RF.img.anni = j.anni || []; RF.img.origini = j.origini || []; RF.img.recentiGiorni = j.recenti_giorni || 30;
+    void rfCicCarica();
     RF.img.ricezione = j.ricezione || null; RF.img.nas = j.nas || null; RF.img.errore = null; RF.arch.stato = j.archivio || null;
   } catch { RF.img.errore = 'Piattaforma non raggiungibile.'; }
   if (rendi) render();
@@ -818,6 +820,7 @@ PAGES.imaging = () => {
     ${RF.img.nas && RF.img.nas.configurato && !RF.img.nas.collegato ? '<div class="rf-manc mb-16"><b>L’archivio sul NAS non è collegato a questo server.</b> Gli esami d’archivio restano in elenco, ma le loro immagini non si aprono finché la cartella del NAS non torna collegata.</div>' : ''}
     ${RF.img.lettore ? '' : '<div class="rf-manc mb-16">Il lettore DICOM non è installato su questo server: gli esami si vedono, ma non si importano e non si disegnano.</div>'}
     <p class="rf-img-limite">Le immagini si <b>consultano</b> nel contesto della cartella, con le misure già fatte dall'apparecchio. Gli esami che l'ecografo manda qui <b>restano</b> su questo Mac e si ritrovano con la ricerca; quelli presi dall'archivio Philips sono copie temporanee, e l'originale resta lì. La diagnosi resta del medico, e il referto nasce dal dettato come sempre.</p>
+    ${rfCicScheda()}
     <div class="card mt-16"><div class="card-head"><span class="section-title">Esami</span><span class="caption">${cercato ? `${l.length}${RF.img.altri ? '+' : ''} trovati` : (c.totale > l.length ? `gli ultimi ${gg} giorni: ${l.length} di ${c.totale}. Gli altri si trovano coi filtri` : `gli ultimi ${gg} giorni, dal più recente`)}</span></div>
       <div class="row" style="gap:12px;align-items:center;margin-top:6px">
         <input class="input" id="rf-img-q" style="flex:1;min-width:0" placeholder="Cerca: cognome, data dell’esame o di nascita (3.5.1950), anno" value="${rfEsc(RF.img.q)}" oninput="RF.img.q=this.value" onkeydown="if(event.key==='Enter')rfImgCerca(0)">
@@ -844,6 +847,79 @@ PAGES.imaging = () => {
       </div>
       <p class="meta" style="margin:10px 0 0;line-height:1.55">I file restano su questo Mac e non escono mai: il browser riceve un'immagine già pronta, non il DICOM. L'esame si aggancia da solo al paziente quando <b>nome e data di nascita</b> del file combaciano con una persona sola della cartella; se no resta «da verificare», e lo abbina qualcuno.</p></div>`;
 };
+
+/* ---------- prova da sforzo: i referti PDF arrivati dalla ciclo (9.10.2026) ----------
+   Il programma della ciclo crea il referto in PDF; una copia arriva sul Mac e la piattaforma la
+   mette da sola nella cartella del paziente quando nome e data di nascita combaciano con una
+   persona sola. Qui: quelli che non si sono agganciati, da assegnare a mano. */
+RF.cic = { arrivi: [], conta: null, scelte: {} };
+const RF_CIC_MOTIVO = { senza_nascita: 'nel referto manca la data di nascita', senza_nome: 'nel referto manca il nome', nessuno: 'nessuna cartella con questo nome', omonimi: 'più persone con questo nome', nascita_diversa: 'la data di nascita non combacia' };
+const rfCicQuando = (s) => (s ? `${s.slice(8, 10)}.${s.slice(5, 7)}.${s.slice(0, 4)} ${s.slice(11, 16)}` : 'data non letta');
+const rfCicGiorno = (s) => (s ? `${s.slice(8, 10)}.${s.slice(5, 7)}.${s.slice(0, 4)}` : '');
+async function rfCicCarica() {
+  try {
+    const r = await fetch('/api/prototipo/ciclo', { credentials: 'include', cache: 'no-store' });
+    if (!r.ok) return;
+    const j = await r.json(); const eraVuoto = !RF.cic.conta, quanti = (RF.cic.arrivi || []).length;
+    RF.cic.arrivi = j.arrivi || []; RF.cic.conta = j.conta || null;
+    // La scheda compare (o cambia) dopo che la pagina è già disegnata: la si ridisegna solo se c'è qualcosa di nuovo da mostrare.
+    if (state.route === 'imaging' && !RF.img.aperto && ((eraVuoto && j.conta && j.conta.totale) || quanti !== RF.cic.arrivi.length)) render();
+  } catch { /* la pagina resta quella degli esami */ }
+}
+async function rfCicChiedi(corpo) {
+  try {
+    const r = await fetch('/api/prototipo/ciclo', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+    const j = await r.json().catch(() => ({}));
+    return r.ok ? j : { errore: j.errore === 'non_permesso' || j.errore === 'ruolo_non_ammesso' ? 'Il tuo ruolo non assegna i referti' : (j.errore || `Non riuscito (${r.status}).`) };
+  } catch { return { errore: 'Piattaforma non raggiungibile.' }; }
+}
+function rfCicCerca(id, v) { (RF.cic.scelte[id] = RF.cic.scelte[id] || {}).cerca = v; render(); const e = document.getElementById(`rf-cic-ac-${id}`); if (e) { e.focus(); e.setSelectionRange(e.value.length, e.value.length); } }
+function rfCicScegli(id, pid) { const p = (RF.data.patients || []).find(x => x.id === pid); RF.cic.scelte[id] = { pid, nome: p ? `${fullName(p)}${p.dob ? ` · ${p.dob}` : ''}` : '', cerca: '' }; render(); }
+function rfCicNuova(id) {
+  const x = (RF.cic.arrivi || []).find(a => a.id === id) || {};
+  RF.cic.scelte[id] = { nuova: true, cognome: (x.proposta && x.proposta.cognome) || '', nome: (x.proposta && x.proposta.nome) || '', nascita: rfCicGiorno(x.nascita_letta) };
+  render();
+}
+async function rfCicFatto(j, messaggio) {
+  if (j.errore) { toast(j.errore); return; }
+  toast(messaggio); await rfCicCarica(); render();
+}
+async function rfCicAssegna(id) {
+  const s = RF.cic.scelte[id]; if (!s || !s.pid) { toast('Scegli il paziente'); return; }
+  const j = await rfCicChiedi({ azione: 'assegna', id, patient_id: s.pid });
+  if (!j.errore) delete RF.cic.scelte[id];
+  await rfCicFatto(j, 'Referto messo nella cartella del paziente');
+}
+async function rfCicCrea(id) {
+  const s = RF.cic.scelte[id]; if (!s || !s.nuova) return;
+  if (!s.cognome.trim() || !s.nome.trim() || !s.nascita.trim()) { toast('Servono cognome, nome e data di nascita'); return; }
+  const j = await rfCicChiedi({ azione: 'crea_cartella', id, cognome: s.cognome, nome: s.nome, data_nascita: s.nascita });
+  if (!j.errore) { delete RF.cic.scelte[id]; void rfCaricaDati(); }
+  await rfCicFatto(j, j.nuova ? 'Cartella creata, referto dentro' : 'La cartella c’era già: referto dentro');
+}
+async function rfCicScarta(id) {
+  if (!confirm('Scartare questo referto? Sul PC della ciclo l’esame resta: da lì si può rifare il PDF.')) return;
+  await rfCicFatto(await rfCicChiedi({ azione: 'scarta', id }), 'Referto scartato');
+}
+function rfCicScheda() {
+  const a = RF.cic.arrivi || [], c = RF.cic.conta;
+  if (!a.length && !(c && c.totale)) return '';
+  const riga = (x) => {
+    const s = RF.cic.scelte[x.id] || {}; const q = (s.cerca || '').trim().toLowerCase();
+    const trovati = q.length >= 2 ? (RF.data.patients || []).filter(p => rfUuid(p.id) && fullName(p).toLowerCase().includes(q)).slice(0, 6) : [];
+    return `<div class="rf-cic-riga">
+      <div><b>Prova da sforzo del ${rfEsc(rfCicQuando(x.esame_il))}</b>${x.nome_letto ? ` · nel referto: ${rfEsc(x.nome_letto)}${x.nascita_letta ? `, ${rfEsc(rfCicGiorno(x.nascita_letta))}` : ''}` : ''} <a class="btn sm ghost" href="/api/prototipo/ciclo/${x.id}" target="_blank" rel="noopener">Apri il PDF</a></div>
+      <div class="caption">Non agganciato da solo: ${rfEsc(RF_CIC_MOTIVO[x.motivo] || 'da assegnare')}.</div>
+      <div class="row" style="gap:10px;flex-wrap:wrap;align-items:center">
+        ${s.nuova ? `<input class="input rf-img-fl" style="width:150px" placeholder="Cognome" value="${rfEsc(s.cognome)}" oninput="RF.cic.scelte['${x.id}'].cognome=this.value"><input class="input rf-img-fl" style="width:150px" placeholder="Nome" value="${rfEsc(s.nome)}" oninput="RF.cic.scelte['${x.id}'].nome=this.value"><input class="input rf-img-fl" style="width:120px" placeholder="31.12.1950" value="${rfEsc(s.nascita)}" oninput="RF.cic.scelte['${x.id}'].nascita=this.value"><button class="btn sm primary" onclick="rfCicCrea('${x.id}')">Crea la cartella e mettilo dentro</button><button class="btn sm ghost" onclick="delete RF.cic.scelte['${x.id}'];render()">Annulla</button>`
+          : s.pid ? `<span class="badge accent">${rfEsc(s.nome)}</span><button class="btn sm ghost" onclick="delete RF.cic.scelte['${x.id}'];render()">Cambia</button><button class="btn sm primary" onclick="rfCicAssegna('${x.id}')">Metti nella sua cartella</button>`
+          : `<input class="input rf-img-fl" id="rf-cic-ac-${x.id}" style="width:220px" placeholder="Di chi è? Scrivi il cognome" value="${rfEsc(s.cerca || '')}" oninput="rfCicCerca('${x.id}', this.value)">${trovati.map(p => `<button class="btn sm" onclick="rfCicScegli('${x.id}','${p.id}')">${rfEsc(fullName(p))}${p.dob ? ` · ${rfEsc(p.dob)}` : ''}</button>`).join('')}<button class="btn sm" onclick="rfCicNuova('${x.id}')">Non ha ancora la cartella: creala</button>`}
+        <span class="grow"></span><button class="btn sm ghost" onclick="rfCicScarta('${x.id}')">Scarta</button></div></div>`;
+  };
+  return `<div class="card mt-16"><div class="card-head"><span class="section-title">Prova da sforzo: referti arrivati dalla ciclo</span>${a.length ? `<span class="badge warning">${a.length} da assegnare</span>` : '<span class="badge success">tutti in cartella</span>'}</div>
+    <p class="meta" style="margin:0 0 6px;line-height:1.55">Il referto in PDF creato sul PC della ciclo («Report PDF») arriva qui da solo e va nella cartella del paziente, fra i documenti «Ciclo», quando <b>nome e data di nascita</b> scritti nel referto combaciano con una persona sola.${c && c.totale ? ` Arrivati finora: <b>${c.totale}</b>, di cui ${c.in_cartella} già in cartella${c.ultimo ? `; l’ultimo il ${rfEsc(rfCicQuando(c.ultimo))}` : ''}.` : ''}</p>
+    ${a.map(riga).join('')}</div>`;
+}
 
 /* L'archivio dello studio (6.10.2026). Al software Philips si chiede «che
    esami hai di questa persona?» e, quando se ne apre uno, ce lo si fa mandare:
