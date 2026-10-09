@@ -67,6 +67,20 @@ export async function statoLettura(studioId: string, id: string): Promise<{ ocr:
   return d ? { ocr: d.ocr_stato } : null;
 }
 
+// Lo storico: le cartelle complete caricate di recente (da qui o divise qui), con a che punto sono —
+// in lettura, da dividere, già divise e in quanti documenti. Serve a ritrovare una cartella lasciata a metà
+// senza ricordarsi di chi era. Solo per chi ha la sezione; i numeri vengono dal registro degli accessi.
+export async function recenti(studioId: string) {
+  return query<{ id: string; filename: string; patient_id: string; paziente: string; caricato: string; ocr_stato: string | null; divisa_il: string | null; documenti: number | null }>(
+    `select d.id, d.filename, d.patient_id, (p.cognome || ' ' || p.nome) as paziente, to_char(d.uploaded_at, 'YYYY-MM-DD') as caricato, d.ocr_stato,
+            to_char(u.at, 'YYYY-MM-DD') as divisa_il, nullif(substring(u.dettaglio from '^divisione: ([0-9]+) documenti'), '')::int as documenti
+       from patient_documents d join patients p on p.id = d.patient_id
+       left join lateral (select l.at, l.dettaglio from document_access_log l where l.document_id = d.id and l.dettaglio like 'divisione: %' order by l.at desc limit 1) u on true
+      where d.studio_id = $1 and d.filename ilike '%.pdf' and d.uploaded_at > now() - interval '90 days'
+        and (d.nota = 'cartella completa, da dividere' or u.at is not null)
+      order by d.uploaded_at desc limit 30`, [studioId]);
+}
+
 // I PDF di un paziente, per scegliere quale dividere.
 export async function elencoPdf(studioId: string, patientId: string) {
   return query<{ id: string; filename: string; categoria: string; caricato: string; ocr_stato: string | null }>(

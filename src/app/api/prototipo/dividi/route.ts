@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
 import { query } from '@/lib/db';
-import { analizza, chiE, crea, elencoPdf, statoLettura, zipDi } from '@/lib/dividi/server';
+import { analizza, chiE, crea, elencoPdf, recenti, statoLettura, zipDi } from '@/lib/dividi/server';
 import { vietato } from '@/lib/permessi';
 
 export const runtime = 'nodejs';
@@ -14,6 +14,7 @@ export const maxDuration = 300;
 // conferma una persona. La usa chi ha la sezione (src/lib/permessi.ts): gli stessi che vedono i Documenti.
 //   GET  ?paziente=<id>  → i PDF di quel paziente
 //   GET  ?documento=<id> → { pagine, con_testo, pezzi proposti }
+//   GET  ?recenti=1      → { cartelle }: lo storico delle cartelle complete caricate, con a che punto sono
 //   GET  ?stato=<id>     → { ocr }: a che punto è la lettura di una scansione (la pagina aspetta da sola)
 //   POST { azione: 'crea', documento_id, pezzi, proposti } → { creati }
 //   POST { azione: 'zip', ids } → il file .zip
@@ -33,6 +34,7 @@ export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams;
   const paziente = q.get('paziente') ?? '', doc = q.get('documento') ?? '';
   const stato = q.get('stato') ?? '';
+  if (q.get('recenti')) return NextResponse.json({ cartelle: await recenti(sid) }, { headers: { 'Cache-Control': 'no-store' } });
   if (isUuid(stato)) {
     const r = await statoLettura(sid, stato);
     return r ? NextResponse.json(r, { headers: { 'Cache-Control': 'no-store' } }) : NextResponse.json({ errore: 'Documento non trovato.' }, { status: 404 });

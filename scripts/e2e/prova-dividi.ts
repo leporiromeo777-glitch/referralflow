@@ -50,7 +50,7 @@ async function main() {
     const file = path.join(TMP, 'cartella.pdf');
     await cartella(file);
     const fd = new FormData();
-    fd.append('file', new Blob([await fs.readFile(file)], { type: 'application/pdf' }), 'Cartella completa.pdf'); fd.append('categoria', 'altro');
+    fd.append('file', new Blob([await fs.readFile(file)], { type: 'application/pdf' }), 'Cartella completa.pdf'); fd.append('categoria', 'altro'); fd.append('nota', 'cartella completa, da dividere');
     const su = await fetch(`${base}/api/prototipo/pazienti/${pa}/documenti`, { method: 'POST', headers: { cookie: C_SEG }, body: fd });
     const doc = (await su.json().catch(() => ({})) as any).id as string;
 
@@ -63,6 +63,8 @@ async function main() {
     verifica(JSON.stringify(pezzi.map((x) => [x.da, x.a, x.categoria, x.data])) === JSON.stringify([[1, 3, 'lettera', '2019-03-12'], [4, 4, 'laboratorio', '2019-02-02'], [5, 5, 'ett', '2020-05-15'], [6, 8, 'dimissione', '2021-11-03']]),
       `la proposta: lettera (col suo retro bianco), laboratorio, ecocardiogramma, lettera di dimissione — tipi e date giusti (${pezzi.length} pezzi)`);
 
+    const sto0 = await leggi(C_SEG, `?recenti=1`);
+    const riga0 = (sto0.j.cartelle ?? []).find((x: any) => x.id === doc);
     // 2 — chi può: chi ha la sezione (il tecnico vede tutto, come per i Documenti); senza sessione no; un documento che non c'è, un intervallo sbagliato.
     const tec = await leggi(C_TEC, `?paziente=${pa}`), fuori = await leggi('', `?documento=${doc}`);
     const finto = await leggi(C_SEG, `?documento=00000000-0000-4000-8000-000000000000`);
@@ -111,6 +113,12 @@ async function main() {
     const [regDopo] = await query<{ n: number }>(`select count(*)::int as n from document_access_log where document_id = $1`, [doc]);
     verifica(st0.stato === 200 && st0.j.ocr === null && st1.j.ocr === 'da_fare' && pr1.j.ocr === 'da_fare' && stFuori.stato === 401 && stFinto.stato === 404 && regDopo.n === regPrima.n + 1,
       `lettura di una scansione: lo stato si chiede a parte (${st0.j.ocr} → ${st1.j.ocr}) e chiederlo non scrive nel registro; senza sessione o su un documento che non c'è no (${stFuori.stato}, ${stFinto.stato})`);
+
+    // 3d — lo storico: la cartella caricata resta in elenco, prima «da dividere» e poi «divisa in 4 documenti»; i pezzi non ci entrano.
+    const sto1 = await leggi(C_SEG, `?recenti=1`), stoFuori = await leggi('', `?recenti=1`);
+    const mie = (sto1.j.cartelle ?? []).filter((x: any) => x.patient_id === pa);
+    verifica(sto0.stato === 200 && riga0 && riga0.divisa_il === null && riga0.paziente === 'Provadividi Anna' && mie.length === 1 && mie[0].id === doc && mie[0].documenti === 4 && !!mie[0].divisa_il && stoFuori.stato === 401,
+      `lo storico: la cartella caricata c'è, prima da dividere e dopo «divisa in ${mie[0]?.documenti} documenti»; i pezzi creati non ci entrano; senza sessione no (${stoFuori.stato})`);
 
     // 4 — tutti insieme in uno zip; e solo documenti dello studio.
     const z = await manda(C_SEG, { azione: 'zip', ids: creati.map((x) => x.id) });

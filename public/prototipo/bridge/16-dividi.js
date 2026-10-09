@@ -51,6 +51,23 @@ async function rfDivChiedi(url, corpo) {
 }
 
 /* ---------- scegliere il paziente e la cartella ---------- */
+// Lo storico: le cartelle complete caricate di recente e a che punto sono (in lettura, da dividere, divise).
+async function rfDivStorico() {
+  if (RF.div.storicoChiesto && Date.now() - RF.div.storicoChiesto < 15000) return;      // si ridisegna a ogni tasto: non a ogni tasto una richiesta
+  RF.div.storicoChiesto = Date.now();
+  const j = await rfDivChiedi(`${RF_DIV_URL}?recenti=1`);
+  RF.div.storico = j.errore ? [] : (j.cartelle || []);
+  const el = document.getElementById('rf-div-storico'); if (el) el.innerHTML = rfDivStoricoHtml();
+}
+function rfDivStoricoHtml() {
+  const s = RF.div.storico;
+  if (!s) return '<div class="caption mt-8">Cerco le cartelle caricate…</div>';
+  if (!s.length) return '<div class="caption mt-8">Ancora nessuna: le cartelle che carichi qui restano in questo elenco, per riprenderle quando vuoi.</div>';
+  return `<div class="list mt-8">${s.map(x => {
+    const stato = x.divisa_il ? `<span class="badge success">divisa in ${x.documenti || '?'} documenti il ${rfEsc(rfDivGiorno(x.divisa_il))}</span>` : x.ocr_stato === 'da_fare' ? '<span class="badge warning">il Mac la sta leggendo</span>' : '<span class="badge accent">da dividere</span>';
+    return `<div class="list-item"><div class="grow"><div class="name">${rfEsc(x.paziente)}</div><div class="sub">${rfEsc(x.filename)} · caricata il ${rfEsc(rfDivGiorno(x.caricato))}</div></div>${stato}
+      <button class="btn sm ghost" data-go="#/patients/${x.patient_id}">Cartella</button><button class="btn sm${x.divisa_il ? '' : ' primary'}" onclick="rfDivApri('${x.id}')">${x.divisa_il ? 'Dividi di nuovo' : 'Dividi'}</button></div>`; }).join('')}</div>`;
+}
 function rfDivCerca(v) { RF.div.cerca = v; render(); const e = document.getElementById('rf-div-cerca'); if (e) { e.focus(); e.setSelectionRange(e.value.length, e.value.length); } }
 async function rfDivPaziente(pid) {
   const p = (RF.data.patients || []).find(x => x.id === pid);
@@ -60,7 +77,7 @@ async function rfDivPaziente(pid) {
   if (j.errore) RF.div.errore = j.errore; else RF.div.documenti = j.documenti || [];
   render();
 }
-function rfDivCambia() { rfDivLiberaPdf(); Object.assign(RF.div, { pid: '', nome: '', cerca: '', documenti: null, doc: null, pezzi: [], proposti: [], creati: null, errore: null, invio: null, attesa: null }); render(); }
+function rfDivCambia() { rfDivLiberaPdf(); Object.assign(RF.div, { storicoChiesto: 0, pid: '', nome: '', cerca: '', documenti: null, doc: null, pezzi: [], proposti: [], creati: null, errore: null, invio: null, attesa: null }); render(); }
 function rfDivDrop(e, sopra) { e.preventDefault(); const z = document.getElementById('rf-div-drop'); if (z) z.classList.toggle('sopra', sopra); }
 function rfDivDropFile(e) { e.preventDefault(); rfDivDrop(e, false); if (e.dataTransfer && e.dataTransfer.files[0]) rfDivFile(e.dataTransfer.files[0]); }
 
@@ -394,6 +411,7 @@ PAGES.dividi = () => {
       ${limite}`;
   }
   // 1 — niente ancora: il PDF subito, oppure prima il paziente.
+  void rfDivStorico();
   return `${testa('Da un PDF unico con tutta la cartella ai singoli documenti')}
     ${errore}
     <div class="card"><div class="section-title">Trascina qui la cartella completa, in PDF</div>
@@ -402,5 +420,7 @@ PAGES.dividi = () => {
     <div class="card mt-16"><div class="section-title">…oppure parti da un paziente che c’è già</div>
       <div class="row mt-8" style="gap:8px;flex-wrap:wrap;align-items:center"><input class="input" id="rf-div-cerca" style="width:260px" placeholder="Scrivi il cognome" value="${rfEsc(v.cerca)}" oninput="rfDivCerca(this.value)">${trovati.map(p => `<button class="btn sm" onclick="rfDivPaziente('${p.id}')">${rfEsc(fullName(p))}${p.dob ? ` · ${rfEsc(p.dob)}` : ''}</button>`).join('')}</div>
       <p class="meta" style="margin:10px 0 0">Così puoi anche dividere un PDF che ha già nella sua cartella.</p></div>
+    <div class="card mt-16"><div class="card-head"><span class="section-title">Cartelle già caricate</span><span class="caption">ultimi 90 giorni</span></div>
+      <div id="rf-div-storico">${rfDivStoricoHtml()}</div></div>
     ${limite}`;
 };
