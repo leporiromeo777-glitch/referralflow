@@ -736,3 +736,10 @@ cartella del PC. Deciso così:
   una persona sola; se no «da assegnare», con il PDF da guardare prima di decidere.
 - **Resta il PDF**, senza estrarre numeri: è il referto firmato dal medico, non una fonte di dati.
 - I file arrivati non si spostano (la copia li rimanderebbe): si tolgono dopo sette giorni.
+
+## 9.10.2026 — ECG a riposo: via GDT, e dal GDT solo l'identità
+touchECG (stesso PC della ciclo) sa scrivere a fine esame un file GDT e il tracciato in PDF in una cartella:
+gli si è data una cartella del Mac e funziona senza niente di installato sul PC. Dal GDT si prendono solo
+chi è il paziente, la data e il nome del PDF; il referto automatico e le misure che contiene **non si
+leggono**: sono nel PDF, e un testo clinico in più nel database o nei log non serve a nessuno. Stessa regola
+severa e stessa scheda «da assegnare» della ciclo.

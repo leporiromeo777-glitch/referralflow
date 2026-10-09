@@ -55,8 +55,10 @@ export function daTesto(testo: string): Referto | null {
   };
 }
 
-// Come si chiama il documento nella cartella del paziente.
-export function nomeDocumento(esame: string | null): string {
+// Come si chiama il documento nella cartella del paziente. Di ECG se ne fanno anche due nello
+// stesso giorno: il nome porta pure l'ora.
+export function nomeDocumento(esame: string | null, tipo: 'ciclo' | 'ecg' = 'ciclo'): string {
   const g = esame ? `${esame.slice(8, 10)}.${esame.slice(5, 7)}.${esame.slice(0, 4)}` : '';
+  if (tipo === 'ecg') return `ECG${g ? ` ${g}` : ''}${esame && esame.length >= 16 ? ` ${esame.slice(11, 13)}.${esame.slice(14, 16)}` : ''}.pdf`;
   return `Prova da sforzo${g ? ` ${g}` : ''}.pdf`;
 }

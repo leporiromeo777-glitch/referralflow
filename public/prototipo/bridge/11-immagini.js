@@ -853,7 +853,7 @@ PAGES.imaging = () => {
    mette da sola nella cartella del paziente quando nome e data di nascita combaciano con una
    persona sola. Qui: quelli che non si sono agganciati, da assegnare a mano. */
 RF.cic = { arrivi: [], conta: null, scelte: {} };
-const RF_CIC_MOTIVO = { senza_nascita: 'nel referto manca la data di nascita', senza_nome: 'nel referto manca il nome', nessuno: 'nessuna cartella con questo nome', omonimi: 'più persone con questo nome', nascita_diversa: 'la data di nascita non combacia' };
+const RF_CIC_MOTIVO = { senza_nascita: 'sull’apparecchio non è stata scritta la data di nascita', senza_nome: 'sull’apparecchio non è stato scritto il nome', nessuno: 'nessuna cartella con questo nome', omonimi: 'più persone con questo nome', nascita_diversa: 'la data di nascita non combacia' };
 const rfCicQuando = (s) => (s ? `${s.slice(8, 10)}.${s.slice(5, 7)}.${s.slice(0, 4)} ${s.slice(11, 16)}` : 'data non letta');
 const rfCicGiorno = (s) => (s ? `${s.slice(8, 10)}.${s.slice(5, 7)}.${s.slice(0, 4)}` : '');
 async function rfCicCarica() {
@@ -888,18 +888,18 @@ async function rfCicAssegna(id) {
   const s = RF.cic.scelte[id]; if (!s || !s.pid) { toast('Scegli il paziente'); return; }
   const j = await rfCicChiedi({ azione: 'assegna', id, patient_id: s.pid });
   if (!j.errore) delete RF.cic.scelte[id];
-  await rfCicFatto(j, 'Referto messo nella cartella del paziente');
+  await rfCicFatto(j, 'Messo nella cartella del paziente');
 }
 async function rfCicCrea(id) {
   const s = RF.cic.scelte[id]; if (!s || !s.nuova) return;
   if (!s.cognome.trim() || !s.nome.trim() || !s.nascita.trim()) { toast('Servono cognome, nome e data di nascita'); return; }
   const j = await rfCicChiedi({ azione: 'crea_cartella', id, cognome: s.cognome, nome: s.nome, data_nascita: s.nascita });
   if (!j.errore) { delete RF.cic.scelte[id]; void rfCaricaDati(); }
-  await rfCicFatto(j, j.nuova ? 'Cartella creata, referto dentro' : 'La cartella c’era già: referto dentro');
+  await rfCicFatto(j, j.nuova ? 'Cartella creata, esame dentro' : 'La cartella c’era già: esame dentro');
 }
 async function rfCicScarta(id) {
-  if (!confirm('Scartare questo referto? Sul PC della ciclo l’esame resta: da lì si può rifare il PDF.')) return;
-  await rfCicFatto(await rfCicChiedi({ azione: 'scarta', id }), 'Referto scartato');
+  if (!confirm('Scartare questo esame? Sul PC dell’apparecchio resta: da lì si può rimandare.')) return;
+  await rfCicFatto(await rfCicChiedi({ azione: 'scarta', id }), 'Esame scartato');
 }
 function rfCicScheda() {
   const a = RF.cic.arrivi || [], c = RF.cic.conta;
@@ -908,7 +908,7 @@ function rfCicScheda() {
     const s = RF.cic.scelte[x.id] || {}; const q = (s.cerca || '').trim().toLowerCase();
     const trovati = q.length >= 2 ? (RF.data.patients || []).filter(p => rfUuid(p.id) && fullName(p).toLowerCase().includes(q)).slice(0, 6) : [];
     return `<div class="rf-cic-riga">
-      <div><b>Prova da sforzo del ${rfEsc(rfCicQuando(x.esame_il))}</b>${x.nome_letto ? ` · nel referto: ${rfEsc(x.nome_letto)}${x.nascita_letta ? `, ${rfEsc(rfCicGiorno(x.nascita_letta))}` : ''}` : ''} <a class="btn sm ghost" href="/api/prototipo/ciclo/${x.id}" target="_blank" rel="noopener">Apri il PDF</a></div>
+      <div><b>${x.tipo === 'ecg' ? 'ECG' : 'Prova da sforzo'} del ${rfEsc(rfCicQuando(x.esame_il))}</b>${x.nome_letto ? ` · nell’esame: ${rfEsc(x.nome_letto)}${x.nascita_letta ? `, ${rfEsc(rfCicGiorno(x.nascita_letta))}` : ''}` : ''} <a class="btn sm ghost" href="/api/prototipo/ciclo/${x.id}" target="_blank" rel="noopener">Apri il PDF</a></div>
       <div class="caption">Non agganciato da solo: ${rfEsc(RF_CIC_MOTIVO[x.motivo] || 'da assegnare')}.</div>
       <div class="row" style="gap:10px;flex-wrap:wrap;align-items:center">
         ${s.nuova ? `<input class="input rf-img-fl" style="width:150px" placeholder="Cognome" value="${rfEsc(s.cognome)}" oninput="RF.cic.scelte['${x.id}'].cognome=this.value"><input class="input rf-img-fl" style="width:150px" placeholder="Nome" value="${rfEsc(s.nome)}" oninput="RF.cic.scelte['${x.id}'].nome=this.value"><input class="input rf-img-fl" style="width:120px" placeholder="31.12.1950" value="${rfEsc(s.nascita)}" oninput="RF.cic.scelte['${x.id}'].nascita=this.value"><button class="btn sm primary" onclick="rfCicCrea('${x.id}')">Crea la cartella e mettilo dentro</button><button class="btn sm ghost" onclick="delete RF.cic.scelte['${x.id}'];render()">Annulla</button>`
@@ -916,8 +916,8 @@ function rfCicScheda() {
           : `<input class="input rf-img-fl" id="rf-cic-ac-${x.id}" style="width:220px" placeholder="Di chi è? Scrivi il cognome" value="${rfEsc(s.cerca || '')}" oninput="rfCicCerca('${x.id}', this.value)">${trovati.map(p => `<button class="btn sm" onclick="rfCicScegli('${x.id}','${p.id}')">${rfEsc(fullName(p))}${p.dob ? ` · ${rfEsc(p.dob)}` : ''}</button>`).join('')}<button class="btn sm" onclick="rfCicNuova('${x.id}')">Non ha ancora la cartella: creala</button>`}
         <span class="grow"></span><button class="btn sm ghost" onclick="rfCicScarta('${x.id}')">Scarta</button></div></div>`;
   };
-  return `<div class="card mt-16"><div class="card-head"><span class="section-title">Prova da sforzo: referti arrivati dalla ciclo</span>${a.length ? `<span class="badge warning">${a.length} da assegnare</span>` : '<span class="badge success">tutti in cartella</span>'}</div>
-    <p class="meta" style="margin:0 0 6px;line-height:1.55">Il referto in PDF creato sul PC della ciclo («Report PDF») arriva qui da solo e va nella cartella del paziente, fra i documenti «Ciclo», quando <b>nome e data di nascita</b> scritti nel referto combaciano con una persona sola.${c && c.totale ? ` Arrivati finora: <b>${c.totale}</b>, di cui ${c.in_cartella} già in cartella${c.ultimo ? `; l’ultimo il ${rfEsc(rfCicQuando(c.ultimo))}` : ''}.` : ''}</p>
+  return `<div class="card mt-16"><div class="card-head"><span class="section-title">ECG e prove da sforzo arrivati dagli apparecchi</span>${a.length ? `<span class="badge warning">${a.length} da assegnare</span>` : '<span class="badge success">tutti in cartella</span>'}</div>
+    <p class="meta" style="margin:0 0 6px;line-height:1.55">L’<b>ECG</b> a fine esame e il referto della <b>prova da sforzo</b> (tasto «Report PDF» sulla ciclo) arrivano qui da soli e vanno nella cartella del paziente, fra i documenti «ECG» e «Ciclo», quando <b>nome e data di nascita</b> scritti sull’apparecchio combaciano con una persona sola.${c && c.totale ? ` Arrivati finora: <b>${c.totale}</b>, di cui ${c.in_cartella} già in cartella${c.ultimo ? `; l’ultimo il ${rfEsc(rfCicQuando(c.ultimo))}` : ''}.` : ''}</p>
     ${a.map(riga).join('')}</div>`;
 }
 

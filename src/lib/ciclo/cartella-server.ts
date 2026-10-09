@@ -11,6 +11,7 @@ import { riabbinaPazienti } from '../pazienti-abbina';
 import { validaAnagrafica } from '../pazienti-import';
 import { testoDelPdf } from '../pressione/cartella-server';
 import { deleteFile, getFile, putFile } from '../storage';
+import { decodificaGdt, ecgDaGdt } from './gdt';
 import { daNomeFile, daTesto, nomeDocumento } from './referto';
 
 // Prova da sforzo: i referti PDF della ciclo (9.10.2026, [[Piattaforma/Prova da sforzo]]).
@@ -24,18 +25,23 @@ import { daNomeFile, daTesto, nomeDocumento } from './referto';
 //   rimanderebbe ogni minuto. Si tolgono dopo sette giorni, quando sul PC non ci sono più da un pezzo.
 // Nei log solo conteggi.
 export const cartellaCiclo = (): string => process.env.CICLO_CARTELLA || path.join(os.homedir(), 'Ciclo da leggere', 'referti');
+// L'ECG a riposo (touchECG) scrive da sé, per ogni esame, un GDT e un PDF in «Ciclo da leggere/ecg».
+export const cartellaEcg = (): string => process.env.ECG_CARTELLA || path.join(os.homedir(), 'Ciclo da leggere', 'ecg');
+const ATTESA_PDF_MS = 10 * 60_000;      // il GDT arriva un attimo prima del suo PDF: lo si aspetta, ma non per sempre
+export type Tipo = 'ciclo' | 'ecg';
 const FERMO_DA_MS = 8_000;
 const GIORNI = 7;
 const MAX_BYTE = 30 * 1024 * 1024;
 
 export type EsitoGiroCiclo = { visti: number; documenti: number; in_attesa: number; non_letti: number; gia_visti: number; cartella?: 'assente' };
 
-async function comeDocumento(studioId: string, patientId: string, pdf: Buffer, key: string | null, esame: string | null, userId: string | null): Promise<string> {
+async function comeDocumento(studioId: string, patientId: string, pdf: Buffer, key: string | null, esame: string | null, userId: string | null, tipo: Tipo = 'ciclo'): Promise<string> {
   const chiave = key ?? await putFile(pdf, 'application/pdf', '.pdf');
+  const da = tipo === 'ecg' ? 'arrivato dall’ECG' : 'arrivato dalla ciclo';
   const [doc] = await query<{ id: string }>(
     `insert into patient_documents (studio_id, patient_id, filename, storage_key, categoria, nota, uploaded_by)
-     values ($1, $2, $3, $4, 'ciclo', 'arrivato dalla ciclo', $5) returning id`, [studioId, patientId, nomeDocumento(esame), chiave, userId]);
-  await logDocumento(doc.id, 'caricamento', { studioId, userId: userId ?? undefined, dettaglio: 'dalla ciclo' });
+     values ($1, $2, $3, $4, $5, $6, $7) returning id`, [studioId, patientId, nomeDocumento(esame, tipo), chiave, tipo, da, userId]);
+  await logDocumento(doc.id, 'caricamento', { studioId, userId: userId ?? undefined, dettaglio: tipo === 'ecg' ? 'dall’ECG' : 'dalla ciclo' });
   await dopoCaricamento(doc.id, pdf, '.pdf').catch(() => null);
   return doc.id;
 }
@@ -102,10 +108,88 @@ export async function giroCiclo(opzioni: { fermoDaMs?: number; giorniTenuti?: nu
   } finally { inCorso = false; }
 }
 
+// ── ECG a riposo ─────────────────────────────────────────────────────────────
+// Per ogni esame touchECG scrive un GDT (chi è, quando) e il tracciato in PDF. Qui i file li
+// scrive direttamente il programma, non una copia: letti, si TOLGONO dalla cartella (il PDF è
+// nell'archivio dei file, l'originale resta nell'archivio di touchECG). Lo stesso esame rimandato
+// ha lo stesso nome di PDF: non entra due volte.
+export type EsitoGiroEcg = { visti: number; documenti: number; in_attesa: number; non_letti: number; gia_visti: number; aspettano_pdf: number; cartella?: 'assente' };
+let ecgInCorso = false;
+export async function giroEcg(opzioni: { fermoDaMs?: number; attesaPdfMs?: number } = {}): Promise<EsitoGiroEcg> {
+  const r: EsitoGiroEcg = { visti: 0, documenti: 0, in_attesa: 0, non_letti: 0, gia_visti: 0, aspettano_pdf: 0 };
+  if (ecgInCorso) return r;
+  ecgInCorso = true;
+  try {
+    const base = cartellaEcg();
+    let tutti: string[];
+    try { tutti = (await fs.readdir(base, { withFileTypes: true })).filter((d) => d.isFile() && !d.name.startsWith('.')).map((d) => d.name); }
+    catch { return { ...r, cartella: 'assente' }; }
+    const gdt = tutti.filter((n) => /\.gdt$/i.test(n)).sort();
+    if (!gdt.length) return r;
+    const [studio] = await query<{ id: string }>(`select id from studios where attivo order by created_at limit 1`);
+    if (!studio) return r;
+    let pazienti: { id: string; cognome: string; nome: string; data_nascita: string | null }[] | null = null;
+    const attesa = opzioni.fermoDaMs ?? FERMO_DA_MS, attesaPdf = opzioni.attesaPdfMs ?? ATTESA_PDF_MS;
+    const via = async (...nomi: string[]) => { for (const n of nomi) await fs.rm(path.join(base, n), { force: true }).catch(() => null); };
+    for (const nome of gdt) {
+      const p = path.join(base, nome);
+      let st; try { st = await fs.stat(p); } catch { continue; }
+      const eta = Date.now() - Math.max(st.mtimeMs, st.ctimeMs);
+      if (attesa > 0 && eta < attesa) continue;
+      if (r.visti >= 20) break;
+      let grezzo: Buffer;
+      try { grezzo = await fs.readFile(p); } catch { continue; }
+      const e = st.size > 0 && st.size < 2 * 1024 * 1024 ? ecgDaGdt(decodificaGdt(grezzo)) : null;
+      if (!e) {
+        // Non è un esame ECG con un PDF: si lascia lì una settimana (per chi volesse capire), poi via. Niente righe: non c'è niente da assegnare.
+        if (eta > GIORNI * 86_400_000) await via(nome);
+        continue;
+      }
+      const nomePdf = tutti.find((n) => n.toLowerCase() === e.pdf.toLowerCase());
+      if (!nomePdf) {
+        // Il PDF non c'è (ancora): si aspetta; passato il tempo il GDT da solo non serve a niente.
+        if (attesaPdf > 0 && eta < attesaPdf) { r.aspettano_pdf++; continue; }
+        await via(nome); r.non_letti++; continue;
+      }
+      const pp = path.join(base, nomePdf);
+      let sp; try { sp = await fs.stat(pp); } catch { continue; }
+      if (attesa > 0 && Date.now() - Math.max(sp.mtimeMs, sp.ctimeMs) < attesa) continue;
+      r.visti++;
+      const [gia] = await query<{ id: string }>(`select id from ciclo_arrivi where studio_id = $1 and nome_file = $2`, [studio.id, nomePdf.slice(0, 240)]);
+      if (gia) { await via(nome, nomePdf); r.gia_visti++; continue; }       // lo stesso esame, rimandato
+      if (sp.size === 0 || sp.size > MAX_BYTE) { await via(nome); r.non_letti++; continue; }
+      let pdf: Buffer;
+      try { pdf = await fs.readFile(pp); } catch { continue; }
+      if (pdf.subarray(0, 5).toString('latin1') !== '%PDF-') { await via(nome); r.non_letti++; continue; }
+      const sha = createHash('sha256').update(pdf).digest('hex');
+      const intero = `${e.cognome} ${e.nome}`.trim();
+      pazienti ??= await query<{ id: string; cognome: string; nome: string; data_nascita: string | null }>(`select id, cognome, nome, data_nascita::text from patients where studio_id = $1`, [studio.id]);
+      const abbinato = intero && e.nascita ? abbinaPaziente(intero, e.nascita, pazienti) : { id: null, motivo: intero ? 'senza_nascita' : 'senza_nome' };
+      const scrivi = (stato: string, altro: { motivo?: string; key?: string | null; pid?: string | null; doc?: string | null }) => query(
+        `insert into ciclo_arrivi (studio_id, tipo, nome_file, sha256, storage_key, esame_il, nome_letto, nascita_letta, stato, motivo, patient_id, documento_id, deciso_il)
+         values ($1,'ecg',$2,$3,$4,$5::timestamp,nullif($6,''),$7::date,$8,nullif($9,''),$10,$11, case when $8 = 'assegnato' then now() else null end)
+         on conflict (studio_id, nome_file) do nothing`,
+        [studio.id, nomePdf.slice(0, 240), sha, altro.key ?? null, e.esame, intero, e.nascita, stato, altro.motivo ?? '', altro.pid ?? null, altro.doc ?? null]);
+      if (abbinato.id) {
+        const doc = await comeDocumento(studio.id, abbinato.id, pdf, null, e.esame, null, 'ecg');
+        await scrivi('assegnato', { pid: abbinato.id, doc });
+        r.documenti++;
+      } else {
+        const key = await putFile(pdf, 'application/pdf', '.pdf');
+        await scrivi('in_attesa', { motivo: abbinato.motivo, key });
+        r.in_attesa++;
+      }
+      await via(nome, nomePdf);
+    }
+    if (r.visti || r.non_letti) console.log(`[ecg] esami: ${r.visti} · in cartella ${r.documenti} · da assegnare ${r.in_attesa} · già visti ${r.gia_visti} · non letti ${r.non_letti}`);
+    return r;
+  } finally { ecgInCorso = false; }
+}
+
 type Esito<T> = T | { errore: string; stato?: number };
 export async function elencoCiclo(studioId: string) {
-  const arrivi = await query<{ id: string; esame_il: string | null; referto_il: string | null; nome_letto: string | null; nascita_letta: string | null; motivo: string | null; quando: string }>(
-    `select id, to_char(esame_il, 'YYYY-MM-DD"T"HH24:MI') as esame_il, to_char(referto_il, 'YYYY-MM-DD"T"HH24:MI') as referto_il, nome_letto, nascita_letta::text, motivo, quando::text
+  const arrivi = await query<{ id: string; tipo: Tipo; esame_il: string | null; referto_il: string | null; nome_letto: string | null; nascita_letta: string | null; motivo: string | null; quando: string }>(
+    `select id, tipo, to_char(esame_il, 'YYYY-MM-DD"T"HH24:MI') as esame_il, to_char(referto_il, 'YYYY-MM-DD"T"HH24:MI') as referto_il, nome_letto, nascita_letta::text, motivo, quando::text
        from ciclo_arrivi where studio_id = $1 and stato = 'in_attesa' order by quando desc limit 50`, [studioId]);
   const [c] = await query<{ totale: number; in_cartella: number; ultimo: string | null }>(
     `select count(*) filter (where stato in ('in_attesa', 'assegnato'))::int as totale, count(*) filter (where stato = 'assegnato')::int as in_cartella,
@@ -120,13 +204,13 @@ export async function pdfArrivo(studioId: string, id: string): Promise<Buffer | 
   try { return (await getFile(a.storage_key)).body; } catch { return null; }
 }
 export async function assegnaCiclo(studioId: string, userId: string, id: string, patientId: string): Promise<Esito<{ ok: true; documento: string }>> {
-  const [a] = await query<{ storage_key: string | null; esame_il: string | null }>(`select storage_key, to_char(esame_il, 'YYYY-MM-DD"T"HH24:MI:SS') as esame_il from ciclo_arrivi where id = $1 and studio_id = $2 and stato = 'in_attesa'`, [id, studioId]);
+  const [a] = await query<{ storage_key: string | null; esame_il: string | null; tipo: Tipo }>(`select storage_key, tipo, to_char(esame_il, 'YYYY-MM-DD"T"HH24:MI:SS') as esame_il from ciclo_arrivi where id = $1 and studio_id = $2 and stato = 'in_attesa'`, [id, studioId]);
   if (!a || !a.storage_key) return { errore: 'Referto non trovato, o già assegnato.', stato: 404 };
   const [p] = await query<{ id: string }>(`select id from patients where id = $1 and studio_id = $2`, [patientId, studioId]);
   if (!p) return { errore: 'Paziente non trovato.', stato: 404 };
   let pdf: Buffer;
   try { pdf = (await getFile(a.storage_key)).body; } catch { return { errore: 'Il file del referto non si trova più.', stato: 410 }; }
-  const doc = await comeDocumento(studioId, patientId, pdf, a.storage_key, a.esame_il, userId);
+  const doc = await comeDocumento(studioId, patientId, pdf, a.storage_key, a.esame_il, userId, a.tipo);
   await query(`update ciclo_arrivi set stato = 'assegnato', patient_id = $2, documento_id = $3, storage_key = null, deciso_da = $4, deciso_il = now() where id = $1`, [id, patientId, doc, userId]);
   return { ok: true, documento: doc };
 }
@@ -163,4 +247,5 @@ let avviato = false;
 export function avviaCiclo(): void {
   if (avviato) return; avviato = true;
   setInterval(() => { giroCiclo().catch((e) => console.error(`[ciclo] cartella: ${e?.code ?? e?.name ?? 'errore'}`)); }, 15_000).unref?.();
+  setInterval(() => { giroEcg().catch((e) => console.error(`[ecg] cartella: ${e?.code ?? e?.name ?? 'errore'}`)); }, 15_000).unref?.();
 }

@@ -11,6 +11,8 @@ import { deleteFile } from '../../src/lib/storage';
 
 const [base, S, C_SEG, C_TEC, CARTELLA] = process.argv.slice(2);
 process.env.CICLO_CARTELLA = CARTELLA;
+const ECG = `${CARTELLA}-ecg`;
+process.env.ECG_CARTELLA = ECG;
 let ok = 0, no = 0;
 const verifica = (cond: boolean, cosa: string) => { if (cond) { ok++; console.log(`ok ${cosa}`); } else { no++; console.log(`NO ${cosa}`); } };
 const url = `${base}/api/prototipo/ciclo`;
@@ -32,7 +34,8 @@ const esiste = (n: string) => fs.access(path.join(CARTELLA, n)).then(() => true,
 
 async function main() {
   if (!/referralflow_demo/.test(process.env.DATABASE_URL ?? '')) throw new Error('solo sul database demo');
-  const { giroCiclo } = await import('../../src/lib/ciclo/cartella-server');
+  const { giroCiclo, giroEcg } = await import('../../src/lib/ciclo/cartella-server');
+  await fs.mkdir(ECG, { recursive: true });
   await fs.mkdir(CARTELLA, { recursive: true });
   const pulisci = async () => {
     const chiavi = await query<{ storage_key: string }>(
@@ -114,9 +117,40 @@ async function main() {
     verifica(sc.stato === 200 && ((await leggi(C_SEG)).j.arrivi ?? []).length === 0 && chiave.n === 0, 'scartare toglie il referto dalla lista; assegnato o scartato, il PDF non resta fra gli arrivi');
     await giroCiclo({ fermoDaMs: 0, giorniTenuti: 0 });
     verifica(!(await esiste(A)) && !(await esiste(B)) && !(await esiste('lettera.pdf')), 'i file già letti si tolgono dalla cartella quando sono vecchi');
+
+    // 8 — ECG a riposo: touchECG scrive un GDT coi dati del paziente e il tracciato in PDF.
+    const riga = (campo: string, v: string) => `${String(v.length + 9).padStart(3, '0')}${campo}${v}`;
+    const gdt = (cognome: string, nome: string, nascita: string, giorno: string, ora: string, pdf: string) => [riga('8000', '6310'), riga('8100', '00999'), riga('9206', '3'), riga('9218', '2.10'), riga('3000', ''),
+      riga('3101', cognome), riga('3102', nome), ...(nascita ? [riga('3103', nascita)] : []), riga('3110', '2'), riga('8402', 'EKG01'), riga('6200', giorno), riga('6201', ora),
+      riga('6220', 'Ritmo inventato'), riga('6302', '000001'), riga('6303', 'PDF'), riga('6304', 'ECG'), riga('6305', `R:\\ecg\\${pdf}`)].join('\r\n');
+    const pdfEcg = async (nome: string) => { await referto('.ecg.pdf', 'tracciato', '', '01/01/2026 - 00:00'); await fs.rename(path.join(CARTELLA, '.ecg.pdf'), path.join(ECG, nome)); };
+    const inEcg = async () => (await fs.readdir(ECG)).filter((n) => !n.startsWith('.'));
+    const P1 = '_7_Provaciclo_Carla_F_12061955_70A_20260311101500__1_1.PDF';
+    await fs.writeFile(path.join(ECG, 'aaaa-1.GDT'), gdt('Provaciclo', 'Carla', '12061955', '11032026', '101500', P1), 'latin1');
+    const e0 = await giroEcg({ fermoDaMs: 0 });                     // il GDT c'è, il suo PDF non ancora: si aspetta
+    await pdfEcg(P1);
+    const e1 = await giroEcg({ fermoDaMs: 0 });
+    const dEcg = (await docDi(pa)).filter((x) => x.categoria === 'ecg');
+    verifica(e0.aspettano_pdf === 1 && e0.documenti === 0 && e1.documenti === 1 && dEcg.length === 1 && dEcg[0].filename === 'ECG 11.03.2026 10.15.pdf' && (await inEcg()).length === 0,
+      `ECG: il GDT aspetta il suo PDF; poi il tracciato va da solo nella cartella come documento «ECG» e i due file si tolgono (${e1.documenti}, ${dEcg[0]?.filename})`);
+    // Lo stesso esame rimandato (altro nome di GDT, stesso PDF) non entra due volte.
+    await fs.writeFile(path.join(ECG, 'bbbb-2.GDT'), gdt('Provaciclo', 'Carla', '12061955', '11032026', '101500', P1), 'latin1'); await pdfEcg(P1);
+    const e2 = await giroEcg({ fermoDaMs: 0 });
+    verifica(e2.gia_visti === 1 && e2.documenti === 0 && (await docDi(pa)).filter((x) => x.categoria === 'ecg').length === 1 && (await inEcg()).length === 0, 'ECG: lo stesso esame rimandato non entra due volte');
+    // Senza data di nascita aspetta «da assegnare»; assegnato, è un documento «ECG». Un GDT senza PDF, passato il tempo, si toglie.
+    const P2 = '_8_Provaciclo_Carla_F__70A_20260312090000__1_1.PDF';
+    await fs.writeFile(path.join(ECG, 'cccc-3.GDT'), gdt('Provaciclo', 'Carla', '', '12032026', '090000', P2), 'latin1'); await pdfEcg(P2);
+    await fs.writeFile(path.join(ECG, 'dddd-4.GDT'), gdt('Provaciclo', 'Carla', '12061955', '13032026', '090000', '_9_mai_arrivato.PDF'), 'latin1');
+    const e3 = await giroEcg({ fermoDaMs: 0, attesaPdfMs: 0 });
+    const ae = ((await leggi(C_SEG)).j.arrivi ?? []).find((x: any) => x.tipo === 'ecg');
+    const as = await manda(C_SEG, { azione: 'assegna', id: ae?.id, patient_id: pa });
+    const dEcg2 = (await docDi(pa)).filter((x) => x.categoria === 'ecg');
+    verifica(e3.in_attesa === 1 && e3.non_letti === 1 && ae?.motivo === 'senza_nascita' && ae?.esame_il === '2026-03-12T09:00' && as.stato === 200 && dEcg2.length === 2 && dEcg2[1].filename === 'ECG 12.03.2026 09.00.pdf' && (await inEcg()).length === 0,
+      `ECG: senza data di nascita aspetta «da assegnare» e poi entra come «ECG»; un GDT il cui PDF non arriva si toglie (${e3.in_attesa}, ${e3.non_letti}, ${as.stato})`);
   } finally {
     await pulisci().catch(() => null);
     await fs.rm(CARTELLA, { recursive: true, force: true }).catch(() => null);
+    await fs.rm(ECG, { recursive: true, force: true }).catch(() => null);
     await pool.end();
   }
   console.log(`${ok} ok, ${no} no`);
