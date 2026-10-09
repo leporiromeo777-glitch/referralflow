@@ -754,3 +754,5 @@ separati. Deciso così:
 - **L'originale non si tocca**; i pezzi sono documenti nuovi della stessa cartella.
 - **Si misura l'utilità della proposta** coi soli numeri (proposti / rimasti uguali) nel registro degli accessi.
 - Le regole sono nate su testi inventati: la prima cartella vera è la prova che manca.
+- Lo stesso giorno, richiesta dello studio: **si può trascinare la cartella di chi non è ancora in piattaforma**. Nome e
+  data di nascita si leggono dal PDF e si propongono; la cartella nasce solo dopo la conferma di una persona.

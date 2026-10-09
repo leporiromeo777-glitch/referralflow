@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
 import { query } from '@/lib/db';
-import { analizza, crea, elencoPdf, zipDi } from '@/lib/dividi/server';
+import { analizza, chiE, crea, elencoPdf, zipDi } from '@/lib/dividi/server';
 import { vietato } from '@/lib/permessi';
 
 export const runtime = 'nodejs';
@@ -16,6 +16,7 @@ export const maxDuration = 300;
 //   GET  ?documento=<id> → { pagine, con_testo, pezzi proposti }
 //   POST { azione: 'crea', documento_id, pezzi, proposti } → { creati }
 //   POST { azione: 'zip', ids } → il file .zip
+//   POST { azione: 'chi', testi } → { letto, trovato }: di chi è un PDF trascinato prima di scegliere il paziente
 async function chi() {
   const session = await getSession();
   if (!session || !session.studioId) return { no: NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 }) };
@@ -54,6 +55,7 @@ export async function POST(req: NextRequest) {
     const r = await crea(sid, c.session.id, id, b?.pezzi, b?.proposti);
     return 'errore' in r ? NextResponse.json({ errore: r.errore }, { status: r.stato }) : NextResponse.json(r, { status: 201 });
   }
+  if (azione === 'chi') return NextResponse.json(await chiE(sid, b?.testi), { headers: { 'Cache-Control': 'no-store' } });
   if (azione === 'zip') {
     const ids = Array.isArray(b?.ids) ? (b.ids as unknown[]).map(String).filter(isUuid) : [];
     const r = await zipDi(sid, c.session.id, ids);

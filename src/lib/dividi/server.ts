@@ -7,7 +7,9 @@ import { logDocumento } from '../cartella';
 import { query } from '../db';
 import { dopoCaricamento, valutaPdf } from '../documenti-ocr';
 import { getFile, putFile } from '../storage';
-import { confronta, controllaPezzi, proponi, type Pezzo } from './tagli';
+import { abbinaPaziente } from '../imaging-ordina';
+import { proponiAnagrafica } from '../pazienti-abbina-regole';
+import { confronta, controllaPezzi, leggiPaziente, proponi, type Pezzo } from './tagli';
 
 // Dividere una cartella completa (9.10.2026, [[Piattaforma/Dividi cartella]]) — il lato che tocca
 // file e database. Le regole che propongono i tagli stanno in tagli.ts (pure). Qui: si legge il
@@ -38,6 +40,24 @@ async function documento(studioId: string, id: string): Promise<Doc | null> {
     `select d.id, d.patient_id, d.filename, d.storage_key, d.ocr_stato, (p.cognome || ' ' || p.nome) as paziente
        from patient_documents d join patients p on p.id = d.patient_id where d.id = $1 and d.studio_id = $2`, [id, studioId]);
   return d && /\.pdf$/i.test(d.filename) ? d : null;
+}
+
+// Di chi è un PDF trascinato prima di scegliere il paziente: dal testo delle prime pagine (che manda il
+// browser, già estratto: il file non si carica due volte) nome e data di nascita proposti, e la cartella
+// che c'è già se combaciano con UNA persona. Del testo non resta niente: né nel database né nei log.
+export async function chiE(studioId: string, testi: unknown) {
+  const pagine = Array.isArray(testi) ? (testi as unknown[]).slice(0, 15).map((x) => String(x ?? '').slice(0, 8000)) : [];
+  const letto = leggiPaziente(pagine);
+  if (!letto) return { letto: null, trovato: null };
+  const an = proponiAnagrafica(letto.nome);
+  let trovato: { id: string; nome: string; nascita: string | null } | null = null;
+  if (letto.nascita) {
+    const pazienti = await query<{ id: string; cognome: string; nome: string; data_nascita: string | null }>(`select id, cognome, nome, data_nascita::text from patients where studio_id = $1`, [studioId]);
+    const a = abbinaPaziente(letto.nome, letto.nascita, pazienti);
+    const p = a.id ? pazienti.find((x) => x.id === a.id) : null;
+    if (p) trovato = { id: p.id, nome: `${p.cognome} ${p.nome}`.trim(), nascita: p.data_nascita };
+  }
+  return { letto: { cognome: an.cognome, nome: an.nome, nascita: letto.nascita }, trovato };
 }
 
 // I PDF di un paziente, per scegliere quale dividere.

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { confronta, controllaPezzi, dataDelDocumento, inizio, proponi, tipoDelDocumento } from './dividi/tagli';
+import { confronta, controllaPezzi, dataDelDocumento, inizio, leggiPaziente, proponi, tipoDelDocumento } from './dividi/tagli';
 
 // Dividere una cartella completa (9.10.2026). Tutti i testi qui sono INVENTATI.
 const lettera1 = ['Studio di Prova', 'Via Inventata 1 · 6900 Lugano', '', 'Lugano, 12 marzo 2019', '', 'Concerne: Signora Provadividi Anna, nata il 03.04.1950', '',
@@ -70,4 +70,17 @@ test('dividi: i pezzi confermati devono stare in ordine, senza sovrapporsi, dent
   assert.ok('errore' in controllaPezzi([], 8));
   assert.ok('errore' in controllaPezzi('pezzi', 8));
   assert.deepEqual(confronta([[1, 3], [4, 4], [5, 8]], [{ da: 1, a: 3 }, { da: 4, a: 5 }, { da: 6, a: 8 }]), { proposti: 3, scelti: 3, uguali: 1 });
+});
+
+test('dividi: di chi è la cartella si legge dal PDF, e si propone soltanto', () => {
+  // Il nome scritto più volte vince; la data di nascita è quella dopo «nata il», non quella della lettera.
+  assert.deepEqual(leggiPaziente([lettera1, lettera2, retro, laboratorio, eco]), { nome: 'Provadividi Anna', nascita: '1950-04-03' });
+  assert.deepEqual(leggiPaziente(['Betrifft: Herr Provadividi Hans, geb. 05.06.1948\nSehr geehrter Herr Kollege']), { nome: 'Provadividi Hans', nascita: '1948-06-05' });
+  assert.deepEqual(leggiPaziente(['Paziente: PROVADIVIDI Maria Pia\nData di nascita: 1.2.1960\nEmoglobina 13']), { nome: 'PROVADIVIDI Maria Pia', nascita: '1960-02-01' });
+  // Un oggetto che non è una persona, una scansione senza testo, una parola sola: niente proposta.
+  assert.equal(leggiPaziente(['Oggetto: rinnovo della ricetta\nEgregio collega']), null);
+  assert.equal(leggiPaziente(['', ' ']), null);
+  assert.equal(leggiPaziente(['Paziente: Anna']), null);
+  // Senza data di nascita il nome si propone lo stesso: la data la scrive chi crea la cartella.
+  assert.deepEqual(leggiPaziente(['Concerne: Signor Provadividi Ugo\nEgregio collega']), { nome: 'Provadividi Ugo', nascita: null });
 });

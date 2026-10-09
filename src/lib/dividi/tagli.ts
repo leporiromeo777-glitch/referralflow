@@ -102,6 +102,40 @@ export function inizio(testo: string, prima: string | null): Segnali {
   return { punti, segnali, vuota: false };
 }
 
+// Di chi è la cartella (9.10.2026): quando il PDF si trascina PRIMA di aver scelto il paziente — perché in
+// piattaforma non c'è ancora — nome e data di nascita si leggono dalle righe «Concerne: Signora …, nata il …»,
+// «Paziente: …», «Data di nascita: …» delle prime pagine. Una cartella ripete il suo paziente su molti fogli:
+// vince il nome scritto più volte. È una proposta per riempire il modulo: la conferma chi crea la cartella.
+const TITOLO_PERSONA = /^(?:(?:sig(?:nor[ae]?|\.ra|\.na|\.)|herrn?|frau|madame|mme|monsieur|m\.|mr\.?|mrs\.?)\s+)/i;
+const CHI = /^(?:concerne|oggetto|betrifft|betreff|objet|paziente|patient(?:in|e)?|nome e cognome|cognome e nome|nome|name)\s*:\s*(.+)$/i;
+const PAROLA_NOME = /^[A-ZÀ-Ý][A-Za-zÀ-ÿ'’-]*$/;
+const NATO = new RegExp(`(?:nat[oa]\\s+il|data di nascita\\s*:?|geb(?:oren|\\.)?(?:\\s+am)?|geburtsdatum\\s*:?|n[ée]e?\\s+le|\\*)\\s*(${DATA_NUM.source}|${DATA_MESE.source})`, 'i');
+export function leggiPaziente(pagine: string[]): { nome: string; nascita: string | null } | null {
+  const nomi = new Map<string, { scritto: string; n: number }>(), nascite = new Map<string, number>();
+  for (const pagina of pagine.slice(0, 15)) {
+    for (const riga of righeDi(pagina).slice(0, 40)) {
+      const nt = NATO.exec(riga);
+      if (nt) { const d = dataIn(nt[1]); if (d) nascite.set(d, (nascite.get(d) ?? 0) + 1); }
+      const m = CHI.exec(riga);
+      if (!m) continue;
+      // Il nome: le parole con la maiuscola che seguono, fino alla virgola, a «nata il», a una cifra.
+      const parole: string[] = [];
+      for (const w of m[1].replace(TITOLO_PERSONA, '').split(/[\s]+/)) {
+        const pulita = w.replace(/[,;.]+$/, '');
+        if (!PAROLA_NOME.test(pulita) || /^(nat[oa]|geb|n[ée]e?)$/i.test(pulita)) break;
+        parole.push(pulita);
+        if (/[,;]$/.test(w) || parole.length === 4) break;
+      }
+      if (parole.length < 2) continue;
+      const scritto = parole.join(' '), k = scritto.toLowerCase();
+      nomi.set(k, { scritto, n: (nomi.get(k)?.n ?? 0) + 1 });
+    }
+  }
+  const piu = <T,>(voci: [T, number][]): T | null => (voci.length ? voci.reduce((a, b) => (b[1] > a[1] ? b : a))[0] : null);
+  const nome = piu([...nomi.values()].map((v) => [v.scritto, v.n] as [string, number]));
+  return nome ? { nome, nascita: piu([...nascite.entries()]) } : null;
+}
+
 // La proposta: i pezzi, in ordine, che coprono tutte le pagine.
 export function proponi(pagine: string[]): Pezzo[] {
   const pezzi: Pezzo[] = [];

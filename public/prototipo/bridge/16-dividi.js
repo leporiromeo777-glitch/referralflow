@@ -35,7 +35,7 @@ if (typeof NAV !== 'undefined') for (const r of ['secretary', 'assistant', 'doct
 .rf-div-drop.sopra { border-color:var(--accent); color:var(--accent); }
 `; document.head.appendChild(st); })();
 
-RF.div = { pid: '', nome: '', cerca: '', documenti: null, doc: null, pezzi: [], proposti: [], carico: false, errore: null, creati: null, invio: null, pdf: null, pdfId: null, mini: {}, zoom: 0 };
+RF.div = { pid: '', nome: '', cerca: '', documenti: null, doc: null, pezzi: [], proposti: [], carico: false, errore: null, creati: null, invio: null, pdf: null, pdfId: null, mini: {}, zoom: 0, attesa: null };
 const RF_DIV_URL = '/api/prototipo/dividi';
 const RF_DIV_TIPI = [['lettera', 'Lettera'], ['referto', 'Referto'], ['dimissione', 'Lettera di dimissione'], ['laboratorio', 'Laboratorio'], ['ecg', 'ECG'], ['ett', 'Ecocardiogramma'], ['ciclo', 'Prova da sforzo'], ['holter', 'Holter'], ['imaging', 'Imaging'], ['consenso', 'Consenso'], ['altro', 'Documento']];
 const rfDivEtichetta = (k) => (RF_DIV_TIPI.find(x => x[0] === k) || ['', 'Documento'])[1];
@@ -60,9 +60,74 @@ async function rfDivPaziente(pid) {
   if (j.errore) RF.div.errore = j.errore; else RF.div.documenti = j.documenti || [];
   render();
 }
-function rfDivCambia() { rfDivLiberaPdf(); Object.assign(RF.div, { pid: '', nome: '', documenti: null, doc: null, pezzi: [], proposti: [], creati: null, errore: null, invio: null }); render(); }
+function rfDivCambia() { rfDivLiberaPdf(); Object.assign(RF.div, { pid: '', nome: '', cerca: '', documenti: null, doc: null, pezzi: [], proposti: [], creati: null, errore: null, invio: null, attesa: null }); render(); }
 function rfDivDrop(e, sopra) { e.preventDefault(); const z = document.getElementById('rf-div-drop'); if (z) z.classList.toggle('sopra', sopra); }
-function rfDivDropFile(e) { e.preventDefault(); rfDivDrop(e, false); if (e.dataTransfer && e.dataTransfer.files[0]) void rfDivCarica(e.dataTransfer.files[0]); }
+function rfDivDropFile(e) { e.preventDefault(); rfDivDrop(e, false); if (e.dataTransfer && e.dataTransfer.files[0]) rfDivFile(e.dataTransfer.files[0]); }
+
+/* ---------- un PDF trascinato PRIMA di scegliere il paziente (9.10.2026) ----------
+   Serve per chi in ReferralFlow non c'è ancora: il file aspetta qui nel browser, dal suo testo si
+   propongono nome e data di nascita, e la cartella si crea (o si sceglie) senza uscire dalla pagina.
+   Finché non si conferma di chi è, sul server non arriva né il file né un paziente nuovo. */
+function rfDivFile(file) {
+  if (!file) return;
+  if (!/\.pdf$/i.test(file.name)) { toast('Serve un PDF'); return; }
+  if (file.size > 50 * 1024 * 1024) { toast('Il file supera i 50 MB: dividilo in due parti prima di caricarlo'); return; }
+  if (RF.div.pid) { void rfDivCarica(file); return; }
+  RF.div.attesa = { file, stato: 'leggo', letto: null, trovato: null, cognome: '', nome: '', nascita: '', pagine: null, salvo: false };
+  RF.div.errore = null; RF.div.cerca = ''; render();
+  void rfDivChiE(file);
+}
+// Il testo delle prime pagine si estrae qui nel browser: così il file non si carica due volte.
+async function rfDivChiE(file) {
+  const a = RF.div.attesa; let testi = [];
+  try {
+    const lib = await rfPdfJs();
+    const pdf = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false, wasmUrl: '/prototipo/vendor/pdfjs/wasm/', standardFontDataUrl: '/prototipo/vendor/pdfjs/standard_fonts/' }).promise;
+    a.pagine = pdf.numPages;
+    for (let n = 1; n <= Math.min(12, pdf.numPages); n++) {
+      const tc = await (await pdf.getPage(n)).getTextContent(); let s = '';
+      for (const it of tc.items) s += (it.str || '') + (it.hasEOL ? '\n' : ' ');
+      testi.push(s.slice(0, 8000));
+    }
+    try { pdf.destroy(); } catch { /* già chiuso */ }
+  } catch { testi = []; }
+  if (RF.div.attesa !== a) return;                       // nel frattempo il file è stato tolto
+  const j = testi.some(x => x.trim().length > 20) ? await rfDivChiedi(RF_DIV_URL, { azione: 'chi', testi }) : {};
+  if (RF.div.attesa !== a) return;
+  a.stato = 'pronto'; a.letto = j.letto || null; a.trovato = j.trovato || null;
+  if (a.letto) { a.cognome = a.letto.cognome || ''; a.nome = a.letto.nome || ''; a.nascita = rfDivGiorno(a.letto.nascita); }
+  render();
+}
+function rfDivAttesaCerca(v) { RF.div.cerca = v; render(); const e = document.getElementById('rf-div-cerca'); if (e) { e.focus(); e.setSelectionRange(e.value.length, e.value.length); } }
+// È di qualcuno che c'è già: si carica nella sua cartella e si passa alla proposta.
+function rfDivUsa(pid, nome) {
+  const a = RF.div.attesa; if (!a) return;
+  const p = (RF.data.patients || []).find(x => x.id === pid);
+  Object.assign(RF.div, { pid, nome: nome || (p ? fullName(p) : ''), attesa: null, cerca: '' });
+  void rfDivCarica(a.file);
+}
+// Non c'è ancora: nasce la cartella coi dati confermati qui, poi il file ci entra.
+async function rfDivCreaPaziente() {
+  const a = RF.div.attesa; if (!a || a.salvo) return;
+  if (!a.cognome.trim() || !a.nome.trim() || !a.nascita.trim()) { toast('Servono cognome, nome e data di nascita'); return; }
+  a.salvo = true; const b = document.getElementById('rf-div-creapaz'); if (b) { b.disabled = true; b.textContent = 'Creo la cartella…'; }
+  let j = {}, stato = 0;
+  try {
+    const r = await fetch('/api/prototipo/pazienti', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'crea', cognome: a.cognome, nome: a.nome, data_nascita: a.nascita }) });
+    stato = r.status; j = await r.json().catch(() => ({}));
+  } catch { /* sotto */ }
+  a.salvo = false;
+  // 409 = quella persona c'è già (stesso cognome, nome e data di nascita): si usa la sua cartella, senza doppioni.
+  if ((stato === 201 || stato === 409) && j.id) {
+    if (stato === 409) toast('Questa persona c’era già: uso la sua cartella');
+    void rfCaricaDati();
+    rfDivUsa(j.id, `${a.cognome.trim()} ${a.nome.trim()}`);
+    return;
+  }
+  const perche = j.errori ? Object.values(j.errori)[0] : (j.errore === 'non_permesso' ? 'Il tuo ruolo non crea cartelle' : j.errore);
+  toast(perche || (stato ? `La cartella non si è creata (${stato})` : 'Piattaforma non raggiungibile'));
+  if (b) { b.disabled = false; b.textContent = 'Crea la cartella e continua'; }
+}
 // La cartella completa entra come un documento della cartella (col suo OCR, se è una scansione), poi la si divide.
 function rfDivCarica(file) {
   if (!file || !RF.div.pid) return;
@@ -77,7 +142,7 @@ function rfDivCarica(file) {
   x.onload = () => {
     let j = {}; try { j = JSON.parse(x.responseText || '{}'); } catch { /* risposta non leggibile */ }
     RF.div.invio = null;
-    if (x.status !== 201 || !j.id) { RF.div.errore = j.errore || `Caricamento non riuscito (${x.status}).`; render(); return; }
+    if (x.status !== 201 || !j.id) { RF.div.errore = j.errore || `Caricamento non riuscito (${x.status}).`; RF.div.documenti = RF.div.documenti || []; render(); return; }
     void rfDivApri(j.id);
   };
   x.onerror = () => { RF.div.invio = null; RF.div.errore = 'Piattaforma non raggiungibile.'; render(); };
@@ -263,21 +328,50 @@ PAGES.dividi = () => {
       ${limite}`;
   }
   if (v.carico) return `${testa('Leggo le pagine e cerco dove comincia ogni documento…')}<div class="card"><div class="caption">Per una cartella lunga ci vuole qualche secondo.</div></div>`;
-  // 1 — di chi è, e quale file.
+  // 1 — il PDF e di chi è, in qualunque ordine: si può trascinare subito il file anche di chi non è ancora in ReferralFlow.
   const q = (v.cerca || '').trim().toLowerCase();
   const trovati = q.length >= 2 ? (RF.data.patients || []).filter(p => rfUuid(p.id) && fullName(p).toLowerCase().includes(q)).slice(0, 8) : [];
+  const zona = (testo) => `<div id="rf-div-drop" class="rf-div-drop mt-8" ondragover="rfDivDrop(event, true)" ondragleave="rfDivDrop(event, false)" ondrop="rfDivDropFile(event)">
+        ${v.invio !== null ? `<span id="rf-div-invio">Carico… ${v.invio}%</span>` : `${testo}<br><div class="row mt-8" style="justify-content:center"><label class="btn sm">Scegli il file… <input type="file" accept="application/pdf,.pdf" style="display:none" onchange="rfDivFile(this.files[0]); this.value=''"></label></div>`}
+      </div>`;
+  // 1b — il file aspetta: di chi è?
+  if (v.attesa) {
+    const a = v.attesa, peso = a.file.size > 1048576 ? `${(a.file.size / 1048576).toFixed(1).replace('.', ',')} MB` : `${Math.max(1, Math.round(a.file.size / 1024))} kB`;
+    const campo = (k, ph, largo) => `<input class="input rf-div-in" style="width:${largo}px" placeholder="${ph}" value="${rfEsc(a[k])}" oninput="RF.div.attesa.${k}=this.value" aria-label="${ph}">`;
+    return `${testa('Da un PDF unico con tutta la cartella ai singoli documenti')}
+      ${errore}
+      <div class="card"><div class="card-head"><span class="section-title">${rfEsc(a.file.name)}</span><span class="caption">${peso}${a.pagine ? ` · ${a.pagine} pagine` : ''} <button class="btn sm ghost" onclick="rfDivCambia()">Togli</button></span></div>
+        <div class="section-title mt-8">Di chi è questa cartella?</div>
+        ${a.stato === 'leggo' ? '<div class="caption mt-8">Cerco nome e data di nascita nelle prime pagine…</div>'
+          : a.trovato ? `<p class="meta" style="margin:8px 0 10px;line-height:1.55">Nel PDF c’è scritto <b>${rfEsc(`${a.letto.cognome} ${a.letto.nome}`.trim())}</b>${a.letto.nascita ? `, ${rfEsc(rfDivGiorno(a.letto.nascita))}` : ''}: in ReferralFlow c’è già la sua cartella.</p>
+              <div class="row" style="gap:10px;flex-wrap:wrap;align-items:center"><button class="btn primary" onclick="rfDivUsa('${a.trovato.id}', '${rfEsc(a.trovato.nome).replace(/'/g, '&#39;')}')">È ${rfEsc(a.trovato.nome)}: usa la sua cartella</button><button class="btn sm ghost" onclick="RF.div.attesa.trovato=null;render()">Non è lei/lui</button></div>`
+          : `<p class="meta" style="margin:8px 0 10px;line-height:1.55">${a.letto ? 'Non è ancora in ReferralFlow. <b>Nome e data di nascita li ho letti dal PDF: controllali</b> (cognome e nome possono essere scambiati), poi crea la cartella.' : 'Nel PDF non trovo il nome del paziente (è una scansione senza testo, o è scritto in un modo che non riconosco): <b>scrivilo tu</b>, poi crea la cartella.'}</p>
+              <div class="row" style="gap:10px;flex-wrap:wrap;align-items:center">${campo('cognome', 'Cognome', 170)}${campo('nome', 'Nome', 170)}${campo('nascita', 'Nascita (31.12.1950)', 170)}<button class="btn primary" id="rf-div-creapaz" onclick="rfDivCreaPaziente()">Crea la cartella e continua</button></div>`}
+        ${a.stato === 'leggo' ? '' : `<div class="section-title mt-16">…oppure è di qualcuno che c’è già</div>
+          <div class="row mt-8" style="gap:8px;flex-wrap:wrap;align-items:center"><input class="input" id="rf-div-cerca" style="width:260px" placeholder="Scrivi il cognome" value="${rfEsc(v.cerca)}" oninput="rfDivAttesaCerca(this.value)">${trovati.map(p => `<button class="btn sm" onclick="rfDivUsa('${p.id}')">${rfEsc(fullName(p))}${p.dob ? ` · ${rfEsc(p.dob)}` : ''}</button>`).join('')}</div>`}</div>
+      ${limite}`;
+  }
+  // 1a — paziente già scelto: il file, o un PDF che ha già in cartella.
+  if (v.pid) {
+    return `${testa('Da un PDF unico con tutta la cartella ai singoli documenti')}
+      ${errore}
+      <div class="card"><div class="section-title">Di chi è la cartella</div>
+        <div class="row mt-8" style="gap:10px;align-items:center"><span class="badge accent">${rfEsc(v.nome)}</span><button class="btn sm ghost" onclick="rfDivCambia()">Cambia</button></div></div>
+      <div class="card mt-16"><div class="section-title">La cartella completa, in PDF</div>
+        ${zona('Trascina qui il PDF, oppure')}
+        <p class="meta" style="margin:10px 0 0;line-height:1.55">Fino a 50 MB. Il file entra nella cartella del paziente così com’è, poi lo si divide. Se è una scansione senza testo, il Mac la legge prima (qualche minuto).</p>
+        ${v.documenti === null ? '<div class="caption mt-16">Cerco i PDF già in cartella…</div>' : v.documenti.length ? `<div class="section-title mt-16">…oppure un PDF già nella sua cartella</div>
+          <div class="list mt-8">${v.documenti.map(x => `<div class="list-item"><div class="grow"><div class="name">${rfEsc(x.filename)}</div><div class="sub">caricato il ${rfEsc(rfDivGiorno(x.caricato))}${x.ocr_stato === 'da_fare' ? ' · in lettura sul Mac' : ''}</div></div><button class="btn sm" onclick="rfDivApri('${x.id}')">Dividi</button></div>`).join('')}</div>` : ''}</div>
+      ${limite}`;
+  }
+  // 1 — niente ancora: il PDF subito, oppure prima il paziente.
   return `${testa('Da un PDF unico con tutta la cartella ai singoli documenti')}
     ${errore}
-    <div class="card"><div class="section-title">1 · Di chi è la cartella</div>
-      ${v.pid ? `<div class="row mt-8" style="gap:10px;align-items:center"><span class="badge accent">${rfEsc(v.nome)}</span><button class="btn sm ghost" onclick="rfDivCambia()">Cambia</button></div>`
-        : `<div class="row mt-8" style="gap:8px;flex-wrap:wrap;align-items:center"><input class="input" id="rf-div-cerca" style="width:260px" placeholder="Scrivi il cognome" value="${rfEsc(v.cerca)}" oninput="rfDivCerca(this.value)">${trovati.map(p => `<button class="btn sm" onclick="rfDivPaziente('${p.id}')">${rfEsc(fullName(p))}${p.dob ? ` · ${rfEsc(p.dob)}` : ''}</button>`).join('')}</div>
-           <p class="meta" style="margin:10px 0 0">Il paziente deve avere già la sua cartella in ReferralFlow: i documenti nascono lì dentro.</p>`}</div>
-    ${v.pid ? `<div class="card mt-16"><div class="section-title">2 · La cartella completa, in PDF</div>
-      <div id="rf-div-drop" class="rf-div-drop mt-8" ondragover="rfDivDrop(event, true)" ondragleave="rfDivDrop(event, false)" ondrop="rfDivDropFile(event)">
-        ${v.invio !== null ? `<span id="rf-div-invio">Carico… ${v.invio}%</span>` : `Trascina qui il PDF, oppure<br><div class="row mt-8" style="justify-content:center"><label class="btn sm">Scegli il file… <input type="file" accept="application/pdf,.pdf" style="display:none" onchange="rfDivCarica(this.files[0]); this.value=''"></label></div>`}
-      </div>
-      <p class="meta" style="margin:10px 0 0;line-height:1.55">Fino a 50 MB. Il file entra nella cartella del paziente così com’è, poi lo si divide. Se è una scansione senza testo, il Mac la legge prima (qualche minuto).</p>
-      ${v.documenti === null ? '<div class="caption mt-16">Cerco i PDF già in cartella…</div>' : v.documenti.length ? `<div class="section-title mt-16">…oppure un PDF già nella sua cartella</div>
-        <div class="list mt-8">${v.documenti.map(x => `<div class="list-item"><div class="grow"><div class="name">${rfEsc(x.filename)}</div><div class="sub">caricato il ${rfEsc(rfDivGiorno(x.caricato))}${x.ocr_stato === 'da_fare' ? ' · in lettura sul Mac' : ''}</div></div><button class="btn sm" onclick="rfDivApri('${x.id}')">Dividi</button></div>`).join('')}</div>` : ''}</div>` : ''}
+    <div class="card"><div class="section-title">Trascina qui la cartella completa, in PDF</div>
+      ${zona('Anche di un paziente che <b>non è ancora in ReferralFlow</b>: la sua cartella si crea qui, subito dopo.<br>Trascina il PDF, oppure')}
+      <p class="meta" style="margin:10px 0 0;line-height:1.55">Fino a 50 MB. Nome e data di nascita si leggono dal PDF, quando ci sono, e li confermi tu.</p></div>
+    <div class="card mt-16"><div class="section-title">…oppure parti da un paziente che c’è già</div>
+      <div class="row mt-8" style="gap:8px;flex-wrap:wrap;align-items:center"><input class="input" id="rf-div-cerca" style="width:260px" placeholder="Scrivi il cognome" value="${rfEsc(v.cerca)}" oninput="rfDivCerca(this.value)">${trovati.map(p => `<button class="btn sm" onclick="rfDivPaziente('${p.id}')">${rfEsc(fullName(p))}${p.dob ? ` · ${rfEsc(p.dob)}` : ''}</button>`).join('')}</div>
+      <p class="meta" style="margin:10px 0 0">Così puoi anche dividere un PDF che ha già nella sua cartella.</p></div>
     ${limite}`;
 };

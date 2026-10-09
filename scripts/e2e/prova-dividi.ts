@@ -90,6 +90,17 @@ async function main() {
     const [reg] = await query<{ n: number }>(`select count(*)::int as n from document_access_log where document_id = $1 and dettaglio like 'divisione: 4 documenti, proposti 4, uguali 2'`, [doc]);
     verifica(JSON.stringify(np) === '[2,1,1,2]' && (await pagineDi(doc)) === 8 && reg.n === 1, `ogni pezzo è un PDF con le sue pagine; l'originale resta di 8; nel registro quanti tagli proposti sono rimasti uguali (2 su 4), senza titoli né testo`);
 
+    // 3b — un PDF trascinato prima di scegliere il paziente: dal testo delle prime pagine si propone di chi è.
+    const testi = PAGINE.map((r) => r.join('\n'));
+    const chi = await (await manda(C_SEG, { azione: 'chi', testi })).json() as any;
+    const ignoto = await (await manda(C_SEG, { azione: 'chi', testi: ['Concerne: Signor Provadividi Sconosciuto, nato il 01.01.1940\nEgregio collega'] })).json() as any;
+    const vuoto = await (await manda(C_SEG, { azione: 'chi', testi: ['', ' '] })).json() as any;
+    const chiFuori = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'chi', testi }) });
+    const [quanti] = await query<{ n: number }>(`select count(*)::int as n from patients where studio_id = $1 and cognome = 'Provadividi'`, [S]);
+    verifica(chi.letto?.cognome === 'Provadividi' && chi.letto?.nome === 'Anna' && chi.letto?.nascita === '1950-04-03' && chi.trovato?.id === pa
+      && ignoto.letto?.nome === 'Sconosciuto' && ignoto.trovato === null && vuoto.letto === null && chiFuori.status === 401 && quanti.n === 1,
+      `di chi è il PDF: nome e data di nascita letti dalle pagine e cartella trovata se c'è; chi non c'è resta da creare (e chiedere non crea niente); senza testo nessuna proposta; senza sessione no (${chiFuori.status})`);
+
     // 4 — tutti insieme in uno zip; e solo documenti dello studio.
     const z = await manda(C_SEG, { azione: 'zip', ids: creati.map((x) => x.id) });
     const zb = Buffer.from(await z.arrayBuffer());
