@@ -717,3 +717,10 @@ schermo intero. Deciso così:
 - **La rotella cambia immagine**, non fotogramma: i fotogrammi hanno la loro barra.
 - **Schermo intero sulla pagina**, col visore che la copre: il visore da solo ne uscirebbe a ogni disegno.
 - I filmati preparati non guardati da 14 giorni si buttano (si rifanno in un paio di secondi).
+
+## 9.10.2026 — Immagini: di serie solo gli esami recenti
+Finito il catalogo del NAS l'elenco si è riempito di 3022 esami del 2023–2024 e quelli dell'ecografo ci
+sparivano dentro. Richiesta dello studio: vedere solo i più recenti, gli altri cercarli con un filtro.
+«Recente» = ultimi 30 giorni, per data dell'esame o per arrivo (non per il catalogo del NAS). Filtri per
+anno, provenienza e stato, applicati dal server su tutti gli esami. Nella cartella del paziente niente
+cambia: lì si vedono tutti i suoi.

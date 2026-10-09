@@ -28,12 +28,16 @@ if (typeof NAV !== 'undefined') for (const r of ['secretary', 'assistant', 'doct
 .rf-img-vista .vuoto { color:#888; font-size:13px; padding:40px; text-align:center; }
 .rf-img-hud { position:absolute; left:10px; top:8px; color:#bbb; font-size:11px; font-variant-numeric:tabular-nums; pointer-events:none; text-shadow:0 1px 2px #000; }
 .rf-img-hud.destra { left:auto; right:10px; text-align:right; }
-.rf-img-barra { display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap; }
+.rf-img-barra { display:flex; align-items:center; gap:10px 18px; margin-top:14px; flex-wrap:wrap; }
+.rf-img-barra .btn.sm { height:34px; padding:0 14px; }
+.rf-img-barra .seg { gap:6px; padding:4px; }
+.rf-img-barra .seg button { padding:0 14px; }
 .rf-img-barra input[type=range] { flex:1; min-width:160px; }
+.rf-img-fl { width:auto; min-width:0; height:34px; padding:0 10px; }
 .rf-img-col.pieno { position:fixed; inset:0; z-index:45; background:#000; padding:8px 12px 10px; display:flex; flex-direction:column; overflow:auto; }
 .rf-img-col.pieno .rf-img-vista { flex:1; min-height:0; border-radius:0; }
 .rf-img-col.pieno .rf-img-vista img { max-width:none; max-height:none; }
-.rf-img-col.pieno .rf-img-barra, .rf-img-col.pieno > .row { background:var(--surface); border-radius:12px; padding:6px 10px; margin-top:8px; }
+.rf-img-col.pieno .rf-img-barra, .rf-img-col.pieno > .row { background:var(--surface); border-radius:12px; padding:8px 14px; margin-top:8px; }
 body.rf-img-pieno .statusbar, body.rf-img-pieno .mobile-nav { display:none; }
 .rf-img-drop { border:1.5px dashed var(--border); border-radius:12px; padding:18px; text-align:center; color:var(--muted); font-size:13px; }
 .rf-img-drop.sopra { border-color:var(--cta); color:var(--cta); }
@@ -50,7 +54,7 @@ body.rf-img-pieno .statusbar, body.rf-img-pieno .mobile-nav { display:none; }
 .rf-mis-ind.st-NOT_MEASURABLE { color:#8a1f1f; border-color:#e5a3a3; }
 .rf-mis-ind button { all:unset; cursor:pointer; text-decoration:underline; font-size:11px; color:var(--muted); }
 .rf-mis-motivo { font-size:12px; color:var(--muted); line-height:1.45; }
-.rf-mis-str { display:flex; flex-wrap:wrap; gap:4px; }
+.rf-mis-str { display:flex; flex-wrap:wrap; gap:10px; }
 .rf-mis-str button.attivo { background:var(--cta); color:#fff; border-color:var(--cta); }
 .rf-mis-stato { font-size:11px; margin-left:4px; }
 .rf-mis-stato.st-CAUTION { color:#8a5a00; } .rf-mis-stato.st-VALIDATED { color:#0d5c48; }
@@ -71,6 +75,7 @@ async function rfImgCarica(rendi = true) {
     if (!r.ok) { RF.img.errore = r.status === 403 ? 'Le immagini le vede chi cura: il tuo ruolo non ci accede.' : `Non riesco a leggere gli esami (${r.status}).`; if (rendi) render(); return; }
     const j = await r.json();
     RF.img.lista = j.esami || []; RF.img.conta = j.conta || {}; RF.img.lettore = j.lettore !== false;
+    RF.img.anni = j.anni || []; RF.img.origini = j.origini || []; RF.img.recentiGiorni = j.recenti_giorni || 30;
     RF.img.ricezione = j.ricezione || null; RF.img.nas = j.nas || null; RF.img.errore = null; RF.arch.stato = j.archivio || null;
   } catch { RF.img.errore = 'Piattaforma non raggiungibile.'; }
   if (rendi) render();
@@ -81,18 +86,22 @@ async function rfImgCarica(rendi = true) {
    POST: quello che si scrive è un nome, e un nome non va in un indirizzo. */
 async function rfImgCerca(da) {
   const q = (RF.img.q || '').trim();
-  if (!q) { rfImgCercaVia(); return; }
+  const anno = RF.img.anno || '', origine = RF.img.origine || '', stato = RF.img.filtro || '';
+  // Niente parole e nessun filtro: si torna agli esami recenti.
+  if (!q && !anno && !origine && !stato) { RF.img.trovati = null; RF.img.altri = false; RF.img.erroreCerca = null; render(); return; }
   if (RF.img.cerco) return;
   RF.img.cerco = true; RF.img.erroreCerca = null; render();
   try {
-    const r = await fetch('/api/prototipo/imaging', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'cerca', q, da: da || 0 }) });
+    const r = await fetch('/api/prototipo/imaging', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'cerca', q, da: da || 0, anno: anno || undefined, origine: origine || undefined, stato: stato || undefined }) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) RF.img.erroreCerca = j.errore || `La ricerca non è riuscita (${r.status}).`;
     else { RF.img.trovati = da ? (RF.img.trovati || []).concat(j.esami || []) : (j.esami || []); RF.img.altri = !!j.altri; }
   } catch { RF.img.erroreCerca = 'Piattaforma non raggiungibile.'; }
   RF.img.cerco = false; render();
 }
-function rfImgCercaVia() { RF.img.q = ''; RF.img.trovati = null; RF.img.altri = false; RF.img.erroreCerca = null; render(); }
+function rfImgCercaVia() { RF.img.q = ''; RF.img.anno = ''; RF.img.origine = ''; RF.img.filtro = ''; RF.img.trovati = null; RF.img.altri = false; RF.img.erroreCerca = null; render(); }
+function rfImgFiltro(campo, v) { RF.img[campo] = v; void rfImgCerca(0); }
+const RF_IMG_ORIGINE = { rete: 'Dall’ecografo', nas: 'Archivio sul NAS', archivio: 'Copie dall’archivio Philips', import: 'Caricati a mano', portale: 'Dal portale' };
 
 async function rfImgApri(id) {
   RF.img.aperto = id; RF.img.dati = null; RF.img.serie = 0; RF.img.idx = 0; RF.img.frame = 0; RF.img.ww = null; RF.img.wl = null; RF.mpr.piano = null; RF.mpr.indice = 0;
@@ -790,7 +799,9 @@ PAGES.imaging = () => {
   const cercato = RF.img.trovati !== null;
   const l = cercato ? RF.img.trovati : (RF.img.lista || []);
   const f = RF.img.filtro;
-  const mostrati = f === 'verifica' ? l.filter(e => e.stato === 'da_verificare') : f === 'senza' ? l.filter(e => !e.patient_id) : l;
+  const mostrati = l;                       // i filtri li applica il server, su tutti gli esami (9.10.2026)
+  const gg = RF.img.recentiGiorni || 30;
+  const conFiltri = !!(RF.img.q || RF.img.anno || RF.img.origine || f);
   const riga = (e) => {
     const st = RF_IMG_STATO[e.stato] || ['', e.stato];
     return `<div class="list-item" style="cursor:pointer" onclick="rfImgApri('${e.id}')">
@@ -801,20 +812,25 @@ PAGES.imaging = () => {
   };
   const c = RF.img.conta || {};
   return `
-    <div class="page-head"><div><h2 class="page-title">Immagini</h2><div class="page-sub">${c.totale != null ? c.totale : l.length} esami${c.byte && Number(c.byte) ? ` · ${rfImgPeso(c.byte)}` : ''}${c.da_verificare ? ` · ${c.da_verificare} da verificare` : ''}${c.senza_paziente ? ` · ${c.senza_paziente} senza paziente` : ''}</div></div>
-      <div class="actions"><div class="seg"><button class="${!f ? 'active' : ''}" onclick="RF.img.filtro='';render()">Tutti</button><button class="${f === 'verifica' ? 'active' : ''}" onclick="RF.img.filtro='verifica';render()">Da verificare</button><button class="${f === 'senza' ? 'active' : ''}" onclick="RF.img.filtro='senza';render()">Senza paziente</button></div></div></div>
+    <div class="page-head"><div><h2 class="page-title">Immagini</h2><div class="page-sub">${c.totale != null ? c.totale : l.length} esami in tutto${c.byte && Number(c.byte) ? ` · ${rfImgPeso(c.byte)}` : ''}${c.da_verificare ? ` · ${c.da_verificare} da verificare` : ''}${c.senza_paziente ? ` · ${c.senza_paziente} senza paziente` : ''}</div></div>
+      <div class="actions"><div class="seg"><button class="${!f ? 'active' : ''}" onclick="rfImgFiltro('filtro','')">Tutti</button><button class="${f === 'verifica' ? 'active' : ''}" onclick="rfImgFiltro('filtro','verifica')">Da verificare</button><button class="${f === 'senza' ? 'active' : ''}" onclick="rfImgFiltro('filtro','senza')">Senza paziente</button></div></div></div>
     ${RF.img.errore ? `<div class="rf-manc mb-16">${rfEsc(RF.img.errore)}</div>` : ''}
     ${RF.img.nas && RF.img.nas.configurato && !RF.img.nas.collegato ? '<div class="rf-manc mb-16"><b>L’archivio sul NAS non è collegato a questo server.</b> Gli esami d’archivio restano in elenco, ma le loro immagini non si aprono finché la cartella del NAS non torna collegata.</div>' : ''}
     ${RF.img.lettore ? '' : '<div class="rf-manc mb-16">Il lettore DICOM non è installato su questo server: gli esami si vedono, ma non si importano e non si disegnano.</div>'}
     <p class="rf-img-limite">Le immagini si <b>consultano</b> nel contesto della cartella, con le misure già fatte dall'apparecchio. Gli esami che l'ecografo manda qui <b>restano</b> su questo Mac e si ritrovano con la ricerca; quelli presi dall'archivio Philips sono copie temporanee, e l'originale resta lì. La diagnosi resta del medico, e il referto nasce dal dettato come sempre.</p>
-    <div class="card mt-16"><div class="card-head"><span class="section-title">Esami</span><span class="caption">${cercato ? `${l.length}${RF.img.altri ? '+' : ''} trovati` : (c.totale > l.length ? `gli ultimi ${l.length} di ${c.totale}: gli altri si cercano` : 'dal più recente')}</span></div>
+    <div class="card mt-16"><div class="card-head"><span class="section-title">Esami</span><span class="caption">${cercato ? `${l.length}${RF.img.altri ? '+' : ''} trovati` : (c.totale > l.length ? `gli ultimi ${gg} giorni: ${l.length} di ${c.totale}. Gli altri si trovano coi filtri` : `gli ultimi ${gg} giorni, dal più recente`)}</span></div>
       <div class="row mb-8" style="gap:8px;align-items:center">
         <input class="input" id="rf-img-q" style="flex:1;min-width:0" placeholder="Cerca: cognome, data dell’esame o di nascita (3.5.1950), anno" value="${rfEsc(RF.img.q)}" oninput="RF.img.q=this.value" onkeydown="if(event.key==='Enter')rfImgCerca(0)">
         <button class="btn sm" onclick="rfImgCerca(0)" ${RF.img.cerco ? 'disabled' : ''}>${RF.img.cerco ? 'Cerco…' : 'Cerca'}</button>
-        ${cercato || RF.img.q ? '<button class="btn sm ghost" onclick="rfImgCercaVia()">Tutti</button>' : ''}
+      </div>
+      <div class="row mb-8" style="gap:10px 14px;align-items:center;flex-wrap:wrap">
+        <span class="caption">Filtri</span>
+        <select class="input rf-img-fl" onchange="rfImgFiltro('anno', this.value)" aria-label="Anno dell’esame"><option value="">Qualsiasi anno</option>${(RF.img.anni || []).map(a => `<option value="${a.anno}" ${String(RF.img.anno) === String(a.anno) ? 'selected' : ''}>${a.anno} · ${a.n}</option>`).join('')}</select>
+        <select class="input rf-img-fl" onchange="rfImgFiltro('origine', this.value)" aria-label="Da dove viene l’esame"><option value="">Qualsiasi provenienza</option>${(RF.img.origini || []).map(o => `<option value="${rfEsc(o.origine)}" ${RF.img.origine === o.origine ? 'selected' : ''}>${rfEsc(RF_IMG_ORIGINE[o.origine] || o.origine)} · ${o.n}</option>`).join('')}</select>
+        ${conFiltri || cercato ? '<button class="btn sm ghost" onclick="rfImgCercaVia()">Togli i filtri: solo i recenti</button>' : ''}
       </div>
       ${RF.img.erroreCerca ? `<div class="rf-manc mb-8">${rfEsc(RF.img.erroreCerca)}</div>` : ''}
-      <div class="list">${mostrati.length ? mostrati.map(riga).join('') : `<div class="caption">${cercato ? 'Nessun esame con questi dati.' : 'Nessun esame.'}</div>`}</div>
+      <div class="list">${mostrati.length ? mostrati.map(riga).join('') : `<div class="caption">${cercato ? 'Nessun esame con questi dati.' : `Nessun esame negli ultimi ${gg} giorni. Gli altri si trovano coi filtri qui sopra.`}</div>`}</div>
       ${cercato && RF.img.altri ? '<div class="row mt-8" style="justify-content:center"><button class="btn sm ghost" onclick="rfImgCerca(RF.img.trovati.length)">Mostra altri</button></div>' : ''}</div>
     ${rfArchScheda()}
     ${rfImgRicezione()}
@@ -1012,7 +1028,7 @@ function rfImgDettaglio() {
   const vgP = RF.mpr.piano ? rfMprVirtuale() : null;
   const prop = i ? (vgP ? (vgP.righe * (vgP.sp_y || 1)) / (vgP.colonne * (vgP.sp_x || 1)) : (i.righe || 3) / (i.colonne || 4)) : 0.75;
   const barre = 1 + (i && i.frame > 1 && !vgP ? 1 : 0) + (vgP ? 1 : 0) + (finestre.length ? 1 : 0);
-  const stilePieno = RF.img.pieno ? ` style="height:min(calc(100dvh - ${26 + barre * 54}px), calc((100vw - 24px) * ${prop.toFixed(5)}));width:auto"` : '';
+  const stilePieno = RF.img.pieno ? ` style="height:min(calc(100dvh - ${26 + barre * 60}px), calc((100vw - 24px) * ${prop.toFixed(5)}));width:auto"` : '';
   const anteprima = (ser) => {
     const prima = (ser.immagini || []).find(x => x.immagine);
     return prima ? `<img src="/api/prototipo/imaging/immagine/${prima.id}?anteprima=1" alt="" loading="lazy">` : `<div style="aspect-ratio:1;border-radius:6px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px">nessuna<br>immagine</div>`;
@@ -1054,7 +1070,7 @@ function rfImgDettaglio() {
         </div>
         ${i.frame > 1 && !(RF.mpr.piano && rfMprVirtuale()) ? rfCineComandi(i) : ''}
         ${RF.mpr.piano && rfMprVirtuale() ? `<div class="rf-img-barra"><span class="caption">${rfEsc(RF.mpr.piano)}</span><input type="range" min="0" max="${rfMprVirtuale().n_indici - 1}" value="${RF.mpr.indice}" oninput="rfMprIndice(this.value)" aria-label="Piano ricostruito"></div>` : ''}
-        ${finestre.length ? `<div class="row wrap mt-8" style="gap:6px"><span class="caption" style="align-self:center">finestra</span>
+        ${finestre.length ? `<div class="row wrap mt-8" style="gap:10px"><span class="caption" style="align-self:center">finestra</span>
           <button class="btn sm ${RF.img.ww === null ? 'primary' : ''}" onclick="rfImgFinestra(null, null)">Del file</button>
           ${finestre.map(f => `<button class="btn sm ${RF.img.ww === f.ww && RF.img.wl === f.wl ? 'primary' : ''}" onclick="rfImgFinestra(${f.ww}, ${f.wl})">${rfEsc(f.nome)}</button>`).join('')}</div>` : ''}` : ''}
       </div>

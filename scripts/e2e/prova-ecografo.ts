@@ -89,6 +89,16 @@ async function main() {
     verifica(vuota.http === 400 && fuori.http === 401, 'ricerca vuota rifiutata; senza sessione niente');
     const el = await (await fetch(`${base}/api/prototipo/imaging`, { headers: { cookie } })).json();
     verifica(el.conta?.totale >= 1 && Number(el.conta?.byte) >= Number(e2.byte), `l'elenco dice quanti esami ci sono in tutto e quanto pesano (${el.conta?.totale})`);
+    // L'elenco di serie mostra solo i recenti (9.10.2026): un esame appena mandato dall'apparecchio c'è anche se è datato mesi fa;
+    // invecchiato l'arrivo esce dall'elenco, e si ritrova col filtro.
+    const dentro = (el.esami ?? []).some((x: any) => x.id === e2.id);
+    await query(`update imaging_esami set created_at = now() - interval '90 days' where id = $1`, [e2.id]);
+    const elDopo = await (await fetch(`${base}/api/prototipo/imaging`, { headers: { cookie } })).json();
+    const colFiltro = await fetch(`${base}/api/prototipo/imaging`, { method: 'POST', headers: h, body: JSON.stringify({ azione: 'cerca', origine: 'rete', anno: 2026 }) }).then((r) => r.json());
+    const perPaz = await (await fetch(`${base}/api/prototipo/imaging?paziente=${pa}`, { headers: { cookie } })).json();
+    await query(`update imaging_esami set created_at = now() where id = $1`, [e2.id]);
+    verifica(dentro && el.recenti_giorni === 30 && !(elDopo.esami ?? []).some((x: any) => x.id === e2.id) && (colFiltro.esami ?? []).some((x: any) => x.id === e2.id) && (perPaz.esami ?? []).some((x: any) => x.id === e2.id),
+      'di serie solo gli esami recenti: appena arrivato c’è; dopo 90 giorni esce dall’elenco, si ritrova col filtro e resta nella cartella del paziente');
 
     // 5 — una copia presa dall'archivio diventa un esame che resta quando l'apparecchio ne manda le immagini…
     await query(`update imaging_esami set origine = 'archivio', scade_il = now() + interval '7 days' where id = $1`, [e2.id]);

@@ -166,3 +166,21 @@ function dataValida(a: number, m: number, g: number): string | null {
 }
 export const ricercaVuota = (r: Ricerca): boolean => !r.data && r.anno === null && !r.parole.length;
 
+// L'elenco di serie mostra solo gli esami RECENTI (9.10.2026, richiesta dello
+// studio dopo il catalogo dei 3022 esami del NAS): gli altri si trovano coi
+// filtri — anno dell'esame, provenienza, stato — da soli o insieme alle parole.
+export const GIORNI_RECENTI = 30;
+export const ORIGINI = ['rete', 'nas', 'archivio', 'import', 'portale'] as const;
+export type Filtro = { anno: number | null; origine: (typeof ORIGINI)[number] | null; stato: 'verifica' | 'senza' | null };
+export function leggiFiltro(c: { anno?: unknown; origine?: unknown; stato?: unknown } | null | undefined): Filtro {
+  const a = Number(c?.anno);
+  const o = String(c?.origine ?? '');
+  const s = String(c?.stato ?? '');
+  return {
+    anno: Number.isInteger(a) && a >= 1900 && a <= 2100 ? a : null,
+    origine: (ORIGINI as readonly string[]).includes(o) ? (o as Filtro['origine']) : null,
+    stato: s === 'verifica' || s === 'senza' ? s : null,
+  };
+}
+export const filtroVuoto = (f: Filtro): boolean => f.anno === null && f.origine === null && f.stato === null;
+

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { chiaveNas, eSulNas, leggiConfNas, percorsoNas, relativoSicuro } from './imaging-esterno';
-import { abbinaPaziente, etichetta, finestreDi, leggiRicerca, raggruppa, ricercaVuota, scegliLotto, slugNome, type MetaMinima } from './imaging-ordina';
+import { abbinaPaziente, etichetta, filtroVuoto, finestreDi, leggiFiltro, leggiRicerca, raggruppa, ricercaVuota, scegliLotto, slugNome, type MetaMinima } from './imaging-ordina';
 
 const base: MetaMinima = {
   study_uid: 'S1', series_uid: 'SE1', sop_uid: 'I1', modalita: 'ct', data_esame: '2026-09-11',
@@ -109,6 +109,15 @@ test('imaging: lo spool si svuota a lotti, per numero e per peso, e un file enor
   assert.deepEqual(scegliLotto(file, 1, 384 * MB), ['a']);                    // il numero vince
   assert.deepEqual(scegliLotto([{ nome: 'x', byte: 900 * MB }, { nome: 'y', byte: MB }], 400, 384 * MB), ['x']);  // mai zero
   assert.deepEqual(scegliLotto([], 400, 384 * MB), []);
+});
+
+test('imaging: i filtri dell’elenco (anno, provenienza, stato) accettano solo valori noti', () => {
+  assert.deepEqual(leggiFiltro({ anno: '2024', origine: 'nas', stato: 'senza' }), { anno: 2024, origine: 'nas', stato: 'senza' });
+  assert.deepEqual(leggiFiltro({ anno: 2026, origine: 'rete' }), { anno: 2026, origine: 'rete', stato: null });
+  // Ciò che non è un anno, una provenienza o uno stato conosciuti non filtra niente (e non arriva alla query).
+  assert.deepEqual(leggiFiltro({ anno: '20x4', origine: "nas' or 1=1", stato: 'tutti' }), { anno: null, origine: null, stato: null });
+  assert.deepEqual(leggiFiltro({ anno: 99999 }), { anno: null, origine: null, stato: null });
+  assert.ok(filtroVuoto(leggiFiltro(null)) && filtroVuoto(leggiFiltro({})) && !filtroVuoto(leggiFiltro({ stato: 'verifica' })));
 });
 
 test('imaging: la ricerca nell’elenco capisce date, anni e parole, e non indovina', () => {

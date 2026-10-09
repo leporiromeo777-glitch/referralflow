@@ -62,7 +62,13 @@ async function main() {
 
     // 4 — si guarda: elenco, esame, e un fotogramma di un filmato letto dal NAS.
     const el = await (await fetch(`${base}/api/prototipo/imaging`, { headers: { cookie } })).json();
-    verifica(el.nas?.configurato === true && el.nas?.collegato === true && (el.esami ?? []).some((x: any) => x.id === a.id && x.origine === 'nas') && !(el.conta?.da_verificare > 0 && (el.esami ?? []).some((x: any) => x.id === b.id && x.stato === 'da_verificare')), 'la pagina Immagini li elenca, sa che il NAS è collegato');
+    verifica(el.nas?.configurato === true && el.nas?.collegato === true && !(el.esami ?? []).some((x: any) => x.id === a.id || x.id === b.id) && (el.origini ?? []).some((o: any) => o.origine === 'nas' && o.n >= 2) && (el.anni ?? []).some((y: any) => y.anno === 2024 && y.n >= 2),
+      'la pagina Immagini sa che il NAS è collegato; gli esami d’archivio (del 2024) NON stanno fra i recenti, ma l’elenco dice quanti sono per anno e per provenienza');
+    const filtra = async (corpo: Record<string, unknown>) => { const r = await fetch(`${base}/api/prototipo/imaging`, { method: 'POST', headers: { cookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ azione: 'cerca', ...corpo }) }); return { http: r.status, ...(await r.json().catch(() => ({}))) }; };
+    const fNas = await filtra({ origine: 'nas' }), fAnno = await filtra({ anno: 2024, origine: 'nas' }), fAltro = await filtra({ anno: 1999, origine: 'nas' }), fRete = await filtra({ origine: 'rete', anno: 2024 }), fFinta = await filtra({ origine: 'altrove' });
+    const cè = (r: any, id: string) => (r.esami ?? []).some((x: any) => x.id === id);
+    verifica(fNas.http === 200 && cè(fNas, a.id) && cè(fNas, b.id) && cè(fAnno, a.id) && fAltro.http === 200 && !cè(fAltro, a.id) && !cè(fRete, a.id) && fFinta.http === 400,
+      `col filtro si trovano: per provenienza, per anno e provenienza; un altro anno o un'altra provenienza no; una provenienza inventata non è un filtro (${fNas.http}, ${fFinta.http})`);
     const d = await (await fetch(`${base}/api/prototipo/imaging/${a.id}`, { headers: { cookie } })).json();
     const imgs: any[] = (d.serie ?? []).flatMap((s: any) => s.immagini ?? []);
     const filmato = imgs.find((i) => i.frame > 1), secondo = imgs.filter((i) => i.frame > 1)[1];

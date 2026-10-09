@@ -4,7 +4,7 @@ import { query } from '@/lib/db';
 import { isUuid } from '@/lib/cartella';
 import { lettoreDisponibile, statoRicezione, statoNas } from '@/lib/imaging';
 import { ingestaDicom } from '@/lib/imaging-ingest';
-import { leggiRicerca, ricercaVuota } from '@/lib/imaging-ordina';
+import { GIORNI_RECENTI, filtroVuoto, leggiFiltro, leggiRicerca, ricercaVuota } from '@/lib/imaging-ordina';
 import { statoArchivio } from '@/lib/imaging-archivio';
 import { vietato } from '@/lib/permessi';
 
@@ -48,8 +48,13 @@ export async function GET(req: NextRequest) {
        from imaging_esami e left join patients p on p.id = e.patient_id
       where e.studio_id = $1 and e.stato <> 'nascosto'
         and ($2 = '' or e.patient_id = $2::uuid)
-      order by e.data_esame desc nulls last, e.created_at desc limit 200`,
-    [sid, isUuid(paziente) ? paziente : '']);
+        -- Di serie solo i recenti (9.10.2026): fatti negli ultimi giorni, oppure arrivati qui negli
+        -- ultimi giorni (dall'apparecchio, a mano, chiesti all'archivio). Il catalogo del NAS no:
+        -- è «arrivato» tutto insieme ma sono esami di anni fa. Nella cartella di un paziente, tutti.
+        and ($2 <> '' or e.data_esame >= current_date - $3::int
+             or (e.origine <> 'nas' and e.created_at >= now() - make_interval(days => $3::int)))
+      order by e.data_esame desc nulls last, e.created_at desc limit 300`,
+    [sid, isUuid(paziente) ? paziente : '', GIORNI_RECENTI]);
 
   // `totale` e `byte`: l'elenco mostra gli ultimi 200, l'archivio può averne
   // migliaia (7.10.2026): quanti sono e quanto pesano si dice sempre.
@@ -59,8 +64,15 @@ export async function GET(req: NextRequest) {
             count(*)::int as totale, coalesce(sum(byte), 0)::text as byte
        from imaging_esami where studio_id = $1 and stato <> 'nascosto'`, [sid]);
 
+  // Per i filtri della pagina: quanti esami per anno e per provenienza (solo conteggi).
+  const anni = paziente ? [] : await query<{ anno: number; n: number }>(
+    `select extract(year from data_esame)::int as anno, count(*)::int as n from imaging_esami
+      where studio_id = $1 and stato <> 'nascosto' and data_esame is not null group by 1 order by 1 desc`, [sid]);
+  const origini = paziente ? [] : await query<{ origine: string; n: number }>(
+    `select origine, count(*)::int as n from imaging_esami where studio_id = $1 and stato <> 'nascosto' group by 1 order by 2 desc`, [sid]);
+
   return NextResponse.json(
-    { esami, conta, lettore: await lettoreDisponibile(), ricezione: await statoRicezione(), archivio: await statoArchivio(), nas: await statoNas() },
+    { esami, conta, anni, origini, recenti_giorni: GIORNI_RECENTI, lettore: await lettoreDisponibile(), ricezione: await statoRicezione(), archivio: await statoArchivio(), nas: await statoNas() },
     { headers: { 'Cache-Control': 'no-store' } });
 }
 
@@ -81,7 +93,8 @@ export async function POST(req: NextRequest) {
     // quello che si cerca è il nome di una persona, e un nome non va in un URL.
     if (azione === 'cerca') {
       const r = leggiRicerca(String(c?.q ?? ''));
-      if (ricercaVuota(r)) return NextResponse.json({ errore: 'Scrivi un cognome, una data o un anno.' }, { status: 400 });
+      const f = leggiFiltro(c);
+      if (ricercaVuota(r) && filtroVuoto(f)) return NextResponse.json({ errore: 'Scrivi un cognome, una data o un anno, oppure scegli un filtro.' }, { status: 400 });
       const da = Math.max(0, Math.min(5000, Number(c?.da) || 0));
       const PAGINA = 50;
       const righe = await query<Record<string, unknown>>(
@@ -93,12 +106,14 @@ export async function POST(req: NextRequest) {
           where e.studio_id = $1 and e.stato <> 'nascosto'
             and ($2::date is null or e.data_esame = $2::date or e.paziente_nascita = $2::date or p.data_nascita = $2::date)
             and ($3::int is null or extract(year from e.data_esame) = $3::int)
+            and ($7::text is null or e.origine = $7::text)
+            and ($8::text is null or ($8::text = 'verifica' and e.stato = 'da_verificare') or ($8::text = 'senza' and e.patient_id is null))
             and not exists (
               select 1 from unnest($4::text[]) w
                where position(w in lower(coalesce(p.cognome, '') || ' ' || coalesce(p.nome, '') || ' ' ||
                                          replace(coalesce(e.paziente_dicom, ''), '^', ' ') || ' ' || coalesce(e.descrizione, ''))) = 0)
           order by e.data_esame desc nulls last, e.created_at desc limit $5 offset $6`,
-        [sid, r.data, r.anno, r.parole, PAGINA + 1, da]);
+        [sid, r.data, f.anno ?? r.anno, r.parole, PAGINA + 1, da, f.origine, f.stato]);
       await query(`insert into imaging_accessi (studio_id, esame_id, user_id, azione) values ($1, null, $2, 'elenco_cerca')`, [sid, session.id]).catch(() => null);
       return NextResponse.json({ esami: righe.slice(0, PAGINA), altri: righe.length > PAGINA, da }, { headers: { 'Cache-Control': 'no-store' } });
     }
