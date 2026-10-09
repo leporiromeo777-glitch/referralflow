@@ -8,7 +8,7 @@ import { NextResponse } from 'next/server';
 
 export const SEZIONI = [
   'agenda', 'visite', 'richiami', 'sale', 'prestazioni', 'invianti', 'patients', 'percorsi',
-  'documents', 'moduli', 'imaging', 'monitoraggio', 'pressione', 'reports', 'dittafono', 'converti', 'anonymize', 'inbox', 'ai',
+  'documents', 'dividi', 'moduli', 'imaging', 'monitoraggio', 'pressione', 'reports', 'dittafono', 'converti', 'anonymize', 'inbox', 'ai',
   'fatturazione', 'administration',
 ] as const;
 export type Sezione = (typeof SEZIONI)[number];
@@ -16,7 +16,8 @@ export type Sezione = (typeof SEZIONI)[number];
 // 'monitoraggio' (6.10.2026): la sezione la vede chi cura; dentro, quattro capacità
 // distinte (consultare, prendere in carico, regole, dispositivi) in monitoraggio/catalogo.ts.
 // 'pressione' (7.10.2026): il profilo pressorio delle 24 ore; chi fa che cosa dentro sta in pressione/archivio.ts (PUO_PA).
-const CURA: Sezione[] = ['agenda', 'visite', 'richiami', 'sale', 'patients', 'percorsi', 'documents', 'moduli', 'imaging', 'monitoraggio', 'pressione', 'inbox', 'ai'];
+// 'dividi' (9.10.2026): da un PDF unico con tutta la cartella ai singoli documenti; la vede chi lavora sulle cartelle.
+const CURA: Sezione[] = ['agenda', 'visite', 'richiami', 'sale', 'patients', 'percorsi', 'documents', 'dividi', 'moduli', 'imaging', 'monitoraggio', 'pressione', 'inbox', 'ai'];
 const SEGRETERIA: Sezione[] = [...CURA, 'prestazioni', 'invianti', 'reports', 'converti', 'anonymize', 'fatturazione'];
 
 // Ruoli del database (users.role).

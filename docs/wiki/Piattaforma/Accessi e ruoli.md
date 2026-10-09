@@ -34,7 +34,7 @@ Decisione dello studio: ogni ruolo vede le sezioni del suo lavoro e ha la sua ho
 
 | sezione | medico | aiuto medico | segreteria | amministrazione | tecnico |
 |---|---|---|---|---|---|
-| Agenda, Visite, Richiami, Sale, Pazienti, Percorsi, Documenti, Moduli, Immagini, Attività, Cleo | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Agenda, Visite, Richiami, Sale, Pazienti, Percorsi, Documenti, Dividi cartella, Moduli, Immagini, Attività, Cleo | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Referti | ✅ | — | ✅ | ✅ | ✅ |
 | Dittafono | ✅ | ✅ | — | — | ✅ |
 | Prestazioni, Invianti, Converti audio, Anonimizzazione, Da fatturare | — | — | ✅ | ✅ | ✅ |

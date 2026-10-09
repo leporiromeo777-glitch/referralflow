@@ -743,3 +743,14 @@ gli si è data una cartella del Mac e funziona senza niente di installato sul PC
 chi è il paziente, la data e il nome del PDF; il referto automatico e le misure che contiene **non si
 leggono**: sono nel PDF, e un testo clinico in più nel database o nei log non serve a nessuno. Stessa regola
 severa e stessa scheda «da assegnare» della ciclo.
+
+## 9.10.2026 — Dividi cartella: propone il codice, conferma una persona
+Lo studio vuole dare alla piattaforma una cartella completa in un PDF solo e riavere le lettere e i documenti
+separati. Deciso così:
+- **Regole e non un modello** per trovare dove comincia ogni documento: si misurano e si correggono, e il
+  testo delle cartelle non va a nessun modello. Il modello locale resta una possibilità per i casi dubbi, se i
+  numeri diranno che serve.
+- **Niente nasce senza conferma**: un taglio sbagliato spezza una lettera o ne incolla due.
+- **L'originale non si tocca**; i pezzi sono documenti nuovi della stessa cartella.
+- **Si misura l'utilità della proposta** coi soli numeri (proposti / rimasti uguali) nel registro degli accessi.
+- Le regole sono nate su testi inventati: la prima cartella vera è la prova che manca.

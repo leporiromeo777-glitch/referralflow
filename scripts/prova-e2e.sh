@@ -172,6 +172,10 @@ echo "→ ciclo ed ECG: il referto della prova da sforzo e il tracciato vanno ne
 DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-ciclo.ts "http://localhost:$PORTA" "$STUDIO" "$C_SEGR" "$C_TEC" "$TMP/ciclo-cartella" > "$TMP/ciclo.txt" 2>&1 || { fallito "prova-ciclo"; cut -c1-300 "$TMP/ciclo.txt"; }
 grep -E "^NO" "$TMP/ciclo.txt"; echo "   $(grep -c '^ok' "$TMP/ciclo.txt") ok, $(grep -c '^NO' "$TMP/ciclo.txt") no"
 
+echo "→ dividi cartella: da un PDF unico ai singoli documenti, proposta, conferma, zip, permessi"
+DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-dividi.ts "http://localhost:$PORTA" "$STUDIO" "$C_SEGR" "$C_TEC" "$TMP/dividi" > "$TMP/dividi.txt" 2>&1 || { fallito "prova-dividi"; cut -c1-300 "$TMP/dividi.txt"; }
+grep -E "^NO" "$TMP/dividi.txt"; echo "   $(grep -c '^ok' "$TMP/dividi.txt") ok, $(grep -c '^NO' "$TMP/dividi.txt") no"
+
 echo "→ agenda: quando MediOnline mostra meno agende, quelle nascoste non si svuotano"
 DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-agenda-colonne.ts "$STUDIO" > "$TMP/agenda-colonne.txt" 2>&1 || { fallito "prova-agenda-colonne"; cut -c1-300 "$TMP/agenda-colonne.txt"; }
 grep -E "^NO" "$TMP/agenda-colonne.txt"; echo "   $(grep -c '^ok' "$TMP/agenda-colonne.txt") ok, $(grep -c '^NO' "$TMP/agenda-colonne.txt") no"

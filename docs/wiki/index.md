@@ -27,6 +27,7 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 - [[Piattaforma/Immagini]] — esami per immagini dentro la cartella: DICOM, visore, abbinamento severo al paziente
 - [[Piattaforma/Monitoraggio]] — monitoraggio remoto con dispositivi indossabili: modulo DIMOSTRATIVO (dati simulati), regole, avvisi, adattatori
 - [[Piattaforma/Pressione]] — profilo pressorio con la terapia sopra; cartella che si legge da sola; tabella dei farmaci da confermare; proposte di orario accese dall'8.10.2026 (dispositivo interno, validazione e notifica da fare)
+- [[Piattaforma/Dividi cartella]] — da un PDF unico con tutta la cartella ai singoli documenti: la piattaforma propone i tagli, una persona conferma
 - [[Piattaforma/Prova da sforzo]] — prova da sforzo (CubeStress) ed ECG a riposo (touchECG): referto e tracciato arrivano da soli nella cartella del paziente; quelli senza data di nascita si assegnano a mano
 - [[Piattaforma/Funzioni fatte]] — tutto ciò che esiste già, in ordine inverso
 - [[Piattaforma/Revisione del 18.9.2026]] — le quattro forme di guasto uscite dalla passata di revisione, e che cosa resta da fare
