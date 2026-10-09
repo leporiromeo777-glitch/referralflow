@@ -123,5 +123,7 @@ export async function giroOcr(massimo = 20): Promise<{ esito: 'occupata' | 'in_c
     inCorso = false;
   }
   if (fatti || restano) console.log(`[ocr] giro: ${fatti} fatti, ${restano} rimandati`);
+  // Una cartella completa appena letta passa all'analisi (separatori e modello locale) senza aspettare che qualcuno la apra.
+  if (fatti) void import('./dividi/analisi').then((m) => m.giroAnalisi()).catch(() => null);
   return { esito: 'fatto', fatti, restano };
 }

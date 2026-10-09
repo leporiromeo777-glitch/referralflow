@@ -20,7 +20,7 @@ export const ETICHETTE: Record<Tipo, string> = {
 };
 export type Pezzo = { da: number; a: number; categoria: Tipo; data: string | null; titolo: string; sicurezza: 'alta' | 'media' | 'bassa'; segnali: string[] };
 
-const SOGLIA = 3;
+export const SOGLIA = 3;
 const righeDi = (t: string): string[] => String(t ?? '').split(/\r?\n/).map((r) => r.replace(/\s+/g, ' ').trim()).filter(Boolean);
 
 const SALUTO = /^(egregi[oa]|gentil(?:e|issim[oa])|car[oa]|carissim[oa]|stimat[oa]|spettabile|sehr geehrte[rs]?|liebe[rs]?|ch[eè]re?|dear)\b/i;
@@ -57,11 +57,27 @@ function giornoIso(g: number, m: number, a: number): string | null {
   const d = new Date(Date.UTC(a, m - 1, g));
   return d.getUTCMonth() === m - 1 && d.getUTCDate() === g ? `${a}-${String(m).padStart(2, '0')}-${String(g).padStart(2, '0')}` : null;
 }
-function dataIn(riga: string): string | null {
+export function dataIn(riga: string): string | null {
   let m = DATA_NUM.exec(riga);
   if (m) { const d = giornoIso(+m[1], +m[2], +m[3]); if (d) return d; }
   m = DATA_MESE.exec(riga);
   if (m) { const mese = MESI[m[2].toLowerCase()]; if (mese) return giornoIso(+m[1], mese, +m[3]); }
+  return null;
+}
+// Tutte le date scritte in una pagina: serve a controllare che una data proposta dal modello ci sia davvero.
+export function tutteLeDate(testo: string): Set<string> {
+  const fuori = new Set<string>(), t = String(testo ?? '');
+  for (const m of t.matchAll(new RegExp(DATA_NUM.source, 'g'))) { const d = giornoIso(+m[1], +m[2], +m[3]); if (d) fuori.add(d); }
+  for (const m of t.matchAll(new RegExp(DATA_MESE.source, 'g'))) { const mese = MESI[m[2].toLowerCase()]; const d = mese ? giornoIso(+m[1], mese, +m[3]) : null; if (d) fuori.add(d); }
+  return fuori;
+}
+// Il tipo che dice un titolo breve («Holter», «EcoTT», «Dimissione Ospedale…»), o null.
+export function tipoDaTitolo(titolo: string): Tipo | null {
+  const t = String(titolo ?? '');
+  if (/eco\s?tt|eco|ete|ett/i.test(t)) return 'ett';
+  if (/dimissione|degenza|ricovero/i.test(t)) return 'dimissione';
+  if (/^lettera/i.test(t)) return 'lettera';
+  for (const [re, tp] of TITOLI) if (re.test(t)) return tp;
   return null;
 }
 // La data del documento: quella di «Luogo, data» se c'è; se no la prima in cima che non sia una data di nascita.
@@ -131,6 +147,13 @@ export function leggiPaziente(pagine: string[]): { nome: string; nascita: string
       nomi.set(k, { scritto, n: (nomi.get(k)?.n ?? 0) + 1 });
     }
   }
+  // Il foglio di copertina di una cartella cartacea: «Cognome: …» e «Nome: …» su due righe.
+  if (!nomi.size) {
+    const r = righeDi(pagine[0] ?? '').slice(0, 20);
+    const dopo = (re: RegExp) => { const x = r.map((y) => re.exec(y)).find(Boolean); return x ? x[1].split(/\s+/).filter((w) => /^[A-ZÀ-Ý][A-Za-zÀ-ÿ'’-]*$/.test(w)).slice(0, 3).join(' ') : ''; };
+    const cognome = dopo(/^cognome\s*:\s*(.+)$/i), nome = dopo(/^nome\s*:\s*(.+)$/i);
+    if (cognome && nome) nomi.set(`${cognome} ${nome}`.toLowerCase(), { scritto: `${cognome} ${nome}`, n: 1 });
+  }
   const piu = <T,>(voci: [T, number][]): T | null => (voci.length ? voci.reduce((a, b) => (b[1] > a[1] ? b : a))[0] : null);
   const nome = piu([...nomi.values()].map((v) => [v.scritto, v.n] as [string, number]));
   return nome ? { nome, nascita: piu([...nascite.entries()]) } : null;
@@ -162,7 +185,7 @@ export function titoloDi(categoria: Tipo, data: string | null): string {
 
 // Ciò che la persona ha confermato: intervalli in ordine, senza sovrapposizioni, dentro il documento.
 // Non devono coprire tutto: una pagina bianca si può lasciare fuori.
-export type PezzoScelto = { da: number; a: number; categoria: Tipo; titolo: string; data: string | null };
+export type PezzoScelto = { da: number; a: number; categoria: Tipo; titolo: string; data: string | null; cartella: string | null };
 export function controllaPezzi(grezzi: unknown, totale: number): { pezzi: PezzoScelto[] } | { errore: string } {
   if (!Array.isArray(grezzi) || !grezzi.length) return { errore: 'Nessun documento da creare.' };
   if (grezzi.length > 300) return { errore: 'Troppi documenti in una volta: al massimo 300.' };
@@ -176,7 +199,8 @@ export function controllaPezzi(grezzi: unknown, totale: number): { pezzi: PezzoS
     const dg = String(g?.data ?? '').trim();
     const data = /^\d{4}-\d{2}-\d{2}$/.test(dg) ? giornoIso(+dg.slice(8, 10), +dg.slice(5, 7), +dg.slice(0, 4)) : dataIn(dg);
     const titolo = String(g?.titolo ?? '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || titoloDi(categoria, data);
-    pezzi.push({ da, a, categoria, titolo, data });
+    const cartella = String(g?.cartella ?? '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || null;
+    pezzi.push({ da, a, categoria, titolo, data, cartella });
   }
   return { pezzi };
 }

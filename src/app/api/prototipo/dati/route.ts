@@ -102,8 +102,8 @@ export async function GET() {
     `select r.id, r.patient_id, r.quesito, r.urgenza, r.status, r.created_at::text, d.nome as medico, r.appuntamento_at::text, r.follow_up_due::text
        from referrals r left join referring_doctors d on d.id = r.referring_doctor_id
       where r.studio_id = $1 order by r.created_at desc limit 2000`, [sid]);
-  const docs = await query<{ id: string; patient_id: string; filename: string; categoria: string; nota: string | null; uploaded_at: string }>(
-    `select id, patient_id, filename, categoria, nota, uploaded_at::text from patient_documents where studio_id = $1 order by uploaded_at desc limit 2000`, [sid]);
+  const docs = await query<{ id: string; patient_id: string; filename: string; categoria: string; nota: string | null; uploaded_at: string; cartella: string | null }>(
+    `select id, patient_id, filename, categoria, nota, uploaded_at::text, cartella from patient_documents where studio_id = $1 order by uploaded_at desc limit 2000`, [sid]);
   const appts = await query<{ id: string; provider_id: string | null; medico: string | null; starts_at: string; ends_at: string | null; titolo: string | null; paziente_nome: string | null; motivo: string | null; luogo: string | null; completed_at: string | null; referral_id: string | null; colore: string | null; stato_medionline: string | null; patient_id: string | null }>(
     `select a.id, a.provider_id, pr.nome as medico, a.starts_at::text, a.ends_at::text, a.titolo, a.paziente_nome, a.motivo, a.luogo, a.completed_at::text, a.referral_id, a.colore, a.stato_medionline, a.patient_id
        from appointments a left join providers pr on pr.id = a.provider_id
@@ -144,7 +144,7 @@ export async function GET() {
         const k = tipoEsame(d);
         return { id: d.id, t: d.nota || d.filename, d: dCh(d.uploaded_at), r: ETICHETTA_ESAME[k] ?? 'Documento', k, filename: d.filename };
       }),
-      docs: dd.map((d) => ({ id: d.id, t: d.nota || d.filename, filename: d.filename, d: dCh(d.uploaded_at), k: DOC_TYPE[d.categoria] ?? 'admin', new: (adesso - new Date(d.uploaded_at).getTime()) < 7 * 86400000 })),
+      docs: dd.map((d) => ({ id: d.id, t: d.cartella || /^(dalla cartella completa|cartella completa, da dividere)/.test(d.nota ?? '') ? d.filename.replace(/\.pdf$/i, '') : d.nota || d.filename, filename: d.filename, cartella: d.cartella, d: dCh(d.uploaded_at), k: DOC_TYPE[d.categoria] ?? 'admin', new: (adesso - new Date(d.uploaded_at).getTime()) < 7 * 86400000 })),
       assicurazione: p.assicurazione ?? '',
       // Tutte le visite in agenda del paziente (passate e future), per la scheda.
       visits: aa.map((a) => ({ id: a.id, d: dCh(a.starts_at), ora: ora(a.starts_at), medico: a.medico ?? '', motivo: a.motivo ?? a.titolo ?? '', fatta: !!a.completed_at || new Date(a.starts_at).getTime() < adesso, futura: new Date(a.starts_at).getTime() >= adesso })),

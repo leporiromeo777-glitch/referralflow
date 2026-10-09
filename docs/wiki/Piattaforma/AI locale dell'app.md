@@ -1,6 +1,6 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-09-13
+aggiornata: 2026-10-09
 ---
 # AI locale dell'app
 
@@ -18,6 +18,7 @@ Gira su Ollama sul Mac dello studio, nessun cloud, nessun dato fuori dal compute
 | anonimizzazione nell'interfaccia nuova | `POST /api/prototipo/anonimizza` | stessa libreria di `/anonimizza`: modello `ANONIMIZZA_LLM`, il codice sostituisce; niente persistenza |
 | interprete delle domande scritte | `POST /api/prototipo/interpreta` | il codice interpreta; il modello (`PROTOTIPO_LLM`) solo nei casi grigi, sì/no sul candidato del codice, con traccia `interpretazione` |
 | riassunto pre-visita, confronto referti, cattura impegnativa | server action | generazione secca, su richiesta |
+| Dividi cartella | in sottofondo (`src/lib/dividi/analisi.ts`) | per ogni pagina di una cartella scansionata: comincia un documento? data, che documento è. Modello `DIVIDI_LLM` (default `gemma3:12b`), dopo la catena; decide insieme alle regole, conferma una persona ([[Piattaforma/Dividi cartella]]) |
 
 Tutte passano da `src/lib/ollama.ts`. Non c'è un assistente globale su tutte le pagine: non è mai stato costruito.
 

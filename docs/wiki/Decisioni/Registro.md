@@ -758,3 +758,14 @@ separati. Deciso così:
   data di nascita si leggono dal PDF e si propongono; la cartella nasce solo dopo la conferma di una persona.
 
 **Aggiunta (9.10.2026, dopo la prima cartella vera):** una scansione senza testo non si dichiara «illeggibile»: la pagina aspetta la lettura del Mac e rifà la proposta da sola. I tagli messi a mano nel frattempo valgono più della proposta arrivata dopo: non si sovrascrivono mai, si offre di passare.
+
+**Cambiata lo stesso giorno, con un dato nuovo.** Alla prima cartella vera lo studio ha detto che le sole regole
+sbagliano ancora tanto, e sul banco inventato lasciano interi 7 documenti su 12. Quindi:
+- **il modello locale entra per ogni pagina**, non solo per i casi dubbi (12 su 12 sul banco); resta **locale**
+  (Ollama sul Mac, `gemma3:12b`: il 27b dà le stesse risposte in quasi il triplo del tempo) e in sottofondo, dopo la catena;
+- **le regole restano come freno e paracadute**: «pagina 2 di N» e le pagine bianche non aprono mai un documento,
+  una data non scritta nella pagina non si accetta, e dove il modello tace decidono loro;
+- **i fogli col codice a barre comandano le sezioni**: ogni sezione è una sottocartella, i fogli restano fuori;
+- **il nome è «AAAA.MM.GG Cognome Nome tipo»** (richiesta dello studio): il nome del paziente sta nel nome del file,
+  che vive nella sua cartella e nel database; nei log continuano a non finire nomi né titoli;
+- **niente nasce senza conferma**, come prima.

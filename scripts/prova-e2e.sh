@@ -72,7 +72,7 @@ REFERTI_IMAGING_BASE="$ARCH" "$PY" imaging/ricevi-dicom.py > "$TMP/ricezione.log
 RIC_PID=$!
 # Monitoraggio: sul server di prova il motore è spento (lo guidano le prove, col tempo simulato) e l'AI pure;
 # la demo è quella COMPLETA (13 pazienti, tutte le situazioni), non i quattro che si vedono di serie.
-MONITORAGGIO_DEMO=completa MONITORAGGIO_MOTORE=spento MONITORAGGIO_AI=spenta PRESSIONE_PROPOSTE=1 PRESSIONE_CARTELLA="$TMP/pressione-cartella" PRESSIONE_CARTELLA_GIRO=spento CICLO_CARTELLA="$TMP/ciclo-cartella" ECG_CARTELLA="$TMP/ciclo-cartella-ecg" CICLO_CARTELLA_GIRO=spento REFERTI_IMAGING_BASE="$ARCH" IMAGING_MISURE=1 DATABASE_URL="$URL_DB" PORT="$PORTA" npx next dev -p "$PORTA" > "$TMP/server.log" 2>&1 &
+MONITORAGGIO_DEMO=completa MONITORAGGIO_MOTORE=spento MONITORAGGIO_AI=spenta PRESSIONE_PROPOSTE=1 PRESSIONE_CARTELLA="$TMP/pressione-cartella" PRESSIONE_CARTELLA_GIRO=spento CICLO_CARTELLA="$TMP/ciclo-cartella" ECG_CARTELLA="$TMP/ciclo-cartella-ecg" CICLO_CARTELLA_GIRO=spento DIVIDI_LLM=spento REFERTI_IMAGING_BASE="$ARCH" IMAGING_MISURE=1 DATABASE_URL="$URL_DB" PORT="$PORTA" npx next dev -p "$PORTA" > "$TMP/server.log" 2>&1 &
 SERVER_PID=$!
 for _ in $(seq 1 60); do curl -s -o /dev/null "http://localhost:$PORTA/login" && break; sleep 2; done
 curl -s -o /dev/null "http://localhost:$PORTA/login" || { fallito "il server di prova non è partito (vedi $TMP/server.log)"; tail -5 "$TMP/server.log"; exit 1; }

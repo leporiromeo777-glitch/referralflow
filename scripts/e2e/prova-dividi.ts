@@ -35,6 +35,33 @@ async function cartella(file: string): Promise<void> {
   await fs.rm(src, { force: true });
 }
 
+// Una cartella cartacea coi fogli separatori: il codice a barre (Code 39) lo si disegna qui, barra per barra.
+const C39: Record<string, string> = { '0': '000110100', '1': '100100001', '2': '001100001', '3': '101100000', '4': '000110001', '5': '100110000', '7': '000100101', P: '001010010', Z: '011010000', '*': '010010100' };
+function barre(codice: string, x0: number, y: number): string {
+  let x = x0; const ps: string[] = [];
+  for (const c of `*${codice}*`) {
+    [...C39[c]].forEach((largo, k) => { const w = largo === '1' ? 5 : 2; if (k % 2 === 0) ps.push(`${x} ${y} ${w} 50 rectfill`); x += w; });
+    x += 2;
+  }
+  return `${ps.join(' ')} 50 ${y - 20} moveto (*${codice}*) show`;
+}
+const lettera = (giorno: string, n: string) => [`50 770 moveto (Studio di Prova) show 50 752 moveto (Lugano, ${giorno}) show 50 734 moveto (Concerne: Signora Provadividi Anna, nata il 03.04.1950) show 50 716 moveto (Egregio collega,) show 50 698 moveto (ho rivisto la paziente per il controllo ${n}. Riferisce di stare bene e non lamenta disturbi.) show 50 680 moveto (Pagina 1 di 2) show`,
+  `50 770 moveto (prosegue la terapia in corso senza modifiche e la rivedro fra dodici mesi.) show 50 752 moveto (Con i migliori saluti) show 50 734 moveto (Dr. med. Inventato) show 50 716 moveto (Pagina 2 di 2) show`];
+const PAGINE_BARRE: string[] = [
+  `${barre('PZ00012345', 150, 600)} 50 500 moveto (N. Paziente 12345) show 50 482 moveto (Cognome: Provadividi) show 50 464 moveto (Nome: Anna) show`,      // 1 copertina
+  `${barre('770000', 180, 600)} 50 500 moveto (RAPPORTI) show`,                                                                                             // 2 separatore: 01_Rapporti
+  ...lettera('12 marzo 2019', 'annuale'), ...lettera('15 maggio 2020', 'successivo'),                                                                     // 3-4, 5-6
+  `${barre('770004', 180, 600)} 50 500 moveto (APPARECCHI) show`,                                                                                           // 7 separatore: 05_Apparecchi
+  '',                                                                                                                                                       // 8 il retro del separatore
+  `50 770 moveto (Holter ECG 24 ore) show 50 752 moveto (Registrazione del 18.10.2023) show 50 734 moveto (FC media 68/min, minima 49/min, massima 121/min, rare extrasistoli) show`,   // 9
+];
+async function cartellaBarre(file: string): Promise<void> {
+  const src = `${file}.ps`;
+  await fs.writeFile(src, `%!PS\n/Helvetica findfont 11 scalefont setfont\n${PAGINE_BARRE.map((x) => `${x}\nshowpage`).join('\n')}\n`);
+  execFileSync(process.env.GS_BIN || '/opt/homebrew/bin/gs', ['-q', '-dNOPAUSE', '-dBATCH', '-sDEVICE=pdfwrite', `-sOutputFile=${file}`, src], { stdio: 'ignore' });
+  await fs.rm(src, { force: true });
+}
+
 async function main() {
   if (!/referralflow_demo/.test(process.env.DATABASE_URL ?? '')) throw new Error('solo sul database demo');
   await fs.mkdir(TMP, { recursive: true });
@@ -125,6 +152,35 @@ async function main() {
     const zb = Buffer.from(await z.arrayBuffer());
     const zNo = await manda(C_SEG, { azione: 'zip', ids: ['00000000-0000-4000-8000-000000000000'] }), zVuoto = await manda(C_SEG, { azione: 'zip', ids: [] });
     verifica(z.status === 200 && zb.subarray(0, 2).toString() === 'PK' && zb.length > 1000 && zNo.status === 404 && zVuoto.status === 400, `lo zip coi quattro PDF si scarica; un documento che non c'è o un elenco vuoto no (${z.status}, ${zNo.status}, ${zVuoto.status})`);
+
+    // 5 — la cartella coi fogli separatori: il Mac li trova in sottofondo, e la proposta diventa sezioni e nomi.
+    const fileB = path.join(TMP, 'barre.pdf');
+    await cartellaBarre(fileB);
+    const fb = new FormData();
+    fb.append('file', new Blob([await fs.readFile(fileB)], { type: 'application/pdf' }), 'Cartella coi separatori.pdf'); fb.append('categoria', 'altro'); fb.append('nota', 'cartella completa, da dividere');
+    const docB = (await (await fetch(`${base}/api/prototipo/pazienti/${pa}/documenti`, { method: 'POST', headers: { cookie: C_SEG }, body: fb })).json() as any).id as string;
+    const primaB = await leggi(C_SEG, `?documento=${docB}`);
+    let statoB: any = null;
+    for (let k = 0; k < 60 && statoB?.analisi?.stato !== 'fatta'; k++) { await new Promise((r) => setTimeout(r, 1000)); statoB = (await leggi(C_SEG, `?stato=${docB}`)).j; }
+    const dopoB = await leggi(C_SEG, `?documento=${docB}`);
+    const pb: any[] = dopoB.j.pezzi ?? [];
+    verifica(primaB.stato === 200 && statoB?.analisi?.stato === 'fatta' && dopoB.j.analisi?.stato === 'fatta'
+      && JSON.stringify(pb.map((x) => [x.da, x.a, x.foglio, x.cartella, x.escluso])) === JSON.stringify([[1, 1, 'copertina', null, true], [2, 2, 'separatore', '01_Rapporti', true], [3, 4, null, '01_Rapporti', false], [5, 6, null, '01_Rapporti', false],
+        [7, 7, 'separatore', '05_Apparecchi', true], [8, 8, null, '05_Apparecchi', true], [9, 9, null, '05_Apparecchi', false]]),
+      `i codici a barre si leggono (copertina e due separatori): due sezioni, i fogli e il retro bianco restano fuori, tre documenti (analisi ${statoB?.analisi?.stato}, ${pb.length} pezzi)`);
+    verifica(pb[2]?.titolo === '2019.03.12 Provadividi Anna Lettera' && pb[3]?.titolo === '2020.05.15 Provadividi Anna Lettera' && pb[6]?.titolo === '2023.10.18 Provadividi Anna Holter' && pb[6]?.categoria === 'holter',
+      `i nomi proposti: data, paziente, tipo di documento (${pb[6]?.titolo})`);
+    const sceltiB = pb.filter((x) => !x.escluso).map((x) => ({ da: x.da, a: x.a, categoria: x.categoria, titolo: x.titolo, data: x.data, cartella: x.cartella }));
+    const crB = await manda(C_SEG, { azione: 'crea', documento_id: docB, pezzi: sceltiB, proposti: sceltiB.map((x) => [x.da, x.a]) });
+    const creatiB: any[] = (await crB.json().catch(() => ({})) as any).creati ?? [];
+    const righeB = await query<{ filename: string; cartella: string | null }>(`select filename, cartella from patient_documents where id = any($1::uuid[]) order by cartella, filename`, [creatiB.map((x) => x.id)]);
+    const zB = await manda(C_SEG, { azione: 'zip', ids: creatiB.map((x) => x.id) });
+    const fz = path.join(TMP, 'b.zip'); await fs.writeFile(fz, Buffer.from(await zB.arrayBuffer()));
+    const dentro = execFileSync('/usr/bin/unzip', ['-Z1', fz]).toString().trim().split('\n').sort();
+    verifica(crB.status === 201 && JSON.stringify(righeB.map((x) => [x.cartella, x.filename])) === JSON.stringify([['01_Rapporti', '2019.03.12 Provadividi Anna Lettera.pdf'], ['01_Rapporti', '2020.05.15 Provadividi Anna Lettera.pdf'], ['05_Apparecchi', '2023.10.18 Provadividi Anna Holter.pdf']])
+      && JSON.stringify(dentro) === JSON.stringify(['01_Rapporti/2019.03.12 Provadividi Anna Lettera.pdf', '01_Rapporti/2020.05.15 Provadividi Anna Lettera.pdf', '05_Apparecchi/2023.10.18 Provadividi Anna Holter.pdf']),
+      `i documenti nascono nella loro sottocartella, e lo zip ha le stesse sottocartelle (${dentro.length} file)`);
+
   } finally {
     await pulisci().catch(() => null);
     await fs.rm(TMP, { recursive: true, force: true }).catch(() => null);

@@ -9,7 +9,9 @@ import { dopoCaricamento, valutaPdf } from '../documenti-ocr';
 import { getFile, putFile } from '../storage';
 import { abbinaPaziente } from '../imaging-ordina';
 import { proponiAnagrafica } from '../pazienti-abbina-regole';
-import { confronta, controllaPezzi, leggiPaziente, proponi, type Pezzo } from './tagli';
+import { analisiDi, mettiInCoda, statoAnalisi, type StatoAnalisi } from './analisi';
+import { componi, type PezzoSezione } from './sezioni';
+import { confronta, controllaPezzi, leggiPaziente } from './tagli';
 
 // Dividere una cartella completa (9.10.2026, [[Piattaforma/Dividi cartella]]) — il lato che tocca
 // file e database. Le regole che propongono i tagli stanno in tagli.ts (pure). Qui: si legge il
@@ -62,19 +64,20 @@ export async function chiE(studioId: string, testi: unknown) {
 
 // A che punto è la lettura (OCR) di una scansione: la pagina lo chiede ogni pochi secondi mentre aspetta,
 // e per questo non apre il file e non scrive nel registro.
-export async function statoLettura(studioId: string, id: string): Promise<{ ocr: string | null } | null> {
+export async function statoLettura(studioId: string, id: string): Promise<{ ocr: string | null; analisi: StatoAnalisi | null } | null> {
   const [d] = await query<{ ocr_stato: string | null }>(`select ocr_stato from patient_documents where id = $1 and studio_id = $2`, [id, studioId]);
-  return d ? { ocr: d.ocr_stato } : null;
+  return d ? { ocr: d.ocr_stato, analisi: await statoAnalisi(studioId, id) } : null;
 }
 
 // Lo storico: le cartelle complete caricate di recente (da qui o divise qui), con a che punto sono —
 // in lettura, da dividere, già divise e in quanti documenti. Serve a ritrovare una cartella lasciata a metà
 // senza ricordarsi di chi era. Solo per chi ha la sezione; i numeri vengono dal registro degli accessi.
 export async function recenti(studioId: string) {
-  return query<{ id: string; filename: string; patient_id: string; paziente: string; caricato: string; ocr_stato: string | null; divisa_il: string | null; documenti: number | null }>(
+  return query<{ id: string; filename: string; patient_id: string; paziente: string; caricato: string; ocr_stato: string | null; divisa_il: string | null; documenti: number | null; analisi: string | null }>(
     `select d.id, d.filename, d.patient_id, (p.cognome || ' ' || p.nome) as paziente, to_char(d.uploaded_at, 'YYYY-MM-DD') as caricato, d.ocr_stato,
-            to_char(u.at, 'YYYY-MM-DD') as divisa_il, nullif(substring(u.dettaglio from '^divisione: ([0-9]+) documenti'), '')::int as documenti
+            to_char(u.at, 'YYYY-MM-DD') as divisa_il, nullif(substring(u.dettaglio from '^divisione: ([0-9]+) documenti'), '')::int as documenti, a.stato as analisi
        from patient_documents d join patients p on p.id = d.patient_id
+       left join dividi_analisi a on a.documento_id = d.id and a.storage_key = d.storage_key
        left join lateral (select l.at, l.dettaglio from document_access_log l where l.document_id = d.id and l.dettaglio like 'divisione: %' order by l.at desc limit 1) u on true
       where d.studio_id = $1 and d.filename ilike '%.pdf' and d.uploaded_at > now() - interval '90 days'
         and (d.nota = 'cartella completa, da dividere' or u.at is not null)
@@ -103,7 +106,7 @@ async function testiPagine(dati: Buffer): Promise<string[] | null> {
   } catch { return null; }
 }
 
-export type Analisi = { documento: { id: string; filename: string; patient_id: string; paziente: string }; pagine: number; con_testo: number; ocr: string | null; pezzi: Pezzo[] };
+export type Analisi = { documento: { id: string; filename: string; patient_id: string; paziente: string }; pagine: number; con_testo: number; ocr: string | null; pezzi: PezzoSezione[]; analisi: StatoAnalisi | null };
 export async function analizza(studioId: string, userId: string, id: string): Promise<Analisi | { errore: string; stato: number }> {
   const d = await documento(studioId, id);
   if (!d) return { errore: 'Documento non trovato, o non è un PDF.', stato: 404 };
@@ -112,14 +115,19 @@ export async function analizza(studioId: string, userId: string, id: string): Pr
   const testi = await testiPagine(dati);
   if (!testi) return { errore: 'Il PDF non si legge.', stato: 422 };
   if (testi.length > MAX_PAGINE) return { errore: `Il PDF ha ${testi.length} pagine: se ne dividono al massimo ${MAX_PAGINE} per volta.`, stato: 413 };
-  const pezzi = proponi(testi);
   const conTesto = testi.filter((t) => t.replace(/\s+/g, '').length > 20).length;
+  // L'analisi in sottofondo (separatori col codice a barre + modello locale): se c'è, la proposta la usa;
+  // se no si mette in coda e intanto valgono le regole. Una scansione ancora da leggere aspetta l'OCR.
+  let an = await analisiDi(id, d.storage_key);
+  if (!an && d.ocr_stato !== 'da_fare') { await mettiInCoda(studioId, id, d.storage_key); an = await analisiDi(id, d.storage_key); }
+  const pezzi = componi(testi, an?.esito.separatori ?? [], an?.esito.risposte ?? {}, d.paziente);
   await logDocumento(id, 'lettura', { studioId, userId, dettaglio: 'proposta di divisione' });
-  console.log(`[dividi] ${id.slice(0, 8)}: ${testi.length} pagine, ${conTesto} con testo → ${pezzi.length} documenti proposti`);
-  return { documento: { id: d.id, filename: d.filename, patient_id: d.patient_id, paziente: d.paziente }, pagine: testi.length, con_testo: conTesto, ocr: d.ocr_stato, pezzi };
+  console.log(`[dividi] ${id.slice(0, 8)}: ${testi.length} pagine, ${conTesto} con testo → ${pezzi.filter((x) => !x.escluso).length} documenti proposti in ${new Set(pezzi.map((x) => x.cartella).filter(Boolean)).size} sezioni (analisi: ${an?.stato ?? 'in attesa'})`);
+  return { documento: { id: d.id, filename: d.filename, patient_id: d.patient_id, paziente: d.paziente }, pagine: testi.length, con_testo: conTesto, ocr: d.ocr_stato, pezzi,
+    analisi: an ? { stato: an.stato, fatte: an.fatte, pagine: an.pagine, versione: an.versione, modello: an.modello } : null };
 }
 
-export type Creato = { id: string; filename: string; pagine: number; categoria: string };
+export type Creato = { id: string; filename: string; pagine: number; categoria: string; cartella: string | null };
 export async function crea(studioId: string, userId: string, id: string, grezzi: unknown, proposti: unknown): Promise<{ creati: Creato[] } | { errore: string; stato: number }> {
   const d = await documento(studioId, id);
   if (!d) return { errore: 'Documento non trovato, o non è un PDF.', stato: 404 };
@@ -141,11 +149,11 @@ export async function crea(studioId: string, userId: string, id: string, grezzi:
         const nome = `${p.titolo}.pdf`;
         const nota = `dalla cartella completa, ${p.da === p.a ? `pagina ${p.da}` : `pagine ${p.da}–${p.a}`}`;
         const [nuovo] = await query<{ id: string }>(
-          `insert into patient_documents (studio_id, patient_id, filename, storage_key, categoria, nota, uploaded_by)
-           values ($1, $2, $3, $4, $5, $6, $7) returning id`, [studioId, d.patient_id, nome, key, p.categoria, nota, userId]);
+          `insert into patient_documents (studio_id, patient_id, filename, storage_key, categoria, nota, uploaded_by, cartella)
+           values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`, [studioId, d.patient_id, nome, key, p.categoria, nota, userId, p.cartella]);
         await logDocumento(nuovo.id, 'caricamento', { studioId, userId, dettaglio: `diviso da ${id.slice(0, 8)}` });
         await dopoCaricamento(nuovo.id, pdf, '.pdf').catch(() => null);
-        creati.push({ id: nuovo.id, filename: nome, pagine: p.a - p.da + 1, categoria: p.categoria });
+        creati.push({ id: nuovo.id, filename: nome, pagine: p.a - p.da + 1, categoria: p.categoria, cartella: p.cartella });
         await fs.rm(uscita, { force: true });
       }
       // Quanto è servita la proposta: solo numeri (è la misura con cui si giudicano le regole).
@@ -161,16 +169,19 @@ export async function crea(studioId: string, userId: string, id: string, grezzi:
 // Tutti i documenti scelti in un file .zip, coi loro nomi (per chi li vuole fuori dalla piattaforma).
 export async function zipDi(studioId: string, userId: string, ids: string[]): Promise<Buffer | { errore: string; stato: number }> {
   if (!ids.length || ids.length > 300) return { errore: 'Scegli da 1 a 300 documenti.', stato: 400 };
-  const righe = await query<{ id: string; filename: string; storage_key: string }>(
-    `select id, filename, storage_key from patient_documents where studio_id = $1 and id = any($2::uuid[])`, [studioId, ids]);
+  const righe = await query<{ id: string; filename: string; storage_key: string; cartella: string | null }>(
+    `select id, filename, storage_key, cartella from patient_documents where studio_id = $1 and id = any($2::uuid[])`, [studioId, ids]);
   if (righe.length !== new Set(ids).size) return { errore: 'Qualche documento non si trova.', stato: 404 };
   try {
     return await inCartella(async (dir) => {
       const visti = new Set<string>(); const nomi: string[] = [];
       for (const r of righe) {
-        const pulito = r.filename.replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim() || 'documento.pdf';
-        let nome = pulito; for (let n = 2; visti.has(nome.toLowerCase()); n++) nome = pulito.replace(/(\.[^.]+)?$/, ` (${n})$1`);
+        const netto = (x: string) => x.replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').replace(/^\.+/, '').trim();
+        const pulito = netto(r.filename) || 'documento.pdf', sotto = netto(r.cartella ?? '');
+        // Ogni sezione della cartella è una sottocartella dello zip.
+        let nome = sotto ? `${sotto}/${pulito}` : pulito; for (let n = 2; visti.has(nome.toLowerCase()); n++) nome = (sotto ? `${sotto}/` : '') + pulito.replace(/(\.[^.]+)?$/, ` (${n})$1`);
         visti.add(nome.toLowerCase()); nomi.push(nome);
+        if (sotto) await fs.mkdir(path.join(dir, sotto), { recursive: true });
         await fs.writeFile(path.join(dir, nome), (await getFile(r.storage_key)).body, { mode: 0o600 });
         await logDocumento(r.id, 'lettura', { studioId, userId, dettaglio: 'scaricato in zip' });
       }
