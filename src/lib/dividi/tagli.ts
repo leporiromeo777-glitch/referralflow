@@ -96,6 +96,32 @@ export function tipoDelDocumento(testo: string): Tipo {
   return 'altro';
 }
 
+// La FORMA della pagina (9.10.2026, indicazione dello studio): una lettera COMINCIA con un titolo in alto
+// («Referto», «Rapporto»…) e spesso con un blocco di dati in alto a destra; FINISCE quando in fondo alla
+// pagina c'è il nome del medico (e a volte la firma) o i saluti. Finché una pagina non «chiude», quella dopo
+// è il suo seguito. Il server la ricava dalla posizione delle righe nel PDF (`formaDaRighe`); dal solo testo
+// (`formaDaTesto`, per le prove) le righe a destra sono quelle che cominciano con due tabulazioni.
+export type Forma = { titolo: boolean; destra: number; chiusa: boolean };
+export type RigaPosta = { t: string; x: number; y: number };      // x, y da 0 a 1: frazione della larghezza e dell'altezza (0 = in alto a sinistra)
+const TITOLO_ALTO = /(referto|rapporto|bericht|consulto|consilium|visita|lettera|dimissione|austritt|ecocardio|echokardio|holter|\becg\b|\bekg\b|elettrocardio|laborator|risultati|ergometr|cicloergo|spiro|coronarograf|misurazione|duplex|doppler|radiografia|risonanza|\btac\b|\bmri\b|scintigrafia|interrogazione|ricetta|rezept|ordonnance|certificato|consenso)/i;
+const SALUTI_FINE = new RegExp(`${CHIUSURA.source}|con stima|cordialmente|mit freundlichen|cordialement`, 'i');
+const MEDICO = /(^|[^a-zà-ÿ])(dr\.?\s?(med\.?|ssa\.?)?|dott\.?(ssa\.?)?|dottor(e|essa)?|prof\.?|pd dr\.?|fmh|capoclinica|caposervizio|viceprimario|primario|medico (assistente|aggiunto|capo))(?=$|[^a-zà-ÿ])/i;
+const RECAPITI = /(tel\.?\s*[:+\d]|telefono|fax|www\.|@|iban|\bch-?\d{4}\b)/i;      // il piè di pagina della carta intestata non è una firma
+function formaDi(alto: string[], destra: number, fondo: string[]): Forma {
+  // Un titolo è una riga corta che COMINCIA con la parola («Referto cardiologico», «Lettera di dimissione») e non finisce col punto: non una frase che la contiene.
+  const titolo = alto.slice(0, 12).some((x) => x.length <= 60 && /^[A-ZÀ-Ý0-9]/.test(x) && !/[.;,]$/.test(x) && TITOLO_ALTO.test(x.split(/\s+/).slice(0, 2).join(' ')));
+  const chiusa = SALUTI_FINE.test(fondo.slice(-14).join('\n')) || fondo.slice(-8).some((x) => !RECAPITI.test(x) && MEDICO.test(x));
+  return { titolo, destra, chiusa };
+}
+export function formaDaRighe(righe: RigaPosta[]): Forma {
+  const r = righe.map((x) => ({ ...x, t: x.t.replace(/\s+/g, ' ').trim() })).filter((x) => x.t.replace(/[^A-Za-zÀ-ÿ0-9]/g, '').length >= 3).sort((a, b) => a.y - b.y);
+  return formaDi(r.filter((x) => x.y < 0.4).map((x) => x.t), r.filter((x) => x.y < 0.3 && x.x >= 0.5).length, r.map((x) => x.t));
+}
+export function formaDaTesto(testo: string): Forma {
+  const grezze = String(testo ?? '').split(/\r?\n/).filter((x) => x.trim());
+  return formaDi(righeDi(testo).slice(0, 12), grezze.slice(0, 15).filter((x) => /^(\t\t| {20,})/.test(x)).length, righeDi(testo));
+}
+
 export type Segnali = { punti: number; segnali: string[]; vuota: boolean };
 // Quanto questa pagina sembra la PRIMA di un documento (prima = il testo della pagina precedente, o null).
 export function inizio(testo: string, prima: string | null): Segnali {

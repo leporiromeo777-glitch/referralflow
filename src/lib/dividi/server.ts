@@ -10,6 +10,7 @@ import { getFile, putFile } from '../storage';
 import { abbinaPaziente } from '../imaging-ordina';
 import { proponiAnagrafica } from '../pazienti-abbina-regole';
 import { analisiDi, mettiInCoda, statoAnalisi, type StatoAnalisi } from './analisi';
+import { leggiPagine } from './pagine';
 import { componi, type PezzoSezione } from './sezioni';
 import { confronta, controllaPezzi, leggiPaziente } from './tagli';
 
@@ -91,36 +92,22 @@ export async function elencoPdf(studioId: string, patientId: string) {
       where studio_id = $1 and patient_id = $2 and filename ilike '%.pdf' order by uploaded_at desc limit 200`, [studioId, patientId]);
 }
 
-// Il testo di ogni pagina, nell'ordine. Una pagina senza testo dà una stringa vuota.
-async function testiPagine(dati: Buffer): Promise<string[] | null> {
-  try {
-    const { PDFParse } = await import('pdf-parse');
-    const parser = new PDFParse({ data: dati });
-    const r: any = await parser.getText();
-    try { await parser.destroy(); } catch { /* ignora */ }
-    const n: number = typeof r?.total === 'number' ? r.total : Array.isArray(r?.pages) ? r.pages.length : 0;
-    if (!n) return null;
-    const fuori: string[] = Array.from({ length: n }, () => '');
-    for (const p of Array.isArray(r?.pages) ? r.pages : []) { const k = Number(p?.num ?? 0); if (k >= 1 && k <= n) fuori[k - 1] = String(p?.text ?? ''); }
-    return fuori;
-  } catch { return null; }
-}
-
 export type Analisi = { documento: { id: string; filename: string; patient_id: string; paziente: string }; pagine: number; con_testo: number; ocr: string | null; pezzi: PezzoSezione[]; analisi: StatoAnalisi | null };
 export async function analizza(studioId: string, userId: string, id: string): Promise<Analisi | { errore: string; stato: number }> {
   const d = await documento(studioId, id);
   if (!d) return { errore: 'Documento non trovato, o non è un PDF.', stato: 404 };
   let dati: Buffer;
   try { dati = (await getFile(d.storage_key)).body; } catch { return { errore: 'Il file non si trova più.', stato: 410 }; }
-  const testi = await testiPagine(dati);
-  if (!testi) return { errore: 'Il PDF non si legge.', stato: 422 };
+  const letto = await leggiPagine(dati);
+  if (!letto) return { errore: 'Il PDF non si legge.', stato: 422 };
+  const testi = letto.testi;
   if (testi.length > MAX_PAGINE) return { errore: `Il PDF ha ${testi.length} pagine: se ne dividono al massimo ${MAX_PAGINE} per volta.`, stato: 413 };
   const conTesto = testi.filter((t) => t.replace(/\s+/g, '').length > 20).length;
   // L'analisi in sottofondo (separatori col codice a barre + modello locale): se c'è, la proposta la usa;
   // se no si mette in coda e intanto valgono le regole. Una scansione ancora da leggere aspetta l'OCR.
   let an = await analisiDi(id, d.storage_key);
   if (!an && d.ocr_stato !== 'da_fare') { await mettiInCoda(studioId, id, d.storage_key); an = await analisiDi(id, d.storage_key); }
-  const pezzi = componi(testi, an?.esito.separatori ?? [], an?.esito.risposte ?? {}, d.paziente);
+  const pezzi = componi(testi, an?.esito.separatori ?? [], an?.esito.risposte ?? {}, d.paziente, letto.forme);
   await logDocumento(id, 'lettura', { studioId, userId, dettaglio: 'proposta di divisione' });
   console.log(`[dividi] ${id.slice(0, 8)}: ${testi.length} pagine, ${conTesto} con testo → ${pezzi.filter((x) => !x.escluso).length} documenti proposti in ${new Set(pezzi.map((x) => x.cartella).filter(Boolean)).size} sezioni (analisi: ${an?.stato ?? 'in attesa'})`);
   return { documento: { id: d.id, filename: d.filename, patient_id: d.patient_id, paziente: d.paziente }, pagine: testi.length, con_testo: conTesto, ocr: d.ocr_stato, pezzi,

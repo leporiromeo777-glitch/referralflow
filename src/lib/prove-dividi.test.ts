@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { confronta, controllaPezzi, dataDelDocumento, inizio, leggiPaziente, proponi, tipoDelDocumento } from './dividi/tagli';
+import { confronta, controllaPezzi, dataDelDocumento, formaDaRighe, formaDaTesto, inizio, leggiPaziente, proponi, tipoDelDocumento } from './dividi/tagli';
 
 // Dividere una cartella completa (9.10.2026). Tutti i testi qui sono INVENTATI.
 const lettera1 = ['Studio di Prova', 'Via Inventata 1 · 6900 Lugano', '', 'Lugano, 12 marzo 2019', '', 'Concerne: Signora Provadividi Anna, nata il 03.04.1950', '',
@@ -96,6 +96,7 @@ test('dividi: il codice del foglio dice la sezione (le ultime due cifre, da 00) 
   assert.deepEqual(foglioDelCodice('770000'), { copertina: false, numero: 1, nome: '01_Rapporti' });
   assert.deepEqual(foglioDelCodice('770010'), { copertina: false, numero: 11, nome: '11_Documenti amministrativi' });
   assert.deepEqual(foglioDelCodice('770008'), { copertina: false, numero: 9, nome: '09_Laboratorio e analisi' });
+  assert.deepEqual(foglioDelCodice('770011'), { copertina: false, numero: 12, nome: '12_Ricette' });
   assert.deepEqual(foglioDelCodice(' PZ 00012345 '), { copertina: true });
   assert.equal(foglioDelCodice('770017')!.copertina === false && (foglioDelCodice('770017') as any).nome, '18_Sezione 18', 'una sezione che non si conosce prende il suo numero, e il nome lo si corregge a mano');
   assert.equal(foglioDelCodice('ABC'), null);
@@ -131,17 +132,37 @@ test('dividi: i fogli separatori aprono le sezioni e restano fuori; ogni documen
   assert.deepEqual(muta.map((x) => [x.da, x.a, x.sicurezza, x.escluso]), [[1, 1, 'alta', true], [2, 4, 'bassa', false]]);
 });
 
-test('dividi: il modello decide dove le regole non vedono, ma non scavalca i freni', () => {
-  // Due appunti di giorni diversi, senza saluti né titoli: per le regole è un documento solo.
-  const due = [appunti, `${appunti} seconda visita, 04.11.2024`, lettera2];
-  assert.equal(componi(due, [], {}, 'Provadividi Anna').length, 1);
-  const p = componi(due, [], { 2: { nuovo: true, data: '04.11.2024', titolo: 'Appunti' }, 3: { nuovo: true, data: null, titolo: 'Rapporto' } }, 'Provadividi Anna');
-  assert.deepEqual(p.map((x) => [x.da, x.a, x.data]), [[1, 1, null], [2, 3, '2024-11-04']], 'il modello apre il secondo appunto; «pagina 2 di 2» resta un seguito anche se il modello dice di no');
-  assert.equal(p[1].titolo, '2024.11.04 Provadividi Anna Appunti');
-  assert.equal(p[1].sicurezza, 'media', 'regole e modello non sono d\'accordo: da guardare');
-  // Il modello può anche unire: il titolo «Ecocardiogramma» in cima a un allegato dello stesso esame.
-  const unito = componi([lettera1, eco], [], { 2: { nuovo: false, data: null, titolo: null } }, 'Provadividi Anna');
-  assert.deepEqual(unito.map((x) => [x.da, x.a]), [[1, 2]]);
+const firmata = (giorno: string) => ['Studio di Prova', `Lugano, ${giorno}`, 'Egregio collega,', 'ho rivisto la paziente per il controllo. Riferisce di stare bene e non lamenta disturbi di rilievo.', 'Con i migliori saluti', 'Dr. med. Inventato'].join('\n');
+const allegato = ['Emoglobina 13,9 g/dl', 'Creatinina 71 umol/l', 'Colesterolo LDL 1,8 mmol/l', 'Potassio 4,1 mmol/l, sodio 139 mmol/l'].join('\n');
+const corpo = ['Diagnosi: cardiopatia ischemica stabile.', 'Anamnesi: da alcune settimane lieve affaticabilita salendo le scale, senza dolori toracici.', 'Esame obiettivo nella norma, pressione 130/80 mmHg.'].join('\n');
+const fine = ['Valutazione: situazione stabile, terapia invariata, controllo fra sei mesi.', 'Con i migliori saluti', 'Dr. med. Inventato'].join('\n');
+
+test('dividi: la forma della pagina — una lettera finisce col nome del medico, comincia col titolo o col blocco a destra', () => {
+  assert.deepEqual(formaDaTesto(firmata('12 marzo 2019')), { titolo: false, destra: 0, chiusa: true });
+  assert.equal(formaDaTesto(corpo).chiusa, false);
+  assert.equal(formaDaTesto('Referto cardiologico\n\t\tLugano, 12 marzo 2019\n\t\tPaziente: Provadividi Anna\nAnamnesi: sta bene e non lamenta disturbi.').titolo, true);
+  assert.equal(formaDaTesto('Referto cardiologico\n\t\tLugano, 12 marzo 2019\n\t\tPaziente: Provadividi Anna\nAnamnesi: sta bene e non lamenta disturbi.').destra, 2);
+  assert.equal(formaDaTesto('Terapia alla dimissione invariata.\nControllo fra un mese.').titolo, false, 'una frase che contiene la parola non è un titolo');
+  assert.equal(formaDaTesto('Decorso regolare.\nStudio di Prova · Dr. med. Inventato · Tel. 091 000 00 00 · www.prova.example').chiusa, false, 'il piè di pagina della carta intestata non è una firma');
+  // Dalle posizioni vere delle righe (come le dà il PDF): in alto a destra, e in fondo.
+  assert.deepEqual(formaDaRighe([{ t: 'Rapporto medico', x: 0.1, y: 0.12 }, { t: 'Lugano, 12.03.2019', x: 0.62, y: 0.08 }, { t: 'Paziente: Provadividi Anna', x: 0.62, y: 0.1 }, { t: 'Decorso regolare e senza complicazioni.', x: 0.1, y: 0.5 }, { t: 'Dr. med. Inventato', x: 0.1, y: 0.9 }]), { titolo: true, destra: 2, chiusa: true });
+  // Il freno: la pagina prima non chiude e questa non ha niente di un inizio → è il seguito, anche se il modello dice «nuovo».
+  const lettera = componi([corpo, fine], [], { 2: { nuovo: true, data: null, titolo: 'Rapporto' } }, 'Provadividi Anna');
+  assert.deepEqual(lettera.map((x) => [x.da, x.a]), [[1, 2]], 'una lettera non si taglia in due');
+  // La pagina prima chiude e questa ha un inizio → documento nuovo, anche se il modello dice «continua».
+  const due = componi([firmata('12 marzo 2019'), firmata('15 maggio 2020')], [], { 2: { nuovo: false, data: null, titolo: null } }, 'Provadividi Anna');
+  assert.deepEqual(due.map((x) => [x.da, x.a, x.sicurezza]), [[1, 1, 'alta'], [2, 2, 'media']]);
+});
+
+test('dividi: il modello decide nei casi incerti, ma non scavalca i freni né inventa date', () => {
+  // Incerto: la lettera ha chiuso, e la pagina dopo non ha né titolo né data in testa (un allegato? un altro documento?). Decide il modello.
+  assert.deepEqual(componi([firmata('12 marzo 2019'), allegato], [], {}, 'Provadividi Anna').map((x) => [x.da, x.a]), [[1, 2]], 'senza modello, i punti delle regole: resta unito');
+  const p = componi([firmata('12 marzo 2019'), allegato, lettera2], [], { 2: { nuovo: true, data: null, titolo: 'Laboratorio' }, 3: { nuovo: true, data: null, titolo: 'Rapporto' } }, 'Provadividi Anna');
+  assert.deepEqual(p.map((x) => [x.da, x.a, x.categoria, x.sicurezza]), [[1, 1, 'lettera', 'alta'], [2, 3, 'laboratorio', 'media']], 'il modello apre il laboratorio; «pagina 2 di 2» resta un seguito anche se il modello dice di no');
+  assert.equal(p[1].titolo, 'Provadividi Anna Laboratorio');
+  // Tracciati e appunti: un documento per giorno. Cambia la data → nuovo; stessa data o nessuna → continua.
+  const giorni = componi([retro, `01.04.2022\n${appunti}`, appunti, `12.05.2022\n${appunti}`, `12.05.2022 seconda pagina\n${appunti}`], [{ pagina: 1, codice: '770002' }], {}, 'Provadividi Anna');
+  assert.deepEqual(giorni.filter((x) => !x.foglio).map((x) => [x.da, x.a, x.data, x.titolo]), [[2, 3, '2022-04-01', '2022.04.01 Provadividi Anna Appunti'], [4, 5, '2022-05-12', '2022.05.12 Provadividi Anna Appunti']]);
   // Una data che nella pagina non è scritta non si accetta: resta quella letta dalle regole, o niente.
   const inventata = componi([appunti], [], { 1: { nuovo: true, data: '01.01.2020', titolo: 'Appunti' } }, 'Provadividi Anna');
   assert.equal(inventata[0].data, null);

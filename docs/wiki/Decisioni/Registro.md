@@ -769,3 +769,12 @@ sbagliano ancora tanto, e sul banco inventato lasciano interi 7 documenti su 12.
 - **il nome è «AAAA.MM.GG Cognome Nome tipo»** (richiesta dello studio): il nome del paziente sta nel nome del file,
   che vive nella sua cartella e nel database; nei log continuano a non finire nomi né titoli;
 - **niente nasce senza conferma**, come prima.
+
+**E ancora, la sera (dato nuovo: la prima cartella vera).** Il modello da solo taglia troppo (106 documenti su 163
+pagine; lo studio: «a volte taglia una lettera in due»). Quindi **il modello non decide più da solo**:
+- **comanda la forma della pagina** descritta dallo studio — una lettera finisce col nome del medico in fondo,
+  comincia col titolo in alto e il blocco di dati a destra — e fa da **freno**: se la pagina prima non chiude e
+  questa non ha un inizio, è un seguito, qualunque cosa dica il modello;
+- **il modello decide solo i casi incerti**, e dà data e titolo;
+- **tracciati e appunti: un documento per giorno**, come nello schema dello studio;
+- la sottocartella **Ricette** è la 12 **finché lo studio non dice il suo numero**.
