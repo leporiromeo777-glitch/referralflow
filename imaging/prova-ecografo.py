@@ -182,6 +182,51 @@ def main() -> int:
         check("filmato lungo (240 fotogrammi): fotogramma 200", bool(esito.get("ok")) and esito.get("frame") == 200 and barra(t / "l.png", 200, RG, CG), json.dumps(esito)[:90])
         check("  un fotogramma non costa come tutto il filmato", tl < tc * 3 + 0.5, f"corto {tc:.2f}s · lungo {tl:.2f}s")
 
+        # Il filmato intero in un file, per riprodurlo (9.10.2026): tutti i
+        # fotogrammi, nell'ordine, coi colori giusti, e la durata dichiarata dal file.
+        def filmato(file: Path, uscita: Path, *altri: str) -> tuple[dict, float]:
+            t0 = time.monotonic()
+            r = subprocess.run([sys.executable, str(LETTORE), "filmato", str(file), "--out", str(uscita), *altri], capture_output=True, text=True, timeout=180)
+            try:
+                return json.loads(r.stdout or "{}"), time.monotonic() - t0
+            except json.JSONDecodeError:
+                return {"errore": "uscita_non_json"}, time.monotonic() - t0
+
+        def apri(p: Path) -> tuple[dict, list[bytes]]:
+            b = p.read_bytes()
+            assert b[:8] == b"RFCINE1\n"
+            lung = int.from_bytes(b[8:12], "little")
+            testa = json.loads(b[12:12 + lung]); pos = 12 + lung; pezzi = []
+            for n in testa["lunghezze"]:
+                pezzi.append(b[pos:pos + n]); pos += n
+            assert pos == len(b)
+            return testa, pezzi
+
+        def come_png(pezzo: bytes, dove: Path) -> Path:
+            Image.open(io.BytesIO(pezzo)).save(dove); return dove
+
+        ds = filmato_jpeg(24, R, C); ds.FrameTime = "33.3"; f = t / "tempo.dcm"; ds.save_as(f)
+        esito, _ = filmato(f, t / "tempo.bin")
+        ok = bool(esito.get("ok")) and esito.get("frame_totali") == 24
+        check("filmato intero: 24 fotogrammi in un file, con la durata del file (33,3 ms)", ok and esito.get("ms") == 33.3, json.dumps(esito)[:110])
+        if ok:
+            testa, pezzi = apri(t / "tempo.bin")
+            check("  intestazione e pezzi tornano", testa["n"] == 24 and len(pezzi) == 24 and (testa["larghezza"], testa["altezza"]) == (C, R) and all(x[:2] == b"\xff\xd8" for x in pezzi))
+            check("  ogni fotogramma è il suo, e il rosso resta rosso", all(barra(come_png(pezzi[i], t / f"b{i}.png"), i, R, C) and rosso(t / f"b{i}.png") for i in (0, 7, 23)))
+            check("  nessun file a metà lasciato accanto", not list(t.glob("tempo.bin.*")))
+        ds = filmato_jpeg(6, R, C); ds.RecommendedDisplayFrameRate = 25; f = t / "fps.dcm"; ds.save_as(f)
+        check("  senza FrameTime vale la velocità consigliata (25/s → 40 ms)", filmato(f, t / "fps.bin")[0].get("ms") == 40.0)
+        check("  se il file non dice niente, la durata è null (decide la pagina)", filmato(t / "filmato.dcm", t / "muto.bin")[0].get("ms", 0) is None)
+        esito, _ = filmato(t / "grigio.dcm", t / "grigio.bin")
+        if esito.get("ok"):
+            _, pezzi = apri(t / "grigio.bin")
+            check("  filmato in grigio: 12 fotogrammi, il 5 è il 5", len(pezzi) == 12 and barra(come_png(pezzi[5], t / "bg.png"), 5, R, C))
+        else:
+            check("  filmato in grigio", False, json.dumps(esito)[:90])
+        check("  un'immagine ferma non è un filmato", filmato(t / "rgb.dcm", t / "no.bin")[0].get("errore") == "non_filmato" and not (t / "no.bin").exists())
+        esito, tempo = filmato(lungo, t / "lungo.bin")
+        check("  240 fotogrammi 800×600 in un processo solo", bool(esito.get("ok")) and esito.get("frame_totali") == 240, f"{tempo:.1f}s · {esito.get('byte', 0) / 1048576:.1f} MB")
+
     print(f"\n{'TUTTO OK' if not falliti else f'{falliti} FALLITI'}")
     return 1 if falliti else 0
 

@@ -706,3 +706,14 @@ Le quattro cose restano da fare. Per spegnere: togliere la riga dal `.env` e ria
 Richiesta dello studio: i rapporti veri coprono più giorni e in un grafico solo non si leggono. Si sceglie
 «Tutto» o un giorno; è una vista, i conti (medie, fasce, punteggio, proposte) restano su tutta la
 registrazione, e la legenda lo dice.
+
+## 9.10.2026 — Immagini: i filmati vanno da soli, e lo schermo intero
+Richiesta dello studio: non far avanzare i filmati con la rotella, poterli muovere con una barra, vederli a
+schermo intero. Deciso così:
+- **Il filmato si prepara intero sul Mac e gira nel browser** (un file coi fotogrammi in JPEG), non cento
+  richieste di PNG: un processo invece di cento, e mentre gira la pagina non si ridisegna.
+- **JPEG per guardare, PNG per misurare**: in movimento qualità 90; appena ci si ferma arriva il fotogramma
+  esatto del file. Le misure non cambiano: i numeri vengono dal file, non dall'immagine mostrata.
+- **La rotella cambia immagine**, non fotogramma: i fotogrammi hanno la loro barra.
+- **Schermo intero sulla pagina**, col visore che la copre: il visore da solo ne uscirebbe a ogni disegno.
+- I filmati preparati non guardati da 14 giorni si buttano (si rifanno in un paio di secondi).

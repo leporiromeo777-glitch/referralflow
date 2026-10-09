@@ -35,9 +35,9 @@ export type MetaDicom = {
   geometria: Geometria | null;
 };
 
-function esegui(args: string[]): Promise<{ uscita: string; codice: number }> {
+function esegui(args: string[], tempo = TIMEOUT_MS): Promise<{ uscita: string; codice: number }> {
   return new Promise((risolvi) => {
-    execFile(PY, [STRUMENTO, ...args], { timeout: TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024 },
+    execFile(PY, [STRUMENTO, ...args], { timeout: tempo, maxBuffer: 4 * 1024 * 1024 },
       (errore, stdout) => {
         const codice = errore && typeof (errore as any).code === 'number' ? (errore as any).code : errore ? 1 : 0;
         risolvi({ uscita: String(stdout ?? ''), codice });
@@ -149,6 +149,63 @@ export async function fotogrammaPng(
     if (!j?.ok) return { errore: String(j?.errore ?? 'disegno_fallito') };
     return fs.readFile(inCache);
   });
+}
+
+// Un filmato intero in un file solo, per riprodurlo nel browser (9.10.2026):
+// intestazione con le lunghezze e poi i fotogrammi in JPEG, preparati dal
+// lettore in un processo (cento PNG vorrebbero cento processi). Resta in cache
+// come i fotogrammi; chi lo chiede due volte insieme aspetta la stessa preparazione.
+const filmatiInCorso = new Map<string, Promise<string | { errore: string }>>();
+export async function filmatoFile(
+  key: string, opzioni: { ww?: number | null; wl?: number | null; lato?: number }
+): Promise<string | { errore: string }> {
+  const lato = Math.max(64, Math.min(2048, Math.round(opzioni.lato ?? 1024)));
+  const ww = Number.isFinite(opzioni.ww as number) ? Number(opzioni.ww) : null;
+  const wl = Number.isFinite(opzioni.wl as number) ? Number(opzioni.wl) : null;
+  const nome = `${key.replace(/[^a-z0-9]+/gi, '_')}-filmato-l${lato}-${ww ?? 'x'}-${wl ?? 'x'}.bin`;
+  const inCache = path.join(CACHE, nome);
+  try {
+    await fs.access(inCache);
+    // Usato adesso: la pulizia (`filmatiVecchiVia`) guarda questa data.
+    const ora = new Date(); await fs.utimes(inCache, ora, ora).catch(() => null);
+    return inCache;
+  } catch { /* si prepara */ }
+  const gia = filmatiInCorso.get(nome);
+  if (gia) return gia;
+  const lavoro = (async (): Promise<string | { errore: string }> => {
+    if (eSulNas(key) && !(await statoNas()).collegato) return { errore: 'archivio_non_collegato' };
+    try {
+      return await conFile(key, async (percorso): Promise<string | { errore: string }> => {
+      await fs.mkdir(CACHE, { recursive: true });
+      const args = ['filmato', percorso, '--out', inCache, '--lato', String(lato)];
+      if (ww !== null && wl !== null) args.push('--ww', String(ww), '--wl', String(wl));
+      const { uscita } = await esegui(args, 120_000);
+      let j: any = {};
+      try { j = JSON.parse(uscita || '{}'); } catch { /* uscita illeggibile */ }
+      return j?.ok ? inCache : { errore: String(j?.errore ?? 'filmato_fallito') };
+      });
+    } catch (e) {
+      return { errore: e instanceof NasNonCollegato ? 'archivio_non_collegato' : 'file_assente' };
+    }
+  })().finally(() => filmatiInCorso.delete(nome));
+  filmatiInCorso.set(nome, lavoro);
+  return lavoro;
+}
+
+// I filmati preparati che nessuno guarda da due settimane si buttano: si rifanno in un paio di secondi.
+export async function filmatiVecchiVia(giorni = 14): Promise<number> {
+  let tolti = 0;
+  let nomi: string[] = [];
+  try { nomi = await fs.readdir(CACHE); } catch { return 0; }
+  const limite = Date.now() - giorni * 86_400_000;
+  for (const n of nomi) {
+    if (!/-filmato-l\d+-.*\.bin(\.\d+\.tmp)?$/.test(n)) continue;
+    try {
+      const s = await fs.stat(path.join(CACHE, n));
+      if (s.mtimeMs < limite) { await fs.rm(path.join(CACHE, n), { force: true }); tolti++; }
+    } catch { /* sparito nel frattempo */ }
+  }
+  return tolti;
 }
 
 // Le misure dentro un referto strutturato. Si chiede solo per i file che

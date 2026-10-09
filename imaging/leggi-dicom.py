@@ -8,6 +8,7 @@ rovina al massimo la sua richiesta:
 
     leggi-dicom.py meta <file>                        → JSON dei campi utili
     leggi-dicom.py png <file> --frame N --out f.png   → un fotogramma in PNG
+    leggi-dicom.py filmato <file> --out f.bin         → tutti i fotogrammi di un filmato in un file (JPEG), per riprodurlo
     leggi-dicom.py misure <file>                      → le misure FATTE DALL'APPARECCHIO
     leggi-dicom.py calibrazione <file>                → mm per pixel, per misurare sull'immagine (vista compatta)
     leggi-dicom.py geometria <file>                   → tutta la geometria (fase 1 MSE), con sha256 del file
@@ -269,6 +270,66 @@ def comando_misure(percorso: Path) -> int:
                     "sop_class": str(getattr(ds, "SOPClassUID", "") or "")})
 
 
+def _disegna(ds, pixel, ww, wl, lato: int, fissa=None):
+    """Dai pixel di UN fotogramma all'immagine da mostrare: colori del file, o
+    grigi con la finestra. `fissa` = (basso, alto) già scelti (un filmato in
+    grigio senza finestra usa quelli del primo fotogramma per tutti: se ogni
+    fotogramma si allargasse sulla sua dinamica il filmato sfarfallerebbe).
+    Rende (immagine, (basso, alto) usati o None per il colore)."""
+    import numpy as np
+    from PIL import Image
+    from pydicom.pixels import apply_modality_lut, apply_voi_lut
+
+    usata = None
+    colore = getattr(ds, "SamplesPerPixel", 1) and int(ds.SamplesPerPixel) == 3
+    # PALETTE COLOR: i pixel sono indici e i colori stanno nella tavolozza del
+    # file (certe immagini Doppler degli ecografi). Letti come grigi darebbero
+    # un'immagine leggibile ma coi colori sbagliati.
+    if not colore and str(getattr(ds, "PhotometricInterpretation", "")).upper() == "PALETTE COLOR":
+        try:
+            from pydicom.pixels import apply_color_lut
+            pixel = apply_color_lut(np.asarray(pixel), ds)
+            colore = True
+        except Exception:  # noqa: BLE001 — tavolozza assente o rotta: si mostra in grigio
+            pass
+    if colore:
+        arr = np.asarray(pixel)
+        if arr.dtype != np.uint8:
+            arr = (arr.astype(np.float32) / max(1.0, float(arr.max())) * 255).astype(np.uint8)
+        img = Image.fromarray(arr, mode="RGB")
+    else:
+        # L'ordine è quello del DICOM e non è opinabile: prima la LUT di
+        # modalità (che porta i numeri grezzi in unità vere — gli HU di una
+        # TAC), poi la finestra, che È ESPRESSA IN QUELLE UNITÀ. Applicare la
+        # finestra ai numeri grezzi dava un'immagine tutta di un colore.
+        arr = apply_modality_lut(pixel, ds).astype(np.float32)
+        if ww is not None and wl is not None and ww > 0:
+            basso, alto = wl - ww / 2.0, wl + ww / 2.0
+        else:
+            # Senza finestra scelta: quella del file, se c'è; se no tutta la
+            # dinamica. Mai un'immagine nera perché nessuno ha scelto.
+            try:
+                arr = apply_voi_lut(arr, ds).astype(np.float32)
+            except Exception:  # noqa: BLE001
+                pass
+            basso, alto = fissa if fissa else (float(np.min(arr)), float(np.max(arr)))
+        if alto <= basso:
+            alto = basso + 1.0
+        arr = np.clip((arr - basso) / (alto - basso), 0.0, 1.0) * 255.0
+        if str(getattr(ds, "PhotometricInterpretation", "")).upper() == "MONOCHROME1":
+            arr = 255.0 - arr          # in MONOCHROME1 il bianco è lo zero
+        img = Image.fromarray(arr.astype(np.uint8), mode="L")
+        usata = (basso, alto)
+
+    larghezza, altezza = img.size
+    tetto = max(1, min(lato, MAX_LATO))
+    if max(larghezza, altezza) > tetto:
+        scala = tetto / float(max(larghezza, altezza))
+        img = img.resize((max(1, int(larghezza * scala)), max(1, int(altezza * scala))), Image.LANCZOS)
+
+    return img, usata
+
+
 def comando_png(percorso: Path, frame: int, ww: float | None, wl: float | None,
                 lato: int, uscita: Path) -> int:
     import numpy as np
@@ -304,55 +365,107 @@ def comando_png(percorso: Path, frame: int, ww: float | None, wl: float | None,
         if n_frame > 1 and pixel.ndim >= 3:
             pixel = pixel[frame]
 
-    colore = getattr(ds, "SamplesPerPixel", 1) and int(ds.SamplesPerPixel) == 3
-    # PALETTE COLOR: i pixel sono indici e i colori stanno nella tavolozza del
-    # file (certe immagini Doppler degli ecografi). Letti come grigi darebbero
-    # un'immagine leggibile ma coi colori sbagliati.
-    if not colore and str(getattr(ds, "PhotometricInterpretation", "")).upper() == "PALETTE COLOR":
-        try:
-            from pydicom.pixels import apply_color_lut
-            pixel = apply_color_lut(np.asarray(pixel), ds)
-            colore = True
-        except Exception:  # noqa: BLE001 — tavolozza assente o rotta: si mostra in grigio
-            pass
-    if colore:
-        arr = np.asarray(pixel)
-        if arr.dtype != np.uint8:
-            arr = (arr.astype(np.float32) / max(1.0, float(arr.max())) * 255).astype(np.uint8)
-        img = Image.fromarray(arr, mode="RGB")
-    else:
-        # L'ordine è quello del DICOM e non è opinabile: prima la LUT di
-        # modalità (che porta i numeri grezzi in unità vere — gli HU di una
-        # TAC), poi la finestra, che È ESPRESSA IN QUELLE UNITÀ. Applicare la
-        # finestra ai numeri grezzi dava un'immagine tutta di un colore.
-        arr = apply_modality_lut(pixel, ds).astype(np.float32)
-        if ww is not None and wl is not None and ww > 0:
-            basso, alto = wl - ww / 2.0, wl + ww / 2.0
-        else:
-            # Senza finestra scelta: quella del file, se c'è; se no tutta la
-            # dinamica. Mai un'immagine nera perché nessuno ha scelto.
-            try:
-                arr = apply_voi_lut(arr, ds).astype(np.float32)
-            except Exception:  # noqa: BLE001
-                pass
-            basso, alto = float(np.min(arr)), float(np.max(arr))
-        if alto <= basso:
-            alto = basso + 1.0
-        arr = np.clip((arr - basso) / (alto - basso), 0.0, 1.0) * 255.0
-        if str(getattr(ds, "PhotometricInterpretation", "")).upper() == "MONOCHROME1":
-            arr = 255.0 - arr          # in MONOCHROME1 il bianco è lo zero
-        img = Image.fromarray(arr.astype(np.uint8), mode="L")
-
-    larghezza, altezza = img.size
-    tetto = max(1, min(lato, MAX_LATO))
-    if max(larghezza, altezza) > tetto:
-        scala = tetto / float(max(larghezza, altezza))
-        img = img.resize((max(1, int(larghezza * scala)), max(1, int(altezza * scala))), Image.LANCZOS)
+    img, _ = _disegna(ds, pixel, ww, wl, lato)
 
     uscita.parent.mkdir(parents=True, exist_ok=True)
     img.save(str(uscita), format="PNG", optimize=False, compress_level=3)
     return _uscita({"ok": True, "larghezza": img.size[0], "altezza": img.size[1],
                     "frame": frame, "frame_totali": n_frame})
+
+
+MAX_FOTOGRAMMI_FILMATO = 600   # oltre, il filmato non si prepara in un colpo solo: si scorre a mano
+QUALITA_FILMATO = 90
+
+
+def _ms_per_fotogramma(ds):
+    """Quanto dura un fotogramma, in millisecondi, come lo dichiara il file:
+    il tempo vero di acquisizione prima (FrameTime, FrameTimeVector), poi la
+    velocità consigliata. None se il file non lo dice."""
+    def numero(v):
+        try:
+            x = float(v)
+            return x if x > 0 else None
+        except Exception:  # noqa: BLE001
+            return None
+    ms = numero(getattr(ds, "FrameTime", None))
+    if ms is None:
+        try:
+            vett = [float(x) for x in (getattr(ds, "FrameTimeVector", None) or []) if float(x) > 0]
+            ms = sum(vett) / len(vett) if vett else None
+        except Exception:  # noqa: BLE001
+            ms = None
+    if ms is None:
+        for nome in ("RecommendedDisplayFrameRate", "CineRate"):
+            fps = numero(getattr(ds, nome, None))
+            if fps:
+                ms = 1000.0 / fps
+                break
+    return round(ms, 2) if ms is not None and 5.0 <= ms <= 2000.0 else None
+
+
+def comando_filmato(percorso: Path, ww: float | None, wl: float | None, lato: int, uscita: Path) -> int:
+    """Tutti i fotogrammi di un filmato in UN file solo, per riprodurlo nel
+    browser (9.10.2026): intestazione JSON con le lunghezze, poi i JPEG uno
+    dietro l'altro. Un processo, una decodifica per fotogramma: chiedere cento
+    PNG uno alla volta vorrebbe cento processi. È JPEG e non PNG perché serve a
+    GUARDARE il movimento (e il filmato dell'ecografo è già JPEG): il fotogramma
+    fermo, su cui si misura, resta il PNG del comando `png`."""
+    import io
+    import os
+    import struct
+    import pydicom
+
+    try:
+        ds = pydicom.dcmread(str(percorso), force=False)
+    except Exception as e:  # noqa: BLE001
+        return _uscita({"errore": "non_dicom", "tipo": type(e).__name__}, 1)
+    if not int(getattr(ds, "Rows", 0) or 0):
+        return _uscita({"errore": "non_immagine"}, 1)
+    n = int(getattr(ds, "NumberOfFrames", 1) or 1)
+    if n < 2:
+        return _uscita({"errore": "non_filmato"}, 1)
+    if n > MAX_FOTOGRAMMI_FILMATO:
+        return _uscita({"errore": "troppo_lungo", "frame_totali": n}, 1)
+
+    def fotogrammi():
+        try:
+            from pydicom.pixels import iter_pixels
+            yield from iter_pixels(str(percorso))
+        except Exception:  # noqa: BLE001 — si ripiega sulla lettura intera
+            tutti = ds.pixel_array
+            for k in range(n):
+                yield tutti[k]
+
+    tetto = max(1, min(lato, MAX_LATO))
+    pezzi, fissa, dimensioni = [], None, None
+    try:
+        for pixel in fotogrammi():
+            img, usata = _disegna(ds, pixel, ww, wl, tetto, fissa)
+            if fissa is None and usata is not None and not (ww is not None and wl is not None and ww > 0):
+                fissa = usata
+            dimensioni = img.size
+            b = io.BytesIO()
+            img.save(b, format="JPEG", quality=QUALITA_FILMATO, subsampling=0)
+            pezzi.append(b.getvalue())
+    except Exception as e:  # noqa: BLE001
+        return _uscita({"errore": "pixel_non_leggibili", "tipo": type(e).__name__}, 1)
+    if len(pezzi) < 2:
+        return _uscita({"errore": "non_filmato"}, 1)
+
+    ms = _ms_per_fotogramma(ds)
+    testa = json.dumps({"n": len(pezzi), "ms": ms, "larghezza": dimensioni[0], "altezza": dimensioni[1],
+                        "lunghezze": [len(x) for x in pezzi]}).encode("utf-8")
+    uscita.parent.mkdir(parents=True, exist_ok=True)
+    # Si scrive accanto e poi si rinomina: chi legge non trova mai un file a metà.
+    provvisorio = uscita.with_name(uscita.name + f".{os.getpid()}.tmp")
+    with open(provvisorio, "wb") as f:
+        f.write(b"RFCINE1\n")
+        f.write(struct.pack("<I", len(testa)))
+        f.write(testa)
+        for x in pezzi:
+            f.write(x)
+    os.replace(provvisorio, uscita)
+    return _uscita({"ok": True, "frame_totali": len(pezzi), "ms": ms, "byte": sum(len(x) for x in pezzi)})
 
 
 def main() -> int:
@@ -371,6 +484,9 @@ def main() -> int:
     p.add_argument("--lato", type=int, default=MAX_LATO)
     p.add_argument("--anteprima", action="store_true")
     p.add_argument("--out", required=True)
+    fl = sub.add_parser("filmato")
+    fl.add_argument("file"); fl.add_argument("--ww", type=float, default=None); fl.add_argument("--wl", type=float, default=None)
+    fl.add_argument("--lato", type=int, default=1024); fl.add_argument("--out", required=True)
     a = ap.parse_args()
 
     percorso = Path(a.file)
@@ -388,6 +504,8 @@ def main() -> int:
         return comando_geometria(percorso)
     if a.comando == "statistiche":
         return comando_statistiche(percorso, a.frame, a.tipo, a.punti)
+    if a.comando == "filmato":
+        return comando_filmato(percorso, a.ww, a.wl, a.lato, Path(a.out))
     return comando_png(percorso, a.frame, a.ww, a.wl,
                        ANTEPRIMA_LATO if a.anteprima else a.lato, Path(a.out))
 

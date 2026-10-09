@@ -30,6 +30,11 @@ if (typeof NAV !== 'undefined') for (const r of ['secretary', 'assistant', 'doct
 .rf-img-hud.destra { left:auto; right:10px; text-align:right; }
 .rf-img-barra { display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap; }
 .rf-img-barra input[type=range] { flex:1; min-width:160px; }
+.rf-img-col.pieno { position:fixed; inset:0; z-index:45; background:#000; padding:8px 12px 10px; display:flex; flex-direction:column; overflow:auto; }
+.rf-img-col.pieno .rf-img-vista { flex:1; min-height:0; border-radius:0; }
+.rf-img-col.pieno .rf-img-vista img { max-width:none; max-height:none; }
+.rf-img-col.pieno .rf-img-barra, .rf-img-col.pieno > .row { background:var(--surface); border-radius:12px; padding:6px 10px; margin-top:8px; }
+body.rf-img-pieno .statusbar, body.rf-img-pieno .mobile-nav { display:none; }
 .rf-img-drop { border:1.5px dashed var(--border); border-radius:12px; padding:18px; text-align:center; color:var(--muted); font-size:13px; }
 .rf-img-drop.sopra { border-color:var(--cta); color:var(--cta); }
 .rf-img-limite { font-size:12px; line-height:1.5; color:var(--muted); border-left:3px solid var(--border); padding:2px 0 2px 10px; margin:12px 0 0; }
@@ -99,7 +104,7 @@ async function rfImgApri(id) {
   } catch { RF.img.errore = 'Piattaforma non raggiungibile.'; }
   render();
 }
-function rfImgChiudi() { RF.img.aperto = null; RF.img.dati = null; render(); void rfImgCarica(); }
+function rfImgChiudi() { RF.img.aperto = null; RF.img.dati = null; rfCineLibera(); if (RF.img.pieno) { rfImgPieno(false); } else render(); void rfImgCarica(); }
 
 function rfImgSerieCorrente() {
   const d = RF.img.dati; if (!d) return null;
@@ -119,12 +124,153 @@ function rfImgUrl(i, lato, frame) {
 function rfImgVaiSerie(n) { RF.img.serie = n; RF.img.idx = 0; RF.img.frame = 0; RF.mpr.piano = null; RF.mpr.indice = 0; render(); }
 function rfImgScorri(d) {
   const v = rfImgVisibili(rfImgSerieCorrente()); if (!v.length) return;
-  const i = rfImgCorrente();
-  if (i && i.frame > 1) { RF.img.frame = Math.max(0, Math.min(i.frame - 1, RF.img.frame + d)); render(); return; }
-  RF.img.idx = Math.max(0, Math.min(v.length - 1, RF.img.idx + d)); RF.img.frame = 0; render();
+  const n = Math.max(0, Math.min(v.length - 1, RF.img.idx + d)); if (n === RF.img.idx) return;
+  RF.img.idx = n; RF.img.frame = 0; render();
+}
+// La rotella passa da un'immagine all'altra. Su un filmato un colpo di rotella ne manda molti: uno ogni quarto di secondo basta.
+function rfImgRotella(ev) {
+  ev.preventDefault();
+  const i = rfImgCorrente(), ora = Date.now();
+  if (i && i.frame > 1) { if (ora - (RF.img.rotellaIl || 0) < 250) return; RF.img.rotellaIl = ora; }
+  rfImgScorri(ev.deltaY > 0 ? 1 : -1);
 }
 function rfImgVai(n) { RF.img.idx = Number(n) || 0; RF.img.frame = 0; render(); }
 function rfImgFrame(n) { RF.img.frame = Number(n) || 0; render(); }
+
+/* ---------- i filmati vanno da soli (9.10.2026) ----------
+   Un'ecografia in movimento è un file solo con decine o centinaia di
+   fotogrammi. Il server li prepara tutti in un file (JPEG), la pagina li tiene
+   in memoria e li fa girare alla velocità scritta nel file, in ciclo. Mentre
+   gira NON si ridisegna la pagina: si cambia solo l'immagine, la barra e il
+   contatore. Da fermo si mostra il fotogramma esatto del file (PNG), che è
+   quello su cui si misura. Con «Misura» accesa il filmato sta fermo. */
+RF.cine = { chiave: null, urls: [], ms: 40, stimata: false, stato: null, suona: true, vel: 1, raf: 0, ultimo: 0, resto: 0 };
+function rfCineLibera() {
+  const c = RF.cine;
+  if (c.raf) cancelAnimationFrame(c.raf);
+  c.urls.forEach(u => URL.revokeObjectURL(u));
+  c.raf = 0; c.urls = []; c.chiave = null; c.stato = null;
+}
+function rfCinePronto(i) { const c = RF.cine; return !!i && c.stato === 'pronto' && c.chiave === `${i.id}|${RF.img.ww}|${RF.img.wl}` && c.urls.length > 1; }
+// Dopo ogni disegno della pagina dell'esame: il filmato dell'immagine corrente c'è? Se no lo si chiede; poi gira o sta fermo.
+async function rfCineAssicura() {
+  const c = RF.cine, i = RF.img.aperto ? rfImgCorrente() : null;
+  if (!i || !(i.frame > 1) || (RF.mpr.piano && rfMprVirtuale()) || !document.getElementById('rf-img-main')) { rfCineLibera(); return; }
+  const k = `${i.id}|${RF.img.ww}|${RF.img.wl}`;
+  if (c.chiave !== k) {
+    rfCineLibera(); c.chiave = k; c.stato = 'carico'; c.suona = true; rfCineSegna();
+    try {
+      const q = ['lato=1024']; if (RF.img.ww !== null && RF.img.wl !== null) q.push(`ww=${RF.img.ww}`, `wl=${RF.img.wl}`);
+      const r = await fetch(`/api/prototipo/imaging/immagine/${i.id}/filmato?${q.join('&')}`, { credentials: 'include', cache: 'no-store' });
+      if (c.chiave !== k) return;                       // nel frattempo si è passati a un'altra immagine
+      if (!r.ok) c.stato = r.status === 413 ? 'lungo' : r.status === 503 ? 'scollegato' : 'errore';
+      else {
+        const b = new Uint8Array(await r.arrayBuffer());
+        if (c.chiave !== k) return;
+        const lt = new DataView(b.buffer, b.byteOffset).getUint32(8, true);
+        const testa = JSON.parse(new TextDecoder().decode(b.subarray(12, 12 + lt)));
+        let pos = 12 + lt;
+        c.urls = testa.lunghezze.map(n => { const u = URL.createObjectURL(new Blob([b.subarray(pos, pos + n)], { type: 'image/jpeg' })); pos += n; return u; });
+        c.ms = testa.ms || 40; c.stimata = !testa.ms; c.stato = c.urls.length > 1 ? 'pronto' : 'errore';
+        if (RF.img.frame >= c.urls.length) RF.img.frame = 0;
+      }
+    } catch { if (c.chiave !== k) return; c.stato = 'errore'; }
+  }
+  rfCineSegna();
+  if (c.stato !== 'pronto') return;
+  if (c.suona && !RF.mis.attiva) rfCineParti(); else rfCineFermo();
+}
+function rfCineParti() {
+  const c = RF.cine; if (c.raf || c.stato !== 'pronto') return;
+  c.ultimo = performance.now(); c.resto = 0;
+  const passo = (ora) => {
+    c.raf = 0;
+    if (!document.getElementById('rf-img-main')) { rfCineLibera(); return; }   // si è lasciata la pagina
+    if (c.stato !== 'pronto' || !c.suona || RF.mis.attiva) return;
+    c.resto += Math.min(250, ora - c.ultimo) * c.vel; c.ultimo = ora;         // una scheda tornata in primo piano non salta avanti di minuti
+    const n = Math.floor(c.resto / c.ms);
+    if (n > 0) { c.resto -= n * c.ms; RF.img.frame = (RF.img.frame + n) % c.urls.length; rfCineMostra(); }
+    c.raf = requestAnimationFrame(passo);
+  };
+  c.raf = requestAnimationFrame(passo);
+}
+// Il fotogramma corrente preso dal filmato in memoria: immagine, barra e contatore, senza ridisegnare la pagina.
+function rfCineMostra() {
+  const c = RF.cine, img = document.getElementById('rf-img-main'); if (!img || !c.urls.length) return;
+  img.src = c.urls[Math.min(RF.img.frame, c.urls.length - 1)];
+  const b = document.getElementById('rf-cine-barra'); if (b) b.value = RF.img.frame;
+  const t = document.getElementById('rf-cine-n'); if (t) t.textContent = `fotogramma ${RF.img.frame + 1} / ${c.urls.length}`;
+}
+// Fermo: al posto del fotogramma del filmato, quello esatto del file — appena è arrivato, e solo se nel frattempo non ci si è mossi.
+function rfCineFermo() {
+  const c = RF.cine, i = rfImgCorrente(); if (!i || !rfCinePronto(i)) return;
+  const f = RF.img.frame, k = c.chiave, u = rfImgUrl(i, 1024, f), p = new Image();
+  p.onload = () => { const m = document.getElementById('rf-img-main'); if (m && c.chiave === k && RF.img.frame === f && !c.raf) m.src = u; };
+  p.src = u;
+}
+function rfCineFerma() { const c = RF.cine; c.suona = false; if (c.raf) cancelAnimationFrame(c.raf); c.raf = 0; }
+function rfCineSuona() {
+  const c = RF.cine, i = rfImgCorrente(); if (!rfCinePronto(i)) return;
+  if (RF.mis.attiva) { toast('Con «Misura» accesa il filmato resta fermo'); return; }
+  if (c.suona) { rfCineFerma(); rfCineFermo(); } else { c.suona = true; rfCineParti(); }
+  rfCineSegna();
+}
+// La barra dei fotogrammi: trascinarla ferma il filmato e porta lì.
+function rfCineVai(n) {
+  const c = RF.cine, i = rfImgCorrente(); if (!i) return;
+  if (!rfCinePronto(i)) { rfImgFrame(n); return; }      // filmato non ancora pronto (o troppo lungo): un fotogramma alla volta, come prima
+  rfCineFerma(); RF.img.frame = Math.max(0, Math.min(c.urls.length - 1, Number(n) || 0)); rfCineMostra(); rfCineSegna();
+}
+function rfCinePasso(d) {
+  const c = RF.cine, i = rfImgCorrente(); if (!i) return;
+  const tot = rfCinePronto(i) ? c.urls.length : i.frame;
+  const n = (RF.img.frame + d + tot) % tot;
+  if (!rfCinePronto(i)) { rfImgFrame(n); return; }
+  rfCineFerma(); RF.img.frame = n; rfCineMostra(); rfCineFermo(); rfCineSegna();
+}
+function rfCineVel(v) { RF.cine.vel = v; RF.cine.resto = 0; rfCineSegna(); }
+// Tasto, velocità e stato, aggiornati sul posto.
+function rfCineSegna() {
+  const c = RF.cine;
+  const pp = document.getElementById('rf-cine-pp');
+  if (pp) { const gira = c.stato === 'pronto' && c.suona && !RF.mis.attiva; pp.textContent = gira ? 'Pausa' : 'Riproduci'; pp.disabled = c.stato !== 'pronto'; }
+  document.querySelectorAll('#rf-cine-vel button').forEach(b => b.classList.toggle('active', Number(b.dataset.v) === c.vel));
+  const s = document.getElementById('rf-cine-stato');
+  if (s) s.textContent = c.stato === 'carico' ? 'preparo il filmato…' : c.stato === 'lungo' ? 'filmato troppo lungo per andare da solo: usa la barra' : c.stato === 'scollegato' ? 'archivio non collegato' : c.stato === 'errore' ? 'il filmato non si prepara: usa la barra' : c.stato === 'pronto' ? `${Math.round(1000 / c.ms)} al secondo${c.stimata ? ' (stimati: il file non lo dice)' : ''}` : '';
+}
+function rfCineComandi(i) {
+  const c = RF.cine, gira = rfCinePronto(i) && c.suona && !RF.mis.attiva;
+  return `<div class="rf-img-barra"><button class="btn sm" id="rf-cine-pp" onclick="rfCineSuona()" ${rfCinePronto(i) ? '' : 'disabled'} style="min-width:86px">${gira ? 'Pausa' : 'Riproduci'}</button>
+    <button class="btn sm" onclick="rfCinePasso(-1)" title="Un fotogramma indietro">◀</button>
+    <input type="range" id="rf-cine-barra" min="0" max="${i.frame - 1}" value="${Math.min(RF.img.frame, i.frame - 1)}" oninput="rfCineVai(this.value)" onchange="rfCineFermo()" aria-label="Fotogramma del filmato">
+    <button class="btn sm" onclick="rfCinePasso(1)" title="Un fotogramma avanti">▶</button>
+    <span class="seg" id="rf-cine-vel">${[[0.25, '¼×'], [0.5, '½×'], [1, '1×']].map(([v, n]) => `<button data-v="${v}" class="${c.vel === v ? 'active' : ''}" onclick="rfCineVel(${v})">${n}</button>`).join('')}</span>
+    <span class="caption" id="rf-cine-stato"></span></div>`;
+}
+
+/* ---------- a schermo intero (9.10.2026) ----------
+   Il visore copre tutto lo schermo, coi suoi comandi sotto. Si chiede lo
+   schermo intero del browser sulla pagina (non sul visore, che a ogni disegno
+   viene ricreato e ne uscirebbe); dove il browser non lo dà (iPhone) resta a
+   tutta finestra. Si esce col tasto, o con Esc. */
+function rfImgPieno(v) {
+  RF.img.pieno = v === undefined ? !RF.img.pieno : !!v;
+  document.body.classList.toggle('rf-img-pieno', RF.img.pieno);
+  const el = document.documentElement;
+  try {
+    if (RF.img.pieno && el.requestFullscreen && !document.fullscreenElement) el.requestFullscreen().catch(() => null);
+    else if (!RF.img.pieno && document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => null);
+  } catch { /* resta a tutta finestra */ }
+  render();
+}
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && RF.img.pieno) { RF.img.pieno = false; document.body.classList.remove('rf-img-pieno'); render(); } });
+window.addEventListener('keydown', (e) => {
+  if (!RF.img.aperto || !document.getElementById('rf-img-main')) return;
+  const dove = e.target && e.target.tagName; if (dove === 'INPUT' && e.target.type !== 'range' || dove === 'TEXTAREA' || dove === 'SELECT' || (e.target && e.target.isContentEditable)) return;
+  if (document.querySelector('#modal-overlay.show')) return;
+  if (e.key === 'Escape' && RF.img.pieno && !(RF.mis.attiva && RF.mis.bozza)) { e.preventDefault(); rfImgPieno(false); }
+  else if (e.key === ' ' && rfCinePronto(rfImgCorrente()) && dove !== 'BUTTON') { e.preventDefault(); rfCineSuona(); }
+});
 function rfImgFinestra(ww, wl) { RF.img.ww = ww; RF.img.wl = wl; render(); }
 
 async function rfImgAzione(corpo, messaggio) {
@@ -861,6 +1007,12 @@ function rfImgDettaglio() {
   const finestre = d.finestre || [];
   const cal = rfMisCal(i);
   setTimeout(rfMisDisegna, 0);
+  setTimeout(rfCineAssicura, 0);
+  // A schermo intero l'immagine si allarga quanto ci sta, tenendo le proporzioni (la tela delle misure segue l'immagine).
+  const vgP = RF.mpr.piano ? rfMprVirtuale() : null;
+  const prop = i ? (vgP ? (vgP.righe * (vgP.sp_y || 1)) / (vgP.colonne * (vgP.sp_x || 1)) : (i.righe || 3) / (i.colonne || 4)) : 0.75;
+  const barre = 1 + (i && i.frame > 1 && !vgP ? 1 : 0) + (vgP ? 1 : 0) + (finestre.length ? 1 : 0);
+  const stilePieno = RF.img.pieno ? ` style="height:min(calc(100dvh - ${26 + barre * 54}px), calc((100vw - 24px) * ${prop.toFixed(5)}));width:auto"` : '';
   const anteprima = (ser) => {
     const prima = (ser.immagini || []).find(x => x.immagine);
     return prima ? `<img src="/api/prototipo/imaging/immagine/${prima.id}?anteprima=1" alt="" loading="lazy">` : `<div style="aspect-ratio:1;border-radius:6px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px">nessuna<br>immagine</div>`;
@@ -880,12 +1032,12 @@ function rfImgDettaglio() {
         ${(d.serie || []).map((x, n) => `<button class="rf-img-s ${n === RF.img.serie ? 'active' : ''}" onclick="rfImgVaiSerie(${n})">
           ${anteprima(x)}<div class="n"><b>${x.numero || n + 1}</b> · ${rfEsc(x.modalita || '')}<br>${rfEsc((x.descrizione || '').slice(0, 30) || '—')}<br>${x.n_immagini} img</div></button>`).join('')}
       </div>
-      <div>
-        <div class="rf-img-vista" onwheel="event.preventDefault(); rfImgScorri(event.deltaY > 0 ? 1 : -1)">
-          ${i ? `<div class="rf-mis-tela ${RF.mis.attiva ? 'attiva' : ''}"><img id="rf-img-main" src="${RF.mpr.piano && rfMprVirtuale() ? rfMprUrl(s) : rfImgUrl(i, 1024, RF.img.frame)}" alt="Immagine ${RF.img.idx + 1}" onload="rfMisDisegna()" draggable="false">
+      <div class="rf-img-col ${RF.img.pieno ? 'pieno' : ''}">
+        <div class="rf-img-vista" onwheel="rfImgRotella(event)">
+          ${i ? `<div class="rf-mis-tela ${RF.mis.attiva ? 'attiva' : ''}"><img id="rf-img-main" src="${RF.mpr.piano && rfMprVirtuale() ? rfMprUrl(s) : rfCinePronto(i) ? RF.cine.urls[Math.min(RF.img.frame, RF.cine.urls.length - 1)] : rfImgUrl(i, 1024, RF.img.frame)}" alt="Immagine ${RF.img.idx + 1}" onload="rfMisDisegna()" draggable="false"${stilePieno}>
               <canvas id="rf-mis-canvas" onpointerdown="rfMisGiu(event)" onpointermove="rfMisMuovi(event)" onpointerup="rfMisSu(event)" onpointercancel="rfMisSu(event)" ondblclick="rfMisDoppio(event)"></canvas></div>
             <div class="rf-img-hud">${rfEsc(s.descrizione || s.modalita || '')}<br>${RF.mpr.piano && rfMprVirtuale() ? `${rfEsc(RF.mpr.piano)} ${RF.mpr.indice + 1} / ${rfMprVirtuale().n_indici} · griglia ${rfMprVirtuale().colonne}×${rfMprVirtuale().righe} · ${String(rfMprVirtuale().sp_x).replace('.', ',')} × ${String(Math.round(rfMprVirtuale().sp_y * 1000) / 1000).replace('.', ',')} mm/px · ricostruita` : `${i.colonne || '?'}×${i.righe || '?'}<br>${rfEsc(cal === null ? 'calibrazione: leggo…' : RFMSE.geometria.descriviCalibrazione(cal))}`}${s.geometria && s.geometria.stato === 'ok' ? `<br>serie ${rfEsc(s.geometria.orientamento || '')} · ${s.geometria.n} fette${s.geometria.distanza_media_mm ? ` · passo ${String(Math.round(s.geometria.distanza_media_mm * 100) / 100).replace('.', ',')} mm${s.geometria.uniforme ? '' : ' (non uniforme)'}` : ''}` : ''}</div>
-            <div class="rf-img-hud destra">${RF.img.idx + 1} / ${visibili.length}${i.frame > 1 ? `<br>fotogramma ${RF.img.frame + 1} / ${i.frame}` : ''}${RF.img.ww !== null ? `<br>W ${RF.img.ww} / L ${RF.img.wl}` : ''}</div>
+            <div class="rf-img-hud destra">${RF.img.idx + 1} / ${visibili.length}${i.frame > 1 ? `<br><span id="rf-cine-n">fotogramma ${RF.img.frame + 1} / ${i.frame}</span>` : ''}${RF.img.ww !== null ? `<br>W ${RF.img.ww} / L ${RF.img.wl}` : ''}</div>
             <div class="limite">${RF.mis.attiva ? `${rfEsc((RF_MIS_STRUMENTI.find(x => x[0] === RF.mis.strumento) || ['', ''])[1])}: ${rfEsc(rfMisIstruzione())}` : 'Consultazione e misure — la diagnosi è del medico'}</div>`
             : `<div class="vuoto">Questa serie non contiene immagini da disegnare${nonImmagini ? ` (${nonImmagini} ${nonImmagini === 1 ? 'oggetto DICOM non grafico' : 'oggetti DICOM non grafici'}: referti strutturati, PDF o modelli)` : ''}.</div>`}
         </div>
@@ -895,11 +1047,12 @@ function rfImgDettaglio() {
           ${s && s.mpr ? `<span class="seg"><button class="${!RF.mpr.piano ? 'active' : ''}" onclick="rfMprVai(null)">Nativo</button><button class="${RF.mpr.piano === 'sagittale' ? 'active' : ''}" onclick="rfMprVai('sagittale')">Sagittale</button><button class="${RF.mpr.piano === 'coronale' ? 'active' : ''}" onclick="rfMprVai('coronale')">Coronale</button></span>` : ''}
           ${rfMisPuo() && s && s.geometria && s.geometria.volume_possibile && !RF.mpr.piano ? `<button class="btn sm" onclick="rfMisVolume()" title="Volume dalle ROI su fette consecutive">Volume</button>` : ''}
           ${RF.mis.attiva && rfMisPuo() ? `<span class="rf-mis-str">${RF_MIS_STRUMENTI.map(([k, n]) => `<button class="btn sm ${RF.mis.strumento === k ? 'attivo' : ''}" onclick="rfMisStrumento('${k}')">${n}</button>`).join('')}${rfMisAlg().gesto === 'punti_chiusi' || rfMisAlg().gesto === 'punti' ? `<button class="btn sm" onclick="rfMisChiudi()" title="Termina la figura">Chiudi</button>` : ''}</span>` : ''}
-          <button class="btn sm" onclick="rfImgScorri(-1)">‹</button>
+          <button class="btn sm" onclick="rfImgScorri(-1)" title="Immagine prima">‹</button>
           <input type="range" min="0" max="${Math.max(0, visibili.length - 1)}" value="${RF.img.idx}" oninput="rfImgVai(this.value)" aria-label="Immagine della serie">
           <button class="btn sm" onclick="rfImgScorri(1)">›</button>
+          <button class="btn sm" onclick="rfImgPieno()" title="${RF.img.pieno ? 'Torna alla pagina (Esc)' : 'Il visore a tutto schermo'}">${RF.img.pieno ? 'Esci da schermo intero' : 'Schermo intero'}</button>
         </div>
-        ${i.frame > 1 ? `<div class="rf-img-barra"><span class="caption">fotogrammi</span><input type="range" min="0" max="${i.frame - 1}" value="${RF.img.frame}" oninput="rfImgFrame(this.value)" aria-label="Fotogramma"></div>` : ''}
+        ${i.frame > 1 && !(RF.mpr.piano && rfMprVirtuale()) ? rfCineComandi(i) : ''}
         ${RF.mpr.piano && rfMprVirtuale() ? `<div class="rf-img-barra"><span class="caption">${rfEsc(RF.mpr.piano)}</span><input type="range" min="0" max="${rfMprVirtuale().n_indici - 1}" value="${RF.mpr.indice}" oninput="rfMprIndice(this.value)" aria-label="Piano ricostruito"></div>` : ''}
         ${finestre.length ? `<div class="row wrap mt-8" style="gap:6px"><span class="caption" style="align-self:center">finestra</span>
           <button class="btn sm ${RF.img.ww === null ? 'primary' : ''}" onclick="rfImgFinestra(null, null)">Del file</button>

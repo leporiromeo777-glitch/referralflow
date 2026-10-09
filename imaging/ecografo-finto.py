@@ -52,6 +52,7 @@ def main() -> int:
     for n in range(a.filmati):
         ds = fab.filmato_jpeg(12, 240, 320)
         ds.SeriesDescription = "Filmati"
+        ds.FrameTime = "40"          # come un ecografo vero: 25 fotogrammi al secondo
         oggetti.append(ds)
     fermo = fab.fermo_rgb(240, 320)
     fermo.SeriesDescription = "Filmati"

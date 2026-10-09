@@ -65,6 +65,20 @@ async function main() {
     const png = await fetch(`${base}/api/prototipo/imaging/immagine/${filmato?.id}?lato=512&frame=7`, { headers: { cookie } });
     const corpo = Buffer.from(await png.arrayBuffer());
     verifica(png.status === 200 && (png.headers.get('content-type') ?? '').includes('image/png') && corpo.subarray(1, 4).toString() === 'PNG', `il fotogramma 8 di un filmato JPEG a colori si disegna (${png.status})`);
+    // Il filmato intero, per farlo andare da solo (9.10.2026): un file con l'intestazione e i 12 fotogrammi in JPEG.
+    const fl = await fetch(`${base}/api/prototipo/imaging/immagine/${filmato?.id}/filmato?lato=512`, { headers: { cookie } });
+    const bin = Buffer.from(await fl.arrayBuffer());
+    const lt = bin.length > 12 ? bin.readUInt32LE(8) : 0;
+    let testa: any = {}; try { testa = JSON.parse(bin.subarray(12, 12 + lt).toString('utf-8')); } catch { /* non è il file atteso */ }
+    const somma = (testa.lunghezze ?? []).reduce((z: number, n: number) => z + n, 0);
+    verifica(fl.status === 200 && bin.subarray(0, 8).toString() === 'RFCINE1\n' && testa.n === 12 && testa.ms === 40 && 12 + lt + somma === bin.length && bin.subarray(12 + lt, 12 + lt + 2).toString('hex') === 'ffd8',
+      `il filmato si prepara intero: 12 fotogrammi JPEG, 25 al secondo come dice il file (${fl.status}, ${testa.n}, ${testa.ms})`);
+    const fermoImg = imgs.find((x: any) => x.frame <= 1);
+    const flFermo = await fetch(`${base}/api/prototipo/imaging/immagine/${fermoImg?.id}/filmato`, { headers: { cookie } });
+    const flFuori = await fetch(`${base}/api/prototipo/imaging/immagine/${filmato?.id}/filmato`);
+    const fl2 = await fetch(`${base}/api/prototipo/imaging/immagine/${filmato?.id}/filmato?lato=512`, { headers: { cookie } });
+    verifica(flFermo.status === 415 && flFuori.status === 401 && fl2.status === 200 && Number(fl2.headers.get('content-length')) === bin.length,
+      `un'immagine ferma non è un filmato; senza sessione niente; la seconda richiesta dà lo stesso file (${flFermo.status}, ${flFuori.status}, ${fl2.status})`);
 
     // 4 — si trova: per cognome, per data di nascita, per data dell'esame, per anno; e non si trova ciò che non c'è.
     const c1 = await cerca('provaeco'), c2 = await cerca('4.3.1948'), c3 = await cerca('01.03.2026 provaeco'), c4 = await cerca('Maria 2026'), c5 = await cerca('provaeco 2019'), c6 = await cerca('zzzqqq');

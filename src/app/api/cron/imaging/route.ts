@@ -5,6 +5,7 @@ import path from 'node:path';
 import { chiaveCronValida } from '@/lib/cron-chiave';
 import { scadutiVia, svuotaSpool } from '@/lib/imaging-archivio';
 import { riabbinaEsami } from '@/lib/imaging-catalogo';
+import { filmatiVecchiVia } from '@/lib/imaging';
 import { query } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -41,7 +42,10 @@ export async function POST(req: NextRequest) {
     if (studio) riabbinati = await riabbinaEsami(studio.id);
     if (riabbinati) console.log(`[imaging] esami agganciati a una cartella nata dopo: ${riabbinati}`);
   } catch (e: any) { console.error(`[imaging] riabbinamento: ${e?.code ?? e?.name ?? 'errore'}`); }
-  return NextResponse.json({ ok: true, ...r, scadute, riabbinati });
+  // I filmati preparati per la riproduzione che nessuno guarda da due settimane (9.10.2026).
+  let filmati = 0;
+  try { filmati = await filmatiVecchiVia(); } catch { /* la cache si pulisce al giro dopo */ }
+  return NextResponse.json({ ok: true, ...r, scadute, riabbinati, filmati_tolti: filmati });
 }
 
 // Il GET dice solo quanto c'è in coda: serve alla pagina Immagini.
