@@ -24,7 +24,7 @@ export const SEZIONI: Record<number, { nome: string; tipo: Tipo | null; voce: st
   6: { nome: '06_Ciclo - Ergospiro', tipo: 'ciclo', voce: 'Cicloergometria' },
   7: { nome: '07_TAC - MRI - RX', tipo: 'imaging', voce: 'Imaging' },
   8: { nome: '08_Intervento cardiologico', tipo: null, voce: 'Intervento' },
-  9: { nome: '09_Sezione 9', tipo: null, voce: 'Documento' },
+  9: { nome: '09_Laboratorio e analisi', tipo: 'laboratorio', voce: 'Laboratorio' },
   10: { nome: '10_Vari', tipo: 'altro', voce: 'Documento' },
   11: { nome: '11_Documenti amministrativi', tipo: 'altro', voce: 'Documento amministrativo' },
 };

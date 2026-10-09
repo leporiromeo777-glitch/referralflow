@@ -17,7 +17,7 @@ Che cosa è vero oggi (9.10.2026). Una cartella completa arriva spesso come **un
 
 ## Sezioni, nomi, ordine (9.10.2026)
 
-- **I fogli col codice a barre sono separatori.** La cartella cartacea dello studio ha, fra un gruppo di documenti e l'altro, un foglio con un codice a barre (Code 39): sei cifre, e **le ultime due dicono la sezione, contando da 00** (00 → `01_Rapporti`, 01 → `02_Rapporti esterni - ricoveri`, 02 → `03_Appunti`, 03 → `04_ECG - tracciato PM-ICD`, 04 → `05_Apparecchi`, 05 → `06_Ciclo - Ergospiro`, 06 → `07_TAC - MRI - RX`, 07 → `08_Intervento cardiologico`, 09 → `10_Vari`, 10 → `11_Documenti amministrativi`; la 09 non ha ancora un nome: compare come `09_Sezione 9` e si rinomina a mano). Il primo foglio, con un codice di lettere e cifre, è la **copertina** col numero del paziente. Separatori, copertina e il loro retro bianco **restano fuori**; un codice che non ha quella forma non è un separatore. I nomi delle sezioni stanno in `SEZIONI` (`src/lib/dividi/sezioni.ts`).
+- **I fogli col codice a barre sono separatori.** La cartella cartacea dello studio ha, fra un gruppo di documenti e l'altro, un foglio con un codice a barre (Code 39): sei cifre, e **le ultime due dicono la sezione, contando da 00** (00 → `01_Rapporti`, 01 → `02_Rapporti esterni - ricoveri`, 02 → `03_Appunti`, 03 → `04_ECG - tracciato PM-ICD`, 04 → `05_Apparecchi`, 05 → `06_Ciclo - Ergospiro`, 06 → `07_TAC - MRI - RX`, 07 → `08_Intervento cardiologico`, 08 → `09_Laboratorio e analisi`, 09 → `10_Vari`, 10 → `11_Documenti amministrativi`; una sezione oltre l'undicesima compare come `12_Sezione 12` e si rinomina a mano). Il primo foglio, con un codice di lettere e cifre, è la **copertina** col numero del paziente. Separatori, copertina e il loro retro bianco **restano fuori**; un codice che non ha quella forma non è un separatore. I nomi delle sezioni stanno in `SEZIONI` (`src/lib/dividi/sezioni.ts`).
 - **Il codice lo legge il Mac** (`imaging/separatori.py`: ghostscript rende le pagine, Pillow e numpy cercano le fasce a barre e le decodificano): della pagina si legge solo il codice.
 - **Ogni sezione è una sottocartella** della cartella del paziente (`patient_documents.cartella`, migrazione 089). Nella scheda «Documenti» del paziente le sottocartelle compaiono in ordine di numero, e dentro i documenti **in ordine di tempo, i più recenti in testa** (quelli senza data in fondo); i documenti senza sottocartella stanno in «Altri documenti».
 - **Il nome**: `AAAA.MM.GG Cognome Nome Che cos'è` (per esempio `2023.10.18 Rossi Maria Holter`): data, paziente, tipo di documento. La data davanti in quell'ordine fa sì che l'ordine alfabetico sia quello del tempo anche fuori dalla piattaforma. Se la data non si trova il nome parte dal paziente, e il pezzo porta l'avviso «senza data».
@@ -70,7 +70,7 @@ Regole, istruzioni del modello e banco sono fatti su testi **inventati**: non si
 
 - File oltre i 50 MB (vanno divisi prima).
 - Riprendere una divisione lasciata a metà (le correzioni fatte a mano non si salvano: ricaricando si riparte dalla proposta).
-- Il nome della sezione 09, e i nomi delle sezioni modificabili dalle impostazioni invece che nel codice.
+- I nomi delle sezioni modificabili dalle impostazioni invece che nel codice.
 - Leggere le pagine scritte a mano.
 - Riordinare le pagine o ruotarle.
 - Sostituire l'originale coi pezzi: resta in cartella, lo toglie chi vuole.

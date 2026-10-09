@@ -95,6 +95,7 @@ const sep = [{ pagina: 1, codice: 'PZ00012345' }, { pagina: 2, codice: '770000' 
 test('dividi: il codice del foglio dice la sezione (le ultime due cifre, da 00) o la copertina', () => {
   assert.deepEqual(foglioDelCodice('770000'), { copertina: false, numero: 1, nome: '01_Rapporti' });
   assert.deepEqual(foglioDelCodice('770010'), { copertina: false, numero: 11, nome: '11_Documenti amministrativi' });
+  assert.deepEqual(foglioDelCodice('770008'), { copertina: false, numero: 9, nome: '09_Laboratorio e analisi' });
   assert.deepEqual(foglioDelCodice(' PZ 00012345 '), { copertina: true });
   assert.equal(foglioDelCodice('770017')!.copertina === false && (foglioDelCodice('770017') as any).nome, '18_Sezione 18', 'una sezione che non si conosce prende il suo numero, e il nome lo si corregge a mano');
   assert.equal(foglioDelCodice('ABC'), null);
