@@ -143,7 +143,7 @@ function rfDitSecondi() {
   return (d.stato === 'registra' ? (d.modo === 'aggiungi' ? d.pcm.length : d.punto) + campioni : d.pcm.length) / RFDittafono.FREQUENZA;
 }
 function rfDitTesto(el) {
-  const d = RF.dit; d.testo = el.value;
+  const d = RF.dit; d.testo = el.value; d.cursore = el.selectionStart;
   const s = Math.round(rfDitSecondi() * 10) / 10, u = d.tempi[d.tempi.length - 1];
   if (u && u[0] === s) u[1] = d.testo.length; else if (d.tempi.length < 5000) d.tempi.push([s, d.testo.length]);
   // Il testo arriva ma il microfono non sente niente: di solito è il programma di dettatura che lo tiene tutto per sé.
@@ -208,7 +208,7 @@ async function rfDitRegistra(modo) {
   rfDitCuffieStato();
   render();
   // In dettatura il cursore va nella casella: è lì che il programma di dettatura scrive.
-  if (rfDitDettatura()) setTimeout(() => { const t = document.getElementById('rf-dit-testo'); if (t) { t.focus(); try { t.setSelectionRange(t.value.length, t.value.length); } catch (_) { /* niente */ } } }, 0);
+  if (rfDitDettatura()) setTimeout(() => { const t = document.getElementById('rf-dit-testo'); if (t) { t.focus(); const c = typeof d.cursore === 'number' && d.cursore <= t.value.length ? d.cursore : t.value.length; try { t.setSelectionRange(c, c); } catch (_) { /* niente */ } } }, 0);      // il cursore torna dov'era: per aggiungere un pezzo in mezzo lo si mette lì prima di registrare
   d.orologio = setInterval(rfDitAggiorna, 100);
   d.salvataggio = setInterval(() => void rfDitSalva(), 15000);
 }
@@ -253,7 +253,7 @@ async function rfDitInvia() {
     const r = await fetch('/api/referti/upload', { method: 'POST', body: fd, credentials: 'include' });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { d.errore = j.errore === 'medico_mancante' ? 'Scegli il medico che ha dettato.' : j.errore === 'troppo_grande' ? 'Registrazione troppo lunga per un invio solo.' : 'Invio non riuscito: la registrazione resta qui, riprova.'; d.invio = false; render(); return; }
-    d.pcm = new Int16Array(0); d.stato = 'pronto'; d.invio = false; d.paziente = ''; d.testo = ''; d.tempi = []; rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota();
+    d.pcm = new Int16Array(0); d.stato = 'pronto'; d.invio = false; d.paziente = ''; d.testo = ''; d.tempi = []; d.cursore = null; rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota();
     toast(dettato ? 'Testo e audio in coda: la bozza arriva tra i referti in pochi minuti, col confronto fra i due' : 'Dettato in coda: la bozza arriva tra i referti in pochi minuti');
     render(); setTimeout(rfCaricaDati, 3000);
   } catch (_) { d.errore = 'Piattaforma non raggiungibile: la registrazione resta su questo dispositivo, riprova.'; d.invio = false; render(); }
@@ -305,7 +305,7 @@ PAGES.dittafono = () => {
       ${rfDitDettatura() ? `<div class="mt-16">
         <div class="row" style="justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap"><label for="rf-dit-testo" class="section-title">Testo dettato</label>
           ${(d.microfoni || []).length > 1 ? `<span class="caption">Microfono <select class="input sm" style="max-width:260px" ${rec ? 'disabled' : ''} onchange="rfDitMicImposta(this.value)" aria-label="Microfono da registrare"><option value="">quello di serie</option>${d.microfoni.map(x => `<option value="${rfEsc(x.id)}" ${x.id === rfDitMicScelto() ? 'selected' : ''}>${rfEsc(x.nome)}</option>`).join('')}</select></span>` : ''}</div>
-        <textarea class="input rf-dit-testo mt-8" id="rf-dit-testo" spellcheck="false" placeholder="1. Tocca il tasto rosso per registrare.  2. Detta con Dragon: il testo compare qui mentre la pagina registra la voce.  3. Metti in pausa e premi «Invia»." oninput="rfDitTesto(this)">${rfEsc(d.testo || '')}</textarea>
+        <textarea class="input rf-dit-testo mt-8" id="rf-dit-testo" spellcheck="false" placeholder="1. Tocca il tasto rosso per registrare.  2. Detta con Dragon: il testo compare qui mentre la pagina registra la voce.  3. Metti in pausa e premi «Invia»." oninput="rfDitTesto(this)" onblur="RF.dit.cursore=this.selectionStart" onkeyup="RF.dit.cursore=this.selectionStart" onclick="RF.dit.cursore=this.selectionStart">${rfEsc(d.testo || '')}</textarea>
         <div id="rf-dit-sordo" class="rf-manc mt-8" style="display:none"><b>Il testo arriva ma il microfono non sente niente.</b> Di solito il programma di dettatura tiene il microfono tutto per sé, oppure qui è scelto un altro microfono: metti in pausa e scegli sopra lo stesso che usa lui. Senza audio non c'è né riascolto né confronto.</div>
         <div id="rf-dit-fermo" class="rf-manc mt-8" style="display:none"><b>Stai dettando ma la registrazione è ferma.</b> Tocca il tasto per registrare: senza audio non c'è né riascolto né confronto.</div>
         <p class="rf-dit-nota mt-8">La casella è un campo di testo qualunque: il programma di dettatura ci scrive come farebbe in Word, e si può correggere a mano. La voce che lui manda al suo servizio non passa da qui; la registrazione che fa questa pagina resta sul dispositivo e poi sul Mac dello studio.</p></div>` : ''}
