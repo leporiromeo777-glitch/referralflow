@@ -1,6 +1,6 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-09-23
+aggiornata: 2026-10-11
 ---
 # Dittafono
 
@@ -15,6 +15,23 @@ Una pagina della piattaforma, non un programma a parte. Fino al 22.9.2026 era l'
 - **Resta sul dispositivo finché non si invia**: l'audio si salva in IndexedDB a ogni pausa e ogni 15 secondi mentre si registra. Se la pagina si chiude, alla riapertura c'è «C'è una registrazione non inviata di m:ss» con Riprendila / Scartala. Cambiare pagina mentre si registra mette in pausa e salva, non perde niente. Dopo l'invio la copia locale si cancella.
 - **Pausa e ripresa col tasto delle cuffie** (8.10.2026, **in prova**, da accendere con la casella sotto il tasto; spenta di serie, la scelta resta sul dispositivo): con le cuffie col filo, il tasto al centro mette in pausa e riprende. Per il sistema quel tasto è «play/pausa» di chi sta suonando: la pagina tiene in ciclo un secondo di **silenzio** mentre si registra e si dichiara come lettore (Media Session; funzioni `rfDitCuffie*`). Se si sta riascoltando, il tasto ferma solo l'ascolto; doppio e triplo clic non fanno niente. **Non provato col tasto vero**: da qui si è verificata la logica (acceso/spento, silenzio valido, il tasto in registrazione mette in pausa senza perdere audio), non il comportamento di un telefono. Da vedere sul dispositivo: se il tasto arriva alla pagina mentre il microfono è aperto, e se far suonare il silenzio cambia la qualità della registrazione — se sì, si spegne la casella e tutto torna com'era.
 - Lo schermo resta acceso mentre si registra (dove il browser lo permette); in pausa il microfono resta pronto due minuti, poi si rilascia da solo.
+
+## Dettare con Dragon mentre la pagina registra (11.10.2026, in prova)
+
+Uno dei medici detta già con Dragon (dettatura in tempo reale, licenza dello studio). Lo studio vuole usarlo **dentro** ReferralFlow senza perdere l'audio. Si accende con la casella «Detto con Dragon (o un altro programma di dettatura)», per dispositivo.
+
+- **Una casella di testo e basta.** Dragon scrive nel campo dove sta il cursore, come in Word: fra lui e ReferralFlow **non c'è nessun collegamento**, né serve. Toccando il tasto per registrare il cursore va da solo nella casella. Il testo si corregge anche a mano.
+- **La pagina registra in parallelo** dallo stesso microfono, e segna a che secondo dell'audio il testo è arrivato a quale lunghezza.
+- **«Invia» manda le due cose insieme**: l'audio nella coda di sempre e il testo accanto al dettato (`referti_audio.dettato_testo`, `dettato_tempi`, `dettato_fonte`, migrazione 090). Fino all'invio stanno tutti e due sul dispositivo, come l'audio.
+- **La catena non cambia**: trascrive l'audio per conto suo, coi suoi controlli, e la **bozza da rivedere è la sua**. Così di uno stesso dettato ci sono due testi indipendenti.
+- **In revisione** compare il riquadro «Dettato con Dragon»: il suo testo, con **evidenziati i punti in cui lui e il Mac hanno scritto cose diverse** (sotto, in piccolo, ciò che ha sentito il Mac; ∅ = una parola che ha solo il Mac), quante parole coincidono, e un clic **riascolta quel punto** — il secondo viene dalle parole della catena, che portano il loro tempo. Chi ha ragione non lo decide la pagina: lo dice l'audio. Il confronto è `src/lib/dettato-confronto.ts` (puro: sottosequenza comune più lunga sulle parole ridotte all'osso, fino a 3000 per parte).
+- **Il microfono.** Dragon e il browser devono usare lo stesso microfono nello stesso momento. Dopo il primo permesso la pagina elenca i microfoni e si sceglie quello di Dragon. Se il testo arriva ma il microfono non sente niente (tipico: il programma lo tiene tutto per sé), la pagina **lo dice**; lo dice anche se si detta a registrazione ferma.
+
+**Dove va la voce.** Quella che Dragon manda al suo servizio **non passa da ReferralFlow**: è la scelta che lo studio ha già fatto usando quel programma, col suo contratto. La parte nuova — registrazione, testo, confronto, trascrizione di controllo — resta sul dispositivo e sul Mac dello studio.
+
+**Che cosa non è stato provato**: tutto ciò che dipende dal computer del medico — che Dragon scriva davvero nella casella del browser, che il microfono si condivida, com'è l'audio registrato in parallelo. Qui si è provato solo con testo scritto a mano e audio di prova.
+
+**Che cosa ancora non fa**: il Mac **non rifinisce il testo di Dragon** — rifinisce la sua trascrizione, come sempre. Usare il testo di Dragon dentro la catena (come terzo testimone accanto a whisper e Voxtral, o come testo di partenza) è il passo dopo, e si decide coi numeri del confronto sulle prime dettature vere. Dragon dentro la pagina, col suo tasto e i comandi vocali, richiede il kit per sviluppatori e un contratto a parte.
 
 ## Come è fatto
 

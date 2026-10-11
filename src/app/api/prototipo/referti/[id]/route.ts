@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { confronta, type Confronto } from '@/lib/dettato-confronto';
 import { impronta } from '@/lib/referti-eventi';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
@@ -55,6 +56,13 @@ export async function GET(_req: Request, props: { params: Promise<{ id: string }
     ...(b.audio_id ? [{ id: b.audio_id, url: `/api/referti/audio/${b.audio_id}`, offset: 0 }] : []),
     ...altre.filter((a) => spostamenti.has(a.id)).map((a) => ({ id: a.id, url: `/api/referti/audio/${a.id}`, offset: spostamenti.get(a.id) ?? 0 })),
   ];
+  // Il testo scritto da un programma di dettatura mentre si registrava (11.10.2026), messo a confronto con le parole
+  // che la catena ha ricavato dall'audio: dove non coincidono c'è un punto da riascoltare.
+  let dettato: (Confronto & { fonte: string }) | null = null;
+  if (b.audio_id) {
+    const [dt] = await query<{ dettato_testo: string | null; dettato_fonte: string | null }>('select dettato_testo, dettato_fonte from referti_audio where id = $1 and studio_id = $2', [b.audio_id, session.studioId]);
+    if (dt?.dettato_testo) dettato = { ...confronta(dt.dettato_testo, Array.isArray(p.parole) ? p.parole : []), fonte: dt.dettato_fonte ?? 'dettatura' };
+  }
   const [inArrivo] = await query<{ n: number }>(`select count(*)::int as n from referti_audio where aggiunge_a = $1 and stato in ('in_coda', 'elaborazione')`, [b.id]);
 
   return NextResponse.json({
@@ -88,6 +96,7 @@ export async function GET(_req: Request, props: { params: Promise<{ id: string }
     dettato_il: p.dettato_il ?? b.created_at,
     fiducia: p.fiducia ?? null,
     note_segreteria: Array.isArray(p.note_segreteria) ? p.note_segreteria.filter((n: unknown) => typeof n === 'string') : [],
+    dettato,
     ...rev,
   });
 }

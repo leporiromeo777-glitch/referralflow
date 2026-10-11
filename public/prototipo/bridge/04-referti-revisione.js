@@ -114,6 +114,32 @@ async function rfCaricaMedici() {
 /* ---------- Revisione: bozza vera, audio vero, salvataggio nella piattaforma ---------- */
 window.addEventListener('hashchange', () => { if (!/^#\/review\//.test(location.hash)) RF.reviewAperta = null; });
 const rfReviewOrig = PAGES.review;
+/* Dettato con un programma di dettatura (Dragon) accanto alla registrazione (11.10.2026): di uno stesso dettato ci sono
+   due testi indipendenti, quello di Dragon e quello che il Mac ha ricavato dall'audio. Qui si vede quello di Dragon, con
+   evidenziati i punti in cui i due non coincidono; sotto ogni punto, in piccolo, ciò che ha sentito il Mac. Un clic
+   riascolta quel punto. Chi ha ragione non lo decide la pagina: lo dice l'audio. La bozza da rivedere resta quella del Mac. */
+(function () { const st = document.createElement('style'); st.textContent = `
+.rf-dg-testo { line-height: 2.1; font-size: 14.5px; margin-top: 8px; white-space: normal; }
+.rf-dg { background: rgba(214,92,42,.16); border-radius: 5px; padding: 1px 4px; cursor: pointer; position: relative; color: inherit; }
+.rf-dg:hover { background: rgba(214,92,42,.3); }
+.rf-dg small { display: block; position: absolute; left: 4px; top: 1.35em; font-size: 10.5px; line-height: 1; color: var(--muted); white-space: nowrap; pointer-events: none; }
+`; document.head.appendChild(st); })();
+function rfDettatoHtml(d) {
+  const nome = d.fonte === 'dragon' ? 'Dragon' : 'il programma di dettatura';
+  const pct = d.parole_dettato ? Math.round(d.uguali / d.parole_dettato * 100) : 0;
+  const conta = !d.parole_mac ? 'la trascrizione del Mac non porta i tempi delle parole: il confronto non si può fare'
+    : `${d.parole_dettato} parole · ${pct}% uguali alla trascrizione del Mac · ${d.punti === 1 ? '1 punto diverso' : `${d.punti} punti diversi`}${d.troncato ? ' (confronto sulle prime 3000 parole)' : ''}`;
+  const corpo = d.pezzi.map(p => p.uguale ? rfEsc(p.t) : `<mark class="rf-dg" ${p.s != null ? `onclick="rvSeek(${Math.max(0, p.s - 1.5).toFixed(1)}, true)"` : ''} title="${p.mac ? `Il Mac ha sentito: ${rfEsc(p.mac)}` : 'Il Mac qui non ha sentito niente'}${p.s != null ? ' — clicca per riascoltare' : ''}">${p.t ? rfEsc(p.t) : '∅'}${d.parole_mac && p.mac ? `<small>${rfEsc(p.mac)}</small>` : ''}</mark>`).join(' ');
+  let chiuso = false; try { chiuso = localStorage.getItem('rf-dettato-chiuso') === '1'; } catch { /* ignora */ }
+  return `<details class="rf-note-seg" ${chiuso ? '' : 'open'} ontoggle="try{localStorage.setItem('rf-dettato-chiuso',this.open?'0':'1')}catch(e){}"><summary>${ICONS.mic || ''}<b>Dettato con ${rfEsc(nome)}</b><span class="caption">${conta}</span></summary>
+    <div class="rf-dg-testo">${corpo}</div>
+    <div class="row mt-8" style="gap:10px;align-items:center;flex-wrap:wrap"><button class="btn sm" onclick="rfDettatoCopia()">Copia il testo di ${rfEsc(nome)}</button><span class="caption">Evidenziato: dove ${rfEsc(nome)} e il Mac hanno scritto cose diverse (∅ = una parola che ha solo il Mac); sotto, in piccolo, ciò che ha sentito il Mac. Un clic riascolta quel punto. La bozza qui sotto è quella del Mac.</span></div></details>`;
+}
+function rfDettatoCopia() {
+  const d = (RF.meta || {}).dettato; if (!d) return;
+  const testo = d.pezzi.map(p => p.t).filter(Boolean).join(' ');
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(testo).then(() => toast('Testo copiato'), () => toast('Non riesco a copiare'));
+}
 PAGES.review = () => {
   const id = state.params && state.params.id;
   if (!RF.live || !id || !/^[0-9a-f-]{36}$/.test(id)) return RF.live ? rfPaginaPiattaforma('Revisione guidata', 'Scegli un referto dalla coda') : rfReviewOrig();
@@ -148,6 +174,8 @@ PAGES.review = () => {
     // Referto confermato (2.10.2026): fuori Prepara e-mail e Allegati, il resto nel menu ⋯.
     : `<button class="btn sm primary" onclick="rfEmailPrepara('${id}')" title="La mail per il medico inviante con il Word e gli allegati, da aprire nel programma di posta">${ICONS.mail} Prepara e-mail</button><button class="btn sm ghost" onclick="rfAllegati()" title="Che cosa parte con la mail all'inviante e che cosa elenca il Word; aggiungi o togli">Allegati</button><details class="rf-kebab"><summary class="btn sm ghost" title="Altro" aria-label="Altre azioni">⋯</summary><div class="rf-kebab-menu"><button class="btn sm ghost" onclick="rfWord('${id}')">${ICONS.file} Scarica Word</button><button class="btn sm ghost" onclick="rfDuplica('${id}')" title="Anche da un referto già confermato: la copia riparte dal dettato della catena, da tagliare per il secondo paziente">Duplica</button></div></details>`;
   html = html.replace('<div class="rv-top-r">', `<div class="rv-top-r">${bottoni}`);
+  // Il testo scritto da un programma di dettatura mentre si registrava (11.10.2026), a confronto con la trascrizione del Mac.
+  if (m.dettato && Array.isArray(m.dettato.pezzi) && m.dettato.pezzi.length) html = html.replace('<div class="rv-grid', `${rfDettatoHtml(m.dettato)}<div class="rv-grid`);
   const note = Array.isArray(m.note_segreteria) ? m.note_segreteria.filter(n => typeof n === 'string' && n.trim()) : [];
   // Ogni nota ha «Rimetti»: la catena a volte scambia una frase clinica per
   // un'istruzione alla segretaria, e prima non c'era modo di riportarla nel

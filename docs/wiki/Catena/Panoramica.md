@@ -27,6 +27,8 @@ Dettato (dittafono o drag & drop dalla pagina Referti) → `pipeline-referti/pip
 | registro dei fatti e punteggio di fiducia | codice | [[Catena/Registro dei fatti e fiducia]] |
 | manifesto, storia, versioni, versione_catena | codice | [[Catena/Audit e qualità]] |
 
+**Dettatura in tempo reale accanto al dettato** (11.10.2026): quando il medico detta con Dragon nella casella del dittafono, il suo testo arriva in piattaforma con l'audio (`referti_audio.dettato_testo`) ma **la catena non lo legge**: lavora sull'audio come sempre. Il confronto fra i due testi lo fa la piattaforma in revisione ([[Piattaforma/Dittafono]]).
+
 ## Percorso esterno
 `~/.referralflow-esterno.conf` (`attivo=1`, url Infomaniak, modello `google/gemma-4-31B-it`, `modello_verifica=Qwen/Qwen3.5-397B-A17B-FP8` per i verificatori, interruttori per fase: `arbitro=1`, `estrazione`, `omissioni`, `coerenza`, `verificatore`…). Il testo esce SOLO pseudonimizzato (`_anonimizza_per_esterno`: gemma3:12b locale trova i dati, il codice sostituisce con segnaposto, controprova in due tempi; nei log solo conteggi). Su qualunque intoppo si resta in locale. Modalità manuale con `~/referti/scambio-esterno/ATTIVO`.
 

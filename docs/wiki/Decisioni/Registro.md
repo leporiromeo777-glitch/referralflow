@@ -778,3 +778,16 @@ pagine; lo studio: «a volte taglia una lettera in due»). Quindi **il modello n
 - **il modello decide solo i casi incerti**, e dà data e titolo;
 - **tracciati e appunti: un documento per giorno**, come nello schema dello studio;
 - la sottocartella **Ricette** è la 12 **finché lo studio non dice il suo numero**.
+
+## 11.10.2026 — Dragon accanto alla catena, non al suo posto
+Lo studio ha la licenza di Dragon e un medico lo usa già; vuole dettare in ReferralFlow in tempo reale e salvare
+anche l'audio. Deciso così:
+- **Dragon scrive in una casella del dittafono, la pagina registra in parallelo**: nessun collegamento con Dragon
+  (il kit per sviluppatori è un altro contratto);
+- **la catena resta com'è e la bozza resta la sua**: il testo di Dragon le sta accanto come secondo testo
+  indipendente, e in revisione si vedono i punti in cui non coincidono, col riascolto. Non si perde né l'audio
+  né il doppio controllo;
+- **prima i numeri, poi la catena**: se e come far entrare il testo di Dragon nella catena (terzo testimone, o testo
+  di partenza da rifinire) si decide dopo le prime dettature vere, guardando quanto coincide;
+- **la voce verso Dragon non è cosa della piattaforma**: è la scelta che lo studio ha già fatto con quel programma;
+  ciò che ReferralFlow aggiunge resta sul dispositivo e sul Mac. La regola nLPD della catena non cambia.

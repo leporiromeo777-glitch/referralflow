@@ -71,10 +71,22 @@ export async function POST(req: NextRequest) {
   // (decoder locale), così il player nel dettaglio parte senza attese.
   // Best-effort: se fallisce, la rotta audio riprova alla prima richiesta.
   if (ESTENSIONI_DITTAFONO.has(ext)) void wavDaDittafono(key, buffer);
+  // Dettatura in tempo reale accanto alla registrazione (11.10.2026): il testo che un programma di dettatura
+  // (Dragon) ha scritto nella casella del dittafono mentre si registrava, e a che secondo dell'audio era arrivato.
+  // Resta accanto al dettato; la catena trascrive l'audio per conto suo e in revisione i due si confrontano.
+  const dettatoTesto = String(form?.get('dettato_testo') ?? '').replace(/\u0000/g, '').trim().slice(0, 60_000) || null;
+  let dettatoTempi: [number, number][] | null = null;
+  if (dettatoTesto) {
+    try {
+      const grezzi = JSON.parse(String(form?.get('dettato_tempi') ?? '[]'));
+      if (Array.isArray(grezzi)) dettatoTempi = grezzi.filter((x: unknown): x is [number, number] => Array.isArray(x) && x.length === 2 && x.every((n) => typeof n === 'number' && Number.isFinite(n) && n >= 0)).slice(0, 5000);
+    } catch { dettatoTempi = null; }
+  }
+  const dettatoFonte = dettatoTesto ? (String(form?.get('dettato_fonte') ?? '').replace(/[^a-z0-9_-]/gi, '').slice(0, 30).toLowerCase() || 'dettatura') : null;
   const [row] = await query<{ id: string }>(
-    `insert into referti_audio (studio_id, filename, storage_key, content_type, uploaded_by, tipo, medico, patient_id)
-     values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
-    [session.studioId, file.name.slice(0, 200), key, TIPI[ext], session.id, tipo, ids.has(medico) ? medico : null, pazienteId]
+    `insert into referti_audio (studio_id, filename, storage_key, content_type, uploaded_by, tipo, medico, patient_id, dettato_testo, dettato_tempi, dettato_fonte)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11) returning id`,
+    [session.studioId, file.name.slice(0, 200), key, TIPI[ext], session.id, tipo, ids.has(medico) ? medico : null, pazienteId, dettatoTesto, dettatoTempi ? JSON.stringify(dettatoTempi) : null, dettatoFonte]
   );
 
   // L'arrivo di un dettato è «visita finita» per quel medico (16.9.2026,

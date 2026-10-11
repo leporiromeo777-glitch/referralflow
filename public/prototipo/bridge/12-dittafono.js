@@ -28,12 +28,13 @@
 .rf-dit-livello i.alto { background: #d65c2a; }
 .rf-dit-azioni { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 .rf-dit audio { width: 100%; }
+.rf-dit-testo { width: 100%; min-height: 240px; height: auto; padding: 12px 14px; line-height: 1.55; font-size: 15px; resize: vertical; }
 .rf-dit-nota { font-size: 12px; line-height: 1.5; color: var(--muted); border-left: 3px solid var(--border); padding: 2px 0 2px 10px; }
 `;
   document.head.appendChild(st);
 })();
 
-RF.dit = { stato: 'pronto', pcm: new Int16Array(0), nuovi: [], modo: 'aggiungi', punto: 0, livello: 0, medico: '', tipo: 'referto', errore: '', recupero: null, url: null, invio: false, flusso: null, ctx: null, nodo: null, blocco: null, orologio: null, salvataggio: null, rilascio: null, iniziata: 0 };
+RF.dit = { stato: 'pronto', pcm: new Int16Array(0), nuovi: [], modo: 'aggiungi', punto: 0, livello: 0, medico: '', tipo: 'referto', errore: '', recupero: null, url: null, invio: false, flusso: null, ctx: null, nodo: null, blocco: null, orologio: null, salvataggio: null, rilascio: null, iniziata: 0, testo: '', tempi: [], picco: 0, testoInizio: 0, microfoni: null };
 
 /* ── su questo dispositivo finché non si invia ── */
 function rfDitDb() {
@@ -49,7 +50,7 @@ async function rfDitSalva() {
   try {
     const db = await rfDitDb();
     const tutto = d.nuovi.length ? rfDitComponi() : d.pcm;
-    db.transaction('bozza', 'readwrite').objectStore('bozza').put({ pcm: tutto.buffer.slice(tutto.byteOffset, tutto.byteOffset + tutto.byteLength), medico: d.medico, tipo: d.tipo, quando: Date.now() }, 'corrente');
+    db.transaction('bozza', 'readwrite').objectStore('bozza').put({ pcm: tutto.buffer.slice(tutto.byteOffset, tutto.byteOffset + tutto.byteLength), medico: d.medico, tipo: d.tipo, quando: Date.now(), testo: d.testo || '', tempi: d.tempi || [] }, 'corrente');
   } catch (_) { /* senza archivio si registra lo stesso: si perde solo il recupero */ }
 }
 async function rfDitSvuota() { try { const db = await rfDitDb(); db.transaction('bozza', 'readwrite').objectStore('bozza').delete('corrente'); } catch (_) { /* niente */ } }
@@ -63,7 +64,7 @@ async function rfDitCercaRecupero() {
 }
 function rfDitRiprendiRecupero() {
   const v = RF.dit.recupero; if (!v) return;
-  RF.dit.pcm = new Int16Array(v.pcm); RF.dit.medico = v.medico || RF.dit.medico; RF.dit.tipo = v.tipo || 'referto'; RF.dit.recupero = null; RF.dit.stato = 'pausa'; rfDitAudio(); render();
+  RF.dit.pcm = new Int16Array(v.pcm); RF.dit.medico = v.medico || RF.dit.medico; RF.dit.tipo = v.tipo || 'referto'; RF.dit.testo = v.testo || ''; RF.dit.tempi = Array.isArray(v.tempi) ? v.tempi : []; RF.dit.recupero = null; RF.dit.stato = 'pausa'; rfDitAudio(); render();
 }
 function rfDitScartaRecupero() { RF.dit.recupero = null; void rfDitSvuota(); render(); }
 
@@ -126,6 +127,31 @@ function rfDitCuffieFerma() {
     if ('mediaSession' in navigator) { for (const x of ['play', 'pause']) navigator.mediaSession.setActionHandler(x, null); navigator.mediaSession.playbackState = 'none'; }
   } catch (_) { /* niente */ }
 }
+/* Dettare con un programma di dettatura (Dragon) MENTRE la pagina registra (11.10.2026). Il programma scrive nella
+   casella come in qualunque campo di testo: qui non c'è nessun collegamento con lui. La pagina fa tre cose: registra
+   la voce dallo stesso microfono, segna a che secondo dell'audio il testo è arrivato a quale lunghezza, e manda testo
+   e audio insieme. Poi la catena del Mac trascrive l'audio per conto suo e in revisione i due testi si confrontano.
+   È un'opzione da accendere, per dispositivo. */
+const RF_DIT_DETT = 'rf-dit-dettatura', RF_DIT_MIC = 'rf-dit-mic';
+function rfDitDettatura() { try { return localStorage.getItem(RF_DIT_DETT) === '1'; } catch (_) { return false; } }
+function rfDitDettaturaImposta(si) { try { localStorage.setItem(RF_DIT_DETT, si ? '1' : '0'); } catch (_) { /* resta per questa pagina */ } render(); }
+function rfDitMicScelto() { try { return localStorage.getItem(RF_DIT_MIC) || ''; } catch (_) { return ''; } }
+function rfDitMicImposta(id) { try { localStorage.setItem(RF_DIT_MIC, id || ''); } catch (_) { /* niente */ } if (RF.dit.stato !== 'registra') rfDitRilasciaMicrofono(); }
+// A che secondo dell'audio si è adesso (per segnare quando è arrivato il testo).
+function rfDitSecondi() {
+  const d = RF.dit, campioni = d.nuovi.reduce((n, p) => n + p.length, 0);
+  return (d.stato === 'registra' ? (d.modo === 'aggiungi' ? d.pcm.length : d.punto) + campioni : d.pcm.length) / RFDittafono.FREQUENZA;
+}
+function rfDitTesto(el) {
+  const d = RF.dit; d.testo = el.value;
+  const s = Math.round(rfDitSecondi() * 10) / 10, u = d.tempi[d.tempi.length - 1];
+  if (u && u[0] === s) u[1] = d.testo.length; else if (d.tempi.length < 5000) d.tempi.push([s, d.testo.length]);
+  // Il testo arriva ma il microfono non sente niente: di solito è il programma di dettatura che lo tiene tutto per sé.
+  const sordo = document.getElementById('rf-dit-sordo');
+  if (sordo) sordo.style.display = d.stato === 'registra' && Date.now() - d.iniziata > 6000 && d.testo.length - d.testoInizio >= 15 && d.picco < 0.01 ? '' : 'none';
+  const fermo = document.getElementById('rf-dit-fermo');
+  if (fermo) fermo.style.display = d.stato !== 'registra' && d.testo.length - d.testoInizio >= 15 ? '' : 'none';
+}
 function rfDitAudio() {
   const d = RF.dit; if (d.url) { URL.revokeObjectURL(d.url); d.url = null; }
   if (d.pcm.length) d.url = URL.createObjectURL(new Blob([RFDittafono.wav(d.pcm, RFDittafono.FREQUENZA)], { type: 'audio/wav' }));
@@ -138,7 +164,11 @@ async function rfDitMicrofono() {
     d.errore = 'Il microfono funziona solo sull’indirizzo sicuro dello studio (https). Da questo indirizzo il browser non lo concede.'; return false;
   }
   try {
-    d.flusso = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true } });
+    const base = { channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true }, scelto = rfDitMicScelto();
+    try { d.flusso = await navigator.mediaDevices.getUserMedia({ audio: scelto ? { ...base, deviceId: { exact: scelto } } : base }); }
+    catch (e) { if (!scelto || !e || (e.name !== 'OverconstrainedError' && e.name !== 'NotFoundError')) throw e; d.flusso = await navigator.mediaDevices.getUserMedia({ audio: base }); }      // il microfono scelto non c'è più: quello di serie
+    // Dopo il permesso il browser dice i nomi dei microfoni: servono a scegliere lo stesso che usa il programma di dettatura.
+    try { d.microfoni = (await navigator.mediaDevices.enumerateDevices()).filter(x => x.kind === 'audioinput' && x.deviceId).map(x => ({ id: x.deviceId, nome: x.label || 'Microfono' })); } catch (_) { d.microfoni = []; }
   } catch (e) {
     d.errore = e && e.name === 'NotAllowedError' ? 'Il browser non ha il permesso di usare il microfono: concedilo dalle impostazioni del sito e riprova.' : e && e.name === 'NotFoundError' ? 'Nessun microfono trovato su questo dispositivo.' : 'Non riesco ad aprire il microfono.';
     return false;
@@ -150,7 +180,7 @@ async function rfDitMicrofono() {
   d.nodo.onaudioprocess = (ev) => {
     if (RF.dit.stato !== 'registra') return;
     const f = ev.inputBuffer.getChannelData(0);
-    RF.dit.livello = RFDittafono.picco(f);
+    RF.dit.livello = RFDittafono.picco(f); if (RF.dit.livello > RF.dit.picco) RF.dit.picco = RF.dit.livello;
     RF.dit.nuovi.push(RFDittafono.aInt16(RFDittafono.riduci(f, RF.dit.ctx.sampleRate, RFDittafono.FREQUENZA)));
   };
   sorgente.connect(d.nodo); d.nodo.connect(d.ctx.destination);   // l'uscita resta muta: non si copia l'ingresso
@@ -173,10 +203,12 @@ async function rfDitRegistra(modo) {
   if (!(await rfDitMicrofono())) { rfDitCuffieStato(); render(); return; }
   d.modo = modo || 'aggiungi';
   d.punto = d.modo === 'aggiungi' ? d.pcm.length : Math.round(pos * RFDittafono.FREQUENZA);
-  d.nuovi = []; d.stato = 'registra'; d.iniziata = Date.now();
+  d.nuovi = []; d.stato = 'registra'; d.iniziata = Date.now(); d.picco = 0; d.testoInizio = (d.testo || '').length;
   try { if (navigator.wakeLock) d.blocco = await navigator.wakeLock.request('screen'); } catch (_) { /* lo schermo può spegnersi: si registra lo stesso */ }
   rfDitCuffieStato();
   render();
+  // In dettatura il cursore va nella casella: è lì che il programma di dettatura scrive.
+  if (rfDitDettatura()) setTimeout(() => { const t = document.getElementById('rf-dit-testo'); if (t) { t.focus(); try { t.setSelectionRange(t.value.length, t.value.length); } catch (_) { /* niente */ } } }, 0);
   d.orologio = setInterval(rfDitAggiorna, 100);
   d.salvataggio = setInterval(() => void rfDitSalva(), 15000);
 }
@@ -199,7 +231,7 @@ function rfDitAggiorna() {
 }
 function rfDitScarta() {
   if (!confirm('Scartare questa registrazione? Non si può recuperare.')) return;
-  const d = RF.dit; d.pcm = new Int16Array(0); d.nuovi = []; d.stato = 'pronto'; d.errore = '';
+  const d = RF.dit; d.pcm = new Int16Array(0); d.nuovi = []; d.stato = 'pronto'; d.errore = ''; d.testo = ''; d.tempi = [];
   rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota(); render();
 }
 async function rfDitInvia() {
@@ -216,11 +248,13 @@ async function rfDitInvia() {
     fd.append('medico', medico); fd.append('tipo', tipo);
     const pazId = typeof rfPazIdDa === 'function' ? rfPazIdDa(d.paziente) : null;
     if (pazId) fd.append('patient_id', pazId);
+    const dettato = rfDitDettatura() ? (d.testo || '').trim() : '';
+    if (dettato) { fd.append('dettato_testo', dettato); fd.append('dettato_tempi', JSON.stringify(d.tempi || [])); fd.append('dettato_fonte', 'dragon'); }
     const r = await fetch('/api/referti/upload', { method: 'POST', body: fd, credentials: 'include' });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { d.errore = j.errore === 'medico_mancante' ? 'Scegli il medico che ha dettato.' : j.errore === 'troppo_grande' ? 'Registrazione troppo lunga per un invio solo.' : 'Invio non riuscito: la registrazione resta qui, riprova.'; d.invio = false; render(); return; }
-    d.pcm = new Int16Array(0); d.stato = 'pronto'; d.invio = false; d.paziente = ''; rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota();
-    toast('Dettato in coda: la bozza arriva tra i referti in pochi minuti');
+    d.pcm = new Int16Array(0); d.stato = 'pronto'; d.invio = false; d.paziente = ''; d.testo = ''; d.tempi = []; rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota();
+    toast(dettato ? 'Testo e audio in coda: la bozza arriva tra i referti in pochi minuti, col confronto fra i due' : 'Dettato in coda: la bozza arriva tra i referti in pochi minuti');
     render(); setTimeout(rfCaricaDati, 3000);
   } catch (_) { d.errore = 'Piattaforma non raggiungibile: la registrazione resta su questo dispositivo, riprova.'; d.invio = false; render(); }
 }
@@ -267,6 +301,14 @@ PAGES.dittafono = () => {
         <div class="caption">${rec ? 'tocca per la pausa' : d.pcm.length ? 'tocca per riprendere in coda' : 'tocca per registrare'}</div>
         ${rfDitCuffiePossibile() ? `<label class="caption" style="display:flex;gap:8px;align-items:center;margin-top:10px;cursor:pointer"><input type="checkbox" ${rfDitCuffieAcceso() ? 'checked' : ''} ${rec ? 'disabled' : ''} onchange="rfDitCuffieImposta(this.checked)"> Pausa e ripresa col tasto delle cuffie <span title="In prova. Con le cuffie col filo, il tasto al centro mette in pausa e riprende. Se la registrazione ha problemi, spegnilo.">(in prova)</span></label>` : ''}
       </div>
+      <label class="caption" style="display:flex;gap:8px;align-items:center;justify-content:center;cursor:pointer"><input type="checkbox" ${rfDitDettatura() ? 'checked' : ''} ${rec ? 'disabled' : ''} onchange="rfDitDettaturaImposta(this.checked)"> Detto con Dragon (o un altro programma di dettatura): mostra la casella del testo</label>
+      ${rfDitDettatura() ? `<div class="mt-16">
+        <div class="row" style="justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap"><label for="rf-dit-testo" class="section-title">Testo dettato</label>
+          ${(d.microfoni || []).length > 1 ? `<span class="caption">Microfono <select class="input sm" style="max-width:260px" ${rec ? 'disabled' : ''} onchange="rfDitMicImposta(this.value)" aria-label="Microfono da registrare"><option value="">quello di serie</option>${d.microfoni.map(x => `<option value="${rfEsc(x.id)}" ${x.id === rfDitMicScelto() ? 'selected' : ''}>${rfEsc(x.nome)}</option>`).join('')}</select></span>` : ''}</div>
+        <textarea class="input rf-dit-testo mt-8" id="rf-dit-testo" spellcheck="false" placeholder="1. Tocca il tasto rosso per registrare.  2. Detta con Dragon: il testo compare qui mentre la pagina registra la voce.  3. Metti in pausa e premi «Invia»." oninput="rfDitTesto(this)">${rfEsc(d.testo || '')}</textarea>
+        <div id="rf-dit-sordo" class="rf-manc mt-8" style="display:none"><b>Il testo arriva ma il microfono non sente niente.</b> Di solito il programma di dettatura tiene il microfono tutto per sé, oppure qui è scelto un altro microfono: metti in pausa e scegli sopra lo stesso che usa lui. Senza audio non c'è né riascolto né confronto.</div>
+        <div id="rf-dit-fermo" class="rf-manc mt-8" style="display:none"><b>Stai dettando ma la registrazione è ferma.</b> Tocca il tasto per registrare: senza audio non c'è né riascolto né confronto.</div>
+        <p class="rf-dit-nota mt-8">La casella è un campo di testo qualunque: il programma di dettatura ci scrive come farebbe in Word, e si può correggere a mano. La voce che lui manda al suo servizio non passa da qui; la registrazione che fa questa pagina resta sul dispositivo e poi sul Mac dello studio.</p></div>` : ''}
       ${d.errore ? `<div class="rf-manc mt-8">${rfEsc(d.errore)}</div>` : ''}
       ${!rec && d.pcm.length ? `<div class="mt-16">
         <audio id="rf-dit-audio" controls preload="metadata" src="${d.url || ''}"></audio>
