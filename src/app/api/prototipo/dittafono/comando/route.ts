@@ -11,7 +11,8 @@ export const dynamic = 'force-dynamic';
 // I comandi a voce del dittafono (12.10.2026, [[Piattaforma/Dittafono]]): chi detta dice «per favore, inserisci la
 // lettera più recente» e la pagina chiede qui il pezzo da mettere nel foglio.
 // Si può chiedere la lettera intera o solo alcune PARTI (anamnesi, FRCV, comorbidità, un esame, la conclusione, la terapia).
-//   POST { comando: 'lettera_recente' | 'parti', parti?: [...], paziente: <uuid> } → { testo, fonte, data, cosa, mancanti } | { errore }
+//   POST { comando: 'lettera_recente' | 'parti', parti?: [...], paziente: <uuid> } → { testo, fonte, data, cosa, mancanti, apri } | { errore }
+// `apri` è la lettera di provenienza, che la pagina mostra accanto al foglio.
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
@@ -26,5 +27,5 @@ export async function POST(req: NextRequest) {
   if (comando === 'parti' && !parti.length) return NextResponse.json({ errore: 'Non ho capito quale parte della lettera.' }, { status: 400 });
   const r = await eseguiComando(session.studioId, session.id, paziente, comando, parti);
   return 'errore' in r ? NextResponse.json({ errore: r.errore }, { status: 404, headers: { 'Cache-Control': 'no-store' } })
-    : NextResponse.json({ testo: r.testo, fonte: r.fonte, data: r.data, cosa: r.cosa, mancanti: r.mancanti }, { headers: { 'Cache-Control': 'no-store' } });
+    : NextResponse.json({ testo: r.testo, fonte: r.fonte, data: r.data, cosa: r.cosa, mancanti: r.mancanti, apri: r.apri }, { headers: { 'Cache-Control': 'no-store' } });
 }

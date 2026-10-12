@@ -82,6 +82,11 @@ test('comandi a voce: «per favore» più un comando previsto — e solo quello 
     ['per favore inserisci la terapia dell\'ultima lettera', 'parti'],
     ['per favore aggiungi la terapia', 'parti'],
     ['per favore metti la terapia della lettera precedente qui', 'parti'],
+    // «la lettera» e basta è la più recente (12.10.2026): «riprendimi la lettera»
+    ['per favore riprendimi la lettera', 'lettera_recente'],
+    ['Per favore riprendi la lettera del paziente.', 'lettera_recente'],
+    ['per favore prendimi la lettera e aggiungimela qui', 'lettera_recente'],
+    ['per favore riprendimi la lettera più recente', 'lettera_recente'],
     ['per favore annulla', 'annulla'],
     ['Per favore togli la lettera', 'annulla'],
   ] as [string, string | null][]) {
@@ -100,6 +105,9 @@ test('comandi a voce: «per favore» più un comando previsto — e solo quello 
     'Per favore inserire la terapia nel piano di cura.',
     'Per favore metti in pausa la terapia per tre giorni.',
     'Per favore riprendi la terapia anticoagulante dopo l\'intervento.',
+    'Per favore riprendi la terapia',
+    'Per favore prendi la lettera del collega e portala alla prossima visita.',
+    'Per favore metti la lettera di dimissione nella cartella.',
   ]) assert.equal(K.trova(frase), null, frase);
   assert.equal(K.letto('Bene. Per favore inserisce la namnesi'), 'inserisce la namnesi');
   assert.equal(K.letto('Per favore inserisci l\'anamnesi'), null);

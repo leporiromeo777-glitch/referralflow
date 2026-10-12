@@ -14,14 +14,16 @@
  */
 (function (root) {
   'use strict';
-  var VERSIONE = '1.3';
+  var VERSIONE = '1.4';
   // Una copia nuova a ogni ricerca: l'espressione ricorda dov'è arrivata, e due ricerche una dentro l'altra sulla
   // stessa copia non finivano più (la pagina si bloccava a ogni «per favore» senza comando, 12.10.2026).
   // Dopo la parola d'ordine il programma di dettatura può mettere da sé un punto, una virgola o un a capo.
   function parola() { return /\bper[ \t]*favore\b[ \t,:;.!…]*(?:\n[ \t]*)?/gi; }
   // Il verbo: all'imperativo, anche col pronome attaccato («inseriscimi», «aggiungimela»); all'infinito solo dopo
   // «puoi», «potresti», «vorrei» — «per favore aggiungere…» è una frase da lettera, non un comando.
-  var VERBO = /^(?:(?:(?:mi|me|ora|adesso|qui|poi|tu)\s+)*(?:(?:inserisc[ia]|incolla|aggiung[ia]|prendi|metti|copia|riporta)(?:mi|mela|melo|meli|mele|la|lo|li|le)?|damm(?:i|ela|elo|eli|ele))|(?:mi\s+)?(?:puoi|potresti|pu[oò]|vorrei|voglio)\s+(?:(?:che\s+)?(?:mi|tu)\s+)*(?:inser|incoll|aggiung|prend|mett|copi|riport)[a-zà-ù]{1,9})(?![a-zà-ù])/i;
+  var VERBO = /^(?:(?:(?:mi|me|ora|adesso|qui|poi|tu)\s+)*(?:(?:inserisc[ia]|incolla|aggiung[ia]|riprendi|prendi|metti|copia|riporta)(?:mi|mela|melo|meli|mele|la|lo|li|le)?|damm(?:i|ela|elo|eli|ele))|(?:mi\s+)?(?:puoi|potresti|pu[oò]|vorrei|voglio)\s+(?:(?:che\s+)?(?:mi|tu)\s+)*(?:inser|incoll|aggiung|riprend|prend|mett|copi|riport)[a-zà-ù]{1,9})(?![a-zà-ù])/i;
+  // «Riprendi» vale solo per la lettera: «per favore riprendi la terapia…» è una frase da lettera.
+  var SOLO_LETTERA = /riprend/i;
   // Che cosa si può chiedere: la lettera intera, oppure solo alcune PARTI («l'anamnesi», «FRCV e comorbidità»,
   // «la conclusione dell'ultima lettera»). I nomi delle parti sono quelli che il server conosce (src/lib/dittafono-comandi.ts).
   var LETTERA = /\b(?:ultima\s+lettera|lettera\s+(?:pi[uù]\s+(?:recente|nuova)|precedente|vecchia|di\s+prima)|(?:pi[uù]\s+recente|precedente)\s+lettera)(?![a-zà-ù])/i;
@@ -42,6 +44,9 @@
   ];
   // Fra una parte e la successiva solo parole di legame («FRCV e le comorbidità», «anamnesi, FRCV»).
   var LEGAME = /^[ \t,]*(?:(?:e|ed|con|pi[uù]|poi|anche)[ \t]+)*(?:(?:il|lo|la|i|gli|le)[ \t]+|l['’][ \t]?)?$/i;
+  // «La lettera» e basta («per favore riprendimi la lettera») è la più recente — ma solo se la frase finisce lì:
+  // «prendi la lettera del collega…» è testo.
+  var LETTERA_NUDA = /^[ \t,]*(?:(?:qui|mi|anche)[ \t]+)*(?:(?:il[ \t]+testo[ \t]+)?(?:di[ \t]+tutta[ \t]+|del)?(?:la[ \t]+|l['’][ \t]?))?(?:mia[ \t]+|sua[ \t]+)?lettera(?![a-zà-ù])/i;
   // Fra il verbo e la prima parte solo parole che non cambiano il senso («solo», «qui», «il testo di», l'articolo):
   // «per favore prendi la terapia regolarmente» lo è, «per favore metti in pausa la terapia» no.
   var ATTACCO = /^[ \t,]*(?:(?:solo|soltanto|anche|pure|qui|dentro|tutt[aoei]|mi)[ \t]+)*(?:il[ \t]+testo[ \t]+(?:di[ \t]+|del(?:la)?[ \t]+|dell['’][ \t]?))?(?:(?:il|lo|la|i|gli|le)[ \t]+|l['’][ \t]?)?$/i;
@@ -81,12 +86,16 @@
           var poi = resto.slice(v[0].length), frase = poi.split(/[.!?](?=\s+[A-ZÀ-Ý]|\s*$)/)[0];
           var let_ = LETTERA.exec(frase); if (let_ && let_.index > FRA) let_ = null;
           // le parti: subito dopo il verbo («inserisci l'anamnesi dell'ultima lettera») o dopo la lettera («dall'ultima lettera, l'anamnesi»)
-          var p = partiIn(frase, 0, FRA);
-          if (let_ && (!p || let_.index < p.inizio)) p = partiIn(frase, let_.index + let_[0].length, 25);
+          var p = SOLO_LETTERA.test(v[0]) ? null : partiIn(frase, 0, FRA);
+          if (let_ && (!p || let_.index < p.inizio) && !SOLO_LETTERA.test(v[0])) p = partiIn(frase, let_.index + let_[0].length, 25);
           if (p) {
             var dove = DA_DOVE.exec(frase.slice(p.fine));
             fine = v[0].length + Math.max(p.fine + (dove ? dove[0].length : 0), let_ ? let_.index + let_[0].length : 0); comando = 'parti'; parti = p.parti;
           } else if (let_) { fine = v[0].length + let_.index + let_[0].length; comando = 'lettera_recente'; }
+          else {
+            var nuda = LETTERA_NUDA.exec(poi);
+            if (nuda) { var dopoNuda = poi.slice(nuda[0].length), coda = CODA.exec(dopoNuda)[0]; if (/^\s*(?:$|[.,;!?\n]|[A-ZÀ-Ý])/.test(dopoNuda.slice(coda.length)) || /[.,;!]$/.test(coda)) { fine = v[0].length + nuda[0].length; comando = 'lettera_recente'; } }
+          }
         }
       }
       if (comando) {

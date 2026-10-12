@@ -9,7 +9,10 @@ import { corpoDellaLettera, NOME_PARTE, partiDellaLettera, type Comando, type Pa
 // in cartella, lettere dentro le cartelle scansionate), partendo dal paziente scelto. Tutto in studio: nessun modello,
 // nessun fornitore. Nei log niente testo; la lettura di un documento della cartella va nel registro accessi.
 
-export type EsitoComando = { ok: true; testo: string; fonte: string; data: string; cosa: string; mancanti: string[] } | { errore: string };
+// `apri`: la lettera da cui viene il pezzo, da mostrare ACCANTO al foglio (12.10.2026, richiesta dello studio): il PDF
+// alle sue pagine se è una scansione, se no il testo della lettera intera.
+export type DaAprire = { tipo: 'referto' | 'documento' | 'pagine'; id: string; pdf: boolean; da: number | null; a: number | null; testo: string };
+export type EsitoComando = { ok: true; testo: string; fonte: string; data: string; cosa: string; mancanti: string[]; apri: DaAprire } | { errore: string };
 const TETTO = 20000;
 
 export async function eseguiComando(studioId: string, userId: string | null, patientId: string, comando: Comando, parti: ParteLettera[] = []): Promise<EsitoComando> {
@@ -20,12 +23,17 @@ export async function eseguiComando(studioId: string, userId: string | null, pat
   const letta = async (l: (typeof lettere)[number]) => {
     if (l.fonte.tipo !== 'referto') await logDocumento(l.fonte.id, 'lettura', { studioId, userId: userId ?? undefined, dettaglio: 'dittafono, comando a voce' }).catch(() => {});
   };
+  const daAprire = async (l: (typeof lettere)[number]): Promise<DaAprire> => {
+    let pdf = l.fonte.tipo === 'pagine';
+    if (l.fonte.tipo === 'documento') { const [f] = await query<{ filename: string }>('select filename from patient_documents where id = $1 and studio_id = $2', [l.fonte.id, studioId]); pdf = !!f && f.filename.toLowerCase().endsWith('.pdf'); }
+    return { tipo: l.fonte.tipo, id: l.fonte.id, pdf, da: l.fonte.da ?? null, a: l.fonte.a ?? null, testo: l.testo.replace(/\r\n?/g, '\n').trim().slice(0, 40000) };
+  };
   if (comando === 'lettera_recente') {
     const l = lettere[0];
     const testo = corpoDellaLettera(l.testo).slice(0, TETTO);
     if (!testo) return { errore: 'La lettera più recente è vuota.' };
     await letta(l);
-    return { ok: true, testo, fonte: l.fonte.etichetta, data: l.fonte.data, cosa: 'la lettera', mancanti: [] };
+    return { ok: true, testo, fonte: l.fonte.etichetta, data: l.fonte.data, cosa: 'la lettera', mancanti: [], apri: await daAprire(l) };
   }
   // Le parti chieste: dalla più recente fra le ultime quattro lettere che ne ha almeno una (un biglietto può non
   // averne nessuna). Tutte dalla STESSA lettera: quelle che lì non ci sono vengono dette, non cercate altrove.
@@ -37,7 +45,7 @@ export async function eseguiComando(studioId: string, userId: string | null, pat
     await letta(l);
     return {
       ok: true, testo: trovate.map((k) => sue[k]).join('\n\n').slice(0, TETTO), fonte: l.fonte.etichetta, data: l.fonte.data,
-      cosa: trovate.map((k) => NOME_PARTE[k]).join(', '), mancanti: parti.filter((k) => !sue[k]).map((k) => NOME_PARTE[k]),
+      cosa: trovate.map((k) => NOME_PARTE[k]).join(', '), mancanti: parti.filter((k) => !sue[k]).map((k) => NOME_PARTE[k]), apri: await daAprire(l),
     };
   }
   return { errore: `Nelle ultime lettere di questo paziente non trovo: ${parti.map((k) => NOME_PARTE[k]).join(', ')}.` };

@@ -49,7 +49,20 @@
 .rf-dit-lato .rf-dit-campi { grid-template-columns: 1fr; }
 .rf-dit-lato .rf-dit-centro { padding-top: 12px; }
 .rf-dit-carta .rf-foglio { margin-top: 0; min-height: 78vh; }
-@media (max-width: 900px) { .rf-dit-due { grid-template-columns: 1fr; } .rf-dit-lato { position: static; } }
+.rf-dit-due.con-fonte { grid-template-columns: minmax(230px, 280px) minmax(0, 1fr) minmax(0, 1fr); }
+.rf-dit-fonte { display: none; position: sticky; top: 4px; max-height: calc(100vh - 20px); flex-direction: column; background: var(--surface, #fff); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.rf-dit-due.con-fonte .rf-dit-fonte { display: flex; }
+.rf-dit-fonte-bar { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.rf-dit-fonte-bar .rf-dit-fonte-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+.rf-dit-fonte-corpo { flex: 1; min-height: 60vh; overflow: auto; padding: 8px; background: var(--surface-2, #eef0ec); }
+.rf-dit-fonte-corpo canvas { display: block; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.12); margin: 0 auto 8px; }
+.rf-dit-fonte-testo { background: #fff; color: #1b1b1f; padding: 22px 26px; white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.55 Arial, Helvetica, sans-serif; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.rf-zoom { display: inline-flex; gap: 4px; align-items: center; flex: 0 0 auto; }
+.rf-zoom .btn { min-width: 30px; padding-left: 8px; padding-right: 8px; }
+.rf-dit-carta-bar { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-bottom: 6px; }
+.rf-dit-carta { min-width: 0; }
+@media (max-width: 1150px) { .rf-dit-due.con-fonte { grid-template-columns: minmax(230px, 280px) minmax(0, 1fr); } .rf-dit-fonte { grid-column: 1 / -1; position: static; max-height: none; } }
+@media (max-width: 900px) { .rf-dit-due, .rf-dit-due.con-fonte { grid-template-columns: 1fr; } .rf-dit-lato { position: static; } }
 .rf-dit-nota { font-size: 12px; line-height: 1.5; color: var(--muted); border-left: 3px solid var(--border); padding: 2px 0 2px 10px; }
 `;
   document.head.appendChild(st);
@@ -239,9 +252,78 @@ async function rfDitComandoEsegui(comando, da, a, frase, parti) {
     const originale = el.value, s = RFComandi.sostituisci(originale, da, a, j.testo);
     d.cmdUltimo = { inizio: s.inizio, fine: s.fine, pezzo: s.testo.slice(s.inizio, s.fine), frase: frase || '', originale, risultato: s.testo, dopoFrase: a }; d.cmdFallito = '';
     rfDitTestoMetti(s.testo, s.fine);
+    if (j.apri) rfDitFonteApri(j.apri, `${j.fonte || 'lettera'} · ${j.data || ''}`);
     rfDitComandoStato(`Inserito dalla lettera del ${rfEsc(j.data || '')}: <b>${rfEsc(j.cosa || cosa)}</b> (${rfEsc(j.fonte || '')}) — ${s.fine - s.inizio} caratteri che non hai dettato tu, da rileggere.${(j.mancanti || []).length ? ` <span style="color:#b3261e">In quella lettera non trovo: ${rfEsc(j.mancanti.join(', '))}.</span>` : ''} <a href="javascript:void 0" onclick="rfDitComandoAnnulla()">Annulla</a>${frase ? ' · <a href="javascript:void 0" onclick="rfDitComandoAnnulla(true)">Non era un comando: rimetti la frase</a>' : ''}`);
   } catch (_) { fallito('Il server non risponde: riprova.'); }
   finally { d.cmdInCorso = false; }
+}
+/* ACCANTO AL FOGLIO (12.10.2026, richiesta dello studio): ogni cosa chiesta con un comando si apre da sola di fianco —
+   la lettera da cui viene il pezzo, com'è: le sue pagine se è una scansione, il suo testo se è un referto della
+   piattaforma o un Word. Con lo ZOOM (− 100% +), che c'è anche per il foglio; la scelta resta su quel computer. I tasti
+   non tolgono il cursore dal foglio (il programma di dettatura continua a scriverci). */
+const RF_DIT_ZOOM = 'rf-dit-zoom';
+function rfDitZoomLetto() { try { const z = JSON.parse(localStorage.getItem(RF_DIT_ZOOM) || '{}'); return z && typeof z === 'object' ? z : {}; } catch (_) { return {}; } }
+function rfDitZoomDi(chi) { const v = Number(rfDitZoomLetto()[chi]); return v >= 0.5 && v <= 3 ? v : 1; }
+function rfDitZoomHtml(chi) {
+  const fermo = 'onmousedown="event.preventDefault()"';
+  return `<span class="rf-zoom"><button class="btn sm" ${fermo} onclick="rfDitZoom('${chi}', -1)" aria-label="Rimpicciolisci" title="Rimpicciolisci">−</button><button class="btn sm" ${fermo} onclick="rfDitZoom('${chi}', 0)" title="Torna al 100%" id="rf-zoom-${chi}">${Math.round(rfDitZoomDi(chi) * 100)}%</button><button class="btn sm" ${fermo} onclick="rfDitZoom('${chi}', 1)" aria-label="Ingrandisci" title="Ingrandisci">+</button></span>`;
+}
+function rfDitZoom(chi, verso) {
+  const z = rfDitZoomLetto(); z[chi] = verso === 0 ? 1 : Math.min(3, Math.max(0.5, Math.round((rfDitZoomDi(chi) + verso * 0.1) * 10) / 10));
+  try { localStorage.setItem(RF_DIT_ZOOM, JSON.stringify(z)); } catch (_) { /* resta per questa pagina */ }
+  const et = document.getElementById(`rf-zoom-${chi}`); if (et) et.textContent = `${Math.round(z[chi] * 100)}%`;
+  if (chi === 'foglio') { rfDitZoomFoglio(); rfFoglioRiempi(); } else void rfDitFonteDisegna();
+}
+// Il foglio ingrandito resta largo quanto la sua colonna: cresce ciò che c'è scritto, non il foglio.
+function rfDitZoomFoglio() {
+  const f = document.getElementById('rf-foglio'), z = rfDitZoomDi('foglio'); if (!f) return;
+  f.style.zoom = z === 1 ? '' : String(z); f.style.width = z === 1 ? '' : `calc(100% / ${z})`;
+}
+function rfDitFonteHtml() {
+  const f = RF.dit.fonte; if (!f) return '';
+  return `<div class="rf-dit-fonte-bar"><b class="rf-dit-fonte-nome" title="${rfEsc(f.titolo || '')}">${rfEsc(f.titolo || 'Lettera')}</b>${rfDitZoomHtml('fonte')}<button class="btn sm" onmousedown="event.preventDefault()" onclick="rfDitFonteChiudi()" aria-label="Chiudi" title="Chiudi">✕</button></div><div class="rf-dit-fonte-corpo" id="rf-dit-fonte-corpo"></div>`;
+}
+function rfDitFonteApri(apri, titolo) {
+  const d = RF.dit, stessa = d.fonte && d.fonte.id === apri.id && d.fonte.tipo === apri.tipo;
+  d.fonte = { ...apri, titolo, pdfDoc: stessa ? d.fonte.pdfDoc : null };
+  const g = document.getElementById('rf-dit-due'), el = document.getElementById('rf-dit-fonte');
+  if (g) g.classList.add('con-fonte'); if (el) el.innerHTML = rfDitFonteHtml();
+  rfFoglioRiempi(); void rfDitFonteDisegna();
+}
+function rfDitFonteChiudi() {
+  RF.dit.fonte = null;
+  const g = document.getElementById('rf-dit-due'), el = document.getElementById('rf-dit-fonte');
+  if (g) g.classList.remove('con-fonte'); if (el) el.innerHTML = '';
+  rfFoglioRiempi();
+}
+async function rfDitFonteDisegna() {
+  const d = RF.dit, f = d.fonte, box = document.getElementById('rf-dit-fonte-corpo'); if (!f || !box) return;
+  const z = rfDitZoomDi('fonte'), chiave = `${f.tipo}:${f.id}:${f.da || 0}:${z}:${box.clientWidth}`;
+  if (box.dataset.fatto === chiave) return;      // già disegnata così: non si rifà a ogni ridisegno della pagina
+  box.dataset.fatto = chiave;
+  const testo = () => { box.innerHTML = `<div class="rf-dit-fonte-testo" style="font-size:${Math.round(13 * z)}px">${rfEsc(f.testo || '')}</div>`; };
+  if (!f.pdf || typeof rfPdfJs !== 'function') { testo(); return; }
+  try {
+    if (!f.pdfDoc) {
+      box.innerHTML = '<div class="caption" style="padding:14px">Apro la lettera…</div>';
+      const lib = await rfPdfJs(), r = await fetch(`/api/documents/${encodeURIComponent(f.id)}`, { credentials: 'include', cache: 'no-store' });
+      if (!r.ok) throw new Error(String(r.status));
+      f.pdfDoc = await lib.getDocument({ data: new Uint8Array(await r.arrayBuffer()), isEvalSupported: false, wasmUrl: '/prototipo/vendor/pdfjs/wasm/', standardFontDataUrl: '/prototipo/vendor/pdfjs/standard_fonts/' }).promise;
+    }
+    const attuale = () => RF.dit.fonte === f && box.dataset.fatto === chiave && box.isConnected;
+    if (!attuale()) return;
+    // le pagine della lettera (in una cartella scansionata solo le sue); un file intero fino a dodici pagine
+    const n = f.pdfDoc.numPages, da = Math.min(n, Math.max(1, f.da || 1)), a = Math.min(n, Math.max(da, f.da ? (f.a || f.da) : 12));
+    const larga = Math.max(200, box.clientWidth - 16) * z, dpr = Math.min(2, window.devicePixelRatio || 1), tele = [];
+    for (let i = da; i <= a; i++) {
+      const p = await f.pdfDoc.getPage(i), v1 = p.getViewport({ scale: 1 }), v = p.getViewport({ scale: larga / v1.width * dpr }), c = document.createElement('canvas');
+      c.width = Math.floor(v.width); c.height = Math.floor(v.height); c.style.width = `${Math.floor(v.width / dpr)}px`; c.style.height = `${Math.floor(v.height / dpr)}px`;
+      await p.render({ canvas: c, canvasContext: c.getContext('2d'), viewport: v }).promise;
+      if (!attuale()) return;
+      tele.push(c);
+    }
+    box.innerHTML = ''; tele.forEach(c => box.appendChild(c));
+  } catch (_) { if (RF.dit.fonte === f) testo(); }      // il file non si apre qui: resta il testo della lettera
 }
 function rfDitComandoRiprova() { RF.dit.cmdFallito = ''; RF.dit.testoIl = 0; void rfDitComandoCerca(); }
 // Dal tasto accanto al foglio: stesso comando, nel punto del cursore.
@@ -548,7 +630,7 @@ function rfDitAggiorna() {
 }
 function rfDitScarta() {
   if (!confirm('Scartare questa registrazione? Non si può recuperare.')) return;
-  const d = RF.dit; d.pcm = new Int16Array(0); d.nuovi = []; d.stato = 'pronto'; d.errore = ''; d.testo = ''; d.tempi = []; d.foglio = null; d.foglioToccato = {}; d.foglioPer = null; d.cmdUltimo = null; d.cmdStato = ''; d.cmdFallito = ''; d.cmdNonCapito = null; d.cmdIgnora = [];
+  const d = RF.dit; d.pcm = new Int16Array(0); d.nuovi = []; d.stato = 'pronto'; d.errore = ''; d.testo = ''; d.tempi = []; d.foglio = null; d.foglioToccato = {}; d.foglioPer = null; d.cmdUltimo = null; d.cmdStato = ''; d.cmdFallito = ''; d.cmdNonCapito = null; d.cmdIgnora = []; d.fonte = null;
   rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota(); render();
 }
 async function rfDitInvia() {
@@ -570,7 +652,7 @@ async function rfDitInvia() {
     const r = await fetch('/api/referti/upload', { method: 'POST', body: fd, credentials: 'include' });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { d.errore = j.errore === 'medico_mancante' ? 'Scegli il medico che ha dettato.' : j.errore === 'troppo_grande' ? 'Registrazione troppo lunga per un invio solo.' : 'Invio non riuscito: la registrazione resta qui, riprova.'; d.invio = false; render(); return; }
-    d.pcm = new Int16Array(0); d.stato = 'pronto'; d.invio = false; d.paziente = ''; d.testo = ''; d.tempi = []; d.cursore = null; d.foglio = null; d.foglioToccato = {}; d.foglioPer = null; d.cmdUltimo = null; d.cmdStato = ''; d.cmdFallito = ''; d.cmdNonCapito = null; d.cmdIgnora = []; rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota();
+    d.pcm = new Int16Array(0); d.stato = 'pronto'; d.invio = false; d.paziente = ''; d.testo = ''; d.tempi = []; d.cursore = null; d.foglio = null; d.foglioToccato = {}; d.foglioPer = null; d.cmdUltimo = null; d.cmdStato = ''; d.cmdFallito = ''; d.cmdNonCapito = null; d.cmdIgnora = []; d.fonte = null; rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota();
     toast(dettato ? 'Lettera e audio inviati: arriva tra i referti in pochi minuti, quando il Mac ha finito il controllo con l’audio' : 'Dettato in coda: la bozza arriva tra i referti in pochi minuti');
     render(); setTimeout(rfCaricaDati, 3000);
   } catch (_) { d.errore = 'Piattaforma non raggiungibile: la registrazione resta su questo dispositivo, riprova.'; d.invio = false; render(); }
@@ -600,13 +682,13 @@ PAGES.dittafono = () => {
   const rec = d.stato === 'registra';
   const medici = (RF.medici || []).map(m => `<option value="${rfEsc(m.id)}" ${m.id === d.medico ? 'selected' : ''}>${rfEsc(m.nome)}</option>`).join('');
   const mic = ICONS.mic || '', pausa = ICONS.pause || '';
-  if (rfDitDettatura()) { void rfFoglioCarica(); setTimeout(rfFoglioRiempi, 0); }
+  if (rfDitDettatura()) { void rfFoglioCarica(); setTimeout(() => { rfDitZoomFoglio(); rfFoglioRiempi(); void rfDitFonteDisegna(); }, 0); }
   return `<div class="rf-dit ${rfDitDettatura() ? 'con-foglio' : ''}">
     <div class="page-head"><div><h2 class="page-title">Dittafono</h2><div class="page-sub">Detta qui: l'audio va nella coda dei referti, come un file trascinato nella pagina Referti</div></div>
       <div class="actions"><button class="btn" data-go="#/reports">Referti</button></div></div>
     ${d.recupero ? `<div class="rf-manc"><b>C'è una registrazione non inviata</b> di ${RFDittafono.formatta(d.recupero.pcm.byteLength / 2 / RFDittafono.FREQUENZA)}, rimasta su questo dispositivo.
       <div class="row mt-8" style="gap:8px"><button class="btn primary sm" onclick="rfDitRiprendiRecupero()">Riprendila</button><button class="btn sm" onclick="rfDitScartaRecupero()">Scartala</button></div></div>` : ''}
-    ${rfDitDettatura() ? '<div class="rf-dit-due">' : ''}<div class="card ${rfDitDettatura() ? 'rf-dit-lato' : ''}">
+    ${rfDitDettatura() ? `<div class="rf-dit-due ${d.fonte ? 'con-fonte' : ''}" id="rf-dit-due">` : ''}<div class="card ${rfDitDettatura() ? 'rf-dit-lato' : ''}">
       <div class="rf-dit-campi" id="rf-dit-campi">
         <div class="field"><label for="rf-dit-medico">Chi detta</label><select class="input" id="rf-dit-medico" ${rec ? 'disabled' : ''} onchange="RF.dit.medico=this.value;rfFoglioCarica()"><option value="">${(RF.medici || []).length ? '— scegli il medico —' : 'nessun medico configurato'}</option>${medici}</select></div>
         <div class="field"><label for="rf-dit-tipo">Che cosa</label><select class="input" id="rf-dit-tipo" ${rec ? 'disabled' : ''} onchange="RF.dit.tipo=this.value"><option value="referto" ${d.tipo === 'referto' ? 'selected' : ''}>Referto</option><option value="visita" ${d.tipo === 'visita' ? 'selected' : ''}>Visita registrata</option></select></div>
@@ -641,7 +723,7 @@ PAGES.dittafono = () => {
           <button class="btn primary" onclick="rfDitInvia()" ${d.invio ? 'disabled' : ''}>${d.invio ? 'Invio…' : 'Invia alla trascrizione'}</button>
         </div>
         <p class="rf-dit-nota mt-8">Riascolta e ferma il cursore dove vuoi: <b>Inserisci qui</b> aggiunge un pezzo in quel punto, <b>Sovrascrivi da qui</b> rifà la dettatura da lì in avanti.</p></div>` : ''}</div>
-    </div>${rfDitDettatura() ? `<div class="rf-dit-carta">${rfFoglioHtml()}</div></div>` : ''}
+    </div>${rfDitDettatura() ? `<div class="rf-dit-carta"><div class="rf-dit-carta-bar"><span class="caption">Foglio</span>${rfDitZoomHtml('foglio')}</div>${rfFoglioHtml()}</div><div class="rf-dit-fonte" id="rf-dit-fonte">${rfDitFonteHtml()}</div></div>` : ''}
     ${rfDitRecenti()}
     <p class="rf-dit-nota">L'audio resta su questo dispositivo finché non premi «Invia»; se la pagina si chiude lo ritrovi qui. Una volta inviato segue la stessa strada di ogni dettato: trascrizione sul Mac dello studio, bozza nella pagina Referti.</p>
   </div>`;
