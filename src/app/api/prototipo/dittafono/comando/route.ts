@@ -22,6 +22,8 @@ export async function POST(req: NextRequest) {
   // Un «per favore» che la pagina non ha capito: arriva solo la FORMA (c'era un verbo previsto? si nominava la lettera?
   // quali parti?), mai le parole. Va nel log, per capire da qui che cosa non viene riconosciuto.
   if (b?.comando === 'non_capito') {
+    const motivo = ['senza_paziente', 'testo_cambiato', 'rete'].find((k) => k === b?.motivo);
+    if (motivo) { console.log(`[dittafono-comando] capito ma non eseguito: ${motivo}`); return NextResponse.json({ ok: true }); }
     const f = b?.forma ?? {};
     const parti = (Array.isArray(f.parti) ? (f.parti as unknown[]).map(String) : []).filter((k) => (PARTI_LETTERA as readonly string[]).includes(k)).slice(0, 8);
     console.log(`[dittafono-comando] non capito: verbo=${f.verbo === true ? 'sì' : 'no'} lettera=${f.lettera === true ? 'sì' : 'no'} parti=${parti.join('+') || '-'} caratteri=${Math.min(999, Number(f.caratteri) || 0)} parole=${Math.min(99, Number(f.parole) || 0)}`);

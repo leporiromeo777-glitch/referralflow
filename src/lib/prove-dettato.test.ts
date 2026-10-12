@@ -138,6 +138,22 @@ test('comandi a voce: «per favore» più un comando previsto — e solo quello 
     const r = K.trova(frase);
     assert.deepEqual(r && [r.comando, Array.from(r.parti), r.a >= frase.replace(/[?]$/, '').length], ['parti', parti, true], frase);
   }
+  // I verbi del guardare aprono la lettera accanto senza mettere niente nel foglio; senza verbo vale se la frase finisce lì.
+  for (const [frase, comando, solo] of [
+    ['per favore aprimi la lettera', 'lettera_recente', true],
+    ['Per favore fammi vedere l\'ultima lettera', 'lettera_recente', true],
+    ['per favore mostrami l\'ECG della lettera precedente', 'parti', true],
+    ['per favore puoi farmi vedere la lettera', 'lettera_recente', true],
+    ['per favore la lettera più recente', 'lettera_recente', false],
+    ['Per favore l\'anamnesi.', 'parti', false],
+    ['per favore FRCV e comorbidità', 'parti', false],
+    ['per favore inserisci la lettera', 'lettera_recente', false],
+  ] as [string, string | null, boolean][]) {
+    const r = K.trova(frase);
+    assert.deepEqual([r ? r.comando : null, r ? r.soloApri : false], [comando, solo], frase);
+  }
+  for (const frase of ['Per favore la terapia va assunta regolarmente', 'per favore la lettera del collega appena arriva', 'Per favore apri la finestra', 'per favore l\'anamnesi familiare è muta'])
+    assert.equal(K.trova(frase), null, frase);
   // Una parte nominata più avanti, in un'altra frase o staccata, non entra nel comando.
   assert.deepEqual(Array.from(K.trova('per favore inserisci l\'anamnesi. Poi vediamo l\'ECG').parti), ['anamnesi']);
   assert.deepEqual(Array.from(K.trova('per favore inserisci l\'anamnesi che contiene la diagnosi').parti), ['anamnesi']);

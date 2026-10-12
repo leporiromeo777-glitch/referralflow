@@ -14,7 +14,7 @@
  */
 (function (root) {
   'use strict';
-  var VERSIONE = '1.5';
+  var VERSIONE = '1.6';
   // Una copia nuova a ogni ricerca: l'espressione ricorda dov'è arrivata, e due ricerche una dentro l'altra sulla
   // stessa copia non finivano più (la pagina si bloccava a ogni «per favore» senza comando, 12.10.2026).
   // Dopo la parola d'ordine il programma di dettatura può mettere da sé un punto, una virgola o un a capo.
@@ -22,6 +22,9 @@
   // Il verbo: all'imperativo, anche col pronome attaccato («inseriscimi», «aggiungimela»); all'infinito solo dopo
   // «puoi», «potresti», «vorrei» — «per favore aggiungere…» è una frase da lettera, non un comando.
   var VERBO = /^(?:(?:(?:mi|me|ora|adesso|qui|poi|tu)\s+)*(?:(?:inserisc[ia]|incolla|aggiung[ia]|riprendi|prendi|metti|copia|riporta)(?:mi|mela|melo|meli|mele|la|lo|li|le)?|damm(?:i|ela|elo|eli|ele))|(?:mi\s+)?(?:puoi|potresti|pu[oò]|vorrei|voglio)\s+(?:(?:che\s+)?(?:mi|tu)\s+)*(?:inser|incoll|aggiung|riprend|prend|mett|copi|riport)[a-zà-ù]{1,9})(?![a-zà-ù])/i;
+  // I verbi del GUARDARE («aprimi la lettera», «fammi vedere l'ECG», «mostrami l'ultima lettera»): la lettera si apre
+  // accanto al foglio e nel foglio non entra niente.
+  var VEDI = /^(?:(?:(?:mi|me|ora|adesso|qui|poi|tu)\s+)*(?:apri(?:mi|mela|melo|la|lo)?|mostra(?:mi|mela|melo|la|lo)?|visualizza(?:mi|la|lo)?|fa(?:mmi|i|cci)\s+vedere|fammel[ao]\s+vedere|cerca(?:mi|mela|la)?|trova(?:mi|mela|la)?)|(?:mi\s+)?(?:puoi|potresti|pu[oò]|vorrei|voglio)\s+(?:(?:che\s+)?(?:mi|tu)\s+)*(?:(?:aprir|mostrar|veder|visualizzar|cercar|trovar)[a-zà-ù]{1,6}|far(?:mi|ci)?\s+vedere))(?![a-zà-ù])/i;
   // «Riprendi» vale solo per la lettera: «per favore riprendi la terapia…» è una frase da lettera.
   var SOLO_LETTERA = /riprend/i;
   // Che cosa si può chiedere: la lettera intera, oppure solo alcune PARTI («l'anamnesi», «FRCV e comorbidità»,
@@ -81,10 +84,13 @@
       var an = ANNULLA.exec(resto), fine = -1, comando = '', parti = null;
       if (an) { fine = an[0].length; comando = 'annulla'; }
       else {
-        var v = VERBO.exec(resto);
+        // Senza verbo («per favore l'anamnesi», «per favore la lettera più recente») vale solo se la frase finisce lì.
+        var v = VERBO.exec(resto), soloApri = false, senzaVerbo = false;
+        if (!v) { v = VEDI.exec(resto); soloApri = !!v; }
+        if (!v) { v = ['']; senzaVerbo = true; }
         if (v) {
           var poi = resto.slice(v[0].length), frase = poi.split(/[.!?](?=\s+[A-ZÀ-Ý]|\s*$)/)[0];
-          var let_ = LETTERA.exec(frase); if (let_ && let_.index > FRA) let_ = null;
+          var let_ = LETTERA.exec(frase); if (let_ && (let_.index > FRA || (senzaVerbo && !ATTACCO.test(frase.slice(0, let_.index))))) let_ = null;
           // le parti: subito dopo il verbo («inserisci l'anamnesi dell'ultima lettera») o dopo la lettera («dall'ultima lettera, l'anamnesi»)
           var p = SOLO_LETTERA.test(v[0]) ? null : partiIn(frase, 0, FRA);
           if (let_ && (!p || let_.index < p.inizio) && !SOLO_LETTERA.test(v[0])) p = partiIn(frase, let_.index + let_[0].length, 25);
@@ -100,7 +106,8 @@
       }
       if (comando) {
         fine += CODA.exec(resto.slice(fine))[0].length;
-        return { da: m.index, a: dopo + fine, comando: comando, parti: parti, frase: t.slice(m.index, dopo + fine) };
+        if (comando !== 'annulla' && senzaVerbo && !/^\s*(?:$|[.,;!?]|[A-ZÀ-Ý])/.test(resto.slice(fine)) && !/[.,;!]$/.test(resto.slice(0, fine))) continue;
+        return { da: m.index, a: dopo + fine, comando: comando, parti: parti, soloApri: comando !== 'annulla' && soloApri, frase: t.slice(m.index, dopo + fine) };
       }
     }
     return null;
@@ -123,7 +130,7 @@
   function forma(letto) {
     var t = String(letto || ''), parti = [];
     for (var k = 0; k < PARTI.length; k++) if (new RegExp(PARTI[k][1].source, 'i').test(t)) parti.push(PARTI[k][0]);
-    return { verbo: VERBO.test(t), lettera: /\blettera(?![a-zà-ù])/i.test(t), parti: parti, caratteri: t.length, parole: t.split(/\s+/).filter(Boolean).length };
+    return { verbo: VERBO.test(t) || VEDI.test(t), lettera: /\blettera(?![a-zà-ù])/i.test(t), parti: parti, caratteri: t.length, parole: t.split(/\s+/).filter(Boolean).length };
   }
   // Al posto di testo[da..a) mette `pezzo`, come paragrafo a sé; con `pezzo` vuoto toglie e ricuce.
   // → { testo, inizio, fine }: dove sta ora il pezzo.
