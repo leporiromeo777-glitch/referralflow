@@ -34,7 +34,7 @@
   document.head.appendChild(st);
 })();
 
-RF.dit = { stato: 'pronto', pcm: new Int16Array(0), nuovi: [], modo: 'aggiungi', punto: 0, livello: 0, medico: '', tipo: 'referto', errore: '', recupero: null, url: null, invio: false, flusso: null, ctx: null, nodo: null, blocco: null, orologio: null, salvataggio: null, rilascio: null, iniziata: 0, testo: '', tempi: [], picco: 0, testoInizio: 0, microfoni: null };
+RF.dit = { stato: 'pronto', pcm: new Int16Array(0), nuovi: [], modo: 'aggiungi', punto: 0, livello: 0, medico: '', tipo: 'referto', errore: '', recupero: null, url: null, invio: false, flusso: null, ctx: null, nodo: null, blocco: null, orologio: null, salvataggio: null, rilascio: null, iniziata: 0, testo: '', tempi: [], picco: 0, testoInizio: 0, microfoni: null, impara: null, tastoGiu: false, daTasto: false, tastoPronto: false, hid: [], prima: null, primaIl: 0, fermataIl: 0, tastoErrore: '' };
 
 /* ── su questo dispositivo finché non si invia ── */
 function rfDitDb() {
@@ -150,7 +150,114 @@ function rfDitTesto(el) {
   const sordo = document.getElementById('rf-dit-sordo');
   if (sordo) sordo.style.display = d.stato === 'registra' && Date.now() - d.iniziata > 6000 && d.testo.length - d.testoInizio >= 15 && d.picco < 0.01 ? '' : 'none';
   const fermo = document.getElementById('rf-dit-fermo');
+  if (d.stato !== 'registra' && Date.now() - (d.fermataIl || 0) < 8000) d.testoInizio = d.testo.length;      // l'ultima frase arriva un attimo dopo aver lasciato il tasto: non è «dettare a registrazione ferma»
   if (fermo) fermo.style.display = d.stato !== 'registra' && d.testo.length - d.testoInizio >= 15 ? '' : 'none';
+}
+// In dettatura la casella del testo NON si ricrea mai: il programma di dettatura ci sta scrivendo, e ricrearla gli toglie
+// il campo da sotto (12.10.2026). Si ridisegnano solo i pezzi attorno: campi, tasto, lettore.
+function rfDitRidisegna() {
+  if (state.route !== 'dittafono' || !rfDitDettatura() || !document.getElementById('rf-dit-testo')) { render(); return; }
+  const nuovo = document.createElement('div'); nuovo.innerHTML = PAGES.dittafono();
+  for (const id of ['rf-dit-campi', 'rf-dit-centro', 'rf-dit-opz', 'rf-dit-micsel', 'rf-dit-tasto', 'rf-dit-sotto']) {
+    const a = document.getElementById(id), b = nuovo.querySelector('#' + id);
+    if (a) a.innerHTML = b ? b.innerHTML : '';
+  }
+}
+/* Il tasto del microfono (12.10.2026, richiesta dello studio): chi detta tiene premuto UN tasto — quello che fa ascoltare
+   il programma di dettatura — e la pagina registra finché è premuto. Il tasto può essere un tasto della tastiera o un
+   tasto del microfono da dettatura (un dispositivo che il browser legge con WebHID, in Chrome ed Edge, dopo che lo si è
+   scelto una volta). Non serve sapere com'è fatto il dispositivo: la pagina lo IMPARA — «tieni premuto il tasto, poi
+   lascialo» — guardando quale bit cambia. La scelta resta su questo computer. */
+const RF_DIT_TASTO = 'rf-dit-tasto';
+function rfDitTastoLetto() { try { return JSON.parse(localStorage.getItem(RF_DIT_TASTO) || 'null'); } catch (_) { return null; } }
+function rfDitTastoHtml() {
+  const d = RF.dit, t = rfDitTastoLetto();
+  if (d.impara) return `<b>Tieni premuto il tasto con cui detti, poi lascialo.</b> ${d.impara.nota || ''} <a href="javascript:void 0" onclick="rfDitTastoAnnulla()">Annulla</a>`;
+  if (t) return `Tasto del microfono: <b>${rfEsc(t.nome || 'collegato')}</b> — finché lo tieni premuto la pagina registra. <a href="javascript:void 0" onclick="rfDitTastoScollega()">Scollega</a>${d.tastoErrore ? ` · <span style="color:#b3261e">${rfEsc(d.tastoErrore)}</span>` : ''}`;
+  return `<a href="javascript:void 0" onclick="rfDitTastoCollega()">Collega il tasto con cui detti</a>: tenendolo premuto partono insieme il programma di dettatura e la registrazione, lasciandolo si fermano.`;
+}
+function rfDitTastoDisegna() { const el = document.getElementById('rf-dit-tasto'); if (el) el.innerHTML = rfDitTastoHtml(); const c = document.getElementById('rf-dit-centro'); if (c && RF.dit.stato !== 'registra') rfDitRidisegna(); }
+async function rfDitHidApri(dev) {
+  try { if (!dev.opened) await dev.open(); dev.oninputreport = rfDitHidRapporto; RF.dit.hid = (RF.dit.hid || []).filter(x => x !== dev).concat(dev); return true; }
+  catch (_) { return false; }
+}
+async function rfDitTastoCollega() {
+  const d = RF.dit; if (d.stato === 'registra') return;
+  d.impara = { visti: {}, nota: '' }; d.tastoErrore = ''; rfDitTastoDisegna();
+  const t = document.getElementById('rf-dit-testo'); if (t) t.blur();
+  // Un microfono da dettatura: il browser chiede quale dispositivo, e da lì se ne leggono i tasti. Chi usa un tasto della tastiera chiude la finestra e basta.
+  if (navigator.hid) {
+    try {
+      const scelti = await navigator.hid.requestDevice({ filters: [] });
+      let aperti = 0; for (const dev of scelti) if (await rfDitHidApri(dev)) aperti++;
+      if (d.impara) { d.impara.nota = scelti.length ? (aperti ? '' : 'Non riesco ad aprire quel dispositivo: forse lo tiene tutto per sé il programma di dettatura. Prova con un tasto della tastiera.') : 'Nessun dispositivo scelto: va bene anche un tasto della tastiera.'; rfDitTastoDisegna(); }
+    } catch (_) { /* finestra chiusa: resta la tastiera */ }
+  } else if (d.impara) { d.impara.nota = 'Questo browser legge solo i tasti della tastiera (per i tasti del microfono servono Chrome o Edge).'; rfDitTastoDisegna(); }
+}
+function rfDitTastoAnnulla() { RF.dit.impara = null; rfDitTastoDisegna(); }
+function rfDitTastoScollega() { try { localStorage.removeItem(RF_DIT_TASTO); } catch (_) { /* niente */ } RF.dit.tastoPronto = false; RF.dit.tastoErrore = ''; if (RF.dit.stato !== 'registra') rfDitRilasciaMicrofono(); rfDitTastoDisegna(); }
+function rfDitTastoImparato(t) {
+  try { localStorage.setItem(RF_DIT_TASTO, JSON.stringify(t)); } catch (_) { /* resta per questa pagina */ }
+  RF.dit.impara = null; RF.dit.tastoGiu = false; rfDitTastoDisegna(); rfDitTastoPronto();
+  toast('Tasto collegato: tienilo premuto per dettare');
+}
+// Un rapporto dal dispositivo: mentre si impara, si cercano due rapporti di fila (premuto, lasciato) che differiscono in un byte.
+function rfDitHidRapporto(e) {
+  const d = RF.dit, b = new Uint8Array(e.data.buffer, e.data.byteOffset, e.data.byteLength), dev = e.device;
+  if (d.impara) {
+    const k = `${dev.vendorId}:${dev.productId}:${e.reportId}`, prima = d.impara.visti[k];
+    if (!prima) { d.impara.visti[k] = { b: b.slice(), quando: Date.now() }; return; }
+    if (Date.now() - prima.quando < 200) return;      // rimbalzi e rotelle: si aspetta che il tasto sia stato tenuto un attimo
+    for (let i = 0; i < Math.min(b.length, prima.b.length); i++) if (b[i] !== prima.b[i]) {
+      const maschera = b[i] ^ prima.b[i];
+      rfDitTastoImparato({ tipo: 'hid', vid: dev.vendorId, pid: dev.productId, rid: e.reportId, i, maschera, premuto: prima.b[i] & maschera, nome: dev.productName || 'microfono da dettatura' });
+      return;
+    }
+    return;
+  }
+  const t = rfDitTastoLetto();
+  if (!t || t.tipo !== 'hid' || t.vid !== dev.vendorId || t.pid !== dev.productId || t.rid !== e.reportId || t.i >= b.length) return;
+  rfDitTastoStato((b[t.i] & t.maschera) === t.premuto);
+}
+function rfDitTastoStato(giu) {
+  const d = RF.dit;
+  if (state.route !== 'dittafono' || !rfDitDettatura() || d.invio || giu === !!d.tastoGiu) return;
+  d.tastoGiu = giu;
+  if (giu) { if (d.stato !== 'registra') { d.daTasto = true; void rfDitRegistra('aggiungi'); } }
+  else if (d.stato === 'registra' && d.daTasto) rfDitPausa();
+}
+// La tastiera: mentre si impara, il primo tasto tenuto premuto; poi quel tasto fa da «premi per dettare» finché si è nella pagina.
+window.addEventListener('keydown', (e) => {
+  const d = RF.dit; if (state.route !== 'dittafono') return;
+  if (d.impara) { if (e.repeat || ['Shift', 'Control', 'Alt', 'Meta', 'Tab', 'Escape'].includes(e.key)) return; e.preventDefault(); d.impara.tasto = e.code; return; }
+  const t = rfDitTastoLetto(); if (!t || t.tipo !== 'tasto' || e.code !== t.code || !rfDitDettatura()) return;
+  e.preventDefault(); if (!e.repeat) rfDitTastoStato(true);
+}, true);
+window.addEventListener('keyup', (e) => {
+  const d = RF.dit; if (state.route !== 'dittafono') return;
+  if (d.impara) { if (d.impara.tasto && e.code === d.impara.tasto) { e.preventDefault(); rfDitTastoImparato({ tipo: 'tasto', code: e.code, nome: `tasto ${e.key.length === 1 ? e.key.toUpperCase() : e.key}` }); } return; }
+  const t = rfDitTastoLetto(); if (!t || t.tipo !== 'tasto' || e.code !== t.code || !rfDitDettatura()) return;
+  e.preventDefault(); rfDitTastoStato(false);
+}, true);
+// Con un tasto della TASTIERA, se la finestra perde il fuoco col tasto giù il rilascio non arriverebbe più: ci si ferma. (Il tasto del microfono si legge anche senza fuoco.)
+window.addEventListener('blur', () => { const t = rfDitTastoLetto(); if (RF.dit.tastoGiu && t && t.tipo === 'tasto') rfDitTastoStato(false); });
+// All'apertura della pagina: si riapre il dispositivo già scelto (senza chiedere di nuovo) e si tiene pronto il microfono,
+// se il permesso c'è già — così la pressione del tasto registra subito.
+function rfDitTastoPronto() {
+  const d = RF.dit, t = rfDitTastoLetto();
+  if (!t || !rfDitDettatura() || d.tastoPronto) return;
+  d.tastoPronto = true;
+  if (t.tipo === 'hid') {
+    if (!navigator.hid) { d.tastoErrore = 'questo browser non legge il microfono da dettatura'; return; }
+    navigator.hid.getDevices().then(async (l) => {
+      const miei = l.filter(x => x.vendorId === t.vid && x.productId === t.pid);
+      let aperti = 0; for (const dev of miei) if (await rfDitHidApri(dev)) aperti++;
+      d.tastoErrore = aperti ? '' : 'il dispositivo non risponde: ricollegalo';
+      const el = document.getElementById('rf-dit-tasto'); if (el) el.innerHTML = rfDitTastoHtml();
+    }).catch(() => {});
+  }
+  const pronto = () => { if (d.stato !== 'registra' && state.route === 'dittafono') void rfDitMicrofono(); };
+  if (navigator.permissions && navigator.permissions.query) navigator.permissions.query({ name: 'microphone' }).then(p => { if (p.state === 'granted') pronto(); }).catch(() => {});
 }
 // Mentre si detta o si registra la pagina non va ridisegnata dal ricarico periodico dei dati (ogni due minuti): la casella
 // verrebbe ricreata e il cursore ne uscirebbe — il programma di dettatura smetterebbe di scriverci (12.10.2026).
@@ -185,8 +292,8 @@ async function rfDitMicrofono() {
   const sorgente = d.ctx.createMediaStreamSource(d.flusso);
   d.nodo = d.ctx.createScriptProcessor(4096, 1, 1);
   d.nodo.onaudioprocess = (ev) => {
-    if (RF.dit.stato !== 'registra') return;
     const f = ev.inputBuffer.getChannelData(0);
+    if (RF.dit.stato !== 'registra') { if (RF.dit.tastoPronto) { RF.dit.prima = RFDittafono.aInt16(RFDittafono.riduci(f, RF.dit.ctx.sampleRate, RFDittafono.FREQUENZA)); RF.dit.primaIl = Date.now(); } return; }
     RF.dit.livello = RFDittafono.picco(f); if (RF.dit.livello > RF.dit.picco) RF.dit.picco = RF.dit.livello;
     RF.dit.nuovi.push(RFDittafono.aInt16(RFDittafono.riduci(f, RF.dit.ctx.sampleRate, RFDittafono.FREQUENZA)));
   };
@@ -207,26 +314,31 @@ async function rfDitRegistra(modo) {
   const lettore = document.getElementById('rf-dit-audio');
   const pos = lettore && isFinite(lettore.currentTime) ? lettore.currentTime : 0;
   if (lettore) lettore.pause();
-  if (!(await rfDitMicrofono())) { rfDitCuffieStato(); render(); return; }
+  if (!(await rfDitMicrofono())) { d.daTasto = false; rfDitCuffieStato(); rfDitRidisegna(); return; }
   d.modo = modo || 'aggiungi';
   d.punto = d.modo === 'aggiungi' ? d.pcm.length : Math.round(pos * RFDittafono.FREQUENZA);
-  d.nuovi = []; d.stato = 'registra'; d.iniziata = Date.now(); d.picco = 0; d.testoInizio = (d.testo || '').length;
+  // Partendo dal tasto del microfono si tiene anche il quarto di secondo prima: la prima sillaba non si perde.
+  d.nuovi = d.daTasto && d.modo === 'aggiungi' && d.prima && Date.now() - d.primaIl < 600 ? [d.prima] : []; d.prima = null;
+  d.stato = 'registra'; d.iniziata = Date.now(); d.picco = 0; d.testoInizio = (d.testo || '').length;
   try { if (navigator.wakeLock) d.blocco = await navigator.wakeLock.request('screen'); } catch (_) { /* lo schermo può spegnersi: si registra lo stesso */ }
   rfDitCuffieStato();
-  render();
+  const giaDentro = document.activeElement && document.activeElement.id === 'rf-dit-testo';
+  rfDitRidisegna();
   // In dettatura il cursore va nella casella: è lì che il programma di dettatura scrive.
-  if (rfDitDettatura()) setTimeout(() => { const t = document.getElementById('rf-dit-testo'); if (t) { t.focus(); const c = typeof d.cursore === 'number' && d.cursore <= t.value.length ? d.cursore : t.value.length; try { t.setSelectionRange(c, c); } catch (_) { /* niente */ } } }, 0);      // il cursore torna dov'era: per aggiungere un pezzo in mezzo lo si mette lì prima di registrare
+  if (rfDitDettatura() && !giaDentro) setTimeout(() => { const t = document.getElementById('rf-dit-testo'); if (t) { t.focus(); const c = typeof d.cursore === 'number' && d.cursore <= t.value.length ? d.cursore : t.value.length; try { t.setSelectionRange(c, c); } catch (_) { /* niente */ } } }, 0);      // il cursore torna dov'era: per aggiungere un pezzo in mezzo lo si mette lì prima di registrare
   d.orologio = setInterval(rfDitAggiorna, 100);
   d.salvataggio = setInterval(() => void rfDitSalva(), 15000);
+  if (d.daTasto && !d.tastoGiu) rfDitPausa();      // il tasto è stato lasciato mentre il microfono si apriva
 }
 function rfDitPausa() {
   const d = RF.dit; if (d.stato !== 'registra') return;
-  d.pcm = rfDitComponi(); d.nuovi = []; d.modo = 'aggiungi'; d.stato = 'pausa'; d.livello = 0;
+  d.pcm = rfDitComponi(); d.nuovi = []; d.modo = 'aggiungi'; d.stato = 'pausa'; d.livello = 0; d.fermataIl = Date.now(); d.daTasto = false;
   clearInterval(d.orologio); clearInterval(d.salvataggio);
   try { if (d.blocco) void d.blocco.release(); } catch (_) { /* niente */ } d.blocco = null;
-  // il microfono resta pronto due minuti per riprendere subito, poi si rilascia da solo
-  d.rilascio = setTimeout(rfDitRilasciaMicrofono, 120000);
-  rfDitAudio(); void rfDitSalva(); rfDitCuffieStato(); render();
+  // il microfono resta pronto due minuti per riprendere subito, poi si rilascia da solo; col tasto del microfono collegato
+  // resta pronto finché si sta nella pagina (se no ogni pressione perderebbe l'inizio)
+  if (!(rfDitDettatura() && rfDitTastoLetto())) d.rilascio = setTimeout(rfDitRilasciaMicrofono, 120000);
+  rfDitAudio(); void rfDitSalva(); rfDitCuffieStato(); rfDitRidisegna();
 }
 function rfDitAggiorna() {
   const d = RF.dit; if (d.stato !== 'registra') return;
@@ -266,7 +378,7 @@ async function rfDitInvia() {
   } catch (_) { d.errore = 'Piattaforma non raggiungibile: la registrazione resta su questo dispositivo, riprova.'; d.invio = false; render(); }
 }
 // Cambiare pagina mentre si registra non perde niente: si mette in pausa e si salva.
-window.addEventListener('hashchange', () => { if (RF.dit.stato === 'registra' && !/^#\/dittafono/.test(location.hash)) rfDitPausa(); });
+window.addEventListener('hashchange', () => { if (/^#\/dittafono/.test(location.hash)) return; if (RF.dit.stato === 'registra') rfDitPausa(); if (RF.dit.tastoPronto) { RF.dit.tastoPronto = false; rfDitRilasciaMicrofono(); } });
 window.addEventListener('beforeunload', (e) => { if (RF.dit.stato === 'registra') rfDitPausa(); if (RF.dit.pcm.length) { void rfDitSalva(); e.preventDefault(); e.returnValue = ''; } });
 
 /* ── la pagina ── */
@@ -285,6 +397,7 @@ PAGES.dittafono = () => {
   if (!RF.live) return '<div class="page"><div class="card"><p class="meta" style="margin:0">Il dittafono è una funzione della piattaforma: qui, fuori, non registra.</p></div></div>';
   if (!(RF.medici || []).length && typeof rfCaricaMedici === 'function' && !d.mediciChiesti) { d.mediciChiesti = true; void rfCaricaMedici().then(() => { if (state.route === 'dittafono') render(); }); }
   void rfDitCercaRecupero();
+  rfDitTastoPronto();
   const durata = RFDittafono.formatta(RFDittafono.durata(d.pcm));
   const rec = d.stato === 'registra';
   const medici = (RF.medici || []).map(m => `<option value="${rfEsc(m.id)}" ${m.id === d.medico ? 'selected' : ''}>${rfEsc(m.nome)}</option>`).join('');
@@ -295,28 +408,29 @@ PAGES.dittafono = () => {
     ${d.recupero ? `<div class="rf-manc"><b>C'è una registrazione non inviata</b> di ${RFDittafono.formatta(d.recupero.pcm.byteLength / 2 / RFDittafono.FREQUENZA)}, rimasta su questo dispositivo.
       <div class="row mt-8" style="gap:8px"><button class="btn primary sm" onclick="rfDitRiprendiRecupero()">Riprendila</button><button class="btn sm" onclick="rfDitScartaRecupero()">Scartala</button></div></div>` : ''}
     <div class="card">
-      <div class="rf-dit-campi">
+      <div class="rf-dit-campi" id="rf-dit-campi">
         <div class="field"><label for="rf-dit-medico">Chi detta</label><select class="input" id="rf-dit-medico" ${rec ? 'disabled' : ''} onchange="RF.dit.medico=this.value"><option value="">${(RF.medici || []).length ? '— scegli il medico —' : 'nessun medico configurato'}</option>${medici}</select></div>
         <div class="field"><label for="rf-dit-tipo">Che cosa</label><select class="input" id="rf-dit-tipo" ${rec ? 'disabled' : ''} onchange="RF.dit.tipo=this.value"><option value="referto" ${d.tipo === 'referto' ? 'selected' : ''}>Referto</option><option value="visita" ${d.tipo === 'visita' ? 'selected' : ''}>Visita registrata</option></select></div>
         <div class="field"><label for="rf-dit-paz">Paziente <span class="caption">(facoltativo)</span></label><input class="input" id="rf-dit-paz" list="rf-paz-elenco" placeholder="Cognome Nome" autocomplete="off" value="${rfEsc(d.paziente || '')}" ${rec ? 'disabled' : ''} oninput="RF.dit.paziente=this.value">${typeof rfPazElenco === 'function' ? rfPazElenco() : ''}</div>
       </div>
-      <div class="rf-dit-centro">
+      <div class="rf-dit-centro" id="rf-dit-centro">
         <div class="rf-dit-tempo" id="rf-dit-tempo">${durata}</div>
         <div class="rf-dit-stato ${rec ? 'rec' : ''}">${rec ? (d.modo === 'inserisci' ? 'Registro: inserisco nel punto scelto' : d.modo === 'sovrascrivi' ? 'Registro: sovrascrivo da lì in poi' : 'Registro') : d.stato === 'pausa' ? 'In pausa' : 'Pronto'}</div>
         <div class="rf-dit-livello" aria-hidden="true"><i id="rf-dit-liv"></i></div>
         <button class="rf-dit-rec ${rec ? 'attivo' : ''}" onclick="${rec ? 'rfDitPausa()' : "rfDitRegistra('aggiungi')"}" aria-label="${rec ? 'Metti in pausa' : d.pcm.length ? 'Riprendi in coda' : 'Registra'}" title="${rec ? 'Pausa' : d.pcm.length ? 'Riprendi in coda' : 'Registra'}">${rec ? pausa : mic}</button>
-        <div class="caption">${rec ? 'tocca per la pausa' : d.pcm.length ? 'tocca per riprendere in coda' : 'tocca per registrare'}</div>
+        <div class="caption">${rec ? (d.daTasto ? 'lascia il tasto per fermare' : 'tocca per la pausa') : rfDitDettatura() && rfDitTastoLetto() ? 'tieni premuto il tasto del microfono per dettare' : d.pcm.length ? 'tocca per riprendere in coda' : 'tocca per registrare'}</div>
         ${rfDitCuffiePossibile() ? `<label class="caption" style="display:flex;gap:8px;align-items:center;margin-top:10px;cursor:pointer"><input type="checkbox" ${rfDitCuffieAcceso() ? 'checked' : ''} ${rec ? 'disabled' : ''} onchange="rfDitCuffieImposta(this.checked)"> Pausa e ripresa col tasto delle cuffie <span title="In prova. Con le cuffie col filo, il tasto al centro mette in pausa e riprende. Se la registrazione ha problemi, spegnilo.">(in prova)</span></label>` : ''}
       </div>
-      <label class="caption" style="display:flex;gap:8px;align-items:center;justify-content:center;cursor:pointer"><input type="checkbox" ${rfDitDettatura() ? 'checked' : ''} ${rec ? 'disabled' : ''} onchange="rfDitDettaturaImposta(this.checked)"> Detto con Dragon (o un altro programma di dettatura): mostra la casella del testo</label>
+      <label class="caption" id="rf-dit-opz" style="display:flex;gap:8px;align-items:center;justify-content:center;cursor:pointer"><input type="checkbox" ${rfDitDettatura() ? 'checked' : ''} ${rec ? 'disabled' : ''} onchange="rfDitDettaturaImposta(this.checked)"> Detto con Dragon (o un altro programma di dettatura): mostra la casella del testo</label>
       ${rfDitDettatura() ? `<div class="mt-16">
         <div class="row" style="justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap"><label for="rf-dit-testo" class="section-title">Testo dettato</label>
-          ${(d.microfoni || []).length > 1 ? `<span class="caption">Microfono <select class="input sm" style="max-width:260px" ${rec ? 'disabled' : ''} onchange="rfDitMicImposta(this.value)" aria-label="Microfono da registrare"><option value="">quello di serie</option>${d.microfoni.map(x => `<option value="${rfEsc(x.id)}" ${x.id === rfDitMicScelto() ? 'selected' : ''}>${rfEsc(x.nome)}</option>`).join('')}</select></span>` : ''}</div>
+          <span id="rf-dit-micsel">${(d.microfoni || []).length > 1 ? `<span class="caption">Microfono <select class="input sm" style="max-width:260px" ${rec ? 'disabled' : ''} onchange="rfDitMicImposta(this.value)" aria-label="Microfono da registrare"><option value="">quello di serie</option>${d.microfoni.map(x => `<option value="${rfEsc(x.id)}" ${x.id === rfDitMicScelto() ? 'selected' : ''}>${rfEsc(x.nome)}</option>`).join('')}</select></span>` : ''}</span></div>
+        <div id="rf-dit-tasto" class="caption mt-8">${rfDitTastoHtml()}</div>
         <textarea class="input rf-dit-testo mt-8" id="rf-dit-testo" spellcheck="false" placeholder="1. Tocca il tasto rosso per registrare.  2. Detta con Dragon: il testo compare qui mentre la pagina registra la voce.  3. Metti in pausa e premi «Invia»." oninput="rfDitTesto(this)" onblur="RF.dit.cursore=this.selectionStart" onkeyup="RF.dit.cursore=this.selectionStart" onclick="RF.dit.cursore=this.selectionStart">${rfEsc(d.testo || '')}</textarea>
         <div id="rf-dit-sordo" class="rf-manc mt-8" style="display:none"><b>Il testo arriva ma il microfono non sente niente.</b> Di solito il programma di dettatura tiene il microfono tutto per sé, oppure qui è scelto un altro microfono: metti in pausa e scegli sopra lo stesso che usa lui. Senza audio non c'è né riascolto né confronto.</div>
         <div id="rf-dit-fermo" class="rf-manc mt-8" style="display:none"><b>Stai dettando ma la registrazione è ferma.</b> Tocca il tasto per registrare: senza audio non c'è né riascolto né confronto.</div>
         <p class="rf-dit-nota mt-8">La casella è un campo di testo qualunque: il programma di dettatura ci scrive come farebbe in Word, e si può correggere a mano. La voce che lui manda al suo servizio non passa da qui; la registrazione che fa questa pagina resta sul dispositivo e poi sul Mac dello studio.</p></div>` : ''}
-      ${d.errore ? `<div class="rf-manc mt-8">${rfEsc(d.errore)}</div>` : ''}
+      <div id="rf-dit-sotto">${d.errore ? `<div class="rf-manc mt-8">${rfEsc(d.errore)}</div>` : ''}
       ${!rec && d.pcm.length ? `<div class="mt-16">
         <audio id="rf-dit-audio" controls preload="metadata" src="${d.url || ''}"></audio>
         <div class="rf-dit-azioni mt-8">
@@ -325,7 +439,7 @@ PAGES.dittafono = () => {
           <button class="btn sm" onclick="rfDitScarta()">Scarta</button>
           <button class="btn primary" onclick="rfDitInvia()" ${d.invio ? 'disabled' : ''}>${d.invio ? 'Invio…' : 'Invia alla trascrizione'}</button>
         </div>
-        <p class="rf-dit-nota mt-8">Riascolta e ferma il cursore dove vuoi: <b>Inserisci qui</b> aggiunge un pezzo in quel punto, <b>Sovrascrivi da qui</b> rifà la dettatura da lì in avanti.</p></div>` : ''}
+        <p class="rf-dit-nota mt-8">Riascolta e ferma il cursore dove vuoi: <b>Inserisci qui</b> aggiunge un pezzo in quel punto, <b>Sovrascrivi da qui</b> rifà la dettatura da lì in avanti.</p></div>` : ''}</div>
     </div>
     ${rfDitRecenti()}
     <p class="rf-dit-nota">L'audio resta su questo dispositivo finché non premi «Invia»; se la pagina si chiude lo ritrovi qui. Una volta inviato segue la stessa strada di ogni dettato: trascrizione sul Mac dello studio, bozza nella pagina Referti.</p>

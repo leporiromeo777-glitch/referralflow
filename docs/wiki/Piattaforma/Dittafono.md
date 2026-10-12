@@ -1,6 +1,6 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-10-11
+aggiornata: 2026-10-12
 ---
 # Dittafono
 
@@ -28,9 +28,13 @@ Uno dei medici detta già con Dragon (dettatura in tempo reale, licenza dello st
 - **In revisione** compare il riquadro «Dettato con Dragon»: il suo testo, con **evidenziati i punti in cui lui e il Mac hanno scritto cose diverse** (sotto, in piccolo, ciò che ha sentito il Mac; ∅ = una parola che ha solo il Mac), quante parole coincidono, e un clic **riascolta quel punto** — il secondo viene dalle parole della catena, che portano il loro tempo. Chi ha ragione non lo decide la pagina: lo dice l'audio. Il confronto è `src/lib/dettato-confronto.ts` (puro: sottosequenza comune più lunga sulle parole ridotte all'osso, fino a 3000 per parte).
 - **Il microfono.** Dragon e il browser devono usare lo stesso microfono nello stesso momento. Dopo il primo permesso la pagina elenca i microfoni e si sceglie quello di Dragon. Se il testo arriva ma il microfono non sente niente (tipico: il programma lo tiene tutto per sé), la pagina **lo dice**; lo dice anche se si detta a registrazione ferma.
 
+- **Un tasto solo per tutti e due** (12.10.2026, richiesta dello studio dopo la prima prova). «Collega il tasto con cui detti»: la pagina chiede di tenerlo premuto e lasciarlo, e **impara** qual è — un tasto della tastiera, oppure un tasto del microfono da dettatura, che il browser legge direttamente (WebHID, in Chrome ed Edge, dopo aver scelto il dispositivo una volta; non serve sapere com'è fatto: si guarda quale bit cambia fra premuto e lasciato). Da lì, **finché il tasto è premuto la pagina registra, e quando lo si lascia si ferma**: lo stesso gesto che fa ascoltare Dragon. Perché non si perda l'inizio, col tasto collegato il microfono resta pronto finché si sta nella pagina (il browser mostra che è in uso; non si salva niente se il tasto non è premuto) e si tiene il quarto di secondo prima della pressione. La scelta resta su quel computer.
+- **La casella non si ricrea mai** mentre si detta: all'avvio e alla pausa si ridisegnano solo i pezzi attorno (prima si ridisegnava tutta la pagina, e ogni due minuti il ricarico dei dati faceva lo stesso: a Dragon spariva il campo da sotto). Il testo dell'ultima frase, che arriva un attimo dopo aver lasciato il tasto, non fa scattare l'avviso «registrazione ferma».
+- **In Chrome serve l'estensione di Dragon** («Dragon (DMO, DMD, DPA, DLA) Web Extension»): senza, Dragon non riconosce i campi delle pagine web e apre la sua casella di dettatura. Con l'estensione scrive nella casella (provato dallo studio il 12.10.2026).
+
 **Dove va la voce.** Quella che Dragon manda al suo servizio **non passa da ReferralFlow**: è la scelta che lo studio ha già fatto usando quel programma, col suo contratto. La parte nuova — registrazione, testo, confronto, trascrizione di controllo — resta sul dispositivo e sul Mac dello studio.
 
-**Che cosa non è stato provato**: tutto ciò che dipende dal computer del medico — che Dragon scriva davvero nella casella del browser, che il microfono si condivida, com'è l'audio registrato in parallelo. Qui si è provato solo con testo scritto a mano e audio di prova.
+**Che cosa è stato provato e che cosa no.** Dallo studio: con l'estensione, Dragon scrive nella casella. Qui, con un microfono e un dispositivo finti: il tasto imparato (tastiera e dispositivo), premuto → registra, lasciato → pausa, la casella resta la stessa col cursore dentro. **Non provato**: che Chrome riesca a leggere il microfono da dettatura mentre lo usa anche Dragon (se non riesce, la pagina lo dice e resta il tasto della tastiera), che il tasto della tastiera arrivi alla pagina se Dragon lo tiene per sé, com'è l'audio registrato in parallelo.
 
 **Che cosa ancora non fa**: il Mac **non rifinisce il testo di Dragon** — rifinisce la sua trascrizione, come sempre. Usare il testo di Dragon dentro la catena (come terzo testimone accanto a whisper e Voxtral, o come testo di partenza) è il passo dopo, e si decide coi numeri del confronto sulle prime dettature vere. Dragon dentro la pagina, col suo tasto e i comandi vocali, richiede il kit per sviluppatori e un contratto a parte.
 
