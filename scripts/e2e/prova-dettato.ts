@@ -72,7 +72,7 @@ async function main() {
     // lettera più recente del paziente scelto, e la terapia dal suo blocco.
     const [{ id: paz }] = await query<{ id: string }>(`insert into patients (studio_id, cognome, nome, data_nascita) values ($1, 'Comandoprova', 'Anna', '1950-04-03') returning id`, [S]); pazienti.push(paz);
     const [{ id: vuoto }] = await query<{ id: string }>(`insert into patients (studio_id, cognome, nome) values ($1, 'Comandoprova', 'Senzalettere') returning id`, [S]); pazienti.push(vuoto);
-    const lettera = (quando: string, corpo: string) => `Caro collega,\n\n${corpo} ${'Il decorso inventato prosegue senza novità di rilievo. '.repeat(4)}\n\nTerapia:\nFarmacoA ${quando === 'nuova' ? '10' : '5'} mg 1-0-0\nFarmacoB 5 mg 0-0-1\n\nIn conclusione quadro stabile.\n\nRimanendo a disposizione, porgo cordiali saluti.\n\nDr. med. Inventato`;
+    const lettera = (quando: string, corpo: string) => `Caro collega,\n\n${corpo} ${'Il decorso inventato prosegue senza novità di rilievo. '.repeat(4)}${quando === 'nuova' ? '' : '\n\nFRCV: ipertensione inventata.\n\nComorbidità: nessuna di rilievo.'}\n\nTerapia:\nFarmacoA ${quando === 'nuova' ? '10' : '5'} mg 1-0-0\nFarmacoB 5 mg 0-0-1\n\nIn conclusione quadro stabile.\n\nRimanendo a disposizione, porgo cordiali saluti.\n\nDr. med. Inventato`;
     for (const [quando, giorno] of [['vecchia', '2026-01-10'], ['nuova', '2026-06-20']] as const) {
       // il nome nei campi è scritto diverso apposta: la lettera si trova dal legame col paziente
       const [{ id }] = await query<{ id: string }>(`insert into referti_bozze (studio_id, file_id, payload, tipo, stato, testo_finale, reviewed_at, patient_id, campi_confermati) values ($1, 'prova-comando-' || gen_random_uuid(), $2, 'referto', 'confermata', $3, now(), $4, $5) returning id`,
@@ -80,10 +80,17 @@ async function main() {
       bozze.push(id);
     }
     const comando = async (corpo: unknown, cookie = C) => { const r = await fetch(`${base}/api/prototipo/dittafono/comando`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(cookie ? { cookie } : {}) }, body: JSON.stringify(corpo) }); return { stato: r.status, j: (await r.json().catch(() => ({}))) as any }; };
-    const k1 = await comando({ comando: 'lettera_recente', paziente: paz }), k2 = await comando({ comando: 'terapia_recente', paziente: paz });
+    const k1 = await comando({ comando: 'lettera_recente', paziente: paz }), k2 = await comando({ comando: 'parti', parti: ['terapia'], paziente: paz });
     verifica(k1.stato === 200 && k1.j.testo.startsWith('ho rivisto la paziente inventata, visita nuova.') && k1.j.testo.endsWith('In conclusione quadro stabile.') && !/Caro collega|cordiali saluti|Dr\. med\./.test(k1.j.testo) && k1.j.data === '20.06.2026'
       && k2.stato === 200 && k2.j.testo === 'Terapia:\nFarmacoA 10 mg 1-0-0\nFarmacoB 5 mg 0-0-1',
       `«inserisci la lettera più recente»: arriva il corpo della più recente (senza saluto, saluti e firma), trovata dal legame col paziente; «la terapia»: il suo blocco (${k1.stato}, ${k1.j.data}, ${k2.stato})`);
+    // Solo una parte: l'anamnesi e la conclusione dalla più recente; FRCV e comorbidità, che la più recente non ha,
+    // dalla lettera prima — tutte dalla stessa lettera, e ciò che lì manca viene detto.
+    const p1 = await comando({ comando: 'parti', parti: ['anamnesi', 'conclusione', 'allergie'], paziente: paz }), p2 = await comando({ comando: 'parti', parti: ['frcv', 'comorbidita'], paziente: paz });
+    const p3 = await comando({ comando: 'parti', parti: ['holter'], paziente: paz }), p4 = await comando({ comando: 'parti', parti: ['inventata'], paziente: paz });
+    verifica(p1.stato === 200 && p1.j.testo.startsWith('ho rivisto la paziente inventata, visita nuova.') && p1.j.testo.endsWith('\n\nIn conclusione quadro stabile.') && !/Terapia|FarmacoA/.test(p1.j.testo) && p1.j.cosa === 'anamnesi, conclusione' && p1.j.mancanti?.join() === 'allergie' && p1.j.data === '20.06.2026'
+      && p2.stato === 200 && p2.j.testo === 'FRCV: ipertensione inventata.\n\nComorbidità: nessuna di rilievo.' && p2.j.data === '10.01.2026' && p3.stato === 404 && !p3.j.testo && p4.stato === 400,
+      `solo una parte: anamnesi e conclusione dalla più recente, senza il resto, e la parte che lì manca viene detta; FRCV e comorbidità dalla lettera che le ha; una parte che non c'è in nessuna dà un avviso; una parte non prevista è rifiutata (${p1.stato}, ${p1.j.cosa}, ${p2.j.data}, ${p3.stato}, ${p4.stato})`);
     const k3 = await comando({ comando: 'lettera_recente', paziente: vuoto }), k4 = await comando({ comando: 'cancella_tutto', paziente: paz }), k5 = await comando({ comando: 'lettera_recente', paziente: 'x' }), k6 = await comando({ comando: 'lettera_recente', paziente: paz }, '');
     verifica(k3.stato === 404 && typeof k3.j.errore === 'string' && !k3.j.testo && k4.stato === 400 && k5.stato === 400 && k6.stato === 401,
       `un paziente senza lettere dà un avviso e niente testo; un comando non previsto, un paziente non scelto e una richiesta senza sessione sono rifiutati (${k3.stato}, ${k4.stato}, ${k5.stato}, ${k6.stato})`);

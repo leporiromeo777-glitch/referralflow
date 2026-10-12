@@ -1,8 +1,9 @@
 /* Dittafono — i comandi a voce, in funzioni pure (12.10.2026).
  *
  * Chi detta sul foglio può dare un'istruzione alla piattaforma: la parola d'ordine è «per favore» (scelta dello
- * studio), seguita da un comando — «per favore, inserisci la lettera più recente», «per favore, inserisci la terapia
- * dell'ultima lettera», «per favore annulla». Il programma di dettatura scrive la frase nel foglio come testo; la
+ * studio), seguita da un comando — «per favore, inserisci la lettera più recente», oppure solo una o più PARTI
+ * («per favore, inserisci l'anamnesi», «…FRCV e comorbidità dell'ultima lettera», «…la conclusione», «…la terapia»),
+ * «per favore annulla». Il programma di dettatura scrive la frase nel foglio come testo; la
  * pagina la riconosce, la toglie e mette al suo posto ciò che è stato chiesto.
  *
  * «Per favore» si può dire anche in una lettera vera («ti prego per favore di inviarmi…»): per questo una frase è un
@@ -13,14 +14,48 @@
  */
 (function (root) {
   'use strict';
-  var VERSIONE = '1.1';
+  var VERSIONE = '1.2';
   // Una copia nuova a ogni ricerca: l'espressione ricorda dov'è arrivata, e due ricerche una dentro l'altra sulla
   // stessa copia non finivano più (la pagina si bloccava a ogni «per favore» senza comando, 12.10.2026).
   function parola() { return /\bper\s*favore\b[ \t,:;]*/gi; }
   var VERBO = /^(?:(?:mi|ora|adesso|puoi|potresti|qui)\s+)*(?:inserisc[ia](?:mi)?|incolla(?:mi)?|aggiung[ia](?:mi)?|prendi(?:mi)?|metti(?:mi)?|riprendi(?:mi)?|copia(?:mi)?|riporta(?:mi)?|dammi|inserire|incollare|aggiungere|prendere|mettere|riprendere|copiare|riportare)(?![a-zà-ù])/i;
-  // Che cosa si può chiedere. La terapia si guarda prima: «la terapia dell'ultima lettera» nomina anche la lettera.
-  var TERAPIA = /\b(?:ultima\s+)?terapia(?![a-zà-ù])(?:[^.\n!?]{0,40}?(?:ultima\s+lettera|lettera\s+(?:pi[uù]\s+(?:recente|nuova)|precedente|vecchia|di\s+prima)|ultima\s+(?:volta|visita)|precedente|di\s+prima)(?![a-zà-ù]))?/i;
+  // Che cosa si può chiedere: la lettera intera, oppure solo alcune PARTI («l'anamnesi», «FRCV e comorbidità»,
+  // «la conclusione dell'ultima lettera»). I nomi delle parti sono quelli che il server conosce (src/lib/dittafono-comandi.ts).
   var LETTERA = /\b(?:ultima\s+lettera|lettera\s+(?:pi[uù]\s+(?:recente|nuova)|precedente|vecchia|di\s+prima)|(?:pi[uù]\s+recente|precedente)\s+lettera)(?![a-zà-ù])/i;
+  var PARTI = [
+    ['anamnesi', /\banamnesi(?![a-zà-ù])/i],
+    ['frcv', /\b(?:f\.?\s?r\.?\s?c\.?\s?v\b\.?|fattori\s+di\s+rischio(?:\s+cardio\s?vascolar[ei])?(?![a-zà-ù]))/i],
+    ['comorbidita', /\bco\s?morbi[dl]it[aàá]/i],
+    ['allergie', /\ballergie(?![a-zà-ù])/i],
+    ['diagnosi', /\bdiagnosi(?![a-zà-ù])/i],
+    ['esame', /\besame\s+(?:clinico|obiettivo)(?![a-zà-ù])/i],
+    ['ecg', /\b(?:ecg|elettrocardiogramma)(?![a-zà-ù])/i],
+    ['eco', /\b(?:ecocardiogra(?:mma|fia)|ecocardio|eco)(?![a-zà-ù])/i],
+    ['sforzo', /\b(?:(?:ciclo|spiro)?ergometria|test\s+da\s+sforzo|prova\s+da\s+sforzo)(?![a-zà-ù])/i],
+    ['holter', /\bholter(?![a-zà-ù])/i],
+    ['laboratorio', /\b(?:laboratorio|esami\s+(?:di\s+laboratorio|del\s+sangue|ematici|ematochimici))(?![a-zà-ù])/i],
+    ['conclusione', /\b(?:conclusion[ei]|valutazione)(?![a-zà-ù])/i],
+    ['terapia', /\b(?:ultima\s+)?terapia(?![a-zà-ù])/i]
+  ];
+  // Fra una parte e la successiva solo parole di legame («FRCV e le comorbidità», «anamnesi, FRCV»).
+  var LEGAME = /^[ \t,]*(?:(?:e|ed|con|pi[uù]|poi|anche)[ \t]+)*(?:(?:il|lo|la|i|gli|le)[ \t]+|l['’][ \t]?)?$/i;
+  // Da quale lettera («…dell'ultima lettera», «…della lettera precedente»): fa parte della richiesta.
+  var DA_DOVE = /^[ \t,]*(?:(?:del(?:la)?|dal(?:la)?|di|nel(?:la)?)[ \t]+|(?:dell|dall|nell)['’][ \t]?)?(?:ultima\s+lettera|lettera\s+(?:pi[uù]\s+(?:recente|nuova)|precedente|vecchia|di\s+prima)|ultima\s+(?:volta|visita)|precedente|di\s+prima)(?![a-zà-ù])/i;
+  // Le parti nominate in una frase, nell'ordine in cui sono dette: la prima entro `entro` caratteri da `da`, le altre attaccate.
+  function partiIn(frase, da, entro, attaccata) {
+    var viste = [];
+    for (var k = 0; k < PARTI.length; k++) { var rx = new RegExp(PARTI[k][1].source, 'gi'), m; rx.lastIndex = da; while ((m = rx.exec(frase))) viste.push({ parte: PARTI[k][0], i: m.index, f: m.index + m[0].length }); }
+    viste.sort(function (a, b) { return a.i - b.i || b.f - a.f; });
+    var out = [], fine = -1, inizio = -1;
+    for (var j = 0; j < viste.length; j++) {
+      var v = viste[j];
+      if (!out.length) { if (v.i - da <= entro && (!attaccata || LEGAME.test(frase.slice(da, v.i).replace(/\bsolo\b/i, '')))) { out.push(v.parte); inizio = v.i; fine = v.f; } else break; continue; }
+      if (v.i < fine) continue;      // dentro la parte già presa («ecg holter»)
+      if (!LEGAME.test(frase.slice(fine, v.i))) break;
+      if (out.indexOf(v.parte) < 0) out.push(v.parte); fine = v.f;
+    }
+    return out.length ? { parti: out, inizio: inizio, fine: fine } : null;
+  }
   var ANNULLA = /^(?:annulla|togli(?:la|lo)?|toglimi(?:la|lo)?|rimuovi(?:la|lo)?)(?![a-zà-ù])(?:\s+(?:l['’]\s*ultim[oa]\s+(?:inserimento|aggiunta)|la\s+lettera|la\s+terapia|tutto|quello\s+che\s+hai\s+(?:messo|inserito|aggiunto)))?/i;
   // Ciò che di solito segue e fa ancora parte della richiesta («…del paziente e aggiungimela qui, grazie»).
   var CODA = /^(?:[ \t]*,?[ \t]*(?:del(?:la)?\s+paziente|di\s+quest[oa]\s+paziente|e\s+(?:me\s+la\s+|poi\s+)?(?:aggiung|incoll|inserisc|mett|copi|riport)[a-z]{1,7}|qui(?:\s+dentro)?|dentro|sopra|nel\s+foglio|nella\s+lettera|nel\s+testo|grazie)(?![a-zà-ù]))*[ \t]*[.,;!]?/i;
@@ -32,20 +67,25 @@
     rx.lastIndex = Math.max(0, da0 || 0);
     while ((m = rx.exec(t))) {
       var dopo = m.index + m[0].length, resto = t.slice(dopo, dopo + 220).split('\n')[0];
-      var an = ANNULLA.exec(resto), fine = -1, comando = '';
+      var an = ANNULLA.exec(resto), fine = -1, comando = '', parti = null;
       if (an) { fine = an[0].length; comando = 'annulla'; }
       else {
         var v = VERBO.exec(resto);
         if (v) {
-          var poi = resto.slice(v[0].length), frase = poi.split(/[.!?]/)[0];
-          var ter = TERAPIA.exec(frase), let_ = LETTERA.exec(frase);
-          if (ter && ter.index <= FRA && (!let_ || ter.index <= let_.index)) { fine = v[0].length + ter.index + ter[0].length; comando = 'terapia_recente'; }
-          else if (let_ && let_.index <= FRA) { fine = v[0].length + let_.index + let_[0].length; comando = 'lettera_recente'; }
+          var poi = resto.slice(v[0].length), frase = poi.split(/[.!?](?=\s+[A-ZÀ-Ý]|\s*$)/)[0];
+          var let_ = LETTERA.exec(frase); if (let_ && let_.index > FRA) let_ = null;
+          // le parti: subito dopo il verbo («inserisci l'anamnesi dell'ultima lettera») o dopo la lettera («dall'ultima lettera, l'anamnesi»)
+          var p = partiIn(frase, 0, FRA);
+          if (let_ && (!p || let_.index < p.inizio)) p = partiIn(frase, let_.index + let_[0].length, 25, true);
+          if (p) {
+            var dove = DA_DOVE.exec(frase.slice(p.fine));
+            fine = v[0].length + Math.max(p.fine + (dove ? dove[0].length : 0), let_ ? let_.index + let_[0].length : 0); comando = 'parti'; parti = p.parti;
+          } else if (let_) { fine = v[0].length + let_.index + let_[0].length; comando = 'lettera_recente'; }
         }
       }
       if (comando) {
         fine += CODA.exec(resto.slice(fine))[0].length;
-        return { da: m.index, a: dopo + fine, comando: comando, frase: t.slice(m.index, dopo + fine) };
+        return { da: m.index, a: dopo + fine, comando: comando, parti: parti, frase: t.slice(m.index, dopo + fine) };
       }
     }
     return null;

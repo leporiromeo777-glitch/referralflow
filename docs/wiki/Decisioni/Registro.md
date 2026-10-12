@@ -809,3 +809,6 @@ mentre detta («prendi la lettera più recente del paziente e aggiungimela») e 
   lettera, annulla. Le richieste libere («riassumi», «riscrivi») restano fuori finché non si è visto come Dragon scrive
   la parola d'ordine;
 - ciò che entra nel foglio senza essere stato dettato è sempre **dichiarato** (che cosa, da dove) e **annullabile**.
+- **Le parti della lettera** (stesso giorno, precisazione dello studio): una lettera è anamnesi (il primo paragrafo),
+  FRCV, comorbidità, eventuali conclusioni dei singoli esami, conclusione generale. Chi chiede solo una parte riceve
+  solo quella; più parti vengono dalla stessa lettera, e ciò che lì manca viene detto invece di essere cercato altrove.

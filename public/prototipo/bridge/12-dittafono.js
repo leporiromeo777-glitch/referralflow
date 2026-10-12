@@ -204,18 +204,18 @@ async function rfDitComandoCerca() {
   while (c && d.cmdFallito && d.cmdFallito === c.frase) c = RFComandi.trova(el.value, c.a);      // quello già fallito aspetta «Riprova»
   if (!c) { if (!d.cmdFallito && RFComandi.nonCapito(el.value) && !d.cmdUltimo) rfDitComandoStato('Dopo «per favore» non ho riconosciuto un comando: il testo resta com’è.'); return; }
   if (c.comando === 'annulla') { const t = RFComandi.sostituisci(el.value, c.da, c.a, ''); const sposta = c.a <= (d.cmdUltimo ? d.cmdUltimo.inizio : -1) ? el.value.length - t.testo.length : 0; rfDitTestoMetti(t.testo, t.inizio); if (d.cmdUltimo && sposta) { d.cmdUltimo.inizio -= sposta; d.cmdUltimo.fine -= sposta; } rfDitComandoAnnulla(); }
-  else await rfDitComandoEsegui(c.comando, c.da, c.a, c.frase);
+  else await rfDitComandoEsegui(c.comando, c.da, c.a, c.frase, c.parti);
   if (RFComandi.trova(el.value, 0)) rfDitComandoProgramma();      // ce n'è un altro
 }
 // Chiede il pezzo al server e lo mette al posto della frase (o, dal tasto, dove sta il cursore).
-async function rfDitComandoEsegui(comando, da, a, frase) {
-  const d = RF.dit, paz = rfFoglioPazId(), cosa = comando === 'terapia_recente' ? 'la terapia' : 'la lettera';
+async function rfDitComandoEsegui(comando, da, a, frase, parti) {
+  const d = RF.dit, paz = rfFoglioPazId(), cosa = comando === 'parti' ? 'quella parte della lettera' : 'la lettera';
   const riprova = ' <a href="javascript:void 0" onclick="rfDitComandoRiprova()">Riprova</a>';
   const fallito = (perche) => { d.cmdFallito = frase || ''; rfDitComandoStato(`<span style="color:#b3261e">${rfEsc(perche)}</span>${frase ? riprova : ''}`); };
   if (!paz) { fallito('Per inserire ' + cosa + ' scegli prima il paziente.'); return; }
   d.cmdInCorso = true; rfDitComandoStato('Cerco ' + cosa + ' nella cartella del paziente…');
   try {
-    const r = await fetch('/api/prototipo/dittafono/comando', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comando, paziente: paz }) });
+    const r = await fetch('/api/prototipo/dittafono/comando', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comando, parti: parti || [], paziente: paz }) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.testo) { fallito(j.errore || 'Non riesco a prendere ' + cosa + '.'); return; }
     const el = document.getElementById('rf-dit-testo'); if (!el) return;
@@ -225,16 +225,16 @@ async function rfDitComandoEsegui(comando, da, a, frase) {
     const s = RFComandi.sostituisci(el.value, da, a, j.testo);
     d.cmdUltimo = { inizio: s.inizio, fine: s.fine, pezzo: s.testo.slice(s.inizio, s.fine) }; d.cmdFallito = '';
     rfDitTestoMetti(s.testo, s.fine);
-    rfDitComandoStato(`Inserita <b>${cosa} del ${rfEsc(j.data || '')}</b> (${rfEsc(j.fonte || '')}): ${s.fine - s.inizio} caratteri che non hai dettato tu, da rileggere. <a href="javascript:void 0" onclick="rfDitComandoAnnulla()">Annulla</a>`);
+    rfDitComandoStato(`Inserito dalla lettera del ${rfEsc(j.data || '')}: <b>${rfEsc(j.cosa || cosa)}</b> (${rfEsc(j.fonte || '')}) — ${s.fine - s.inizio} caratteri che non hai dettato tu, da rileggere.${(j.mancanti || []).length ? ` <span style="color:#b3261e">In quella lettera non trovo: ${rfEsc(j.mancanti.join(', '))}.</span>` : ''} <a href="javascript:void 0" onclick="rfDitComandoAnnulla()">Annulla</a>`);
   } catch (_) { fallito('Il server non risponde: riprova.'); }
   finally { d.cmdInCorso = false; }
 }
 function rfDitComandoRiprova() { RF.dit.cmdFallito = ''; RF.dit.testoIl = 0; void rfDitComandoCerca(); }
 // Dal tasto accanto al foglio: stesso comando, nel punto del cursore.
-function rfDitComandoTasto(comando) {
+function rfDitComandoTasto(comando, parte) {
   const d = RF.dit, el = document.getElementById('rf-dit-testo'); if (!el || d.cmdInCorso || d.stato === 'registra') return;
   const qui = typeof d.cursore === 'number' && d.cursore <= el.value.length ? d.cursore : el.value.length;
-  void rfDitComandoEsegui(comando, qui, qui, '');
+  void rfDitComandoEsegui(comando, qui, qui, '', parte ? [parte] : []);
 }
 function rfDitComandoAnnulla() {
   const d = RF.dit, el = document.getElementById('rf-dit-testo'), u = d.cmdUltimo; if (!el) return;
@@ -601,7 +601,7 @@ PAGES.dittafono = () => {
           <span id="rf-dit-micsel">${(d.microfoni || []).length > 1 ? `<span class="caption">Microfono <select class="input sm" style="max-width:260px" ${rec ? 'disabled' : ''} onchange="rfDitMicImposta(this.value)" aria-label="Microfono da registrare"><option value="">quello di serie</option>${d.microfoni.map(x => `<option value="${rfEsc(x.id)}" ${x.id === rfDitMicScelto() ? 'selected' : ''}>${rfEsc(x.nome)}</option>`).join('')}</select></span>` : ''}</span></div>
         <div id="rf-dit-tasto" class="caption mt-8">${rfDitTastoHtml()}</div>
         <div id="rf-dit-spia" class="caption" style="opacity:.7">${rfDitHidSpia()}</div>
-        <div class="caption mt-8">Comandi a voce: detta <b>«per favore, inserisci la lettera più recente»</b> oppure <b>«per favore, inserisci la terapia dell’ultima lettera»</b>, poi lascia il tasto; <b>«per favore annulla»</b> toglie ciò che è entrato. Anche da qui, nel punto del cursore: <a href="javascript:void 0" onclick="rfDitComandoTasto('lettera_recente')">lettera più recente</a> · <a href="javascript:void 0" onclick="rfDitComandoTasto('terapia_recente')">terapia</a></div>
+        <div class="caption mt-8">Comandi a voce: detta <b>«per favore, inserisci la lettera più recente»</b>, oppure solo una parte — <b>«per favore, inserisci l’anamnesi»</b>, «…FRCV e comorbidità», «…l’ECG», «…la conclusione», «…la terapia» — poi lascia il tasto; <b>«per favore annulla»</b> toglie ciò che è entrato. Anche da qui, nel punto del cursore: <a href="javascript:void 0" onclick="rfDitComandoTasto('lettera_recente')">lettera intera</a>${[['anamnesi', 'anamnesi'], ['frcv', 'FRCV'], ['comorbidita', 'comorbidità'], ['conclusione', 'conclusione'], ['terapia', 'terapia']].map(([k, n]) => ` · <a href="javascript:void 0" onclick="rfDitComandoTasto('parti', '${k}')">${n}</a>`).join('')}</div>
         <div id="rf-dit-cmd-stato" class="caption" style="margin-top:4px">${RF.dit.cmdStato || ''}</div>
         <div id="rf-dit-sordo" class="rf-manc mt-8" style="display:none"><b>Il testo arriva ma il microfono non sente niente.</b> Di solito il programma di dettatura tiene il microfono tutto per sé, oppure qui è scelto un altro microfono: metti in pausa e scegli sopra lo stesso che usa lui. Senza audio non c'è né riascolto né confronto.</div>
         <div id="rf-dit-fermo" class="rf-manc mt-8" style="display:none"><b>Stai dettando ma la registrazione è ferma.</b> Tocca il tasto per registrare: senza audio non c'è né riascolto né confronto.</div>

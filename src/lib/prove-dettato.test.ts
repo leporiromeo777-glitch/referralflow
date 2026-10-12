@@ -65,7 +65,7 @@ test('foglio: dalla lettera sul foglio al testo da rivedere — saluto, corpo, c
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
-import { corpoDellaLettera, terapiaDellaLettera } from './dittafono-comandi';
+import { corpoDellaLettera, partiDellaLettera, terapiaDellaLettera } from './dittafono-comandi';
 const ctx: any = {};
 vm.runInNewContext(readFileSync(path.join(process.cwd(), 'public', 'prototipo', 'dittafono-comandi.js'), 'utf-8'), ctx);
 const K = ctx.RFComandi;
@@ -79,9 +79,9 @@ test('comandi a voce: «per favore» più un comando previsto — e solo quello 
     ['per favore inserisci l\'ultima lettera', 'lettera_recente'],
     ['Per favore, incollami qui il testo di tutta la lettera precedente grazie', 'lettera_recente'],
     ['perfavore mi riporti la lettera vecchia', null],                       // «riporti» non è fra i verbi previsti
-    ['per favore inserisci la terapia dell\'ultima lettera', 'terapia_recente'],
-    ['per favore aggiungi la terapia', 'terapia_recente'],
-    ['per favore metti la terapia della lettera precedente qui', 'terapia_recente'],
+    ['per favore inserisci la terapia dell\'ultima lettera', 'parti'],
+    ['per favore aggiungi la terapia', 'parti'],
+    ['per favore metti la terapia della lettera precedente qui', 'parti'],
     ['per favore annulla', 'annulla'],
     ['Per favore togli la lettera', 'annulla'],
   ] as [string, string | null][]) {
@@ -102,6 +102,25 @@ test('comandi a voce: «per favore» più un comando previsto — e solo quello 
   assert.equal(K.nonCapito('per favore uno. per favore due, per favore'), 3);
   assert.equal(K.nonCapito('Per favore inserisci l\'ultima lettera'), 0);
   // Il secondo comando si trova ripartendo da dopo il primo.
+  // Le PARTI della lettera: una o più, nell'ordine in cui sono dette; «da quale lettera» fa parte della richiesta.
+  for (const [frase, parti] of [
+    ['per favore inserisci l\'anamnesi', ['anamnesi']],
+    ['Per favore prendi solo l\'anamnesi dell\'ultima lettera e aggiungimela', ['anamnesi']],
+    ['per favore inserisci FRCV e comorbidità della lettera precedente', ['frcv', 'comorbidita']],
+    ['per favore inserisci i fattori di rischio cardiovascolari, le comorbidità e le allergie', ['frcv', 'comorbidita', 'allergie']],
+    ['per favore metti la conclusione dell\'ultima lettera', ['conclusione']],
+    ['per favore incolla l\'ecocardiogramma e l\'ECG', ['eco', 'ecg']],
+    ['per favore prendi dall\'ultima lettera l\'anamnesi', ['anamnesi']],
+    ['per favore inserisci la terapia', ['terapia']],
+  ] as [string, string[]][]) {
+    const r = K.trova(frase);
+    assert.deepEqual(r && [r.comando, Array.from(r.parti), r.a], ['parti', parti, frase.length], frase);
+  }
+  // Una parte nominata più avanti, in un'altra frase o staccata, non entra nel comando.
+  assert.deepEqual(Array.from(K.trova('per favore inserisci l\'anamnesi. Poi vediamo l\'ECG').parti), ['anamnesi']);
+  assert.deepEqual(Array.from(K.trova('per favore inserisci l\'anamnesi che contiene la diagnosi').parti), ['anamnesi']);
+  assert.equal(K.trova('per favore inserisci la lettera più recente').comando, 'lettera_recente');
+  assert.equal(K.trova('per favore inserisci la lettera più recente che parlava della terapia nuova').comando, 'lettera_recente');
   const due = 'per favore inserisci la terapia. Poi per favore annulla';
   assert.equal(K.trova(due, K.trova(due).a).comando, 'annulla');
 });
@@ -129,4 +148,27 @@ test('comandi a voce: della lettera trovata si prende il corpo, e la terapia dal
   assert.equal(terapiaDellaLettera('Caro collega, tutto bene. Terapia attuale: FarmacoA 10 mg, FarmacoB 5 mg. Cordiali saluti'), 'Terapia: FarmacoA 10 mg, FarmacoB 5 mg.');
   assert.equal(terapiaDellaLettera('Caro collega, tutto bene.'), '');
   assert.equal(corpoDellaLettera('Biglietto breve.'), 'Biglietto breve.', 'un testo corto resta intero');
+});
+
+test('comandi a voce: le parti della lettera — anamnesi, FRCV, comorbidità, esami, conclusione — una per una', () => {
+  // A paragrafi, con le etichette (testo INVENTATO).
+  const a = partiDellaLettera('Caro collega,\n\nho rivisto il paziente inventato in data 03.02.2026 per il controllo annuale. Riferisce di stare bene.\n\nFRCV: ipertensione arteriosa, dislipidemia. Ex fumatore.\n\nComorbidità: gonartrosi.\n\nClinicamente compensato, PA 130/80 mmHg.\n\nAll\'ECG ritmo sinusale, 64/min.\n\nEcocardiogramma: funzione sistolica conservata.\n\nTerapia:\nFarmacoA 10 mg 1-0-0\n\nIn conclusione quadro stabile. Controllo fra dodici mesi.\n\nCordiali saluti\n\nDr. med. Inventato');
+  assert.equal(a.anamnesi, 'ho rivisto il paziente inventato in data 03.02.2026 per il controllo annuale. Riferisce di stare bene.');
+  assert.equal(a.frcv, 'FRCV: ipertensione arteriosa, dislipidemia. Ex fumatore.');
+  assert.equal(a.comorbidita, 'Comorbidità: gonartrosi.');
+  assert.equal(a.esame, 'Clinicamente compensato, PA 130/80 mmHg.');
+  assert.equal(a.ecg, 'All\'ECG ritmo sinusale, 64/min.');
+  assert.equal(a.eco, 'Ecocardiogramma: funzione sistolica conservata.');
+  assert.equal(a.conclusione, 'In conclusione quadro stabile. Controllo fra dodici mesi.');
+  assert.equal(a.terapia, 'Terapia:\nFarmacoA 10 mg 1-0-0');
+  assert.equal(a.allergie, undefined, 'una parte che non c\'è non si inventa');
+  // Tutta di fila, come esce da una scansione: le parti si riconoscono dall\'etichetta o dalla frase che le apre.
+  const b = partiDellaLettera('Caro collega, ho rivisto la paziente inventata per dispnea da sforzo. Fattori di rischio cardiovascolari: ipertensione. Comorbilità: asma. All\'ecocardiogramma odierno: ventricolo sinistro normale. In conclusione nessuna cardiopatia. Cordiali saluti');
+  assert.equal(b.anamnesi, 'ho rivisto la paziente inventata per dispnea da sforzo.');
+  assert.equal(b.frcv, 'Fattori di rischio cardiovascolari: ipertensione.');
+  assert.equal(b.comorbidita, 'Comorbilità: asma.');
+  assert.equal(b.eco, 'All\'ecocardiogramma odierno: ventricolo sinistro normale.');
+  assert.equal(b.conclusione, 'In conclusione nessuna cardiopatia.');
+  // Un biglietto senza parti: resta solo il primo paragrafo come anamnesi.
+  assert.deepEqual(Object.keys(partiDellaLettera('Caro collega,\n\nti ringrazio per l\'invio del paziente inventato, che vedrò volentieri il mese prossimo in studio.\n\nA presto')), ['anamnesi']);
 });
