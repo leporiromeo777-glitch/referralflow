@@ -237,12 +237,23 @@ function rfDitRidisegna() {
    scelto una volta). Non serve sapere com'è fatto il dispositivo: la pagina lo IMPARA — «tieni premuto il tasto, poi
    lascialo» — guardando quale bit cambia. La scelta resta su questo computer. */
 const RF_DIT_TASTO = 'rf-dit-tasto';
-function rfDitTastoLetto() { try { return JSON.parse(localStorage.getItem(RF_DIT_TASTO) || 'null'); } catch (_) { return null; } }
+// I microfoni Philips (SpeechMike) mandano sullo stesso canale più TIPI di messaggio, distinti dal primo byte: i tasti,
+// ma anche il sensore di movimento (preso in mano, appoggiato). Di quei dispositivi si guardano solo i messaggi dello
+// stesso tipo di quello imparato — se no muovere il microfono «premeva» il tasto (12.10.2026, visto dallo studio).
+const RF_DIT_PHILIPS = 0x0911, RF_DIT_PHILIPS_TASTI = 0x80;      // 0x80 = «è cambiato un tasto»; 0x9e = movimento; altri = stato
+function rfDitTastoLetto() {
+  try {
+    const t = JSON.parse(localStorage.getItem(RF_DIT_TASTO) || 'null');
+    // Un collegamento imparato prima di questa correzione, su un Philips, non sa di che tipo era il messaggio: va rifatto.
+    if (t && t.tipo === 'hid' && t.vid === RF_DIT_PHILIPS && t.tipo0 !== RF_DIT_PHILIPS_TASTI) { localStorage.removeItem(RF_DIT_TASTO); RF.dit.tastoErrore = 'da ricollegare'; return null; }
+    return t;
+  } catch (_) { return null; }
+}
 function rfDitTastoHtml() {
   const d = RF.dit, t = rfDitTastoLetto();
   if (d.impara) return `<b>Tieni premuto il tasto con cui detti, poi lascialo.</b> ${d.impara.nota || ''} <a href="javascript:void 0" onclick="rfDitTastoAnnulla()">Annulla</a>`;
   if (t) return `Tasto del microfono: <b>${rfEsc(t.nome || 'collegato')}</b> — finché lo tieni premuto la pagina registra${RF.dit.tastoGiu ? ' · <b style="color:#b3261e">premuto</b>' : ''}. Se registra quando NON lo premi, scollegalo e ricollegalo. <a href="javascript:void 0" onclick="rfDitTastoScollega()">Scollega</a>${d.tastoErrore ? ` · <span style="color:#b3261e">${rfEsc(d.tastoErrore)}</span>` : ''}`;
-  return `<a href="javascript:void 0" onclick="rfDitTastoCollega()">Collega il tasto con cui detti</a>: tenendolo premuto partono insieme il programma di dettatura e la registrazione, lasciandolo si fermano.`;
+  return `${d.tastoErrore === 'da ricollegare' ? '<b style="color:#b3261e">Il tasto va ricollegato</b> (prima la pagina scambiava il movimento del microfono per il tasto). ' : ''}<a href="javascript:void 0" onclick="rfDitTastoCollega()">Collega il tasto con cui detti</a>: tenendolo premuto partono insieme il programma di dettatura e la registrazione, lasciandolo si fermano. Mentre lo colleghi tieni il microfono fermo in mano.`;
 }
 function rfDitTastoDisegna() { const el = document.getElementById('rf-dit-tasto'); if (el) el.innerHTML = rfDitTastoHtml(); const c = document.getElementById('rf-dit-centro'); if (c && RF.dit.stato !== 'registra') rfDitRidisegna(); }
 async function rfDitHidApri(dev) {
@@ -273,17 +284,25 @@ function rfDitTastoImparato(t) {
 function rfDitHidRapporto(e) {
   const d = RF.dit, b = new Uint8Array(e.data.buffer, e.data.byteOffset, e.data.byteLength), dev = e.device;
   if (d.impara) {
-    const k = `${dev.vendorId}:${dev.productId}:${e.reportId}`, prima = d.impara.visti[k];
+    // Sui Philips si confrontano solo messaggi dello stesso tipo (primo byte): un messaggio di movimento non è un tasto.
+    const colTipo = dev.vendorId === RF_DIT_PHILIPS && b.length > 1;
+    // …e si impara SOLO dai messaggi dei tasti: prendere in mano il microfono mentre lo si collega non deve contare.
+    if (colTipo && b[0] !== RF_DIT_PHILIPS_TASTI) {
+      d.impara.altri = (d.impara.altri || 0) + 1;
+      if (d.impara.altri === 3) { d.impara.nota = 'Vedo il microfono muoversi ma non ancora il tasto: tienilo fermo e tieni premuto il tasto.'; const el = document.getElementById('rf-dit-tasto'); if (el) el.innerHTML = rfDitTastoHtml(); }
+      return;
+    }
+    const k = `${dev.vendorId}:${dev.productId}:${e.reportId}${colTipo ? `:${b[0]}` : ''}`, prima = d.impara.visti[k];
     if (!prima) { d.impara.visti[k] = { b: b.slice(), quando: Date.now() }; return; }
     if (Date.now() - prima.quando < 200) return;      // rimbalzi e rotelle: si aspetta che il tasto sia stato tenuto un attimo
-    for (let i = 0; i < Math.min(b.length, prima.b.length); i++) if (b[i] !== prima.b[i]) {
+    for (let i = colTipo ? 1 : 0; i < Math.min(b.length, prima.b.length); i++) if (b[i] !== prima.b[i]) {
       const maschera = b[i] ^ prima.b[i], uno = prima.b[i] & maschera, due = b[i] & maschera;
       // Quale dei due stati è «premuto»? Un tasto a riposo vale zero: premuto è lo stato che accende il bit. (Il primo
       // rapporto visto non è per forza la pressione: può essere un altro tasto, o il microfono appoggiato sul tavolo —
       // imparato al contrario, la pagina registrava a tasto rilasciato, 12.10.2026.) Solo se tutti e due gli stati
       // accendono qualcosa — un cursore a più posizioni — vale l'ordine: prima la posizione di dettatura, poi il riposo.
       const premuto = uno && !due ? uno : due && !uno ? due : uno;
-      rfDitTastoImparato({ tipo: 'hid', vid: dev.vendorId, pid: dev.productId, rid: e.reportId, i, maschera, premuto, nome: dev.productName || 'microfono da dettatura' });
+      rfDitTastoImparato({ tipo: 'hid', vid: dev.vendorId, pid: dev.productId, rid: e.reportId, i, maschera, premuto, ...(colTipo ? { tipo0: b[0] } : {}), nome: dev.productName || 'microfono da dettatura' });
       return;
     }
     // Nessuna differenza con quello di prima: si riparte da qui (un rapporto ripetuto non è il tasto).
@@ -292,6 +311,7 @@ function rfDitHidRapporto(e) {
   }
   const t = rfDitTastoLetto();
   if (!t || t.tipo !== 'hid' || t.vid !== dev.vendorId || t.pid !== dev.productId || t.rid !== e.reportId || t.i >= b.length) return;
+  if (typeof t.tipo0 === 'number' && b[0] !== t.tipo0) return;      // un altro tipo di messaggio (movimento, stato): non è il tasto
   rfDitTastoStato((b[t.i] & t.maschera) === t.premuto);
 }
 function rfDitTastoStato(giu) {
