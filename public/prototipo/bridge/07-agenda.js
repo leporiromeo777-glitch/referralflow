@@ -278,6 +278,6 @@ window.addEventListener('load', () => {
   void rfCaricaDati();
   // Anche quando il primo caricamento non è mai riuscito: se no chi ha aperto
   // la pagina nel momento sbagliato resta bloccato finché non ricarica a mano.
-  setInterval(() => { if (RF.nonAutorizzato) return; if ((RF.live || RF.erroreCarico) && state.route !== 'review') void rfCaricaDati(); }, 120000);
+  setInterval(() => { if (RF.nonAutorizzato) return; if ((RF.live || RF.erroreCarico) && state.route !== 'review' && !(typeof rfDitOccupato === 'function' && rfDitOccupato())) void rfCaricaDati(); }, 120000);
 });
 

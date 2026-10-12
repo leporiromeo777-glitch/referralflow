@@ -152,6 +152,13 @@ function rfDitTesto(el) {
   const fermo = document.getElementById('rf-dit-fermo');
   if (fermo) fermo.style.display = d.stato !== 'registra' && d.testo.length - d.testoInizio >= 15 ? '' : 'none';
 }
+// Mentre si detta o si registra la pagina non va ridisegnata dal ricarico periodico dei dati (ogni due minuti): la casella
+// verrebbe ricreata e il cursore ne uscirebbe — il programma di dettatura smetterebbe di scriverci (12.10.2026).
+function rfDitOccupato() {
+  if (state.route !== 'dittafono') return false;
+  const t = document.getElementById('rf-dit-testo'), a = document.getElementById('rf-dit-audio');
+  return RF.dit.stato === 'registra' || (t && document.activeElement === t) || (a && !a.paused);
+}
 function rfDitAudio() {
   const d = RF.dit; if (d.url) { URL.revokeObjectURL(d.url); d.url = null; }
   if (d.pcm.length) d.url = URL.createObjectURL(new Blob([RFDittafono.wav(d.pcm, RFDittafono.FREQUENZA)], { type: 'audio/wav' }));
