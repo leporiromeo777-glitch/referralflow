@@ -13,8 +13,10 @@
  */
 (function (root) {
   'use strict';
-  var VERSIONE = '1.0';
-  var PAROLA = /\bper\s*favore\b[ \t,:;]*/gi;
+  var VERSIONE = '1.1';
+  // Una copia nuova a ogni ricerca: l'espressione ricorda dov'è arrivata, e due ricerche una dentro l'altra sulla
+  // stessa copia non finivano più (la pagina si bloccava a ogni «per favore» senza comando, 12.10.2026).
+  function parola() { return /\bper\s*favore\b[ \t,:;]*/gi; }
   var VERBO = /^(?:(?:mi|ora|adesso|puoi|potresti|qui)\s+)*(?:inserisc[ia](?:mi)?|incolla(?:mi)?|aggiung[ia](?:mi)?|prendi(?:mi)?|metti(?:mi)?|riprendi(?:mi)?|copia(?:mi)?|riporta(?:mi)?|dammi|inserire|incollare|aggiungere|prendere|mettere|riprendere|copiare|riportare)(?![a-zà-ù])/i;
   // Che cosa si può chiedere. La terapia si guarda prima: «la terapia dell'ultima lettera» nomina anche la lettera.
   var TERAPIA = /\b(?:ultima\s+)?terapia(?![a-zà-ù])(?:[^.\n!?]{0,40}?(?:ultima\s+lettera|lettera\s+(?:pi[uù]\s+(?:recente|nuova)|precedente|vecchia|di\s+prima)|ultima\s+(?:volta|visita)|precedente|di\s+prima)(?![a-zà-ù]))?/i;
@@ -26,9 +28,9 @@
 
   // Il primo comando nel testo da `da0` in poi: { da, a, comando, frase } — `da`/`a` sono i confini della frase da togliere.
   function trova(testo, da0) {
-    var t = String(testo || ''), m;
-    PAROLA.lastIndex = Math.max(0, da0 || 0);
-    while ((m = PAROLA.exec(t))) {
+    var t = String(testo || ''), m, rx = parola();
+    rx.lastIndex = Math.max(0, da0 || 0);
+    while ((m = rx.exec(t))) {
       var dopo = m.index + m[0].length, resto = t.slice(dopo, dopo + 220).split('\n')[0];
       var an = ANNULLA.exec(resto), fine = -1, comando = '';
       if (an) { fine = an[0].length; comando = 'annulla'; }
@@ -50,9 +52,8 @@
   }
   // C'è un «per favore» che non è un comando? (per dire a chi detta che l'istruzione non è stata capita)
   function nonCapito(testo) {
-    var t = String(testo || ''), m, n = 0;
-    PAROLA.lastIndex = 0;
-    while ((m = PAROLA.exec(t))) { var c = trova(t, m.index); if (!c || c.da !== m.index) n++; }
+    var t = String(testo || ''), m, n = 0, rx = parola();
+    while ((m = rx.exec(t))) { var c = trova(t, m.index); if (!c || c.da !== m.index) n++; }
     return n;
   }
   // Al posto di testo[da..a) mette `pezzo`, come paragrafo a sé; con `pezzo` vuoto toglie e ricuce.

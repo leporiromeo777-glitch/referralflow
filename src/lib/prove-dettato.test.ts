@@ -97,6 +97,10 @@ test('comandi a voce: «per favore» più un comando previsto — e solo quello 
     'Per favore prendi appuntamento con la segreteria per la prossima visita.',
   ]) assert.equal(K.trova(frase), null, frase);
   assert.equal(K.nonCapito('Per favore fammi un caffè. Per favore inserisci l\'ultima lettera.'), 1);
+  // Un «per favore» senza comando, da solo: la ricerca deve FINIRE (bloccava la pagina, 12.10.2026).
+  assert.equal(K.nonCapito('Per favore qualcosa'), 1);
+  assert.equal(K.nonCapito('per favore uno. per favore due, per favore'), 3);
+  assert.equal(K.nonCapito('Per favore inserisci l\'ultima lettera'), 0);
   // Il secondo comando si trova ripartendo da dopo il primo.
   const due = 'per favore inserisci la terapia. Poi per favore annulla';
   assert.equal(K.trova(due, K.trova(due).a).comando, 'annulla');
