@@ -16,7 +16,7 @@ export const maxDuration = 300;
 //   GET  ?documento=<id> → { pagine, con_testo, pezzi proposti }
 //   GET  ?recenti=1      → { cartelle }: lo storico delle cartelle complete caricate, con a che punto sono
 //   GET  ?stato=<id>     → { ocr }: a che punto è la lettura di una scansione (la pagina aspetta da sola)
-//   POST { azione: 'crea', documento_id, pezzi, proposti } → { creati }
+//   POST { azione: 'crea', documento_id, pezzi, proposti, sostituisci? } → { creati, sostituiti, tenuti } (sostituisci: toglie i documenti della divisione precedente)
 //   POST { azione: 'zip', ids } → il file .zip
 //   POST { azione: 'chi', testi } → { letto, trovato }: di chi è un PDF trascinato prima di scegliere il paziente
 async function chi() {
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
   if (azione === 'crea') {
     const id = String(b?.documento_id ?? '');
     if (!isUuid(id)) return NextResponse.json({ errore: 'documento' }, { status: 400 });
-    const r = await crea(sid, c.session.id, id, b?.pezzi, b?.proposti);
+    const r = await crea(sid, c.session.id, id, b?.pezzi, b?.proposti, b?.sostituisci === true);
     return 'errore' in r ? NextResponse.json({ errore: r.errore }, { status: r.stato }) : NextResponse.json(r, { status: 201 });
   }
   if (azione === 'chi') return NextResponse.json(await chiE(sid, b?.testi), { headers: { 'Cache-Control': 'no-store' } });

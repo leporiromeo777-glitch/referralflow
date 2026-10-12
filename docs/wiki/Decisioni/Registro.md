@@ -777,7 +777,9 @@ pagine; lo studio: «a volte taglia una lettera in due»). Quindi **il modello n
   questa non ha un inizio, è un seguito, qualunque cosa dica il modello;
 - **il modello decide solo i casi incerti**, e dà data e titolo;
 - **tracciati e appunti: un documento per giorno**, come nello schema dello studio;
-- la sottocartella **Ricette** è la 12 **finché lo studio non dice il suo numero**.
+- la sottocartella **Ricette** è la 12 (confermato dallo studio il 12.10.2026: è l'ultima).
+
+**12.10.2026 — dividere di nuovo sostituisce.** Lo studio aveva già creato 97 documenti dalla proposta coi troppi tagli, e li vuole sostituiti. Deciso: una divisione rifatta **toglie i documenti della precedente** (di serie; si può scegliere di tenerli), dopo aver creato i nuovi; mai quelli allegati a un referto; l'originale non si tocca; ogni cancellazione nel registro. È l'unica cancellazione di documenti che la piattaforma fa, e la fa solo su copie di pagine che restano nell'originale.
 
 ## 11.10.2026 — Dragon accanto alla catena, non al suo posto
 Lo studio ha la licenza di Dragon e un medico lo usa già; vuole dettare in ReferralFlow in tempo reale e salvare

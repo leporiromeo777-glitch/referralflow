@@ -69,6 +69,7 @@ async function main() {
     const chiavi = await query<{ storage_key: string }>(`select d.storage_key from patient_documents d join patients p on p.id = d.patient_id where p.studio_id = $1 and p.cognome = 'Provadividi'`, [S]);
     await query(`delete from document_access_log where document_id in (select d.id from patient_documents d join patients p on p.id = d.patient_id where p.studio_id = $1 and p.cognome = 'Provadividi')`, [S]).catch(() => null);
     await query(`delete from patients where studio_id = $1 and cognome = 'Provadividi'`, [S]);
+    await query(`delete from referti_bozze where studio_id = $1 and file_id like 'prova-dividi-%'`, [S]).catch(() => null);
     for (const c of chiavi) await deleteFile(c.storage_key).catch(() => null);
   };
   try {
@@ -152,6 +153,21 @@ async function main() {
     const zb = Buffer.from(await z.arrayBuffer());
     const zNo = await manda(C_SEG, { azione: 'zip', ids: ['00000000-0000-4000-8000-000000000000'] }), zVuoto = await manda(C_SEG, { azione: 'zip', ids: [] });
     verifica(z.status === 200 && zb.subarray(0, 2).toString() === 'PK' && zb.length > 1000 && zNo.status === 404 && zVuoto.status === 400, `lo zip coi quattro PDF si scarica; un documento che non c'è o un elenco vuoto no (${z.status}, ${zNo.status}, ${zVuoto.status})`);
+
+    // 4b — «Dividi di nuovo» che sostituisce: i documenti della divisione precedente si tolgono, a nuovi creati;
+    // quello già allegato a un referto resta; ogni cancellazione va nel registro; l'originale non si tocca.
+    const giaPrima = (await leggi(C_SEG, `?documento=${doc}`)).j.gia_creati;
+    const [{ id: bz }] = await query<{ id: string }>(`insert into referti_bozze (studio_id, file_id, payload, tipo) values ($1, 'prova-dividi-' || gen_random_uuid(), '{}'::jsonb, 'referto') returning id`, [S]);
+    await query(`insert into referti_allegati (studio_id, bozza_id, tipo, documento_id, etichetta) values ($1, $2, 'cartella', $3, 'prova')`, [S, bz, creati[0].id]);
+    const rifatto = await manda(C_SEG, { azione: 'crea', documento_id: doc, sostituisci: true, pezzi: [{ da: 1, a: 3, categoria: 'lettera', titolo: 'Lettera rifatta', data: '12.03.2019' }, { da: 4, a: 8, categoria: 'altro', titolo: 'Resto rifatto' }], proposti: [] });
+    const rj = (await rifatto.json().catch(() => ({}))) as any;
+    const dopo = await query<{ id: string; filename: string }>(`select id, filename from patient_documents where patient_id = $1 and id <> $2 order by filename`, [pa, doc]);
+    const [canc] = await query<{ n: number }>(`select count(*)::int as n from document_access_log where document_id = any($1::uuid[]) and azione = 'cancellazione'`, [creati.map((x) => x.id)]);
+    const giaDopo = (await leggi(C_SEG, `?documento=${doc}`)).j.gia_creati;
+    await query(`delete from referti_bozze where id = $1`, [bz]);
+    verifica(giaPrima === 4 && rifatto.status === 201 && rj.creati?.length === 2 && rj.sostituiti === 3 && rj.tenuti === 1 && canc.n === 3
+      && JSON.stringify(dopo.map((x) => x.filename)) === JSON.stringify(['Lettera 12.03.2019.pdf', 'Lettera rifatta.pdf', 'Resto rifatto.pdf']) && (await pagineDi(doc)) === 8 && giaDopo === 2,
+      `dividere di nuovo sostituendo: nati 2, tolti i 3 di prima, tenuto quello allegato a un referto, 3 cancellazioni nel registro, originale intatto (${rj.sostituiti} tolti, ${rj.tenuti} tenuti, restano ${dopo.length})`);
 
     // 5 — la cartella coi fogli separatori: il Mac li trova in sottofondo, e la proposta diventa sezioni e nomi.
     const fileB = path.join(TMP, 'barre.pdf');

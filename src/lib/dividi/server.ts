@@ -6,7 +6,7 @@ import path from 'path';
 import { logDocumento } from '../cartella';
 import { query } from '../db';
 import { dopoCaricamento, valutaPdf } from '../documenti-ocr';
-import { getFile, putFile } from '../storage';
+import { deleteFile, getFile, putFile } from '../storage';
 import { abbinaPaziente } from '../imaging-ordina';
 import { proponiAnagrafica } from '../pazienti-abbina-regole';
 import { analisiDi, mettiInCoda, statoAnalisi, type StatoAnalisi } from './analisi';
@@ -92,7 +92,19 @@ export async function elencoPdf(studioId: string, patientId: string) {
       where studio_id = $1 and patient_id = $2 and filename ilike '%.pdf' order by uploaded_at desc limit 200`, [studioId, patientId]);
 }
 
-export type Analisi = { documento: { id: string; filename: string; patient_id: string; paziente: string }; pagine: number; con_testo: number; ocr: string | null; pezzi: PezzoSezione[]; analisi: StatoAnalisi | null };
+// I documenti nati da una divisione precedente di QUESTA cartella: stessa cartella del paziente, la nota «dalla
+// cartella completa…» e, nel registro, «diviso da <questo originale>». Quelli già allegati a un referto non si toccano.
+type Vecchio = { id: string; storage_key: string; allegato: boolean };
+async function pezziDiPrima(studioId: string, patientId: string, originale: string): Promise<Vecchio[]> {
+  return query<Vecchio>(
+    `select d.id, d.storage_key, exists (select 1 from referti_allegati a where a.documento_id = d.id) as allegato
+       from patient_documents d
+      where d.studio_id = $1 and d.patient_id = $2 and d.nota like 'dalla cartella completa,%'
+        and exists (select 1 from document_access_log l where l.document_id = d.id and l.azione = 'caricamento' and l.dettaglio = $3)`,
+    [studioId, patientId, `diviso da ${originale.slice(0, 8)}`]);
+}
+
+export type Analisi = { documento: { id: string; filename: string; patient_id: string; paziente: string }; pagine: number; con_testo: number; ocr: string | null; pezzi: PezzoSezione[]; analisi: StatoAnalisi | null; gia_creati: number };
 export async function analizza(studioId: string, userId: string, id: string): Promise<Analisi | { errore: string; stato: number }> {
   const d = await documento(studioId, id);
   if (!d) return { errore: 'Documento non trovato, o non è un PDF.', stato: 404 };
@@ -111,11 +123,12 @@ export async function analizza(studioId: string, userId: string, id: string): Pr
   await logDocumento(id, 'lettura', { studioId, userId, dettaglio: 'proposta di divisione' });
   console.log(`[dividi] ${id.slice(0, 8)}: ${testi.length} pagine, ${conTesto} con testo → ${pezzi.filter((x) => !x.escluso).length} documenti proposti in ${new Set(pezzi.map((x) => x.cartella).filter(Boolean)).size} sezioni (analisi: ${an?.stato ?? 'in attesa'})`);
   return { documento: { id: d.id, filename: d.filename, patient_id: d.patient_id, paziente: d.paziente }, pagine: testi.length, con_testo: conTesto, ocr: d.ocr_stato, pezzi,
-    analisi: an ? { stato: an.stato, fatte: an.fatte, pagine: an.pagine, versione: an.versione, modello: an.modello } : null };
+    analisi: an ? { stato: an.stato, fatte: an.fatte, pagine: an.pagine, versione: an.versione, modello: an.modello } : null,
+    gia_creati: (await pezziDiPrima(studioId, d.patient_id, id)).filter((x) => !x.allegato).length };
 }
 
 export type Creato = { id: string; filename: string; pagine: number; categoria: string; cartella: string | null };
-export async function crea(studioId: string, userId: string, id: string, grezzi: unknown, proposti: unknown): Promise<{ creati: Creato[] } | { errore: string; stato: number }> {
+export async function crea(studioId: string, userId: string, id: string, grezzi: unknown, proposti: unknown, sostituisci = false): Promise<{ creati: Creato[]; sostituiti: number; tenuti: number } | { errore: string; stato: number }> {
   const d = await documento(studioId, id);
   if (!d) return { errore: 'Documento non trovato, o non è un PDF.', stato: 404 };
   let dati: Buffer;
@@ -148,7 +161,24 @@ export async function crea(studioId: string, userId: string, id: string, grezzi:
       const m = confronta(prop, scelta.pezzi);
       await logDocumento(id, 'lettura', { studioId, userId, dettaglio: `divisione: ${m.scelti} documenti, proposti ${m.proposti}, uguali ${m.uguali}` });
       console.log(`[dividi] ${id.slice(0, 8)}: creati ${m.scelti} documenti · proposti ${m.proposti} · rimasti uguali ${m.uguali}`);
-      return { creati };
+      // «Dividi di nuovo» che SOSTITUISCE (12.10.2026, richiesta dello studio): i documenti della divisione precedente
+      // di questa cartella si tolgono — solo adesso, a documenti nuovi creati: se qualcosa va storto prima, restano.
+      // Sono copie di pagine dell'originale, che resta in cartella: non si perde niente. Quelli già allegati a un
+      // referto si tengono. Ogni cancellazione va nel registro, che non si cancella.
+      let sostituiti = 0, tenuti = 0;
+      if (sostituisci) {
+        const nuovi = new Set(creati.map((x) => x.id));
+        for (const v of (await pezziDiPrima(studioId, d.patient_id, id)).filter((x) => !nuovi.has(x.id))) {
+          if (v.allegato) { tenuti++; continue; }
+          const [via] = await query<{ id: string }>(`delete from patient_documents where id = $1 and studio_id = $2 returning id`, [v.id, studioId]);
+          if (!via) continue;
+          await logDocumento(v.id, 'cancellazione', { studioId, userId, dettaglio: `sostituito da una nuova divisione di ${id.slice(0, 8)}` });
+          await deleteFile(v.storage_key).catch(() => null);
+          sostituiti++;
+        }
+        console.log(`[dividi] ${id.slice(0, 8)}: sostituiti ${sostituiti} documenti della divisione precedente, tenuti ${tenuti} (allegati a un referto)`);
+      }
+      return { creati, sostituiti, tenuti };
     });
   } catch { return { errore: 'Divisione non riuscita: il PDF non si legge.', stato: 422 }; }
 }

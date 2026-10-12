@@ -184,7 +184,7 @@ async function rfDivApri(id, tieniPdf) {
   const j = await rfDivChiedi(`${RF_DIV_URL}?documento=${encodeURIComponent(id)}`);
   RF.div.carico = false;
   if (j.errore) { RF.div.errore = j.errore; render(); return; }
-  RF.div.doc = { id: j.documento.id, filename: j.documento.filename, pagine: j.pagine, con_testo: j.con_testo, ocr: j.ocr, analisi: j.analisi || null };
+  RF.div.doc = { id: j.documento.id, filename: j.documento.filename, pagine: j.pagine, con_testo: j.con_testo, ocr: j.ocr, analisi: j.analisi || null, gia: j.gia_creati || 0 };
   if (!RF.div.pid) { RF.div.pid = j.documento.patient_id; RF.div.nome = j.documento.paziente; }
   RF.div.proposti = (j.pezzi || []).filter(p => !p.escluso).map(p => [p.da, p.a]);
   RF.div.pezzi = (j.pezzi || []).map(p => ({ da: p.da, a: p.a, categoria: p.categoria, data: rfDivGiorno(p.data), titolo: '', descr: p.descrizione || '', auto: true, sicurezza: p.sicurezza, escluso: !!p.escluso, foglio: p.foglio || null, cartella: p.cartella || '' }));
@@ -348,13 +348,15 @@ async function rfDivCrea() {
   const d = RF.div.doc; if (!d || RF.div.carico) return;
   const scelti = RF.div.pezzi.filter(p => !p.escluso);
   if (!scelti.length) { toast('Non c’è nessun documento da creare'); return; }
-  if (!confirm(`${rfDivTastoCrea()} nella cartella di ${RF.div.nome}? L’originale resta com’è.`)) return;
+  // Una cartella già divisa: i documenti di prima si sostituiscono (di serie) o si tengono accanto ai nuovi.
+  const sost = d.gia > 0 && !((document.getElementById('rf-div-tieni') || {}).checked);
+  if (!confirm(`${rfDivTastoCrea()} nella cartella di ${RF.div.nome}?${d.gia > 0 ? (sost ? ` I ${d.gia} documenti creati la volta prima da questa cartella vengono TOLTI e sostituiti da questi.` : ` I ${d.gia} documenti creati la volta prima restano: avrai i doppioni.`) : ''} L’originale resta com’è.`)) return;
   RF.div.carico = true; const b = document.getElementById('rf-div-crea'); if (b) { b.disabled = true; b.textContent = 'Divido…'; }
-  const j = await rfDivChiedi(RF_DIV_URL, { azione: 'crea', documento_id: d.id, proposti: RF.div.proposti, pezzi: scelti.map(p => ({ da: p.da, a: p.a, categoria: p.categoria, titolo: p.titolo, data: p.data, cartella: p.cartella || null })) });
+  const j = await rfDivChiedi(RF_DIV_URL, { azione: 'crea', documento_id: d.id, sostituisci: sost, proposti: RF.div.proposti, pezzi: scelti.map(p => ({ da: p.da, a: p.a, categoria: p.categoria, titolo: p.titolo, data: p.data, cartella: p.cartella || null })) });
   RF.div.carico = false;
   if (j.errore) { toast(j.errore); if (b) { b.disabled = false; b.textContent = rfDivTastoCrea(); } return; }
   RF.div.creati = j.creati || []; rfDivLiberaPdf(); RF.div.doc = null; RF.div.pezzi = [];
-  toast(`${RF.div.creati.length} documenti nella cartella di ${RF.div.nome}`);
+  toast(`${RF.div.creati.length} documenti nella cartella di ${RF.div.nome}${j.sostituiti ? ` · tolti i ${j.sostituiti} di prima` : ''}${j.tenuti ? ` · ${j.tenuti} tenuti perché allegati a un referto` : ''}`);
   void rfCaricaDati(); render();
 }
 async function rfDivZip() {
@@ -437,6 +439,7 @@ PAGES.dividi = () => {
     return `${testa(`${rfEsc(v.nome)} · ${rfEsc(d.filename)} · ${d.pagine} pagine`, `<button class="btn" onclick="rfDivDaCapo()">Torna ai tagli proposti</button><button class="btn" onclick="rfDivCambia()">Cambia cartella</button>`)}
       ${errore}
       <div id="rf-div-avviso">${rfDivAvvisoHtml()}</div>
+      ${d.gia > 0 ? `<div class="rf-manc mb-16"><b>Questa cartella è già stata divisa: ${d.gia} documenti creati la volta prima.</b> Creando quelli nuovi, <b>quelli di prima vengono tolti e sostituiti</b> (sono copie di pagine dell’originale, che resta). <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;margin-left:6px"><input type="checkbox" id="rf-div-tieni"> tienili accanto ai nuovi</label></div>` : ''}
       <div class="card"><div class="card-head"><span class="section-title">Documenti trovati</span><span class="caption">clicca una pagina per guardarla in grande · ✂ fra due pagine per tagliare</span></div>
         <div id="rf-div-pezzi">${rfDivPezziHtml()}</div>
         <div class="row mt-16" style="gap:12px;justify-content:flex-end;align-items:center"><span class="caption">I documenti nascono nella cartella di ${rfEsc(v.nome)}; l’originale resta.</span><button class="btn primary" id="rf-div-crea" onclick="rfDivCrea()">${rfDivTastoCrea()}</button></div></div>
