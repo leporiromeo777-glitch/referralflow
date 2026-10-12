@@ -78,7 +78,7 @@ test('comandi a voce: «per favore» più un comando previsto — e solo quello 
   for (const [frase, comando] of [
     ['per favore inserisci l\'ultima lettera', 'lettera_recente'],
     ['Per favore, incollami qui il testo di tutta la lettera precedente grazie', 'lettera_recente'],
-    ['perfavore mi riporti la lettera vecchia', null],                       // «riporti» non è fra i verbi previsti
+    ['perfavore mi riporti la lettera vecchia', 'lettera_recente'],            // «riporti» non è la forma prevista, ma si capisce
     ['per favore inserisci la terapia dell\'ultima lettera', 'parti'],
     ['per favore aggiungi la terapia', 'parti'],
     ['per favore metti la terapia della lettera precedente qui', 'parti'],
@@ -109,7 +109,8 @@ test('comandi a voce: «per favore» più un comando previsto — e solo quello 
     'Per favore prendi la lettera del collega e portala alla prossima visita.',
     'Per favore metti la lettera di dimissione nella cartella.',
   ]) assert.equal(K.trova(frase), null, frase);
-  assert.equal(K.letto('Bene. Per favore inserisce la namnesi'), 'inserisce la namnesi');
+  assert.equal(K.letto('Bene. Per favore dimmi che ore sono'), 'dimmi che ore sono');
+  assert.equal(K.letto('Bene. Per favore inserisce la namnesi'), null, 'scritto male, ma capito');
   assert.equal(K.letto('Per favore inserisci l\'anamnesi'), null);
   assert.equal(K.nonCapito('Per favore fammi un caffè. Per favore inserisci l\'ultima lettera.'), 1);
   // Un «per favore» senza comando, da solo: la ricerca deve FINIRE (bloccava la pagina, 12.10.2026).
@@ -153,6 +154,29 @@ test('comandi a voce: «per favore» più un comando previsto — e solo quello 
     assert.deepEqual([r ? r.comando : null, r ? r.soloApri : false], [comando, solo], frase);
   }
   for (const frase of ['Per favore la terapia va assunta regolarmente', 'per favore la lettera del collega appena arriva', 'Per favore apri la finestra', 'per favore l\'anamnesi familiare è muta'])
+    assert.equal(K.trova(frase), null, frase);
+  // Il programma di dettatura non scrive sempre il comando giusto (dal log dello studio: il verbo all'infinito): il
+  // verbo vale anche in un'altra forma o un po' storpiato, e così i nomi delle parti — se la frase finisce lì.
+  for (const [frase, comando, parti] of [
+    ['per favore inserire l\'anamnesi', 'parti', ['anamnesi']],
+    ['Per favore inserire l\'anamnesi del paziente', 'parti', ['anamnesi']],
+    ['per favore inserisce la namnesi', 'parti', ['anamnesi']],
+    ['per favore inserisci mi l\'amnesia', 'parti', ['anamnesi']],
+    ['per favore prendere FR CV e con morbidità', 'parti', ['frcv', 'comorbidita']],
+    ['per favor inseriscii l\'eco cardiogramma dell\'ultima lettera', 'parti', ['eco']],
+    ['per favore aggiungere le conclusioni della lettera', 'parti', ['conclusione']],
+    ['per favore incollare i farmaci', 'parti', ['terapia']],
+    ['per favore riprendere la lettera', 'lettera_recente', null],
+    ['per favore prendere l\'ultima lettera per favore', 'lettera_recente', null],
+    ['per favore aprire la lettera', 'lettera_recente', null],
+    ['per favore mostrare l\'e c g', 'parti', ['ecg']],
+  ] as [string, string, string[] | null][]) {
+    const r = K.trova(frase);
+    assert.deepEqual([r ? r.comando : null, r && r.parti ? Array.from(r.parti) : null, r ? r.a : 0], [comando, parti, frase.length], frase);
+  }
+  assert.equal(K.trova('per favore aprire la lettera').soloApri, true);
+  // …ma una frase da lettera con lo stesso verbo resta testo: non finisce lì, o è una terapia che si «prende».
+  for (const frase of ['Per favore inserire la terapia nel piano di cura.', 'Per favore prendere la terapia.', 'Per favore riprendere la terapia', 'Per favore aggiungere alla terapia una statina.', 'Per favore controllare l\'ECG.', 'Per favore ripetere l\'ecocardiogramma fra un anno.', 'Per favore inserire l\'ECG nella documentazione del paziente.', 'A fine aprile la lettera'])
     assert.equal(K.trova(frase), null, frase);
   // Una parte nominata più avanti, in un'altra frase o staccata, non entra nel comando.
   assert.deepEqual(Array.from(K.trova('per favore inserisci l\'anamnesi. Poi vediamo l\'ECG').parti), ['anamnesi']);

@@ -14,14 +14,52 @@
  */
 (function (root) {
   'use strict';
-  var VERSIONE = '1.6';
+  var VERSIONE = '1.7';
   // Una copia nuova a ogni ricerca: l'espressione ricorda dov'è arrivata, e due ricerche una dentro l'altra sulla
   // stessa copia non finivano più (la pagina si bloccava a ogni «per favore» senza comando, 12.10.2026).
   // Dopo la parola d'ordine il programma di dettatura può mettere da sé un punto, una virgola o un a capo.
-  function parola() { return /\bper[ \t]*favore\b[ \t,:;.!…]*(?:\n[ \t]*)?/gi; }
+  function parola() { return /\bper[ \t]*favor[ei]?(?![a-zà-ù])[ \t,:;.!…]*(?:\n[ \t]*)?/gi; }
   // Il verbo: all'imperativo, anche col pronome attaccato («inseriscimi», «aggiungimela»); all'infinito solo dopo
   // «puoi», «potresti», «vorrei» — «per favore aggiungere…» è una frase da lettera, non un comando.
   var VERBO = /^(?:(?:(?:mi|me|ora|adesso|qui|poi|tu)\s+)*(?:(?:inserisc[ia]|incolla|aggiung[ia]|riprendi|prendi|metti|copia|riporta)(?:mi|mela|melo|meli|mele|la|lo|li|le)?|damm(?:i|ela|elo|eli|ele))|(?:mi\s+)?(?:puoi|potresti|pu[oò]|vorrei|voglio)\s+(?:(?:che\s+)?(?:mi|tu)\s+)*(?:inser|incoll|aggiung|riprend|prend|mett|copi|riport)[a-zà-ù]{1,9})(?![a-zà-ù])/i;
+  /* Il programma di dettatura NON scrive sempre il comando giusto (12.10.2026, dal log dello studio: il verbo arrivava
+     all'infinito, «inserire l'anamnesi»). Quindi il verbo si accetta anche in un'altra coniugazione o un po' storpiato
+     — stessa radice, o a una o due lettere di distanza da un verbo previsto — ma allora la frase deve FINIRE con la cosa
+     chiesta: «per favore inserire l'anamnesi» è un comando, «per favore inserire la terapia nel piano di cura» no. */
+  var CANONICI = ['inserisci', 'inseriscimi', 'incolla', 'incollami', 'aggiungi', 'aggiungimi', 'prendi', 'prendimi', 'riprendi', 'riprendimi', 'metti', 'mettimi', 'copia', 'copiami', 'riporta', 'riportami', 'dammi'];
+  var CANONICI_VEDI = ['apri', 'aprimi', 'mostra', 'mostrami', 'visualizza', 'cerca', 'cercami', 'trova', 'trovami'];
+  var RADICI = /^(?:inser|incoll|aggiung|riprend|prend|mett|copi|riport|ridamm|damm)[a-z]{0,9}$/, RADICI_VEDI = /^(?:apr(?:i|ir|e)[a-z]{0,5}|mostr[a-z]{1,7}|visualizz[a-z]{1,6}|cerc[a-z]{1,6}|trov[a-z]{1,6}|ved(?:i|ere|ermi|erla|erlo))$/;
+  var NON_VERBI = { aprile: 1, copie: 1, metto: 0, messa: 1, presa: 1, cerchio: 1, trovato: 1, trovata: 1, mostrato: 1, mostrata: 1, inserito: 1, inserita: 1 };
+  var RIEMPITIVI = /^(?:mi|me|ora|adesso|qui|poi|tu|puoi|potresti|puo|vorrei|voglio|che|devi|dovresti|ti|chiedo|di)$/;
+  // Le terapie si «prendono», «riprendono», «mettono» e «aggiungono» anche nelle lettere: con quei verbi scritti in
+  // un'altra forma («prendere la terapia.») la terapia non è un comando.
+  var VERBI_DA_TERAPIA = /^(?:riprend|prend|mett|aggiung)/;
+  function piana(w) { return String(w || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]/g, ''); }
+  function distanza(a, b) {
+    var r = [], i, j; for (j = 0; j <= b.length; j++) r[j] = j;
+    for (i = 1; i <= a.length; i++) { var su = r[0]; r[0] = i; for (j = 1; j <= b.length; j++) { var t = r[j]; r[j] = Math.min(r[j] + 1, r[j - 1] + 1, su + (a[i - 1] === b[j - 1] ? 0 : 1)); su = t; } }
+    return r[b.length];
+  }
+  function verboVicino(w) {
+    if (w.length < 4 || NON_VERBI[w]) return null;
+    if (RADICI.test(w)) return 'metti'; if (RADICI_VEDI.test(w)) return 'vedi';
+    var soglia = w.length <= 5 ? 1 : 2, k;
+    for (k = 0; k < CANONICI.length; k++) if (Math.abs(CANONICI[k].length - w.length) <= soglia && distanza(w, CANONICI[k]) <= soglia) return 'metti';
+    for (k = 0; k < CANONICI_VEDI.length; k++) if (Math.abs(CANONICI_VEDI[k].length - w.length) <= soglia && distanza(w, CANONICI_VEDI[k]) <= soglia) return 'vedi';
+    return null;
+  }
+  // Il verbo «più o meno»: in testa a `resto`, dopo al massimo tre parole di contorno. → { lungo, tipo, radice } o null.
+  function verboCirca(resto) {
+    var rx = /[^\s,;:.!?]+/g, m, n = 0;
+    while ((m = rx.exec(resto)) && n < 4) {
+      var w = piana(m[0]); n++;
+      if (RIEMPITIVI.test(w)) continue;
+      var tipo = verboVicino(w); if (!tipo) return null;
+      var fine = m.index + m[0].length, pron = /^\s+(?:mi|me|mela|melo|la|lo)(?![a-zà-ù'’])/i.exec(resto.slice(fine));
+      return { lungo: fine + (pron ? pron[0].length : 0), tipo: tipo, radice: w };
+    }
+    return null;
+  }
   // I verbi del GUARDARE («aprimi la lettera», «fammi vedere l'ECG», «mostrami l'ultima lettera»): la lettera si apre
   // accanto al foglio e nel foglio non entra niente.
   var VEDI = /^(?:(?:(?:mi|me|ora|adesso|qui|poi|tu)\s+)*(?:apri(?:mi|mela|melo|la|lo)?|mostra(?:mi|mela|melo|la|lo)?|visualizza(?:mi|la|lo)?|fa(?:mmi|i|cci)\s+vedere|fammel[ao]\s+vedere|cerca(?:mi|mela|la)?|trova(?:mi|mela|la)?)|(?:mi\s+)?(?:puoi|potresti|pu[oò]|vorrei|voglio)\s+(?:(?:che\s+)?(?:mi|tu)\s+)*(?:(?:aprir|mostrar|veder|visualizzar|cercar|trovar)[a-zà-ù]{1,6}|far(?:mi|ci)?\s+vedere))(?![a-zà-ù])/i;
@@ -31,19 +69,19 @@
   // «la conclusione dell'ultima lettera»). I nomi delle parti sono quelli che il server conosce (src/lib/dittafono-comandi.ts).
   var LETTERA = /\b(?:ultima\s+lettera|lettera\s+(?:pi[uù]\s+(?:recente|nuova)|precedente|vecchia|di\s+prima)|(?:pi[uù]\s+recente|precedente)\s+lettera)(?![a-zà-ù])/i;
   var PARTI = [
-    ['anamnesi', /\banamnesi(?![a-zà-ù])/i],
-    ['frcv', /\b(?:f\.?\s?r\.?\s?c\.?\s?v\b\.?|fattori\s+di\s+rischio(?:\s+cardio\s?vascolar[ei])?(?![a-zà-ù]))/i],
-    ['comorbidita', /\bco[\s-]?morbi[dl]it[aàá]/i],
+    ['anamnesi', /\b(?:anamnesi|namnesi|anamnesis|amnesia|ha[ \t]+namnesi)(?![a-zà-ù])/i],
+    ['frcv', /\b(?:f\.?\s?r\.?\s?c\.?\s?v\b\.?|effe\s+erre\s+ci\s+v[ui](?![a-zà-ù])|(?:fattori\s+di\s+rischio|fattore\s+di\s+rischio|rischio)(?:\s+cardio[\s-]?vascolar[ei])?(?![a-zà-ù]))/i],
+    ['comorbidita', /\b(?:co|con|com)?[\s-]?morbi[dl]it[aàá]/i],
     ['allergie', /\ballergie(?![a-zà-ù])/i],
     ['diagnosi', /\bdiagnosi(?![a-zà-ù])/i],
     ['esame', /\besame\s+(?:clinico|obiettivo)(?![a-zà-ù])/i],
-    ['ecg', /\b(?:ecg|elettrocardiogramma)(?![a-zà-ù])/i],
-    ['eco', /\b(?:ecocardiogra(?:mma|fia)|ecocardio|eco)(?![a-zà-ù])/i],
+    ['ecg', /\b(?:ecg|e\.?[ \t]?c\.?[ \t]?g\.?|elettro[\s-]?cardiogramma)(?![a-zà-ù])/i],
+    ['eco', /\b(?:eco[\s-]?cardio(?:gra(?:mma|fia))?|eco)(?![a-zà-ù])/i],
     ['sforzo', /\b(?:(?:ciclo|spiro)?ergometria|test\s+da\s+sforzo|prova\s+da\s+sforzo)(?![a-zà-ù])/i],
     ['holter', /\bholter(?![a-zà-ù])/i],
     ['laboratorio', /\b(?:laboratorio|esami\s+(?:di\s+laboratorio|del\s+sangue|ematici|ematochimici))(?![a-zà-ù])/i],
     ['conclusione', /\b(?:conclusion[ei]|valutazione)(?![a-zà-ù])/i],
-    ['terapia', /\b(?:ultima\s+)?terapia(?![a-zà-ù])/i]
+    ['terapia', /\b(?:(?:ultima\s+)?terapia|farmaci|medicamenti)(?![a-zà-ù])/i]
   ];
   // Fra una parte e la successiva solo parole di legame («FRCV e le comorbidità», «anamnesi, FRCV»).
   var LEGAME = /^[ \t,]*(?:(?:e|ed|con|pi[uù]|poi|anche)[ \t]+)*(?:(?:il|lo|la|i|gli|le)[ \t]+|l['’][ \t]?)?$/i;
@@ -54,7 +92,7 @@
   // «per favore prendi la terapia regolarmente» lo è, «per favore metti in pausa la terapia» no.
   var ATTACCO = /^[ \t,]*(?:(?:solo|soltanto|anche|pure|qui|dentro|tutt[aoei]|mi)[ \t]+)*(?:il[ \t]+testo[ \t]+(?:di[ \t]+|del(?:la)?[ \t]+|dell['’][ \t]?))?(?:(?:il|lo|la|i|gli|le)[ \t]+|l['’][ \t]?)?$/i;
   // Da quale lettera («…dell'ultima lettera», «…della lettera precedente»): fa parte della richiesta.
-  var DA_DOVE = /^[ \t,]*(?:(?:del(?:la)?|dal(?:la)?|di|nel(?:la)?)[ \t]+|(?:dell|dall|nell)['’][ \t]?)?(?:ultima\s+lettera|lettera\s+(?:pi[uù]\s+(?:recente|nuova)|precedente|vecchia|di\s+prima)|ultima\s+(?:volta|visita)|precedente|di\s+prima)(?![a-zà-ù])/i;
+  var DA_DOVE = /^[ \t,]*(?:(?:del(?:la)?|dal(?:la)?|di|nel(?:la)?)[ \t]+|(?:dell|dall|nell)['’][ \t]?)?(?:ultima\s+lettera|lettera(?:\s+(?:pi[uù]\s+(?:recente|nuova)|precedente|vecchia|di\s+prima))?|ultima\s+(?:volta|visita)|precedente|di\s+prima)(?![a-zà-ù])/i;
   // Le parti nominate in una frase, nell'ordine in cui sono dette: la prima entro `entro` caratteri da `da`, le altre attaccate.
   function partiIn(frase, da, entro) {
     var viste = [];
@@ -72,7 +110,7 @@
   }
   var ANNULLA = /^(?:annulla|togli(?:la|lo)?|toglimi(?:la|lo)?|rimuovi(?:la|lo)?)(?![a-zà-ù])(?:\s+(?:l['’]\s*ultim[oa]\s+(?:inserimento|aggiunta)|la\s+lettera|la\s+terapia|tutto|quello\s+che\s+hai\s+(?:messo|inserito|aggiunto)))?/i;
   // Ciò che di solito segue e fa ancora parte della richiesta («…del paziente e aggiungimela qui, grazie»).
-  var CODA = /^(?:[ \t]*,?[ \t]*(?:del(?:la)?\s+paziente|di\s+quest[oa]\s+paziente|e\s+(?:me\s+la\s+|poi\s+)?(?:aggiung|incoll|inserisc|mett|copi|riport)[a-z]{1,7}|qui(?:\s+dentro)?|dentro|sopra|nel\s+foglio|nella\s+lettera|nel\s+testo|grazie)(?![a-zà-ù]))*[ \t]*[.,;!]?/i;
+  var CODA = /^(?:[ \t]*,?[ \t]*(?:del(?:la)?\s+paziente|di\s+quest[oa]\s+paziente|e\s+(?:me\s+la\s+|poi\s+)?(?:aggiung|incoll|inserisc|mett|copi|riport)[a-z]{1,7}|qui(?:\s+(?:dentro|sotto|sopra))?|dentro|sopra|(?:nel|sul)\s+foglio|nella\s+lettera|nel\s+testo|(?:dalla|della|in|nella)\s+cartella|grazie|per\s+(?:favore|piacere|cortesia))(?![a-zà-ù]))*[ \t]*[.,;!]?/i;
   var FRA = 45;      // quanti caratteri al massimo fra il verbo e la cosa chiesta («…il testo di tutta la…»)
 
   // Il primo comando nel testo da `da0` in poi: { da, a, comando, frase } — `da`/`a` sono i confini della frase da togliere.
@@ -85,14 +123,17 @@
       if (an) { fine = an[0].length; comando = 'annulla'; }
       else {
         // Senza verbo («per favore l'anamnesi», «per favore la lettera più recente») vale solo se la frase finisce lì.
-        var v = VERBO.exec(resto), soloApri = false, senzaVerbo = false;
+        // `senzaVerbo` vale anche per il verbo «più o meno»: in tutti e due i casi la frase deve finire con la cosa chiesta.
+        var v = VERBO.exec(resto), soloApri = false, senzaVerbo = false, circa = null;
         if (!v) { v = VEDI.exec(resto); soloApri = !!v; }
+        if (!v) { circa = verboCirca(resto); if (circa) { v = [resto.slice(0, circa.lungo)]; soloApri = circa.tipo === 'vedi'; senzaVerbo = true; } }
         if (!v) { v = ['']; senzaVerbo = true; }
         if (v) {
           var poi = resto.slice(v[0].length), frase = poi.split(/[.!?](?=\s+[A-ZÀ-Ý]|\s*$)/)[0];
           var let_ = LETTERA.exec(frase); if (let_ && (let_.index > FRA || (senzaVerbo && !ATTACCO.test(frase.slice(0, let_.index))))) let_ = null;
           // le parti: subito dopo il verbo («inserisci l'anamnesi dell'ultima lettera») o dopo la lettera («dall'ultima lettera, l'anamnesi»)
           var p = SOLO_LETTERA.test(v[0]) ? null : partiIn(frase, 0, FRA);
+          if (p && circa && VERBI_DA_TERAPIA.test(circa.radice) && p.parti.indexOf('terapia') >= 0) p = null;
           if (let_ && (!p || let_.index < p.inizio) && !SOLO_LETTERA.test(v[0])) p = partiIn(frase, let_.index + let_[0].length, 25);
           if (p) {
             var dove = DA_DOVE.exec(frase.slice(p.fine));
@@ -130,7 +171,7 @@
   function forma(letto) {
     var t = String(letto || ''), parti = [];
     for (var k = 0; k < PARTI.length; k++) if (new RegExp(PARTI[k][1].source, 'i').test(t)) parti.push(PARTI[k][0]);
-    return { verbo: VERBO.test(t) || VEDI.test(t), lettera: /\blettera(?![a-zà-ù])/i.test(t), parti: parti, caratteri: t.length, parole: t.split(/\s+/).filter(Boolean).length };
+    return { verbo: VERBO.test(t) || VEDI.test(t) || !!verboCirca(t), lettera: /\blettera(?![a-zà-ù])/i.test(t), parti: parti, caratteri: t.length, parole: t.split(/\s+/).filter(Boolean).length };
   }
   // Al posto di testo[da..a) mette `pezzo`, come paragrafo a sé; con `pezzo` vuoto toglie e ricuce.
   // → { testo, inizio, fine }: dove sta ora il pezzo.
