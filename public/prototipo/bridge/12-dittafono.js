@@ -187,6 +187,12 @@ function rfDitComandoProgramma() {
   if (!rfDitDettatura() || typeof RFComandi === 'undefined' || !/per\s*favore/i.test(d.testo || '')) return;
   d.cmdAttesa = setTimeout(rfDitComandoCerca, 1500);
 }
+// Un programma di dettatura non sempre avvisa la pagina quando scrive (a volte cambia il testo senza l'evento che la
+// pagina ascolta): ogni secondo si guarda se il foglio è cambiato, così né il testo né un comando vanno persi.
+setInterval(() => {
+  if (typeof state === 'undefined' || state.route !== 'dittafono' || !rfDitDettatura()) return;
+  const el = document.getElementById('rf-dit-testo'); if (el && el.value !== (RF.dit.testo || '')) { rfDitTesto(el); rfFoglioAlto(el); }
+}, 1000);
 // Mette nel foglio il testo nuovo senza ricreare la casella, col cursore dove serve.
 function rfDitTestoMetti(testo, cursore) {
   const d = RF.dit, el = document.getElementById('rf-dit-testo'); if (!el) return;
@@ -199,10 +205,18 @@ async function rfDitComandoCerca() {
   const d = RF.dit, el = document.getElementById('rf-dit-testo');
   if (!el || state.route !== 'dittafono' || !rfDitDettatura() || d.cmdInCorso || d.invio) return;
   // il tasto è giù, o l'ultima frase sta ancora arrivando: si riprova fra poco
-  if (d.tastoGiu || d.stato === 'registra' && d.daTasto || Date.now() - (d.testoIl || 0) < 1400) { clearTimeout(d.cmdAttesa); d.cmdAttesa = setTimeout(rfDitComandoCerca, 700); return; }
+  // …ma se il testo è fermo da quattro secondi nessuno sta più scrivendo, anche se il rilascio del tasto non è arrivato
+  const fermoDa = Date.now() - (d.testoIl || 0);
+  if (fermoDa < 1400 || (fermoDa < 4000 && (d.tastoGiu || d.stato === 'registra' && d.daTasto))) { clearTimeout(d.cmdAttesa); d.cmdAttesa = setTimeout(rfDitComandoCerca, 700); return; }
+  const salta = (x) => (d.cmdFallito && d.cmdFallito === x.frase) || (d.cmdIgnora || []).includes(x.frase.trim());      // già fallito (aspetta «Riprova») o dichiarato «non era un comando»
   let c = RFComandi.trova(el.value, 0);
-  while (c && d.cmdFallito && d.cmdFallito === c.frase) c = RFComandi.trova(el.value, c.a);      // quello già fallito aspetta «Riprova»
-  if (!c) { if (!d.cmdFallito && RFComandi.nonCapito(el.value) && !d.cmdUltimo) rfDitComandoStato('Dopo «per favore» non ho riconosciuto un comando: il testo resta com’è.'); return; }
+  while (c && salta(c)) c = RFComandi.trova(el.value, c.a);
+  if (!c) {
+    // Non capito: si mostra che cosa c'era scritto dopo «per favore», così si vede come l'ha scritto il programma di dettatura.
+    const letto = RFComandi.letto(el.value);
+    if (letto !== null && letto !== d.cmdNonCapito) { d.cmdNonCapito = letto; rfDitComandoStato(`Dopo «per favore» ho letto <b>«${rfEsc(letto)}»</b>: non è un comando che conosco, il testo resta com’è.`); }
+    return;
+  }
   if (c.comando === 'annulla') { const t = RFComandi.sostituisci(el.value, c.da, c.a, ''); const sposta = c.a <= (d.cmdUltimo ? d.cmdUltimo.inizio : -1) ? el.value.length - t.testo.length : 0; rfDitTestoMetti(t.testo, t.inizio); if (d.cmdUltimo && sposta) { d.cmdUltimo.inizio -= sposta; d.cmdUltimo.fine -= sposta; } rfDitComandoAnnulla(); }
   else await rfDitComandoEsegui(c.comando, c.da, c.a, c.frase, c.parti);
   if (RFComandi.trova(el.value, 0)) rfDitComandoProgramma();      // ce n'è un altro
@@ -222,10 +236,10 @@ async function rfDitComandoEsegui(comando, da, a, frase, parti) {
     // intanto il testo può essere cambiato: la frase si ritrova, se no non si tocca niente
     if (frase && el.value.slice(da, a) !== frase) { const i = el.value.indexOf(frase); if (i < 0) { fallito('Il testo è cambiato mentre cercavo: ripeti il comando.'); return; } da = i; a = i + frase.length; }
     if (!frase) { da = Math.min(da, el.value.length); a = da; }
-    const s = RFComandi.sostituisci(el.value, da, a, j.testo);
-    d.cmdUltimo = { inizio: s.inizio, fine: s.fine, pezzo: s.testo.slice(s.inizio, s.fine) }; d.cmdFallito = '';
+    const originale = el.value, s = RFComandi.sostituisci(originale, da, a, j.testo);
+    d.cmdUltimo = { inizio: s.inizio, fine: s.fine, pezzo: s.testo.slice(s.inizio, s.fine), frase: frase || '', originale, risultato: s.testo, dopoFrase: a }; d.cmdFallito = '';
     rfDitTestoMetti(s.testo, s.fine);
-    rfDitComandoStato(`Inserito dalla lettera del ${rfEsc(j.data || '')}: <b>${rfEsc(j.cosa || cosa)}</b> (${rfEsc(j.fonte || '')}) — ${s.fine - s.inizio} caratteri che non hai dettato tu, da rileggere.${(j.mancanti || []).length ? ` <span style="color:#b3261e">In quella lettera non trovo: ${rfEsc(j.mancanti.join(', '))}.</span>` : ''} <a href="javascript:void 0" onclick="rfDitComandoAnnulla()">Annulla</a>`);
+    rfDitComandoStato(`Inserito dalla lettera del ${rfEsc(j.data || '')}: <b>${rfEsc(j.cosa || cosa)}</b> (${rfEsc(j.fonte || '')}) — ${s.fine - s.inizio} caratteri che non hai dettato tu, da rileggere.${(j.mancanti || []).length ? ` <span style="color:#b3261e">In quella lettera non trovo: ${rfEsc(j.mancanti.join(', '))}.</span>` : ''} <a href="javascript:void 0" onclick="rfDitComandoAnnulla()">Annulla</a>${frase ? ' · <a href="javascript:void 0" onclick="rfDitComandoAnnulla(true)">Non era un comando: rimetti la frase</a>' : ''}`);
   } catch (_) { fallito('Il server non risponde: riprova.'); }
   finally { d.cmdInCorso = false; }
 }
@@ -236,13 +250,24 @@ function rfDitComandoTasto(comando, parte) {
   const qui = typeof d.cursore === 'number' && d.cursore <= el.value.length ? d.cursore : el.value.length;
   void rfDitComandoEsegui(comando, qui, qui, '', parte ? [parte] : []);
 }
-function rfDitComandoAnnulla() {
+// `rimetti`: la frase tolta era testo della lettera («per favore prendi la terapia regolarmente»): torna dov'era, e non
+// viene più presa per un comando.
+function rfDitComandoAnnulla(rimetti) {
   const d = RF.dit, el = document.getElementById('rf-dit-testo'), u = d.cmdUltimo; if (!el) return;
   if (!u) { rfDitComandoStato('Non c’è niente da annullare.'); return; }
   let da = u.inizio; if (el.value.slice(u.inizio, u.fine) !== u.pezzo) da = el.value.indexOf(u.pezzo);
   if (da < 0) { rfDitComandoStato('Il testo inserito è stato modificato: non lo tolgo da solo.'); return; }
   const t = RFComandi.sostituisci(el.value, da, da + u.pezzo.length, '');
-  d.cmdUltimo = null; rfDitTestoMetti(t.testo, t.inizio); rfDitComandoStato('Tolto ciò che era stato inserito.');
+  d.cmdUltimo = null;
+  if (rimetti && u.frase) {
+    const frase = u.frase.trim(), prima = t.testo.slice(0, t.inizio), dopo = t.testo.slice(t.inizio), spazio = prima && !/\s$/.test(prima) ? ' ' : '';
+    d.cmdIgnora = (d.cmdIgnora || []).concat(frase).slice(-20);
+    // se da allora il foglio non è cambiato torna esattamente com'era; se no la frase torna al posto del pezzo
+    if (el.value === u.risultato) rfDitTestoMetti(u.originale, u.dopoFrase);
+    else rfDitTestoMetti(prima + spazio + frase + (dopo && !/^\s/.test(dopo) ? ' ' : '') + dopo, prima.length + spazio.length + frase.length);
+    rfDitComandoStato('Frase rimessa nel testo: non la prendo più per un comando.'); return;
+  }
+  rfDitTestoMetti(t.testo, t.inizio); rfDitComandoStato('Tolto ciò che era stato inserito.');
 }
 /* Il FOGLIO (12.10.2026, richiesta dello studio): chi detta non scrive in una casella ma sulla lettera — carta
    intestata, destinatario, data, titolo, paziente, saluto, e in fondo saluti e firma sono già scritti (dagli stessi
@@ -523,7 +548,7 @@ function rfDitAggiorna() {
 }
 function rfDitScarta() {
   if (!confirm('Scartare questa registrazione? Non si può recuperare.')) return;
-  const d = RF.dit; d.pcm = new Int16Array(0); d.nuovi = []; d.stato = 'pronto'; d.errore = ''; d.testo = ''; d.tempi = []; d.foglio = null; d.foglioToccato = {}; d.foglioPer = null; d.cmdUltimo = null; d.cmdStato = ''; d.cmdFallito = '';
+  const d = RF.dit; d.pcm = new Int16Array(0); d.nuovi = []; d.stato = 'pronto'; d.errore = ''; d.testo = ''; d.tempi = []; d.foglio = null; d.foglioToccato = {}; d.foglioPer = null; d.cmdUltimo = null; d.cmdStato = ''; d.cmdFallito = ''; d.cmdNonCapito = null; d.cmdIgnora = [];
   rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota(); render();
 }
 async function rfDitInvia() {
@@ -545,7 +570,7 @@ async function rfDitInvia() {
     const r = await fetch('/api/referti/upload', { method: 'POST', body: fd, credentials: 'include' });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { d.errore = j.errore === 'medico_mancante' ? 'Scegli il medico che ha dettato.' : j.errore === 'troppo_grande' ? 'Registrazione troppo lunga per un invio solo.' : 'Invio non riuscito: la registrazione resta qui, riprova.'; d.invio = false; render(); return; }
-    d.pcm = new Int16Array(0); d.stato = 'pronto'; d.invio = false; d.paziente = ''; d.testo = ''; d.tempi = []; d.cursore = null; d.foglio = null; d.foglioToccato = {}; d.foglioPer = null; d.cmdUltimo = null; d.cmdStato = ''; d.cmdFallito = ''; rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota();
+    d.pcm = new Int16Array(0); d.stato = 'pronto'; d.invio = false; d.paziente = ''; d.testo = ''; d.tempi = []; d.cursore = null; d.foglio = null; d.foglioToccato = {}; d.foglioPer = null; d.cmdUltimo = null; d.cmdStato = ''; d.cmdFallito = ''; d.cmdNonCapito = null; d.cmdIgnora = []; rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota();
     toast(dettato ? 'Lettera e audio inviati: arriva tra i referti in pochi minuti, quando il Mac ha finito il controllo con l’audio' : 'Dettato in coda: la bozza arriva tra i referti in pochi minuti');
     render(); setTimeout(rfCaricaDati, 3000);
   } catch (_) { d.errore = 'Piattaforma non raggiungibile: la registrazione resta su questo dispositivo, riprova.'; d.invio = false; render(); }

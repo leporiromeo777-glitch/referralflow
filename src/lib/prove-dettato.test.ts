@@ -95,7 +95,14 @@ test('comandi a voce: «per favore» più un comando previsto — e solo quello 
     'La paziente chiede per favore un certificato.',
     'Per favore controllare la terapia fra un mese.',
     'Per favore prendi appuntamento con la segreteria per la prossima visita.',
+    // frasi da lettera che nominano una parte: il verbo all'infinito, o qualcosa fra il verbo e la parte
+    'Per favore aggiungere alla terapia una statina.',
+    'Per favore inserire la terapia nel piano di cura.',
+    'Per favore metti in pausa la terapia per tre giorni.',
+    'Per favore riprendi la terapia anticoagulante dopo l\'intervento.',
   ]) assert.equal(K.trova(frase), null, frase);
+  assert.equal(K.letto('Bene. Per favore inserisce la namnesi'), 'inserisce la namnesi');
+  assert.equal(K.letto('Per favore inserisci l\'anamnesi'), null);
   assert.equal(K.nonCapito('Per favore fammi un caffè. Per favore inserisci l\'ultima lettera.'), 1);
   // Un «per favore» senza comando, da solo: la ricerca deve FINIRE (bloccava la pagina, 12.10.2026).
   assert.equal(K.nonCapito('Per favore qualcosa'), 1);
@@ -112,9 +119,16 @@ test('comandi a voce: «per favore» più un comando previsto — e solo quello 
     ['per favore incolla l\'ecocardiogramma e l\'ECG', ['eco', 'ecg']],
     ['per favore prendi dall\'ultima lettera l\'anamnesi', ['anamnesi']],
     ['per favore inserisci la terapia', ['terapia']],
+    // come può scriverlo un programma di dettatura: punto o a capo dopo la parola d'ordine, pronome attaccato, «puoi…»
+    ['Per favore. Inserisci l\'anamnesi.', ['anamnesi']],
+    ['Per favore\nInserisci l\'anamnesi', ['anamnesi']],
+    ['per favore aggiungimela la conclusione', ['conclusione']],
+    ['Per favore, mi puoi inserire le co-morbidità?', ['comorbidita']],
+    ['per favore puoi mettermi qui anche l\'ECG', ['ecg']],
+    ['per favore dammi la terapia', ['terapia']],
   ] as [string, string[]][]) {
     const r = K.trova(frase);
-    assert.deepEqual(r && [r.comando, Array.from(r.parti), r.a], ['parti', parti, frase.length], frase);
+    assert.deepEqual(r && [r.comando, Array.from(r.parti), r.a >= frase.replace(/[?]$/, '').length], ['parti', parti, true], frase);
   }
   // Una parte nominata più avanti, in un'altra frase o staccata, non entra nel comando.
   assert.deepEqual(Array.from(K.trova('per favore inserisci l\'anamnesi. Poi vediamo l\'ECG').parti), ['anamnesi']);

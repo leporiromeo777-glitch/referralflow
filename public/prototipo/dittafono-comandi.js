@@ -14,18 +14,21 @@
  */
 (function (root) {
   'use strict';
-  var VERSIONE = '1.2';
+  var VERSIONE = '1.3';
   // Una copia nuova a ogni ricerca: l'espressione ricorda dov'è arrivata, e due ricerche una dentro l'altra sulla
   // stessa copia non finivano più (la pagina si bloccava a ogni «per favore» senza comando, 12.10.2026).
-  function parola() { return /\bper\s*favore\b[ \t,:;]*/gi; }
-  var VERBO = /^(?:(?:mi|ora|adesso|puoi|potresti|qui)\s+)*(?:inserisc[ia](?:mi)?|incolla(?:mi)?|aggiung[ia](?:mi)?|prendi(?:mi)?|metti(?:mi)?|riprendi(?:mi)?|copia(?:mi)?|riporta(?:mi)?|dammi|inserire|incollare|aggiungere|prendere|mettere|riprendere|copiare|riportare)(?![a-zà-ù])/i;
+  // Dopo la parola d'ordine il programma di dettatura può mettere da sé un punto, una virgola o un a capo.
+  function parola() { return /\bper[ \t]*favore\b[ \t,:;.!…]*(?:\n[ \t]*)?/gi; }
+  // Il verbo: all'imperativo, anche col pronome attaccato («inseriscimi», «aggiungimela»); all'infinito solo dopo
+  // «puoi», «potresti», «vorrei» — «per favore aggiungere…» è una frase da lettera, non un comando.
+  var VERBO = /^(?:(?:(?:mi|me|ora|adesso|qui|poi|tu)\s+)*(?:(?:inserisc[ia]|incolla|aggiung[ia]|prendi|metti|copia|riporta)(?:mi|mela|melo|meli|mele|la|lo|li|le)?|damm(?:i|ela|elo|eli|ele))|(?:mi\s+)?(?:puoi|potresti|pu[oò]|vorrei|voglio)\s+(?:(?:che\s+)?(?:mi|tu)\s+)*(?:inser|incoll|aggiung|prend|mett|copi|riport)[a-zà-ù]{1,9})(?![a-zà-ù])/i;
   // Che cosa si può chiedere: la lettera intera, oppure solo alcune PARTI («l'anamnesi», «FRCV e comorbidità»,
   // «la conclusione dell'ultima lettera»). I nomi delle parti sono quelli che il server conosce (src/lib/dittafono-comandi.ts).
   var LETTERA = /\b(?:ultima\s+lettera|lettera\s+(?:pi[uù]\s+(?:recente|nuova)|precedente|vecchia|di\s+prima)|(?:pi[uù]\s+recente|precedente)\s+lettera)(?![a-zà-ù])/i;
   var PARTI = [
     ['anamnesi', /\banamnesi(?![a-zà-ù])/i],
     ['frcv', /\b(?:f\.?\s?r\.?\s?c\.?\s?v\b\.?|fattori\s+di\s+rischio(?:\s+cardio\s?vascolar[ei])?(?![a-zà-ù]))/i],
-    ['comorbidita', /\bco\s?morbi[dl]it[aàá]/i],
+    ['comorbidita', /\bco[\s-]?morbi[dl]it[aàá]/i],
     ['allergie', /\ballergie(?![a-zà-ù])/i],
     ['diagnosi', /\bdiagnosi(?![a-zà-ù])/i],
     ['esame', /\besame\s+(?:clinico|obiettivo)(?![a-zà-ù])/i],
@@ -39,17 +42,20 @@
   ];
   // Fra una parte e la successiva solo parole di legame («FRCV e le comorbidità», «anamnesi, FRCV»).
   var LEGAME = /^[ \t,]*(?:(?:e|ed|con|pi[uù]|poi|anche)[ \t]+)*(?:(?:il|lo|la|i|gli|le)[ \t]+|l['’][ \t]?)?$/i;
+  // Fra il verbo e la prima parte solo parole che non cambiano il senso («solo», «qui», «il testo di», l'articolo):
+  // «per favore prendi la terapia regolarmente» lo è, «per favore metti in pausa la terapia» no.
+  var ATTACCO = /^[ \t,]*(?:(?:solo|soltanto|anche|pure|qui|dentro|tutt[aoei]|mi)[ \t]+)*(?:il[ \t]+testo[ \t]+(?:di[ \t]+|del(?:la)?[ \t]+|dell['’][ \t]?))?(?:(?:il|lo|la|i|gli|le)[ \t]+|l['’][ \t]?)?$/i;
   // Da quale lettera («…dell'ultima lettera», «…della lettera precedente»): fa parte della richiesta.
   var DA_DOVE = /^[ \t,]*(?:(?:del(?:la)?|dal(?:la)?|di|nel(?:la)?)[ \t]+|(?:dell|dall|nell)['’][ \t]?)?(?:ultima\s+lettera|lettera\s+(?:pi[uù]\s+(?:recente|nuova)|precedente|vecchia|di\s+prima)|ultima\s+(?:volta|visita)|precedente|di\s+prima)(?![a-zà-ù])/i;
   // Le parti nominate in una frase, nell'ordine in cui sono dette: la prima entro `entro` caratteri da `da`, le altre attaccate.
-  function partiIn(frase, da, entro, attaccata) {
+  function partiIn(frase, da, entro) {
     var viste = [];
     for (var k = 0; k < PARTI.length; k++) { var rx = new RegExp(PARTI[k][1].source, 'gi'), m; rx.lastIndex = da; while ((m = rx.exec(frase))) viste.push({ parte: PARTI[k][0], i: m.index, f: m.index + m[0].length }); }
     viste.sort(function (a, b) { return a.i - b.i || b.f - a.f; });
     var out = [], fine = -1, inizio = -1;
     for (var j = 0; j < viste.length; j++) {
       var v = viste[j];
-      if (!out.length) { if (v.i - da <= entro && (!attaccata || LEGAME.test(frase.slice(da, v.i).replace(/\bsolo\b/i, '')))) { out.push(v.parte); inizio = v.i; fine = v.f; } else break; continue; }
+      if (!out.length) { if (v.i - da <= entro && ATTACCO.test(frase.slice(da, v.i))) { out.push(v.parte); inizio = v.i; fine = v.f; } else break; continue; }
       if (v.i < fine) continue;      // dentro la parte già presa («ecg holter»)
       if (!LEGAME.test(frase.slice(fine, v.i))) break;
       if (out.indexOf(v.parte) < 0) out.push(v.parte); fine = v.f;
@@ -76,7 +82,7 @@
           var let_ = LETTERA.exec(frase); if (let_ && let_.index > FRA) let_ = null;
           // le parti: subito dopo il verbo («inserisci l'anamnesi dell'ultima lettera») o dopo la lettera («dall'ultima lettera, l'anamnesi»)
           var p = partiIn(frase, 0, FRA);
-          if (let_ && (!p || let_.index < p.inizio)) p = partiIn(frase, let_.index + let_[0].length, 25, true);
+          if (let_ && (!p || let_.index < p.inizio)) p = partiIn(frase, let_.index + let_[0].length, 25);
           if (p) {
             var dove = DA_DOVE.exec(frase.slice(p.fine));
             fine = v[0].length + Math.max(p.fine + (dove ? dove[0].length : 0), let_ ? let_.index + let_[0].length : 0); comando = 'parti'; parti = p.parti;
@@ -96,6 +102,13 @@
     while ((m = rx.exec(t))) { var c = trova(t, m.index); if (!c || c.da !== m.index) n++; }
     return n;
   }
+  // Che cosa c'era scritto dopo l'ultimo «per favore» non capito (una riga, al massimo 60 caratteri): la pagina lo mostra
+  // a chi detta, così si vede come il programma di dettatura ha scritto il comando.
+  function letto(testo) {
+    var t = String(testo || ''), m, rx = parola(), ultimo = null;
+    while ((m = rx.exec(t))) { var c = trova(t, m.index); if (!c || c.da !== m.index) ultimo = t.slice(m.index + m[0].length).split('\n')[0].slice(0, 60).trim(); }
+    return ultimo;
+  }
   // Al posto di testo[da..a) mette `pezzo`, come paragrafo a sé; con `pezzo` vuoto toglie e ricuce.
   // → { testo, inizio, fine }: dove sta ora il pezzo.
   function sostituisci(testo, da, a, pezzo) {
@@ -111,5 +124,5 @@
     return { testo: testa + p + (dopo ? '\n\n' + dopo : ''), inizio: testa.length, fine: testa.length + p.length };
   }
 
-  root.RFComandi = { VERSIONE: VERSIONE, trova: trova, nonCapito: nonCapito, sostituisci: sostituisci };
+  root.RFComandi = { VERSIONE: VERSIONE, trova: trova, nonCapito: nonCapito, letto: letto, sostituisci: sostituisci };
 })(typeof window !== 'undefined' ? window : globalThis);
