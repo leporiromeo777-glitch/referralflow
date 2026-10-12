@@ -191,6 +191,18 @@ test('comandi a voce: le parti della lettera — anamnesi, FRCV, comorbidità, e
   assert.equal(b.comorbidita, 'Comorbilità: asma.');
   assert.equal(b.eco, 'All\'ecocardiogramma odierno: ventricolo sinistro normale.');
   assert.equal(b.conclusione, 'In conclusione nessuna cardiopatia.');
+  // Un Word letto dal file: una riga vuota dopo OGNI paragrafo (misurato sulle lettere vere: la terapia usciva di una
+  // riga sola). I paragrafi vuoti lasciati apposta — quattro a capo — restano righe vuote vere.
+  const word = ['Studio Inventato', 'Caro collega,', 'ho rivisto il paziente inventato per il controllo annuale.', 'FRCV:', 'ipertensione arteriosa', 'dislipidemia', 'Comorbidità: gonartrosi', 'Coronarografia 2019: nella norma', 'ECG: ritmo sinusale', 'Terapia:', 'FarmacoA 10 mg 1-0-0', 'FarmacoB 5 mg 0-0-1', 'FarmacoC 20 mg 0-0-1'].join('\n\n')
+    + '\n\n' + ['In conclusione quadro stabile.', 'Cordiali saluti', 'Dr. med. Inventato'].join('\n\n');
+  const w = partiDellaLettera(word);
+  assert.equal(w.anamnesi, 'ho rivisto il paziente inventato per il controllo annuale.');
+  assert.equal(w.frcv, 'FRCV:\nipertensione arteriosa\ndislipidemia');
+  assert.equal(w.comorbidita, 'Comorbidità: gonartrosi', 'un\'etichetta che non è una parte chiude quella prima');
+  assert.equal(w.ecg, 'ECG: ritmo sinusale');
+  assert.equal(w.terapia, 'Terapia:\nFarmacoA 10 mg 1-0-0\nFarmacoB 5 mg 0-0-1\nFarmacoC 20 mg 0-0-1', 'tutta la terapia, non la prima riga');
+  assert.equal(w.conclusione, 'In conclusione quadro stabile.');
+  assert.ok(!corpoDellaLettera(word).includes('\n\n\n') && corpoDellaLettera(word).includes('FarmacoA 10 mg 1-0-0\nFarmacoB'), 'la lettera intera entra coi paragrafi come righe');
   // Un biglietto senza parti: resta solo il primo paragrafo come anamnesi.
   assert.deepEqual(Object.keys(partiDellaLettera('Caro collega,\n\nti ringrazio per l\'invio del paziente inventato, che vedrò volentieri il mese prossimo in studio.\n\nA presto')), ['anamnesi']);
 });

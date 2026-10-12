@@ -14,7 +14,7 @@
  */
 (function (root) {
   'use strict';
-  var VERSIONE = '1.4';
+  var VERSIONE = '1.5';
   // Una copia nuova a ogni ricerca: l'espressione ricorda dov'è arrivata, e due ricerche una dentro l'altra sulla
   // stessa copia non finivano più (la pagina si bloccava a ogni «per favore» senza comando, 12.10.2026).
   // Dopo la parola d'ordine il programma di dettatura può mettere da sé un punto, una virgola o un a capo.
@@ -118,6 +118,13 @@
     while ((m = rx.exec(t))) { var c = trova(t, m.index); if (!c || c.da !== m.index) ultimo = t.slice(m.index + m[0].length).split('\n')[0].slice(0, 60).trim(); }
     return ultimo;
   }
+  // La FORMA di ciò che non è stato capito, senza le parole: c'era un verbo previsto, si nominava la lettera, quali
+  // parti. La pagina la manda al server, che la scrive nel log: da lì si vede che cosa non viene riconosciuto.
+  function forma(letto) {
+    var t = String(letto || ''), parti = [];
+    for (var k = 0; k < PARTI.length; k++) if (new RegExp(PARTI[k][1].source, 'i').test(t)) parti.push(PARTI[k][0]);
+    return { verbo: VERBO.test(t), lettera: /\blettera(?![a-zà-ù])/i.test(t), parti: parti, caratteri: t.length, parole: t.split(/\s+/).filter(Boolean).length };
+  }
   // Al posto di testo[da..a) mette `pezzo`, come paragrafo a sé; con `pezzo` vuoto toglie e ricuce.
   // → { testo, inizio, fine }: dove sta ora il pezzo.
   function sostituisci(testo, da, a, pezzo) {
@@ -133,5 +140,5 @@
     return { testo: testa + p + (dopo ? '\n\n' + dopo : ''), inizio: testa.length, fine: testa.length + p.length };
   }
 
-  root.RFComandi = { VERSIONE: VERSIONE, trova: trova, nonCapito: nonCapito, letto: letto, sostituisci: sostituisci };
+  root.RFComandi = { VERSIONE: VERSIONE, trova: trova, nonCapito: nonCapito, letto: letto, forma: forma, sostituisci: sostituisci };
 })(typeof window !== 'undefined' ? window : globalThis);

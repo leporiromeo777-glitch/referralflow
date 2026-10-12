@@ -227,6 +227,10 @@ async function rfDitComandoCerca() {
   if (!c) {
     // Non capito: si mostra che cosa c'era scritto dopo «per favore», così si vede come l'ha scritto il programma di dettatura.
     const letto = RFComandi.letto(el.value);
+    if (letto !== null && letto !== d.cmdNonCapito) {
+      // al server va solo la forma (verbo sì/no, parti nominate), mai le parole: serve a capire che cosa non viene riconosciuto
+      try { void fetch('/api/prototipo/dittafono/comando', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comando: 'non_capito', forma: RFComandi.forma(letto) }) }).catch(() => {}); } catch (_) { /* niente */ }
+    }
     if (letto !== null && letto !== d.cmdNonCapito) { d.cmdNonCapito = letto; rfDitComandoStato(`Dopo «per favore» ho letto <b>«${rfEsc(letto)}»</b>: non è un comando che conosco, il testo resta com’è.`); }
     return;
   }

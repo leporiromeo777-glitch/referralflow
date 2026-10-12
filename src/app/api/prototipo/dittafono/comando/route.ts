@@ -19,6 +19,14 @@ export async function POST(req: NextRequest) {
   const no = vietato(session.role, 'dittafono');
   if (no) return no;
   const b = await req.json().catch(() => null);
+  // Un «per favore» che la pagina non ha capito: arriva solo la FORMA (c'era un verbo previsto? si nominava la lettera?
+  // quali parti?), mai le parole. Va nel log, per capire da qui che cosa non viene riconosciuto.
+  if (b?.comando === 'non_capito') {
+    const f = b?.forma ?? {};
+    const parti = (Array.isArray(f.parti) ? (f.parti as unknown[]).map(String) : []).filter((k) => (PARTI_LETTERA as readonly string[]).includes(k)).slice(0, 8);
+    console.log(`[dittafono-comando] non capito: verbo=${f.verbo === true ? 'sì' : 'no'} lettera=${f.lettera === true ? 'sì' : 'no'} parti=${parti.join('+') || '-'} caratteri=${Math.min(999, Number(f.caratteri) || 0)} parole=${Math.min(99, Number(f.parole) || 0)}`);
+    return NextResponse.json({ ok: true });
+  }
   const comando = String(b?.comando ?? '') as Comando;
   const paziente = String(b?.paziente ?? '');
   if (!COMANDI.includes(comando)) return NextResponse.json({ errore: 'Comando non previsto.' }, { status: 400 });
@@ -26,6 +34,7 @@ export async function POST(req: NextRequest) {
   const parti = [...new Set((Array.isArray(b?.parti) ? (b.parti as unknown[]) : []).map(String))].filter((k): k is ParteLettera => (PARTI_LETTERA as readonly string[]).includes(k)).slice(0, 8);
   if (comando === 'parti' && !parti.length) return NextResponse.json({ errore: 'Non ho capito quale parte della lettera.' }, { status: 400 });
   const r = await eseguiComando(session.studioId, session.id, paziente, comando, parti);
+  console.log(`[dittafono-comando] ${comando}${parti.length ? ` parti=${parti.join('+')}` : ''} → ${'errore' in r ? `niente (${r.errore.replace(/:.*/, '').slice(0, 60)})` : `ok fonte=${r.apri.tipo} pdf=${r.apri.pdf ? 'sì' : 'no'} caratteri=${r.testo.length} mancanti=${r.mancanti.length}`}`);
   return 'errore' in r ? NextResponse.json({ errore: r.errore }, { status: 404, headers: { 'Cache-Control': 'no-store' } })
     : NextResponse.json({ testo: r.testo, fonte: r.fonte, data: r.data, cosa: r.cosa, mancanti: r.mancanti, apri: r.apri }, { headers: { 'Cache-Control': 'no-store' } });
 }

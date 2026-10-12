@@ -21,10 +21,21 @@ const RX_SALUTO_RIGA = /^[ \t]*(?:caro|cara|cari|gentile|gentili|egregio|egregia
 const RX_CHIUSURA = /(rimanendo a (?:tua |sua |vostra )?disposizione|rimango a (?:tua |sua |vostra )?disposizione|resto a (?:tua |sua |vostra )?disposizione|cordiali saluti|distinti saluti|migliori saluti|cari saluti|un cordiale saluto|collegiali saluti|un caro saluto|con stima\b|freundliche[nm]? gr[uü](?:ss|ß)e?n?)/i;
 const pulisci = (t: string) => t.replace(/\r\n?/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 
+// I Word letti dal file hanno una riga vuota dopo OGNI paragrafo: lì la riga vuota non separa niente, e chi si ferma
+// «alla fine del paragrafo» si ferma dopo la prima riga (misurato sulle lettere vere, 12.10.2026: la terapia usciva di
+// una riga sola). Se TUTTI gli a capo sono doppi (in un testo scritto a paragrafi veri ce n'è sempre qualcuno semplice),
+// un a capo doppio torna semplice — e i paragrafi vuoti lasciati apposta, che erano quattro a capo, tornano una riga vuota.
+export function righeVere(testo: string): string {
+  const t = String(testo ?? '').replace(/\r\n?/g, '\n').replace(/[ \t]+\n/g, '\n');
+  const stacchi = t.match(/\n+/g) ?? [];
+  if (stacchi.length < 6 || stacchi.some((x) => x.length < 2)) return t;
+  return t.replace(/\n\n/g, '\n');
+}
+
 // Il corpo: da dopo il saluto (cercato in testa) a prima dei saluti finali (cercati nella seconda metà: «cordiali
 // saluti» citato in mezzo a una lettera non è la fine). Se così resta troppo poco, vale la lettera intera.
 export function corpoDellaLettera(testo: string): string {
-  const t = pulisci(String(testo ?? ''));
+  const t = pulisci(righeVere(testo));
   const s = RX_SALUTO_RIGA.exec(t.slice(0, 2500));
   let corpo = s ? t.slice(s.index + s[0].length) : t;
   const meta = Math.floor(corpo.length / 2);
@@ -42,8 +53,12 @@ export function corpoDellaLettera(testo: string): string {
 // La terapia: il blocco sotto «Terapia:» a riga propria (come nelle lettere dello studio), o ciò che segue
 // «Terapia…:» sulla stessa riga, fino alla riga vuota o ai saluti. Vuoto se non c'è.
 export function terapiaDellaLettera(testo: string): string {
-  const t = pulisci(String(testo ?? ''));
-  const righe = estraiTerapia(t);
+  const t = pulisci(righeVere(testo));
+  let righe = estraiTerapia(t);
+  // Senza una riga vuota dopo l'elenco (i Word): i farmaci sono righe brevi, e l'elenco finisce dove comincia un'altra
+  // parte («In conclusione…», «ECG:») o riprende il racconto.
+  const fuori = righe.findIndex((r) => r.length > 110 || APERTURE.some(([, rx]) => rx.test(r)) || (() => { const e = /^([^\n:.!?;]{2,45}):/.exec(r); return !!e && !!famigliaDi(e[1]); })());
+  if (fuori >= 0) righe = righe.slice(0, fuori);
   if (righe.length) return `Terapia:\n${righe.join('\n')}`;
   const m = /(?:^|[\n.;]\s*)(terapia(?:\s+(?:domiciliare|attuale|in corso|in atto|farmacologica|abituale))?\s*:)[ \t]*([^\n]+(?:\n(?![ \t]*\n)[^\n]+)*)/i.exec(t);
   if (!m) return '';
@@ -66,6 +81,7 @@ const APERTURE: [ParteLettera, RegExp][] = [
 ];
 // Le parti che sono un elenco o un esame finiscono col loro paragrafo; la conclusione arriva fino alla parte dopo.
 const FINO_AL_PARAGRAFO = new Set<string>(['frcv', 'comorbidita', 'allergie', 'diagnosi', 'terapia', 'esame', 'ecg', 'eco', 'sforzo', 'holter', 'laboratorio']);
+const ELENCHI = new Set<string>(['frcv', 'comorbidita', 'allergie', 'diagnosi']);
 const DI_FAMIGLIA: Record<string, ParteLettera> = { frcv: 'frcv', comorbidita: 'comorbidita', allergie: 'allergie', diagnosi: 'diagnosi', anamnesi: 'anamnesi', esame: 'esame', ecg: 'ecg', eco: 'eco', sforzo: 'sforzo', holter: 'holter', laboratorio: 'laboratorio', conclusione: 'conclusione', terapia: 'terapia' };
 
 // Le parti del corpo di una lettera. Una parte comincia dove una frase (o una riga) si apre con l'etichetta di una
@@ -82,19 +98,29 @@ export function partiDellaLettera(testo: string): Partial<Record<ParteLettera, s
     const fam = e ? famigliaDi(e[1]) : null;
     let parte: ParteLettera | null = fam ? DI_FAMIGLIA[fam] ?? null : null;
     if (!parte && !fam) parte = APERTURE.find(([, rx]) => rx.test(qui.replace(/^[\s•\-–]+/, '')))?.[0] ?? null;
+    const aRiga = i === 0 || t[i - 1] === '\n' || /\n[ \t]*$/.test(t.slice(Math.max(0, i - 4), i));
     if (parte && confini[confini.length - 1]?.parte !== parte) confini.push({ i, parte });
-    // un'etichetta di un'altra categoria (non fra le parti) chiude comunque la parte prima
-    else if (!parte && fam) confini.push({ i, parte: null });
+    // un'etichetta di un'altra categoria (non fra le parti), o un'etichetta qualunque a inizio riga («Coronarografia
+    // 2019:»), chiude comunque la parte prima
+    else if (!parte && (fam || (e && aRiga))) confini.push({ i, parte: null });
   }
   const out: Partial<Record<ParteLettera, string>> = {};
   const aggiungi = (parte: ParteLettera, pezzo: string) => { const p = pulisci(pezzo); if (p) out[parte] = out[parte] ? `${out[parte]}\n\n${p}` : p; };
   const primo = confini[0]?.i ?? t.length;
-  // l'anamnesi senza etichetta: il primo paragrafo di ciò che precede la prima parte
-  if (primo > 0 && confini[0]?.parte !== 'anamnesi') aggiungi('anamnesi', t.slice(0, primo).split(/\n[ \t]*\n/)[0]);
+  // L'anamnesi senza etichetta: tutto ciò che precede la prima parte (nelle lettere dello studio è il primo paragrafo,
+  // poi vengono FRCV e il resto). Se la lettera non ha nessuna parte riconoscibile, solo il primo paragrafo — o la
+  // prima riga, dove i paragrafi sono righe — e non la lettera intera.
+  if (primo > 0 && confini[0]?.parte !== 'anamnesi') {
+    const prima = t.slice(0, primo);
+    if (confini.length) aggiungi('anamnesi', prima);
+    else { const blocchi = prima.split(/\n[ \t]*\n/); aggiungi('anamnesi', blocchi.length > 1 ? blocchi[0] : prima.split('\n').find((r) => r.trim().length >= 40) ?? prima.split('\n')[0]); }
+  }
   confini.forEach((c, k) => {
     if (!c.parte) return;
     let pezzo = t.slice(c.i, confini[k + 1]?.i ?? t.length);
     if (FINO_AL_PARAGRAFO.has(c.parte)) pezzo = pezzo.split(/\n[ \t]*\n/)[0];
+    // un elenco (FRCV, comorbidità…) è fatto di righe brevi: una riga lunga dopo è già il racconto che riprende
+    if (ELENCHI.has(c.parte)) { const righe = pezzo.split('\n'); const stop = righe.findIndex((r, n) => n > 0 && r.trim().length > 160); if (stop > 0) pezzo = righe.slice(0, stop).join('\n'); }
     aggiungi(c.parte, pezzo);
   });
   // La terapia ha il suo lettore (il blocco sotto «Terapia:», riga per riga): vale quello.
