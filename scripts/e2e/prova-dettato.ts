@@ -3,6 +3,8 @@
 // bozza esce a confronto con le parole che la catena ha ricavato dall'audio. Poi toglie tutto.
 import { query, pool } from '../../src/lib/db';
 import { deleteFile } from '../../src/lib/storage';
+import { applicaFoglio } from '../../src/lib/dittafono-foglio';
+import { togliAudit } from './pulizia-audit';
 
 const [base, S, C] = process.argv.slice(2);
 let ok = 0, no = 0;
@@ -50,9 +52,25 @@ async function main() {
     const diversi = (d1?.pezzi ?? []).filter((p: any) => !p.uguale);
     verifica(d1?.fonte === 'dragon' && d1?.punti === 2 && d1?.parole_dettato === 11 && d1?.uguali === 10 && diversi[0]?.t === '5' && diversi[0]?.mac === '2,5' && diversi[0]?.s === 1 && diversi[1]?.t === '' && diversi[1]?.mac === 'non' && d2 === null,
       `in revisione i due testi a confronto: due punti diversi (la dose, e un «non» che ha solo il Mac), ognuno col secondo da riascoltare; una bozza senza dettatura non ha il riquadro (${d1?.punti} punti)`);
+    // Il foglio (12.10.2026): le parti già scritte, e la lettera del foglio che diventa il testo da rivedere.
+    const fg = await fetch(`${base}/api/prototipo/dittafono/foglio?medico=${encodeURIComponent(medici[0]?.id ?? '')}`, { headers: { cookie: C } });
+    const fj = (await fg.json().catch(() => ({}))) as any;
+    const fgFuori = await fetch(`${base}/api/prototipo/dittafono/foglio`);
+    verifica(fg.status === 200 && /^\d{2}\.\d{2}\.\d{4}$/.test(fj.data ?? '') && typeof fj.destinatario === 'string' && fj.destinatario.length > 5 && typeof fj.titolo === 'string' && ['lettera', 'rapporto'].includes(fj.formato) && fgFuori.status === 401,
+      `il foglio si prepara dalla carta intestata: data di oggi, destinatario, titolo, formato del medico; senza sessione no (${fg.status}, ${fj.formato}, ${fgFuori.status})`);
+    const foglio = { destinatario: 'Egregio Signor\nDr. med. Altro Inventato\nVia e-mail', data: fj.data, titolo: 'Visita', paziente: 'Paziente\nProva Anna – 03.04.1950', saluto: 'Caro collega,', chiusura: 'Con i migliori saluti\n\nDr. med. Inventato', copia: '' };
+    const c = await carica(C, { dettato_testo: dettato, dettato_foglio: JSON.stringify(foglio), dettato_fonte: 'dragon' });
+    const sulFoglio = await nuova(c.id);
+    const fatto = await applicaFoglio(S, sulFoglio, c.id ?? null), nonFatto = await applicaFoglio(S, senzaDettato, b.id ?? null);
+    const [bz] = await query<any>(`select testo_finale, payload->'foglio'->>'fonte' as fonte, payload->>'testo_corretto' as catena, campi_confermati->>'medico_destinatario' as dest from referti_bozze where id = $1`, [sulFoglio]);
+    const d3 = ((await (await fetch(`${base}/api/prototipo/referti/${sulFoglio}`, { headers: { cookie: C } })).json()) as any);
+    verifica(c.stato === 201 && fatto === true && nonFatto === false && bz?.testo_finale === `Caro collega,\n\n${dettato}\n\nCon i migliori saluti\n\nDr. med. Inventato` && bz?.fonte === 'dragon' && bz?.dest === 'Dr. med. Altro Inventato'
+      && /bisoprololo 2,5 mg/.test(bz?.catena ?? '') && d3.dettato?.foglio === true && d3.versione?.dalla_catena === false,
+      `la lettera dettata sul foglio diventa il testo da rivedere (saluto, corpo, saluti e firma), col destinatario fra i campi; il testo della catena resta come controllo; un dettato senza foglio non cambia (${fatto}, ${nonFatto})`);
   } finally {
     const chiavi = fatti.length ? await query<{ storage_key: string }>(`select storage_key from referti_audio where id = any($1::uuid[])`, [fatti]) : [];
     if (fatti.length) await query(`delete from referti_audio where id = any($1::uuid[])`, [fatti]);
+    if (bozze.length) await togliAudit(bozze).catch(() => null);
     if (bozze.length) await query(`delete from referti_bozze where id = any($1::uuid[])`, [bozze]);
     for (const c of chiavi) await deleteFile(c.storage_key).catch(() => null);
     await pool.end();

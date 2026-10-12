@@ -5,6 +5,7 @@ import { putFile } from '@/lib/storage';
 import { mediciDelloStudio } from '@/lib/referti-medici';
 import { ESTENSIONI_DITTAFONO, wavDaDittafono } from '@/lib/dittafono';
 import { TIPI_AUDIO, MAX_BYTES_AUDIO } from '@/lib/referti-audio-tipi';
+import { pulisciFoglio } from '@/lib/dittafono-foglio-regole';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -82,11 +83,15 @@ export async function POST(req: NextRequest) {
       if (Array.isArray(grezzi)) dettatoTempi = grezzi.filter((x: unknown): x is [number, number] => Array.isArray(x) && x.length === 2 && x.every((n) => typeof n === 'number' && Number.isFinite(n) && n >= 0)).slice(0, 5000);
     } catch { dettatoTempi = null; }
   }
+  // Il foglio (12.10.2026): le parti della lettera attorno al corpo dettato. Con un foglio, alla consegna della bozza
+  // la lettera del foglio diventa il testo da rivedere (src/lib/dittafono-foglio.ts).
+  let dettatoFoglio: ReturnType<typeof pulisciFoglio> = null;
+  if (dettatoTesto) { try { dettatoFoglio = pulisciFoglio(JSON.parse(String(form?.get('dettato_foglio') ?? 'null'))); } catch { dettatoFoglio = null; } }
   const dettatoFonte = dettatoTesto ? (String(form?.get('dettato_fonte') ?? '').replace(/[^a-z0-9_-]/gi, '').slice(0, 30).toLowerCase() || 'dettatura') : null;
   const [row] = await query<{ id: string }>(
-    `insert into referti_audio (studio_id, filename, storage_key, content_type, uploaded_by, tipo, medico, patient_id, dettato_testo, dettato_tempi, dettato_fonte)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11) returning id`,
-    [session.studioId, file.name.slice(0, 200), key, TIPI[ext], session.id, tipo, ids.has(medico) ? medico : null, pazienteId, dettatoTesto, dettatoTempi ? JSON.stringify(dettatoTempi) : null, dettatoFonte]
+    `insert into referti_audio (studio_id, filename, storage_key, content_type, uploaded_by, tipo, medico, patient_id, dettato_testo, dettato_tempi, dettato_fonte, dettato_foglio)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12::jsonb) returning id`,
+    [session.studioId, file.name.slice(0, 200), key, TIPI[ext], session.id, tipo, ids.has(medico) ? medico : null, pazienteId, dettatoTesto, dettatoTempi ? JSON.stringify(dettatoTempi) : null, dettatoFonte, dettatoFoglio ? JSON.stringify(dettatoFoglio) : null]
   );
 
   // L'arrivo di un dettato è «visita finita» per quel medico (16.9.2026,

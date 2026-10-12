@@ -58,10 +58,10 @@ export async function GET(_req: Request, props: { params: Promise<{ id: string }
   ];
   // Il testo scritto da un programma di dettatura mentre si registrava (11.10.2026), messo a confronto con le parole
   // che la catena ha ricavato dall'audio: dove non coincidono c'è un punto da riascoltare.
-  let dettato: (Confronto & { fonte: string }) | null = null;
+  let dettato: (Confronto & { fonte: string; foglio: boolean }) | null = null;
   if (b.audio_id) {
     const [dt] = await query<{ dettato_testo: string | null; dettato_fonte: string | null }>('select dettato_testo, dettato_fonte from referti_audio where id = $1 and studio_id = $2', [b.audio_id, session.studioId]);
-    if (dt?.dettato_testo) dettato = { ...confronta(dt.dettato_testo, Array.isArray(p.parole) ? p.parole : []), fonte: dt.dettato_fonte ?? 'dettatura' };
+    if (dt?.dettato_testo) dettato = { ...confronta(dt.dettato_testo, Array.isArray(p.parole) ? p.parole : []), fonte: dt.dettato_fonte ?? 'dettatura', foglio: !!p.foglio };      // foglio: la lettera in revisione È quella dettata (src/lib/dittafono-foglio.ts)
   }
   const [inArrivo] = await query<{ n: number }>(`select count(*)::int as n from referti_audio where aggiunge_a = $1 and stato in ('in_coda', 'elaborazione')`, [b.id]);
 

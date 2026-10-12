@@ -43,3 +43,20 @@ test('dettato: senza l\'uno o l\'altro testo il confronto non inventa niente', (
   const lungo = confronta(Array.from({ length: 3200 }, (_, i) => `p${i}`).join(' '), mac('p0 p1 p2'));
   assert.equal(lungo.troncato, true);
 });
+
+// ---- Il foglio del dittafono (12.10.2026). Testi INVENTATI. ----
+import { letteraDalFoglio, nomeDestinatario, pulisciFoglio } from './dittafono-foglio-regole';
+
+test('foglio: dalla lettera sul foglio al testo da rivedere — saluto, corpo, chiusura e firma', () => {
+  const foglio = pulisciFoglio({ destinatario: 'Egregio Signor\nDr. med. Altro Inventato\nFMH Medicina interna\nVia e-mail: altro@example.org', data: '12.10.2026', titolo: 'Visita del 12.10.2026', paziente: 'Paziente\nProva Anna – 03.04.1950',
+    saluto: 'Caro collega,', chiusura: 'Con i migliori saluti\n\nDr. med. Inventato', copia: 'Copia: alla paziente', altro: 'non previsto', numero: 3 })!;
+  assert.deepEqual(Object.keys(foglio).sort(), ['chiusura', 'copia', 'data', 'destinatario', 'paziente', 'saluto', 'titolo'], 'solo le parti previste');
+  assert.equal(letteraDalFoglio(foglio, '  ho rivisto la paziente per il controllo annuale.\r\nSta bene.  '), 'Caro collega,\n\nho rivisto la paziente per il controllo annuale.\nSta bene.\n\nCon i migliori saluti\n\nDr. med. Inventato');
+  assert.equal(letteraDalFoglio({ saluto: '', chiusura: '' }, 'Solo il corpo.'), 'Solo il corpo.', 'senza saluto né chiusura resta il corpo');
+  assert.equal(nomeDestinatario(foglio.destinatario), 'Dr. med. Altro Inventato');
+  assert.equal(nomeDestinatario('Egregio Signor\nDr. med. \nVia e-mail'), '', 'un destinatario ancora da compilare non è un nome');
+  assert.equal(nomeDestinatario('Gentile Signora\nDr.ssa med. Terza Inventata'), 'Dr.ssa med. Terza Inventata');
+  assert.equal(pulisciFoglio(null), null);
+  assert.equal(pulisciFoglio({ saluto: '   ' }), null, 'un foglio vuoto non è un foglio');
+  assert.equal(pulisciFoglio({ saluto: 'x'.repeat(5000) })!.saluto.length, 300);
+});

@@ -793,3 +793,10 @@ anche l'audio. Deciso così:
   di partenza da rifinire) si decide dopo le prime dettature vere, guardando quanto coincide;
 - **la voce verso Dragon non è cosa della piattaforma**: è la scelta che lo studio ha già fatto con quel programma;
   ciò che ReferralFlow aggiunge resta sul dispositivo e sul Mac. La regola nLPD della catena non cambia.
+
+**12.10.2026 — il foglio è la lettera (cambia la decisione dell'11.10).** Dopo la prima prova con Dragon lo studio
+vuole dettare su un foglio con la carta intestata e vedere la lettera prendere forma, e ha deciso:
+- **quel che c'è sul foglio è la lettera da rivedere e firmare**; la trascrizione che il Mac ricava dall'audio resta
+  come controllo (punti diversi evidenziati, riascolto);
+- **niente rifinitura automatica per ora**: il foglio è ciò che è stato dettato;
+- la catena non si tocca: continua a trascrivere l'audio, e i suoi controlli valgono per il suo testo.

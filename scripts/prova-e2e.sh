@@ -173,7 +173,7 @@ DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2
 grep -E "^NO" "$TMP/ciclo.txt"; echo "   $(grep -c '^ok' "$TMP/ciclo.txt") ok, $(grep -c '^NO' "$TMP/ciclo.txt") no"
 
 echo "→ dettatura in tempo reale: il testo scritto mentre si registra viaggia con l'audio e si confronta con la trascrizione"
-DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-dettato.ts "http://localhost:$PORTA" "$STUDIO" "$C_SEGR" > "$TMP/dettato.txt" 2>&1 || { fallito "prova-dettato"; cut -c1-300 "$TMP/dettato.txt"; }
+DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-dettato.ts "http://localhost:$PORTA" "$STUDIO" "$C_MEDICO" > "$TMP/dettato.txt" 2>&1 || { fallito "prova-dettato"; cut -c1-300 "$TMP/dettato.txt"; }
 grep -E "^NO" "$TMP/dettato.txt"; echo "   $(grep -c '^ok' "$TMP/dettato.txt") ok, $(grep -c '^NO' "$TMP/dettato.txt") no"
 
 echo "→ dividi cartella: da un PDF unico ai singoli documenti, proposta, conferma, zip, permessi"

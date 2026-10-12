@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { applicaFoglio } from '@/lib/dittafono-foglio';
 import { collegaInviante } from '@/lib/referti-inviante';
 import { registraCorsa, registraCorsaFallita, registraTestoMacchina } from '@/lib/audit/lineage';
 import { createHash } from 'crypto';
@@ -497,7 +498,12 @@ export async function POST(req: NextRequest) {
     if (!(payload as any).ombra) try {
       if (!(await collegaDalCaricamento(studio.id, inserita.id, audioId))) await abbinaPazienteBozza(studio.id, inserita.id);
     } catch (e: any) { console.error(`[paziente] ${e?.code ?? e?.name ?? 'errore'}`); }
-    if (tipo === 'referto' && !(payload as any).ombra) try {
+    // Dettato scritto sul FOGLIO del dittafono (12.10.2026, decisione dello studio): la lettera è quella che il
+    // medico ha visto prendere forma, non quella ricavata dall'audio — che resta nel payload come controllo. Niente
+    // aggiornamento dalla lettera vecchia: riscriverebbe una lettera che il medico ha già davanti com'è.
+    let dalFoglio = false;
+    if (!(payload as any).ombra) try { dalFoglio = await applicaFoglio(studio.id, inserita.id, audioId); } catch (e: any) { console.error(`[foglio] ${inserita.id.slice(0, 8)}: ${e?.code ?? e?.name ?? 'errore'}`); }
+    if (tipo === 'referto' && !(payload as any).ombra && !dalFoglio) try {
       const esito = await aggiornamentoAutomatico(studio.id, inserita.id);
       if (esito === 'applicato' || esito === 'stampella') await registraEvento(studio.id, inserita.id, 'lettera_aggiornata', null, { automatico: true, stampella: esito === 'stampella' });
     } catch (e: any) { console.error(`[aggiorna-lettera] ${inserita.id.slice(0, 8)}: ${e?.code ?? e?.name ?? 'errore'}`); }

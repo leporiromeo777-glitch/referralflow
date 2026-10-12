@@ -29,12 +29,33 @@
 .rf-dit-azioni { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 .rf-dit audio { width: 100%; }
 .rf-dit-testo { width: 100%; min-height: 240px; height: auto; padding: 12px 14px; line-height: 1.55; font-size: 15px; resize: vertical; }
+.rf-foglio { background: #fff; color: #1b1b1f; border: 1px solid var(--border); border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 8px 24px rgba(0,0,0,.06); padding: 26px clamp(18px, 6vw, 56px) 40px; font: 14.5px/1.55 Calibri, "Helvetica Neue", Arial, sans-serif; }
+.rf-foglio-logo { display: block; width: 100%; height: auto; margin-bottom: 4px; }
+.rf-foglio-int { font-size: 11.5px; line-height: 1.45; color: #4a4a55; margin-bottom: 26px; }
+.rf-foglio-int b { color: #1b1b1f; font-size: 12.5px; }
+.rf-fg { display: block; width: 100%; box-sizing: border-box; border: 0; outline: 1px dashed transparent; outline-offset: 3px; border-radius: 3px; background: transparent; color: inherit; font: inherit; padding: 0; margin: 0; resize: none; overflow: hidden; }
+.rf-fg:hover { outline-color: rgba(90,90,200,.35); }
+.rf-fg:focus { outline: 1px dashed rgba(90,90,200,.7); background: rgba(90,90,200,.04); }
+.rf-fg::placeholder { color: #9a9aa6; }
+.rf-fg-data { display: flex; align-items: baseline; gap: 5px; margin: 26px 0 18px; }
+.rf-fg-data .rf-fg { width: 12ch; }
+.rf-fg-titolo { font-weight: 700; margin-bottom: 10px; }
+.rf-fg-paziente { font-weight: 700; margin-bottom: 18px; }
+.rf-fg-corpo { min-height: 300px; margin: 12px 0; }
+.rf-fg-copia { margin-top: 22px; font-size: 12.5px; color: #4a4a55; }
+.rf-dit.con-foglio { max-width: none; }
+.rf-dit-due { display: grid; grid-template-columns: minmax(270px, 330px) minmax(0, 1fr); gap: 18px; align-items: start; }
+.rf-dit-lato { position: sticky; top: 4px; }
+.rf-dit-lato .rf-dit-campi { grid-template-columns: 1fr; }
+.rf-dit-lato .rf-dit-centro { padding-top: 12px; }
+.rf-dit-carta .rf-foglio { margin-top: 0; min-height: 78vh; }
+@media (max-width: 900px) { .rf-dit-due { grid-template-columns: 1fr; } .rf-dit-lato { position: static; } }
 .rf-dit-nota { font-size: 12px; line-height: 1.5; color: var(--muted); border-left: 3px solid var(--border); padding: 2px 0 2px 10px; }
 `;
   document.head.appendChild(st);
 })();
 
-RF.dit = { stato: 'pronto', pcm: new Int16Array(0), nuovi: [], modo: 'aggiungi', punto: 0, livello: 0, medico: '', tipo: 'referto', errore: '', recupero: null, url: null, invio: false, flusso: null, ctx: null, nodo: null, blocco: null, orologio: null, salvataggio: null, rilascio: null, iniziata: 0, testo: '', tempi: [], picco: 0, testoInizio: 0, microfoni: null, impara: null, tastoGiu: false, daTasto: false, tastoPronto: false, hid: [], prima: null, primaIl: 0, fermataIl: 0, tastoErrore: '' };
+RF.dit = { stato: 'pronto', pcm: new Int16Array(0), nuovi: [], modo: 'aggiungi', punto: 0, livello: 0, medico: '', tipo: 'referto', errore: '', recupero: null, url: null, invio: false, flusso: null, ctx: null, nodo: null, blocco: null, orologio: null, salvataggio: null, rilascio: null, iniziata: 0, testo: '', tempi: [], picco: 0, testoInizio: 0, microfoni: null, foglio: null, foglioToccato: {}, foglioPer: null, impara: null, tastoGiu: false, daTasto: false, tastoPronto: false, hid: [], prima: null, primaIl: 0, fermataIl: 0, tastoErrore: '' };
 
 /* ── su questo dispositivo finché non si invia ── */
 function rfDitDb() {
@@ -50,7 +71,7 @@ async function rfDitSalva() {
   try {
     const db = await rfDitDb();
     const tutto = d.nuovi.length ? rfDitComponi() : d.pcm;
-    db.transaction('bozza', 'readwrite').objectStore('bozza').put({ pcm: tutto.buffer.slice(tutto.byteOffset, tutto.byteOffset + tutto.byteLength), medico: d.medico, tipo: d.tipo, quando: Date.now(), testo: d.testo || '', tempi: d.tempi || [] }, 'corrente');
+    db.transaction('bozza', 'readwrite').objectStore('bozza').put({ pcm: tutto.buffer.slice(tutto.byteOffset, tutto.byteOffset + tutto.byteLength), medico: d.medico, tipo: d.tipo, quando: Date.now(), testo: d.testo || '', tempi: d.tempi || [], foglio: d.foglio || null, foglioToccato: d.foglioToccato || {}, paziente: d.paziente || '' }, 'corrente');
   } catch (_) { /* senza archivio si registra lo stesso: si perde solo il recupero */ }
 }
 async function rfDitSvuota() { try { const db = await rfDitDb(); db.transaction('bozza', 'readwrite').objectStore('bozza').delete('corrente'); } catch (_) { /* niente */ } }
@@ -64,7 +85,7 @@ async function rfDitCercaRecupero() {
 }
 function rfDitRiprendiRecupero() {
   const v = RF.dit.recupero; if (!v) return;
-  RF.dit.pcm = new Int16Array(v.pcm); RF.dit.medico = v.medico || RF.dit.medico; RF.dit.tipo = v.tipo || 'referto'; RF.dit.testo = v.testo || ''; RF.dit.tempi = Array.isArray(v.tempi) ? v.tempi : []; RF.dit.recupero = null; RF.dit.stato = 'pausa'; rfDitAudio(); render();
+  RF.dit.pcm = new Int16Array(v.pcm); RF.dit.medico = v.medico || RF.dit.medico; RF.dit.tipo = v.tipo || 'referto'; RF.dit.testo = v.testo || ''; RF.dit.tempi = Array.isArray(v.tempi) ? v.tempi : []; if (v.foglio) { RF.dit.foglio = v.foglio; RF.dit.foglioToccato = v.foglioToccato || {}; RF.dit.paziente = v.paziente || RF.dit.paziente; RF.dit.foglioPer = rfFoglioChiave(); } RF.dit.recupero = null; RF.dit.stato = 'pausa'; rfDitAudio(); render();
 }
 function rfDitScartaRecupero() { RF.dit.recupero = null; void rfDitSvuota(); render(); }
 
@@ -153,6 +174,53 @@ function rfDitTesto(el) {
   if (d.stato !== 'registra' && Date.now() - (d.fermataIl || 0) < 8000) d.testoInizio = d.testo.length;      // l'ultima frase arriva un attimo dopo aver lasciato il tasto: non è «dettare a registrazione ferma»
   if (fermo) fermo.style.display = d.stato !== 'registra' && d.testo.length - d.testoInizio >= 15 ? '' : 'none';
 }
+/* Il FOGLIO (12.10.2026, richiesta dello studio): chi detta non scrive in una casella ma sulla lettera — carta
+   intestata, destinatario, data, titolo, paziente, saluto, e in fondo saluti e firma sono già scritti (dagli stessi
+   ingredienti del Word: profilo del medico, cartella del paziente) e si correggono cliccandoci; il corpo è dove
+   scrive il programma di dettatura. Quel che c'è sul foglio è la lettera che arriva in revisione. */
+const RF_FOGLIO_PARTI = ['destinatario', 'data', 'titolo', 'paziente', 'saluto', 'chiusura', 'copia'];
+function rfFoglioPazId() { const d = RF.dit; return (d.paziente || '').trim() && typeof rfPazIdDa === 'function' ? (rfPazIdDa(d.paziente) || '') : ''; }
+function rfFoglioChiave() { return `${RF.dit.medico || ''}|${rfFoglioPazId()}`; }
+function rfFoglioAlto(el) { if (!el || el.tagName !== 'TEXTAREA') return; el.style.height = 'auto'; el.style.height = `${el.scrollHeight + 2}px`; }
+function rfFoglioCampo(k, el) { const d = RF.dit; if (!d.foglio) d.foglio = {}; d.foglio[k] = el.value; d.foglioToccato[k] = true; rfFoglioAlto(el); }
+// Mette nel foglio a schermo ciò che c'è in memoria, senza ricreare niente (il corpo non si tocca mai).
+function rfFoglioRiempi() {
+  const f = RF.dit.foglio; if (!f) return;
+  const m = document.getElementById('rf-fg-medico'), i = document.getElementById('rf-fg-int');
+  if (m) m.textContent = f.medico || ''; if (i) i.innerHTML = (f.intestazione || []).map(rfEsc).join('<br>');
+  for (const k of RF_FOGLIO_PARTI) { const el = document.getElementById(`rf-fg-${k}`); if (el && el.value !== (f[k] || '')) el.value = f[k] || ''; rfFoglioAlto(el); }
+  rfFoglioAlto(document.getElementById('rf-dit-testo'));
+}
+// Le parti già scritte vengono dal server quando cambia il medico o il paziente; quelle corrette a mano restano com'erano.
+async function rfFoglioCarica() {
+  const d = RF.dit; if (!rfDitDettatura()) return;
+  const chiave = rfFoglioChiave(); if (d.foglioPer === chiave) return;
+  d.foglioPer = chiave;
+  try {
+    const r = await fetch(`/api/prototipo/dittafono/foglio?medico=${encodeURIComponent(d.medico || '')}&paziente=${encodeURIComponent(rfFoglioPazId())}`, { credentials: 'include', cache: 'no-store' });
+    if (!r.ok || d.foglioPer !== chiave) return;
+    const j = await r.json(), prima = d.foglio || {};
+    d.foglio = { ...j }; for (const k of RF_FOGLIO_PARTI) if (d.foglioToccato[k]) d.foglio[k] = prima[k] || '';
+    rfFoglioRiempi();
+  } catch (_) { d.foglioPer = null; }
+}
+function rfFoglioHtml() {
+  const d = RF.dit, f = d.foglio || {};
+  const area = (k, righe, ph, classe = '') => `<textarea class="rf-fg ${classe}" id="rf-fg-${k}" rows="${righe}" spellcheck="false" placeholder="${ph}" oninput="rfFoglioCampo('${k}', this)">${rfEsc(f[k] || '')}</textarea>`;
+  const riga = (k, ph, classe = '') => `<input class="rf-fg ${classe}" id="rf-fg-${k}" spellcheck="false" placeholder="${ph}" value="${rfEsc(f[k] || '')}" oninput="rfFoglioCampo('${k}', this)">`;
+  return `<div class="rf-foglio mt-8" id="rf-foglio">
+    <img class="rf-foglio-logo" src="carta-intestata.png" alt="">
+    <div class="rf-foglio-int"><b id="rf-fg-medico">${rfEsc(f.medico || '')}</b><div id="rf-fg-int">${(f.intestazione || []).map(rfEsc).join('<br>')}</div></div>
+    ${area('destinatario', 4, 'Destinatario')}
+    <div class="rf-fg-data"><span>Lugano,</span>${riga('data', 'data')}</div>
+    ${riga('titolo', 'Titolo', 'rf-fg-titolo')}
+    ${area('paziente', 2, 'Paziente', 'rf-fg-paziente')}
+    ${riga('saluto', 'Saluto (Caro collega,)')}
+    <textarea class="rf-fg rf-fg-corpo" id="rf-dit-testo" spellcheck="false" placeholder="Tieni premuto il tasto del microfono e detta: il testo compare qui." oninput="rfDitTesto(this); rfFoglioAlto(this)" onblur="RF.dit.cursore=this.selectionStart" onkeyup="RF.dit.cursore=this.selectionStart" onclick="RF.dit.cursore=this.selectionStart">${rfEsc(d.testo || '')}</textarea>
+    ${area('chiusura', 4, 'Saluti e firma')}
+    ${riga('copia', 'Copia: …', 'rf-fg-copia')}
+  </div>`;
+}
 // In dettatura la casella del testo NON si ricrea mai: il programma di dettatura ci sta scrivendo, e ricrearla gli toglie
 // il campo da sotto (12.10.2026). Si ridisegnano solo i pezzi attorno: campi, tasto, lettore.
 function rfDitRidisegna() {
@@ -173,7 +241,7 @@ function rfDitTastoLetto() { try { return JSON.parse(localStorage.getItem(RF_DIT
 function rfDitTastoHtml() {
   const d = RF.dit, t = rfDitTastoLetto();
   if (d.impara) return `<b>Tieni premuto il tasto con cui detti, poi lascialo.</b> ${d.impara.nota || ''} <a href="javascript:void 0" onclick="rfDitTastoAnnulla()">Annulla</a>`;
-  if (t) return `Tasto del microfono: <b>${rfEsc(t.nome || 'collegato')}</b> — finché lo tieni premuto la pagina registra. <a href="javascript:void 0" onclick="rfDitTastoScollega()">Scollega</a>${d.tastoErrore ? ` · <span style="color:#b3261e">${rfEsc(d.tastoErrore)}</span>` : ''}`;
+  if (t) return `Tasto del microfono: <b>${rfEsc(t.nome || 'collegato')}</b> — finché lo tieni premuto la pagina registra${RF.dit.tastoGiu ? ' · <b style="color:#b3261e">premuto</b>' : ''}. Se registra quando NON lo premi, scollegalo e ricollegalo. <a href="javascript:void 0" onclick="rfDitTastoScollega()">Scollega</a>${d.tastoErrore ? ` · <span style="color:#b3261e">${rfEsc(d.tastoErrore)}</span>` : ''}`;
   return `<a href="javascript:void 0" onclick="rfDitTastoCollega()">Collega il tasto con cui detti</a>: tenendolo premuto partono insieme il programma di dettatura e la registrazione, lasciandolo si fermano.`;
 }
 function rfDitTastoDisegna() { const el = document.getElementById('rf-dit-tasto'); if (el) el.innerHTML = rfDitTastoHtml(); const c = document.getElementById('rf-dit-centro'); if (c && RF.dit.stato !== 'registra') rfDitRidisegna(); }
@@ -209,10 +277,17 @@ function rfDitHidRapporto(e) {
     if (!prima) { d.impara.visti[k] = { b: b.slice(), quando: Date.now() }; return; }
     if (Date.now() - prima.quando < 200) return;      // rimbalzi e rotelle: si aspetta che il tasto sia stato tenuto un attimo
     for (let i = 0; i < Math.min(b.length, prima.b.length); i++) if (b[i] !== prima.b[i]) {
-      const maschera = b[i] ^ prima.b[i];
-      rfDitTastoImparato({ tipo: 'hid', vid: dev.vendorId, pid: dev.productId, rid: e.reportId, i, maschera, premuto: prima.b[i] & maschera, nome: dev.productName || 'microfono da dettatura' });
+      const maschera = b[i] ^ prima.b[i], uno = prima.b[i] & maschera, due = b[i] & maschera;
+      // Quale dei due stati è «premuto»? Un tasto a riposo vale zero: premuto è lo stato che accende il bit. (Il primo
+      // rapporto visto non è per forza la pressione: può essere un altro tasto, o il microfono appoggiato sul tavolo —
+      // imparato al contrario, la pagina registrava a tasto rilasciato, 12.10.2026.) Solo se tutti e due gli stati
+      // accendono qualcosa — un cursore a più posizioni — vale l'ordine: prima la posizione di dettatura, poi il riposo.
+      const premuto = uno && !due ? uno : due && !uno ? due : uno;
+      rfDitTastoImparato({ tipo: 'hid', vid: dev.vendorId, pid: dev.productId, rid: e.reportId, i, maschera, premuto, nome: dev.productName || 'microfono da dettatura' });
       return;
     }
+    // Nessuna differenza con quello di prima: si riparte da qui (un rapporto ripetuto non è il tasto).
+    d.impara.visti[k] = { b: b.slice(), quando: Date.now() };
     return;
   }
   const t = rfDitTastoLetto();
@@ -350,7 +425,7 @@ function rfDitAggiorna() {
 }
 function rfDitScarta() {
   if (!confirm('Scartare questa registrazione? Non si può recuperare.')) return;
-  const d = RF.dit; d.pcm = new Int16Array(0); d.nuovi = []; d.stato = 'pronto'; d.errore = ''; d.testo = ''; d.tempi = [];
+  const d = RF.dit; d.pcm = new Int16Array(0); d.nuovi = []; d.stato = 'pronto'; d.errore = ''; d.testo = ''; d.tempi = []; d.foglio = null; d.foglioToccato = {}; d.foglioPer = null;
   rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota(); render();
 }
 async function rfDitInvia() {
@@ -368,12 +443,12 @@ async function rfDitInvia() {
     const pazId = typeof rfPazIdDa === 'function' ? rfPazIdDa(d.paziente) : null;
     if (pazId) fd.append('patient_id', pazId);
     const dettato = rfDitDettatura() ? (d.testo || '').trim() : '';
-    if (dettato) { fd.append('dettato_testo', dettato); fd.append('dettato_tempi', JSON.stringify(d.tempi || [])); fd.append('dettato_fonte', 'dragon'); }
+    if (dettato) { fd.append('dettato_testo', dettato); fd.append('dettato_tempi', JSON.stringify(d.tempi || [])); fd.append('dettato_fonte', 'dragon'); if (d.foglio) fd.append('dettato_foglio', JSON.stringify(Object.fromEntries(RF_FOGLIO_PARTI.map(k => [k, d.foglio[k] || ''])))); }
     const r = await fetch('/api/referti/upload', { method: 'POST', body: fd, credentials: 'include' });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { d.errore = j.errore === 'medico_mancante' ? 'Scegli il medico che ha dettato.' : j.errore === 'troppo_grande' ? 'Registrazione troppo lunga per un invio solo.' : 'Invio non riuscito: la registrazione resta qui, riprova.'; d.invio = false; render(); return; }
-    d.pcm = new Int16Array(0); d.stato = 'pronto'; d.invio = false; d.paziente = ''; d.testo = ''; d.tempi = []; d.cursore = null; rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota();
-    toast(dettato ? 'Testo e audio in coda: la bozza arriva tra i referti in pochi minuti, col confronto fra i due' : 'Dettato in coda: la bozza arriva tra i referti in pochi minuti');
+    d.pcm = new Int16Array(0); d.stato = 'pronto'; d.invio = false; d.paziente = ''; d.testo = ''; d.tempi = []; d.cursore = null; d.foglio = null; d.foglioToccato = {}; d.foglioPer = null; rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota();
+    toast(dettato ? 'Lettera e audio inviati: arriva tra i referti in pochi minuti, quando il Mac ha finito il controllo con l’audio' : 'Dettato in coda: la bozza arriva tra i referti in pochi minuti');
     render(); setTimeout(rfCaricaDati, 3000);
   } catch (_) { d.errore = 'Piattaforma non raggiungibile: la registrazione resta su questo dispositivo, riprova.'; d.invio = false; render(); }
 }
@@ -402,16 +477,17 @@ PAGES.dittafono = () => {
   const rec = d.stato === 'registra';
   const medici = (RF.medici || []).map(m => `<option value="${rfEsc(m.id)}" ${m.id === d.medico ? 'selected' : ''}>${rfEsc(m.nome)}</option>`).join('');
   const mic = ICONS.mic || '', pausa = ICONS.pause || '';
-  return `<div class="rf-dit">
+  if (rfDitDettatura()) { void rfFoglioCarica(); setTimeout(rfFoglioRiempi, 0); }
+  return `<div class="rf-dit ${rfDitDettatura() ? 'con-foglio' : ''}">
     <div class="page-head"><div><h2 class="page-title">Dittafono</h2><div class="page-sub">Detta qui: l'audio va nella coda dei referti, come un file trascinato nella pagina Referti</div></div>
       <div class="actions"><button class="btn" data-go="#/reports">Referti</button></div></div>
     ${d.recupero ? `<div class="rf-manc"><b>C'è una registrazione non inviata</b> di ${RFDittafono.formatta(d.recupero.pcm.byteLength / 2 / RFDittafono.FREQUENZA)}, rimasta su questo dispositivo.
       <div class="row mt-8" style="gap:8px"><button class="btn primary sm" onclick="rfDitRiprendiRecupero()">Riprendila</button><button class="btn sm" onclick="rfDitScartaRecupero()">Scartala</button></div></div>` : ''}
-    <div class="card">
+    ${rfDitDettatura() ? '<div class="rf-dit-due">' : ''}<div class="card ${rfDitDettatura() ? 'rf-dit-lato' : ''}">
       <div class="rf-dit-campi" id="rf-dit-campi">
-        <div class="field"><label for="rf-dit-medico">Chi detta</label><select class="input" id="rf-dit-medico" ${rec ? 'disabled' : ''} onchange="RF.dit.medico=this.value"><option value="">${(RF.medici || []).length ? '— scegli il medico —' : 'nessun medico configurato'}</option>${medici}</select></div>
+        <div class="field"><label for="rf-dit-medico">Chi detta</label><select class="input" id="rf-dit-medico" ${rec ? 'disabled' : ''} onchange="RF.dit.medico=this.value;rfFoglioCarica()"><option value="">${(RF.medici || []).length ? '— scegli il medico —' : 'nessun medico configurato'}</option>${medici}</select></div>
         <div class="field"><label for="rf-dit-tipo">Che cosa</label><select class="input" id="rf-dit-tipo" ${rec ? 'disabled' : ''} onchange="RF.dit.tipo=this.value"><option value="referto" ${d.tipo === 'referto' ? 'selected' : ''}>Referto</option><option value="visita" ${d.tipo === 'visita' ? 'selected' : ''}>Visita registrata</option></select></div>
-        <div class="field"><label for="rf-dit-paz">Paziente <span class="caption">(facoltativo)</span></label><input class="input" id="rf-dit-paz" list="rf-paz-elenco" placeholder="Cognome Nome" autocomplete="off" value="${rfEsc(d.paziente || '')}" ${rec ? 'disabled' : ''} oninput="RF.dit.paziente=this.value">${typeof rfPazElenco === 'function' ? rfPazElenco() : ''}</div>
+        <div class="field"><label for="rf-dit-paz">Paziente <span class="caption">(facoltativo)</span></label><input class="input" id="rf-dit-paz" list="rf-paz-elenco" placeholder="Cognome Nome" autocomplete="off" value="${rfEsc(d.paziente || '')}" ${rec ? 'disabled' : ''} oninput="RF.dit.paziente=this.value;rfFoglioCarica()">${typeof rfPazElenco === 'function' ? rfPazElenco() : ''}</div>
       </div>
       <div class="rf-dit-centro" id="rf-dit-centro">
         <div class="rf-dit-tempo" id="rf-dit-tempo">${durata}</div>
@@ -423,13 +499,12 @@ PAGES.dittafono = () => {
       </div>
       <label class="caption" id="rf-dit-opz" style="display:flex;gap:8px;align-items:center;justify-content:center;cursor:pointer"><input type="checkbox" ${rfDitDettatura() ? 'checked' : ''} ${rec ? 'disabled' : ''} onchange="rfDitDettaturaImposta(this.checked)"> Detto con Dragon (o un altro programma di dettatura): mostra la casella del testo</label>
       ${rfDitDettatura() ? `<div class="mt-16">
-        <div class="row" style="justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap"><label for="rf-dit-testo" class="section-title">Testo dettato</label>
+        <div class="row" style="justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap"><span class="section-title">Dettatura</span>
           <span id="rf-dit-micsel">${(d.microfoni || []).length > 1 ? `<span class="caption">Microfono <select class="input sm" style="max-width:260px" ${rec ? 'disabled' : ''} onchange="rfDitMicImposta(this.value)" aria-label="Microfono da registrare"><option value="">quello di serie</option>${d.microfoni.map(x => `<option value="${rfEsc(x.id)}" ${x.id === rfDitMicScelto() ? 'selected' : ''}>${rfEsc(x.nome)}</option>`).join('')}</select></span>` : ''}</span></div>
         <div id="rf-dit-tasto" class="caption mt-8">${rfDitTastoHtml()}</div>
-        <textarea class="input rf-dit-testo mt-8" id="rf-dit-testo" spellcheck="false" placeholder="1. Tocca il tasto rosso per registrare.  2. Detta con Dragon: il testo compare qui mentre la pagina registra la voce.  3. Metti in pausa e premi «Invia»." oninput="rfDitTesto(this)" onblur="RF.dit.cursore=this.selectionStart" onkeyup="RF.dit.cursore=this.selectionStart" onclick="RF.dit.cursore=this.selectionStart">${rfEsc(d.testo || '')}</textarea>
         <div id="rf-dit-sordo" class="rf-manc mt-8" style="display:none"><b>Il testo arriva ma il microfono non sente niente.</b> Di solito il programma di dettatura tiene il microfono tutto per sé, oppure qui è scelto un altro microfono: metti in pausa e scegli sopra lo stesso che usa lui. Senza audio non c'è né riascolto né confronto.</div>
         <div id="rf-dit-fermo" class="rf-manc mt-8" style="display:none"><b>Stai dettando ma la registrazione è ferma.</b> Tocca il tasto per registrare: senza audio non c'è né riascolto né confronto.</div>
-        <p class="rf-dit-nota mt-8">La casella è un campo di testo qualunque: il programma di dettatura ci scrive come farebbe in Word, e si può correggere a mano. La voce che lui manda al suo servizio non passa da qui; la registrazione che fa questa pagina resta sul dispositivo e poi sul Mac dello studio.</p></div>` : ''}
+        <p class="rf-dit-nota mt-8">Quel che vedi sul foglio è la lettera che arriva in revisione: intestazione, destinatario, data, paziente, saluti e firma sono già scritti e si correggono cliccandoci; il corpo lo scrive il programma di dettatura. La registrazione resta sul dispositivo e poi sul Mac dello studio, che la trascrive per controllo.</p></div>` : ''}
       <div id="rf-dit-sotto">${d.errore ? `<div class="rf-manc mt-8">${rfEsc(d.errore)}</div>` : ''}
       ${!rec && d.pcm.length ? `<div class="mt-16">
         <audio id="rf-dit-audio" controls preload="metadata" src="${d.url || ''}"></audio>
@@ -440,7 +515,7 @@ PAGES.dittafono = () => {
           <button class="btn primary" onclick="rfDitInvia()" ${d.invio ? 'disabled' : ''}>${d.invio ? 'Invio…' : 'Invia alla trascrizione'}</button>
         </div>
         <p class="rf-dit-nota mt-8">Riascolta e ferma il cursore dove vuoi: <b>Inserisci qui</b> aggiunge un pezzo in quel punto, <b>Sovrascrivi da qui</b> rifà la dettatura da lì in avanti.</p></div>` : ''}</div>
-    </div>
+    </div>${rfDitDettatura() ? `<div class="rf-dit-carta">${rfFoglioHtml()}</div></div>` : ''}
     ${rfDitRecenti()}
     <p class="rf-dit-nota">L'audio resta su questo dispositivo finché non premi «Invia»; se la pagina si chiude lo ritrovi qui. Una volta inviato segue la stessa strada di ogni dettato: trascrizione sul Mac dello studio, bozza nella pagina Referti.</p>
   </div>`;
