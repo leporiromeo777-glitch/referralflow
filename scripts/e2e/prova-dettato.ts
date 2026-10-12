@@ -18,7 +18,7 @@ function wav(): Buffer {
 }
 async function main() {
   if (!/referralflow_demo/.test(process.env.DATABASE_URL ?? '')) throw new Error('solo sul database demo');
-  const fatti: string[] = [], bozze: string[] = [];
+  const fatti: string[] = [], bozze: string[] = [], pazienti: string[] = [];
   try {
     const medici = ((await (await fetch(`${base}/api/referti/upload`, { headers: { cookie: C } })).json()) as any).medici ?? [];
     const carica = async (cookie: string, campi: Record<string, string>) => {
@@ -67,11 +67,32 @@ async function main() {
     verifica(c.stato === 201 && fatto === true && nonFatto === false && bz?.testo_finale === `Caro collega,\n\n${dettato}\n\nCon i migliori saluti\n\nDr. med. Inventato` && bz?.fonte === 'dragon' && bz?.dest === 'Dr. med. Altro Inventato'
       && /bisoprololo 2,5 mg/.test(bz?.catena ?? '') && d3.dettato?.foglio === true && d3.versione?.dalla_catena === false,
       `la lettera dettata sul foglio diventa il testo da rivedere (saluto, corpo, saluti e firma), col destinatario fra i campi; il testo della catena resta come controllo; un dettato senza foglio non cambia (${fatto}, ${nonFatto})`);
+
+    // I comandi a voce (12.10.2026): «per favore, inserisci la lettera più recente» — il server dà il corpo della
+    // lettera più recente del paziente scelto, e la terapia dal suo blocco.
+    const [{ id: paz }] = await query<{ id: string }>(`insert into patients (studio_id, cognome, nome, data_nascita) values ($1, 'Comandoprova', 'Anna', '1950-04-03') returning id`, [S]); pazienti.push(paz);
+    const [{ id: vuoto }] = await query<{ id: string }>(`insert into patients (studio_id, cognome, nome) values ($1, 'Comandoprova', 'Senzalettere') returning id`, [S]); pazienti.push(vuoto);
+    const lettera = (quando: string, corpo: string) => `Caro collega,\n\n${corpo} ${'Il decorso inventato prosegue senza novità di rilievo. '.repeat(4)}\n\nTerapia:\nFarmacoA ${quando === 'nuova' ? '10' : '5'} mg 1-0-0\nFarmacoB 5 mg 0-0-1\n\nIn conclusione quadro stabile.\n\nRimanendo a disposizione, porgo cordiali saluti.\n\nDr. med. Inventato`;
+    for (const [quando, giorno] of [['vecchia', '2026-01-10'], ['nuova', '2026-06-20']] as const) {
+      // il nome nei campi è scritto diverso apposta: la lettera si trova dal legame col paziente
+      const [{ id }] = await query<{ id: string }>(`insert into referti_bozze (studio_id, file_id, payload, tipo, stato, testo_finale, reviewed_at, patient_id, campi_confermati) values ($1, 'prova-comando-' || gen_random_uuid(), $2, 'referto', 'confermata', $3, now(), $4, $5) returning id`,
+        [S, JSON.stringify({ dettato_il: `${giorno}T09:00:00Z` }), lettera(quando, `ho rivisto la paziente inventata, visita ${quando}.`), paz, JSON.stringify({ nome_paziente: 'Sig.ra A. Comandoprova' })]);
+      bozze.push(id);
+    }
+    const comando = async (corpo: unknown, cookie = C) => { const r = await fetch(`${base}/api/prototipo/dittafono/comando`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(cookie ? { cookie } : {}) }, body: JSON.stringify(corpo) }); return { stato: r.status, j: (await r.json().catch(() => ({}))) as any }; };
+    const k1 = await comando({ comando: 'lettera_recente', paziente: paz }), k2 = await comando({ comando: 'terapia_recente', paziente: paz });
+    verifica(k1.stato === 200 && k1.j.testo.startsWith('ho rivisto la paziente inventata, visita nuova.') && k1.j.testo.endsWith('In conclusione quadro stabile.') && !/Caro collega|cordiali saluti|Dr\. med\./.test(k1.j.testo) && k1.j.data === '20.06.2026'
+      && k2.stato === 200 && k2.j.testo === 'Terapia:\nFarmacoA 10 mg 1-0-0\nFarmacoB 5 mg 0-0-1',
+      `«inserisci la lettera più recente»: arriva il corpo della più recente (senza saluto, saluti e firma), trovata dal legame col paziente; «la terapia»: il suo blocco (${k1.stato}, ${k1.j.data}, ${k2.stato})`);
+    const k3 = await comando({ comando: 'lettera_recente', paziente: vuoto }), k4 = await comando({ comando: 'cancella_tutto', paziente: paz }), k5 = await comando({ comando: 'lettera_recente', paziente: 'x' }), k6 = await comando({ comando: 'lettera_recente', paziente: paz }, '');
+    verifica(k3.stato === 404 && typeof k3.j.errore === 'string' && !k3.j.testo && k4.stato === 400 && k5.stato === 400 && k6.stato === 401,
+      `un paziente senza lettere dà un avviso e niente testo; un comando non previsto, un paziente non scelto e una richiesta senza sessione sono rifiutati (${k3.stato}, ${k4.stato}, ${k5.stato}, ${k6.stato})`);
   } finally {
     const chiavi = fatti.length ? await query<{ storage_key: string }>(`select storage_key from referti_audio where id = any($1::uuid[])`, [fatti]) : [];
     if (fatti.length) await query(`delete from referti_audio where id = any($1::uuid[])`, [fatti]);
     if (bozze.length) await togliAudit(bozze).catch(() => null);
     if (bozze.length) await query(`delete from referti_bozze where id = any($1::uuid[])`, [bozze]);
+    if (pazienti.length) await query(`delete from patients where id = any($1::uuid[])`, [pazienti]);
     for (const c of chiavi) await deleteFile(c.storage_key).catch(() => null);
     await pool.end();
   }

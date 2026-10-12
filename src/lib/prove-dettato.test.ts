@@ -60,3 +60,69 @@ test('foglio: dalla lettera sul foglio al testo da rivedere — saluto, corpo, c
   assert.equal(pulisciFoglio({ saluto: '   ' }), null, 'un foglio vuoto non è un foglio');
   assert.equal(pulisciFoglio({ saluto: 'x'.repeat(5000) })!.saluto.length, 300);
 });
+
+// ---- I comandi a voce del dittafono (12.10.2026). Testi INVENTATI. ----
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import vm from 'node:vm';
+import { corpoDellaLettera, terapiaDellaLettera } from './dittafono-comandi';
+const ctx: any = {};
+vm.runInNewContext(readFileSync(path.join(process.cwd(), 'public', 'prototipo', 'dittafono-comandi.js'), 'utf-8'), ctx);
+const K = ctx.RFComandi;
+
+test('comandi a voce: «per favore» più un comando previsto — e solo quello — viene riconosciuto e tolto', () => {
+  const es = 'Il paziente sta bene. Per favore prendi la lettera più recente del paziente e aggiungimela. Clinicamente compensato.';
+  const c = K.trova(es);
+  assert.equal(c.comando, 'lettera_recente');
+  assert.equal(c.frase, 'Per favore prendi la lettera più recente del paziente e aggiungimela.');
+  for (const [frase, comando] of [
+    ['per favore inserisci l\'ultima lettera', 'lettera_recente'],
+    ['Per favore, incollami qui il testo di tutta la lettera precedente grazie', 'lettera_recente'],
+    ['perfavore mi riporti la lettera vecchia', null],                       // «riporti» non è fra i verbi previsti
+    ['per favore inserisci la terapia dell\'ultima lettera', 'terapia_recente'],
+    ['per favore aggiungi la terapia', 'terapia_recente'],
+    ['per favore metti la terapia della lettera precedente qui', 'terapia_recente'],
+    ['per favore annulla', 'annulla'],
+    ['Per favore togli la lettera', 'annulla'],
+  ] as [string, string | null][]) {
+    const r = K.trova(frase);
+    assert.equal(r ? r.comando : null, comando, frase);
+    if (r) assert.equal(r.a, frase.length, `la frase si toglie tutta: ${frase}`);
+  }
+  // In una lettera vera «per favore» resta dov'è: senza un verbo previsto subito dopo non è un comando.
+  for (const frase of [
+    'Ti prego per favore di inviarmi copia dell\'ultima lettera del collega.',
+    'La paziente chiede per favore un certificato.',
+    'Per favore controllare la terapia fra un mese.',
+    'Per favore prendi appuntamento con la segreteria per la prossima visita.',
+  ]) assert.equal(K.trova(frase), null, frase);
+  assert.equal(K.nonCapito('Per favore fammi un caffè. Per favore inserisci l\'ultima lettera.'), 1);
+  // Il secondo comando si trova ripartendo da dopo il primo.
+  const due = 'per favore inserisci la terapia. Poi per favore annulla';
+  assert.equal(K.trova(due, K.trova(due).a).comando, 'annulla');
+});
+
+test('comandi a voce: il pezzo entra come paragrafo a sé al posto della frase, e si toglie ricucendo', () => {
+  const es = 'Il paziente sta bene. Per favore inserisci l\'ultima lettera. Clinicamente compensato.';
+  const c = K.trova(es), s = K.sostituisci(es, c.da, c.a, '  Anamnesi inventata.\r\nSeconda riga.  ');
+  assert.equal(s.testo, 'Il paziente sta bene.\n\nAnamnesi inventata.\nSeconda riga.\n\nClinicamente compensato.');
+  assert.equal(s.testo.slice(s.inizio, s.fine), 'Anamnesi inventata.\nSeconda riga.');
+  // annullare: il pezzo sparisce e il testo torna quello di prima senza la frase del comando
+  assert.equal(K.sostituisci(s.testo, s.inizio, s.fine, '').testo, 'Il paziente sta bene.\n\nClinicamente compensato.');
+  assert.equal(K.sostituisci('Per favore inserisci l\'ultima lettera', 0, 37, 'Corpo.').testo, 'Corpo.', 'in un foglio vuoto resta solo il pezzo');
+  assert.equal(K.sostituisci('Uno. per favore annulla due.', 5, 23, '').testo, 'Uno. due.');
+  // dal tasto, nel punto del cursore
+  assert.equal(K.sostituisci('Prima. Dopo.', 6, 6, 'In mezzo.').testo, 'Prima.\n\nIn mezzo.\n\nDopo.');
+});
+
+test('comandi a voce: della lettera trovata si prende il corpo, e la terapia dal suo blocco', () => {
+  const lettera = 'Studio Inventato\nVia Finta 1\n\nEgregio Signor\nDr. med. Altro Inventato\n\nCaro collega,\n\nho rivisto il paziente inventato in data 03.02.2026. Sta bene e non riferisce disturbi; nel testo cito i cordiali saluti del collega.\n\nTerapia:\nFarmacoA 10 mg 1-0-0\nFarmacoB 5 mg 0-0-1\n\nIn conclusione quadro stabile, controllo fra dodici mesi. Rimanendo a disposizione per ulteriori informazioni, porgo cordiali saluti.\n\nDr. med. Inventato';
+  const corpo = corpoDellaLettera(lettera);
+  assert.ok(corpo.startsWith('ho rivisto il paziente inventato'), 'senza testata, destinatario e saluto');
+  assert.ok(corpo.endsWith('controllo fra dodici mesi.'), 'senza saluti e firma');
+  assert.ok(corpo.includes('cordiali saluti del collega'), '«cordiali saluti» in mezzo non è la fine');
+  assert.equal(terapiaDellaLettera(lettera), 'Terapia:\nFarmacoA 10 mg 1-0-0\nFarmacoB 5 mg 0-0-1');
+  assert.equal(terapiaDellaLettera('Caro collega, tutto bene. Terapia attuale: FarmacoA 10 mg, FarmacoB 5 mg. Cordiali saluti'), 'Terapia: FarmacoA 10 mg, FarmacoB 5 mg.');
+  assert.equal(terapiaDellaLettera('Caro collega, tutto bene.'), '');
+  assert.equal(corpoDellaLettera('Biglietto breve.'), 'Biglietto breve.', 'un testo corto resta intero');
+});

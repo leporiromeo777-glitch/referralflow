@@ -94,7 +94,7 @@ async function testoDelFile(storageKey: string, filename: string): Promise<strin
 // quelle di quel giorno (o mese, o anno); se non c'è una lettera a sé, si
 // cerca quella data dentro i PDF lunghi della cartella (la cartella
 // cartacea scansionata intera) e si prendono le pagine della lettera.
-export async function lettereVecchie(studioId: string, bozzaId: string, nomePaziente: string, data: DataCercata | null): Promise<Trovata[]> {
+export async function lettereVecchie(studioId: string, bozzaId: string, nomePaziente: string, data: DataCercata | null, paziente: string | null = null): Promise<Trovata[]> {
   const out: Trovata[] = [];
   const nome = nomePerConfronto(nomePaziente);
   if (nome && nome !== 'non indicato') {
@@ -102,14 +102,15 @@ export async function lettereVecchie(studioId: string, bozzaId: string, nomePazi
       `select id, testo_finale, coalesce((payload->>'dettato_il')::timestamptz, reviewed_at, created_at) as quando from referti_bozze
         where studio_id = $1 and id <> $2 and stato = 'confermata' and tipo = 'referto' and testo_finale is not null
           and coalesce((payload->>'ombra')::boolean, false) = false
-          and regexp_replace(lower(trim(coalesce(campi_confermati->>'nome_paziente', payload->'campi_estratti'->>'nome_paziente', ''))), '[\\s,;.:]+', ' ', 'g') = $3
-        order by quando desc limit 10`, [studioId, bozzaId, nome]);
+          and (regexp_replace(lower(trim(coalesce(campi_confermati->>'nome_paziente', payload->'campi_estratti'->>'nome_paziente', ''))), '[\\s,;.:]+', ' ', 'g') = $3
+               or ($4::uuid is not null and patient_id = $4))
+        order by quando desc limit 10`, [studioId, bozzaId, nome, paziente]);
     for (const r of referti) {
       if (r.testo_finale.trim().length < 200 || (data && !stessaData(r.quando, data))) continue;
       out.push({ fonte: { tipo: 'referto', id: r.id, etichetta: `referto confermato del ${fmt(r.quando)}`, data: fmt(r.quando) }, testo: r.testo_finale });
     }
   }
-  const patientId = await pazienteDelReferto(studioId, bozzaId);
+  const patientId = paziente ?? await pazienteDelReferto(studioId, bozzaId);
   if (!patientId) return out;
   const docs = await query<{ id: string; filename: string; nota: string | null; storage_key: string; uploaded_at: Date; ocr_stato: string | null; categoria: string | null }>(
     `select id, filename, nota, storage_key, uploaded_at, ocr_stato, categoria from patient_documents
@@ -408,16 +409,22 @@ function lettereDelPaziente(studioId: string, bozzaId: string, nome: string): Pr
   if (lette.size > 20) lette.delete(lette.keys().next().value as string);
   return lista;
 }
-async function leggiLettereDelPaziente(studioId: string, bozzaId: string, nome: string): Promise<Trovata[]> {
+// Dal PAZIENTE, quando una bozza non c'è ancora (12.10.2026): chi detta sul foglio del dittafono chiede «la lettera
+// più recente» prima che la catena abbia consegnato qualcosa. Stessa ricerca, col paziente dato e nessuna bozza da escludere.
+const NESSUNA_BOZZA = '00000000-0000-0000-0000-000000000000';
+export async function lettereDelPazienteScelto(studioId: string, patientId: string, nome: string): Promise<{ testo: string; fonte: Fonte }[]> {
+  return leggiLettereDelPaziente(studioId, NESSUNA_BOZZA, nome, patientId);
+}
+async function leggiLettereDelPaziente(studioId: string, bozzaId: string, nome: string, paziente: string | null = null): Promise<Trovata[]> {
   const cand: { t: Trovata; quando: number }[] = [];
   const conData = (d: Date | null, alt: Date) => (d ?? alt).getTime();
-  for (const t of await lettereVecchie(studioId, bozzaId, nome, null)) {
+  for (const t of await lettereVecchie(studioId, bozzaId, nome, null, paziente)) {
     let quando = Number.NaN;
     if (t.fonte.tipo === 'referto') { const [g, m, a] = t.fonte.data.split('.').map(Number); quando = new Date(a, m - 1, g).getTime(); }
     else { const [l] = lettereNellePagine([t.testo]); const [g, m, a] = t.fonte.data.split('.').map(Number); quando = conData(l?.data ?? null, new Date(a, m - 1, g)); }
     if (!Number.isNaN(quando)) cand.push({ t: { ...t, fonte: { ...t.fonte, data: fmt(new Date(quando)) } }, quando });
   }
-  const patientId = await pazienteDelReferto(studioId, bozzaId);
+  const patientId = paziente ?? await pazienteDelReferto(studioId, bozzaId);
   if (patientId) {
     const docs = await query<{ id: string; filename: string; nota: string | null; storage_key: string; categoria: string | null }>(
       `select id, filename, nota, storage_key, categoria from patient_documents

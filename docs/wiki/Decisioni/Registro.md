@@ -800,3 +800,12 @@ vuole dettare su un foglio con la carta intestata e vedere la lettera prendere f
   come controllo (punti diversi evidenziati, riascolto);
 - **niente rifinitura automatica per ora**: il foglio è ciò che è stato dettato;
 - la catena non si tocca: continua a trascrivere l'audio, e i suoi controlli valgono per il suo testo.
+
+**12.10.2026 — comandi a voce nel dittafono, parola d'ordine «per favore».** Lo studio vuole poter dare istruzioni
+mentre detta («prendi la lettera più recente del paziente e aggiungimela») e ha scelto la parola d'ordine:
+- **«per favore»** apre il comando. Poiché si dice anche nelle lettere vere, vale come comando solo se seguito da un
+  verbo all'imperativo previsto e da una cosa che si può chiedere; il resto rimane testo;
+- **comandi fissi eseguiti dal codice**, senza modello e senza fornitori: lettera più recente, terapia dell'ultima
+  lettera, annulla. Le richieste libere («riassumi», «riscrivi») restano fuori finché non si è visto come Dragon scrive
+  la parola d'ordine;
+- ciò che entra nel foglio senza essere stato dettato è sempre **dichiarato** (che cosa, da dove) e **annullabile**.

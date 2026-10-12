@@ -173,6 +173,76 @@ function rfDitTesto(el) {
   const fermo = document.getElementById('rf-dit-fermo');
   if (d.stato !== 'registra' && Date.now() - (d.fermataIl || 0) < 8000) d.testoInizio = d.testo.length;      // l'ultima frase arriva un attimo dopo aver lasciato il tasto: non è «dettare a registrazione ferma»
   if (fermo) fermo.style.display = d.stato !== 'registra' && d.testo.length - d.testoInizio >= 15 ? '' : 'none';
+  d.testoIl = Date.now(); rfDitComandoProgramma();
+}
+/* I COMANDI A VOCE (12.10.2026, richiesta dello studio): chi detta può dare un'istruzione alla piattaforma. La parola
+   d'ordine è «per favore» (scelta dello studio): «per favore, inserisci la lettera più recente», «per favore, inserisci
+   la terapia dell'ultima lettera», «per favore annulla». Il programma di dettatura scrive la frase nel foglio; la pagina
+   la riconosce (dittafono-comandi.js), la toglie e mette al suo posto ciò che è stato chiesto, preso dalla cartella del
+   paziente. Si aspetta che il tasto sia lasciato e che il testo sia fermo da un attimo: mentre il programma di
+   dettatura scrive, il foglio non si tocca. Ciò che entra è detto in una riga, con «Annulla». */
+function rfDitComandoStato(html) { RF.dit.cmdStato = html || ''; const el = document.getElementById('rf-dit-cmd-stato'); if (el) el.innerHTML = RF.dit.cmdStato; }
+function rfDitComandoProgramma() {
+  const d = RF.dit; clearTimeout(d.cmdAttesa);
+  if (!rfDitDettatura() || typeof RFComandi === 'undefined' || !/per\s*favore/i.test(d.testo || '')) return;
+  d.cmdAttesa = setTimeout(rfDitComandoCerca, 1500);
+}
+// Mette nel foglio il testo nuovo senza ricreare la casella, col cursore dove serve.
+function rfDitTestoMetti(testo, cursore) {
+  const d = RF.dit, el = document.getElementById('rf-dit-testo'); if (!el) return;
+  el.value = testo; d.testo = testo; d.cursore = cursore; d.testoInizio = testo.length;
+  try { el.setSelectionRange(cursore, cursore); } catch (_) { /* niente */ }
+  const s = Math.round(rfDitSecondi() * 10) / 10; if (d.tempi.length < 5000) d.tempi.push([s, testo.length]);
+  rfFoglioAlto(el); void rfDitSalva();
+}
+async function rfDitComandoCerca() {
+  const d = RF.dit, el = document.getElementById('rf-dit-testo');
+  if (!el || state.route !== 'dittafono' || !rfDitDettatura() || d.cmdInCorso || d.invio) return;
+  // il tasto è giù, o l'ultima frase sta ancora arrivando: si riprova fra poco
+  if (d.tastoGiu || d.stato === 'registra' && d.daTasto || Date.now() - (d.testoIl || 0) < 1400) { clearTimeout(d.cmdAttesa); d.cmdAttesa = setTimeout(rfDitComandoCerca, 700); return; }
+  let c = RFComandi.trova(el.value, 0);
+  while (c && d.cmdFallito && d.cmdFallito === c.frase) c = RFComandi.trova(el.value, c.a);      // quello già fallito aspetta «Riprova»
+  if (!c) { if (!d.cmdFallito && RFComandi.nonCapito(el.value) && !d.cmdUltimo) rfDitComandoStato('Dopo «per favore» non ho riconosciuto un comando: il testo resta com’è.'); return; }
+  if (c.comando === 'annulla') { const t = RFComandi.sostituisci(el.value, c.da, c.a, ''); const sposta = c.a <= (d.cmdUltimo ? d.cmdUltimo.inizio : -1) ? el.value.length - t.testo.length : 0; rfDitTestoMetti(t.testo, t.inizio); if (d.cmdUltimo && sposta) { d.cmdUltimo.inizio -= sposta; d.cmdUltimo.fine -= sposta; } rfDitComandoAnnulla(); }
+  else await rfDitComandoEsegui(c.comando, c.da, c.a, c.frase);
+  if (RFComandi.trova(el.value, 0)) rfDitComandoProgramma();      // ce n'è un altro
+}
+// Chiede il pezzo al server e lo mette al posto della frase (o, dal tasto, dove sta il cursore).
+async function rfDitComandoEsegui(comando, da, a, frase) {
+  const d = RF.dit, paz = rfFoglioPazId(), cosa = comando === 'terapia_recente' ? 'la terapia' : 'la lettera';
+  const riprova = ' <a href="javascript:void 0" onclick="rfDitComandoRiprova()">Riprova</a>';
+  const fallito = (perche) => { d.cmdFallito = frase || ''; rfDitComandoStato(`<span style="color:#b3261e">${rfEsc(perche)}</span>${frase ? riprova : ''}`); };
+  if (!paz) { fallito('Per inserire ' + cosa + ' scegli prima il paziente.'); return; }
+  d.cmdInCorso = true; rfDitComandoStato('Cerco ' + cosa + ' nella cartella del paziente…');
+  try {
+    const r = await fetch('/api/prototipo/dittafono/comando', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comando, paziente: paz }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.testo) { fallito(j.errore || 'Non riesco a prendere ' + cosa + '.'); return; }
+    const el = document.getElementById('rf-dit-testo'); if (!el) return;
+    // intanto il testo può essere cambiato: la frase si ritrova, se no non si tocca niente
+    if (frase && el.value.slice(da, a) !== frase) { const i = el.value.indexOf(frase); if (i < 0) { fallito('Il testo è cambiato mentre cercavo: ripeti il comando.'); return; } da = i; a = i + frase.length; }
+    if (!frase) { da = Math.min(da, el.value.length); a = da; }
+    const s = RFComandi.sostituisci(el.value, da, a, j.testo);
+    d.cmdUltimo = { inizio: s.inizio, fine: s.fine, pezzo: s.testo.slice(s.inizio, s.fine) }; d.cmdFallito = '';
+    rfDitTestoMetti(s.testo, s.fine);
+    rfDitComandoStato(`Inserita <b>${cosa} del ${rfEsc(j.data || '')}</b> (${rfEsc(j.fonte || '')}): ${s.fine - s.inizio} caratteri che non hai dettato tu, da rileggere. <a href="javascript:void 0" onclick="rfDitComandoAnnulla()">Annulla</a>`);
+  } catch (_) { fallito('Il server non risponde: riprova.'); }
+  finally { d.cmdInCorso = false; }
+}
+function rfDitComandoRiprova() { RF.dit.cmdFallito = ''; RF.dit.testoIl = 0; void rfDitComandoCerca(); }
+// Dal tasto accanto al foglio: stesso comando, nel punto del cursore.
+function rfDitComandoTasto(comando) {
+  const d = RF.dit, el = document.getElementById('rf-dit-testo'); if (!el || d.cmdInCorso || d.stato === 'registra') return;
+  const qui = typeof d.cursore === 'number' && d.cursore <= el.value.length ? d.cursore : el.value.length;
+  void rfDitComandoEsegui(comando, qui, qui, '');
+}
+function rfDitComandoAnnulla() {
+  const d = RF.dit, el = document.getElementById('rf-dit-testo'), u = d.cmdUltimo; if (!el) return;
+  if (!u) { rfDitComandoStato('Non c’è niente da annullare.'); return; }
+  let da = u.inizio; if (el.value.slice(u.inizio, u.fine) !== u.pezzo) da = el.value.indexOf(u.pezzo);
+  if (da < 0) { rfDitComandoStato('Il testo inserito è stato modificato: non lo tolgo da solo.'); return; }
+  const t = RFComandi.sostituisci(el.value, da, da + u.pezzo.length, '');
+  d.cmdUltimo = null; rfDitTestoMetti(t.testo, t.inizio); rfDitComandoStato('Tolto ciò che era stato inserito.');
 }
 /* Il FOGLIO (12.10.2026, richiesta dello studio): chi detta non scrive in una casella ma sulla lettera — carta
    intestata, destinatario, data, titolo, paziente, saluto, e in fondo saluti e firma sono già scritti (dagli stessi
@@ -453,7 +523,7 @@ function rfDitAggiorna() {
 }
 function rfDitScarta() {
   if (!confirm('Scartare questa registrazione? Non si può recuperare.')) return;
-  const d = RF.dit; d.pcm = new Int16Array(0); d.nuovi = []; d.stato = 'pronto'; d.errore = ''; d.testo = ''; d.tempi = []; d.foglio = null; d.foglioToccato = {}; d.foglioPer = null;
+  const d = RF.dit; d.pcm = new Int16Array(0); d.nuovi = []; d.stato = 'pronto'; d.errore = ''; d.testo = ''; d.tempi = []; d.foglio = null; d.foglioToccato = {}; d.foglioPer = null; d.cmdUltimo = null; d.cmdStato = ''; d.cmdFallito = '';
   rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota(); render();
 }
 async function rfDitInvia() {
@@ -475,7 +545,7 @@ async function rfDitInvia() {
     const r = await fetch('/api/referti/upload', { method: 'POST', body: fd, credentials: 'include' });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { d.errore = j.errore === 'medico_mancante' ? 'Scegli il medico che ha dettato.' : j.errore === 'troppo_grande' ? 'Registrazione troppo lunga per un invio solo.' : 'Invio non riuscito: la registrazione resta qui, riprova.'; d.invio = false; render(); return; }
-    d.pcm = new Int16Array(0); d.stato = 'pronto'; d.invio = false; d.paziente = ''; d.testo = ''; d.tempi = []; d.cursore = null; d.foglio = null; d.foglioToccato = {}; d.foglioPer = null; rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota();
+    d.pcm = new Int16Array(0); d.stato = 'pronto'; d.invio = false; d.paziente = ''; d.testo = ''; d.tempi = []; d.cursore = null; d.foglio = null; d.foglioToccato = {}; d.foglioPer = null; d.cmdUltimo = null; d.cmdStato = ''; d.cmdFallito = ''; rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota();
     toast(dettato ? 'Lettera e audio inviati: arriva tra i referti in pochi minuti, quando il Mac ha finito il controllo con l’audio' : 'Dettato in coda: la bozza arriva tra i referti in pochi minuti');
     render(); setTimeout(rfCaricaDati, 3000);
   } catch (_) { d.errore = 'Piattaforma non raggiungibile: la registrazione resta su questo dispositivo, riprova.'; d.invio = false; render(); }
@@ -531,6 +601,8 @@ PAGES.dittafono = () => {
           <span id="rf-dit-micsel">${(d.microfoni || []).length > 1 ? `<span class="caption">Microfono <select class="input sm" style="max-width:260px" ${rec ? 'disabled' : ''} onchange="rfDitMicImposta(this.value)" aria-label="Microfono da registrare"><option value="">quello di serie</option>${d.microfoni.map(x => `<option value="${rfEsc(x.id)}" ${x.id === rfDitMicScelto() ? 'selected' : ''}>${rfEsc(x.nome)}</option>`).join('')}</select></span>` : ''}</span></div>
         <div id="rf-dit-tasto" class="caption mt-8">${rfDitTastoHtml()}</div>
         <div id="rf-dit-spia" class="caption" style="opacity:.7">${rfDitHidSpia()}</div>
+        <div class="caption mt-8">Comandi a voce: detta <b>«per favore, inserisci la lettera più recente»</b> oppure <b>«per favore, inserisci la terapia dell’ultima lettera»</b>, poi lascia il tasto; <b>«per favore annulla»</b> toglie ciò che è entrato. Anche da qui, nel punto del cursore: <a href="javascript:void 0" onclick="rfDitComandoTasto('lettera_recente')">lettera più recente</a> · <a href="javascript:void 0" onclick="rfDitComandoTasto('terapia_recente')">terapia</a></div>
+        <div id="rf-dit-cmd-stato" class="caption" style="margin-top:4px">${RF.dit.cmdStato || ''}</div>
         <div id="rf-dit-sordo" class="rf-manc mt-8" style="display:none"><b>Il testo arriva ma il microfono non sente niente.</b> Di solito il programma di dettatura tiene il microfono tutto per sé, oppure qui è scelto un altro microfono: metti in pausa e scegli sopra lo stesso che usa lui. Senza audio non c'è né riascolto né confronto.</div>
         <div id="rf-dit-fermo" class="rf-manc mt-8" style="display:none"><b>Stai dettando ma la registrazione è ferma.</b> Tocca il tasto per registrare: senza audio non c'è né riascolto né confronto.</div>
         <p class="rf-dit-nota mt-8">Quel che vedi sul foglio è la lettera che arriva in revisione: intestazione, destinatario, data, paziente, saluti e firma sono già scritti e si correggono cliccandoci; il corpo lo scrive il programma di dettatura. La registrazione resta sul dispositivo e poi sul Mac dello studio, che la trascrive per controllo.</p></div>` : ''}
