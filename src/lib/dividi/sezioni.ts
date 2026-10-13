@@ -93,10 +93,10 @@ export function pagineDaChiedere(testi: string[], separatori: Separatore[], form
 export function pagineDaGuardare(testi: string[], separatori: Separatore[], inchiostro?: number[] | null): number[] {
   const fogli = new Map(separatori.map((s) => [s.pagina, foglioDelCodice(s.codice)] as const).filter((x) => x[1]));
   const fuori: number[] = [];
-  let tracciati = false;
+  let tracciati = false;      // …e nemmeno gli amministrativi e le ricette: lì una pagina compilata a penna resta quello che è
   for (let i = 0; i < testi.length; i++) {
     const f = fogli.get(i + 1);
-    if (f) { if (!f.copertina) tracciati = f.numero === 4; continue; }
+    if (f) { if (!f.copertina) tracciati = [4, 11, 12].includes(f.numero); continue; }
     if (!tracciati && daGuardare(testi[i], inchiostro ? inchiostro[i] ?? null : null)) fuori.push(i + 1);
   }
   return fuori;
@@ -150,7 +150,10 @@ export function componi(testi: string[], separatori: Separatore[], risposte: Rec
   let corrente: PezzoSezione | null = null;
   let correnteMano = false;             // il documento in corso è fatto di pagine scritte a mano
   let correnteGenere: Genere | null = null;      // il genere della prima pagina del documento in corso
-  const mano = (i: number) => viste[i + 1]?.mano === true && sezione?.numero !== 4;      // nei tracciati la penna non fa un appunto
+  // Dove la penna NON fa un appunto: nei tracciati; fra i documenti amministrativi e le ricette (una procura o una
+  // ricetta compilate a mano restano quello che sono); e su una pagina il cui titolo dice che è una di quelle cose.
+  const SENZA_APPUNTI = new Set([4, 11, 12]);
+  const mano = (i: number) => viste[i + 1]?.mano === true && !SENZA_APPUNTI.has(sezione?.numero ?? 0) && !['amministrativo', 'ricetta'].includes(genereDaTesto(testi[i]) ?? '');
   const dataDi = (i: number): string | null => {
     const r = risposte[i + 1];
     const delModello = r?.data ? dataIn(r.data) : null;
@@ -221,6 +224,8 @@ export function componi(testi: string[], separatori: Separatore[], risposte: Rec
     const descrizione = aMano ? SEZIONI[SEZIONE_APPUNTI].voce : descrModello || (catRegola !== 'altro' && !sez?.tipo ? ETICHETTE[catRegola] : sez?.voce ?? ETICHETTE[categoria]);
     if (aMano && !segnali.includes('scritta a mano')) segnali = [...segnali, 'scritta a mano'];
     if (spostataAMano) { segnali = [...segnali, `era in «${fisica?.nome ?? 'nessuna sezione'}»`]; sicurezza = 'media'; }
+    // Una data che nel testo della pagina non c'è l'ha letta il modello guardando la scrittura: può sbagliare, va guardata.
+    if (aMano && data && !tutteLeDate(testi[i]).has(data)) { segnali = [...segnali, 'data letta guardando la pagina']; sicurezza = 'media'; }
     corrente = { da: i + 1, a: i + 1, categoria, data, titolo: s.vuota ? 'Pagina bianca' : nomeDocumento(data, paziente, descrizione), descrizione: s.vuota ? '' : descrizione, sicurezza, segnali, cartella: qui?.nome ?? null, escluso: s.vuota, foglio: null };
     correnteMano = aMano; correnteGenere = gPagina;
     pezzi.push(corrente);

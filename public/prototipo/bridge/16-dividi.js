@@ -189,7 +189,7 @@ async function rfDivApri(id, tieniPdf) {
   RF.div.proposti = (j.pezzi || []).filter(p => !p.escluso).map(p => [p.da, p.a]);
   RF.div.pezzi = (j.pezzi || []).map(p => ({ da: p.da, a: p.a, categoria: p.categoria, data: rfDivGiorno(p.data), titolo: '', descr: p.descrizione || '', auto: true, sicurezza: p.sicurezza, escluso: !!p.escluso, foglio: p.foglio || null, cartella: p.cartella || '',
     // perché sta in questa sottocartella, se non ci è arrivato dal suo foglio separatore (13.10.2026): scritto a mano, o per contenuto
-    mano: (p.segnali || []).includes('scritta a mano'), contenuto: (p.segnali || []).find(x => x.startsWith('per contenuto: ')) || '', era: (p.segnali || []).find(x => x.startsWith('era in ')) || '' }));
+    mano: (p.segnali || []).includes('scritta a mano'), contenuto: (p.segnali || []).find(x => x.startsWith('per contenuto: ')) || '', era: (p.segnali || []).find(x => x.startsWith('era in ')) || '', dataOcchio: (p.segnali || []).includes('data letta guardando la pagina') }));
   RF.div.pezzi.forEach(p => { p.titolo = p.foglio ? '' : rfDivTitolo(p); });
   RF.div.toccato = false;
   render();
@@ -414,7 +414,7 @@ function rfDivPezziHtml() {
         <input class="input rf-div-in" id="rf-div-t-${k}" style="flex:1;min-width:180px !important" placeholder="Nome del documento" value="${rfEsc(p.titolo)}" oninput="rfDivCampo(${k}, 'titolo', this.value)" aria-label="Nome del documento">
         ${p.escluso ? '' : !p.data ? '<span class="badge warning" title="Nella prima pagina non ho trovato la data: scrivila tu, serve per l’ordine">senza data</span>' : ''}
         ${p.sicurezza === 'media' ? '<span class="badge warning" title="Il taglio è probabile ma non certo: guarda la prima pagina">da guardare</span>' : p.sicurezza === 'bassa' ? '<span class="badge warning">senza testo: taglia tu</span>' : p.sicurezza === 'tua' ? '<span class="badge">taglio tuo</span>' : ''}
-        ${p.mano ? `<span class="badge" title="Il Mac ha guardato la pagina: è scritta a mano, quindi va negli Appunti">scritta a mano</span>` : ''}${p.contenuto ? `<span class="badge" title="Messo in questa sottocartella per quello che contiene">${rfEsc(p.contenuto)}</span>` : ''}${p.era ? `<span class="caption" title="Nella cartella di carta stava dopo un altro foglio separatore">${rfEsc(p.era)}</span>` : ''}
+        ${p.mano ? `<span class="badge" title="Il Mac ha guardato la pagina: è scritta a mano, quindi va negli Appunti">scritta a mano</span>` : ''}${p.dataOcchio ? `<span class="badge warning" title="La data non è nel testo: il Mac l’ha letta guardando la scrittura, può aver sbagliato">data letta a occhio: controlla</span>` : ''}${p.contenuto ? `<span class="badge" title="Messo in questa sottocartella per quello che contiene">${rfEsc(p.contenuto)}</span>` : ''}${p.era ? `<span class="caption" title="Nella cartella di carta stava dopo un altro foglio separatore">${rfEsc(p.era)}</span>` : ''}
         ${prima && !prima.foglio ? `<button class="btn sm" onclick="rfDivUnisci(${k})" title="Questo pezzo è il seguito del precedente">Unisci al precedente</button>` : ''}
         <button class="btn sm ghost" onclick="rfDivEscludi(${k})" title="Pagine bianche o doppie: non diventano un documento">${p.escluso ? 'Rimetti' : 'Lascia fuori'}</button></div>
       <div class="rf-div-pagine">${pagine}</div></div>`;

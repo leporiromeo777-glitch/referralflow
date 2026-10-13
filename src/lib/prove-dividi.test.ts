@@ -247,6 +247,10 @@ test('dividi, appunti a mano: le pagine scritte a mano vanno in «Appunti», un 
   assert.equal(p[1].titolo, '2021.03.12 Prova Mario Appunti');
   assert.ok(p[1].segnali.includes('scritta a mano') && p[1].segnali.includes('era in «01_Rapporti»') && p[1].sicurezza === 'media', 'spostata: da guardare, e si dice da dove viene');
   assert.ok(!p[4].segnali.some((x) => x.startsWith('era in')), 'negli Appunti c\'era già');
+  assert.ok(p[1].segnali.includes('data letta guardando la pagina'), 'una data che il testo non ha viene dalla scrittura: si dice');
+  // Una procura compilata a penna resta un documento amministrativo: per il titolo, o perché sta fra gli amministrativi.
+  const penna = componi(['', PROCURA, '', 'Cognome: Prova'], [{ pagina: 1, codice: '770010' }, { pagina: 3, codice: '770008' }], {}, 'Prova Mario', undefined, { 2: { mano: true, data: null }, 4: { mano: true, data: null } }).filter((x) => !x.foglio);
+  assert.deepEqual(penna.map((x) => [x.da, x.cartella, x.segnali.includes('scritta a mano')]), [[2, '11_Documenti amministrativi', false], [4, '11_Documenti amministrativi', false]]);
   // Senza aver guardato le pagine, quelle senza testo restano attaccate al documento prima, come sempre.
   assert.deepEqual(componi(testi, sep, {}, 'Prova Mario').filter((x) => !x.foglio && !x.escluso).map((x) => [x.da, x.a]).slice(0, 2), [[2, 6], [7, 7]]);
 });
