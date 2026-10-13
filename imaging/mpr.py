@@ -48,7 +48,8 @@ def volume(file: list[str], cache: Path):
         ds = pydicom.dcmread(f, force=False)
         if int(getattr(ds, "SamplesPerPixel", 1) or 1) != 1:
             raise ValueError("colore")
-        arr = apply_modality_lut(ds.pixel_array, ds).astype(np.float32)
+        from pixel import pixel_di      # anche il formato privato dell'archivio Philips
+        arr = apply_modality_lut(pixel_di(ds), ds).astype(np.float32)
         if arr.ndim != 2:
             raise ValueError("multiframe")
         if forma is None:

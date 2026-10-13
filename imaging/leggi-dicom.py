@@ -359,7 +359,8 @@ def comando_png(percorso: Path, frame: int, ww: float | None, wl: float | None,
             pixel = None
     if pixel is None:
         try:
-            pixel = ds.pixel_array
+            from pixel import pixel_di      # anche il formato privato dell'archivio Philips
+            pixel = pixel_di(ds)
         except Exception as e:  # noqa: BLE001 — sintassi di trasferimento non supportata, file troncato…
             return _uscita({"errore": "pixel_non_leggibili", "tipo": type(e).__name__}, 1)
         if n_frame > 1 and pixel.ndim >= 3:
@@ -432,7 +433,8 @@ def comando_filmato(percorso: Path, ww: float | None, wl: float | None, lato: in
             from pydicom.pixels import iter_pixels
             yield from iter_pixels(str(percorso))
         except Exception:  # noqa: BLE001 — si ripiega sulla lettura intera
-            tutti = ds.pixel_array
+            from pixel import pixel_di      # anche il formato privato dell'archivio Philips
+            tutti = pixel_di(ds)
             for k in range(n):
                 yield tutti[k]
 

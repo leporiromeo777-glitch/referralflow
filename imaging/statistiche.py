@@ -63,7 +63,8 @@ def statistiche_di(ds, frame: int, tipo: str, punti: list) -> dict:
     if tipo not in ("rettangolo", "ellisse", "poligono"):
         return {"stato": "roi_non_supportata"}
     try:
-        pixel = ds.pixel_array
+        from pixel import pixel_di      # anche il formato privato dell'archivio Philips
+        pixel = pixel_di(ds)
     except Exception as e:  # noqa: BLE001
         return {"stato": "pixel_non_leggibili", "tipo": type(e).__name__}
     n_frame = int(getattr(ds, "NumberOfFrames", 1) or 1)
