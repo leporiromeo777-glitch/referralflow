@@ -187,7 +187,9 @@ async function rfDivApri(id, tieniPdf) {
   RF.div.doc = { id: j.documento.id, filename: j.documento.filename, pagine: j.pagine, con_testo: j.con_testo, ocr: j.ocr, analisi: j.analisi || null, gia: j.gia_creati || 0 };
   if (!RF.div.pid) { RF.div.pid = j.documento.patient_id; RF.div.nome = j.documento.paziente; }
   RF.div.proposti = (j.pezzi || []).filter(p => !p.escluso).map(p => [p.da, p.a]);
-  RF.div.pezzi = (j.pezzi || []).map(p => ({ da: p.da, a: p.a, categoria: p.categoria, data: rfDivGiorno(p.data), titolo: '', descr: p.descrizione || '', auto: true, sicurezza: p.sicurezza, escluso: !!p.escluso, foglio: p.foglio || null, cartella: p.cartella || '' }));
+  RF.div.pezzi = (j.pezzi || []).map(p => ({ da: p.da, a: p.a, categoria: p.categoria, data: rfDivGiorno(p.data), titolo: '', descr: p.descrizione || '', auto: true, sicurezza: p.sicurezza, escluso: !!p.escluso, foglio: p.foglio || null, cartella: p.cartella || '',
+    // perché sta in questa sottocartella, se non ci è arrivato dal suo foglio separatore (13.10.2026): scritto a mano, o per contenuto
+    mano: (p.segnali || []).includes('scritta a mano'), contenuto: (p.segnali || []).find(x => x.startsWith('per contenuto: ')) || '', era: (p.segnali || []).find(x => x.startsWith('era in ')) || '' }));
   RF.div.pezzi.forEach(p => { p.titolo = p.foglio ? '' : rfDivTitolo(p); });
   RF.div.toccato = false;
   render();
@@ -412,6 +414,7 @@ function rfDivPezziHtml() {
         <input class="input rf-div-in" id="rf-div-t-${k}" style="flex:1;min-width:180px !important" placeholder="Nome del documento" value="${rfEsc(p.titolo)}" oninput="rfDivCampo(${k}, 'titolo', this.value)" aria-label="Nome del documento">
         ${p.escluso ? '' : !p.data ? '<span class="badge warning" title="Nella prima pagina non ho trovato la data: scrivila tu, serve per l’ordine">senza data</span>' : ''}
         ${p.sicurezza === 'media' ? '<span class="badge warning" title="Il taglio è probabile ma non certo: guarda la prima pagina">da guardare</span>' : p.sicurezza === 'bassa' ? '<span class="badge warning">senza testo: taglia tu</span>' : p.sicurezza === 'tua' ? '<span class="badge">taglio tuo</span>' : ''}
+        ${p.mano ? `<span class="badge" title="Il Mac ha guardato la pagina: è scritta a mano, quindi va negli Appunti">scritta a mano</span>` : ''}${p.contenuto ? `<span class="badge" title="Messo in questa sottocartella per quello che contiene">${rfEsc(p.contenuto)}</span>` : ''}${p.era ? `<span class="caption" title="Nella cartella di carta stava dopo un altro foglio separatore">${rfEsc(p.era)}</span>` : ''}
         ${prima && !prima.foglio ? `<button class="btn sm" onclick="rfDivUnisci(${k})" title="Questo pezzo è il seguito del precedente">Unisci al precedente</button>` : ''}
         <button class="btn sm ghost" onclick="rfDivEscludi(${k})" title="Pagine bianche o doppie: non diventano un documento">${p.escluso ? 'Rimetti' : 'Lascia fuori'}</button></div>
       <div class="rf-div-pagine">${pagine}</div></div>`;
@@ -422,7 +425,7 @@ PAGES.dividi = () => {
   if (!RF.live) return rfPaginaPiattaforma('Dividi cartella', 'Da un PDF unico ai singoli documenti');
   const v = RF.div; setTimeout(rfDivOsserva, 0);
   const testa = (sotto, azioni = '') => `<div class="page-head"><div><h2 class="page-title">Dividi cartella</h2><div class="page-sub">${sotto}</div></div>${azioni ? `<div class="actions">${azioni}</div>` : ''}</div>`;
-  const limite = '<p class="rf-img-limite mt-16">I <b>fogli col codice a barre</b> aprono le sezioni (una sottocartella ciascuna) e restano fuori. Dentro ogni sezione dove comincia un documento, che data porta e che cos’è lo <b>propone</b> il Mac — regole più un modello che gira sul Mac dello studio e legge il contesto di ogni pagina — e lo <b>conferma una persona</b>: sbaglia, soprattutto sulle pagine scritte a mano o sbiadite, e per questo ogni pezzo si può unire, tagliare, rinominare o lasciare fuori. I nomi sono «anno.mese.giorno paziente documento», così in ogni sottocartella l’ordine è quello del tempo. Niente esce dallo studio. L’originale non si tocca.</p>';
+  const limite = '<p class="rf-img-limite mt-16">I <b>fogli col codice a barre</b> aprono le sezioni (una sottocartella ciascuna) e restano fuori. Il <b>contenuto</b> può spostare un documento: le pagine <b>scritte a mano</b> vanno negli Appunti, le tabelle di valori in Laboratorio, procure e dispense fra i Documenti amministrativi, i piani di medicazione sotto Ricette — c’è scritto da dove vengono. Dentro ogni sezione dove comincia un documento, che data porta e che cos’è lo <b>propone</b> il Mac — regole più un modello che gira sul Mac dello studio e legge il contesto di ogni pagina — e lo <b>conferma una persona</b>: sbaglia, soprattutto sulle pagine scritte a mano o sbiadite, e per questo ogni pezzo si può unire, tagliare, rinominare o lasciare fuori. I nomi sono «anno.mese.giorno paziente documento», così in ogni sottocartella l’ordine è quello del tempo. Niente esce dallo studio. L’originale non si tocca.</p>';
   const errore = v.errore ? `<div class="rf-manc mb-16">${rfEsc(v.errore)}</div>` : '';
 
   // 3 — fatto: i documenti creati.
