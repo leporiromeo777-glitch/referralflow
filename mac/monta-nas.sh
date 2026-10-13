@@ -6,6 +6,20 @@
 # prima volta («Ricorda la password nel portachiavi»). Qui c'è solo l'indirizzo.
 # Sul NAS questo script non scrive niente.
 set -u
+# Anche la cartella del server dove va la copia di sicurezza (13.10.2026): stessa cura, niente scritture da qui.
+BK="$HOME/.referralflow-backup.conf"
+if [ -f "$BK" ]; then
+  BK_SU="$(sed -n 's/^FUORI_SU=//p' "$BK" | head -1 | tr -d '"')"; BK_URL="$(sed -n 's/^FUORI_URL=//p' "$BK" | head -1 | tr -d '"')"
+  BK_VOL="$(printf '%s' "$BK_SU" | cut -d/ -f1-3)"
+  if [ -n "$BK_URL" ] && [ -n "$BK_VOL" ] && ! mount | grep -qF " on $BK_VOL ("; then
+    BK_HOST="$(printf '%s' "$BK_URL" | sed -E 's#^smb://([^@/]*@)?([^/]+)/.*#\2#')"
+    if nc -z -G 4 "$BK_HOST" 445 >/dev/null 2>&1; then
+      /usr/bin/osascript -e "with timeout of 40 seconds" -e "mount volume \"$BK_URL\"" -e "end timeout" >/dev/null 2>&1 || true
+      mkdir -p "$HOME/Library/Logs/ReferralFlow"
+      echo "$(date '+%F %H:%M') cartella della copia di sicurezza: $(mount | grep -qF " on $BK_VOL (" && echo ricollegata || echo 'non riesco a ricollegarla (password nel portachiavi?)')" >> "$HOME/Library/Logs/ReferralFlow/nas.log"
+    fi
+  fi
+fi
 CONF="$HOME/referti-imaging/archivio-file.conf"
 LOG="$HOME/Library/Logs/ReferralFlow/nas.log"
 mkdir -p "$(dirname "$LOG")"

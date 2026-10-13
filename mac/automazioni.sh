@@ -46,6 +46,8 @@ chiama cron/grezze
 chiama cron/ocr
 # Seconde tracce con istruzioni («aggiungi prima di…»): a catena ferma.
 chiama cron/istruzioni
+# La copia di sicurezza fuori dal Mac: i pacchi cifrati preparati stanotte vanno sul server dello studio.
+chiama cron/backup
 
 # Una sola volta l'ora / al giorno / al mese: passa di qui ogni quarto d'ora,
 # quindi il giro col minuto sotto i 15 è quello «in punto».

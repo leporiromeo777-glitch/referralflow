@@ -34,7 +34,7 @@ Seconda cosa da guardare, quando l'indirizzo del dominio è giusto ma da un altr
 | servizio | cosa fa |
 |---|---|
 | `ch.referralflow.app` | l'app Next.js su :3000 |
-| `ch.referralflow.backup` | backup notturno |
+| `ch.referralflow.backup` | backup notturno (sul Mac) e preparazione dei pacchi cifrati per il server dello studio |
 | `ch.referralflow.automazioni` | ogni 15 min: agenda, SMS, watchdog 07, report il 1° (vedi [[Piattaforma/Automazioni]]) |
 | `ch.referralflow.agenda-robot` | robot MediOnline ai minuti 1,16,31,46 |
 | `ch.referralflow.referti-servizio` | la catena dei referti (`~/referti-pipeline/pipeline.py --servizio`), log in `~/referti/log/servizio.log` |
@@ -60,3 +60,15 @@ Il Mac resta in rete locale, ma ha un nome pubblico con certificato ufficiale: `
 
 ## Cartelle condivise coi PC dello studio (9.10.2026)
 Il Mac condivide in rete (Impostazioni di Sistema → Condivisione file) `~/Pressione da leggere` e `~/Ciclo da leggere`; sulla Scrivania ci sono i collegamenti. Perché un PC Windows ci entri, l'utente del Mac va spuntato sotto **Opzioni… → Condivisione file Windows** (senza, Windows riceve sempre «credenziali sbagliate»: nell'account manca l'impronta `SMB-NT`, si vede con `dscl . -read /Users/<utente> AuthenticationAuthority`). Sul PC la cartella si collega come disco di rete (`\\192.168.0.188\<nome>`), utente `centrocardiologicoticino`. Il filtro pf non tocca la porta 445. Chi è collegato: `netstat -an | grep '\.445 '`. Il PC della ciclo è `192.168.0.93` ed è anche fra gli apparecchi ammessi alla ricezione DICOM (`~/referti-imaging/ricezione.conf`). Dettaglio in [[Piattaforma/Prova da sforzo]] e [[Piattaforma/Pressione]].
+
+## Copia di sicurezza fuori dal Mac (13.10.2026)
+
+Fino al 13.10 tutto stava su un disco solo: il backup notturno (database e allegati) nella casa dell'utente, le immagini senza copia. Decisione dello studio: **la copia va sul server dello studio** (la cartella condivisa `comune` del server dei file, che il Mac tiene collegata).
+
+- **Che cosa parte**: tre tipi di pacco, **cifrati** (AES-256, `openssl enc -pbkdf2`) prima di lasciare il Mac — il database di ogni notte (`referralflow-<giorno>.sql.gz.enc`, sul server ne restano 30 giorni), **solo i file nuovi** di allegati e immagini (`allegati-<giorno>-<ora>.tar.enc`: documenti e immagini non cambiano mai, quindi la prima volta ci sono tutti e poi pochi per notte; questi pacchi si tengono tutti), la configurazione (`configurazione-<giorno>.tar.enc`: `.env`, configurazioni nella casa, dizionari della catena, servizi launchd).
+- **Chi fa che cosa**: `mac/backup-db.sh` (02:30) prepara i pacchi in `~/ReferralFlow-backup/fuori/`; **l'app** li porta sul server (`src/lib/backup-fuori.ts`, rotta `/api/cron/backup`, chiamata da `mac/automazioni.sh` ogni quarto d'ora) — uno script lanciato da launchd non può scrivere sui volumi di rete, l'app sì. Arrivato un pacco (stessa dimensione), sul Mac si toglie. Sul server l'app scrive solo nella sua cartella e tocca solo i file coi suoi nomi.
+- **La chiave** sta in `~/.referralflow-backup.key` (la crea `mac/installa-backup-fuori.sh`, che non la mostra). **Una copia va tenuta fuori dal Mac**: senza, i pacchi non si riaprono. Chi sta sul server vede solo file cifrati.
+- **Se il server non è collegato** i pacchi aspettano sul Mac e partono al giro dopo; `mac/monta-nas.sh` prova a ricollegare la cartella (password nel portachiavi); la **sentinella** avvisa se la copia fuori ha più di due giorni.
+- **Riaprire**: `bash mac/apri-pacco.sh <pacco.enc> <uscita>`; poi `gunzip -c uscita.sql.gz | psql referralflow` per il database, `tar -xf` per allegati (tutti i pacchi, dal più vecchio) e configurazione.
+- **Prove**: `scripts/prova-backup-fuori.ts` (dati inventati, cartelle temporanee): 9/9.
+- **Limiti**: la cartella `comune` la vedono tutti i computer dello studio — non possono leggere i pacchi, ma possono cancellarli; il server sta nello stesso edificio (un incendio o un furto con scasso li prende tutti e due); un ripristino completo non è mai stato provato.

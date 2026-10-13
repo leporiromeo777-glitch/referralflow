@@ -41,10 +41,10 @@ Che cosa è stato guardato, che cosa è stato trovato e corretto, che cosa resta
 
 ## Da decidere con lo studio (non toccato)
 
-1. **Nessuna copia fuori dal Mac.** Il backup notturno (database e allegati) sta sullo stesso disco; le immagini non hanno copia; Time Machine non ha una destinazione. Un guasto o un furto e si perde tutto.
-2. **`mac/apri-finestra.sh`** apre un tunnel Cloudflare sulla piattaforma coi pazienti veri (spento; il traffico passerebbe in chiaro da Cloudflare, che non è fra i fornitori autorizzati), e `.env` ha `ORIGINI_CONSENTITE=*.trycloudflare.com`. Toglierli?
-3. **LM Studio** è aperto, ascolta sulla rete (porta 41488) e tiene due collegamenti verso l'esterno; **Tailscale** è installato (fermo) e il filtro pf non copre la sua scheda. Non servono a ReferralFlow.
-4. **Il sito dimostrativo** (`ch.referralflow.demo`, porta 3100, dati inventati, codice del 17.9, Next 14) risponde in chiaro a tutta la rete dello studio.
+1. ~~Nessuna copia fuori dal Mac~~ — **deciso e fatto il 13.10**: copia cifrata sul server dello studio, vedi [[Piattaforma/Server Mac mini]]. Resta da fare: tenere una copia della chiave fuori dal Mac, e provare una volta un ripristino.
+2. **`mac/apri-finestra.sh`** apre un tunnel Cloudflare sulla piattaforma coi pazienti veri (spento; il traffico passerebbe in chiaro da Cloudflare, che non è fra i fornitori autorizzati), e `.env` ha `ORIGINI_CONSENTITE=*.trycloudflare.com`. Storia: lo script è del 17.9.2026 (per far vedere un referto vero in una riunione) e **non risulta mai usato** (il suo registro non esiste); il tunnel usato dal 16 al 23.9 era quello del sito dimostrativo (`demo-link.sh`, dati inventati). Toglierli?
+3. **LM Studio** è aperto, ascolta sulla rete (porta 41488) e tiene due collegamenti verso l'esterno: non serve a ReferralFlow. **Tailscale** lo studio lo usa per il controllo da remoto del Mac (13.10): resta; il filtro pf non copre la sua scheda, quindi i dispositivi di quella rete privata arrivano alla piattaforma in https (non più alla porta 3000).
+4. ~~Il sito dimostrativo~~ — **spento il 13.10** su richiesta dello studio (`launchctl bootout` + `disable` di `ch.referralflow.demo`): non riparte all'accesso. Il database demo resta, serve alle prove.
 5. **PostgreSQL** accetta senza password chiunque dal Mac stesso (`trust`): va bene finché sul Mac lavora solo lo studio.
 6. **Aggiornamenti in attesa**: macOS 26.7.1, Safari 27; `next` e `nodemailer` hanno correzioni di sicurezza da installare (da fare con le prove complete).
 7. **Più studi sullo stesso server**: archivio immagini, MediOnline, pressione e ciclo leggono una configurazione sola del Mac, non dello studio. Oggi lo studio è uno; prima del secondo va recintato.

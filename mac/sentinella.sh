@@ -186,6 +186,15 @@ if [ -z "$ultimo_backup" ] || [ $(( (ADESSO - $(mtime "$ultimo_backup")) / 3600 
 else
   a_posto backup "il backup notturno è di nuovo in ordine."
 fi
+# La copia FUORI dal Mac (13.10.2026): se è accesa, l'ultima riuscita non deve avere più di due giorni.
+if grep -q '^FUORI_SU=' "$HOME/.referralflow-backup.conf" 2> /dev/null; then
+  fuori="$BACKUP_DIR/.fuori-stato"
+  if [ ! -f "$fuori" ] || [ $(( (ADESSO - $(mtime "$fuori")) / 3600 )) -ge 48 ]; then
+    problema backupfuori 1 "La copia di sicurezza sul server dello studio non arriva da più di due giorni: il server è spento o la sua cartella non è collegata."
+  else
+    a_posto backupfuori "la copia di sicurezza sul server dello studio è di nuovo in ordine."
+  fi
+fi
 
 libero_gb=$(( $(df -k "$HOME" | awk 'NR==2 {print $4}') / 1024 / 1024 ))
 if [ "$libero_gb" -lt "$DISCO_MIN_GB" ]; then

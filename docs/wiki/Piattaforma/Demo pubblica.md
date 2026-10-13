@@ -1,8 +1,10 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-09-16
+aggiornata: 2026-10-13
 ---
 # Demo pubblica
+
+> **Spenta il 13.10.2026** su richiesta dello studio, dopo il controllo di sicurezza: il servizio `ch.referralflow.demo` (porta 3100) è fermo e disattivato, non riparte all'accesso. Rispondeva in chiaro a tutta la rete dello studio con codice del 17.9. Il database `referralflow_demo` resta: lo usano le prove end-to-end. Per riaccenderla: `launchctl enable gui/$(id -u)/ch.referralflow.demo` e `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ch.referralflow.demo.plist`. Quel che segue descrive com'era.
 
 La piattaforma **vera**, raggiungibile da fuori con un link, con un database suo e **dati tutti inventati**. Serve a farla vedere senza portarsi dietro il Mac (16.9.2026, prima della riunione del 17 su [[Proposte/CardioOS confronto per funzione]]).
 
