@@ -28,7 +28,7 @@ renderDocViewer = function () {
   el.innerHTML = `
     <div class="dv-bar rf-dv-bar"><span class="section-title" style="margin:0">Documento</span><span class="badge">${rfEsc(DOC_TYPE[a.kind] || a.kind)}</span><span class="caption rf-dv-chi" title="${rfEsc(paz)}${a.date ? ' · ' + a.date : ''}">${rfEsc(paz)}${a.date ? ' · ' + a.date : ''}</span>
       <span class="right row rf-dv-tasti" style="gap:4px">
-        ${a.pdf && !a.src ? `<button class="btn sm ghost" title="Taglia alcune pagine in un documento nuovo della cartella (per esempio un ECG da allegare)" onclick="rfEstraiPagine('${rfEsc(a.id)}')">Estrai pagine</button>` : ''}
+        ${a.pdf && !a.src ? `<button class="btn sm ghost" title="Taglia alcune pagine in un documento nuovo della cartella (per esempio un ECG da allegare)" onclick="rfEstraiPagine('${rfJs(a.id)}')">Estrai pagine</button>` : ''}
         ${a.p ? `<button class="icon-btn" title="Scheda paziente" data-go="#/patients/${a.p}">${ICONS.patients}</button>` : ''}
         <button class="icon-btn" title="Chiedi all'assistente di riassumerlo" data-ai="Riassumi questo documento in poche righe">${ICONS.ai}</button>
         <a class="icon-btn" title="Scarica" href="${a.src || `/api/documents/${a.id}`}" download>${ICONS.download || '↓'}</a>

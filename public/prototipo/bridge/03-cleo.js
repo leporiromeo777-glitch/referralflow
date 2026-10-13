@@ -116,7 +116,7 @@ function rfCartellaCerca(q) {
   const t = String(q ?? '').trim();
   const trovati = rfCartellaTrova(t);
   box.innerHTML = trovati.length
-    ? trovati.map(p => `<button type="button" class="rf-cart-v" onclick="rfCartellaPaziente('${rfEsc(p.id)}')">
+    ? trovati.map(p => `<button type="button" class="rf-cart-v" onclick="rfCartellaPaziente('${rfJs(p.id)}')">
         <b>${rfEsc(`${p.last ?? ''} ${p.first ?? ''}`.trim())}</b>${p.dob ? `<span>${rfEsc(p.dob)}</span>` : ''}</button>`).join('')
     : `<span class="caption">${t.length < 2 ? 'Scrivi almeno due lettere.' : 'Nessun paziente con questo nome.'}</span>`;
 }

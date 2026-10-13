@@ -202,7 +202,9 @@ export async function zipDi(studioId: string, userId: string, ids: string[]): Pr
         await fs.writeFile(path.join(dir, nome), (await getFile(r.storage_key)).body, { mode: 0o600 });
         await logDocumento(r.id, 'lettura', { studioId, userId, dettaglio: 'scaricato in zip' });
       }
-      await esegui(ZIP, ['-q', '-0', 'documenti.zip', ...nomi], dir);     // -0: i PDF sono già compressi
+      // «./» davanti a ogni nome e «--» prima dei nomi: un documento chiamato «-qualcosa» sarebbe stato letto da zip come
+      // un'opzione (e zip ne ha che eseguono comandi) — 13.10.2026, controllo di sicurezza.
+      await esegui(ZIP, ['-q', '-0', 'documenti.zip', '--', ...nomi.map((n) => `./${n}`)], dir);     // -0: i PDF sono già compressi
       return await fs.readFile(path.join(dir, 'documenti.zip'));
     });
   } catch { return { errore: 'Non riesco a preparare il file .zip.', stato: 500 }; }

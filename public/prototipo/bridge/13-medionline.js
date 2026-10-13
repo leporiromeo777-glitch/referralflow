@@ -179,7 +179,7 @@ function rfMolSezione() {
   if (!d.configurato && !d.puoConfigurare) return '';
   const adesso = Date.now();
   const future = (d.scritture || []).filter(s => new Date(s.fine).getTime() >= adesso);
-  const riga = (s) => `<div class="rf-mol-riga${s.annullato_at ? ' tolto' : ''}"><span class="num">${rfEsc(new Date(s.inizio).toLocaleDateString('it-CH', { day: '2-digit', month: '2-digit', timeZone: 'Europe/Zurich' }))} ${rfMolOra(s.inizio)}</span><span class="t">${rfEsc(s.titolo)}</span><span class="caption">${rfEsc(s.calendario)}${s.da ? ` · da ${rfEsc(String(s.da).split('@')[0])}` : ''}</span>${s.annullato_at ? '<span class="caption">tolto</span>' : (d.puoScrivere ? `<button class="btn sm" onclick="rfMolAnnulla('${rfEsc(s.id)}')">Togli</button>` : '')}</div>`;
+  const riga = (s) => `<div class="rf-mol-riga${s.annullato_at ? ' tolto' : ''}"><span class="num">${rfEsc(new Date(s.inizio).toLocaleDateString('it-CH', { day: '2-digit', month: '2-digit', timeZone: 'Europe/Zurich' }))} ${rfMolOra(s.inizio)}</span><span class="t">${rfEsc(s.titolo)}</span><span class="caption">${rfEsc(s.calendario)}${s.da ? ` · da ${rfEsc(String(s.da).split('@')[0])}` : ''}</span>${s.annullato_at ? '<span class="caption">tolto</span>' : (d.puoScrivere ? `<button class="btn sm" onclick="rfMolAnnulla('${rfJs(s.id)}')">Togli</button>` : '')}</div>`;
   let conf = '';
   if (d.puoConfigurare) {
     const lav = RF.mol.lavoro;
@@ -194,7 +194,7 @@ function rfMolSezione() {
           <button class="btn sm" ${lav || !(d.calendari || []).some(c => c.provider_id) ? 'disabled' : ''} onclick="rfMolAzione('controllo')">${lav === 'controllo' ? 'Confronto…' : 'Controlla il robot'}</button>
           <button class="btn sm" ${lav || !(d.calendari || []).some(c => c.provider_id) ? 'disabled' : ''} onclick="rfMolAzione('recupera', 'Importo dal CalDAV gli appuntamenti PRIMA dell\\'inizio del robot, per i medici abbinati. Si può ripetere senza doppioni. Procedo?')">${lav === 'recupera' ? 'Recupero… (può durare qualche minuto)' : 'Recupera il passato'}</button>
         </div>
-        ${(d.calendari || []).length ? `<div class="rf-mol-cal mt-8">${d.calendari.map(c => `<div class="rf-mol-riga"><span class="t">${rfEsc(c.nome)}</span><select class="input sm" onchange="rfMolAbbina('${rfEsc(c.id)}', this.value)">${opz(c.provider_id)}</select><span class="caption">${c.scrivibile ? 'lettura e scrittura' : 'sola lettura'}</span></div>`).join('')}</div>` : '<div class="caption mt-8">Nessun calendario letto: «Aggiorna i calendari».</div>'}
+        ${(d.calendari || []).length ? `<div class="rf-mol-cal mt-8">${d.calendari.map(c => `<div class="rf-mol-riga"><span class="t">${rfEsc(c.nome)}</span><select class="input sm" onchange="rfMolAbbina('${rfJs(c.id)}', this.value)">${opz(c.provider_id)}</select><span class="caption">${c.scrivibile ? 'lettura e scrittura' : 'sola lettura'}</span></div>`).join('')}</div>` : '<div class="caption mt-8">Nessun calendario letto: «Aggiorna i calendari».</div>'}
         ${ctl ? `<div class="mt-8"><b>Controllo del robot</b> <span class="caption">(${rfEsc(new Date(ctl.da).toLocaleDateString('it-CH'))} – ${rfEsc(new Date(ctl.a).toLocaleDateString('it-CH'))})</span>${ctl.medici.map(m => `<div class="rf-mol-riga"><span class="t">${rfEsc(m.medico)}</span><span class="caption">CalDAV ${m.caldav} · robot ${m.robot}</span><span class="caption">${m.differenze.length ? m.differenze.map(x => `${rfEsc(x.giorno.slice(8, 10))}.${rfEsc(x.giorno.slice(5, 7))}: ${x.caldav} contro ${x.robot}`).join(' · ') : 'uguali'}</span></div>`).join('')}</div>` : ''}
         ${RF.mol.recupero ? `<div class="mt-8 caption">Passato recuperato: ${RF.mol.recupero.medici.map(m => `${rfEsc(m.medico)} ${m.nuovi} nuovi su ${m.letti}`).join(' · ')}</div>` : ''}` : ''}
       </div>`;
@@ -221,7 +221,7 @@ function rfMolSezione() {
 
 /* ---------- dove compare: agenda e scheda del paziente ---------- */
 function rfMolTasto(pid) {
-  return rfMolPuo() ? `<button class="btn" onclick="rfMolApri(${pid ? `'${rfEsc(pid)}'` : ''})">Fissa in MediOnline</button>` : '';
+  return rfMolPuo() ? `<button class="btn" onclick="rfMolApri(${pid ? `'${rfJs(pid)}'` : ''})">Fissa in MediOnline</button>` : '';
 }
 function rfMolCaricaSeServe() { if (RF.live && !RF.mol.dati && !RF.mol.errore && !RF.mol.carico) void rfMolCarica(); }
 

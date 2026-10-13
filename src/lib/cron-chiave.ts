@@ -1,4 +1,5 @@
 import 'server-only';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import type { NextRequest } from 'next/server';
 
 // La chiave delle chiamate automatiche (18.9.2026).
@@ -14,5 +15,7 @@ export function chiaveCronValida(req: NextRequest): boolean {
   if (!atteso) return false;
   const testata = req.headers.get('authorization') ?? '';
   const bearer = testata.toLowerCase().startsWith('bearer ') ? testata.slice(7).trim() : '';
-  return bearer === atteso || req.nextUrl.searchParams.get('key') === atteso;
+  // Il confronto non deve dire, col tempo che ci mette, quanti caratteri sono giusti (13.10.2026).
+  const uguale = (a: string) => { const x = createHash('sha256').update(a).digest(), y = createHash('sha256').update(atteso).digest(); return timingSafeEqual(x, y); };
+  return (!!bearer && uguale(bearer)) || uguale(req.nextUrl.searchParams.get('key') ?? '');
 }

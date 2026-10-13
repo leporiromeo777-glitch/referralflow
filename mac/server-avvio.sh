@@ -53,4 +53,6 @@ if [ ! -d .next ] || [ "$COMMIT" != "$(cat .build-stamp 2> /dev/null)" ]; then
 fi
 
 echo "$(date '+%F %H:%M') avvio ReferralFlow sulla porta 3000"
-exec npm start
+# Solo 127.0.0.1 (13.10.2026): prima ascoltava su tutte le schede, in chiaro, e a tenerla chiusa dalla rete c'era
+# soltanto il filtro pf. Dalla rete si entra da Caddy, in https.
+exec npm start -- -H 127.0.0.1

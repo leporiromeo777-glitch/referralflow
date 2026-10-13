@@ -642,7 +642,7 @@ function rfMonAiHtml() {
   return `${x.domanda ? `<div class="caption">Domanda: «${rfEsc(x.domanda)}»</div>` : ''}<div class="rf-mon-ai">${rfEsc(x.testo)}</div>
     <div class="caption" style="margin-top:8px"><b>${x.fonte === 'modello_locale' ? `Scritto dall'AI locale dello studio (${rfEsc(x.modello || '')}) a partire dai dati calcolati` : 'Composto da un modello fisso, senza AI'}</b>${x.nota ? ` — ${rfEsc(x.nota)}` : ''}</div>
     <div class="caption">Periodo analizzato: dal ${rfEsc(x.periodo.da)} al ${rfEsc(x.periodo.a)} · dati usati: ${x.dati_usati.length ? x.dati_usati.map(p => `${rfEsc(p.nome)} (${p.misure} misure, copre il ${p.copertura_pct}%)`).join(', ') : 'nessuna misura'}</div>
-    ${x.collegamenti.length ? `<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">${x.collegamenti.map(c => `<button class="btn sm ghost" onclick="rfMonVai('${c.tipo}','${rfEsc(c.riferimento)}')">${rfEsc(c.etichetta)}</button>`).join('')}</div>` : ''}
+    ${x.collegamenti.length ? `<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">${x.collegamenti.map(c => `<button class="btn sm ghost" onclick="rfMonVai('${c.tipo}','${rfJs(c.riferimento)}')">${rfEsc(c.etichetta)}</button>`).join('')}</div>` : ''}
     ${x.limiti.length ? `<div class="caption" style="margin-top:6px">Limiti dei dati: ${x.limiti.map(rfEsc).join(' ')}</div>` : ''}
     <p class="rf-img-limite">${rfEsc(x.avvertenza)}</p>`;
 }

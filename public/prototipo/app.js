@@ -12,6 +12,11 @@ const $ = (s, el = document) => el.querySelector(s);
 // dentro stringhe JS fra apici singoli, e un nome come Dell'Orto chiudeva la
 // stringa — il pulsante smetteva di funzionare e basta, senza dire niente.
 const esc = s => String(s ?? '').replace(/[&<>"'`]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' }[c]));
+// Un valore dentro una STRINGA JavaScript di un gestore inline — onclick="f('…')" — non si protegge con esc(): il
+// browser ritrasforma &#39; in un apice PRIMA di eseguire il codice, e un nome come D'Angelo chiude la stringa (o,
+// scritto apposta, fa eseguire altro). Qui ogni carattere che può uscire dalla stringa o dall'attributo diventa \xNN:
+// niente da ritrasformare, e il valore arriva alla funzione identico (13.10.2026, controllo di sicurezza).
+const jsq = s => String(s ?? '').replace(/[\\'"`<>&\n\r\u2028\u2029]/g, c => { const n = c.charCodeAt(0); return n < 256 ? '\\x' + n.toString(16).padStart(2, '0') : '\\u' + n.toString(16).padStart(4, '0'); });
 
 /* ---------- Theme ---------- */
 function applyTheme() {

@@ -17,6 +17,8 @@
 const RF = { live: false, erroreCarico: null, data: null, queue: [], loaded: null, loading: null, meta: null, audioEl: null, medici: [], caricato: false, nonAutorizzato: false, procedure: [], org: null };
 function rfDentro() { return /\/prototipo\//.test(location.pathname); }
 const rfEsc = (s) => (typeof esc === 'function' ? esc(String(s ?? '')) : String(s ?? ''));
+// Per i valori dentro una stringa JavaScript di un gestore inline (onclick="f('…')"): vedi jsq in app.js.
+const rfJs = (s) => jsq(String(s ?? ''));
 /* Il nome di chi sta in un riquadro dell'agenda. Non tutti gli appuntamenti
    hanno un paziente in cartella: l'agenda dello studio contiene anche blocchi
    («pausa pranzo», «ecg 14h», un trattino), e per quelli il campo `p` è vuoto.
@@ -47,7 +49,10 @@ async function rfCaricaDati() {
   state.role = ruolo;
   rfRimpiazzaOggetto(DOCTORS, d.doctors || {});
   rfSvuota(ROOMS); [...new Set((d.appts || []).map(a => a.room).filter(Boolean))].forEach(x => ROOMS.push(x));
-  rfSvuota(PATIENTS); (d.patients || []).forEach(p => PATIENTS.push(p));
+  // Difesa in più (13.10.2026, controllo di sicurezza): un nome non contiene mai «<» o «>». Tolti all'ingresso, anche
+  // una pagina che scrivesse il nome senza proteggerlo non può farne un pezzo di pagina eseguibile.
+  const senzaTag = (v) => (typeof v === 'string' ? v.replace(/[<>]/g, '') : v);
+  rfSvuota(PATIENTS); (d.patients || []).forEach(p => { p.first = senzaTag(p.first); p.last = senzaTag(p.last); PATIENTS.push(p); });
   rfRimpiazzaOggetto(P, Object.fromEntries(PATIENTS.map(p => [p.id, p])));
   rfSvuota(APPTS); (d.appts || []).forEach(a => APPTS.push(a));
   RF.agenda = d.agenda || [];

@@ -1,5 +1,6 @@
 'use server';
 
+import { tentativoAmmesso, tentativoRiuscito, tentativoSbagliato } from '@/lib/tentativi-codice';
 import { randomInt } from 'crypto';
 import { redirect } from 'next/navigation';
 import { query } from '@/lib/db';
@@ -67,13 +68,19 @@ export async function completaRegistrazione(formData: FormData) {
   if (!doc || !doc.email) redirect('/');
   if (password.length < 8) redirect(`/portale/${token}?reg=password`);
 
+  // Al quinto codice sbagliato il codice è annullato: se ne chiede uno nuovo.
+  if (!tentativoAmmesso(`portale:${doc.id}`)) redirect(`/portale/${token}?reg=codice`);
   const [ver] = await query<{ id: string }>(
     `select id from login_verifications
       where referring_doctor_id = $1 and code = $2
         and used_at is null and expires_at > now()`,
     [doc.id, code]
   );
-  if (!ver) redirect(`/portale/${token}?reg=codice`);
+  if (!ver) {
+    if (tentativoSbagliato(`portale:${doc.id}`)) await query('delete from login_verifications where referring_doctor_id = $1', [doc.id]).catch(() => null);
+    redirect(`/portale/${token}?reg=codice`);
+  }
+  tentativoRiuscito(`portale:${doc.id}`);
 
   await query('update login_verifications set used_at = now() where id = $1', [ver.id]);
 

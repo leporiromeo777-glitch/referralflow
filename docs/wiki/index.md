@@ -10,6 +10,7 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 
 ## Regole che non si negoziano
 - [[Regole/nLPD e sessione]] — dati sanitari, che cosa non leggere mai, come si distribuisce, chi paga
+- [[Regole/Controllo di sicurezza 2026-10-13]] — che cosa è stato guardato, corretto e che cosa resta da decidere (accessi, dati in uscita, web, Mac)
 - [[Regole/NON rompere]] — vincoli tecnici che fanno fallire il build o l'app
 
 ## Piattaforma (Next.js)

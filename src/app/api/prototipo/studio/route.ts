@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, hashPassword } from '@/lib/auth';
+import { getSession, hashPassword, dimenticaRiscontro } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { catalogoDaPercorsi } from '@/lib/prestazioni';
 import { caricaPercorsi } from '@/lib/percorsi';
@@ -210,6 +210,7 @@ export async function POST(req: NextRequest) {
       if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 });
       if (id === session.id) return NextResponse.json({ errore: 'Non puoi disattivare il tuo accesso.' }, { status: 400 });
       await query('update users set attivo = not attivo where id = $1 and studio_id = $2', [id, sid]);
+      dimenticaRiscontro(id);      // disattivato: fuori subito, non fra quindici secondi
     } else if (azione === 'medico_crea') {
       const nome = s(c.nome, 120); if (!nome) return NextResponse.json({ errore: 'Il nome è obbligatorio.' }, { status: 400 });
       const aliases = Array.isArray(c.aliases) ? c.aliases.map((x: unknown) => s(x, 80)).filter(Boolean).slice(0, 10) : String(c.aliases ?? '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 10);

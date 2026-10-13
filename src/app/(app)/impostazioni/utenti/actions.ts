@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { query } from '@/lib/db';
-import { getSession, hashPassword } from '@/lib/auth';
+import { getSession, hashPassword, dimenticaRiscontro } from '@/lib/auth';
 
 const RUOLI_VALIDI = ['segretaria', 'medico', 'admin'];
 
@@ -66,6 +66,7 @@ export async function toggleUser(formData: FormData) {
       'update users set attivo = not attivo where id = $1 and studio_id = $2',
       [id, session.studioId]
     );
+      dimenticaRiscontro(id);      // disattivato: fuori subito, non fra quindici secondi
   }
   revalidatePath('/impostazioni/utenti');
 }

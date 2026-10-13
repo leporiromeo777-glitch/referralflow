@@ -21,6 +21,10 @@ export type Fornitore = { url: string; chiave: string };
 export function fornitoreEsterno(avvisa: (m: string) => void = () => {}): Fornitore | null {
   try {
     const c = leggiConf(readFileSync(CONF, 'utf-8'));
+    // L'interruttore è UNO per tutto ciò che esce: `attivo=0` spegne la catena E la piattaforma (13.10.2026,
+    // controllo di sicurezza: prima questa porta non lo leggeva, e «Domanda medica» e «Ricerca clinica» uscivano
+    // verso il fornitore anche con l'interruttore spento).
+    if (c.attivo !== '1') return null;
     if (!c.url || !c.chiave) return null;
     // La guardia: un indirizzo fuori dalla lista autorizzata non si chiama,
     // anche se è scritto nel file di configurazione. Stessa regola della catena.

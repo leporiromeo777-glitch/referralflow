@@ -887,5 +887,5 @@ PAGES.patient = () => {
   const html = rfPazientePrimaModifica();
   const id = state.params && state.params.id;
   if (!RF.live || !rfUuid(id)) return html;
-  return html.replace('<div class="actions">', `<div class="actions"><button class="btn" onclick="rfPazienteModifica('${rfEsc(id)}')">${ICONS.profile || ''} Modifica dati</button>`);
+  return html.replace('<div class="actions">', `<div class="actions"><button class="btn" onclick="rfPazienteModifica('${rfJs(id)}')">${ICONS.profile || ''} Modifica dati</button>`);
 };

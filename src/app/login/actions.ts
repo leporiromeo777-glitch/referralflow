@@ -24,7 +24,8 @@ async function clientIp(): Promise<string> {
 // tornare a sé stesso): solo percorsi interni, mai URL esterni.
 function destinazioneSicura(next: unknown): string | null {
   const s = typeof next === 'string' ? next.trim() : '';
-  return s.startsWith('/') && !s.startsWith('//') && !s.includes('://') && s.length <= 300 ? s : null;
+  // «/\\host» il browser lo legge come «//host», cioè un altro sito: niente barre rovesciate né spazi o caratteri di controllo.
+  return s.startsWith('/') && !s.startsWith('//') && !s.includes('://') && !/[\\\s\u0000-\u001f]/.test(s) && s.length <= 300 ? s : null;
 }
 
 export async function login(_prev: State, formData: FormData): Promise<State> {

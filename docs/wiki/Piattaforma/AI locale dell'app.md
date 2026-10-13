@@ -87,7 +87,7 @@ I nomi si cercano **con la maiuscola**: «capelli neri» non è il cognome Neri.
 Se il controllo non passa, `manda` rifiuta prima di aprire la connessione e la riga resta `bloccata`.
 
 ### Il modello esterno non naviga
-Fuori va **gemma 4 31B su Infomaniak (Ginevra)**, lo stesso della «Domanda medica», per la stessa porta (`fornitore-esterno.ts`, guardia `FORNITORI_AUTORIZZATI`). È più **grande**, non è collegato a internet: non consulta PubMed, non apre le linee guida, risponde da quello che ha imparato. Quindi:
+**Solo con l'interruttore acceso** (`attivo=1` in `~/.referralflow-esterno.conf`: dal 13.10.2026 la porta `fornitore-esterno.ts` lo legge come la catena — prima no, e queste due funzioni uscivano anche con l'interruttore spento; con `attivo=0`, com'è oggi, rispondono «non collegato»). Fuori va **gemma 4 31B su Infomaniak (Ginevra)**, lo stesso della «Domanda medica», per la stessa porta (`fornitore-esterno.ts`, guardia `FORNITORI_AUTORIZZATI`). È più **grande**, non è collegato a internet: non consulta PubMed, non apre le linee guida, risponde da quello che ha imparato. Quindi:
 
 - il prompt gli **vieta link, DOI e PubMed** («non potendoli controllare, sarebbero inventati») e gli chiede di dire quando non è sicuro;
 - `fontiDaVerificare` li segnala lo stesso se compaiono, e la pagina avvisa il medico;

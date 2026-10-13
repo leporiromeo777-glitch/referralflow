@@ -19,7 +19,7 @@ function rfOrAccoglienzaCorpo(o, compatto) {
     const az = [];
     if (p.stato === 'atteso') { az.push(`<button class="btn sm primary" onclick="rfOrchEvento('paziente_arrivato',{appointment_id:'${p.id}'},'tablet')">Arrivato</button>`); az.push(`<button class="btn sm ghost" onclick="rfOrchEvento('paziente_assente',{appointment_id:'${p.id}'},'tablet')">Assente</button>`); }
     if (p.stato === 'arrivato') az.push(`<button class="btn sm" onclick="rfOrchEvento('paziente_accolto',{appointment_id:'${p.id}'},'tablet')">In attesa</button>`);
-    if (['arrivato', 'in_attesa'].includes(p.stato) && p.sala) az.push(`<button class="btn sm ${i && i.azione === 'chiama' ? 'primary' : ''}" onclick="rfOrchEvento('paziente_chiamato',{appointment_id:'${p.id}',sala:'${rfEsc(p.sala)}'},'tablet')">Chiama</button>`);
+    if (['arrivato', 'in_attesa'].includes(p.stato) && p.sala) az.push(`<button class="btn sm ${i && i.azione === 'chiama' ? 'primary' : ''}" onclick="rfOrchEvento('paziente_chiamato',{appointment_id:'${p.id}',sala:'${rfJs(p.sala)}'},'tablet')">Chiama</button>`);
     if (p.stato === 'chiamato') az.push(`<button class="btn sm ghost" onclick="rfOrchEvento('paziente_richiamato',{appointment_id:'${p.id}'},'tablet')" title="Torna in sala d'attesa: lo può fare solo una persona">Richiama</button>`);
     return `<div class="r${fatto ? ' fatto' : ''}${compatto ? ' compatta' : ''}"><span class="h">${rfOrHm(p.teorica)}</span><span><span class="n">${rfEsc(p.etichetta)}</span><br><span class="rf-or-pill ${rfEsc(p.stato)}">${rfEsc(rfOrStato(p.stato))}</span></span><span class="m">${rfEsc(p.prestazione || '—')}<br>${rfEsc(rfNomeCorto(p.medico || 'senza medico'))}${rfOrRitardo(p.medico)}</span><span class="sis">${sis}</span><span class="az">${az.join('')}</span></div>`;
   }).join('');
@@ -63,7 +63,7 @@ PAGES.stanza = () => {
   if (!o) return `${testa}<div class="card"><div class="caption">Carico…</div></div>`;
   const nome = RF.stanzaScelta;
   const s = o.sale.find(x => x.nome === nome);
-  const scelta = `<div class="rf-or-scelta">${o.sale.map(x => `<button class="btn ${x.nome === nome ? 'primary' : ''}" onclick="rfOrchScegliStanza('${rfEsc(x.nome)}')">${rfEsc(x.nome)}</button>`).join('')}</div>`;
+  const scelta = `<div class="rf-or-scelta">${o.sale.map(x => `<button class="btn ${x.nome === nome ? 'primary' : ''}" onclick="rfOrchScegliStanza('${rfJs(x.nome)}')">${rfEsc(x.nome)}</button>`).join('')}</div>`;
   if (!s) return `${testa}<div class="card"><div class="caption" style="margin-bottom:10px">Quale stanza è questa?</div>${scelta}</div>`;
   const d = s.dentro[0];
   const p = d ? o.pazienti.find(x => x.id === d.id) : null;
@@ -71,9 +71,9 @@ PAGES.stanza = () => {
   if (!p) dentro = `<div class="chi">Nessuno</div><div class="cosa">${s.prossimo ? `Prossimo: ${rfEsc(s.prossimo.etichetta)} con ${rfEsc(rfNomeCorto(s.prossimo.medico || ''))}, entra alle ${rfOrHm(s.prossimo.ingresso)}` : 'Nessun ingresso previsto'}</div>`;
   else {
     const b = [];
-    if (p.stato === 'chiamato') b.push(`<button class="btn primary" onclick="rfOrchEvento('preparazione_iniziata',{appointment_id:'${p.id}',sala:'${rfEsc(nome)}'},'stanza')">In preparazione</button>`);
-    if (['chiamato', 'in_preparazione'].includes(p.stato)) b.push(`<button class="btn primary" onclick="rfOrchEvento('pronto',{appointment_id:'${p.id}',sala:'${rfEsc(nome)}'},'stanza')">Pronto</button>`);
-    if (['chiamato', 'in_preparazione', 'pronto'].includes(p.stato)) b.push(`<button class="btn tutta" onclick="rfOrchEvento('visita_iniziata',{appointment_id:'${p.id}',sala:'${rfEsc(nome)}'},'stanza')">Il medico è entrato</button>`);
+    if (p.stato === 'chiamato') b.push(`<button class="btn primary" onclick="rfOrchEvento('preparazione_iniziata',{appointment_id:'${p.id}',sala:'${rfJs(nome)}'},'stanza')">In preparazione</button>`);
+    if (['chiamato', 'in_preparazione'].includes(p.stato)) b.push(`<button class="btn primary" onclick="rfOrchEvento('pronto',{appointment_id:'${p.id}',sala:'${rfJs(nome)}'},'stanza')">Pronto</button>`);
+    if (['chiamato', 'in_preparazione', 'pronto'].includes(p.stato)) b.push(`<button class="btn tutta" onclick="rfOrchEvento('visita_iniziata',{appointment_id:'${p.id}',sala:'${rfJs(nome)}'},'stanza')">Il medico è entrato</button>`);
     if (p.stato === 'in_visita') b.push(`<button class="btn primary tutta" onclick="rfOrchEvento('visita_finita',{appointment_id:'${p.id}'},'stanza')">Finito</button>`);
     if (['in_visita', 'visita_finita'].includes(p.stato)) b.push(`<button class="btn tutta" onclick="rfOrchEvento('dimesso',{appointment_id:'${p.id}'},'stanza')">Il paziente è uscito</button>`);
     dentro = `<div class="chi">${rfEsc(p.etichetta)}</div><div class="cosa">${rfEsc(p.prestazione || '')} · ${rfEsc(rfNomeCorto(p.medico || 'senza medico'))} · <b>${rfEsc(rfOrStato(p.stato))}</b>${p.inizioReale != null ? ` dalle ${rfOrHm(p.inizioReale)}` : ''}</div><div class="grandi">${b.join('')}</div>
@@ -290,7 +290,7 @@ function rfVRiga(p, primo) {
       <div class="rf-v-stato"><span class="rf-v-pallino${tardi ? ' lento' : ''}"></span>In sala d&rsquo;attesa</div>
       <div style="margin-top:3px">${p.arrivo != null ? `arrivo ${rfOrHm(p.arrivo)}${tardi ? ` · da ${aspetta} min` : ''}` : 'arrivo non segnato'}</div>
     </div>
-    <button class="btn${primo ? ' primary' : ''}" onclick="rfVInizia('${rfEsc(p.id)}')">Inizia visita</button>
+    <button class="btn${primo ? ' primary' : ''}" onclick="rfVInizia('${rfJs(p.id)}')">Inizia visita</button>
   </div>`;
 }
 function rfVElenco() {
@@ -468,7 +468,7 @@ function rfVVisita(sel) {
   ${RF.vConferma ? `<div class="rf-v-velo" onclick="if(event.target===this)rfVAnnulla()"><div class="rf-v-sheet" role="dialog" aria-modal="true">
       <h3>Terminare la visita?</h3>
       <p>${rfEsc(sel.etichetta)}${sel.prestazione ? ` · ${rfEsc(sel.prestazione)}` : ''}</p>
-      <div class="righe"><button class="btn" onclick="rfVAnnulla()">Annulla</button><button class="btn primary" onclick="rfVTermina('${rfEsc(sel.id)}')">Termina</button></div>
+      <div class="righe"><button class="btn" onclick="rfVAnnulla()">Annulla</button><button class="btn primary" onclick="rfVTermina('${rfJs(sel.id)}')">Termina</button></div>
     </div></div>` : ''}`;
 }
 function rfVChiudi() { RF.vSel = null; RF.vConferma = false; render(); }
@@ -484,7 +484,7 @@ PAGES.visite = () => {
     return `<div class="rf-v">
       <h1 class="rf-v-titolo">Visite</h1>
       <div class="rf-v-sotto">La pagina mostra i <b>tuoi</b> pazienti in sala d&rsquo;attesa. Chi sei? La scelta resta su questo dispositivo.</div>
-      <div class="rf-or-scelta" style="margin-top:20px">${medici.map((m) => `<button class="btn" onclick="rfVIoScegli('${rfEsc(m)}')">${rfEsc(rfNomeNudo(m))}</button>`).join('') || '<span class="caption">Nessun medico con appuntamenti oggi.</span>'}</div>
+      <div class="rf-or-scelta" style="margin-top:20px">${medici.map((m) => `<button class="btn" onclick="rfVIoScegli('${rfJs(m)}')">${rfEsc(rfNomeNudo(m))}</button>`).join('') || '<span class="caption">Nessun medico con appuntamenti oggi.</span>'}</div>
       <div class="row mt-16"><button class="btn sm ghost" onclick="rfVIoScegli('*')">Mostrami tutti</button></div>
     </div>`;
   }
@@ -838,8 +838,8 @@ PAGES.richiami = () => {
               <div><div class="n">${rfEsc(c.paziente)}</div>
                 <div class="s${c.giorniDiRitardo > 0 ? ' tardi' : ''}">${c.tipo === 'da_prenotare' ? 'da prenotare' : (c.giorniDiRitardo > 0 ? `in ritardo di ${c.giorniDiRitardo} giorni` : `entro il ${rfEsc(c.scadenza || '')}`)}${c.prestazione ? ` · ${rfEsc(c.prestazione)}` : ''}${c.medico ? ` · ${rfEsc(rfNomeCorto(c.medico))}` : ''}</div></div>
               <div class="row" style="gap:6px">
-                <button class="btn sm" onclick="rfRicAlternative('${chiave}', 'candidato', '${rfEsc(c.id)}')">Dove?</button>
-                <button class="btn sm ghost" onclick="rfRicFatto('${rfEsc(c.id)}')" title="Toglilo dalla lista">Fatto</button>
+                <button class="btn sm" onclick="rfRicAlternative('${chiave}', 'candidato', '${rfJs(c.id)}')">Dove?</button>
+                <button class="btn sm ghost" onclick="rfRicFatto('${rfJs(c.id)}')" title="Toglilo dalla lista">Fatto</button>
               </div>
               ${alt ? `<div class="rf-ric-alt"><div class="t">Dove potrebbe entrare</div>
                 ${alt.lista === null ? '<span class="caption">Guardo…</span>' : (alt.lista.length ? alt.lista.map((x, j) => `<button type="button" class="scelta" onclick="rfRicTelefonata('alt', ${j}, '${chiave}')"><b>${rfEsc(rfRicGiorno(x.buco.giorno))} ${rfRicOra(x.buco.dalle)}</b> · ${rfEsc(rfNomeCorto(x.buco.medico))} <span class="caption">${x.buco.minuti} min</span></button>`).join('') : '<span class="caption">Nessun buco adatto nei prossimi giorni.</span>')}</div>` : ''}

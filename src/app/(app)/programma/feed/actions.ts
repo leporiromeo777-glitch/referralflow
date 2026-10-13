@@ -8,9 +8,17 @@ import { getSession, hashPassword } from '@/lib/auth';
 const MATCH_FIELDS = ['summary', 'description', 'location', 'organizer'];
 
 // Crea o aggiorna un feed iCal. L'URL è un segreto: se lasciato vuoto in modifica, resta invariato.
-export async function saveFeed(formData: FormData) {
+// Agende esterne, medici e i loro accessi li gestiscono solo amministrazione e tecnico (13.10.2026, controllo di
+// sicurezza: prima bastava essere entrati, e da qui chiunque poteva cambiare la password di un altro utente).
+async function soloAmministrazione() {
   const session = await getSession();
   if (!session) redirect('/login');
+  if (session.role !== 'admin' && session.role !== 'tecnico') redirect('/');
+  return session;
+}
+
+export async function saveFeed(formData: FormData) {
+  const session = await soloAmministrazione();
 
   const id = String(formData.get('id') || '');
   const nome = String(formData.get('nome') || '').trim();
@@ -42,8 +50,7 @@ export async function saveFeed(formData: FormData) {
 }
 
 export async function deleteFeed(formData: FormData) {
-  const session = await getSession();
-  if (!session) redirect('/login');
+  const session = await soloAmministrazione();
 
   const id = String(formData.get('id') || '');
   if (id) {
@@ -56,8 +63,7 @@ export async function deleteFeed(formData: FormData) {
 // Crea o aggiorna un medico interno con i suoi alias (separati da virgola)
 // e, se indicata, l'email di accesso (crea/collega un utente con ruolo medico).
 export async function saveProvider(formData: FormData) {
-  const session = await getSession();
-  if (!session) redirect('/login');
+  const session = await soloAmministrazione();
 
   const id = String(formData.get('id') || '');
   const nome = String(formData.get('nome') || '').trim();
@@ -102,13 +108,8 @@ export async function saveProvider(formData: FormData) {
          returning id, role`,
         [session.studioId, loginEmail, await hashPassword(loginPassword)]
       );
-    } else if (user && loginPassword) {
-      // Password indicata su utente esistente: la reimposta (reset da parte della segreteria).
-      await query('update users set password_hash = $1 where id = $2', [
-        await hashPassword(loginPassword),
-        user.id,
-      ]);
     }
+    // La password di un utente che esiste già NON si cambia da qui: si fa in Impostazioni → Utenti.
     if (user) {
       await query(
         'update providers set user_id = $1 where id = $2 and studio_id = $3',
@@ -122,8 +123,7 @@ export async function saveProvider(formData: FormData) {
 }
 
 export async function toggleProvider(formData: FormData) {
-  const session = await getSession();
-  if (!session) redirect('/login');
+  const session = await soloAmministrazione();
 
   const id = String(formData.get('id') || '');
   if (id) {

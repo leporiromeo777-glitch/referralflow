@@ -36,6 +36,7 @@ pulisci() {
   rm -rf uploads/imaging-cache/volumi 2> /dev/null
 }
 spegni() {
+  [ -n "${INATTIVI:-}" ] && psql "$URL_DB" -Atqc "update users set attivo = false where id::text in ($INATTIVI)" > /dev/null 2>&1
   [ -n "${SERVER_PID:-}" ] && pkill -P "$SERVER_PID" 2> /dev/null; [ -n "${SERVER_PID:-}" ] && kill "$SERVER_PID" 2> /dev/null
   [ -n "${ARCH_PID:-}" ] && kill "$ARCH_PID" 2> /dev/null; [ -n "${RIC_PID:-}" ] && kill "$RIC_PID" 2> /dev/null; [ -n "${ARCH2_PID:-}" ] && kill "$ARCH2_PID" 2> /dev/null
   pkill -f "next dev -p $PORTA" 2> /dev/null
@@ -43,6 +44,12 @@ spegni() {
   rm -rf "$TMP"
 }
 trap spegni EXIT
+
+# Gli utenti di prova del demo sono DISATTIVATI apposta (nessuno ci entra con la password). Dal 13.10.2026 la sessione
+# si riscontra sul database — un utente disattivato non passa, ed è giusto così — quindi per la durata delle prove li
+# si riattiva, e `riattiva_fine` (chiamata da `spegni`, anche se qualcosa fallisce) li rimette com'erano.
+INATTIVI="$(psql "$URL_DB" -Atc "select string_agg(quote_literal(id::text), ',') from users where studio_id = '$STUDIO' and not attivo")"
+[ -n "$INATTIVI" ] && psql "$URL_DB" -Atqc "update users set attivo = true where id::text in ($INATTIVI)" > /dev/null
 
 echo "→ sintassi di tutti i file del prototipo"
 for f in public/prototipo/*.js public/prototipo/mse/*.js public/prototipo/bridge/*.js; do node --check "$f" || fallito "non si legge: $f"; done

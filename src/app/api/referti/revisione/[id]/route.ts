@@ -1,3 +1,4 @@
+import { vietato } from '@/lib/permessi';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
@@ -21,6 +22,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   const params = await props.params;
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
+  // Non basta essere entrati: serve una sezione che dà diritto a questi dati (13.10.2026, controllo di sicurezza).
+  const negato = vietato(session.role, 'reports');
+  if (negato) return negato;
   if (!isUuid(params.id)) return NextResponse.json({ errore: 'non_trovato' }, { status: 404 });
 
   const grezzo = await req.text().catch(() => '');

@@ -67,7 +67,9 @@ const nextConfig = {
       // Interfaccia nuova e dittafono (file statici in public/): mai in cache,
       // così un aggiornamento arriva al primo ricaricamento (13.9.2026).
       { source: '/prototipo/:path*', headers: [{ key: 'Cache-Control', value: 'no-cache' }] },
-      { source: '/dittafono/:path*', headers: [{ key: 'Cache-Control', value: 'no-cache' }] },{ source: '/:path*', headers: SECURITY_HEADERS }];
+      { source: '/dittafono/:path*', headers: [{ key: 'Cache-Control', value: 'no-cache' }] },
+      // Le risposte delle API portano dati dei pazienti: non si conservano da nessuna parte (13.10.2026).
+      { source: '/api/:path*', headers: [{ key: 'Cache-Control', value: 'no-store' }] },{ source: '/:path*', headers: SECURITY_HEADERS }];
   },
 };
 export default nextConfig;

@@ -81,21 +81,30 @@ function rfDitDb() {
     r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error);
   });
 }
+// La bozza è di CHI l'ha dettata (13.10.2026, controllo di sicurezza): prima era una sola per browser, senza padrone,
+// e chi entrava dopo sullo stesso computer si vedeva offrire audio, testo e paziente del dettato di un altro. Ora ha
+// la chiave dell'utente, e una bozza più vecchia di sette giorni si cancella.
+function rfDitChi() { const u = (RF.data && RF.data.utente) || {}; return String(u.email || u.name || '').toLowerCase(); }
+function rfDitChiave() { return `corrente:${rfDitChi()}`; }
 async function rfDitSalva() {
   const d = RF.dit; if (!d.pcm.length && !d.nuovi.length) return;
   try {
     const db = await rfDitDb();
     const tutto = d.nuovi.length ? rfDitComponi() : d.pcm;
-    db.transaction('bozza', 'readwrite').objectStore('bozza').put({ pcm: tutto.buffer.slice(tutto.byteOffset, tutto.byteOffset + tutto.byteLength), medico: d.medico, tipo: d.tipo, quando: Date.now(), testo: d.testo || '', tempi: d.tempi || [], foglio: d.foglio || null, foglioToccato: d.foglioToccato || {}, paziente: d.paziente || '' }, 'corrente');
+    db.transaction('bozza', 'readwrite').objectStore('bozza').put({ chi: rfDitChi(), pcm: tutto.buffer.slice(tutto.byteOffset, tutto.byteOffset + tutto.byteLength), medico: d.medico, tipo: d.tipo, quando: Date.now(), testo: d.testo || '', tempi: d.tempi || [], foglio: d.foglio || null, foglioToccato: d.foglioToccato || {}, paziente: d.paziente || '' }, rfDitChiave());
   } catch (_) { /* senza archivio si registra lo stesso: si perde solo il recupero */ }
 }
-async function rfDitSvuota() { try { const db = await rfDitDb(); db.transaction('bozza', 'readwrite').objectStore('bozza').delete('corrente'); } catch (_) { /* niente */ } }
+async function rfDitSvuota() { try { const db = await rfDitDb(); const st = db.transaction('bozza', 'readwrite').objectStore('bozza'); st.delete(rfDitChiave()); st.delete('corrente'); } catch (_) { /* niente */ } }
 async function rfDitCercaRecupero() {
   if (RF.dit.cercato) return; RF.dit.cercato = true;
   try {
     const db = await rfDitDb();
-    const r = db.transaction('bozza').objectStore('bozza').get('corrente');
-    r.onsuccess = () => { const v = r.result; if (v && v.pcm && v.pcm.byteLength > 3200 && RF.dit.stato === 'pronto' && !RF.dit.pcm.length) { RF.dit.recupero = v; if (state.route === 'dittafono') render(); } };
+    const st = db.transaction('bozza', 'readwrite').objectStore('bozza');
+    // le bozze scadute (sette giorni) si tolgono, di chiunque siano; quella senza padrone, di prima di questa regola, anche
+    const tutte = st.openCursor();
+    tutte.onsuccess = () => { const c = tutte.result; if (!c) return; const x = c.value || {}; if (!x.quando || Date.now() - x.quando > 7 * 86400000) c.delete(); c.continue(); };
+    const r = st.get(rfDitChiave());
+    r.onsuccess = () => { const v = r.result; if (v && v.chi === rfDitChi() && v.pcm && v.pcm.byteLength > 3200 && RF.dit.stato === 'pronto' && !RF.dit.pcm.length) { RF.dit.recupero = v; if (state.route === 'dittafono') render(); } };
   } catch (_) { /* niente */ }
 }
 function rfDitRiprendiRecupero() {

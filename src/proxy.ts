@@ -84,5 +84,5 @@ export const config = {
   // le API (che verificano la sessione da sole) e i file statici
   // (percorsi con estensione: icone, manifest — mai dati).
   // Così le pagine interne future sono protette di default.
-  matcher: ['/((?!login|password-dimenticata|reimposta-password/|invia|portale/|appuntamento/|affido/|a/|privacy|sicurezza-dati|termini|trattamento-dati|registrazione|attiva|api/|_next/|.*\\..*).*)'],
+  matcher: ['/((?!login|password-dimenticata|reimposta-password/|invia/|invia$|portale/|appuntamento/|affido/|a/|privacy|sicurezza-dati|termini|trattamento-dati|registrazione|attiva|api/|_next/|.*\\..*).*)'],
 };

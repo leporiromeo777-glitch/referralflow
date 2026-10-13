@@ -1,3 +1,4 @@
+import { vietato } from '@/lib/permessi';
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { getSession } from '@/lib/auth';
@@ -33,6 +34,9 @@ export async function GET() {
   if (!session || session.role === 'medico') {
     return new NextResponse('Non autorizzato', { status: 401 });
   }
+  // Non basta essere entrati: serve una sezione che dà diritto a questi dati (13.10.2026, controllo di sicurezza).
+  const negato = vietato(session.role, 'invianti');
+  if (negato) return negato;
 
   const rows = await query<Row>(
     `select to_char(r.created_at, 'YYYY-MM-DD HH24:MI') as created_at,

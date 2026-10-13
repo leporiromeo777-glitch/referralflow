@@ -1,5 +1,6 @@
 'use server';
 
+import { tentativoAmmesso, tentativoRiuscito, tentativoSbagliato } from '@/lib/tentativi-codice';
 import { randomInt } from 'crypto';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
@@ -72,6 +73,8 @@ export async function completaAttivazione(formData: FormData) {
   const code = String(formData.get('code') ?? '').trim();
   const password = String(formData.get('password') ?? '');
   if (!id) redirect('/attiva');
+  // Al quinto codice sbagliato la richiesta è annullata: se ne fa una nuova.
+  if (!tentativoAmmesso(`attiva:${id}`)) redirect('/attiva?err=codice');
 
   const [att] = await query<{
     id: string; nome: string; titolare: string | null; email: string;
@@ -81,7 +84,11 @@ export async function completaAttivazione(formData: FormData) {
       where id = $1 and code = $2 and used_at is null and expires_at > now()`,
     [id, code]
   );
-  if (!att) redirect(`/attiva?step=codice&a=${id}&err=codice`);
+  if (!att) {
+    if (tentativoSbagliato(`attiva:${id}`)) await query('update studio_activations set expires_at = now() where id::text = $1', [id]).catch(() => null);
+    redirect(`/attiva?step=codice&a=${id}&err=codice`);
+  }
+  tentativoRiuscito(`attiva:${id}`);
   if (password.length < 8) redirect(`/attiva?step=codice&a=${id}&err=password`);
   // Accettazione obbligatoria di condizioni + contratto trattamento dati.
   const accetto = String(formData.get('accetto') ?? '') === '1';

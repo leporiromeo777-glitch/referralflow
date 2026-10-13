@@ -121,7 +121,7 @@ export async function GET(req: NextRequest) {
       'select testo, created_at::text from anonimizzazioni where id = $1 and studio_id = $2', [id, session.studioId]);
     if (!riga) return NextResponse.json({ errore: 'non_trovato' }, { status: 404 });
     if (!riga.testo) return NextResponse.json({ errore: 'Questo documento non c’è più: se ne tengono solo gli ultimi cinque.' }, { status: 410 });
-    console.log(`[anonimizza] riscaricato id=${id} da=${session.email}`);
+    console.log(`[anonimizza] riscaricato id=${id} da=${session.id.slice(0, 8)}`);
     return NextResponse.json({ ok: true, testo: riga.testo, created_at: riga.created_at }, { headers: { 'Cache-Control': 'no-store' } });
   }
 

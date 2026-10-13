@@ -1,3 +1,4 @@
+import { vietato } from '@/lib/permessi';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { aggregatiStudio } from '@/lib/statistiche-ai';
@@ -15,6 +16,9 @@ export async function POST(req: NextRequest) {
   if (!session || !session.studioId) {
     return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
   }
+  // Non basta essere entrati: serve una sezione che dà diritto a questi dati (13.10.2026, controllo di sicurezza).
+  const negato = vietato(session.role, 'reports', 'administration');
+  if (negato) return negato;
   if (!(await ollamaAttivo())) {
     const causa = ultimaCausaOllama() ?? 'spento';
     return NextResponse.json(

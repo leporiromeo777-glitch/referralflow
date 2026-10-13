@@ -27,6 +27,11 @@ function normalizeUrl(raw: string): string | null {
   try {
     const parsed = new URL(u);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    // Un'agenda esterna sta fuori: mai un indirizzo del Mac stesso o della rete dello studio (13.10.2026, controllo di
+    // sicurezza — da qui il server avrebbe potuto essere mandato a chiamare i suoi servizi interni).
+    const h = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h === '0.0.0.0' || h === '::1' || (h.includes(':') && /^(fe80|f[cd])/.test(h))
+      || /^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)) return null;
     return parsed.toString();
   } catch {
     return null;

@@ -1,3 +1,4 @@
+import { vietato } from '@/lib/permessi';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
@@ -22,6 +23,9 @@ function dataCh(d: string | null): string {
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session || !session.studioId) return new NextResponse('Non autorizzato', { status: 401 });
+  // Non basta essere entrati: serve una sezione che dà diritto a questi dati (13.10.2026, controllo di sicurezza).
+  const negato = vietato(session.role, 'reports');
+  if (negato) return negato;
   const { id } = await ctx.params;
   if (!isUuid(id)) return new NextResponse('Non trovato', { status: 404 });
   const form = await req.formData().catch(() => null);
@@ -33,6 +37,8 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
   const params = await props.params;
   const session = await getSession();
   if (!session || !session.studioId) return new NextResponse('Non autorizzato', { status: 401 });
+  const negato2 = vietato(session.role, 'reports');
+  if (negato2) return negato2;
 
   const [b] = await query<{
     stato: string; testo_finale: string | null; payload: any;

@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
   // Corsa FALLITA della catena (§43): resta registrata nell'audit con fase e
   // tipo d'errore; nessuna bozza. Risposta 200 = la catena può archiviare.
   if (body?.esito === 'fallita') {
-    try { await registraCorsaFallita(studio.id, body); } catch (e: any) { console.error('audit corsa fallita:', e?.message || e); }
+    try { await registraCorsaFallita(studio.id, body); } catch (e: any) { console.error('audit corsa fallita:', e?.code ?? e?.name ?? 'errore'); }
     return NextResponse.json({ ok: true, fallita: true }, { status: 200 });
   }
   const fileId = typeof body?.file_id === 'string' ? body.file_id.trim().slice(0, 200) : '';
@@ -401,7 +401,7 @@ export async function POST(req: NextRequest) {
         impronta_lettera: impronta(lettera), caratteri: lettera.length, automatica: true, medico: payload.medico!.id,
       });
     } catch (e: any) {
-      console.error('Fusione automatica non avviata:', e?.message || e);
+      console.error('Fusione automatica non avviata:', e?.code ?? e?.name ?? 'errore');
     }
   }
 
@@ -454,7 +454,7 @@ export async function POST(req: NextRequest) {
           [dest.id, studio.id, JSON.stringify(payloadUnito), sonoIstruzioni ? dest.testo_finale : concat(dest.testo_finale, testoNuovo)]);
         if (sonoIstruzioni) void giroIstruzioni().catch((e: any) => console.error(`[istruzioni] giro: ${e?.code ?? e?.name ?? 'errore'}`));
         await collega(dest.id);
-        try { await registraCorsa(studio.id, dest.id, payload, { audioStorage: (await query<{ storage_key: string }>('select storage_key from referti_audio where id = $1', [audioId]))[0]?.storage_key ?? null }); } catch (e: any) { console.error('audit corsa (traccia):', e?.message || e); }
+        try { await registraCorsa(studio.id, dest.id, payload, { audioStorage: (await query<{ storage_key: string }>('select storage_key from referti_audio where id = $1', [audioId]))[0]?.storage_key ?? null }); } catch (e: any) { console.error('audit corsa (traccia):', e?.code ?? e?.name ?? 'errore'); }
         // La corsa della traccia registra come ultimo output AI il SOLO testo
         // della traccia: il testo intero della bozza (unito, o invariato se
         // sono istruzioni) torna a essere la base della misura delle correzioni.
@@ -484,7 +484,7 @@ export async function POST(req: NextRequest) {
     try {
       const [au] = audioId ? await query<{ storage_key: string }>('select storage_key from referti_audio where id = $1', [audioId]) : [];
       await registraCorsa(studio.id, bozzaId, payload, { audioStorage: au?.storage_key ?? null });
-    } catch (e: any) { console.error('audit corsa:', e?.message || e); }
+    } catch (e: any) { console.error('audit corsa:', e?.code ?? e?.name ?? 'errore'); }
   };
   if (inserita) {
     await collega(inserita.id);
@@ -508,7 +508,7 @@ export async function POST(req: NextRequest) {
       if (esito === 'applicato' || esito === 'stampella') await registraEvento(studio.id, inserita.id, 'lettera_aggiornata', null, { automatico: true, stampella: esito === 'stampella' });
     } catch (e: any) { console.error(`[aggiorna-lettera] ${inserita.id.slice(0, 8)}: ${e?.code ?? e?.name ?? 'errore'}`); }
     // Inviante collegato alla rubrica, o segnalato se nuovo (26.9.2026).
-    try { await collegaInviante(studio.id, inserita.id); } catch (e: any) { console.error('inviante:', e?.message || e); }
+    try { await collegaInviante(studio.id, inserita.id); } catch (e: any) { console.error('inviante:', e?.code ?? e?.name ?? 'errore'); }
   return NextResponse.json({ id: inserita.id }, { status: 201 });
   }
 

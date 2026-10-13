@@ -33,10 +33,10 @@ reportsQueue = function () {
         <div class="qm"><span class="v num">${r.issues}</span><span class="l">verifiche</span></div>
         <div class="qm"><span class="v num ${r.crit ? 'crit' : ''}">${r.crit}</span><span class="l">critiche</span></div>
         <div class="qm"><span class="v num">${r.audio}</span><span class="l">audio</span></div>
-        ${r.status === 'APPROVED' ? `<button class="btn primary" onclick="event.stopPropagation();rfEmailPrepara('${rfEsc(r.id)}')" title="La mail per il medico inviante con il Word e gli allegati, da aprire nel programma di posta">${ICONS.mail} Prepara e-mail</button>` : ''}<button class="btn ${r.state === 'priority' && r.status !== 'APPROVED' ? 'primary' : ''}" data-go="#/review/${r.id}">${r.status === 'APPROVED' ? 'Rivedi' : r.rivisto ? 'Riprendi e conferma' : r.state === 'clean' ? 'Lettura rapida' : 'Apri revisione'}</button>
+        ${r.status === 'APPROVED' ? `<button class="btn primary" onclick="event.stopPropagation();rfEmailPrepara('${rfJs(r.id)}')" title="La mail per il medico inviante con il Word e gli allegati, da aprire nel programma di posta">${ICONS.mail} Prepara e-mail</button>` : ''}<button class="btn ${r.state === 'priority' && r.status !== 'APPROVED' ? 'primary' : ''}" data-go="#/review/${r.id}">${r.status === 'APPROVED' ? 'Rivedi' : r.rivisto ? 'Riprendi e conferma' : r.state === 'clean' ? 'Lettura rapida' : 'Apri revisione'}</button>
         <details class="rf-kebab" onclick="event.stopPropagation()"><summary class="btn ghost" title="Altro" aria-label="Altre azioni">⋯</summary><div class="rf-kebab-menu">
           <button class="btn ghost" data-prefirma="${r.id}" title="Controllo prima della firma, con traccia">✓ Controllo</button>
-          <button class="btn ghost" onclick="rfWord('${rfEsc(r.id)}')" title="${r.status === 'APPROVED' ? 'Il Word del referto confermato' : 'Il Word della bozza com\'è adesso, con le correzioni già salvate'}">${ICONS.file} Scarica Word</button>
+          <button class="btn ghost" onclick="rfWord('${rfJs(r.id)}')" title="${r.status === 'APPROVED' ? 'Il Word del referto confermato' : 'Il Word della bozza com\'è adesso, con le correzioni già salvate'}">${ICONS.file} Scarica Word</button>
         </div></details>
       </div>
     </div>`;
@@ -1335,8 +1335,8 @@ function rfProposteHtml() {
       <div><b>${rfEsc(p.richiesta)}</b> → ${pag(p)} di «${rfEsc(p.documento)}» <span class="caption">(${p.pagine_documento} pagine)</span></div>
       <div class="caption">${p.senza_data ? '<span class="badge warning">senza data: controlla</span> ' : ''}trovato: ${p.motivi.map(rfEsc).join(', ')}</div>
       <div class="row" style="gap:4px;margin-top:4px"><a class="btn sm ghost" href="/api/documents/${rfEsc(p.documento_id)}#page=${p.da}" target="_blank" rel="noopener" data-titolo="${rfEsc(p.documento)} · p. ${p.da}">Guarda</a>
-        <button class="btn sm primary" onclick="rfPropostaEstrai('${rfEsc(p.documento_id)}', ${p.da})">${p.gia_estratto ? 'Allega (già estratto)' : 'Estrai e allega'}</button>
-        <button class="btn sm ghost" onclick="rfPropostaNo('${rfEsc(p.documento_id)}', ${p.da})">No</button></div></div>`).join('');
+        <button class="btn sm primary" onclick="rfPropostaEstrai('${rfJs(p.documento_id)}', ${p.da})">${p.gia_estratto ? 'Allega (già estratto)' : 'Estrai e allega'}</button>
+        <button class="btn sm ghost" onclick="rfPropostaNo('${rfJs(p.documento_id)}', ${p.da})">No</button></div></div>`).join('');
   const senza = (pr.senza_proposta || []).length ? `<div class="caption">Citato nel dettato ma non trovato nella cartella: ${pr.senza_proposta.map(rfEsc).join(', ')}.</div>` : '';
   const attesa = pr.attesa_ocr ? `<div class="caption">${pr.attesa_ocr === 1 ? 'Un documento della cartella aspetta' : `${pr.attesa_ocr} documenti della cartella aspettano`} l'OCR: le proposte arrivano dopo.</div>` : '';
   if (!righe && !senza && !attesa) return '';
@@ -1391,7 +1391,7 @@ async function rfAllegati() {
     <div class="rf-al-tit">Partono con la mail</div>
     <div class="rf-al-riga"><span class="rf-al-nome"><b>Rapporto (Word)</b><span class="caption"> · sempre</span></span></div>
     ${al.map(riga).join('') || '<div class="caption" style="padding:6px 0">Nessun altro allegato.</div>'}
-    ${(a.tolti || []).length ? `<div class="rf-al-tit mt-8">Tolti</div>${a.tolti.map(t => `<div class="rf-al-riga"><span class="rf-al-nome" style="color:var(--text-3)">${rfEsc(t.etichetta)}</span><button class="btn sm ghost" onclick="rfAllegatoPost({ azione: 'allegato_rimetti', id: '${rfEsc(t.id)}' })">Rimetti</button></div>`).join('')}` : ''}
+    ${(a.tolti || []).length ? `<div class="rf-al-tit mt-8">Tolti</div>${a.tolti.map(t => `<div class="rf-al-riga"><span class="rf-al-nome" style="color:var(--text-3)">${rfEsc(t.etichetta)}</span><button class="btn sm ghost" onclick="rfAllegatoPost({ azione: 'allegato_rimetti', id: '${rfJs(t.id)}' })">Rimetti</button></div>`).join('')}` : ''}
     ${a.ecg && a.ecg.citato && !a.ecg.trovato ? `<div class="rf-att-warn mt-8">Il medico parla di un <b>ECG</b> che nella cartella non c'è: caricalo qui sotto con categoria ECG.</div>` : ''}
     <div class="rf-al-tit mt-16">Aggiungi dalla cartella</div>
     ${a.paziente_in_cartella
@@ -1585,7 +1585,7 @@ async function rfCartellaDettati() {
    pagina; un referto confermato si legge in una finestra. */
 function rfAggTastoGuarda(f) {
   if (!f || !f.id) return '';
-  return `<button class="btn sm ghost" style="padding:1px 8px" onclick="rfAggGuarda('${rfEsc(f.tipo)}','${rfEsc(f.id)}',${Number(f.da) || 0},'${rfEsc(String(f.etichetta || '').replace(/'/g, '’'))}')">Guarda</button>`;
+  return `<button class="btn sm ghost" style="padding:1px 8px" onclick="rfAggGuarda('${rfJs(f.tipo)}','${rfJs(f.id)}',${Number(f.da) || 0},'${rfJs(String(f.etichetta || '').replace(/'/g, '’'))}')">Guarda</button>`;
 }
 async function rfAggGuarda(tipo, id, da, etichetta) {
   if (tipo === 'documento' || tipo === 'pagine') { rfGuarda(`/api/documents/${id}`, etichetta, da || null, id); return; }
@@ -1624,7 +1624,7 @@ function rfPazHtml() {
       <div class="caption"><b>${rfEsc(z.paziente.nome)}</b>${z.paziente.nascita ? ` · ${rfEsc(z.paziente.nascita)}` : ''} · ${rfEsc(MODO[z.modo] || z.modo || '')}</div>
       ${diverso ? `<div class="caption">Dettato: «${rfEsc(z.nome_dettato)}»: nel testo il nome è scritto come in cartella.</div>` : ''}${scegli}</div>`;
   }
-  const prop = (z.proposte || []).map(p => `<div class="row between" style="gap:6px;margin-top:4px"><span class="caption"><b>${rfEsc(p.nome)}</b>${p.nascita ? ` · ${rfEsc(p.nascita)}` : ''}${p.visita ? (p.visita === 'in agenda' ? ' · in agenda nei giorni del dettato' : ` · visita del ${rfEsc(p.visita)}`) : ''}${p.id ? '' : (p.nuova ? ' · <i>cartella da creare</i>' : '')}</span><button class="btn sm primary" onclick="rfPazAzione(${p.id ? `{ azione: 'collega', patient_id: '${rfEsc(p.id)}' }` : `{ azione: 'collega_agenda', indice: ${Number(p.agenda) || 0} }`})">${p.id || !p.nuova ? 'Collega' : 'Crea e collega'}</button></div>`).join('');
+  const prop = (z.proposte || []).map(p => `<div class="row between" style="gap:6px;margin-top:4px"><span class="caption"><b>${rfEsc(p.nome)}</b>${p.nascita ? ` · ${rfEsc(p.nascita)}` : ''}${p.visita ? (p.visita === 'in agenda' ? ' · in agenda nei giorni del dettato' : ` · visita del ${rfEsc(p.visita)}`) : ''}${p.id ? '' : (p.nuova ? ' · <i>cartella da creare</i>' : '')}</span><button class="btn sm primary" onclick="rfPazAzione(${p.id ? `{ azione: 'collega', patient_id: '${rfJs(p.id)}' }` : `{ azione: 'collega_agenda', indice: ${Number(p.agenda) || 0} }`})">${p.id || !p.nuova ? 'Collega' : 'Crea e collega'}</button></div>`).join('');
   return `<div class="rf-campi rf-paz" ${prop ? 'open' : ''}><div class="row between"><b>Paziente</b><span class="caption">${z.modo === 'scollegato' ? 'scollegato a mano' : 'nessuna cartella collegata'}</span></div>
     ${z.nome_dettato ? `<div class="caption">Dettato: «${rfEsc(z.nome_dettato)}»</div>` : ''}
     ${prop ? `<div class="rf-att-tit" style="margin-top:6px">È forse…</div>${prop}` : ''}${scegli}</div>`;

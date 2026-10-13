@@ -821,3 +821,9 @@ mentre detta («prendi la lettera più recente del paziente e aggiungimela») e 
 - i **piani di medicazione** vanno sotto **Ricette**.
 I fogli col codice a barre restano i separatori, ma la loro numerazione non è quella delle sottocartelle (corretta dai
 conteggi su una cartella vera; da confermare per i fogli 06, 09, 10, 11). I tracciati non si spostano mai per la penna.
+
+**13.10.2026 — controllo di sicurezza: un interruttore solo per ciò che esce.** `attivo` in
+`~/.referralflow-esterno.conf` spegne la catena **e** la piattaforma («Domanda medica», «Ricerca clinica»): prima la
+piattaforma non lo leggeva. L'app ascolta solo su 127.0.0.1; la sessione si riscontra sul database a ogni richiesta;
+le pagine delle proposte del consolidatore non stanno più nel repository pubblico. Il resto in
+[[Regole/Controllo di sicurezza 2026-10-13]].

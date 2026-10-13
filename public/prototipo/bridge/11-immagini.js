@@ -933,7 +933,7 @@ function rfArchRiga(e, pid) {
   const chi = `${rfEsc(e.paziente || 'senza nome')}${e.nascita ? `, ${rfEsc(rfImgData(e.nascita))}` : ', senza data di nascita'}`;
   const tasto = e.esame_id ? `<button class="btn sm ghost" onclick="go('#/imaging');rfImgApri('${e.esame_id}')">Apri</button>`
     : a && a.stato === 'in_corso' ? `<span class="caption">in arrivo${a.in_arrivo ? ` (${a.in_arrivo})` : ''}…</span>`
-    : `<button class="btn sm" onclick="rfArchApri('${e.study_uid}', ${pid ? `'${pid}'` : 'null'}, '${rfEsc(e.archivio || '')}')">Prendi e apri</button>`;
+    : `<button class="btn sm" onclick="rfArchApri('${e.study_uid}', ${pid ? `'${pid}'` : 'null'}, '${rfJs(e.archivio || '')}')">Prendi e apri</button>`;
   const piu = RF.arch.stato && (RF.arch.stato.archivi || []).length > 1;
   return `<div class="list-item"><div class="grow">
       <div class="name">${rfEsc(e.descrizione || 'Esame')} <span class="badge">${rfEsc(e.modalita || '—')}</span>${e.esame_id ? ' <span class="badge success">già qui</span>' : ''}${e.certezza === 'da_controllare' ? ' <span class="badge warning">da controllare</span>' : ''}</div>

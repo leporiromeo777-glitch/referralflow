@@ -15,8 +15,11 @@ import { generaOllama, ollamaAttivo } from './ollama';
 // Accenderla in produzione richiede la stessa validazione legale di Stripe
 // (contratto di trattamento dati con il subfornitore, informativa aggiornata).
 
+// Due condizioni, non una (13.10.2026, controllo di sicurezza): la chiave da sola non basta — una chiave finita
+// nell'ambiente per un altro motivo avrebbe mandato l'impegnativa IN CHIARO fuori dal Mac. Serve anche
+// l'interruttore esplicito IMPEGNATIVA_CLOUD=1.
 export function catturaAttiva(): boolean {
-  return !!process.env.ANTHROPIC_API_KEY;
+  return process.env.IMPEGNATIVA_CLOUD === '1' && !!process.env.ANTHROPIC_API_KEY;
 }
 
 // Motore disponibile per la cattura: 'cloud' (API Anthropic, richiede la

@@ -99,7 +99,7 @@ PAGES.review = () => {
   <div class="rv ${RV.mode === 'read' ? 'read' : ''}">
     <div class="rv-top">
       <button class="btn ghost sm" data-go="#/reports">${ICONS.arrowL}</button>
-      <div class="rv-pat">${ICONS.shield}<b>${fullName(p)}</b><span>12.03.1959</span><span class="sep">·</span><span>Controllo cardiologico</span><span class="sep">·</span><span>Dr.ssa Bianchi</span><span class="sep">·</span><span>09.09.2026 · 14:30</span></div>
+      <div class="rv-pat">${ICONS.shield}<b>${esc(fullName(p))}</b><span>12.03.1959</span><span class="sep">·</span><span>Controllo cardiologico</span><span class="sep">·</span><span>Dr.ssa Bianchi</span><span class="sep">·</span><span>09.09.2026 · 14:30</span></div>
       <div class="rv-top-r">
         <span id="rv-save"><span class="caption">${ICONS.check} Salvato</span></span>
         <span class="caption" id="rv-left">${rvOpen().length} verifiche restanti</span>
@@ -342,7 +342,7 @@ function rvAiTab() {
   return `<div class="rv-ai">
     <div class="caption">L'assistente usa solo questo referto, la sua trascrizione e i dati del paziente aperto.</div>
     ${i ? `<div class="rv-why"><b>Perché è segnalato</b><p>${esc(i.why)}</p><div class="row wrap" style="gap:6px"><span class="badge">${RV_CAT[i.cat][0]}</span><span class="badge ${RV_SEV[i.sev][1]}">${RV_SEV[i.sev][0]}</span><span class="badge ${RV_CONF[i.conf][1]}">${RV_CONF[i.conf][0]}</span></div></div>` : ''}
-    <div class="rv-qs">${['Dove parla del Bisoprololo?', 'Dove parla del follow-up?', 'Confronta le due trascrizioni', 'Perché è stato scritto così?'].map(q => `<button class="chip" onclick="rvAsk('${esc(q)}')">${q}</button>`).join('')}</div>
+    <div class="rv-qs">${['Dove parla del Bisoprololo?', 'Dove parla del follow-up?', 'Confronta le due trascrizioni', 'Perché è stato scritto così?'].map(q => `<button class="chip" onclick="rvAsk('${jsq(q)}')">${q}</button>`).join('')}</div>
     <div id="rv-ai-out"></div>
   </div>`;
 }

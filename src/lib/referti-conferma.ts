@@ -76,7 +76,7 @@ export async function confermaBozzaCore(a: {
       studioId: a.studioId, bozzaId: a.id, userId: a.userId, ruoloUtente: a.ruoloUtente, testo,
       secondi: sec, pipelineVersion: row.pipeline_version ?? null, promptVersion: row.prompt_version ?? null, medico: row.medico ?? null,
     });
-  } catch (e: any) { console.error('audit revisione:', e?.message || e); }
+  } catch (e: any) { console.error('audit revisione:', e?.code ?? e?.name ?? 'errore'); }
 
   // Misura della revisione: quanto la persona ha corretto la catena. Solo numeri.
   if (row.ai_text) {
@@ -120,9 +120,9 @@ export async function confermaBozzaCore(a: {
             [a.studioId, np.slice(0, 200), nd.slice(0, 200)]
           );
         }
-      } catch (e: any) { console.error('Tassonomia modifiche fallita:', e?.message || e); }
+      } catch (e: any) { console.error('Tassonomia modifiche fallita:', e?.code ?? e?.name ?? 'errore'); }
       await query(`update referti_bozze set payload = jsonb_set(payload, '{revisione}', $3::jsonb) where id = $1 and studio_id = $2`, [a.id, a.studioId, JSON.stringify(m)]);
-    } catch (e: any) { console.error('Misura revisione fallita:', e?.message || e); }
+    } catch (e: any) { console.error('Misura revisione fallita:', e?.code ?? e?.name ?? 'errore'); }
   }
 
   // Impara dalla correzione: sostituzioni ricorrenti → suggerimenti per il dizionario.
@@ -136,7 +136,7 @@ export async function confermaBozzaCore(a: {
           [a.studioId, s.da, s.a]
         );
       }
-    } catch (e: any) { console.error('Estrazione suggerimenti referto fallita:', e?.message || e); }
+    } catch (e: any) { console.error('Estrazione suggerimenti referto fallita:', e?.code ?? e?.name ?? 'errore'); }
   }
 
   await registraEvento(a.studioId, a.id, 'conferma', a.userId, {

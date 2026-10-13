@@ -10,6 +10,9 @@ BREW="$([ -d /opt/homebrew ] && echo /opt/homebrew || echo /usr/local)"
 export PATH="$BREW/bin:$BREW/opt/postgresql@16/bin:/usr/bin:/bin"
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
+# Le copie contengono tutto il database e gli allegati: le può leggere solo l'utente del servizio (13.10.2026:
+# la cartella era leggibile dagli altri utenti del Mac).
+umask 077
 DEST="$HOME/ReferralFlow-backup"
 mkdir -p "$DEST"
 

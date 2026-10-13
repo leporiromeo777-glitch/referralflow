@@ -1,3 +1,4 @@
+import { vietato } from '@/lib/permessi';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
@@ -18,6 +19,9 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   const params = await props.params;
   const session = await getSession();
   if (!session || !session.studioId) return new NextResponse('Non autorizzato', { status: 401 });
+  // Non basta essere entrati: serve una sezione che dà diritto a questi dati (13.10.2026, controllo di sicurezza).
+  const negato = vietato(session.role, 'reports');
+  if (negato) return negato;
 
   const [audio] = await query<{ storage_key: string; content_type: string | null }>(
     `select storage_key, content_type from referti_audio

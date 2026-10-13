@@ -295,7 +295,7 @@ PAGES.anonymize = () => {
         <span class="q">${rfEsc(rfAnonQuando(x.created_at))}</span>
         <span class="n">${rfEsc(RF_ANON_ORIGINE[x.origine] || x.origine)}</span>
         <span class="t">${Object.entries(x.per_tipo || {}).sort((p, q) => q[1] - p[1]).slice(0, 5).map(([k, n]) => `<span class="badge">${rfEsc(k)} · ${n}</span>`).join('') || '<span class="caption">nessun dato trovato</span>'}</span>
-        <span class="dx">${x.caratteri} car.${x.da ? ` · ${rfEsc(x.da)}` : ''}${x.ha_testo ? `<button class="btn sm ghost" style="margin-left:8px" onclick="rfAnonRiscarica('${rfEsc(x.id)}')">Scarica</button>` : ''}</span>
+        <span class="dx">${x.caratteri} car.${x.da ? ` · ${rfEsc(x.da)}` : ''}${x.ha_testo ? `<button class="btn sm ghost" style="margin-left:8px" onclick="rfAnonRiscarica('${rfJs(x.id)}')">Scarica</button>` : ''}</span>
       </div>`).join('') : '<div class="caption" style="padding:8px 6px">Ancora nessuna anonimizzazione.</div>'}
     <div class="caption mt-8" style="padding:0 6px">Degli <b>ultimi cinque</b> documenti si tiene il testo <b>anonimizzato</b>, così si può riscaricare senza rifare il lavoro; dal sesto in poi resta solo la riga. Non si conservano mai l'originale, il nome del file o la tabella dei segnaposto — quella è la chiave per tornare indietro.</div></div>`;
 
@@ -452,7 +452,7 @@ PAGES.administration = () => {
         <td>${admin && u.id !== d.io ? `<select class="input sm" onchange="rfStudioAzione({ azione: 'utente_ruolo', id: '${u.id}', ruolo: this.value })">${Object.entries(ruoloIt).map(([k, l]) => `<option value="${k}" ${u.role === k ? 'selected' : ''}>${l}</option>`).join('')}</select>` : rfEsc(ruoloIt[u.role] || u.role)}</td>
         <td>${u.totp ? '<span class="badge success">attiva</span>' : '<span class="caption">no</span>'}</td>
         <td>${u.attivo ? '<span class="badge success">attivo</span>' : '<span class="badge">disattivato</span>'}</td>
-        ${admin ? `<td class="row" style="gap:6px;justify-content:flex-end">${u.id !== d.io ? `<button class="btn sm ghost" onclick="rfStudioPassword('${u.id}', '${rfEsc(u.email)}')">Nuova password</button><button class="btn sm ghost" onclick="rfStudioAzione({ azione: 'utente_attivo', id: '${u.id}' })">${u.attivo ? 'Disattiva' : 'Riattiva'}</button>` : ''}</td>` : ''}
+        ${admin ? `<td class="row" style="gap:6px;justify-content:flex-end">${u.id !== d.io ? `<button class="btn sm ghost" onclick="rfStudioPassword('${u.id}', '${rfJs(u.email)}')">Nuova password</button><button class="btn sm ghost" onclick="rfStudioAzione({ azione: 'utente_attivo', id: '${u.id}' })">${u.attivo ? 'Disattiva' : 'Riattiva'}</button>` : ''}</td>` : ''}
       </tr>`).join('')}</tbody></table></div></div>
       ${admin ? `<div class="card mt-16"><div class="section-title">Nuovo accesso</div><div class="grid grid-3 mt-8">
         <div class="field"><label>E-mail</label><input class="input" id="rf-u-email" type="email" autocomplete="off"></div>

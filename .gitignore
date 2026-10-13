@@ -46,3 +46,21 @@ agenda-locale
 solver-sale/.venv
 __pycache__/
 scripts/.*.tmp.ts
+
+# Mai nel repository pubblico (13.10.2026, controllo di sicurezza): registrazioni, documenti, copie del database,
+# file di lavoro della catena, e le pagine delle proposte del consolidatore (nascono dalle correzioni vere).
+*.wav
+*.mp3
+*.m4a
+*.ds2
+*.dss
+*.sql.gz
+*.dump
+*.dubbi.json
+*.divergenze.json
+.env.production
+.env.*.local
+__pycache__/
+*.pyc
+docs/wiki/Proposte/2*.md
+docs/wiki/Proposte/Ultime.md
