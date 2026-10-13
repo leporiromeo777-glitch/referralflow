@@ -187,6 +187,43 @@ test('comandi a voce: «per favore» più un comando previsto — e solo quello 
   assert.equal(K.trova(due, K.trova(due).a).comando, 'annulla');
 });
 
+test('comandi a voce: «per favore» può stare in mezzo al comando, dopo il verbo — e il dettato prima non si tocca', () => {
+  for (const [testo, frase, comando, soloApri] of [
+    ['Sta bene. Prendimi per favore l\'anamnesi', 'Prendimi per favore l\'anamnesi', 'parti', false],
+    ['senza dolore prendimi per favore l\'anamnesi', 'prendimi per favore l\'anamnesi', 'parti', false],      // senza punto prima: il verbo è scritto giusto
+    ['Puoi per favore riprendermi la lettera', 'Puoi per favore riprendermi la lettera', 'lettera_recente', false],
+    ['Compensato.\nmi puoi per favore aprire l\'ultima lettera', 'mi puoi per favore aprire l\'ultima lettera', 'lettera_recente', true],
+    ['Fammi per favore vedere l\'ECG.', 'Fammi per favore vedere l\'ECG.', 'parti', true],
+    ['Mostrami per favore la conclusione', 'Mostrami per favore la conclusione', 'parti', true],
+    ['Prendimi, per favore, la terapia dell\'ultima lettera', 'Prendimi, per favore, la terapia dell\'ultima lettera', 'parti', false],
+    ['Ora inseriscimi per favore FRCV e comorbidità grazie', 'Ora inseriscimi per favore FRCV e comorbidità grazie', 'parti', false],
+    ['Bene. Inserire per favore l\'anamnesi', 'Inserire per favore l\'anamnesi', 'parti', false],             // verbo in un'altra forma: solo a inizio frase
+    ['Toglimi per favore la lettera', 'Toglimi per favore la lettera', 'annulla', false],
+  ] as [string, string, string, boolean][]) {
+    const r = K.trova(testo);
+    assert.equal(r ? r.comando : null, comando, testo);
+    assert.equal(r.frase, frase, testo);
+    assert.equal(r.soloApri, soloApri, testo);
+    assert.equal(K.nonCapito(testo), 0, testo);
+  }
+  // Il verbo in un'altra forma e NON a inizio frase resta nel testo: vale solo ciò che segue «per favore», come prima.
+  for (const testo of [
+    'Le chiedo di prendere per favore l\'anamnesi',
+    'Riprende la terapia per favore l\'anamnesi',
+    'Il paziente riprende la terapia. Per favore l\'anamnesi',
+  ]) { const r = K.trova(testo); assert.equal(r.comando, 'parti', testo); assert.equal(r.da, testo.toLowerCase().indexOf('per favore'), testo); }
+  // La cosa chiesta sta dopo la parola d'ordine: in fondo alla frase non è previsto; e le frasi da lettera restano tali.
+  for (const testo of [
+    'Prendimi l\'anamnesi per favore',
+    'La paziente prende per favore la terapia regolarmente',
+    'Alla segretaria: copia per favore la lettera al medico curante',
+    'Riprendi per favore la terapia anticoagulante dopo l\'intervento.',
+    'Metti per favore in pausa la terapia per tre giorni.',
+  ]) assert.equal(K.trova(testo), null, testo);
+  const es = 'Sta bene. Prendimi per favore l\'anamnesi. Poi ECG.', c = K.trova(es);
+  assert.equal(K.sostituisci(es, c.da, c.a, 'Anamnesi inventata.').testo, 'Sta bene.\n\nAnamnesi inventata.\n\nPoi ECG.');
+});
+
 test('comandi a voce: il pezzo entra come paragrafo a sé al posto della frase, e si toglie ricucendo', () => {
   const es = 'Il paziente sta bene. Per favore inserisci l\'ultima lettera. Clinicamente compensato.';
   const c = K.trova(es), s = K.sostituisci(es, c.da, c.a, '  Anamnesi inventata.\r\nSeconda riga.  ');

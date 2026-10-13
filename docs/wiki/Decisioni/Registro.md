@@ -827,3 +827,8 @@ conteggi su una cartella vera; da confermare per i fogli 06, 09, 10, 11). I trac
 piattaforma non lo leggeva. L'app ascolta solo su 127.0.0.1; la sessione si riscontra sul database a ogni richiesta;
 le pagine delle proposte del consolidatore non stanno più nel repository pubblico. Il resto in
 [[Regole/Controllo di sicurezza 2026-10-13]].
+
+**13.10.2026 — comandi a voce: «per favore» anche in mezzo al comando, non in fondo.** Lo studio ha chiesto se la
+parola d'ordine potesse stare ovunque nella frase; scelto **solo in mezzo, dopo il verbo** («prendimi per favore
+l'anamnesi»). In fondo alla frase no: per trovare dove comincia il comando bisognerebbe tornare indietro nel dettato,
+col rischio di togliere parole della lettera. Dettaglio in [[Piattaforma/Dittafono]].

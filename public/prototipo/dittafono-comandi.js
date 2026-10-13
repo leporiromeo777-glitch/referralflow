@@ -3,7 +3,8 @@
  * Chi detta sul foglio può dare un'istruzione alla piattaforma: la parola d'ordine è «per favore» (scelta dello
  * studio), seguita da un comando — «per favore, inserisci la lettera più recente», oppure solo una o più PARTI
  * («per favore, inserisci l'anamnesi», «…FRCV e comorbidità dell'ultima lettera», «…la conclusione», «…la terapia»),
- * «per favore annulla». Il programma di dettatura scrive la frase nel foglio come testo; la
+ * «per favore annulla». La parola d'ordine può stare anche in mezzo al comando, dopo il verbo («prendimi per favore
+ * l'anamnesi»). Il programma di dettatura scrive la frase nel foglio come testo; la
  * pagina la riconosce, la toglie e mette al suo posto ciò che è stato chiesto.
  *
  * «Per favore» si può dire anche in una lettera vera («ti prego per favore di inviarmi…»): per questo una frase è un
@@ -14,7 +15,7 @@
  */
 (function (root) {
   'use strict';
-  var VERSIONE = '1.7';
+  var VERSIONE = '1.8';
   // Una copia nuova a ogni ricerca: l'espressione ricorda dov'è arrivata, e due ricerche una dentro l'altra sulla
   // stessa copia non finivano più (la pagina si bloccava a ogni «per favore» senza comando, 12.10.2026).
   // Dopo la parola d'ordine il programma di dettatura può mettere da sé un punto, una virgola o un a capo.
@@ -113,57 +114,83 @@
   var CODA = /^(?:[ \t]*,?[ \t]*(?:del(?:la)?\s+paziente|di\s+quest[oa]\s+paziente|e\s+(?:me\s+la\s+|poi\s+)?(?:aggiung|incoll|inserisc|mett|copi|riport)[a-z]{1,7}|qui(?:\s+(?:dentro|sotto|sopra))?|dentro|sopra|(?:nel|sul)\s+foglio|nella\s+lettera|nel\s+testo|(?:dalla|della|in|nella)\s+cartella|grazie|per\s+(?:favore|piacere|cortesia))(?![a-zà-ù]))*[ \t]*[.,;!]?/i;
   var FRA = 45;      // quanti caratteri al massimo fra il verbo e la cosa chiesta («…il testo di tutta la…»)
 
-  // Il primo comando nel testo da `da0` in poi: { da, a, comando, frase } — `da`/`a` sono i confini della frase da togliere.
+  // Che comando c'è in testa a `resto` (ciò che segue la parola d'ordine)? → { fine, comando, parti, soloApri, verbo, esatto } o null.
+  // `verbo` è quanto è lungo il verbo in testa (0 se non c'è), `esatto` dice se era scritto in una delle forme previste.
+  function analizza(resto) {
+    var an = ANNULLA.exec(resto), fine = -1, comando = '', parti = null, soloApri = false, senzaVerbo = false, circa = null, v = null;
+    if (an) { fine = an[0].length; comando = 'annulla'; }
+    else {
+      // Senza verbo («per favore l'anamnesi», «per favore la lettera più recente») vale solo se la frase finisce lì.
+      // `senzaVerbo` vale anche per il verbo «più o meno»: in tutti e due i casi la frase deve finire con la cosa chiesta.
+      v = VERBO.exec(resto);
+      if (!v) { v = VEDI.exec(resto); soloApri = !!v; }
+      if (!v) { circa = verboCirca(resto); if (circa) { v = [resto.slice(0, circa.lungo)]; soloApri = circa.tipo === 'vedi'; senzaVerbo = true; } }
+      if (!v) { v = ['']; senzaVerbo = true; }
+      var poi = resto.slice(v[0].length), frase = poi.split(/[.!?](?=\s+[A-ZÀ-Ý]|\s*$)/)[0];
+      var let_ = LETTERA.exec(frase); if (let_ && (let_.index > FRA || (senzaVerbo && !ATTACCO.test(frase.slice(0, let_.index))))) let_ = null;
+      // le parti: subito dopo il verbo («inserisci l'anamnesi dell'ultima lettera») o dopo la lettera («dall'ultima lettera, l'anamnesi»)
+      var p = SOLO_LETTERA.test(v[0]) ? null : partiIn(frase, 0, FRA);
+      if (p && circa && VERBI_DA_TERAPIA.test(circa.radice) && p.parti.indexOf('terapia') >= 0) p = null;
+      if (let_ && (!p || let_.index < p.inizio) && !SOLO_LETTERA.test(v[0])) p = partiIn(frase, let_.index + let_[0].length, 25);
+      if (p) {
+        var dove = DA_DOVE.exec(frase.slice(p.fine));
+        fine = v[0].length + Math.max(p.fine + (dove ? dove[0].length : 0), let_ ? let_.index + let_[0].length : 0); comando = 'parti'; parti = p.parti;
+      } else if (let_) { fine = v[0].length + let_.index + let_[0].length; comando = 'lettera_recente'; }
+      else {
+        var nuda = LETTERA_NUDA.exec(poi);
+        if (nuda) { var dopoNuda = poi.slice(nuda[0].length), coda = CODA.exec(dopoNuda)[0]; if (/^\s*(?:$|[.,;!?\n]|[A-ZÀ-Ý])/.test(dopoNuda.slice(coda.length)) || /[.,;!]$/.test(coda)) { fine = v[0].length + nuda[0].length; comando = 'lettera_recente'; } }
+      }
+    }
+    if (!comando) return null;
+    fine += CODA.exec(resto.slice(fine))[0].length;
+    if (comando !== 'annulla' && senzaVerbo && !/^\s*(?:$|[.,;!?]|[A-ZÀ-Ý])/.test(resto.slice(fine)) && !/[.,;!]$/.test(resto.slice(0, fine))) return null;
+    return { fine: fine, comando: comando, parti: parti, soloApri: comando !== 'annulla' && soloApri, verbo: an ? an[0].length : v[0].length, esatto: !!an || !senzaVerbo };
+  }
+  /* «Per favore» IN MEZZO al comando (13.10.2026, richiesta dello studio): «prendimi per favore l'anamnesi», «puoi per
+     favore riprendermi la lettera», «fammi per favore vedere l'ECG». Ciò che sta PRIMA della parola d'ordine è dettato e
+     di regola non si tocca: si torna indietro di quattro parole al massimo, senza passare un punto o un a capo, e solo
+     se lì comincia un verbo di comando che arriva fino a «per favore» (o lo scavalca: «fammi | vedere»). Un verbo
+     scritto in un'altra forma («prendere per favore l'anamnesi») vale solo a inizio frase. La cosa chiesta sta DOPO la
+     parola d'ordine: «prendimi l'anamnesi per favore» non è previsto. → { da, fine (dopo la parola d'ordine), … } o null. */
+  function inMezzo(t, qui, resto) {
+    var riga = t.slice(Math.max(0, qui - 60), qui), base = qui - riga.length, conf = /[\n.!?;:…](?=[^\n.!?;:…]*$)/.exec(riga);
+    var inizio = conf ? conf.index + 1 : 0, certo = !!conf || base === 0;      // `certo`: lì comincia davvero la frase
+    var pezzo = riga.slice(inizio).replace(/[ \t,]+$/, ''), rx = /\S+/g, w, parole = [];
+    while ((w = rx.exec(pezzo))) parole.push(w.index);
+    if (!certo) parole.shift();      // tagliata a metà parola: la prima non conta
+    for (var k = Math.max(0, parole.length - 4); k < parole.length; k++) {
+      var testa = pezzo.slice(parole[k]), r = analizza(testa + ' ' + resto);
+      if (!r || r.verbo < testa.length || r.fine <= testa.length + 1) continue;
+      if (!r.esatto && !(certo && k === 0)) continue;
+      return { da: base + inizio + parole[k], fine: r.fine - testa.length - 1, comando: r.comando, parti: r.parti, soloApri: r.soloApri };
+    }
+    return null;
+  }
+
+  // Il primo comando nel testo da `da0` in poi: { da, a, comando, frase, parola } — `da`/`a` sono i confini della frase
+  // da togliere, `parola` è dove sta il suo «per favore».
   function trova(testo, da0) {
     var t = String(testo || ''), m, rx = parola();
     rx.lastIndex = Math.max(0, da0 || 0);
     while ((m = rx.exec(t))) {
       var dopo = m.index + m[0].length, resto = t.slice(dopo, dopo + 220).split('\n')[0];
-      var an = ANNULLA.exec(resto), fine = -1, comando = '', parti = null;
-      if (an) { fine = an[0].length; comando = 'annulla'; }
-      else {
-        // Senza verbo («per favore l'anamnesi», «per favore la lettera più recente») vale solo se la frase finisce lì.
-        // `senzaVerbo` vale anche per il verbo «più o meno»: in tutti e due i casi la frase deve finire con la cosa chiesta.
-        var v = VERBO.exec(resto), soloApri = false, senzaVerbo = false, circa = null;
-        if (!v) { v = VEDI.exec(resto); soloApri = !!v; }
-        if (!v) { circa = verboCirca(resto); if (circa) { v = [resto.slice(0, circa.lungo)]; soloApri = circa.tipo === 'vedi'; senzaVerbo = true; } }
-        if (!v) { v = ['']; senzaVerbo = true; }
-        if (v) {
-          var poi = resto.slice(v[0].length), frase = poi.split(/[.!?](?=\s+[A-ZÀ-Ý]|\s*$)/)[0];
-          var let_ = LETTERA.exec(frase); if (let_ && (let_.index > FRA || (senzaVerbo && !ATTACCO.test(frase.slice(0, let_.index))))) let_ = null;
-          // le parti: subito dopo il verbo («inserisci l'anamnesi dell'ultima lettera») o dopo la lettera («dall'ultima lettera, l'anamnesi»)
-          var p = SOLO_LETTERA.test(v[0]) ? null : partiIn(frase, 0, FRA);
-          if (p && circa && VERBI_DA_TERAPIA.test(circa.radice) && p.parti.indexOf('terapia') >= 0) p = null;
-          if (let_ && (!p || let_.index < p.inizio) && !SOLO_LETTERA.test(v[0])) p = partiIn(frase, let_.index + let_[0].length, 25);
-          if (p) {
-            var dove = DA_DOVE.exec(frase.slice(p.fine));
-            fine = v[0].length + Math.max(p.fine + (dove ? dove[0].length : 0), let_ ? let_.index + let_[0].length : 0); comando = 'parti'; parti = p.parti;
-          } else if (let_) { fine = v[0].length + let_.index + let_[0].length; comando = 'lettera_recente'; }
-          else {
-            var nuda = LETTERA_NUDA.exec(poi);
-            if (nuda) { var dopoNuda = poi.slice(nuda[0].length), coda = CODA.exec(dopoNuda)[0]; if (/^\s*(?:$|[.,;!?\n]|[A-ZÀ-Ý])/.test(dopoNuda.slice(coda.length)) || /[.,;!]$/.test(coda)) { fine = v[0].length + nuda[0].length; comando = 'lettera_recente'; } }
-          }
-        }
-      }
-      if (comando) {
-        fine += CODA.exec(resto.slice(fine))[0].length;
-        if (comando !== 'annulla' && senzaVerbo && !/^\s*(?:$|[.,;!?]|[A-ZÀ-Ý])/.test(resto.slice(fine)) && !/[.,;!]$/.test(resto.slice(0, fine))) continue;
-        return { da: m.index, a: dopo + fine, comando: comando, parti: parti, soloApri: comando !== 'annulla' && soloApri, frase: t.slice(m.index, dopo + fine) };
-      }
+      var c = inMezzo(t, m.index, resto), da = c ? c.da : m.index;
+      if (!c) c = analizza(resto);
+      if (c) return { da: da, a: dopo + c.fine, comando: c.comando, parti: c.parti, soloApri: c.soloApri, frase: t.slice(da, dopo + c.fine), parola: m.index };
     }
     return null;
   }
   // C'è un «per favore» che non è un comando? (per dire a chi detta che l'istruzione non è stata capita)
   function nonCapito(testo) {
     var t = String(testo || ''), m, n = 0, rx = parola();
-    while ((m = rx.exec(t))) { var c = trova(t, m.index); if (!c || c.da !== m.index) n++; }
+    while ((m = rx.exec(t))) { var c = trova(t, m.index); if (!c || c.parola !== m.index) n++; }
     return n;
   }
   // Che cosa c'era scritto dopo l'ultimo «per favore» non capito (una riga, al massimo 60 caratteri): la pagina lo mostra
   // a chi detta, così si vede come il programma di dettatura ha scritto il comando.
   function letto(testo) {
     var t = String(testo || ''), m, rx = parola(), ultimo = null;
-    while ((m = rx.exec(t))) { var c = trova(t, m.index); if (!c || c.da !== m.index) ultimo = t.slice(m.index + m[0].length).split('\n')[0].slice(0, 60).trim(); }
+    while ((m = rx.exec(t))) { var c = trova(t, m.index); if (!c || c.parola !== m.index) ultimo = t.slice(m.index + m[0].length).split('\n')[0].slice(0, 60).trim(); }
     return ultimo;
   }
   // La FORMA di ciò che non è stato capito, senza le parole: c'era un verbo previsto, si nominava la lettera, quali
