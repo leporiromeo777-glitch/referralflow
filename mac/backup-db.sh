@@ -47,7 +47,9 @@ IMMAGINI_SU=""
 NOTA_IMMAGINI=""
 if [ -d "$REPO/uploads/imaging" ]; then
   PESO="$(du -sh "$REPO/uploads/imaging" 2>/dev/null | cut -f1 | tr -d ' ')"
-  if [ -z "$IMMAGINI_SU" ]; then
+  if [ -z "$IMMAGINI_SU" ] && [ -n "${FUORI_SU:-}" ]; then
+    NOTA_IMMAGINI=" · immagini ($PESO) nella copia fuori, coi documenti"
+  elif [ -z "$IMMAGINI_SU" ]; then
     NOTA_IMMAGINI=" · immagini ($PESO) SENZA copia: nessun secondo disco configurato"
   elif [ ! -d "$(dirname "$IMMAGINI_SU")" ]; then
     NOTA_IMMAGINI=" · immagini ($PESO) NON copiate: il secondo disco non è collegato"
