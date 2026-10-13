@@ -812,3 +812,12 @@ mentre detta («prendi la lettera più recente del paziente e aggiungimela») e 
 - **Le parti della lettera** (stesso giorno, precisazione dello studio): una lettera è anamnesi (il primo paragrafo),
   FRCV, comorbidità, eventuali conclusioni dei singoli esami, conclusione generale. Chi chiede solo una parte riceve
   solo quella; più parti vengono dalla stessa lettera, e ciò che lì manca viene detto invece di essere cercato altrove.
+
+**13.10.2026 — Dividi cartella: il contenuto decide dove va un documento.** Lo studio, dopo le prime cartelle divise:
+- **le pagine scritte a mano sono tutte appunti** — non una firma o poche parole, ma la pagina scritta a penna o il
+  modulo coi campi compilati e contrassegnati a penna — e stanno in ordine di data;
+- **il laboratorio** è ogni documento fatto di analisi e valori misurati (tabelle di valori);
+- fra i **documenti amministrativi** vanno anche procure, dispense e simili;
+- i **piani di medicazione** vanno sotto **Ricette**.
+I fogli col codice a barre restano i separatori, ma la loro numerazione non è quella delle sottocartelle (corretta dai
+conteggi su una cartella vera; da confermare per i fogli 06, 09, 10, 11). I tracciati non si spostano mai per la penna.

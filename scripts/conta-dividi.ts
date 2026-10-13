@@ -10,7 +10,7 @@ import { componi, pagineDaChiedere } from '../src/lib/dividi/sezioni';
   const letto = (await leggiPagine((await getFile(d.storage_key)).body))!;
   const sep = d.esito.separatori ?? [], ris = d.esito.risposte ?? {};
   const conta = (pezzi: any[]) => { const m = new Map<string, number[]>(); for (const x of pezzi) { if (x.foglio || x.escluso) continue; const k = x.cartella ?? '(senza sezione)'; const v = m.get(k) ?? [0, 0, 0, 0, 0]; v[0]++; if (!x.data) v[1]++; if (x.sicurezza === 'media') v[2]++; v[3] += x.a - x.da + 1; if (x.a === x.da) v[4]++; m.set(k, v); } return m; };
-  const regole = conta(componi(letto.testi, sep, {}, 'X Y', letto.forme)), modello = conta(componi(letto.testi, sep, ris, 'X Y', letto.forme));
+  const regole = conta(componi(letto.testi, sep, {}, 'X Y', letto.forme)), modello = conta(componi(letto.testi, sep, ris, 'X Y', letto.forme, d.esito.viste ?? {}));
   console.log(`forme: titolo ${letto.forme.filter((f) => f.titolo).length}, blocco a destra ${letto.forme.filter((f) => f.destra >= 2).length}, chiuse ${letto.forme.filter((f) => f.chiusa).length} su ${letto.forme.length} pagine · pagine da chiedere al modello: ${pagineDaChiedere(letto.testi, sep, letto.forme).length}`);
   console.log('sezione · pagine · documenti senza modello → col modello · di una pagina · senza data · da guardare');
   let tot = [0, 0, 0, 0];

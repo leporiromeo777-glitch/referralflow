@@ -11,6 +11,7 @@
 //  3. il NOME del documento come lo vuole lo studio: «AAAA.MM.GG Cognome Nome Che cos'è».
 // Qui si compone la proposta; chi legge i codici (imaging/separatori.py) e chi chiede al modello
 // (analisi.ts) sta fuori. La conferma resta di una persona.
+import { SEZIONE_APPUNTI, SEZIONE_DEL_GENERE, dataPossibile, daGuardare, genereDaTesto, genereDelDocumento, type Genere } from './generi';
 import { ETICHETTE, SOGLIA, dataDelDocumento, dataIn, formaDaTesto, inizio, tipoDaTitolo, tipoDelDocumento, tutteLeDate, type Forma, type Pezzo, type Tipo } from './tagli';
 
 // Le sezioni della cartella cartacea dello studio, col numero che portano nel nome. `tipo` è il tipo dei
@@ -36,13 +37,22 @@ const PER_GIORNO = new Set([3, 4]);
 // medico, e un esame nuovo si riconosce anche solo dalla data che cambia.
 const PER_ESAME = new Set([5, 6, 7, 9]);
 
+// Dal codice del foglio separatore (le ultime due cifre) alla sezione. I fogli della cartella di carta NON sono
+// numerati come le sottocartelle che lo studio vuole: fino al 05 coincidono, poi no. Si è visto dai conteggi su una
+// cartella vera (13.10.2026, solo quante pagine nominano che cosa): dopo il foglio 07 ci sono tabelle di valori
+// (laboratorio), dopo lo 08 procure e dispense dal segreto (amministrativi), dopo lo 09 un intervento, e il foglio 10
+// — il primo dopo la copertina — apre le carte varie del paziente. Prima il 07 finiva in «Intervento», lo 08 in
+// «Laboratorio» e il 10 in «Documenti amministrativi»: erano le due sottocartelle sbagliate. Un codice che qui non
+// c'è vale «numero + 1», come prima.
+export const SEZIONE_DEL_CODICE: Record<number, number> = { 0: 1, 1: 2, 2: 3, 3: 4, 4: 5, 5: 6, 6: 7, 7: 9, 8: 11, 9: 8, 10: 10, 11: 12 };
+
 export type Foglio = { copertina: true } | { copertina: false; numero: number; nome: string };
-// Che foglio è, dal codice letto: sei cifre = separatore di sezione (le ultime due, da 00); lettere e cifre
+// Che foglio è, dal codice letto: sei cifre = separatore di sezione (le ultime due); lettere e cifre
 // = la copertina col numero del paziente. Un codice che non si riconosce non è un separatore.
 export function foglioDelCodice(codice: string): Foglio | null {
   const c = String(codice ?? '').replace(/\s+/g, '').toUpperCase();
   if (/^\d{6}$/.test(c)) {
-    const numero = Number(c.slice(4)) + 1;
+    const numero = SEZIONE_DEL_CODICE[Number(c.slice(4))] ?? Number(c.slice(4)) + 1;
     return { copertina: false, numero, nome: SEZIONI[numero]?.nome ?? `${String(numero).padStart(2, '0')}_Sezione ${numero}` };
   }
   if (/^[A-Z]{1,3}\d{5,10}$/.test(c)) return { copertina: true };
@@ -50,6 +60,8 @@ export function foglioDelCodice(codice: string): Foglio | null {
 }
 
 export type Risposta = { nuovo: boolean; data: string | null; titolo: string | null };
+// Che cosa ha visto il modello GUARDANDO la pagina: se è scritta a mano per gran parte, e la data che ci ha letto.
+export type Vista = { mano: boolean; data: string | null };
 export type Separatore = { pagina: number; codice: string };
 export type PezzoSezione = Pezzo & { cartella: string | null; escluso: boolean; descrizione: string; foglio: 'separatore' | 'copertina' | null };
 
@@ -72,6 +84,20 @@ export function pagineDaChiedere(testi: string[], separatori: Separatore[], form
     const seguitoCerto = seguito(s.segnali) || (prima !== null && !perGiorno && !F[prima].chiusa && ((!F[i].titolo && F[i].destra < 2 && s.punti < SOGLIA) || s.segnali.includes('comincia in minuscolo')));
     prima = i;
     if (!seguitoCerto) fuori.push(i + 1);
+  }
+  return fuori;
+}
+// Le pagine da far GUARDARE al modello (è scritta a mano?): non i fogli separatori, non le bianche, non le pagine
+// fitte di testo stampato pulito. `inchiostro` è la parte scura di ogni pagina, in percento (dal lettore dei codici).
+// I TRACCIATI (sezione 04) non si guardano: una striscia di ECG con due note a penna resta un ECG, non un appunto.
+export function pagineDaGuardare(testi: string[], separatori: Separatore[], inchiostro?: number[] | null): number[] {
+  const fogli = new Map(separatori.map((s) => [s.pagina, foglioDelCodice(s.codice)] as const).filter((x) => x[1]));
+  const fuori: number[] = [];
+  let tracciati = false;
+  for (let i = 0; i < testi.length; i++) {
+    const f = fogli.get(i + 1);
+    if (f) { if (!f.copertina) tracciati = f.numero === 4; continue; }
+    if (!tracciati && daGuardare(testi[i], inchiostro ? inchiostro[i] ?? null : null)) fuori.push(i + 1);
   }
   return fuori;
 }
@@ -110,7 +136,8 @@ export function nomeDocumento(data: string | null, paziente: string, descrizione
 }
 
 // La proposta: i pezzi in ordine di pagina. I fogli separatori sono pezzi «lasciati fuori» che aprono una sezione.
-export function componi(testi: string[], separatori: Separatore[], risposte: Record<number, Risposta>, paziente: string, forme?: Forma[]): PezzoSezione[] {
+const NOME_GENERE: Record<Genere, string> = { laboratorio: 'Laboratorio', amministrativo: 'Documento amministrativo', ricetta: 'Piano di medicazione' };
+export function componi(testi: string[], separatori: Separatore[], risposte: Record<number, Risposta>, paziente: string, forme?: Forma[], viste: Record<number, Vista> = {}): PezzoSezione[] {
   const F = forme ?? testi.map(formaDaTesto);
   const fogli = new Map<number, Foglio>();
   for (const s of separatori) { const f = foglioDelCodice(s.codice); if (f && s.pagina >= 1 && s.pagina <= testi.length) fogli.set(s.pagina, f); }
@@ -121,10 +148,15 @@ export function componi(testi: string[], separatori: Separatore[], risposte: Rec
   let chiusaPrima = false;              // l'ultima pagina scritta del documento in corso finisce col nome del medico o coi saluti
   let regola: { categoria: Tipo; data: string | null } | null = null;      // tipo e data che le REGOLE danno al pezzo in corso (per la testata ripetuta)
   let corrente: PezzoSezione | null = null;
+  let correnteMano = false;             // il documento in corso è fatto di pagine scritte a mano
+  let correnteGenere: Genere | null = null;      // il genere della prima pagina del documento in corso
+  const mano = (i: number) => viste[i + 1]?.mano === true && sezione?.numero !== 4;      // nei tracciati la penna non fa un appunto
   const dataDi = (i: number): string | null => {
     const r = risposte[i + 1];
     const delModello = r?.data ? dataIn(r.data) : null;
-    return delModello && tutteLeDate(testi[i]).has(delModello) ? delModello : dataDelDocumento(testi[i]);
+    const dalTesto = delModello && tutteLeDate(testi[i]).has(delModello) ? delModello : dataDelDocumento(testi[i]);
+    // Una pagina scritta a mano: la data che l'OCR non legge può averla letta il modello guardandola.
+    return dalTesto ?? (mano(i) ? dataPossibile(viste[i + 1]?.data) : null);
   };
   const senzaTesto = testi.every((t, k) => fogli.has(k + 1) || lettere(t) < 40);
   for (let i = 0; i < testi.length; i++) {
@@ -137,16 +169,27 @@ export function componi(testi: string[], separatori: Separatore[], risposte: Rec
       continue;
     }
     const s0 = inizio(testi[i], ultimaPiena), r = risposte[i + 1];
-    const s = senzaTesto ? { ...s0, vuota: false } : s0;
+    // Le pagine scritte a mano sono tutte APPUNTI (lo studio, 13.10.2026), in qualunque sezione stiano: non sono mai
+    // «pagine vuote» anche se l'OCR non ci ha letto niente, e fanno documenti a sé, uno per giorno.
+    const aMano = mano(i), fisica = sezione;
+    const qui: { numero: number; nome: string } | null = aMano ? { numero: SEZIONE_APPUNTI, nome: SEZIONI[SEZIONE_APPUNTI].nome } : fisica;
+    const s = senzaTesto || aMano ? { ...s0, vuota: false } : s0;
+    const gPagina = aMano ? null : genereDaTesto(testi[i]), titolato = gPagina && gPagina !== 'laboratorio' ? gPagina : null;
     const catRegola = tipoDelDocumento(testi[i]), dataRegola = dataDelDocumento(testi[i]);
     if (!s.vuota) ultimaPiena = testi[i];
     const ripetuta = !!regola && s.segnali.every((x) => x.startsWith('titolo') || x === 'data in cima') && regola.categoria === catRegola && regola.data === dataRegola && catRegola !== 'altro';
     const perRegole = s.punti >= SOGLIA && !ripetuta;
     let nuovo: boolean, sicurezza: Pezzo['sicurezza'], segnali = s.segnali;
     if (!corrente || apre) { nuovo = true; sicurezza = 'alta'; segnali = [i === 0 ? 'prima pagina' : sezione ? 'dopo il separatore' : 'prima pagina', ...s.segnali]; }
-    else if (s.vuota || senzaTesto || seguito(s.segnali)) { nuovo = false; sicurezza = 'alta'; }
+    else if (s.vuota && !aMano) { nuovo = false; sicurezza = 'alta'; }      // il retro bianco resta col foglio prima, anche se quello è scritto a mano
+    // Dalla stampa alla penna, o dalla penna alla stampa: comincia un documento (un appunto non continua una lettera).
+    else if (aMano !== correnteMano) { nuovo = true; sicurezza = 'media'; segnali = [...s.segnali, aMano ? 'scritta a mano' : 'dopo le pagine scritte a mano']; }
+    else if (senzaTesto || (!aMano && seguito(s.segnali))) { nuovo = false; sicurezza = 'alta'; }
+    // Un titolo in cima che dice «procura», «dispensa», «piano di medicazione», «ricetta» apre un documento: è un'altra
+    // cosa rispetto a quello in corso, anche se la pagina prima non «chiude» col nome di un medico.
+    else if (!aMano && titolato && titolato !== correnteGenere) { nuovo = true; sicurezza = 'media'; segnali = [...s.segnali, `titolo in cima: ${NOME_GENERE[titolato].toLowerCase()}`]; }
     else if (s.segnali.includes('pagina 1 di N')) { nuovo = true; sicurezza = 'alta'; }
-    else if (sezione && PER_GIORNO.has(sezione.numero)) {
+    else if (qui && PER_GIORNO.has(qui.numero)) {
       // Tracciati e appunti: un documento per giorno. Cambia la data → documento nuovo; stessa data o nessuna → continua.
       const d = dataDi(i);
       // Il documento in corso non aveva ancora una data (un primo foglio senza): la prende da qui, senza spezzarsi.
@@ -170,16 +213,37 @@ export function componi(testi: string[], separatori: Separatore[], risposte: Rec
     if (!s.vuota) chiusaPrima = F[i].chiusa;
     if (!nuovo) { corrente!.a = i + 1; continue; }
     const descrModello = pulisciTitolo(r?.titolo, paziente);
-    const sez = sezione ? SEZIONI[sezione.numero] : undefined;
+    const sez = qui ? SEZIONI[qui.numero] : undefined;
+    const spostataAMano = aMano && fisica?.numero !== SEZIONE_APPUNTI;      // scritta a mano, ma nella cartella di carta stava altrove
     const categoria: Tipo = sez?.tipo ?? tipoDaTitolo(descrModello) ?? (catRegola !== 'altro' ? catRegola : 'altro');
     const data = dataDi(i);
-    const descrizione = descrModello || (catRegola !== 'altro' && !sez?.tipo ? ETICHETTE[catRegola] : sez?.voce ?? ETICHETTE[categoria]);
-    corrente = { da: i + 1, a: i + 1, categoria, data, titolo: s.vuota ? 'Pagina bianca' : nomeDocumento(data, paziente, descrizione), descrizione: s.vuota ? '' : descrizione, sicurezza, segnali, cartella: sezione?.nome ?? null, escluso: s.vuota, foglio: null };
+    // Di una pagina a penna il titolo detto dal modello viene da un testo che l'OCR ha letto male: si chiama «Appunti».
+    const descrizione = aMano ? SEZIONI[SEZIONE_APPUNTI].voce : descrModello || (catRegola !== 'altro' && !sez?.tipo ? ETICHETTE[catRegola] : sez?.voce ?? ETICHETTE[categoria]);
+    if (aMano && !segnali.includes('scritta a mano')) segnali = [...segnali, 'scritta a mano'];
+    if (spostataAMano) { segnali = [...segnali, `era in «${fisica?.nome ?? 'nessuna sezione'}»`]; sicurezza = 'media'; }
+    corrente = { da: i + 1, a: i + 1, categoria, data, titolo: s.vuota ? 'Pagina bianca' : nomeDocumento(data, paziente, descrizione), descrizione: s.vuota ? '' : descrizione, sicurezza, segnali, cartella: qui?.nome ?? null, escluso: s.vuota, foglio: null };
+    correnteMano = aMano; correnteGenere = gPagina;
     pezzi.push(corrente);
     regola = { categoria: catRegola, data: dataRegola };
     apre = s.vuota;                       // il retro bianco del foglio separatore resta fuori, e il documento comincia dopo
   }
   // Senza testo da nessuna parte (scansione non ancora letta): un pezzo per sezione, e lo si dice.
   if (senzaTesto && testi.length > 1) for (const p of pezzi) if (!p.foglio) p.sicurezza = 'bassa';
+  // IL CONTENUTO DECIDE LA SOTTOCARTELLA (lo studio, 13.10.2026): un documento fatto di valori di laboratorio va in
+  // «Laboratorio», una procura o una dispensa fra i «Documenti amministrativi», un piano di medicazione sotto
+  // «Ricette» — in qualunque sezione della carta fosse. Gli appunti a mano e i tracciati non si toccano.
+  for (const p of pezzi) {
+    if (p.foglio || p.escluso || p.segnali.includes('scritta a mano') || p.cartella === SEZIONI[4].nome) continue;
+    const g = genereDelDocumento(testi.slice(p.da - 1, p.a));
+    if (!g) continue;
+    const dove = SEZIONI[SEZIONE_DEL_GENERE[g]];
+    if (p.cartella === dove.nome) continue;
+    p.segnali = [...p.segnali, `per contenuto: ${NOME_GENERE[g].toLowerCase()}`, `era in «${p.cartella ?? 'nessuna sezione'}»`];
+    // il nome: quello che c'era se diceva già che cos'è; se era la voce generica della sezione di prima, quella del genere
+    const generica = Object.values(SEZIONI).some((x) => x.voce === p.descrizione) || !p.descrizione;
+    if (generica) p.descrizione = NOME_GENERE[g];
+    p.cartella = dove.nome; p.categoria = g === 'laboratorio' ? 'laboratorio' : p.categoria === 'laboratorio' ? 'altro' : p.categoria; p.sicurezza = p.sicurezza === 'alta' ? 'media' : p.sicurezza;
+    p.titolo = nomeDocumento(p.data, paziente, p.descrizione);
+  }
   return pezzi;
 }

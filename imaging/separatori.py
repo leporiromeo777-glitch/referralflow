@@ -119,8 +119,10 @@ def separatori(pdf):
                        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=900)
         file = sorted(x for x in os.listdir(d) if x.startswith('p-'))
         trovati = []
+        inchiostro = []      # per pagina, quanta parte è scura (in percento): serve a sapere quali pagine sono bianche
         for k, nome in enumerate(file, start=1):
             a = immagine(os.path.join(d, nome))
+            inchiostro.append(round(float((a < 0.6).mean()) * 100, 2))
             candidati = [a, a.T] if fasce(a) or fasce(a.T) else []
             if not candidati:
                 continue
@@ -133,7 +135,7 @@ def separatori(pdf):
             os.remove(fitta)
             if codice:
                 trovati.append({'pagina': k, 'codice': codice})
-        return {'pagine': len(file), 'separatori': trovati}
+        return {'pagine': len(file), 'separatori': trovati, 'inchiostro': inchiostro}
 
 
 if __name__ == '__main__':

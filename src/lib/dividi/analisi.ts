@@ -1,6 +1,6 @@
 import 'server-only';
 import { execFile } from 'child_process';
-import { promises as fs } from 'fs';
+import { existsSync, promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
 import { query } from '../db';
@@ -8,7 +8,7 @@ import { catenaOccupata } from '../esporta-grezze';
 import { configurazioneOllama, generaOllamaEsito } from '../ollama';
 import { getFile } from '../storage';
 import { leggiPagine } from './pagine';
-import { estratti, pagineDaChiedere, type Estratto, type Risposta, type Separatore } from './sezioni';
+import { estratti, pagineDaChiedere, pagineDaGuardare, type Estratto, type Risposta, type Separatore, type Vista } from './sezioni';
 
 // Dividi cartella: l'analisi in sottofondo (9.10.2026, [[Piattaforma/Dividi cartella]]).
 // Per una cartella completa: (1) si cercano i fogli separatori col codice a barre (imaging/separatori.py:
@@ -21,7 +21,10 @@ const PY = process.env.IMAGING_PYTHON ?? path.join(os.homedir(), '.referralflow-
 const STRUMENTO = path.join(process.cwd(), 'imaging', 'separatori.py');
 export const MODELLO = process.env.DIVIDI_LLM ?? 'gemma3:12b';      // «spento» = solo separatori e regole
 // Cambia quando cambiano le istruzioni al modello o le pagine che gli si danno: le analisi fatte con la versione prima si rifanno da sole.
-export const VERSIONE = 2;
+export const VERSIONE = 3;
+// Guardare le pagine (è scritta a mano?): «spento» lo salta — le prove end-to-end, o un Mac senza modello che vede.
+const VISTA = process.env.DIVIDI_VISTA !== 'spento';
+const GS = process.env.GS_BIN ?? ['/opt/homebrew/bin/gs', '/usr/local/bin/gs'].find((x) => existsSync(x)) ?? 'gs';
 const ATTESA_CATENA_MS = Number(process.env.DIVIDI_ATTESA_CATENA_MS ?? 20 * 60_000);
 
 // Le istruzioni stanno in testa e non cambiano: il modello le tiene in memoria da una pagina all'altra.
@@ -56,6 +59,41 @@ export async function chiediPagina(e: Estratto, modello = MODELLO): Promise<Risp
   return r.ok ? leggiRisposta(r.testo) : null;
 }
 
+// LA PAGINA GUARDATA (13.10.2026, richiesta dello studio: «le pagine scritte a mano sono tutte appunti»). Una pagina
+// scritta a penna l'OCR non la legge, e un modulo compilato a penna si legge solo nelle parti stampate: dal testo non
+// si capisce che è scritta a mano. Lo stesso modello locale sa guardare un'immagine: gli si dà la pagina e dice se è
+// scritta a mano per gran parte, e la data che ci legge. L'immagine si rende, si manda a Ollama sul Mac e si cancella.
+export const DOMANDA_MANO = `Classifica questa pagina scansionata di una cartella clinica in UNA di queste categorie e rispondi solo con un oggetto JSON {"categoria": "...", "data": "GG.MM.AAAA" oppure null}:
+- "stampata": lettera, referto o tabella scritti al computer; può avere una firma, un timbro o una breve nota a penna.
+- "modulo_vuoto": modulo stampato con i campi non compilati.
+- "modulo_a_penna": modulo stampato i cui campi sono compilati o contrassegnati a mano (righe riempite a penna, crocette, note).
+- "manoscritta": pagina di appunti scritti a mano.
+- "tracciato": tracciato, grafico o immagine.
+- "bianca": pagina vuota.
+"data": la data scritta nella pagina (a mano o stampata) che dice di che giorno è; null se non si legge con sicurezza. Mai una data di nascita.`;
+export function leggiVista(testo: string): Vista | null {
+  try {
+    const o = JSON.parse(testo.slice(testo.indexOf('{'), testo.lastIndexOf('}') + 1));
+    if (typeof o?.categoria !== 'string') return null;
+    return { mano: /^(modulo_a_penna|manoscritta)$/.test(o.categoria.trim().toLowerCase().replace(/\s+/g, '_')), data: typeof o.data === 'string' ? o.data.slice(0, 20) : null };
+  } catch { return null; }
+}
+export async function guardaPagina(pngBase64: string, modello = MODELLO): Promise<Vista | null> {
+  const r = await generaOllamaEsito(DOMANDA_MANO, { json: true, modello, immagini: [pngBase64], timeoutMs: 180_000 });
+  return r.ok ? leggiVista(r.testo) : null;
+}
+
+// Una pagina del PDF come immagine (ghostscript, 100 punti per pollice: al modello basta), letta e subito cancellata.
+function immagineDellaPagina(file: string, pagina: number, dir: string): Promise<string | null> {
+  const png = path.join(dir, `vista-${pagina}.png`);
+  return new Promise((resolve) => {
+    execFile(GS, ['-q', '-dNOPAUSE', '-dBATCH', '-dSAFER', '-sDEVICE=png16m', '-r100', `-dFirstPage=${pagina}`, `-dLastPage=${pagina}`, `-sOutputFile=${png}`, file], { timeout: 120_000 }, async (err) => {
+      if (err) { resolve(null); return; }
+      try { const b = await fs.readFile(png); resolve(b.toString('base64')); } catch { resolve(null); } finally { await fs.rm(png, { force: true }).catch(() => null); }
+    });
+  });
+}
+
 // Sul Mac da 24 GB il modello e whisper non devono contendersi la memoria: appena la catena prende un dettato,
 // il modello di questa analisi si scarica subito (la catena scarica solo i suoi). Se Ollama non risponde, pazienza.
 async function scaricaModello(): Promise<void> {
@@ -63,15 +101,15 @@ async function scaricaModello(): Promise<void> {
   try { await fetch(`${configurazioneOllama.url}/api/generate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: MODELLO, keep_alive: 0 }), signal: AbortSignal.timeout(20_000) }); } catch { /* best effort */ }
 }
 
-function separatoriDi(file: string): Promise<{ pagine: number; separatori: Separatore[] } | null> {
+function separatoriDi(file: string): Promise<{ pagine: number; separatori: Separatore[]; inchiostro: number[] | null } | null> {
   return new Promise((resolve) => {
     execFile(PY, [STRUMENTO, file], { timeout: 20 * 60_000, maxBuffer: 4 * 1024 * 1024 }, (_err, stdout) => {
-      try { const j = JSON.parse(String(stdout ?? '')); resolve(Array.isArray(j?.separatori) ? { pagine: Number(j.pagine) || 0, separatori: j.separatori.filter((s: any) => Number.isInteger(s?.pagina) && typeof s?.codice === 'string') } : null); }
+      try { const j = JSON.parse(String(stdout ?? '')); resolve(Array.isArray(j?.separatori) ? { pagine: Number(j.pagine) || 0, separatori: j.separatori.filter((s: any) => Number.isInteger(s?.pagina) && typeof s?.codice === 'string'), inchiostro: Array.isArray(j?.inchiostro) ? j.inchiostro.map((x: any) => Number(x) || 0) : null } : null); }
       catch { resolve(null); }
     });
   });
 }
-export type Esito = { v?: number; separatori?: Separatore[]; risposte?: Record<number, Risposta>; modello_ok?: boolean };
+export type Esito = { v?: number; separatori?: Separatore[]; risposte?: Record<number, Risposta>; modello_ok?: boolean; inchiostro?: number[] | null; viste?: Record<number, Vista> };
 export type StatoAnalisi = { stato: 'da_fare' | 'in_corso' | 'fatta' | 'fallita'; fatte: number; pagine: number | null; versione: number; modello: string | null };
 export async function analisiDi(docId: string, storageKey: string): Promise<(StatoAnalisi & { esito: Esito }) | null> {
   const [a] = await query<StatoAnalisi & { esito: Esito; storage_key: string }>(`select stato, fatte, pagine, versione, modello, esito, storage_key from dividi_analisi where documento_id = $1`, [docId]);
@@ -88,7 +126,9 @@ export async function statoAnalisi(studioId: string, docId: string): Promise<Sta
 export async function mettiInCoda(studioId: string, docId: string, storageKey: string, daCapo = false): Promise<void> {
   await query(
     `insert into dividi_analisi (documento_id, studio_id, storage_key) values ($1, $2, $3)
-     on conflict (documento_id) do update set stato = 'da_fare', storage_key = excluded.storage_key, fatte = 0, pagine = null, versione = dividi_analisi.versione + 1, esito = '{}'::jsonb, finito_at = null, creato_at = now()
+     on conflict (documento_id) do update set stato = 'da_fare', storage_key = excluded.storage_key, fatte = 0, pagine = null, versione = dividi_analisi.versione + 1, finito_at = null, creato_at = now(),
+         -- solo le istruzioni sono cambiate: ciò che è già stato letto resta (analizzaUna decide che cosa tenere)
+         esito = case when dividi_analisi.storage_key <> excluded.storage_key or $4 then '{}'::jsonb else dividi_analisi.esito end
        where dividi_analisi.storage_key <> excluded.storage_key or $4 or (dividi_analisi.stato = 'fatta' and coalesce((dividi_analisi.esito->>'v')::int, 1) <> $5)`, [docId, studioId, storageKey, daCapo, VERSIONE]);
   void giroAnalisi().catch((e: any) => console.error(`[dividi] giro: ${e?.code ?? e?.name ?? 'errore'}`));
 }
@@ -106,42 +146,55 @@ async function analizzaUna(docId: string): Promise<'fatta' | 'fallita' | 'rimand
     const letto = await leggiPagine(dati);
     if (!letto) throw Object.assign(new Error('pdf'), { code: 'pdf' });
     const testi = letto.testi;
-    // 1 — i separatori (se già trovati in un giro interrotto, non si rifà).
-    const stessa = (d.esito.v ?? 1) === VERSIONE;
-    let separatori = d.esito.separatori;
-    if (!separatori) {
-      const file = path.join(dir, 'ingresso.pdf');
-      await fs.writeFile(file, dati, { mode: 0o600 });
+    // 1 — i separatori e l'inchiostro di ogni pagina (se già trovati in un giro interrotto, non si rifà).
+    // Dalla versione 2 alla 3 le domande sul TESTO non sono cambiate (si è aggiunto il guardare le pagine): le
+    // risposte già date si tengono, così una cartella già letta non aspetta di nuovo venti minuti.
+    const stessa = (d.esito.v ?? 1) === VERSIONE, tieniTesto = (d.esito.v ?? 1) >= 2;
+    let separatori = d.esito.separatori, inchiostro = d.esito.inchiostro;
+    const file = path.join(dir, 'ingresso.pdf');
+    await fs.writeFile(file, dati, { mode: 0o600 });
+    if (!separatori || inchiostro === undefined) {
       const letti = await separatoriDi(file);
       if (!letti) console.error(`[dividi] analisi ${docId.slice(0, 8)}: il lettore dei codici a barre non ha risposto (imaging/separatori.py): si va avanti senza sezioni`);
-      separatori = letti?.separatori ?? [];
-      await fs.rm(file, { force: true });
+      separatori = separatori ?? letti?.separatori ?? [];
+      inchiostro = letti?.inchiostro ?? null;
     }
-    const risposte: Record<number, Risposta> = stessa ? { ...(d.esito.risposte ?? {}) } : {};
+    const risposte: Record<number, Risposta> = tieniTesto ? { ...(d.esito.risposte ?? {}) } : {};
+    const viste: Record<number, Vista> = stessa ? { ...(d.esito.viste ?? {}) } : {};
     const daChiedere = MODELLO === 'spento' ? [] : pagineDaChiedere(testi, separatori, letto.forme).filter((n) => !risposte[n]);
-    const totale = Object.keys(risposte).length + daChiedere.length;
+    const daGuardare = MODELLO === 'spento' || !VISTA ? [] : pagineDaGuardare(testi, separatori, inchiostro).filter((n) => !viste[n]);
+    const fatteFinora = () => Object.keys(risposte).length + Object.keys(viste).length;
+    const totale = fatteFinora() + daChiedere.length + daGuardare.length;
     const salva = async (stato: 'in_corso' | 'da_fare' | 'fatta', modelloOk: boolean) => query(
       `update dividi_analisi set stato = $2, esito = $3::jsonb, pagine = $4, fatte = $5, versione = versione + 1, modello = $6, ms = $7, finito_at = case when $2 = 'fatta' then now() else null end
         where documento_id = $1 and storage_key = $8`,
-      [docId, stato, JSON.stringify({ v: VERSIONE, separatori, risposte, modello_ok: modelloOk } satisfies Esito), totale, Object.keys(risposte).length, MODELLO === 'spento' ? null : MODELLO, Date.now() - t0, d.storage_key]);
+      [docId, stato, JSON.stringify({ v: VERSIONE, separatori, risposte, modello_ok: modelloOk, inchiostro, viste } satisfies Esito), totale, fatteFinora(), MODELLO === 'spento' ? null : MODELLO, Date.now() - t0, d.storage_key]);
     await salva('in_corso', true);
-    console.log(`[dividi] analisi ${docId.slice(0, 8)}: ${testi.length} pagine, ${separatori.length} fogli col codice, ${daChiedere.length} pagine per il modello`);
+    console.log(`[dividi] analisi ${docId.slice(0, 8)}: ${testi.length} pagine, ${separatori.length} fogli col codice, ${daChiedere.length} pagine da leggere e ${daGuardare.length} da guardare per il modello`);
     // 2 — il modello, pagina per pagina. Se si guasta due volte di fila si chiude con quel che c'è: il resto lo fanno le regole.
     let guasti = 0, dalSalvataggio = 0;
-    for (const n of daChiedere) {
+    // Prima tutte le pagine da leggere, poi quelle da guardare: in ordine di pagina, una domanda alla volta.
+    const lavori: { n: number; cosa: 'leggi' | 'guarda' }[] = [...daChiedere.map((n) => ({ n, cosa: 'leggi' as const })), ...daGuardare.map((n) => ({ n, cosa: 'guarda' as const }))];
+    for (const { n, cosa } of lavori) {
       const inizioAttesa = Date.now();
       if (await catenaOccupata()) await scaricaModello();
       while (await catenaOccupata()) {
-        if (Date.now() - inizioAttesa > ATTESA_CATENA_MS) { await salva('da_fare', true); console.log(`[dividi] analisi ${docId.slice(0, 8)}: rimandata, la catena lavora (${Object.keys(risposte).length} di ${totale})`); return 'rimandata'; }
+        if (Date.now() - inizioAttesa > ATTESA_CATENA_MS) { await salva('da_fare', true); console.log(`[dividi] analisi ${docId.slice(0, 8)}: rimandata, la catena lavora (${fatteFinora()} di ${totale})`); return 'rimandata'; }
         await new Promise((r) => setTimeout(r, 15_000));
       }
-      const r = await chiediPagina(estratti(testi, separatori, n, undefined, letto.forme));
-      if (r) { risposte[n] = r; guasti = 0; } else if (++guasti >= 2) break;
+      if (cosa === 'leggi') {
+        const r = await chiediPagina(estratti(testi, separatori, n, undefined, letto.forme));
+        if (r) { risposte[n] = r; guasti = 0; } else if (++guasti >= 2) break;
+      } else {
+        const png = await immagineDellaPagina(file, n, dir);
+        const v = png ? await guardaPagina(png) : null;
+        if (v) { viste[n] = v; guasti = 0; } else if (++guasti >= 2) break;
+      }
       if (++dalSalvataggio >= 5) { dalSalvataggio = 0; if (!(await ancoraLei())) return 'sparita'; await salva('in_corso', true); }
     }
     await scaricaModello();
     await salva('fatta', guasti < 2);
-    console.log(`[dividi] analisi ${docId.slice(0, 8)}: fatta, ${Object.keys(risposte).length} di ${totale} pagine lette dal modello (${MODELLO}), ${Math.round((Date.now() - t0) / 1000)} s`);
+    console.log(`[dividi] analisi ${docId.slice(0, 8)}: fatta, ${Object.keys(risposte).length} pagine lette e ${Object.keys(viste).length} guardate dal modello (${MODELLO}), di cui ${Object.values(viste).filter((v) => v.mano).length} scritte a mano, ${Math.round((Date.now() - t0) / 1000)} s`);
     return 'fatta';
   } catch (e: any) {
     await query(`update dividi_analisi set stato = 'fallita', finito_at = now(), versione = versione + 1 where documento_id = $1`, [docId]);
@@ -166,7 +219,8 @@ export async function giroAnalisi(): Promise<{ esito: 'in_corso' | 'fatto'; fatt
        select d.id, d.studio_id, d.storage_key from patient_documents d
         where d.nota = 'cartella completa, da dividere' and d.filename ilike '%.pdf' and d.ocr_stato is distinct from 'da_fare' and d.uploaded_at > now() - interval '14 days'
           and not exists (select 1 from document_access_log l where l.document_id = d.id and l.dettaglio like 'divisione: %')
-       on conflict (documento_id) do update set stato = 'da_fare', storage_key = excluded.storage_key, fatte = 0, pagine = null, versione = dividi_analisi.versione + 1, esito = '{}'::jsonb, finito_at = null
+       on conflict (documento_id) do update set stato = 'da_fare', storage_key = excluded.storage_key, fatte = 0, pagine = null, versione = dividi_analisi.versione + 1, finito_at = null,
+           esito = case when dividi_analisi.storage_key <> excluded.storage_key then '{}'::jsonb else dividi_analisi.esito end
          where dividi_analisi.storage_key <> excluded.storage_key or (dividi_analisi.stato = 'fatta' and coalesce((dividi_analisi.esito->>'v')::int, 1) <> $1)`, [VERSIONE]);
     const viste = new Set<string>();
     for (;;) {

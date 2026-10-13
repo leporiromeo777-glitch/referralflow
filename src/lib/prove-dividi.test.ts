@@ -94,8 +94,13 @@ const sep = [{ pagina: 1, codice: 'PZ00012345' }, { pagina: 2, codice: '770000' 
 
 test('dividi: il codice del foglio dice la sezione (le ultime due cifre, da 00) o la copertina', () => {
   assert.deepEqual(foglioDelCodice('770000'), { copertina: false, numero: 1, nome: '01_Rapporti' });
-  assert.deepEqual(foglioDelCodice('770010'), { copertina: false, numero: 11, nome: '11_Documenti amministrativi' });
-  assert.deepEqual(foglioDelCodice('770008'), { copertina: false, numero: 9, nome: '09_Laboratorio e analisi' });
+  // I fogli della cartella di carta non sono numerati come le sottocartelle: dal 07 in poi l'ordine è un altro
+  // (visto sui conteggi di una cartella vera, 13.10.2026).
+  assert.deepEqual(foglioDelCodice('770005'), { copertina: false, numero: 6, nome: '06_Ciclo - Ergospiro' });
+  assert.deepEqual(foglioDelCodice('770007'), { copertina: false, numero: 9, nome: '09_Laboratorio e analisi' });
+  assert.deepEqual(foglioDelCodice('770008'), { copertina: false, numero: 11, nome: '11_Documenti amministrativi' });
+  assert.deepEqual(foglioDelCodice('770009'), { copertina: false, numero: 8, nome: '08_Intervento cardiologico' });
+  assert.deepEqual(foglioDelCodice('770010'), { copertina: false, numero: 10, nome: '10_Vari' });
   assert.deepEqual(foglioDelCodice('770011'), { copertina: false, numero: 12, nome: '12_Ricette' });
   assert.deepEqual(foglioDelCodice(' PZ 00012345 '), { copertina: true });
   assert.equal(foglioDelCodice('770017')!.copertina === false && (foglioDelCodice('770017') as any).nome, '18_Sezione 18', 'una sezione che non si conosce prende il suo numero, e il nome lo si corregge a mano');
@@ -183,4 +188,79 @@ test('dividi: quali pagine si danno al modello, con che contesto, e come si ripu
   assert.equal(nomeDocumento('2022-11-09', 'Provadividi Anna', 'ECO'), '2022.11.09 Provadividi Anna ECO');
   assert.equal(nomeDocumento(null, 'Provadividi Anna', 'Diario'), 'Provadividi Anna Diario');
   assert.deepEqual(leggiPaziente(['N. Paziente 12345\nCognome: Provadividi\nNome: Anna\n']), { nome: 'Provadividi Anna', nascita: null }, 'la copertina della cartella cartacea');
+});
+
+// ---- Il contenuto decide la sottocartella, e le pagine scritte a mano sono appunti (13.10.2026). Testi INVENTATI. ----
+import { daGuardare, dataPossibile, genereDaTesto, genereDelDocumento, valoriDiLaboratorio } from './dividi/generi';
+import { pagineDaGuardare } from './dividi/sezioni';
+
+const LAB = ['Laboratorio di Prova SA', 'Rapporto di analisi · prelievo del 01.02.2021', 'Analisi Risultato Unità Riferimento', 'Emoglobina 142 g/l 120 - 160', 'Leucociti 6.4 G/l 4.0 - 10.0', 'Trombociti 231 G/l 150 - 400', 'Creatinina 78 µmol/l 45 - 84',
+  'Potassio 4.2 mmol/l 3.5 - 5.1', 'Sodio 140 mmol/l 136 - 145', 'Colesterolo totale 4.9 mmol/l < 5.0', 'LDL 2.6 mmol/l < 3.0', 'HDL 1.5 mmol/l > 1.0', 'Trigliceridi 1.3 mmol/l < 1.7', 'TSH 2.1 mU/l 0.3 - 4.2', 'CRP 2 mg/l < 5'].join('\n');
+const LETTERA_CON_VALORI = ['Studio Inventato', 'Città di Prova, 03.02.2021', 'Caro collega,', 'ho rivisto il paziente inventato per il controllo annuale; riferisce di stare bene, senza dispnea né dolori toracici, e assume regolarmente la terapia.',
+  'Al laboratorio del 01.02.2021: emoglobina 142 g/l, creatinina 78 µmol/l, potassio 4.2 mmol/l, sodio 140 mmol/l, colesterolo 4.9 mmol/l, LDL 2.6 mmol/l, HDL 1.5 mmol/l, trigliceridi 1.3 mmol/l, TSH 2.1 mU/l.',
+  'In conclusione quadro stabile, proseguire la terapia in corso.', 'Cordiali saluti', 'Dr. med. Inventato Finto'].join('\n');
+const PROCURA = ['PROCURA', 'Il sottoscritto Prova Mario, nato il 01.01.1950, autorizza lo Studio Inventato a richiedere la documentazione medica che lo riguarda presso altri medici e ospedali.', 'Città di Prova, 10.05.2020', 'Firma: ____________'].join('\n');
+const DISPENSA = ['Dispensa dal segreto medico', 'Io sottoscritta Prova Anna dispenso il mio medico dal segreto professionale nei confronti della mia assicurazione.', 'Città di Prova, 11.05.2020'].join('\n');
+const PIANO = ['Piano di medicazione', 'Prova Mario, 01.01.1950 · aggiornato il 12.03.2021', 'FarmacoA 10 mg cpr 1-0-0', 'FarmacoB 5 mg cpr 0-0-1', 'FarmacoC 20 mg cpr 0-0-1'].join('\n');
+const SEGUE = 'la terapia in corso prosegue invariata e il paziente verrà rivisto fra dodici mesi, salvo novità; nel frattempo resta a disposizione il medico curante per ogni necessità clinica.'.repeat(4);
+
+test('dividi, contenuto: una tabella di valori è laboratorio, una lettera che li riporta no; procure e dispense sono amministrative; un piano di medicazione è una ricetta', () => {
+  assert.equal(genereDaTesto(LAB), 'laboratorio');
+  assert.ok(valoriDiLaboratorio(LAB).unita >= 10 && valoriDiLaboratorio(LAB).analisi >= 10);
+  assert.equal(genereDaTesto(LETTERA_CON_VALORI), null, 'ha un saluto: è una lettera, anche se elenca nove valori');
+  assert.equal(genereDaTesto(PROCURA), 'amministrativo');
+  assert.equal(genereDaTesto(DISPENSA), 'amministrativo');
+  assert.equal(genereDaTesto(PIANO), 'ricetta');
+  assert.equal(genereDaTesto(['Città di Prova, 03.02.2021', 'Caro collega,', 'ti mando la ricetta e ti chiedo la procura del paziente.'].join('\n') + SEGUE), null, 'le stesse parole dentro una lettera non contano: vale il titolo in cima');
+  assert.equal(genereDaTesto('ECG a riposo: ritmo sinusale 64/min, PQ 160 ms, QRS 90 ms, QTc 410 ms, asse normale, nessuna alterazione della ripolarizzazione.'), null);
+  assert.equal(genereDelDocumento([LAB, 'Commento: valori nella norma per età e sesso, nessuna indicazione a ulteriori accertamenti.']), 'laboratorio', 'lo dice la prima pagina');
+  assert.equal(genereDelDocumento([LETTERA_CON_VALORI, LAB, SEGUE]), null, 'una lettera con una pagina di valori in mezzo resta una lettera');
+  assert.equal(genereDelDocumento(['', '   ']), null);
+});
+
+test('dividi, guardare: si guardano le pagine con poco testo o testo sporco, non le bianche né quelle fitte di stampa; la data letta a occhio deve essere possibile', () => {
+  const fitta = 'Il paziente riferisce di stare bene e di assumere regolarmente la terapia prescritta senza effetti collaterali. '.repeat(12);
+  assert.equal(daGuardare(fitta, 4), false, 'una pagina di lettera stampata non si guarda');
+  assert.equal(daGuardare('Cognome: ______ Nome: ______ PA: __/__ FC: __', 2.5), true, 'un modulo sì');
+  assert.equal(daGuardare('', 0.1), false, 'una pagina bianca no');
+  assert.equal(daGuardare('', 2.2), true, 'senza testo ma con inchiostro: può essere scritta a penna');
+  assert.equal(daGuardare('', null), false, 'senza sapere quanto inchiostro c\'è, una pagina senza testo non si guarda');
+  assert.equal(daGuardare('xq7 l1 ;; a8 zz 0o ' .repeat(60), 3), true, 'testo sporco: l\'OCR ha inciampato');
+  assert.deepEqual(pagineDaGuardare(['', fitta, '', 'Cognome: __ Nome: __'], [{ pagina: 1, codice: '770002' }], [3, 4, 2, 2]), [3, 4], 'non il foglio separatore, non la pagina fitta');
+  assert.deepEqual(pagineDaGuardare(['', 'Cognome: __', '', 'ECG 25 mm/s', 'Cognome: __'], [{ pagina: 1, codice: '770002' }, { pagina: 3, codice: '770003' }], [3, 2, 3, 6, 2]), [2], 'i tracciati non si guardano');
+  assert.equal(dataPossibile('12.3.2021', new Date('2026-10-13')), '2021-03-12');
+  assert.equal(dataPossibile('12.03.2031', new Date('2026-10-13')), null, 'nel futuro no');
+  assert.equal(dataPossibile('31.02.2021', new Date('2026-10-13')), null);
+  assert.equal(dataPossibile('3.4.1962', new Date('2026-10-13')), null, 'troppo indietro: sembra una data di nascita');
+  assert.equal(dataPossibile(null), null);
+});
+
+test('dividi, appunti a mano: le pagine scritte a mano vanno in «Appunti», un documento per giorno, in qualunque sezione stiano', () => {
+  const lettera = ['Studio Inventato', 'Città di Prova, 03.02.2021', 'Caro collega,', SEGUE, 'Cordiali saluti', 'Dr. med. Inventato Finto'].join('\n');
+  // 1 separatore Rapporti · 2 lettera · 3 a mano (12.3.2021, senza testo) · 4 a mano (stessa data) · 5 retro bianco · 6 a mano (altro giorno) · 7 lettera · 8 separatore Appunti · 9 a mano senza data
+  const testi = ['', lettera, '', 'PA FC kg', '', '', lettera.replace('03.02.2021', '10.06.2021'), '', ''];
+  const sep = [{ pagina: 1, codice: '770000' }, { pagina: 8, codice: '770002' }];
+  const viste = { 3: { mano: true, data: '12.3.2021' }, 4: { mano: true, data: '12.03.2021' }, 6: { mano: true, data: '20.04.2021' }, 7: { mano: false, data: null }, 9: { mano: true, data: null } };
+  const p = componi(testi, sep, {}, 'Prova Mario', undefined, viste).filter((x) => !x.foglio);
+  assert.deepEqual(p.map((x) => [x.da, x.a, x.cartella, x.data]), [
+    [2, 2, '01_Rapporti', '2021-02-03'], [3, 5, '03_Appunti', '2021-03-12'], [6, 6, '03_Appunti', '2021-04-20'], [7, 7, '01_Rapporti', '2021-06-10'], [9, 9, '03_Appunti', null]]);
+  assert.equal(p[1].titolo, '2021.03.12 Prova Mario Appunti');
+  assert.ok(p[1].segnali.includes('scritta a mano') && p[1].segnali.includes('era in «01_Rapporti»') && p[1].sicurezza === 'media', 'spostata: da guardare, e si dice da dove viene');
+  assert.ok(!p[4].segnali.some((x) => x.startsWith('era in')), 'negli Appunti c\'era già');
+  // Senza aver guardato le pagine, quelle senza testo restano attaccate al documento prima, come sempre.
+  assert.deepEqual(componi(testi, sep, {}, 'Prova Mario').filter((x) => !x.foglio && !x.escluso).map((x) => [x.da, x.a]).slice(0, 2), [[2, 6], [7, 7]]);
+});
+
+test('dividi, contenuto: il documento va nella sottocartella del suo contenuto, e si dice da dove viene', () => {
+  // 1 separatore Intervento (codice 09) · 2-3 laboratorio · 4 procura · 5 piano di medicazione · 6 referto qualunque
+  const referto = ['Rapporto operatorio', 'Coronarografia del 05.05.2020', 'Accesso radiale destro, coronarie senza stenosi significative.', 'Dr. med. Inventato Finto'].join('\n');
+  const testi = ['', LAB, LAB.replace('01.02.2021', '01.02.2021').replace('Laboratorio di Prova SA', 'Laboratorio di Prova SA · pagina 2 di 2'), PROCURA, PIANO, referto];
+  const risposte = { 2: { nuovo: true, data: '01.02.2021', titolo: 'Laboratorio' }, 3: { nuovo: false, data: null, titolo: null }, 4: { nuovo: true, data: '10.05.2020', titolo: 'Procura' }, 5: { nuovo: true, data: '12.03.2021', titolo: null }, 6: { nuovo: true, data: '05.05.2020', titolo: 'Coronarografia' } };
+  const p = componi(testi, [{ pagina: 1, codice: '770009' }], risposte, 'Prova Mario').filter((x) => !x.foglio);
+  assert.deepEqual(p.map((x) => [x.da, x.a, x.cartella]), [[2, 3, '09_Laboratorio e analisi'], [4, 4, '11_Documenti amministrativi'], [5, 5, '12_Ricette'], [6, 6, '08_Intervento cardiologico']]);
+  assert.equal(p[0].categoria, 'laboratorio'); assert.equal(p[0].titolo, '2021.02.01 Prova Mario Laboratorio');
+  assert.equal(p[1].titolo, '2020.05.10 Prova Mario Procura', 'il nome detto dal modello resta');
+  assert.equal(p[2].titolo, '2021.03.12 Prova Mario Piano di medicazione', 'senza un nome suo prende quello del genere');
+  assert.ok(p[0].segnali.includes('era in «08_Intervento cardiologico»') && p[0].sicurezza === 'media');
+  assert.ok(!p[3].segnali.some((x) => x.startsWith('era in')), 'ciò che non è di un altro genere resta dov\'è');
 });

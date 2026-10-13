@@ -119,7 +119,7 @@ export async function analizza(studioId: string, userId: string, id: string): Pr
   // se no si mette in coda e intanto valgono le regole. Una scansione ancora da leggere aspetta l'OCR.
   let an = await analisiDi(id, d.storage_key);
   if (!an && d.ocr_stato !== 'da_fare') { await mettiInCoda(studioId, id, d.storage_key); an = await analisiDi(id, d.storage_key); }
-  const pezzi = componi(testi, an?.esito.separatori ?? [], an?.esito.risposte ?? {}, d.paziente, letto.forme);
+  const pezzi = componi(testi, an?.esito.separatori ?? [], an?.esito.risposte ?? {}, d.paziente, letto.forme, an?.esito.viste ?? {});
   await logDocumento(id, 'lettura', { studioId, userId, dettaglio: 'proposta di divisione' });
   console.log(`[dividi] ${id.slice(0, 8)}: ${testi.length} pagine, ${conTesto} con testo → ${pezzi.filter((x) => !x.escluso).length} documenti proposti in ${new Set(pezzi.map((x) => x.cartella).filter(Boolean)).size} sezioni (analisi: ${an?.stato ?? 'in attesa'})`);
   return { documento: { id: d.id, filename: d.filename, patient_id: d.patient_id, paziente: d.paziente }, pagine: testi.length, con_testo: conTesto, ocr: d.ocr_stato, pezzi,
