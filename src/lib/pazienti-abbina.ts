@@ -33,8 +33,9 @@ export async function riabbinaPazienti(studioId: string, solo?: { bozzaId?: stri
     // data di nascita, e 10 schede su 68 non l'avevano): dai titoli dei SUOI appuntamenti, che MediOnline scrive
     // «Cognome Nome (gg.mm.aaaa / N° …)». Solo se tutti dicono la stessa data; una data già scritta non si tocca mai.
     const senza = await query<{ id: string; titoli: string[] }>(
-      `select p.id, array_agg(distinct coalesce(a.paziente_nome, a.titolo)) as titoli from patients p join appointments a on a.patient_id = p.id
-        where p.studio_id = $1 and p.data_nascita is null and coalesce(a.paziente_nome, a.titolo) is not null group by p.id`, [studioId]);
+      // il TITOLO intero: il nome dell'appuntamento (paziente_nome) la data non la porta
+      `select p.id, array_agg(distinct a.titolo) as titoli from patients p join appointments a on a.patient_id = p.id
+        where p.studio_id = $1 and p.data_nascita is null and a.titolo is not null group by p.id`, [studioId]);
     for (const s of senza) {
       const date = new Set(s.titoli.map((t) => daTitoloAgenda(t)).filter((x) => x.persona && /^\d{4}-\d{2}-\d{2}$/.test(x.nascita)).map((x) => x.nascita));
       if (date.size !== 1) continue;

@@ -9,7 +9,8 @@ import { riabbinaPazienti } from '../../src/lib/pazienti-abbina';
   try {
     const mk = async (cognome: string) => { const [{ id }] = await query<{ id: string }>(`insert into patients (studio_id, cognome, nome) values ($1, $2, 'Anna') returning id`, [S, cognome]); ids.push(id); return id; };
     const a = await mk('Provanascitauno'), b = await mk('Provanascitadue'), c = await mk('Provanascitatre');
-    const app = (p: string, t: string) => query(`insert into appointments (studio_id, starts_at, external_uid, patient_id, titolo) values ($1, now(), 'prova-nascite-' || gen_random_uuid(), $2, $3)`, [S, p, t]);
+    // come arrivano da MediOnline: il nome a parte (senza data) e il titolo intero con la data
+    const app = (p: string, t: string) => query(`insert into appointments (studio_id, starts_at, external_uid, patient_id, titolo, paziente_nome) values ($1, now(), 'prova-nascite-' || gen_random_uuid(), $2, $3, split_part($3, ' (', 1))`, [S, p, t]);
     await app(a, 'Provanascitauno Anna (03.04.1950 / N° 1)'); await app(a, 'Provanascitauno Anna (03.04.1950 / N° 1)');
     await app(b, 'Provanascitadue Anna (03.04.1950 / N° 2)'); await app(b, 'Provanascitadue Anna (04.03.1950 / N° 2)');
     await query(`update patients set data_nascita = '1960-01-01' where id = $1`, [c]); await app(c, 'Provanascitatre Anna (03.04.1950 / N° 3)');
