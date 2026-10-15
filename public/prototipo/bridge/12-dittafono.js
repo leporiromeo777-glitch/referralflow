@@ -56,7 +56,12 @@
 .rf-dit-fonte-bar .rf-dit-fonte-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
 .rf-dit-fonte-corpo { flex: 1; min-height: 60vh; overflow: auto; padding: 8px; background: var(--surface-2, #eef0ec); }
 .rf-dit-fonte-corpo canvas { display: block; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.12); margin: 0 auto 8px; }
-.rf-dit-fonte-word section.docx { background: #fff; color: #000; box-shadow: 0 1px 3px rgba(0,0,0,.12); margin: 0 auto 8px; }
+.rf-dit-fonte-word section.docx { background: #fff; color: #000; box-shadow: 0 1px 3px rgba(0,0,0,.12); margin: 0 0 8px; padding: 22px 26px !important; width: auto !important; min-height: 0 !important; box-sizing: border-box; }
+.rf-dit-fonte-word section.docx img { max-width: 100%; height: auto; }
+.rf-dit-fonte-word section.docx > header, .rf-dit-fonte-word section.docx > footer { margin: 0 0 14px !important; min-height: 0 !important; }
+.rf-dit-fonte-word section.docx > footer { margin: 14px 0 0 !important; }
+.rf-dit-fonte-word table { width: 100% !important; max-width: 100%; table-layout: auto !important; }
+.rf-dit-fonte-word td, .rf-dit-fonte-word th, .rf-dit-fonte-word col { width: auto !important; }
 .rf-dit-fonte-testo { background: #fff; color: #1b1b1f; padding: 22px 26px; white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.55 Arial, Helvetica, sans-serif; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
 .rf-zoom { display: inline-flex; gap: 4px; align-items: center; flex: 0 0 auto; }
 .rf-zoom .btn { min-width: 30px; padding-left: 8px; padding-right: 8px; }
@@ -373,11 +378,11 @@ async function rfDitFonteWord(f, box, chiave, z, testo) {
     const attuale = () => RF.dit.fonte === f && box.dataset.fatto === chiave && box.isConnected;
     if (!attuale()) return;
     const foglio = document.createElement('div');
-    await rfDocxLib.renderAsync(f.docxDati, foglio, null, { inWrapper: false, ignoreLastRenderedPageBreak: true, experimental: false, useBase64URL: true });
+    // Senza la larghezza dell'A4 e coi margini stretti (15.10.2026, dallo studio: ingrandendo restava il margine bianco
+    // e il testo usciva a destra): la lettera va a capo nella larghezza del pannello, e lo zoom ingrandisce il testo.
+    await rfDocxLib.renderAsync(f.docxDati, foglio, null, { inWrapper: false, ignoreWidth: true, ignoreHeight: true, ignoreLastRenderedPageBreak: true, experimental: false, useBase64URL: true });
     if (!attuale()) return;
-    // la pagina A4 (circa 794 px) si stringe alla larghezza del pannello, poi lo zoom scelto
-    const larga = Math.max(200, box.clientWidth - 16);
-    foglio.style.zoom = String(Math.round((larga / 794) * z * 100) / 100);
+    foglio.style.zoom = String(Math.round(z * 85) / 100);
     foglio.className = 'rf-dit-fonte-word';
     box.innerHTML = ''; box.appendChild(foglio);
   } catch (_) { if (RF.dit.fonte === f) testo(); }
