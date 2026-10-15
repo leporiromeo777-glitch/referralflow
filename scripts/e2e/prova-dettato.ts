@@ -65,7 +65,7 @@ async function main() {
     const [bz] = await query<any>(`select testo_finale, payload->'foglio'->>'fonte' as fonte, payload->>'testo_corretto' as catena, campi_confermati->>'medico_destinatario' as dest from referti_bozze where id = $1`, [sulFoglio]);
     const d3 = ((await (await fetch(`${base}/api/prototipo/referti/${sulFoglio}`, { headers: { cookie: C } })).json()) as any);
     verifica(c.stato === 201 && fatto === true && nonFatto === false && bz?.testo_finale === `Caro collega,\n\n${dettato}\n\nCon i migliori saluti\n\nDr. med. Inventato` && bz?.fonte === 'dragon' && bz?.dest === 'Dr. med. Altro Inventato'
-      && /bisoprololo 2,5 mg/.test(bz?.catena ?? '') && d3.dettato?.foglio === true && d3.versione?.dalla_catena === false,
+      && /bisoprololo 2,5 mg/.test(bz?.catena ?? '') && d3.dettato?.foglio === true && d3.versione?.dalla_catena === false && d3.testo_attuale === bz?.testo_finale,      // la revisione semplice (15.10.2026) parte da questo testo
       `la lettera dettata sul foglio diventa il testo da rivedere (saluto, corpo, saluti e firma), col destinatario fra i campi; il testo della catena resta come controllo; un dettato senza foglio non cambia (${fatto}, ${nonFatto})`);
 
     // I comandi a voce (12.10.2026): «per favore, inserisci la lettera più recente» — il server dà il corpo della

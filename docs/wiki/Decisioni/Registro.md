@@ -854,3 +854,9 @@ quattro, dicendo da quale lettera vengono).
 **15.10.2026 — dittafono: accanto al foglio la lettera Word vera, non il suo testo.** Per mostrarla nel browser si è
 aggiunta una libreria (docx-preview 0.3.7, Apache-2.0) in `public/prototipo/vendor/docx/`, caricata solo quando serve; il
 Word in anteprima non conta come scaricato. Dettaglio in [[Piattaforma/Dittafono]].
+
+**15.10.2026 — revisione semplice per la lettera dettata sul foglio.** Lo studio: la lettera dettata sul momento ha bisogno di
+meno correzioni, la schermata deve essere pulita e facile da imparare per le segretarie. Scelto: per queste lettere una pagina
+sola — la lettera da correggere come un documento, l'audio, i soli punti dove Dragon e il Mac differiscono (numeri per primi),
+Word e Conferma —; i passi della correzione guidata non compaiono (sono sul testo del Mac). La revisione completa resta a un
+tasto. Il cancello della conferma resta: i numeri non controllati chiedono la presa d'atto.

@@ -97,6 +97,8 @@ export async function GET(_req: Request, props: { params: Promise<{ id: string }
     fiducia: p.fiducia ?? null,
     note_segreteria: Array.isArray(p.note_segreteria) ? p.note_segreteria.filter((n: unknown) => typeof n === 'string') : [],
     dettato,
+    // Il testo com'è, coi suoi paragrafi: la revisione semplice delle lettere dettate sul foglio lo mostra e lo corregge così (15.10.2026).
+    testo_attuale: (b.testo_finale ?? p.testo_corretto ?? '') as string,
     ...rev,
   });
 }
