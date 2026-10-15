@@ -240,6 +240,9 @@ test('comandi a voce: «riprendimi per favore» seguito da una parte toglie anch
     ['per favore riprendimi la lettera fino all\'ECG escluso. Poi detto io.', 'ecg', true, 'per favore riprendimi la lettera fino all\'ECG escluso.'],
     ['per favore riprendimi l\'ultima lettera fino alle conclusioni compresa', 'conclusione', false, null],
     ['per favore la lettera fino a FRCV', 'frcv', false, null],
+    // 15.10.2026, dallo studio: «…la lettera del paziente fino ai fattori di rischio cardiovascolare» non era capito
+    ['Per favore riprendimi la lettera del paziente fino ai fattori di rischio cardiovascolare', 'frcv', false, null],
+    ['per favore riprendimi la lettera di questa paziente fino alle comorbidità', 'comorbidita', false, null],
   ] as [string, string, boolean, string | null][]) {
     const r = K.trova(testo);
     assert.equal(r ? r.comando : null, 'fino', testo); assert.equal(Array.from(r.parti).join(), parte, testo); assert.equal(r.escluso, escluso, testo);
@@ -256,6 +259,11 @@ test('comandi a voce: «riprendimi per favore» seguito da una parte toglie anch
   assert.ok(letteraFinoA(l, 'terapia').endsWith('Terapia:\nFarmacoA 10 mg 1-0-0\nFarmacoB 5 mg 0-0-1'));
   assert.ok(letteraFinoA(l, 'conclusione').endsWith('Controllo fra dodici mesi.') && !letteraFinoA(l, 'conclusione').includes('saluti'));
   assert.equal(letteraFinoA(l, 'holter'), '', 'una parte che non c\'è non dà niente');
+  // tutta di fila, con i fattori di rischio aperti da «(»: la parte finisce con la sua frase
+  const fila = 'Caro collega, ho rivisto la paziente inventata per palpitazioni da alcune settimane, senza sincope. Fattori di rischio cardiovascolare (ipertensione arteriosa, ex fumatrice). All\'ECG ritmo sinusale. ' + 'Il decorso inventato prosegue senza novità. '.repeat(6) + 'Cordiali saluti, Dr. med. Inventato';
+  assert.equal(letteraFinoA(fila, 'frcv'), 'ho rivisto la paziente inventata per palpitazioni da alcune settimane, senza sincope. Fattori di rischio cardiovascolare (ipertensione arteriosa, ex fumatrice).');
+  // citati dentro una frase non sono una parte: niente
+  assert.equal(letteraFinoA('Caro collega, ho rivisto il paziente inventato per la valutazione dei fattori di rischio cardiovascolare e per dolori atipici. ' + 'Il decorso inventato prosegue senza novità. '.repeat(6) + 'Cordiali saluti', 'frcv'), '');
 });
 
 test('comandi a voce: il pezzo entra come paragrafo a sé al posto della frase, e si toglie ricucendo', () => {

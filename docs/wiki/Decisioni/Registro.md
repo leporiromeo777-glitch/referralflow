@@ -846,3 +846,7 @@ file restano a 50 MB. Dettaglio in [[Piattaforma/Dividi cartella]].
 data di nascita» e non vuole riscriverli. Usa una cartella che c'è solo con nome e data uguali a una persona sola; ne
 crea una nuova solo dal nome del file chiaro e senza nessuno che gli somigli (mai dal solo testo, che nomina anche medici e
 familiari); in tutti gli altri casi chiede, dicendo perché. Dettaglio in [[Piattaforma/Dividi cartella]].
+
+**15.10.2026 — «fino a» prende solo la lettera più recente.** Se lì la parte chiesta non è una parte a sé, lo dice
+con la data invece di andare a prenderla in una lettera più vecchia (le parti singole continuano a cercare fra le ultime
+quattro, dicendo da quale lettera vengono).

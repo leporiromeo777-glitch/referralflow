@@ -71,6 +71,10 @@ export function terapiaDellaLettera(testo: string): string {
 
 // Dove comincia una parte quando NON ha un'etichetta coi due punti: la frase che la apre («Clinicamente…», «All'ECG…»).
 const APERTURE: [ParteLettera, RegExp][] = [
+  // a inizio frase e seguiti da «:» o «(» anche se l'etichetta è scritta in un modo che le famiglie non conoscono
+  // (misurato il 15.10.2026 sulle lettere vere: 1 su 36)
+  ['frcv', /^(?:fattor[ei] di rischio(?:\s+cardio[\s-]?vascolar[ei])?|f\.?\s?r\.?\s?c\.?\s?v\.?)\s*[:(]/i],
+  ['comorbidita', /^(?:co-?morbi[dl]it[aàá])\s*[:(]/i],
   ['esame', /^(?:clinicamente|all['’]esame (?:clinico|obiettivo)|esame (?:clinico|obiettivo)|obiettivamente|parametri vitali)(?![a-zà-ù])/i],
   ['ecg', /^(?:all['’]\s?ecg|l['’]\s?ecg|ecg|all['’]\s?elettrocardiogramma|l['’]\s?elettrocardiogramma|elettrocardiogramma|il tracciato)(?![a-zà-ù])/i],
   ['eco', /^(?:all['’]\s?ecocardiogra(?:mma|fia)|l['’]\s?ecocardiogra(?:mma|fia)|ecocardiogra(?:mma|fia)|all['’]\s?eco)(?![a-zà-ù])/i],
@@ -113,6 +117,8 @@ function pezzoDelConfine(t: string, confini: Confine[], k: number): string {
   let pezzo = t.slice(c.i, confini[k + 1]?.i ?? t.length);
   if (c.parte && FINO_AL_PARAGRAFO.has(c.parte)) pezzo = pezzo.split(/\n[ \t]*\n/)[0];
   if (c.parte && ELENCHI.has(c.parte)) { const righe = pezzo.split('\n'); const stop = righe.findIndex((r, n) => n > 0 && r.trim().length > 160); if (stop > 0) pezzo = righe.slice(0, stop).join('\n'); }
+  // un elenco dentro un paragrafo lungo tutto di fila (una scansione): finisce con la sua frase
+  if (c.parte && ELENCHI.has(c.parte) && pezzo.length > 300 && !pezzo.slice(0, 300).includes('\n')) { const f = /[.!?](?=\s|$)/.exec(pezzo); if (f) pezzo = pezzo.slice(0, f.index + 1); }
   return pezzo;
 }
 

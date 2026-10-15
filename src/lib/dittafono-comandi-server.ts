@@ -35,18 +35,18 @@ export async function eseguiComando(studioId: string, userId: string | null, pat
     await letta(l);
     return { ok: true, testo, fonte: l.fonte.etichetta, data: l.fonte.data, cosa: 'la lettera', mancanti: [], apri: await daAprire(l) };
   }
-  // «Fino a…»: dalla più recente fra le ultime quattro lettere che quella parte ce l'ha.
+  // «Fino a…»: dalla lettera più recente — «la lettera» è quella (15.10.2026: prenderne una più vecchia senza dirlo
+  // confonde). Se lì quella parte non è una parte a sé (per esempio i fattori di rischio citati dentro il racconto),
+  // lo dice: dove fermarsi non si indovina.
   if (comando === 'fino') {
     const parte = parti[0];
     if (!parte) return { errore: 'Non ho capito fino a quale parte della lettera.' };
     const cosa = `la lettera fino ${esclusa ? 'a prima di' : 'a'} ${NOME_PARTE[parte]}${esclusa ? '' : ' compresa'}`;
-    for (const l of lettere.slice(0, 4)) {
-      const testo = letteraFinoA(l.testo, parte, esclusa).slice(0, TETTO);
-      if (!testo) continue;
-      await letta(l);
-      return { ok: true, testo, fonte: l.fonte.etichetta, data: l.fonte.data, cosa, mancanti: [], apri: await daAprire(l) };
-    }
-    return { errore: `Nelle ultime lettere di questo paziente non trovo ${esclusa ? 'niente prima di' : ''} ${NOME_PARTE[parte]}.`.replace(/\s+/g, ' ') };
+    const l = lettere[0];
+    const testo = letteraFinoA(l.testo, parte, esclusa).slice(0, TETTO);
+    if (!testo) return { errore: `Nella lettera più recente (${l.fonte.data}) ${NOME_PARTE[parte]} non è una parte a sé${parte === 'frcv' || parte === 'comorbidita' ? ` (con «${NOME_PARTE[parte]}:» a inizio riga)` : ''}: non so dove fermarmi. Chiedi la lettera intera, o fino a un'altra parte.` };
+    await letta(l);
+    return { ok: true, testo, fonte: l.fonte.etichetta, data: l.fonte.data, cosa, mancanti: [], apri: await daAprire(l) };
   }
   // Le parti chieste: dalla più recente fra le ultime quattro lettere che ne ha almeno una (un biglietto può non
   // averne nessuna). Tutte dalla STESSA lettera: quelle che lì non ci sono vengono dette, non cercate altrove.

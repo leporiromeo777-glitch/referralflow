@@ -97,9 +97,9 @@ async function main() {
     const f1 = await comando({ comando: 'fino', parti: ['terapia'], paziente: paz }), f2 = await comando({ comando: 'fino', parti: ['comorbidita'], paziente: paz });
     const f3 = await comando({ comando: 'fino', parti: ['conclusione'], esclusa: true, paziente: paz }), f4 = await comando({ comando: 'fino', parti: [], paziente: paz });
     verifica(f1.stato === 200 && f1.j.testo.startsWith('ho rivisto la paziente inventata, visita nuova.') && f1.j.testo.endsWith('FarmacoB 5 mg 0-0-1') && !/conclusione/i.test(f1.j.testo) && f1.j.data === '20.06.2026'
-      && f2.stato === 200 && f2.j.testo.endsWith('Comorbidità: nessuna di rilievo.') && !/Terapia/.test(f2.j.testo) && f2.j.data === '10.01.2026'
+      && f2.stato === 404 && /lettera più recente \(20\.06\.2026\) comorbidità non è una parte a sé/.test(f2.j.errore ?? '')
       && f3.stato === 200 && f3.j.testo.endsWith('FarmacoB 5 mg 0-0-1') && /a prima di conclusione/.test(f3.j.cosa) && f4.stato === 400,
-      `«fino a»: la lettera dall'inizio fino alla terapia compresa, fino alle comorbidità dalla lettera che le ha, fino a prima della conclusione; senza parte è rifiutato (${f1.stato}, ${f2.stato}, ${f2.j.data}, ${f3.stato}, ${f4.stato})`);
+      `«fino a»: la lettera più recente dall'inizio fino alla terapia compresa, fino a prima della conclusione; una parte che la più recente non ha viene detta con la data (non si prende una lettera più vecchia); senza parte è rifiutato (${f1.stato}, ${f2.stato}, ${f3.stato}, ${f4.stato})`);
     const k3 = await comando({ comando: 'lettera_recente', paziente: vuoto }), k4 = await comando({ comando: 'cancella_tutto', paziente: paz }), k5 = await comando({ comando: 'lettera_recente', paziente: 'x' }), k6 = await comando({ comando: 'lettera_recente', paziente: paz }, '');
     verifica(k3.stato === 404 && typeof k3.j.errore === 'string' && !k3.j.testo && k4.stato === 400 && k5.stato === 400 && k6.stato === 401,
       `un paziente senza lettere dà un avviso e niente testo; un comando non previsto, un paziente non scelto e una richiesta senza sessione sono rifiutati (${k3.stato}, ${k4.stato}, ${k5.stato}, ${k6.stato})`);

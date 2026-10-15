@@ -15,7 +15,7 @@
  */
 (function (root) {
   'use strict';
-  var VERSIONE = '1.9';
+  var VERSIONE = '1.10';
   // Una copia nuova a ogni ricerca: l'espressione ricorda dov'è arrivata, e due ricerche una dentro l'altra sulla
   // stessa copia non finivano più (la pagina si bloccava a ogni «per favore» senza comando, 12.10.2026).
   // Dopo la parola d'ordine il programma di dettatura può mettere da sé un punto, una virgola o un a capo.
@@ -115,7 +115,7 @@
   /* «Riprendimi la lettera FINO A…» (15.10.2026, richiesta dello studio): la lettera dall'inizio fino a una parte,
      compresa («fino alla terapia», «…fino alle comorbidità compresa»), oppure fino a dove quella parte comincia
      («fino a prima dell'esame clinico», «…fino all'ECG escluso»). */
-  var FINO = /^[ \t,]*(?:(?:mi|qui|anche|solo)[ \t]+)*(?:(?:tutta[ \t]+)?(?:la[ \t]+|l['’][ \t]?)(?:mia[ \t]+|sua[ \t]+)?(?:ultima[ \t]+)?lettera(?:[ \t]+(?:pi[uù][ \t]+recente|precedente|di[ \t]+prima))?[ \t,]*)?(?:fino|sino)[ \t]+(?:(?:a[ \t]+)?(prima)[ \t]+(?:di[ \t]+|d['’][ \t]?|del(?:la|lo)?[ \t]+|dell['’][ \t]?|dei[ \t]+|degli[ \t]+|delle[ \t]+)|(?:a|ad|al|allo|alla|ai|agli|alle)[ \t]+|all['’][ \t]?)/i;
+  var FINO = /^[ \t,]*(?:(?:mi|qui|anche|solo)[ \t]+)*(?:(?:tutta[ \t]+)?(?:la[ \t]+|l['’][ \t]?)(?:mia[ \t]+|sua[ \t]+)?(?:ultima[ \t]+)?lettera(?:[ \t]+(?:pi[uù][ \t]+recente|precedente|di[ \t]+prima))?(?:[ \t]+(?:del(?:la)?|di[ \t]+quest[oa]|di[ \t]+questa?)[ \t]+paziente)?[ \t,]*)?(?:fino|sino)[ \t]+(?:(?:a[ \t]+)?(prima)[ \t]+(?:di[ \t]+|d['’][ \t]?|del(?:la|lo)?[ \t]+|dell['’][ \t]?|dei[ \t]+|degli[ \t]+|delle[ \t]+)|(?:a|ad|al|allo|alla|ai|agli|alle)[ \t]+|all['’][ \t]?)/i;
   var COMPRESA = /^[ \t,]*(?:(?:compres|inclus)[oaie]|(esclus[oaie]|(?:e[ \t]+)?non[ \t]+(?:compres|inclus)[oaie]))(?![a-zà-ù])/i;
   var FRA = 45;      // quanti caratteri al massimo fra il verbo e la cosa chiesta («…il testo di tutta la…»)
 
