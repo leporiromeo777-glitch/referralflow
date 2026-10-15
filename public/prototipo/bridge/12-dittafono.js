@@ -56,6 +56,7 @@
 .rf-dit-fonte-bar .rf-dit-fonte-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
 .rf-dit-fonte-corpo { flex: 1; min-height: 60vh; overflow: auto; padding: 8px; background: var(--surface-2, #eef0ec); }
 .rf-dit-fonte-corpo canvas { display: block; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.12); margin: 0 auto 8px; }
+.rf-dit-fonte-word section.docx { background: #fff; color: #000; box-shadow: 0 1px 3px rgba(0,0,0,.12); margin: 0 auto 8px; }
 .rf-dit-fonte-testo { background: #fff; color: #1b1b1f; padding: 22px 26px; white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.55 Arial, Helvetica, sans-serif; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
 .rf-zoom { display: inline-flex; gap: 4px; align-items: center; flex: 0 0 auto; }
 .rf-zoom .btn { min-width: 30px; padding-left: 8px; padding-right: 8px; }
@@ -313,7 +314,7 @@ function rfDitFonteHtml() {
 }
 function rfDitFonteApri(apri, titolo) {
   const d = RF.dit, stessa = d.fonte && d.fonte.id === apri.id && d.fonte.tipo === apri.tipo;
-  d.fonte = { ...apri, titolo, pdfDoc: stessa ? d.fonte.pdfDoc : null };
+  d.fonte = { ...apri, titolo, pdfDoc: stessa ? d.fonte.pdfDoc : null, docxDati: stessa ? d.fonte.docxDati : null };
   const g = document.getElementById('rf-dit-due'), el = document.getElementById('rf-dit-fonte');
   if (g) g.classList.add('con-fonte'); if (el) el.innerHTML = rfDitFonteHtml();
   rfFoglioRiempi(); void rfDitFonteDisegna();
@@ -330,6 +331,7 @@ async function rfDitFonteDisegna() {
   if (box.dataset.fatto === chiave) return;      // già disegnata così: non si rifà a ogni ridisegno della pagina
   box.dataset.fatto = chiave;
   const testo = () => { box.innerHTML = `<div class="rf-dit-fonte-testo" style="font-size:${Math.round(13 * z)}px">${rfEsc(f.testo || '')}</div>`; };
+  if (f.docx) { void rfDitFonteWord(f, box, chiave, z, testo); return; }
   if (!f.pdf || typeof rfPdfJs !== 'function') { testo(); return; }
   try {
     if (!f.pdfDoc) {
@@ -352,6 +354,33 @@ async function rfDitFonteDisegna() {
     }
     box.innerHTML = ''; tele.forEach(c => box.appendChild(c));
   } catch (_) { if (RF.dit.fonte === f) testo(); }      // il file non si apre qui: resta il testo della lettera
+}
+// Una lettera Word disegnata com'è (15.10.2026, dallo studio: «mi apre un testo, non la lettera vera»): per un referto
+// della piattaforma il Word con la carta intestata, lo stesso che si scarica (`?anteprima=1`: non conta come scaricato).
+// Le due librerie (vendor/docx) si caricano solo la prima volta che servono. Se qualcosa non va resta il testo.
+let rfDocxLib = null;
+function rfDitScript(src) { return new Promise((ok, no) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = no; document.head.appendChild(s); }); }
+async function rfDitFonteWord(f, box, chiave, z, testo) {
+  try {
+    if (!rfDocxLib) { if (typeof JSZip === 'undefined') await rfDitScript('/prototipo/vendor/docx/jszip.min.js'); await rfDitScript('/prototipo/vendor/docx/docx-preview.min.js'); rfDocxLib = window.docx; }
+    if (!f.docxDati) {
+      box.innerHTML = '<div class="caption" style="padding:14px">Apro la lettera…</div>';
+      const url = f.tipo === 'referto' ? `/api/referti/docx/${encodeURIComponent(f.id)}?anteprima=1` : `/api/documents/${encodeURIComponent(f.id)}`;
+      const r = await fetch(url, { credentials: 'include', cache: 'no-store' });
+      if (!r.ok) throw new Error(String(r.status));
+      f.docxDati = await r.blob();
+    }
+    const attuale = () => RF.dit.fonte === f && box.dataset.fatto === chiave && box.isConnected;
+    if (!attuale()) return;
+    const foglio = document.createElement('div');
+    await rfDocxLib.renderAsync(f.docxDati, foglio, null, { inWrapper: false, ignoreLastRenderedPageBreak: true, experimental: false, useBase64URL: true });
+    if (!attuale()) return;
+    // la pagina A4 (circa 794 px) si stringe alla larghezza del pannello, poi lo zoom scelto
+    const larga = Math.max(200, box.clientWidth - 16);
+    foglio.style.zoom = String(Math.round((larga / 794) * z * 100) / 100);
+    foglio.className = 'rf-dit-fonte-word';
+    box.innerHTML = ''; box.appendChild(foglio);
+  } catch (_) { if (RF.dit.fonte === f) testo(); }
 }
 function rfDitComandoRiprova() { RF.dit.cmdFallito = ''; RF.dit.testoIl = 0; void rfDitComandoCerca(); }
 // Dal tasto accanto al foglio: stesso comando, nel punto del cursore.

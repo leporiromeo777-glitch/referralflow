@@ -84,8 +84,15 @@ async function main() {
     verifica(k1.stato === 200 && k1.j.testo.startsWith('ho rivisto la paziente inventata, visita nuova.') && k1.j.testo.endsWith('In conclusione quadro stabile.') && !/Caro collega|cordiali saluti|Dr\. med\./.test(k1.j.testo) && k1.j.data === '20.06.2026'
       && k2.stato === 200 && k2.j.testo === 'Terapia:\nFarmacoA 10 mg 1-0-0\nFarmacoB 5 mg 0-0-1'
       // la lettera di provenienza, da aprire accanto al foglio: qui un referto della piattaforma, quindi il suo testo intero
-      && k1.j.apri?.tipo === 'referto' && k1.j.apri?.pdf === false && k1.j.apri?.testo.startsWith('Caro collega,') && /cordiali saluti/.test(k1.j.apri?.testo ?? ''),
+      && k1.j.apri?.tipo === 'referto' && k1.j.apri?.pdf === false && k1.j.apri?.docx === true && k1.j.apri?.testo.startsWith('Caro collega,') && /cordiali saluti/.test(k1.j.apri?.testo ?? ''),
       `«inserisci la lettera più recente»: arriva il corpo della più recente (senza saluto, saluti e firma), trovata dal legame col paziente; «la terapia»: il suo blocco (${k1.stato}, ${k1.j.data}, ${k2.stato})`);
+    // La lettera vera accanto al foglio (15.10.2026): il Word con la carta intestata, in anteprima — non conta come scaricato.
+    const wPrima = await query<{ n: number }>(`select count(*)::int as n from referti_eventi where bozza_id = $1 and azione = 'word_scaricato'`, [k1.j.apri?.id]).catch(() => [{ n: -1 }]);
+    const w = await fetch(`${base}/api/referti/docx/${k1.j.apri?.id}?anteprima=1`, { headers: { cookie: C } }), wb = Buffer.from(await w.arrayBuffer());
+    const wDopo = await query<{ n: number }>(`select count(*)::int as n from referti_eventi where bozza_id = $1 and azione = 'word_scaricato'`, [k1.j.apri?.id]).catch(() => [{ n: -2 }]);
+    const wFuori = await fetch(`${base}/api/referti/docx/${k1.j.apri?.id}?anteprima=1`);
+    verifica(w.status === 200 && wb.subarray(0, 2).toString() === 'PK' && /inline/.test(w.headers.get('content-disposition') ?? '') && wPrima[0].n === wDopo[0].n && wFuori.status === 401,
+      `la lettera vera da aprire accanto: il Word con la carta intestata, mostrato e non scaricato (nessun evento «word_scaricato»); senza sessione no (${w.status}, ${wPrima[0].n}→${wDopo[0].n}, ${wFuori.status})`);
     // Solo una parte: l'anamnesi e la conclusione dalla più recente; FRCV e comorbidità, che la più recente non ha,
     // dalla lettera prima — tutte dalla stessa lettera, e ciò che lì manca viene detto.
     const p1 = await comando({ comando: 'parti', parti: ['anamnesi', 'conclusione', 'allergie'], paziente: paz }), p2 = await comando({ comando: 'parti', parti: ['frcv', 'comorbidita'], paziente: paz });

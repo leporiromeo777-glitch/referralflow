@@ -1,0 +1,4 @@
+Per mostrare una lettera Word com'è (carta intestata, impaginazione) nel pannello accanto al foglio del dittafono
+(15.10.2026). Caricati solo quando servono, da 12-dittafono.js.
+- docx-preview 0.3.7 (Apache-2.0, https://github.com/VolodymyrBaydalka/docxjs): dist/docx-preview.min.js dal pacchetto npm.
+- jszip 3.10.1 (MIT): node_modules/jszip/dist/jszip.min.js (già dipendenza del progetto).

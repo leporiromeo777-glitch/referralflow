@@ -11,7 +11,9 @@ import { corpoDellaLettera, letteraFinoA, NOME_PARTE, partiDellaLettera, type Co
 
 // `apri`: la lettera da cui viene il pezzo, da mostrare ACCANTO al foglio (12.10.2026, richiesta dello studio): il PDF
 // alle sue pagine se è una scansione, se no il testo della lettera intera.
-export type DaAprire = { tipo: 'referto' | 'documento' | 'pagine'; id: string; pdf: boolean; da: number | null; a: number | null; testo: string };
+// `docx` (15.10.2026, dallo studio: «mi apre un testo, non la lettera vera»): la lettera è un Word — per un referto della
+// piattaforma quello con la carta intestata, lo stesso che si scarica — e la pagina lo disegna com'è.
+export type DaAprire = { tipo: 'referto' | 'documento' | 'pagine'; id: string; pdf: boolean; docx: boolean; da: number | null; a: number | null; testo: string };
 export type EsitoComando = { ok: true; testo: string; fonte: string; data: string; cosa: string; mancanti: string[]; apri: DaAprire } | { errore: string };
 const TETTO = 20000;
 
@@ -24,9 +26,9 @@ export async function eseguiComando(studioId: string, userId: string | null, pat
     if (l.fonte.tipo !== 'referto') await logDocumento(l.fonte.id, 'lettura', { studioId, userId: userId ?? undefined, dettaglio: 'dittafono, comando a voce' }).catch(() => {});
   };
   const daAprire = async (l: (typeof lettere)[number]): Promise<DaAprire> => {
-    let pdf = l.fonte.tipo === 'pagine';
-    if (l.fonte.tipo === 'documento') { const [f] = await query<{ filename: string }>('select filename from patient_documents where id = $1 and studio_id = $2', [l.fonte.id, studioId]); pdf = !!f && f.filename.toLowerCase().endsWith('.pdf'); }
-    return { tipo: l.fonte.tipo, id: l.fonte.id, pdf, da: l.fonte.da ?? null, a: l.fonte.a ?? null, testo: l.testo.replace(/\r\n?/g, '\n').trim().slice(0, 40000) };
+    let pdf = l.fonte.tipo === 'pagine', docx = l.fonte.tipo === 'referto';
+    if (l.fonte.tipo === 'documento') { const [f] = await query<{ filename: string }>('select filename from patient_documents where id = $1 and studio_id = $2', [l.fonte.id, studioId]); const n = (f?.filename ?? '').toLowerCase(); pdf = n.endsWith('.pdf'); docx = n.endsWith('.docx'); }
+    return { tipo: l.fonte.tipo, id: l.fonte.id, pdf, docx, da: l.fonte.da ?? null, a: l.fonte.a ?? null, testo: l.testo.replace(/\r\n?/g, '\n').trim().slice(0, 40000) };
   };
   if (comando === 'lettera_recente') {
     const l = lettere[0];

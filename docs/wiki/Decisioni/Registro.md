@@ -850,3 +850,7 @@ familiari); in tutti gli altri casi chiede, dicendo perché. Dettaglio in [[Piat
 **15.10.2026 — «fino a» prende solo la lettera più recente.** Se lì la parte chiesta non è una parte a sé, lo dice
 con la data invece di andare a prenderla in una lettera più vecchia (le parti singole continuano a cercare fra le ultime
 quattro, dicendo da quale lettera vengono).
+
+**15.10.2026 — dittafono: accanto al foglio la lettera Word vera, non il suo testo.** Per mostrarla nel browser si è
+aggiunta una libreria (docx-preview 0.3.7, Apache-2.0) in `public/prototipo/vendor/docx/`, caricata solo quando serve; il
+Word in anteprima non conta come scaricato. Dettaglio in [[Piattaforma/Dittafono]].

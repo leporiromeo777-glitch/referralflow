@@ -29,7 +29,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   return GET(req, ctx);
 }
 
-export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const session = await getSession();
   if (!session || !session.studioId) return new NextResponse('Non autorizzato', { status: 401 });
@@ -38,6 +38,11 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
   if (!isUuid(params.id)) return new NextResponse('Non trovato', { status: 404 });
   const w = await costruisciWord({ studioId: session.studioId, email: session.email }, params.id);
   if ('errore' in w) return new NextResponse(w.errore, { status: w.status });
+  // `?anteprima=1` (15.10.2026): la lettera guardata accanto al foglio del dittafono. Non è uno scaricamento: niente
+  // evento, niente misura, si mostra nella pagina.
+  if (req.nextUrl.searchParams.get('anteprima') === '1') {
+    return new NextResponse(new Uint8Array(w.docx), { headers: { 'Content-Type': MIME_DOCX, 'Content-Disposition': 'inline', 'Cache-Control': 'private, no-store' } });
+  }
   // Evento «word_scaricato» (13.9.2026): serve alla procedura «lettere in
   // ritardo» (referto confermato senza Word prodotto). Solo id, mai testo.
   void registraEvento(session.studioId, params.id, 'word_scaricato', session.id, { stato: w.stato });
