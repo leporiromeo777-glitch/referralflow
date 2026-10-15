@@ -323,16 +323,32 @@ function rfDitFonteHtml() {
 function rfDitFonteApri(apri, titolo) {
   const d = RF.dit, stessa = d.fonte && d.fonte.id === apri.id && d.fonte.tipo === apri.tipo;
   d.fonte = { ...apri, titolo, pdfDoc: stessa ? d.fonte.pdfDoc : null, docxDati: stessa ? d.fonte.docxDati : null };
+  d.fonteChiusa = null; const r = document.getElementById('rf-dit-riapri'); if (r) r.remove();
   const g = document.getElementById('rf-dit-due'), el = document.getElementById('rf-dit-fonte');
   if (g) g.classList.add('con-fonte'); if (el) el.innerHTML = rfDitFonteHtml();
   rfFoglioRiempi(); void rfDitFonteDisegna();
 }
 function rfDitFonteChiudi() {
-  RF.dit.fonte = null;
+  // la lettera chiusa resta a portata: «Riapri la lettera» sopra il foglio (15.10.2026, dallo studio: chiusa con la ✕
+  // non c'era modo di riaprirla se non con un altro comando)
+  RF.dit.fonteChiusa = RF.dit.fonte; RF.dit.fonte = null;
   const g = document.getElementById('rf-dit-due'), el = document.getElementById('rf-dit-fonte');
   if (g) g.classList.remove('con-fonte'); if (el) el.innerHTML = '';
+  rfDitRiapriMetti();
   rfFoglioRiempi();
 }
+function rfDitRiapriHtml() {
+  const f = RF.dit.fonteChiusa;
+  return f && !RF.dit.fonte ? `<button class="btn sm" id="rf-dit-riapri" onmousedown="event.preventDefault()" onclick="rfDitFonteRiapri()" title="${rfEsc(f.titolo || 'La lettera')}">Riapri la lettera</button>` : '';
+}
+// Il tasto si mette e si toglie al suo posto, senza ridisegnare il foglio (il programma di dettatura ci sta scrivendo).
+function rfDitRiapriMetti() {
+  const v = document.getElementById('rf-dit-riapri'); if (v) v.remove();
+  const bar = document.querySelector('.rf-dit-carta-bar'), html = rfDitRiapriHtml(); if (!bar || !html) return;
+  const stato = document.getElementById('rf-dit-cmd-stato');
+  if (stato) stato.insertAdjacentHTML('afterend', html); else bar.insertAdjacentHTML('afterbegin', html);
+}
+function rfDitFonteRiapri() { const f = RF.dit.fonteChiusa; if (!f) return; const { pdfDoc, docxDati, titolo, ...apri } = f; rfDitFonteApri(apri, titolo); RF.dit.fonte.pdfDoc = pdfDoc || null; RF.dit.fonte.docxDati = docxDati || null; }
 async function rfDitFonteDisegna() {
   const d = RF.dit, f = d.fonte, box = document.getElementById('rf-dit-fonte-corpo'); if (!f || !box) return;
   const z = rfDitZoomDi('fonte'), chiave = `${f.tipo}:${f.id}:${f.da || 0}:${z}:${box.clientWidth}`;
@@ -710,7 +726,7 @@ function rfDitAggiorna() {
 }
 function rfDitScarta() {
   if (!confirm('Scartare questa registrazione? Non si può recuperare.')) return;
-  const d = RF.dit; d.pcm = new Int16Array(0); d.nuovi = []; d.stato = 'pronto'; d.errore = ''; d.testo = ''; d.tempi = []; d.foglio = null; d.foglioToccato = {}; d.foglioPer = null; d.cmdUltimo = null; d.cmdStato = ''; d.cmdFallito = ''; d.cmdNonCapito = null; d.cmdIgnora = []; d.fonte = null;
+  const d = RF.dit; d.pcm = new Int16Array(0); d.nuovi = []; d.stato = 'pronto'; d.errore = ''; d.testo = ''; d.tempi = []; d.foglio = null; d.foglioToccato = {}; d.foglioPer = null; d.cmdUltimo = null; d.cmdStato = ''; d.cmdFallito = ''; d.cmdNonCapito = null; d.cmdIgnora = []; d.fonte = null; d.fonteChiusa = null;
   rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota(); render();
 }
 async function rfDitInvia() {
@@ -732,7 +748,7 @@ async function rfDitInvia() {
     const r = await fetch('/api/referti/upload', { method: 'POST', body: fd, credentials: 'include' });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { d.errore = j.errore === 'medico_mancante' ? 'Scegli il medico che ha dettato.' : j.errore === 'troppo_grande' ? 'Registrazione troppo lunga per un invio solo.' : 'Invio non riuscito: la registrazione resta qui, riprova.'; d.invio = false; render(); return; }
-    d.pcm = new Int16Array(0); d.stato = 'pronto'; d.invio = false; d.paziente = ''; d.testo = ''; d.tempi = []; d.cursore = null; d.foglio = null; d.foglioToccato = {}; d.foglioPer = null; d.cmdUltimo = null; d.cmdStato = ''; d.cmdFallito = ''; d.cmdNonCapito = null; d.cmdIgnora = []; d.fonte = null; rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota();
+    d.pcm = new Int16Array(0); d.stato = 'pronto'; d.invio = false; d.paziente = ''; d.testo = ''; d.tempi = []; d.cursore = null; d.foglio = null; d.foglioToccato = {}; d.foglioPer = null; d.cmdUltimo = null; d.cmdStato = ''; d.cmdFallito = ''; d.cmdNonCapito = null; d.cmdIgnora = []; d.fonte = null; d.fonteChiusa = null; rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota();
     toast(dettato ? 'Lettera e audio inviati: arriva tra i referti in pochi minuti, quando il Mac ha finito il controllo con l’audio' : 'Dettato in coda: la bozza arriva tra i referti in pochi minuti');
     render(); setTimeout(rfCaricaDati, 3000);
   } catch (_) { d.errore = 'Piattaforma non raggiungibile: la registrazione resta su questo dispositivo, riprova.'; d.invio = false; render(); }
@@ -802,7 +818,7 @@ PAGES.dittafono = () => {
           <button class="btn primary" onclick="rfDitInvia()" ${d.invio ? 'disabled' : ''}>${d.invio ? 'Invio…' : 'Invia alla trascrizione'}</button>
         </div>
         <p class="rf-dit-nota mt-8">Riascolta e ferma il cursore dove vuoi: <b>Inserisci qui</b> aggiunge un pezzo in quel punto, <b>Sovrascrivi da qui</b> rifà la dettatura da lì in avanti.</p></div>` : ''}</div>
-    </div>${rfDitDettatura() ? `<div class="rf-dit-carta"><div class="rf-dit-carta-bar"><div id="rf-dit-cmd-stato" class="rf-dit-cmd-stato ${RF.dit.cmdStato ? 'pieno' : ''}">${RF.dit.cmdStato || ''}</div><span class="caption">Foglio</span>${rfDitZoomHtml('foglio')}</div>${rfFoglioHtml()}</div><div class="rf-dit-fonte" id="rf-dit-fonte">${rfDitFonteHtml()}</div></div>` : ''}
+    </div>${rfDitDettatura() ? `<div class="rf-dit-carta"><div class="rf-dit-carta-bar"><div id="rf-dit-cmd-stato" class="rf-dit-cmd-stato ${RF.dit.cmdStato ? 'pieno' : ''}">${RF.dit.cmdStato || ''}</div>${rfDitRiapriHtml()}<span class="caption">Foglio</span>${rfDitZoomHtml('foglio')}</div>${rfFoglioHtml()}</div><div class="rf-dit-fonte" id="rf-dit-fonte">${rfDitFonteHtml()}</div></div>` : ''}
     ${rfDitRecenti()}
     <p class="rf-dit-nota">L'audio resta su questo dispositivo finché non premi «Invia»; se la pagina si chiude lo ritrovi qui. Una volta inviato segue la stessa strada di ogni dettato: trascrizione sul Mac dello studio, bozza nella pagina Referti.</p>
   </div>`;
