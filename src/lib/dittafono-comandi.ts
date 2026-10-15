@@ -18,6 +18,15 @@ export type ParteLettera = (typeof PARTI_LETTERA)[number];
 export const NOME_PARTE: Record<ParteLettera, string> = { anamnesi: 'anamnesi', frcv: 'FRCV', comorbidita: 'comorbidità', allergie: 'allergie', diagnosi: 'diagnosi', esame: 'esame clinico', ecg: 'ECG', eco: 'ecocardiogramma', sforzo: 'test da sforzo', holter: 'Holter', laboratorio: 'laboratorio', conclusione: 'conclusione', terapia: 'terapia' };
 
 const RX_SALUTO_RIGA = /^[ \t]*(?:caro|cara|cari|gentile|gentili|egregio|egregia|stimato|stimata|lieber|liebe|sehr geehrte[rs]?)\b[^\n,]{0,80},[ \t]*/im;
+// …o una riga corta che è solo il saluto, senza la virgola («Caro Mirko» e a capo: 3 lettere vere su 36, 15.10.2026)
+const RX_SALUTO_NUDO = /^[ \t]*(?:caro|cara|cari|gentile|gentili|egregio|egregia|stimato|stimata|lieber|liebe|sehr geehrte[rs]?)\b[^\n,.;:!?]{1,50}[ \t]*\n/im;
+// Vale quello con la virgola, se c'è; quello senza solo in mancanza, e mai la riga del destinatario («Egregio Signor»
+// e a capo il nome: è l'indirizzo della lettera, non il saluto).
+function salutoIn(t: string): RegExpExecArray | null {
+  const a = RX_SALUTO_RIGA.exec(t); if (a) return a;
+  const b = RX_SALUTO_NUDO.exec(t);
+  return b && !/^\s*(?:egregi[oa]|gentile|spettabile|stimat[oa])\s+(?:signor[ae]?|sig\.?(?:ra|na)?|dott(?:\.|ore|oressa)?(?:ssa)?|prof(?:\.|essore|essoressa)?)\s*$/i.test(b[0]) ? b : null;
+}
 const RX_CHIUSURA = /(rimanendo a (?:tua |sua |vostra )?disposizione|rimango a (?:tua |sua |vostra )?disposizione|resto a (?:tua |sua |vostra )?disposizione|cordiali saluti|distinti saluti|migliori saluti|cari saluti|un cordiale saluto|collegiali saluti|un caro saluto|con stima\b|freundliche[nm]? gr[uü](?:ss|ß)e?n?)/i;
 const pulisci = (t: string) => t.replace(/\r\n?/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 
@@ -36,7 +45,7 @@ export function righeVere(testo: string): string {
 // saluti» citato in mezzo a una lettera non è la fine). Se così resta troppo poco, vale la lettera intera.
 export function corpoDellaLettera(testo: string): string {
   const t = pulisci(righeVere(testo));
-  const s = RX_SALUTO_RIGA.exec(t.slice(0, 2500));
+  const s = salutoIn(t.slice(0, 2500));
   let corpo = s ? t.slice(s.index + s[0].length) : t;
   const meta = Math.floor(corpo.length / 2);
   const c = RX_CHIUSURA.exec(corpo.slice(meta));
@@ -48,6 +57,15 @@ export function corpoDellaLettera(testo: string): string {
   }
   corpo = pulisci(corpo);
   return corpo.length >= 80 ? corpo : t;
+}
+
+// Il saluto in testa alla lettera («Caro Mirko,»): con la lettera intera, o «fino a…», va nel campo del saluto del
+// foglio (15.10.2026, dallo studio: «se dico riprendimi la lettera deve prendermi anche il saluto iniziale»). Vuoto se non c'è.
+export function salutoDellaLettera(testo: string): string {
+  const s = salutoIn(pulisci(righeVere(testo)).slice(0, 2500));
+  if (!s) return '';
+  const r = s[0].replace(/\s+/g, ' ').trim().slice(0, 120);
+  return /,$/.test(r) ? r : `${r},`;
 }
 
 // La terapia: il blocco sotto «Terapia:» a riga propria (come nelle lettere dello studio), o ciò che segue

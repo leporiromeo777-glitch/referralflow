@@ -3,7 +3,7 @@
 //   NODE_OPTIONS=--conditions=react-server npx tsx scripts/misura-fino.ts [quanti pazienti]
 import { query, pool } from '../src/lib/db';
 import { lettereDelPazienteScelto } from '../src/lib/aggiorna-lettera-server';
-import { corpoDellaLettera, partiDellaLettera } from '../src/lib/dittafono-comandi';
+import { corpoDellaLettera, partiDellaLettera, salutoDellaLettera } from '../src/lib/dittafono-comandi';
 const PAROLE: Record<string, RegExp> = {
   frcv: /fattor[ei] di rischio(?:\s+cardio[\s-]?vascolar[ei])?|\bf\.?\s?r\.?\s?c\.?\s?v\b/gi,
   comorbidita: /\b(?:co|com)?-?morbi[dl]it[aàá]/gi,
@@ -26,6 +26,11 @@ const PAROLE: Record<string, RegExp> = {
     for (const l of n === 0 ? lettere : lettere.slice(0, 2)) {
       if (n === 0) piu('(di cui referti confermati)');
       piu('lettere');
+      piu(`saluto in testa trovato: ${salutoDellaLettera(l.testo) ? 'sì' : 'no'}`);
+      if (!salutoDellaLettera(l.testo)) {
+        const testa = l.testo.slice(0, 2500), w = /(^|\n)[ \t]*(caro|cara|cari|care|gentile|gentili|egregio|egregia|egregi|stimato|stimata|spettabile|lieber|liebe|sehr geehrte|geschätzte|cher|chère|chers|dear)\b([^\n]{0,60})/i.exec(testa);
+        piu(`  senza saluto: ${w ? `parola di saluto a inizio riga (${w[2].toLowerCase()}), ${/,\s*$/.test(w[3]) ? 'con' : 'senza'} virgola in fondo` : /\b(caro|gentile|egregio|stimato|lieber|cher|dear)\b/i.test(testa) ? 'parola di saluto dentro una riga' : 'nessuna parola di saluto'}`);
+      }
       const corpo = corpoDellaLettera(l.testo), parti = partiDellaLettera(l.testo), paragrafi = corpo.split(/\n[ \t]*\n/);
       for (const [k, rx] of Object.entries(PAROLE)) {
         if (parti[k as 'frcv']) { piu(`${k}: con etichetta`); continue; }

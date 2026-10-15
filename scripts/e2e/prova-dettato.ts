@@ -84,7 +84,7 @@ async function main() {
     verifica(k1.stato === 200 && k1.j.testo.startsWith('ho rivisto la paziente inventata, visita nuova.') && k1.j.testo.endsWith('In conclusione quadro stabile.') && !/Caro collega|cordiali saluti|Dr\. med\./.test(k1.j.testo) && k1.j.data === '20.06.2026'
       && k2.stato === 200 && k2.j.testo === 'Terapia:\nFarmacoA 10 mg 1-0-0\nFarmacoB 5 mg 0-0-1'
       // la lettera di provenienza, da aprire accanto al foglio: qui un referto della piattaforma, quindi il suo testo intero
-      && k1.j.apri?.tipo === 'referto' && k1.j.apri?.pdf === false && k1.j.apri?.docx === true && k1.j.apri?.testo.startsWith('Caro collega,') && /cordiali saluti/.test(k1.j.apri?.testo ?? ''),
+      && k1.j.apri?.tipo === 'referto' && k1.j.apri?.pdf === false && k1.j.apri?.docx === true && k1.j.saluto === 'Caro collega,' && !k2.j.saluto && k1.j.apri?.testo.startsWith('Caro collega,') && /cordiali saluti/.test(k1.j.apri?.testo ?? ''),
       `«inserisci la lettera più recente»: arriva il corpo della più recente (senza saluto, saluti e firma), trovata dal legame col paziente; «la terapia»: il suo blocco (${k1.stato}, ${k1.j.data}, ${k2.stato})`);
     // La lettera vera accanto al foglio (15.10.2026): il Word con la carta intestata, in anteprima — non conta come scaricato.
     const wPrima = await query<{ n: number }>(`select count(*)::int as n from referti_eventi where bozza_id = $1 and azione = 'word_scaricato'`, [k1.j.apri?.id]).catch(() => [{ n: -1 }]);

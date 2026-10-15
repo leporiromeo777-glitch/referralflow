@@ -2,7 +2,7 @@ import 'server-only';
 import { lettereDelPazienteScelto } from './aggiorna-lettera-server';
 import { logDocumento } from './cartella';
 import { query } from './db';
-import { corpoDellaLettera, letteraFinoA, NOME_PARTE, partiDellaLettera, type Comando, type ParteLettera } from './dittafono-comandi';
+import { corpoDellaLettera, letteraFinoA, NOME_PARTE, partiDellaLettera, salutoDellaLettera, type Comando, type ParteLettera } from './dittafono-comandi';
 
 // I comandi a voce del dittafono, lato server (12.10.2026, [[Piattaforma/Dittafono]]): il pezzo chiesto, preso dalla
 // lettera più recente del paziente — la stessa ricerca di «Aggiorna una lettera vecchia» (referti confermati, lettere
@@ -14,7 +14,8 @@ import { corpoDellaLettera, letteraFinoA, NOME_PARTE, partiDellaLettera, type Co
 // `docx` (15.10.2026, dallo studio: «mi apre un testo, non la lettera vera»): la lettera è un Word — per un referto della
 // piattaforma quello con la carta intestata, lo stesso che si scarica — e la pagina lo disegna com'è.
 export type DaAprire = { tipo: 'referto' | 'documento' | 'pagine'; id: string; pdf: boolean; docx: boolean; da: number | null; a: number | null; testo: string };
-export type EsitoComando = { ok: true; testo: string; fonte: string; data: string; cosa: string; mancanti: string[]; apri: DaAprire } | { errore: string };
+// `saluto`: il saluto in testa alla lettera, quando si prende dall'inizio (lettera intera, «fino a…»).
+export type EsitoComando = { ok: true; testo: string; fonte: string; data: string; cosa: string; mancanti: string[]; apri: DaAprire; saluto?: string } | { errore: string };
 const TETTO = 20000;
 
 export async function eseguiComando(studioId: string, userId: string | null, patientId: string, comando: Comando, parti: ParteLettera[] = [], esclusa = false): Promise<EsitoComando> {
@@ -35,7 +36,7 @@ export async function eseguiComando(studioId: string, userId: string | null, pat
     const testo = corpoDellaLettera(l.testo).slice(0, TETTO);
     if (!testo) return { errore: 'La lettera più recente è vuota.' };
     await letta(l);
-    return { ok: true, testo, fonte: l.fonte.etichetta, data: l.fonte.data, cosa: 'la lettera', mancanti: [], apri: await daAprire(l) };
+    return { ok: true, testo, fonte: l.fonte.etichetta, data: l.fonte.data, cosa: 'la lettera', mancanti: [], apri: await daAprire(l), saluto: salutoDellaLettera(l.testo) };
   }
   // «Fino a…»: dalla lettera più recente — «la lettera» è quella (15.10.2026: prenderne una più vecchia senza dirlo
   // confonde). Se lì quella parte non è una parte a sé (per esempio i fattori di rischio citati dentro il racconto),
@@ -48,7 +49,7 @@ export async function eseguiComando(studioId: string, userId: string | null, pat
     const testo = letteraFinoA(l.testo, parte, esclusa).slice(0, TETTO);
     if (!testo) return { errore: `Nella lettera più recente (${l.fonte.data}) ${NOME_PARTE[parte]} non è una parte a sé${parte === 'frcv' || parte === 'comorbidita' ? ` (con «${NOME_PARTE[parte]}:» a inizio riga)` : ''}: non so dove fermarmi. Chiedi la lettera intera, o fino a un'altra parte.` };
     await letta(l);
-    return { ok: true, testo, fonte: l.fonte.etichetta, data: l.fonte.data, cosa, mancanti: [], apri: await daAprire(l) };
+    return { ok: true, testo, fonte: l.fonte.etichetta, data: l.fonte.data, cosa, mancanti: [], apri: await daAprire(l), saluto: esclusa && parte === 'anamnesi' ? '' : salutoDellaLettera(l.testo) };
   }
   // Le parti chieste: dalla più recente fra le ultime quattro lettere che ne ha almeno una (un biglietto può non
   // averne nessuna). Tutte dalla STESSA lettera: quelle che lì non ci sono vengono dette, non cercate altrove.

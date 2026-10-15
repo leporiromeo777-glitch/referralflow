@@ -285,6 +285,9 @@ async function rfDitComandoEsegui(comando, da, a, frase, parti, soloApri, esclus
     if (!frase) { da = Math.min(da, el.value.length); a = da; }
     const originale = el.value, s = RFComandi.sostituisci(originale, da, a, j.testo);
     d.cmdUltimo = { inizio: s.inizio, fine: s.fine, pezzo: s.testo.slice(s.inizio, s.fine), frase: frase || '', originale, risultato: s.testo, dopoFrase: a }; d.cmdFallito = '';
+    // Con la lettera dall'inizio arriva anche il suo saluto («Caro Mirko,»), nel campo del saluto del foglio — se non
+    // l'hai scritto tu a mano (15.10.2026, richiesta dello studio). «Annulla» rimette quello di prima.
+    if (j.saluto && !d.foglioToccato.saluto) { if (!d.foglio) d.foglio = {}; d.cmdUltimo.salutoPrima = d.foglio.saluto || ''; d.foglio.saluto = j.saluto; rfFoglioRiempi(); }
     rfDitTestoMetti(s.testo, s.fine);
     if (j.apri) rfDitFonteApri(j.apri, `${j.fonte || 'lettera'} · ${j.data || ''}`);
     rfDitComandoStato(`Inserito dalla lettera del ${rfEsc(j.data || '')}: <b>${rfEsc(j.cosa || cosa)}</b> (${rfEsc(j.fonte || '')}) — ${s.fine - s.inizio} caratteri che non hai dettato tu, da rileggere.${(j.mancanti || []).length ? ` <span style="color:#b3261e">In quella lettera non trovo: ${rfEsc(j.mancanti.join(', '))}.</span>` : ''} <a href="javascript:void 0" onclick="rfDitComandoAnnulla()">Annulla</a>${frase ? ' · <a href="javascript:void 0" onclick="rfDitComandoAnnulla(true)">Non era un comando: rimetti la frase</a>' : ''}`);
@@ -403,6 +406,7 @@ function rfDitComandoAnnulla(rimetti) {
   if (da < 0) { rfDitComandoStato('Il testo inserito è stato modificato: non lo tolgo da solo.'); return; }
   const t = RFComandi.sostituisci(el.value, da, da + u.pezzo.length, '');
   d.cmdUltimo = null;
+  if (typeof u.salutoPrima === 'string' && d.foglio && !d.foglioToccato.saluto) { d.foglio.saluto = u.salutoPrima; rfFoglioRiempi(); }
   if (rimetti && u.frase) {
     const frase = u.frase.trim(), prima = t.testo.slice(0, t.inizio), dopo = t.testo.slice(t.inizio), spazio = prima && !/\s$/.test(prima) ? ' ' : '';
     d.cmdIgnora = (d.cmdIgnora || []).concat(frase).slice(-20);

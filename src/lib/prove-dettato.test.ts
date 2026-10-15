@@ -65,7 +65,7 @@ test('foglio: dalla lettera sul foglio al testo da rivedere — saluto, corpo, c
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
-import { corpoDellaLettera, letteraFinoA, partiDellaLettera, terapiaDellaLettera } from './dittafono-comandi';
+import { corpoDellaLettera, letteraFinoA, partiDellaLettera, salutoDellaLettera, terapiaDellaLettera } from './dittafono-comandi';
 const ctx: any = {};
 vm.runInNewContext(readFileSync(path.join(process.cwd(), 'public', 'prototipo', 'dittafono-comandi.js'), 'utf-8'), ctx);
 const K = ctx.RFComandi;
@@ -259,6 +259,13 @@ test('comandi a voce: «riprendimi per favore» seguito da una parte toglie anch
   assert.ok(letteraFinoA(l, 'terapia').endsWith('Terapia:\nFarmacoA 10 mg 1-0-0\nFarmacoB 5 mg 0-0-1'));
   assert.ok(letteraFinoA(l, 'conclusione').endsWith('Controllo fra dodici mesi.') && !letteraFinoA(l, 'conclusione').includes('saluti'));
   assert.equal(letteraFinoA(l, 'holter'), '', 'una parte che non c\'è non dà niente');
+  // il saluto in testa arriva a parte, per il campo del saluto (15.10.2026)
+  assert.equal(salutoDellaLettera(l), 'Caro collega,');
+  assert.equal(salutoDellaLettera('Studio Inventato\nVia Finta 1\n\nGentile dott.ssa Prova,\n\nho rivisto la paziente.'), 'Gentile dott.ssa Prova,');
+  assert.equal(salutoDellaLettera('ho rivisto il paziente senza saluto.'), '');
+  const nudo = 'Studio Inventato\n\nCaro Inventato\n\nho rivisto il paziente inventato per il controllo annuale, che riferisce di stare bene da mesi.\n\nCordiali saluti';
+  assert.equal(salutoDellaLettera(nudo), 'Caro Inventato,', 'senza virgola: la riga corta col solo saluto');
+  assert.ok(corpoDellaLettera(nudo).startsWith('ho rivisto'), 'e il corpo comincia dopo');
   // tutta di fila, con i fattori di rischio aperti da «(»: la parte finisce con la sua frase
   const fila = 'Caro collega, ho rivisto la paziente inventata per palpitazioni da alcune settimane, senza sincope. Fattori di rischio cardiovascolare (ipertensione arteriosa, ex fumatrice). All\'ECG ritmo sinusale. ' + 'Il decorso inventato prosegue senza novità. '.repeat(6) + 'Cordiali saluti, Dr. med. Inventato';
   assert.equal(letteraFinoA(fila, 'frcv'), 'ho rivisto la paziente inventata per palpitazioni da alcune settimane, senza sincope. Fattori di rischio cardiovascolare (ipertensione arteriosa, ex fumatrice).');

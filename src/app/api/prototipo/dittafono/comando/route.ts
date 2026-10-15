@@ -39,5 +39,5 @@ export async function POST(req: NextRequest) {
   const r = await eseguiComando(session.studioId, session.id, paziente, comando, comando === 'fino' ? parti.slice(0, 1) : parti, esclusa);
   console.log(`[dittafono-comando] ${comando}${parti.length ? ` parti=${parti.join('+')}` : ''}${esclusa ? ' esclusa' : ''} → ${'errore' in r ? `niente (${r.errore.replace(/:.*/, '').slice(0, 60)})` : `ok fonte=${r.apri.tipo} pdf=${r.apri.pdf ? 'sì' : 'no'} caratteri=${r.testo.length} mancanti=${r.mancanti.length}`}`);
   return 'errore' in r ? NextResponse.json({ errore: r.errore }, { status: 404, headers: { 'Cache-Control': 'no-store' } })
-    : NextResponse.json({ testo: r.testo, fonte: r.fonte, data: r.data, cosa: r.cosa, mancanti: r.mancanti, apri: r.apri }, { headers: { 'Cache-Control': 'no-store' } });
+    : NextResponse.json({ testo: r.testo, fonte: r.fonte, data: r.data, cosa: r.cosa, mancanti: r.mancanti, apri: r.apri, saluto: r.saluto ?? '' }, { headers: { 'Cache-Control': 'no-store' } });
 }
