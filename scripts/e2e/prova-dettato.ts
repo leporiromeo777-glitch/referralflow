@@ -108,6 +108,17 @@ async function main() {
       && f2.stato === 404 && /lettera più recente \(20\.06\.2026\) comorbidità non è una parte a sé/.test(f2.j.errore ?? '')
       && f3.stato === 200 && f3.j.testo.endsWith('FarmacoB 5 mg 0-0-1') && /a prima di conclusione/.test(f3.j.cosa) && f4.stato === 400,
       `«fino a»: la lettera più recente dall'inizio fino alla terapia compresa, fino a prima della conclusione; una parte che la più recente non ha viene detta con la data (non si prende una lettera più vecchia); senza parte è rifiutato (${f1.stato}, ${f2.stato}, ${f3.stato}, ${f4.stato})`);
+    // «Detto la lettera all'indirizzo del dottor … per il paziente …» (15.10.2026): medico dalla rubrica, paziente dalla cartella, anche storpiati.
+    const [{ id: inv }] = await query<{ id: string }>(`insert into referring_doctors (studio_id, nome, specialita, email) values ($1, 'Indirizzoprova Luca', 'Medicina interna', 'luca@example.org') returning id`, [S]);
+    try {
+      const i1 = await comando({ comando: 'indirizzo', medico_nome: 'Indirizzoprovva', paziente_nome: 'Anna Comandoprova', nascita: '03.04.1950', donna: false });
+      const i2 = await comando({ comando: 'indirizzo', medico_nome: 'Nessunoinventato', paziente_nome: 'Comandoprova', donna: true });
+      const i3 = await comando({ comando: 'indirizzo', medico_nome: 'Indirizzoprova' }, '');
+      verifica(i1.stato === 200 && i1.j.medico?.stato === 'trovato' && /Indirizzoprova Luca/.test(i1.j.medico?.scelta?.destinatario ?? '')
+        && i1.j.paziente?.stato === 'trovato' && i1.j.paziente?.scelta?.id === paz && i1.j.paziente?.scelta?.nascita === '03.04.1950'
+        && i2.j.medico?.stato === 'nessuno' && i2.j.paziente?.stato === 'scegli' && (i2.j.paziente?.alternative ?? []).length === 2 && i3.stato === 401,
+        `detto la lettera all'indirizzo di…: medico trovato nella rubrica anche storpiato, col destinatario pronto; paziente trovato con la data di nascita; un medico che non c'è viene detto; due pazienti con lo stesso cognome si propongono; senza sessione no (${i1.j.medico?.stato}, ${i1.j.paziente?.stato}, ${i2.j.medico?.stato}, ${i2.j.paziente?.stato}, ${i3.stato})`);
+    } finally { await query(`delete from referring_doctors where id = $1`, [inv]); }
     const k3 = await comando({ comando: 'lettera_recente', paziente: vuoto }), k4 = await comando({ comando: 'cancella_tutto', paziente: paz }), k5 = await comando({ comando: 'lettera_recente', paziente: 'x' }), k6 = await comando({ comando: 'lettera_recente', paziente: paz }, '');
     verifica(k3.stato === 404 && typeof k3.j.errore === 'string' && !k3.j.testo && k4.stato === 400 && k5.stato === 400 && k6.stato === 401,
       `un paziente senza lettere dà un avviso e niente testo; un comando non previsto, un paziente non scelto e una richiesta senza sessione sono rifiutati (${k3.stato}, ${k4.stato}, ${k5.stato}, ${k6.stato})`);

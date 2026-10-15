@@ -863,3 +863,7 @@ tasto. Il cancello della conferma resta: i numeri non controllati chiedono la pr
 
 **15.10.2026 — la pedaliera nella revisione: un colpo avvia/ferma, tenuto suona finché premuto.** Le due abitudini dei
 programmi di trascrizione insieme, senza un'impostazione da scegliere; la pedaliera si impara come il tasto del microfono.
+
+**15.10.2026 — «detto la lettera all'indirizzo del dottor … per il paziente …» senza «per favore».** La frase è già
+un'istruzione e nelle lettere non si scrive così. Medico e paziente si scelgono da soli solo se uno è chiaramente il più
+simile; altrimenti si propongono, mai un'indovinata.

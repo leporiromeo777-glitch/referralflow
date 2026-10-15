@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
 import { COMANDI, PARTI_LETTERA, type Comando, type ParteLettera } from '@/lib/dittafono-comandi';
 import { eseguiComando } from '@/lib/dittafono-comandi-server';
+import { cercaIndirizzo } from '@/lib/dittafono-indirizzo';
 import { vietato } from '@/lib/permessi';
 
 export const runtime = 'nodejs';
@@ -28,6 +29,13 @@ export async function POST(req: NextRequest) {
     const parti = (Array.isArray(f.parti) ? (f.parti as unknown[]).map(String) : []).filter((k) => (PARTI_LETTERA as readonly string[]).includes(k)).slice(0, 8);
     console.log(`[dittafono-comando] non capito: verbo=${f.verbo === true ? 'sì' : 'no'} lettera=${f.lettera === true ? 'sì' : 'no'} parti=${parti.join('+') || '-'} caratteri=${Math.min(999, Number(f.caratteri) || 0)} parole=${Math.min(99, Number(f.parole) || 0)}`);
     return NextResponse.json({ ok: true });
+  }
+  // «Detto la lettera all'indirizzo del dottor … per il paziente …» (15.10.2026): chi sono, dalla rubrica e dalla cartella.
+  if (b?.comando === 'indirizzo') {
+    const testo = (k: string) => String(b?.[k] ?? '').slice(0, 120);
+    const nascita = /^\d{2}\.\d{2}\.\d{4}$/.test(String(b?.nascita ?? '')) ? String(b.nascita) : null;
+    const r = await cercaIndirizzo(session.studioId, { medicoNome: testo('medico_nome'), pazienteNome: testo('paziente_nome'), nascita, donna: b?.donna === true, profilo: testo('medico') || null });
+    return NextResponse.json(r, { headers: { 'Cache-Control': 'no-store' } });
   }
   const comando = String(b?.comando ?? '') as Comando;
   const paziente = String(b?.paziente ?? '');

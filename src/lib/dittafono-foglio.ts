@@ -29,11 +29,7 @@ export async function foglioPer(studioId: string, medicoId: string | null, patie
     `select d.nome, d.specialita, d.email, d.hin_address from referrals r join referring_doctors d on d.id = r.referring_doctor_id
       where r.patient_id = $1 and r.studio_id = $2 order by r.created_at desc limit 1`, [patientId, studioId]) : [];
   const donna = inv ? /\b(dr\.?ssa|dott\.?ssa|dottoressa)\b/i.test(inv.nome) : false;
-  const nomeInv = inv ? conTitolo(inv.nome.replace(/^dr\.?\s*(med\.?)?\s*/i, ''), donna) : '';
-  const posta = inv?.hin_address || inv?.email || '';
-  const destinatario = formato === 'lettera'
-    ? (inv ? [appellativo(inv.nome, donna), nomeInv, inv.specialita ? `FMH ${inv.specialita}` : '', posta ? `Via e-mail: ${posta}` : 'Via e-mail'] : ['Egregio Signor', 'Dr. med. ', 'Via e-mail']).filter(Boolean).join('\n')
-    : [nomeInv || 'Dr. med. ', 'Via email'].join('\n');
+  const destinatario = destinatarioDi(inv ?? null, formato, donna);
   const nomePaziente = p ? `${p.cognome} ${p.nome}`.trim() : '';
   return {
     medico, intestazione, formato, destinatario, data,
@@ -79,4 +75,16 @@ export async function pazienteDelFoglio(studioId: string, patientId: string | nu
     if (p) return { nome_paziente: `${p.cognome} ${p.nome}`.trim(), ...(p.nascita ? { data_nascita: p.nascita } : {}) };
   }
   return pazienteDalTesto(testo);
+}
+
+// Il blocco del destinatario sul foglio, dal medico della rubrica degli invianti: «Egregio Signor / Dr. med. … / FMH … /
+// Via e-mail: …» nel formato lettera, nome e «Via email» nel rapporto. Lo usano il foglio e «detto la lettera
+// all'indirizzo del dottor …» (src/lib/dittafono-indirizzo.ts).
+export type Inviante = { nome: string; specialita: string | null; email: string | null; hin_address: string | null };
+export function destinatarioDi(inv: Inviante | null, formato: 'lettera' | 'rapporto', donna: boolean): string {
+  const nomeInv = inv ? conTitolo(inv.nome.replace(/^dr\.?\s*(med\.?)?\s*/i, ''), donna) : '';
+  const posta = inv?.hin_address || inv?.email || '';
+  return formato === 'lettera'
+    ? (inv ? [appellativo(inv.nome, donna), nomeInv, inv.specialita ? `FMH ${inv.specialita}` : '', posta ? `Via e-mail: ${posta}` : 'Via e-mail'] : ['Egregio Signor', 'Dr. med. ', 'Via e-mail']).filter(Boolean).join('\n')
+    : [nomeInv || 'Dr. med. ', 'Via email'].join('\n');
 }

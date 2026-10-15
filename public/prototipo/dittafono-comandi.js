@@ -15,7 +15,7 @@
  */
 (function (root) {
   'use strict';
-  var VERSIONE = '1.10';
+  var VERSIONE = '1.11';
   // Una copia nuova a ogni ricerca: l'espressione ricorda dov'è arrivata, e due ricerche una dentro l'altra sulla
   // stessa copia non finivano più (la pagina si bloccava a ogni «per favore» senza comando, 12.10.2026).
   // Dopo la parola d'ordine il programma di dettatura può mettere da sé un punto, una virgola o un a capo.
@@ -232,5 +232,19 @@
     return { testo: testa + p + (dopo ? '\n\n' + dopo : ''), inizio: testa.length, fine: testa.length + p.length };
   }
 
-  root.RFComandi = { VERSIONE: VERSIONE, trova: trova, nonCapito: nonCapito, letto: letto, forma: forma, sostituisci: sostituisci };
+  /* «Detto la lettera all'indirizzo del dottor Rossi per il paziente Bianchi Maria» (15.10.2026, richiesta dello studio):
+     non serve «per favore» (la frase è già un'istruzione, e nelle lettere non si scrive così). → { da, a, comando:
+     'indirizzo', medico, paziente, nascita, donna, frase } o null. Medico e paziente li cerca il server, anche storpiati. */
+  var INDIRIZZO = /(?:\bper[ \t]*favore[\s,:;.]*)?\b(?:detto|dettiamo|scrivo)\s+(?:la\s+|una\s+)?lettera\s+(?:all['’]\s*indirizzo|indirizzata|destinata)\s*(?:(?:a|al|alla|del|della|di)\s+|(?:all|dell)['’]\s*)?((?:dott(?:or|ore|oressa|\.ssa|\.)?|dr\.?(?:\s*med\.?)?(?:ssa)?|prof(?:essor|essore|essoressa)?\.?)\s+)?([^\n.;,]{2,60}?)(?:\s*,?\s*(?:per|riguardo\s+a|relativa\s+a)\s+(?:(?:il|la|al|alla|del|della)\s+)?(?:paziente|signor[ae]?|sig\.?(?:ra)?)\s+((?:[^\n.;]|\.(?=\d)){2,80}?))?\s*(?:[.;!](?!\d)|\n|$)/i;
+  function trovaIndirizzo(testo) {
+    var t = String(testo || ''), m = INDIRIZZO.exec(t); if (!m) return null;
+    var medico = m[2].replace(/\s+(?:e|ed)\s*$/i, '').trim(), paz = (m[3] || '').trim(), nascita = null;
+    var nt = /\s*,?\s*(?:nat[oa]\s+(?:il\s+)?)?(\d{1,2})[./](\d{1,2})[./](\d{4})\s*$/i.exec(paz);
+    if (nt) { nascita = ('0' + nt[1]).slice(-2) + '.' + ('0' + nt[2]).slice(-2) + '.' + nt[3]; paz = paz.slice(0, nt.index).trim(); }
+    paz = paz.replace(/\s*,?\s*nat[oa]\b.*$/i, '').trim();
+    if (!/[a-zà-ù]{2}/i.test(medico)) return null;
+    return { da: m.index, a: m.index + m[0].length, comando: 'indirizzo', medico: medico, paziente: paz, nascita: nascita, donna: /oressa|ssa\b/i.test(m[1] || '') || /^(?:la|della|alla)\b/i.test(t.slice(m.index).replace(/^.*?(?:indirizzo|indirizzata|destinata)\s*/i, '')), frase: m[0] };
+  }
+
+  root.RFComandi = { VERSIONE: VERSIONE, trova: trova, trovaIndirizzo: trovaIndirizzo, nonCapito: nonCapito, letto: letto, forma: forma, sostituisci: sostituisci };
 })(typeof window !== 'undefined' ? window : globalThis);

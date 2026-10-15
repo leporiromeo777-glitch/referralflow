@@ -216,7 +216,7 @@ function rfDitComandoStato(html) { RF.dit.cmdStato = html || ''; const el = docu
 function rfDitComandoDice(corpo) { try { void fetch('/api/prototipo/dittafono/comando', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comando: 'non_capito', ...corpo }) }).catch(() => {}); } catch (_) { /* niente */ } }
 function rfDitComandoProgramma() {
   const d = RF.dit; clearTimeout(d.cmdAttesa);
-  if (!rfDitDettatura() || typeof RFComandi === 'undefined' || !/per\s*favore/i.test(d.testo || '')) return;
+  if (!rfDitDettatura() || typeof RFComandi === 'undefined' || !/per\s*favore|lettera\s+(?:all['’]?\s*indirizzo|indirizzata|destinata)/i.test(d.testo || '')) return;
   d.cmdAttesa = setTimeout(rfDitComandoCerca, 1500);
 }
 // Un programma di dettatura non sempre avvisa la pagina quando scrive (a volte cambia il testo senza l'evento che la
@@ -241,6 +241,9 @@ async function rfDitComandoCerca() {
   const fermoDa = Date.now() - (d.testoIl || 0);
   if (fermoDa < 1400 || (fermoDa < 4000 && (d.tastoGiu || d.stato === 'registra' && d.daTasto))) { clearTimeout(d.cmdAttesa); d.cmdAttesa = setTimeout(rfDitComandoCerca, 700); return; }
   const salta = (x) => (d.cmdFallito && d.cmdFallito === x.frase) || (d.cmdIgnora || []).includes(x.frase.trim());      // già fallito (aspetta «Riprova») o dichiarato «non era un comando»
+  // «Detto la lettera all'indirizzo del dottor … per il paziente …» (15.10.2026): prima di tutto, anche senza «per favore»
+  const ind = RFComandi.trovaIndirizzo ? RFComandi.trovaIndirizzo(el.value) : null;
+  if (ind && !salta(ind)) { await rfDitIndirizzo(ind); if (RFComandi.trova(el.value, 0) || RFComandi.trovaIndirizzo(el.value)) rfDitComandoProgramma(); return; }
   let c = RFComandi.trova(el.value, 0);
   while (c && salta(c)) c = RFComandi.trova(el.value, c.a);
   if (!c) {
@@ -406,6 +409,56 @@ async function rfDitFonteWord(f, box, chiave, z, testo) {
     box.innerHTML = ''; box.appendChild(foglio);
   } catch (_) { if (RF.dit.fonte === f) testo(); }
 }
+/* «DETTO LA LETTERA ALL'INDIRIZZO DEL DOTTOR … PER IL PAZIENTE …» (15.10.2026, richiesta dello studio). La frase si toglie dal
+   foglio (è un'istruzione, non testo della lettera); il medico si cerca nella rubrica degli invianti e il paziente in
+   cartella, anche coi nomi un po' storpiati da Dragon (src/lib/dittafono-indirizzo.ts). Trovato uno solo: il destinatario
+   del foglio e il paziente si compilano da soli. Più d'uno: si sceglie sopra il foglio. Nessuno: lo dice. */
+async function rfDitIndirizzo(c) {
+  const d = RF.dit; d.cmdInCorso = true; rfDitComandoStato('Cerco il medico e il paziente…');
+  try {
+    const r = await fetch('/api/prototipo/dittafono/comando', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ comando: 'indirizzo', medico_nome: c.medico, paziente_nome: c.paziente, nascita: c.nascita, donna: c.donna, medico: d.medico || '' }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(String(r.status));
+    const el = document.getElementById('rf-dit-testo'); if (!el) return;
+    let da = c.da, a = c.a;
+    if (el.value.slice(da, a) !== c.frase) { const i = el.value.indexOf(c.frase); if (i < 0) { rfDitComandoStato('Il testo è cambiato mentre cercavo: ripeti la frase.'); return; } da = i; a = i + c.frase.length; }
+    const t = RFComandi.sostituisci(el.value, da, a, '');
+    if (t.inizio === 0) t.testo = t.testo.replace(/^\s+/, '');      // era in cima: niente riga vuota al suo posto
+    rfDitTestoMetti(t.testo, t.inizio);
+    d.indirizzo = { medico: j.medico || null, paziente: j.paziente || null, detto: { medico: c.medico, paziente: c.paziente } };
+    if (j.medico && j.medico.scelta) rfDitIndMedicoMetti(j.medico.scelta);
+    if (j.paziente && j.paziente.scelta) rfDitIndPazienteMetti(j.paziente.scelta);
+    rfDitIndStato();
+  } catch (_) { d.cmdFallito = c.frase; rfDitComandoStato('<span style="color:#b3261e">Non riesco a cercare medico e paziente.</span> <a href="javascript:void 0" onclick="rfDitComandoRiprova()">Riprova</a>'); }
+  finally { d.cmdInCorso = false; }
+}
+function rfDitIndStato() {
+  const d = RF.dit, x = d.indirizzo; if (!x) return;
+  const riga = (e, chi, detto, metti) => {
+    if (!e) return '';
+    if (e.scelta) return `${chi}: <b>${rfEsc(e.scelta.nome)}</b>${e.scelta.nascita ? `, ${rfEsc(e.scelta.nascita)}` : ''} ✓`;
+    if (e.alternative && e.alternative.length) return `${chi} «${rfEsc(detto)}»: quale? ${e.alternative.map((p, i) => `<button class="btn sm" onmousedown="event.preventDefault()" onclick="${metti}(${i})">${rfEsc(p.nome)}${p.nascita ? ` · ${rfEsc(p.nascita)}` : ''}</button>`).join(' ')}`;
+    return `<span style="color:#b3261e">${chi}: «${rfEsc(detto)}» non ${chi === 'Destinatario' ? 'è nella rubrica degli invianti' : 'è in cartella'}</span> — scrivilo a mano.`;
+  };
+  rfDitComandoStato([riga(x.medico, 'Destinatario', x.detto.medico, 'rfDitIndMedicoScegli'), riga(x.paziente, 'Paziente', x.detto.paziente, 'rfDitIndPazienteScegli')].filter(Boolean).join('<br>'));
+}
+function rfDitIndMedicoMetti(m) {
+  const d = RF.dit; if (!d.foglio) d.foglio = {};
+  d.foglio.destinatario = m.destinatario; d.foglioToccato.destinatario = true;
+  if (m.saluto && !d.foglioToccato.saluto) { d.foglio.saluto = m.saluto; d.foglioToccato.saluto = true; }
+  rfFoglioRiempi();
+}
+function rfDitIndPazienteMetti(p) {
+  const d = RF.dit, q = (typeof PATIENTS !== 'undefined' ? PATIENTS : []).find(x => x.id === p.id);
+  d.paziente = q ? `${fullName(q)}${q.dob ? ' · ' + q.dob : ''}` : p.nome;
+  d.pazienteScelto = { id: p.id, testo: d.paziente.trim() };
+  const inp = document.getElementById('rf-dit-paz'); if (inp) inp.value = d.paziente;
+  const ok = document.getElementById('rf-dit-paz-ok'); if (ok) ok.innerHTML = rfDitPazStato();
+  void rfFoglioCarica();
+}
+function rfDitIndMedicoScegli(i) { const x = RF.dit.indirizzo; const m = x && x.medico && x.medico.alternative[i]; if (!m) return; x.medico.scelta = m; rfDitIndMedicoMetti(m); rfDitIndStato(); }
+function rfDitIndPazienteScegli(i) { const x = RF.dit.indirizzo; const p = x && x.paziente && x.paziente.alternative[i]; if (!p) return; x.paziente.scelta = p; rfDitIndPazienteMetti(p); rfDitIndStato(); }
 function rfDitComandoRiprova() { RF.dit.cmdFallito = ''; RF.dit.testoIl = 0; void rfDitComandoCerca(); }
 // Dal tasto accanto al foglio: stesso comando, nel punto del cursore.
 function rfDitComandoTasto(comando, parte) {
@@ -442,6 +495,7 @@ const RF_FOGLIO_PARTI = ['destinatario', 'data', 'titolo', 'paziente', 'saluto',
 // parole in qualunque ordine («Cognome Nome» o «Nome Cognome», senza badare a maiuscole e accenti), se è uno solo.
 function rfFoglioPazId() {
   const d = RF.dit, v = (d.paziente || '').trim(); if (!v) return '';
+  if (d.pazienteScelto && d.pazienteScelto.testo === v) return d.pazienteScelto.id;      // scelto da «detto la lettera… per il paziente …»
   const esatto = typeof rfPazIdDa === 'function' ? rfPazIdDa(v) : null; if (esatto) return esatto;
   const parole = (x) => String(x || '').split('·')[0].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).filter(Boolean).sort().join(' ');
   const cerco = parole(v); if (!cerco || typeof PATIENTS === 'undefined') return '';
@@ -726,7 +780,7 @@ function rfDitAggiorna() {
 }
 function rfDitScarta() {
   if (!confirm('Scartare questa registrazione? Non si può recuperare.')) return;
-  const d = RF.dit; d.pcm = new Int16Array(0); d.nuovi = []; d.stato = 'pronto'; d.errore = ''; d.testo = ''; d.tempi = []; d.foglio = null; d.foglioToccato = {}; d.foglioPer = null; d.cmdUltimo = null; d.cmdStato = ''; d.cmdFallito = ''; d.cmdNonCapito = null; d.cmdIgnora = []; d.fonte = null; d.fonteChiusa = null;
+  const d = RF.dit; d.pcm = new Int16Array(0); d.nuovi = []; d.stato = 'pronto'; d.errore = ''; d.testo = ''; d.tempi = []; d.foglio = null; d.foglioToccato = {}; d.foglioPer = null; d.cmdUltimo = null; d.cmdStato = ''; d.cmdFallito = ''; d.cmdNonCapito = null; d.cmdIgnora = []; d.fonte = null; d.fonteChiusa = null; d.pazienteScelto = null; d.indirizzo = null;
   rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota(); render();
 }
 async function rfDitInvia() {
@@ -748,7 +802,7 @@ async function rfDitInvia() {
     const r = await fetch('/api/referti/upload', { method: 'POST', body: fd, credentials: 'include' });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { d.errore = j.errore === 'medico_mancante' ? 'Scegli il medico che ha dettato.' : j.errore === 'troppo_grande' ? 'Registrazione troppo lunga per un invio solo.' : 'Invio non riuscito: la registrazione resta qui, riprova.'; d.invio = false; render(); return; }
-    d.pcm = new Int16Array(0); d.stato = 'pronto'; d.invio = false; d.paziente = ''; d.testo = ''; d.tempi = []; d.cursore = null; d.foglio = null; d.foglioToccato = {}; d.foglioPer = null; d.cmdUltimo = null; d.cmdStato = ''; d.cmdFallito = ''; d.cmdNonCapito = null; d.cmdIgnora = []; d.fonte = null; d.fonteChiusa = null; rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota();
+    d.pcm = new Int16Array(0); d.stato = 'pronto'; d.invio = false; d.paziente = ''; d.testo = ''; d.tempi = []; d.cursore = null; d.foglio = null; d.foglioToccato = {}; d.foglioPer = null; d.cmdUltimo = null; d.cmdStato = ''; d.cmdFallito = ''; d.cmdNonCapito = null; d.cmdIgnora = []; d.fonte = null; d.fonteChiusa = null; d.pazienteScelto = null; d.indirizzo = null; rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota();
     toast(dettato ? 'Lettera e audio inviati: arriva tra i referti in pochi minuti, quando il Mac ha finito il controllo con l’audio' : 'Dettato in coda: la bozza arriva tra i referti in pochi minuti');
     render(); setTimeout(rfCaricaDati, 3000);
   } catch (_) { d.errore = 'Piattaforma non raggiungibile: la registrazione resta su questo dispositivo, riprova.'; d.invio = false; render(); }

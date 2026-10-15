@@ -279,6 +279,26 @@ test('comandi a voce: «riprendimi per favore» seguito da una parte toglie anch
   assert.equal(letteraFinoA('Caro collega, ho rivisto il paziente inventato per la valutazione dei fattori di rischio cardiovascolare e per dolori atipici. ' + 'Il decorso inventato prosegue senza novità. '.repeat(6) + 'Cordiali saluti', 'frcv'), '');
 });
 
+// «Detto la lettera all'indirizzo del dottor … per il paziente …» (15.10.2026). Nomi INVENTATI.
+import { cercaSimili, paroleNome } from './somiglianza-nomi';
+test('detto la lettera all’indirizzo di…: la frase si riconosce; medico e paziente si trovano anche storpiati', () => {
+  const r = K.trovaIndirizzo("Bene. Detto la lettera all'indirizzo della dottoressa Maria Provamedico, per la paziente Provapaziente Anna nata il 3.4.1950\nCaro collega");
+  assert.deepEqual([r.medico, r.paziente, r.nascita, r.donna], ['Maria Provamedico', 'Provapaziente Anna', '03.04.1950', true]);
+  assert.equal(K.trovaIndirizzo("Detto la lettera indirizzata al Dr. med. Provamedico per il signor Gialli").medico, 'Provamedico');
+  assert.equal(K.trovaIndirizzo("Per favore, detto la lettera all'indirizzo del dottor Provamedico").paziente, '');
+  for (const t of ['Ho dettato la lettera al collega.', 'La lettera è indirizzata al paziente.', 'ho rivisto il paziente per il controllo']) assert.equal(K.trovaIndirizzo(t), null, t);
+  assert.deepEqual(paroleNome('Dr. med. Mario Rossi'), ['mario', 'rossi']);
+  const rubrica = [{ nome: 'Provamedico Mario' }, { nome: 'Provamedico Maria' }, { nome: 'Altroinventato Luca' }, { nome: 'Bianchi Paolo' }];
+  const n = (p: { nome: string }) => p.nome;
+  assert.equal(cercaSimili('Altroinventatto', rubrica, n).scelta?.nome, 'Altroinventato Luca', 'una lettera in più (Dragon): è lui');
+  assert.equal(cercaSimili('Luca Altroinventato', rubrica, n).scelta?.nome, 'Altroinventato Luca', 'nome e cognome nell’altro ordine');
+  assert.equal(cercaSimili('Provamedico', rubrica, n).scelta, null, 'due Provamedico: non si sceglie');
+  assert.deepEqual(cercaSimili('Provamedico', rubrica, n).alternative.map(n), ['Provamedico Mario', 'Provamedico Maria']);
+  assert.equal(cercaSimili('Provamedico Mario', rubrica, n).scelta, null, 'Mario e Maria differiscono di una lettera: si propongono tutti e due');
+  assert.equal(cercaSimili('Bianco', rubrica, n).scelta, null, 'una parola corta diversa: non è lui');
+  assert.equal(cercaSimili('Verdi', rubrica, n).alternative.length, 0);
+});
+
 test('comandi a voce: il pezzo entra come paragrafo a sé al posto della frase, e si toglie ricucendo', () => {
   const es = 'Il paziente sta bene. Per favore inserisci l\'ultima lettera. Clinicamente compensato.';
   const c = K.trova(es), s = K.sostituisci(es, c.da, c.a, '  Anamnesi inventata.\r\nSeconda riga.  ');
