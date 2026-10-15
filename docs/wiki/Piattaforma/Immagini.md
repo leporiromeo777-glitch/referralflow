@@ -137,6 +137,8 @@ Lo schema è noto e pubblico, ed è **senza perdita**: corse di byte uguali, poi
 
 Sul NAS non si scrive niente: i file restano come sono e si decodificano al momento di guardarli (due centesimi di secondo l'uno).
 
+**Anche in ricezione** (15.10.2026): il ricevitore del Mac (`imaging/ricevi-dicom.py`, AE REFERRALFLOW, porta 11112) accetta, oltre a tutte le sintassi standard, anche questa sintassi privata — se l'IntelliSpace Portal (192.168.0.222, già fra gli apparecchi ammessi) manda TAC e RM come le tiene in archivio, si salvano come arrivano invece di essere rifiutate. Serve quando Philips avrà aggiunto il nodo REFERRALFLOW come destinazione: oggi il Portal risponde a eco e ricerche, ma rifiuta di mandare (`0xA801`), e gli esami dopo il 1.7.2024 stanno solo lì (sul NAS c'è il riversamento una tantum di maggio 2026).
+
 ## Dall'archivio dello studio (6.10.2026)
 
 Il software Philips dello studio è un **IntelliSpace Portal 11** (nodo `ISP`, porta 104, sulla rete degli apparecchi 192.168.0.x a cui il Mac è collegato col cavo). Misurato il 6.10.2026 con una sola prova di presentazione, senza chiedere dati: accetta il collegamento dal Mac (AE chiamante `REFERRALFLOW`) anche senza registrarlo, e offre verifica, **ricerca per studio (C-FIND)** e **invio a un altro nodo (C-MOVE)**; il recupero diretto (C-GET) no. Quindi cercare si può subito; per *avere* un esame l'ISP deve conoscere il Mac come destinazione.

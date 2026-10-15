@@ -43,6 +43,7 @@ import urllib.request
 from pathlib import Path
 
 BASE = Path(os.environ.get("REFERTI_IMAGING_BASE", Path.home() / "referti-imaging"))
+PHILIPS_PRIVATA = "1.3.46.670589.33.1.4.1"      # la compressione senza perdita delle TAC/RM Philips (imaging/pixel.py)
 CONF = BASE / "ricezione.conf"
 PREDEFINITI = {
     "AE_TITLE": "REFERRALFLOW",
@@ -219,8 +220,12 @@ def main() -> int:
             stato["ricevute"] = 0
 
     ae = AE(ae_title=c["AE_TITLE"])
+    # Anche la compressione privata di Philips (15.10.2026): l'IntelliSpace Portal può mandare le TAC e le RM come le
+    # tiene in archivio (sintassi 1.3.46.670589.33.1.4.1, ELSCINT1 PMSCT_RLE1). Si salvano come arrivano; imaging/pixel.py
+    # le decodifica senza perdita. Senza questa riga quelle immagini sarebbero rifiutate in ricezione.
+    sintassi = list(ALL_TRANSFER_SYNTAXES) + [PHILIPS_PRIVATA]
     for contesto in AllStoragePresentationContexts:
-        ae.add_supported_context(contesto.abstract_syntax, ALL_TRANSFER_SYNTAXES)
+        ae.add_supported_context(contesto.abstract_syntax, sintassi)
     ae.add_supported_context(Verification, ALL_TRANSFER_SYNTAXES)
     # Le immagini arrivano come sono: nessuna ricodifica, nessuna perdita.
     ae.maximum_pdu_size = 0
