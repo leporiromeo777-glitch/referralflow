@@ -2,7 +2,7 @@ import 'server-only';
 import { lettereDelPazienteScelto } from './aggiorna-lettera-server';
 import { logDocumento } from './cartella';
 import { query } from './db';
-import { corpoDellaLettera, NOME_PARTE, partiDellaLettera, type Comando, type ParteLettera } from './dittafono-comandi';
+import { corpoDellaLettera, letteraFinoA, NOME_PARTE, partiDellaLettera, type Comando, type ParteLettera } from './dittafono-comandi';
 
 // I comandi a voce del dittafono, lato server (12.10.2026, [[Piattaforma/Dittafono]]): il pezzo chiesto, preso dalla
 // lettera più recente del paziente — la stessa ricerca di «Aggiorna una lettera vecchia» (referti confermati, lettere
@@ -15,7 +15,7 @@ export type DaAprire = { tipo: 'referto' | 'documento' | 'pagine'; id: string; p
 export type EsitoComando = { ok: true; testo: string; fonte: string; data: string; cosa: string; mancanti: string[]; apri: DaAprire } | { errore: string };
 const TETTO = 20000;
 
-export async function eseguiComando(studioId: string, userId: string | null, patientId: string, comando: Comando, parti: ParteLettera[] = []): Promise<EsitoComando> {
+export async function eseguiComando(studioId: string, userId: string | null, patientId: string, comando: Comando, parti: ParteLettera[] = [], esclusa = false): Promise<EsitoComando> {
   const [p] = await query<{ cognome: string; nome: string }>('select cognome, nome from patients where id = $1 and studio_id = $2', [patientId, studioId]);
   if (!p) return { errore: 'Paziente non trovato.' };
   const lettere = await lettereDelPazienteScelto(studioId, patientId, `${p.cognome} ${p.nome}`.trim());
@@ -34,6 +34,19 @@ export async function eseguiComando(studioId: string, userId: string | null, pat
     if (!testo) return { errore: 'La lettera più recente è vuota.' };
     await letta(l);
     return { ok: true, testo, fonte: l.fonte.etichetta, data: l.fonte.data, cosa: 'la lettera', mancanti: [], apri: await daAprire(l) };
+  }
+  // «Fino a…»: dalla più recente fra le ultime quattro lettere che quella parte ce l'ha.
+  if (comando === 'fino') {
+    const parte = parti[0];
+    if (!parte) return { errore: 'Non ho capito fino a quale parte della lettera.' };
+    const cosa = `la lettera fino ${esclusa ? 'a prima di' : 'a'} ${NOME_PARTE[parte]}${esclusa ? '' : ' compresa'}`;
+    for (const l of lettere.slice(0, 4)) {
+      const testo = letteraFinoA(l.testo, parte, esclusa).slice(0, TETTO);
+      if (!testo) continue;
+      await letta(l);
+      return { ok: true, testo, fonte: l.fonte.etichetta, data: l.fonte.data, cosa, mancanti: [], apri: await daAprire(l) };
+    }
+    return { errore: `Nelle ultime lettere di questo paziente non trovo ${esclusa ? 'niente prima di' : ''} ${NOME_PARTE[parte]}.`.replace(/\s+/g, ' ') };
   }
   // Le parti chieste: dalla più recente fra le ultime quattro lettere che ne ha almeno una (un biglietto può non
   // averne nessuna). Tutte dalla STESSA lettera: quelle che lì non ci sono vengono dette, non cercate altrove.

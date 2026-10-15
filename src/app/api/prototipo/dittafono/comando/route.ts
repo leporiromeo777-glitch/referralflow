@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 // I comandi a voce del dittafono (12.10.2026, [[Piattaforma/Dittafono]]): chi detta dice «per favore, inserisci la
 // lettera più recente» e la pagina chiede qui il pezzo da mettere nel foglio.
 // Si può chiedere la lettera intera o solo alcune PARTI (anamnesi, FRCV, comorbidità, un esame, la conclusione, la terapia).
-//   POST { comando: 'lettera_recente' | 'parti', parti?: [...], paziente: <uuid> } → { testo, fonte, data, cosa, mancanti, apri } | { errore }
+//   POST { comando: 'lettera_recente' | 'parti' | 'fino', parti?: [...], esclusa?: bool, paziente: <uuid> } → { testo, fonte, data, cosa, mancanti, apri } | { errore }
 // `apri` è la lettera di provenienza, che la pagina mostra accanto al foglio.
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -34,9 +34,10 @@ export async function POST(req: NextRequest) {
   if (!COMANDI.includes(comando)) return NextResponse.json({ errore: 'Comando non previsto.' }, { status: 400 });
   if (!isUuid(paziente)) return NextResponse.json({ errore: 'Scegli prima il paziente.' }, { status: 400 });
   const parti = [...new Set((Array.isArray(b?.parti) ? (b.parti as unknown[]) : []).map(String))].filter((k): k is ParteLettera => (PARTI_LETTERA as readonly string[]).includes(k)).slice(0, 8);
-  if (comando === 'parti' && !parti.length) return NextResponse.json({ errore: 'Non ho capito quale parte della lettera.' }, { status: 400 });
-  const r = await eseguiComando(session.studioId, session.id, paziente, comando, parti);
-  console.log(`[dittafono-comando] ${comando}${parti.length ? ` parti=${parti.join('+')}` : ''} → ${'errore' in r ? `niente (${r.errore.replace(/:.*/, '').slice(0, 60)})` : `ok fonte=${r.apri.tipo} pdf=${r.apri.pdf ? 'sì' : 'no'} caratteri=${r.testo.length} mancanti=${r.mancanti.length}`}`);
+  if ((comando === 'parti' || comando === 'fino') && !parti.length) return NextResponse.json({ errore: 'Non ho capito quale parte della lettera.' }, { status: 400 });
+  const esclusa = comando === 'fino' && b?.esclusa === true;
+  const r = await eseguiComando(session.studioId, session.id, paziente, comando, comando === 'fino' ? parti.slice(0, 1) : parti, esclusa);
+  console.log(`[dittafono-comando] ${comando}${parti.length ? ` parti=${parti.join('+')}` : ''}${esclusa ? ' esclusa' : ''} → ${'errore' in r ? `niente (${r.errore.replace(/:.*/, '').slice(0, 60)})` : `ok fonte=${r.apri.tipo} pdf=${r.apri.pdf ? 'sì' : 'no'} caratteri=${r.testo.length} mancanti=${r.mancanti.length}`}`);
   return 'errore' in r ? NextResponse.json({ errore: r.errore }, { status: 404, headers: { 'Cache-Control': 'no-store' } })
     : NextResponse.json({ testo: r.testo, fonte: r.fonte, data: r.data, cosa: r.cosa, mancanti: r.mancanti, apri: r.apri }, { headers: { 'Cache-Control': 'no-store' } });
 }

@@ -832,3 +832,7 @@ le pagine delle proposte del consolidatore non stanno più nel repository pubbli
 parola d'ordine potesse stare ovunque nella frase; scelto **solo in mezzo, dopo il verbo** («prendimi per favore
 l'anamnesi»). In fondo alla frase no: per trovare dove comincia il comando bisognerebbe tornare indietro nel dettato,
 col rischio di togliere parole della lettera. Dettaglio in [[Piattaforma/Dittafono]].
+
+**15.10.2026 — comandi a voce: «riprendimi la lettera fino a…».** Richiesta dello studio (il messaggio si è
+interrotto dopo «fino a»: interpretato come «fino a una parte della lettera»). Scelto: «fino a X» = **X compresa**;
+«fino a prima di X» o «X escluso/a» = fino a dove X comincia. Dettaglio in [[Piattaforma/Dittafono]].

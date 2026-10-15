@@ -93,6 +93,13 @@ async function main() {
     verifica(p1.stato === 200 && p1.j.testo.startsWith('ho rivisto la paziente inventata, visita nuova.') && p1.j.testo.endsWith('\n\nIn conclusione quadro stabile.') && !/Terapia|FarmacoA/.test(p1.j.testo) && p1.j.cosa === 'anamnesi, conclusione' && p1.j.mancanti?.join() === 'allergie' && p1.j.data === '20.06.2026'
       && p2.stato === 200 && p2.j.testo === 'FRCV: ipertensione inventata.\n\nComorbidità: nessuna di rilievo.' && p2.j.data === '10.01.2026' && p3.stato === 404 && !p3.j.testo && p4.stato === 400,
       `solo una parte: anamnesi e conclusione dalla più recente, senza il resto, e la parte che lì manca viene detta; FRCV e comorbidità dalla lettera che le ha; una parte che non c'è in nessuna dà un avviso; una parte non prevista è rifiutata (${p1.stato}, ${p1.j.cosa}, ${p2.j.data}, ${p3.stato}, ${p4.stato})`);
+    // «Riprendimi la lettera fino a…» (15.10.2026): dall'inizio fino alla parte, compresa o no; dalla lettera che quella parte ce l'ha.
+    const f1 = await comando({ comando: 'fino', parti: ['terapia'], paziente: paz }), f2 = await comando({ comando: 'fino', parti: ['comorbidita'], paziente: paz });
+    const f3 = await comando({ comando: 'fino', parti: ['conclusione'], esclusa: true, paziente: paz }), f4 = await comando({ comando: 'fino', parti: [], paziente: paz });
+    verifica(f1.stato === 200 && f1.j.testo.startsWith('ho rivisto la paziente inventata, visita nuova.') && f1.j.testo.endsWith('FarmacoB 5 mg 0-0-1') && !/conclusione/i.test(f1.j.testo) && f1.j.data === '20.06.2026'
+      && f2.stato === 200 && f2.j.testo.endsWith('Comorbidità: nessuna di rilievo.') && !/Terapia/.test(f2.j.testo) && f2.j.data === '10.01.2026'
+      && f3.stato === 200 && f3.j.testo.endsWith('FarmacoB 5 mg 0-0-1') && /a prima di conclusione/.test(f3.j.cosa) && f4.stato === 400,
+      `«fino a»: la lettera dall'inizio fino alla terapia compresa, fino alle comorbidità dalla lettera che le ha, fino a prima della conclusione; senza parte è rifiutato (${f1.stato}, ${f2.stato}, ${f2.j.data}, ${f3.stato}, ${f4.stato})`);
     const k3 = await comando({ comando: 'lettera_recente', paziente: vuoto }), k4 = await comando({ comando: 'cancella_tutto', paziente: paz }), k5 = await comando({ comando: 'lettera_recente', paziente: 'x' }), k6 = await comando({ comando: 'lettera_recente', paziente: paz }, '');
     verifica(k3.stato === 404 && typeof k3.j.errore === 'string' && !k3.j.testo && k4.stato === 400 && k5.stato === 400 && k6.stato === 401,
       `un paziente senza lettere dà un avviso e niente testo; un comando non previsto, un paziente non scelto e una richiesta senza sessione sono rifiutati (${k3.stato}, ${k4.stato}, ${k5.stato}, ${k6.stato})`);

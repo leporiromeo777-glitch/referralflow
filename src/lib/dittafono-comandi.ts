@@ -8,7 +8,7 @@
 import { famigliaDi } from './forma-lettera';
 import { estraiTerapia } from './referti-terapia';
 
-export const COMANDI = ['lettera_recente', 'parti'] as const;
+export const COMANDI = ['lettera_recente', 'parti', 'fino'] as const;
 export type Comando = (typeof COMANDI)[number];
 // Le PARTI che si possono chiedere una per una (12.10.2026, richiesta dello studio: «se chiedo solo una parte della
 // lettera, prendimi solo quella»). Le lettere dello studio vanno così: anamnesi (il primo paragrafo), FRCV,
@@ -87,8 +87,8 @@ const DI_FAMIGLIA: Record<string, ParteLettera> = { frcv: 'frcv', comorbidita: '
 // Le parti del corpo di una lettera. Una parte comincia dove una frase (o una riga) si apre con l'etichetta di una
 // categoria («FRCV:», «Comorbidità:» — le stesse famiglie del grassetto, comunque scritte) o con la frase che apre un
 // esame o la conclusione. Ciò che viene prima della prima parte è l'ANAMNESI: il primo paragrafo.
-export function partiDellaLettera(testo: string): Partial<Record<ParteLettera, string>> {
-  const t = corpoDellaLettera(testo);
+type Confine = { i: number; parte: ParteLettera | null };
+function confiniDelCorpo(t: string): Confine[] {
   const inizi: number[] = [0];
   for (const m of t.matchAll(/\n+[ \t]*|[.!?][ \t]+(?=[\p{Lu}•\-–])/gu)) inizi.push((m.index ?? 0) + m[0].length);
   const confini: { i: number; parte: ParteLettera | null }[] = [];
@@ -104,6 +104,21 @@ export function partiDellaLettera(testo: string): Partial<Record<ParteLettera, s
     // 2019:»), chiude comunque la parte prima
     else if (!parte && (fam || (e && aRiga))) confini.push({ i, parte: null });
   }
+  return confini;
+}
+// Il pezzo di una parte che comincia al confine k: fin dove arriva la parte dopo, ma un esame o un elenco finisce col
+// suo paragrafo, e un elenco (FRCV, comorbidità…) è fatto di righe brevi: una riga lunga dopo è già il racconto che riprende.
+function pezzoDelConfine(t: string, confini: Confine[], k: number): string {
+  const c = confini[k];
+  let pezzo = t.slice(c.i, confini[k + 1]?.i ?? t.length);
+  if (c.parte && FINO_AL_PARAGRAFO.has(c.parte)) pezzo = pezzo.split(/\n[ \t]*\n/)[0];
+  if (c.parte && ELENCHI.has(c.parte)) { const righe = pezzo.split('\n'); const stop = righe.findIndex((r, n) => n > 0 && r.trim().length > 160); if (stop > 0) pezzo = righe.slice(0, stop).join('\n'); }
+  return pezzo;
+}
+
+export function partiDellaLettera(testo: string): Partial<Record<ParteLettera, string>> {
+  const t = corpoDellaLettera(testo);
+  const confini = confiniDelCorpo(t);
   const out: Partial<Record<ParteLettera, string>> = {};
   const aggiungi = (parte: ParteLettera, pezzo: string) => { const p = pulisci(pezzo); if (p) out[parte] = out[parte] ? `${out[parte]}\n\n${p}` : p; };
   const primo = confini[0]?.i ?? t.length;
@@ -115,16 +130,34 @@ export function partiDellaLettera(testo: string): Partial<Record<ParteLettera, s
     if (confini.length) aggiungi('anamnesi', prima);
     else { const blocchi = prima.split(/\n[ \t]*\n/); aggiungi('anamnesi', blocchi.length > 1 ? blocchi[0] : prima.split('\n').find((r) => r.trim().length >= 40) ?? prima.split('\n')[0]); }
   }
-  confini.forEach((c, k) => {
-    if (!c.parte) return;
-    let pezzo = t.slice(c.i, confini[k + 1]?.i ?? t.length);
-    if (FINO_AL_PARAGRAFO.has(c.parte)) pezzo = pezzo.split(/\n[ \t]*\n/)[0];
-    // un elenco (FRCV, comorbidità…) è fatto di righe brevi: una riga lunga dopo è già il racconto che riprende
-    if (ELENCHI.has(c.parte)) { const righe = pezzo.split('\n'); const stop = righe.findIndex((r, n) => n > 0 && r.trim().length > 160); if (stop > 0) pezzo = righe.slice(0, stop).join('\n'); }
-    aggiungi(c.parte, pezzo);
-  });
+  confini.forEach((c, k) => { if (c.parte) aggiungi(c.parte, pezzoDelConfine(t, confini, k)); });
   // La terapia ha il suo lettore (il blocco sotto «Terapia:», riga per riga): vale quello.
   const ter = terapiaDellaLettera(testo);
   if (ter) out.terapia = ter;
   return out;
+}
+
+// «Riprendimi la lettera fino a…» (15.10.2026, richiesta dello studio): il corpo della lettera dall'inizio fino alla
+// fine di una parte (`esclusa` = fino a dove quella parte comincia). Vuoto se la lettera quella parte non ce l'ha.
+export function letteraFinoA(testo: string, parte: ParteLettera, esclusa = false): string {
+  const t = corpoDellaLettera(testo);
+  const confini = confiniDelCorpo(t);
+  let k = confini.findIndex((c) => c.parte === parte);
+  let fine = -1;
+  if (parte === 'anamnesi' && (k < 0 || k === 0 && confini[0].i === 0)) {
+    // l'anamnesi senza etichetta è ciò che precede la prima parte (o il primo paragrafo); prima di lei non c'è niente
+    if (esclusa) return '';
+    if (k < 0) { const primo = confini[0]?.i ?? 0; fine = primo > 0 ? primo : t.split(/\n[ \t]*\n/)[0].length; }
+  }
+  if (fine < 0) {
+    if (k < 0 && parte === 'terapia') { const m = /(?:^|\n)[ \t]*terapia[^\n:]{0,30}:/i.exec(t); if (m) { const i = m.index + (m[0].startsWith('\n') ? 1 : 0); confini.push({ i, parte: 'terapia' }); confini.sort((a, b) => a.i - b.i); k = confini.findIndex((c) => c.i === i); } }
+    if (k < 0) return '';
+    if (esclusa) fine = confini[k].i;
+    else {
+      fine = confini[k].i + pezzoDelConfine(t, confini, k).length;
+      // la terapia ha il suo lettore: l'elenco finisce con la sua ultima riga
+      if (parte === 'terapia') { const ultima = terapiaDellaLettera(testo).split('\n').pop()?.trim(); const j = ultima ? t.indexOf(ultima, confini[k].i) : -1; if (j >= 0) fine = j + ultima!.length; }
+    }
+  }
+  return pulisci(t.slice(0, fine));
 }

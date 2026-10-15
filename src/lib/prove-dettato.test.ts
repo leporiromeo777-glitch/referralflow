@@ -65,7 +65,7 @@ test('foglio: dalla lettera sul foglio al testo da rivedere — saluto, corpo, c
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
-import { corpoDellaLettera, partiDellaLettera, terapiaDellaLettera } from './dittafono-comandi';
+import { corpoDellaLettera, letteraFinoA, partiDellaLettera, terapiaDellaLettera } from './dittafono-comandi';
 const ctx: any = {};
 vm.runInNewContext(readFileSync(path.join(process.cwd(), 'public', 'prototipo', 'dittafono-comandi.js'), 'utf-8'), ctx);
 const K = ctx.RFComandi;
@@ -222,6 +222,40 @@ test('comandi a voce: «per favore» può stare in mezzo al comando, dopo il ver
   ]) assert.equal(K.trova(testo), null, testo);
   const es = 'Sta bene. Prendimi per favore l\'anamnesi. Poi ECG.', c = K.trova(es);
   assert.equal(K.sostituisci(es, c.da, c.a, 'Anamnesi inventata.').testo, 'Sta bene.\n\nAnamnesi inventata.\n\nPoi ECG.');
+});
+
+test('comandi a voce: «riprendimi per favore» seguito da una parte toglie anche il verbo; «fino a» una parte', () => {
+  // 15.10.2026, dallo studio: «riprendimi per favore l'anamnesi» lasciava scritto «riprendimi».
+  for (const [testo, frase, parti] of [
+    ['riprendimi per favore l\'anamnesi', 'riprendimi per favore l\'anamnesi', 'anamnesi'],
+    ['Bene. Riprendimi, per favore, la terapia.', 'Riprendimi, per favore, la terapia.', 'terapia'],
+    ['senza dolore riprendimi per favore FRCV e comorbidità', 'riprendimi per favore FRCV e comorbidità', 'frcv,comorbidita'],
+  ] as [string, string, string][]) { const r = K.trova(testo); assert.equal(r.comando, 'parti', testo); assert.equal(r.frase, frase, testo); assert.equal(Array.from(r.parti).join(), parti, testo); }
+  // «riprendi» resta una frase da lettera quando dopo la parte il discorso continua
+  assert.equal(K.trova('Riprendi per favore la terapia anticoagulante dopo l\'intervento.'), null);
+  for (const [testo, parte, escluso, frase] of [
+    ['per favore riprendimi la lettera fino alla terapia', 'terapia', false, null],
+    ['Riprendimi per favore fino alle comorbidità', 'comorbidita', false, null],
+    ['per favore riprendimi fino a prima dell\'esame clinico', 'esame', true, null],
+    ['per favore riprendimi la lettera fino all\'ECG escluso. Poi detto io.', 'ecg', true, 'per favore riprendimi la lettera fino all\'ECG escluso.'],
+    ['per favore riprendimi l\'ultima lettera fino alle conclusioni compresa', 'conclusione', false, null],
+    ['per favore la lettera fino a FRCV', 'frcv', false, null],
+  ] as [string, string, boolean, string | null][]) {
+    const r = K.trova(testo);
+    assert.equal(r ? r.comando : null, 'fino', testo); assert.equal(Array.from(r.parti).join(), parte, testo); assert.equal(r.escluso, escluso, testo);
+    assert.equal(r.frase, frase ?? testo, testo);
+  }
+  assert.equal(K.trova('per favore riprendimi fino a domani'), null);
+  // il ritaglio (lettera INVENTATA)
+  const l = 'Caro collega,\n\nho rivisto il paziente inventato per il controllo annuale. Riferisce di stare bene.\n\nFRCV: ipertensione arteriosa.\n\nComorbidità: gonartrosi.\n\nClinicamente compensato, PA 130/80 mmHg.\n\nAll\'ECG ritmo sinusale.\n\nTerapia:\nFarmacoA 10 mg 1-0-0\nFarmacoB 5 mg 0-0-1\n\nIn conclusione quadro stabile. Controllo fra dodici mesi.\n\nCordiali saluti\n\nDr. med. Inventato';
+  const anam = 'ho rivisto il paziente inventato per il controllo annuale. Riferisce di stare bene.';
+  assert.equal(letteraFinoA(l, 'comorbidita'), `${anam}\n\nFRCV: ipertensione arteriosa.\n\nComorbidità: gonartrosi.`);
+  assert.equal(letteraFinoA(l, 'esame', true), `${anam}\n\nFRCV: ipertensione arteriosa.\n\nComorbidità: gonartrosi.`);
+  assert.equal(letteraFinoA(l, 'anamnesi'), anam);
+  assert.equal(letteraFinoA(l, 'anamnesi', true), '', 'prima dell\'anamnesi non c\'è niente');
+  assert.ok(letteraFinoA(l, 'terapia').endsWith('Terapia:\nFarmacoA 10 mg 1-0-0\nFarmacoB 5 mg 0-0-1'));
+  assert.ok(letteraFinoA(l, 'conclusione').endsWith('Controllo fra dodici mesi.') && !letteraFinoA(l, 'conclusione').includes('saluti'));
+  assert.equal(letteraFinoA(l, 'holter'), '', 'una parte che non c\'è non dà niente');
 });
 
 test('comandi a voce: il pezzo entra come paragrafo a sé al posto della frase, e si toglie ricucendo', () => {

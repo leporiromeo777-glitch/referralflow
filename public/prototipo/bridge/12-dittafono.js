@@ -249,18 +249,18 @@ async function rfDitComandoCerca() {
     return;
   }
   if (c.comando === 'annulla') { const t = RFComandi.sostituisci(el.value, c.da, c.a, ''); const sposta = c.a <= (d.cmdUltimo ? d.cmdUltimo.inizio : -1) ? el.value.length - t.testo.length : 0; rfDitTestoMetti(t.testo, t.inizio); if (d.cmdUltimo && sposta) { d.cmdUltimo.inizio -= sposta; d.cmdUltimo.fine -= sposta; } rfDitComandoAnnulla(); }
-  else await rfDitComandoEsegui(c.comando, c.da, c.a, c.frase, c.parti, c.soloApri);
+  else await rfDitComandoEsegui(c.comando, c.da, c.a, c.frase, c.parti, c.soloApri, c.escluso);
   if (RFComandi.trova(el.value, 0)) rfDitComandoProgramma();      // ce n'è un altro
 }
 // Chiede il pezzo al server e lo mette al posto della frase (o, dal tasto, dove sta il cursore).
-async function rfDitComandoEsegui(comando, da, a, frase, parti, soloApri) {
+async function rfDitComandoEsegui(comando, da, a, frase, parti, soloApri, esclusa) {
   const d = RF.dit, paz = rfFoglioPazId(), cosa = comando === 'parti' ? 'quella parte della lettera' : 'la lettera';
   const riprova = ' <a href="javascript:void 0" onclick="rfDitComandoRiprova()">Riprova</a>';
   const fallito = (perche, motivo) => { d.cmdFallito = frase || ''; rfDitComandoStato(`<span style="color:#b3261e">${rfEsc(perche)}</span>${frase ? riprova : ''}`); if (typeof toast === 'function') toast(perche); if (motivo) rfDitComandoDice({ motivo }); };
   if (!paz) { fallito('Comando capito, ma manca il paziente: sceglilo dall’elenco nel campo «Paziente», poi «Riprova».', 'senza_paziente'); return; }
   d.cmdInCorso = true; rfDitComandoStato('Cerco ' + cosa + ' nella cartella del paziente…');
   try {
-    const r = await fetch('/api/prototipo/dittafono/comando', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comando, parti: parti || [], paziente: paz }) });
+    const r = await fetch('/api/prototipo/dittafono/comando', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comando, parti: parti || [], esclusa: !!esclusa, paziente: paz }) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.testo) { fallito(j.errore || 'Non riesco a prendere ' + cosa + '.'); return; }
     // «Aprimi…», «fammi vedere…»: la frase si toglie, la lettera si apre accanto, nel foglio non entra niente.
@@ -750,7 +750,7 @@ PAGES.dittafono = () => {
           <span id="rf-dit-micsel">${(d.microfoni || []).length > 1 ? `<span class="caption">Microfono <select class="input sm" style="max-width:260px" ${rec ? 'disabled' : ''} onchange="rfDitMicImposta(this.value)" aria-label="Microfono da registrare"><option value="">quello di serie</option>${d.microfoni.map(x => `<option value="${rfEsc(x.id)}" ${x.id === rfDitMicScelto() ? 'selected' : ''}>${rfEsc(x.nome)}</option>`).join('')}</select></span>` : ''}</span></div>
         <div id="rf-dit-tasto" class="caption mt-8">${rfDitTastoHtml()}</div>
         <div id="rf-dit-spia" class="caption" style="opacity:.7">${rfDitHidSpia()}</div>
-        <div class="caption mt-8">Comandi a voce: detta <b>«per favore, inserisci la lettera più recente»</b>, oppure solo una parte — <b>«per favore, inserisci l’anamnesi»</b>, «…FRCV e comorbidità», «…l’ECG», «…la conclusione», «…la terapia» — poi lascia il tasto; «per favore» va bene anche dopo il verbo (<b>«prendimi per favore l’anamnesi»</b>); <b>«per favore annulla»</b> toglie ciò che è entrato. Anche da qui, nel punto del cursore: <a href="javascript:void 0" onclick="rfDitComandoTasto('lettera_recente')">lettera intera</a>${[['anamnesi', 'anamnesi'], ['frcv', 'FRCV'], ['comorbidita', 'comorbidità'], ['conclusione', 'conclusione'], ['terapia', 'terapia']].map(([k, n]) => ` · <a href="javascript:void 0" onclick="rfDitComandoTasto('parti', '${k}')">${n}</a>`).join('')}</div>
+        <div class="caption mt-8">Comandi a voce: detta <b>«per favore, inserisci la lettera più recente»</b>, oppure solo una parte — <b>«per favore, inserisci l’anamnesi»</b>, «…FRCV e comorbidità», «…l’ECG», «…la conclusione», «…la terapia», oppure <b>«per favore riprendimi la lettera fino alla terapia»</b> (o «…fino a prima dell’esame clinico») — poi lascia il tasto; «per favore» va bene anche dopo il verbo (<b>«prendimi per favore l’anamnesi»</b>); <b>«per favore annulla»</b> toglie ciò che è entrato. Anche da qui, nel punto del cursore: <a href="javascript:void 0" onclick="rfDitComandoTasto('lettera_recente')">lettera intera</a>${[['anamnesi', 'anamnesi'], ['frcv', 'FRCV'], ['comorbidita', 'comorbidità'], ['conclusione', 'conclusione'], ['terapia', 'terapia']].map(([k, n]) => ` · <a href="javascript:void 0" onclick="rfDitComandoTasto('parti', '${k}')">${n}</a>`).join('')}</div>
         <div id="rf-dit-sordo" class="rf-manc mt-8" style="display:none"><b>Il testo arriva ma il microfono non sente niente.</b> Di solito il programma di dettatura tiene il microfono tutto per sé, oppure qui è scelto un altro microfono: metti in pausa e scegli sopra lo stesso che usa lui. Senza audio non c'è né riascolto né confronto.</div>
         <div id="rf-dit-fermo" class="rf-manc mt-8" style="display:none"><b>Stai dettando ma la registrazione è ferma.</b> Tocca il tasto per registrare: senza audio non c'è né riascolto né confronto.</div>
         <p class="rf-dit-nota mt-8">Quel che vedi sul foglio è la lettera che arriva in revisione: intestazione, destinatario, data, paziente, saluti e firma sono già scritti e si correggono cliccandoci; il corpo lo scrive il programma di dettatura. La registrazione resta sul dispositivo e poi sul Mac dello studio, che la trascrive per controllo.</p></div>` : ''}

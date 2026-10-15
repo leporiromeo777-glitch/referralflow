@@ -3,7 +3,7 @@
  * Chi detta sul foglio può dare un'istruzione alla piattaforma: la parola d'ordine è «per favore» (scelta dello
  * studio), seguita da un comando — «per favore, inserisci la lettera più recente», oppure solo una o più PARTI
  * («per favore, inserisci l'anamnesi», «…FRCV e comorbidità dell'ultima lettera», «…la conclusione», «…la terapia»),
- * «per favore annulla». La parola d'ordine può stare anche in mezzo al comando, dopo il verbo («prendimi per favore
+ * «per favore riprendimi la lettera fino alla terapia» (dall'inizio fino a quella parte), «per favore annulla». La parola d'ordine può stare anche in mezzo al comando, dopo il verbo («prendimi per favore
  * l'anamnesi»). Il programma di dettatura scrive la frase nel foglio come testo; la
  * pagina la riconosce, la toglie e mette al suo posto ciò che è stato chiesto.
  *
@@ -15,7 +15,7 @@
  */
 (function (root) {
   'use strict';
-  var VERSIONE = '1.8';
+  var VERSIONE = '1.9';
   // Una copia nuova a ogni ricerca: l'espressione ricorda dov'è arrivata, e due ricerche una dentro l'altra sulla
   // stessa copia non finivano più (la pagina si bloccava a ogni «per favore» senza comando, 12.10.2026).
   // Dopo la parola d'ordine il programma di dettatura può mettere da sé un punto, una virgola o un a capo.
@@ -112,12 +112,19 @@
   var ANNULLA = /^(?:annulla|togli(?:la|lo)?|toglimi(?:la|lo)?|rimuovi(?:la|lo)?)(?![a-zà-ù])(?:\s+(?:l['’]\s*ultim[oa]\s+(?:inserimento|aggiunta)|la\s+lettera|la\s+terapia|tutto|quello\s+che\s+hai\s+(?:messo|inserito|aggiunto)))?/i;
   // Ciò che di solito segue e fa ancora parte della richiesta («…del paziente e aggiungimela qui, grazie»).
   var CODA = /^(?:[ \t]*,?[ \t]*(?:del(?:la)?\s+paziente|di\s+quest[oa]\s+paziente|e\s+(?:me\s+la\s+|poi\s+)?(?:aggiung|incoll|inserisc|mett|copi|riport)[a-z]{1,7}|qui(?:\s+(?:dentro|sotto|sopra))?|dentro|sopra|(?:nel|sul)\s+foglio|nella\s+lettera|nel\s+testo|(?:dalla|della|in|nella)\s+cartella|grazie|per\s+(?:favore|piacere|cortesia))(?![a-zà-ù]))*[ \t]*[.,;!]?/i;
+  /* «Riprendimi la lettera FINO A…» (15.10.2026, richiesta dello studio): la lettera dall'inizio fino a una parte,
+     compresa («fino alla terapia», «…fino alle comorbidità compresa»), oppure fino a dove quella parte comincia
+     («fino a prima dell'esame clinico», «…fino all'ECG escluso»). */
+  var FINO = /^[ \t,]*(?:(?:mi|qui|anche|solo)[ \t]+)*(?:(?:tutta[ \t]+)?(?:la[ \t]+|l['’][ \t]?)(?:mia[ \t]+|sua[ \t]+)?(?:ultima[ \t]+)?lettera(?:[ \t]+(?:pi[uù][ \t]+recente|precedente|di[ \t]+prima))?[ \t,]*)?(?:fino|sino)[ \t]+(?:(?:a[ \t]+)?(prima)[ \t]+(?:di[ \t]+|d['’][ \t]?|del(?:la|lo)?[ \t]+|dell['’][ \t]?|dei[ \t]+|degli[ \t]+|delle[ \t]+)|(?:a|ad|al|allo|alla|ai|agli|alle)[ \t]+|all['’][ \t]?)/i;
+  var COMPRESA = /^[ \t,]*(?:(?:compres|inclus)[oaie]|(esclus[oaie]|(?:e[ \t]+)?non[ \t]+(?:compres|inclus)[oaie]))(?![a-zà-ù])/i;
   var FRA = 45;      // quanti caratteri al massimo fra il verbo e la cosa chiesta («…il testo di tutta la…»)
 
   // Che comando c'è in testa a `resto` (ciò che segue la parola d'ordine)? → { fine, comando, parti, soloApri, verbo, esatto } o null.
   // `verbo` è quanto è lungo il verbo in testa (0 se non c'è), `esatto` dice se era scritto in una delle forme previste.
-  function analizza(resto) {
-    var an = ANNULLA.exec(resto), fine = -1, comando = '', parti = null, soloApri = false, senzaVerbo = false, circa = null, v = null;
+  // `mezzo`: c'era «per favore» fra il verbo e il resto («riprendimi per favore l'anamnesi»): allora è certamente un
+  // comando, e anche «riprendi» vale per le parti — purché la frase finisca lì.
+  function analizza(resto, mezzo) {
+    var an = ANNULLA.exec(resto), fine = -1, comando = '', parti = null, soloApri = false, senzaVerbo = false, circa = null, v = null, finisce = false, escluso = false;
     if (an) { fine = an[0].length; comando = 'annulla'; }
     else {
       // Senza verbo («per favore l'anamnesi», «per favore la lettera più recente») vale solo se la frase finisce lì.
@@ -127,12 +134,22 @@
       if (!v) { circa = verboCirca(resto); if (circa) { v = [resto.slice(0, circa.lungo)]; soloApri = circa.tipo === 'vedi'; senzaVerbo = true; } }
       if (!v) { v = ['']; senzaVerbo = true; }
       var poi = resto.slice(v[0].length), frase = poi.split(/[.!?](?=\s+[A-ZÀ-Ý]|\s*$)/)[0];
-      var let_ = LETTERA.exec(frase); if (let_ && (let_.index > FRA || (senzaVerbo && !ATTACCO.test(frase.slice(0, let_.index))))) let_ = null;
+      var fino = FINO.exec(frase), pf = fino ? partiIn(frase, fino[0].length, 3) : null;
+      if (pf) {
+        var dopoParte = pf.inizio + frase.slice(pf.inizio).search(/[ \t,.;!?]|$/), cmp = COMPRESA.exec(frase.slice(dopoParte));
+        if (pf.parti.length > 1 || !cmp) dopoParte = pf.fine; else dopoParte += cmp[0].length;
+        var doveF = DA_DOVE.exec(frase.slice(dopoParte));
+        fine = v[0].length + dopoParte + (doveF ? doveF[0].length : 0); comando = 'fino'; parti = [pf.parti[0]];
+        escluso = !!fino[1] || !!(cmp && cmp[1]);
+      }
+      var let_ = comando ? null : LETTERA.exec(frase); if (let_ && (let_.index > FRA || (senzaVerbo && !ATTACCO.test(frase.slice(0, let_.index))))) let_ = null;
       // le parti: subito dopo il verbo («inserisci l'anamnesi dell'ultima lettera») o dopo la lettera («dall'ultima lettera, l'anamnesi»)
-      var p = SOLO_LETTERA.test(v[0]) ? null : partiIn(frase, 0, FRA);
-      if (p && circa && VERBI_DA_TERAPIA.test(circa.radice) && p.parti.indexOf('terapia') >= 0) p = null;
-      if (let_ && (!p || let_.index < p.inizio) && !SOLO_LETTERA.test(v[0])) p = partiIn(frase, let_.index + let_[0].length, 25);
-      if (p) {
+      var soloLettera = SOLO_LETTERA.test(v[0]), p = comando || (soloLettera && !mezzo) ? null : partiIn(frase, 0, FRA);
+      if (p && soloLettera) finisce = true;
+      if (p && circa && !mezzo && VERBI_DA_TERAPIA.test(circa.radice) && p.parti.indexOf('terapia') >= 0) p = null;
+      if (let_ && (!p || let_.index < p.inizio) && !soloLettera) p = partiIn(frase, let_.index + let_[0].length, 25);
+      if (comando) { /* già deciso: «fino a…» */ }
+      else if (p) {
         var dove = DA_DOVE.exec(frase.slice(p.fine));
         fine = v[0].length + Math.max(p.fine + (dove ? dove[0].length : 0), let_ ? let_.index + let_[0].length : 0); comando = 'parti'; parti = p.parti;
       } else if (let_) { fine = v[0].length + let_.index + let_[0].length; comando = 'lettera_recente'; }
@@ -143,8 +160,8 @@
     }
     if (!comando) return null;
     fine += CODA.exec(resto.slice(fine))[0].length;
-    if (comando !== 'annulla' && senzaVerbo && !/^\s*(?:$|[.,;!?]|[A-ZÀ-Ý])/.test(resto.slice(fine)) && !/[.,;!]$/.test(resto.slice(0, fine))) return null;
-    return { fine: fine, comando: comando, parti: parti, soloApri: comando !== 'annulla' && soloApri, verbo: an ? an[0].length : v[0].length, esatto: !!an || !senzaVerbo };
+    if (comando !== 'annulla' && (senzaVerbo || finisce) && !/^\s*(?:$|[.,;!?]|[A-ZÀ-Ý])/.test(resto.slice(fine)) && !/[.,;!]$/.test(resto.slice(0, fine))) return null;
+    return { fine: fine, comando: comando, parti: parti, escluso: escluso, soloApri: comando !== 'annulla' && soloApri, verbo: an ? an[0].length : v[0].length, esatto: !!an || !senzaVerbo };
   }
   /* «Per favore» IN MEZZO al comando (13.10.2026, richiesta dello studio): «prendimi per favore l'anamnesi», «puoi per
      favore riprendermi la lettera», «fammi per favore vedere l'ECG». Ciò che sta PRIMA della parola d'ordine è dettato e
@@ -159,10 +176,10 @@
     while ((w = rx.exec(pezzo))) parole.push(w.index);
     if (!certo) parole.shift();      // tagliata a metà parola: la prima non conta
     for (var k = Math.max(0, parole.length - 4); k < parole.length; k++) {
-      var testa = pezzo.slice(parole[k]), r = analizza(testa + ' ' + resto);
+      var testa = pezzo.slice(parole[k]), r = analizza(testa + ' ' + resto, true);
       if (!r || r.verbo < testa.length || r.fine <= testa.length + 1) continue;
       if (!r.esatto && !(certo && k === 0)) continue;
-      return { da: base + inizio + parole[k], fine: r.fine - testa.length - 1, comando: r.comando, parti: r.parti, soloApri: r.soloApri };
+      return { da: base + inizio + parole[k], fine: r.fine - testa.length - 1, comando: r.comando, parti: r.parti, escluso: r.escluso, soloApri: r.soloApri };
     }
     return null;
   }
@@ -176,7 +193,7 @@
       var dopo = m.index + m[0].length, resto = t.slice(dopo, dopo + 220).split('\n')[0];
       var c = inMezzo(t, m.index, resto), da = c ? c.da : m.index;
       if (!c) c = analizza(resto);
-      if (c) return { da: da, a: dopo + c.fine, comando: c.comando, parti: c.parti, soloApri: c.soloApri, frase: t.slice(da, dopo + c.fine), parola: m.index };
+      if (c) return { da: da, a: dopo + c.fine, comando: c.comando, parti: c.parti, escluso: !!c.escluso, soloApri: c.soloApri, frase: t.slice(da, dopo + c.fine), parola: m.index };
     }
     return null;
   }
