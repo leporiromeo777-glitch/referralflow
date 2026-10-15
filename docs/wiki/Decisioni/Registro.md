@@ -841,3 +841,8 @@ interrotto dopo «fino a»: interpretato come «fino a una parte della lettera»
 studio non vuole più spezzare a mano le cartelle grandi. Scelto di accettarle intere invece di tagliarle in pezzi da
 50 MB: un taglio a caso cadrebbe in mezzo a un documento e le proposte da confermare diventerebbero due. Gli altri
 file restano a 50 MB. Dettaglio in [[Piattaforma/Dividi cartella]].
+
+**15.10.2026 — Dividi cartella: di chi è, deciso da sola nei casi netti.** Lo studio chiama spesso i file «Cognome Nome
+data di nascita» e non vuole riscriverli. Usa una cartella che c'è solo con nome e data uguali a una persona sola; ne
+crea una nuova solo dal nome del file chiaro e senza nessuno che gli somigli (mai dal solo testo, che nomina anche medici e
+familiari); in tutti gli altri casi chiede, dicendo perché. Dettaglio in [[Piattaforma/Dividi cartella]].

@@ -7,9 +7,8 @@ import { logDocumento } from '../cartella';
 import { query } from '../db';
 import { dopoCaricamento, valutaPdf } from '../documenti-ocr';
 import { deleteFile, getFile, putFile } from '../storage';
-import { abbinaPaziente } from '../imaging-ordina';
-import { proponiAnagrafica } from '../pazienti-abbina-regole';
 import { analisiDi, mettiInCoda, statoAnalisi, type StatoAnalisi } from './analisi';
+import { chiDalNomeFile, decidiChi } from './chi';
 import { leggiPagine } from './pagine';
 import { componi, type PezzoSezione } from './sezioni';
 import { confronta, controllaPezzi, leggiPaziente } from './tagli';
@@ -45,22 +44,23 @@ async function documento(studioId: string, id: string): Promise<Doc | null> {
   return d && /\.pdf$/i.test(d.filename) ? d : null;
 }
 
-// Di chi è un PDF trascinato prima di scegliere il paziente: dal testo delle prime pagine (che manda il
-// browser, già estratto: il file non si carica due volte) nome e data di nascita proposti, e la cartella
-// che c'è già se combaciano con UNA persona. Del testo non resta niente: né nel database né nei log.
-export async function chiE(studioId: string, testi: unknown) {
+// Di chi è un PDF trascinato prima di scegliere il paziente: dal NOME DEL FILE («Cognome Nome 03.04.1950.pdf», come lo
+// studio li chiama spesso) e dal testo delle prime pagine (che manda il browser, già estratto: il file non si carica due
+// volte). La decisione — usare una cartella che c'è, crearne una, o chiedere — sta in chi.ts. Del testo e del nome del
+// file non resta niente: né nel database né nei log (solo che cosa si è deciso e da dove).
+export async function chiE(studioId: string, testi: unknown, filename: unknown = '') {
   const pagine = Array.isArray(testi) ? (testi as unknown[]).slice(0, 15).map((x) => String(x ?? '').slice(0, 8000)) : [];
-  const letto = leggiPaziente(pagine);
-  if (!letto) return { letto: null, trovato: null };
-  const an = proponiAnagrafica(letto.nome);
-  let trovato: { id: string; nome: string; nascita: string | null } | null = null;
-  if (letto.nascita) {
-    const pazienti = await query<{ id: string; cognome: string; nome: string; data_nascita: string | null }>(`select id, cognome, nome, data_nascita::text from patients where studio_id = $1`, [studioId]);
-    const a = abbinaPaziente(letto.nome, letto.nascita, pazienti);
-    const p = a.id ? pazienti.find((x) => x.id === a.id) : null;
-    if (p) trovato = { id: p.id, nome: `${p.cognome} ${p.nome}`.trim(), nascita: p.data_nascita };
-  }
-  return { letto: { cognome: an.cognome, nome: an.nome, nascita: letto.nascita }, trovato };
+  const testo = pagine.length ? leggiPaziente(pagine) : null;
+  const file = chiDalNomeFile(String(filename ?? '').slice(0, 300));
+  const pazienti = file || testo ? await query<{ id: string; cognome: string; nome: string; data_nascita: string | null }>(`select id, cognome, nome, data_nascita::text from patients where studio_id = $1`, [studioId]) : [];
+  const d = decidiChi(file, testo, pazienti);
+  const p = d.id ? pazienti.find((x) => x.id === d.id) : null, s = d.simile ? pazienti.find((x) => x.id === d.simile) : null;
+  console.log(`[dividi] di chi è: ${d.cosa} (nome del file ${file ? (file.certo ? 'chiaro' : 'incerto') : 'senza dati'}, testo ${testo ? (testo.nascita ? 'con nome e nascita' : 'col nome') : 'senza nome'})`);
+  return {
+    letto: d.proposta ? { cognome: d.proposta.cognome, nome: d.proposta.nome, nascita: d.proposta.nascita } : null,
+    trovato: p ? { id: p.id, nome: `${p.cognome} ${p.nome}`.trim(), nascita: p.data_nascita } : null,
+    decisione: { cosa: d.cosa, motivo: d.motivo, fonte: d.fonte, simile: s ? { id: s.id, nome: `${s.cognome} ${s.nome}`.trim(), nascita: s.data_nascita } : null },
+  };
 }
 
 // A che punto è la lettura (OCR) di una scansione: la pagina lo chiede ogni pochi secondi mentre aspetta,

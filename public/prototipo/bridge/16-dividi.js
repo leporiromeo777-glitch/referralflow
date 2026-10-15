@@ -88,7 +88,7 @@ async function rfDivPaziente(pid) {
   if (j.errore) RF.div.errore = j.errore; else RF.div.documenti = j.documenti || [];
   render();
 }
-function rfDivCambia() { rfDivLiberaPdf(); Object.assign(RF.div, { storicoChiesto: 0, pid: '', nome: '', cerca: '', documenti: null, doc: null, pezzi: [], proposti: [], creati: null, errore: null, invio: null, attesa: null }); render(); }
+function rfDivCambia() { rfDivLiberaPdf(); Object.assign(RF.div, { storicoChiesto: 0, pid: '', nome: '', cerca: '', documenti: null, doc: null, pezzi: [], proposti: [], creati: null, errore: null, invio: null, attesa: null, riconosciuto: null }); render(); }
 function rfDivDrop(e, sopra) { e.preventDefault(); const z = document.getElementById('rf-div-drop'); if (z) z.classList.toggle('sopra', sopra); }
 function rfDivDropFile(e) { e.preventDefault(); rfDivDrop(e, false); if (e.dataTransfer && e.dataTransfer.files[0]) rfDivFile(e.dataTransfer.files[0]); }
 
@@ -120,10 +120,20 @@ async function rfDivChiE(file) {
     try { pdf.destroy(); } catch { /* già chiuso */ }
   } catch { testi = []; }
   if (RF.div.attesa !== a) return;                       // nel frattempo il file è stato tolto
-  const j = testi.some(x => x.trim().length > 20) ? await rfDivChiedi(RF_DIV_URL, { azione: 'chi', testi }) : {};
+  // Anche il NOME DEL FILE dice di chi è («Cognome Nome 03.04.1950.pdf», 15.10.2026): il server decide se usare una
+  // cartella che c'è, crearne una, o chiedere (src/lib/dividi/chi.ts).
+  const j = await rfDivChiedi(RF_DIV_URL, { azione: 'chi', testi: testi.some(x => x.trim().length > 20) ? testi : [], nome_file: file.name });
   if (RF.div.attesa !== a) return;
-  a.stato = 'pronto'; a.letto = j.letto || null; a.trovato = j.trovato || null;
+  a.stato = 'pronto'; a.letto = j.letto || null; a.trovato = j.trovato || null; a.decisione = j.decisione || null;
   if (a.letto) { a.cognome = a.letto.cognome || ''; a.nome = a.letto.nome || ''; a.nascita = rfDivGiorno(a.letto.nascita); }
+  const da = a.decisione && a.decisione.fonte === 'file' ? 'dal nome del file' : 'dal PDF';
+  if (a.decisione && a.decisione.cosa === 'usa' && a.trovato) {
+    RF.div.riconosciuto = `Riconosciuto ${da}: <b>${rfEsc(a.trovato.nome)}</b>${a.trovato.nascita ? `, ${rfEsc(rfDivGiorno(a.trovato.nascita))}` : ''} — la sua cartella c’era già.`;
+    rfDivUsa(a.trovato.id, a.trovato.nome); return;
+  }
+  if (a.decisione && a.decisione.cosa === 'crea') {
+    a.auto = da; render(); void rfDivCreaPaziente(); return;
+  }
   render();
 }
 function rfDivAttesaCerca(v) { RF.div.cerca = v; render(); const e = document.getElementById('rf-div-cerca'); if (e) { e.focus(); e.setSelectionRange(e.value.length, e.value.length); } }
@@ -148,6 +158,7 @@ async function rfDivCreaPaziente() {
   // 409 = quella persona c'è già (stesso cognome, nome e data di nascita): si usa la sua cartella, senza doppioni.
   if ((stato === 201 || stato === 409) && j.id) {
     if (stato === 409) toast('Questa persona c’era già: uso la sua cartella');
+    if (a.auto) RF.div.riconosciuto = `Riconosciuto ${a.auto}: <b>${rfEsc(`${a.cognome} ${a.nome}`.trim())}</b>, ${rfEsc(a.nascita)} — ${stato === 409 ? 'la sua cartella c’era già.' : 'non c’era: ho creato la sua cartella.'}`;
     void rfCaricaDati();
     rfDivUsa(j.id, `${a.cognome.trim()} ${a.nome.trim()}`);
     return;
@@ -465,9 +476,9 @@ PAGES.dividi = () => {
         <div class="section-title mt-8">Di chi è questa cartella?</div>
         ${a.stato === 'leggo' ? '<div class="caption mt-8">Cerco nome e data di nascita nelle prime pagine…</div>'
           : a.trovato ? `<p class="meta" style="margin:8px 0 10px;line-height:1.55">Nel PDF c’è scritto <b>${rfEsc(`${a.letto.cognome} ${a.letto.nome}`.trim())}</b>${a.letto.nascita ? `, ${rfEsc(rfDivGiorno(a.letto.nascita))}` : ''}: in ReferralFlow c’è già la sua cartella.</p>
-              <div class="row" style="gap:10px;flex-wrap:wrap;align-items:center"><button class="btn primary" onclick="rfDivUsa('${a.trovato.id}', '${rfEsc(a.trovato.nome).replace(/'/g, '&#39;')}')">È ${rfEsc(a.trovato.nome)}: usa la sua cartella</button><button class="btn sm ghost" onclick="RF.div.attesa.trovato=null;render()">Non è lei/lui</button></div>`
-          : `<p class="meta" style="margin:8px 0 10px;line-height:1.55">${a.letto ? 'Non è ancora in ReferralFlow. <b>Nome e data di nascita li ho letti dal PDF: controllali</b> (cognome e nome possono essere scambiati), poi crea la cartella.' : 'Nel PDF non trovo il nome del paziente (è una scansione senza testo, o è scritto in un modo che non riconosco): <b>scrivilo tu</b>, poi crea la cartella.'}</p>
-              <div class="row" style="gap:10px;flex-wrap:wrap;align-items:center">${campo('cognome', 'Cognome', 170)}${campo('nome', 'Nome', 170)}${campo('nascita', 'Nascita (31.12.1950)', 170)}<button class="btn primary" id="rf-div-creapaz" onclick="rfDivCreaPaziente()">Crea la cartella e continua</button></div>`}
+              <div class="row" style="gap:10px;flex-wrap:wrap;align-items:center"><button class="btn primary" onclick="rfDivUsa('${rfJs(a.trovato.id)}', '${rfJs(a.trovato.nome)}')">È ${rfEsc(a.trovato.nome)}: usa la sua cartella</button><button class="btn sm ghost" onclick="RF.div.attesa.trovato=null;render()">Non è lei/lui</button></div>`
+          : `${a.decisione && a.decisione.motivo ? `<p class="meta" style="margin:8px 0 0;line-height:1.55;color:var(--warn, #b26a00)"><b>Da controllare:</b> ${rfEsc(a.decisione.motivo)}</p>` : ''}${a.decisione && a.decisione.simile ? `<div class="row mt-8" style="gap:10px;flex-wrap:wrap;align-items:center"><button class="btn primary" onclick="rfDivUsa('${rfJs(a.decisione.simile.id)}', '${rfJs(a.decisione.simile.nome)}')">È ${rfEsc(a.decisione.simile.nome)}${a.decisione.simile.nascita ? `, ${rfEsc(rfDivGiorno(a.decisione.simile.nascita))}` : ''}: usa la sua cartella</button></div>` : ''}<p class="meta" style="margin:8px 0 10px;line-height:1.55">${a.decisione && a.decisione.simile ? 'Se invece è un’altra persona, <b>controlla i dati</b> e crea la sua cartella.' : a.letto ? `Non è ancora in ReferralFlow. <b>Nome e data di nascita li ho letti ${a.decisione && a.decisione.fonte === 'file' ? 'dal nome del file' : 'dal PDF'}: controllali</b> (cognome e nome possono essere scambiati), poi crea la cartella.` : 'Nel PDF non trovo il nome del paziente (è una scansione senza testo, o è scritto in un modo che non riconosco): <b>scrivilo tu</b>, poi crea la cartella.'}</p>
+              <div class="row" style="gap:10px;flex-wrap:wrap;align-items:center">${campo('cognome', 'Cognome', 170)}${campo('nome', 'Nome', 170)}${campo('nascita', 'Nascita (31.12.1950)', 170)}<button class="btn ${a.decisione && a.decisione.simile ? '' : 'primary'}" id="rf-div-creapaz" onclick="rfDivCreaPaziente()">Crea la cartella e continua</button></div>`}
         ${a.stato === 'leggo' ? '' : `<div class="section-title mt-16">…oppure è di qualcuno che c’è già</div>
           <div class="row mt-8" style="gap:8px;flex-wrap:wrap;align-items:center"><input class="input" id="rf-div-cerca" style="width:260px" placeholder="Scrivi il cognome" value="${rfEsc(v.cerca)}" oninput="rfDivAttesaCerca(this.value)">${trovati.map(p => `<button class="btn sm" onclick="rfDivUsa('${p.id}')">${rfEsc(fullName(p))}${p.dob ? ` · ${rfEsc(p.dob)}` : ''}</button>`).join('')}</div>`}</div>
       ${limite}`;
@@ -477,7 +488,7 @@ PAGES.dividi = () => {
     return `${testa('Da un PDF unico con tutta la cartella ai singoli documenti')}
       ${errore}
       <div class="card"><div class="section-title">Di chi è la cartella</div>
-        <div class="row mt-8" style="gap:10px;align-items:center"><span class="badge accent">${rfEsc(v.nome)}</span><button class="btn sm ghost" onclick="rfDivCambia()">Cambia</button></div></div>
+        <div class="row mt-8" style="gap:10px;align-items:center"><span class="badge accent">${rfEsc(v.nome)}</span><button class="btn sm ghost" onclick="rfDivCambia()">Cambia</button></div>${v.riconosciuto ? `<div class="caption mt-8">${v.riconosciuto} Se non è lui/lei: «Cambia», e togli il file dai suoi documenti.</div>` : ''}</div>
       <div class="card mt-16"><div class="section-title">La cartella completa, in PDF</div>
         ${zona('Trascina qui il PDF, oppure')}
         <p class="meta" style="margin:10px 0 0;line-height:1.55">Fino a 300 MB, anche una cartella intera: non serve spezzarla. Il file entra nella cartella del paziente così com’è, poi lo si divide. Se è una scansione senza testo, il Mac la legge prima (qualche minuto).</p>

@@ -130,6 +130,17 @@ async function main() {
     verifica(chi.letto?.cognome === 'Provadividi' && chi.letto?.nome === 'Anna' && chi.letto?.nascita === '1950-04-03' && chi.trovato?.id === pa
       && ignoto.letto?.nome === 'Sconosciuto' && ignoto.trovato === null && vuoto.letto === null && chiFuori.status === 401 && quanti.n === 1,
       `di chi è il PDF: nome e data di nascita letti dalle pagine e cartella trovata se c'è; chi non c'è resta da creare (e chiedere non crea niente); senza testo nessuna proposta; senza sessione no (${chiFuori.status})`);
+    // 3c — dal NOME DEL FILE (15.10.2026): «Cognome Nome data di nascita». Chi c'è → usa; chi non c'è e il nome è chiaro →
+    // crea (lo fa la pagina, il server dice solo che cosa); incerto, o file e testo in disaccordo → chiede. Chiedere non crea niente.
+    const nf = async (nome_file: string, t: string[] = []) => (await (await manda(C_SEG, { azione: 'chi', testi: t, nome_file })).json() as any);
+    const fUsa = await nf('Provadividi Anna 03.04.1950.pdf'), fCrea = await nf('Provadividi Nuova 05.06.1955.pdf'), fIncerto = await nf('Provadividi Anna 04.03.1950.pdf');
+    const fContro = await nf('Provadividi Nuova 05.06.1955.pdf', testi), fNiente = await nf('Cartella completa.pdf');
+    const [quanti2] = await query<{ n: number }>(`select count(*)::int as n from patients where studio_id = $1 and cognome = 'Provadividi'`, [S]);
+    verifica(fUsa.decisione?.cosa === 'usa' && fUsa.trovato?.id === pa && fUsa.decisione?.fonte === 'file'
+      && fCrea.decisione?.cosa === 'crea' && fCrea.letto?.cognome === 'Provadividi' && fCrea.letto?.nome === 'Nuova' && fCrea.letto?.nascita === '1955-06-05'
+      && fIncerto.decisione?.cosa === 'chiedi' && /data scritta diversa/.test(fIncerto.decisione?.motivo ?? '')
+      && fContro.decisione?.cosa === 'chiedi' && fNiente.decisione?.cosa === 'chiedi' && fNiente.letto === null && quanti2.n === 1,
+      `di chi è, dal nome del file: c'è → usa la sua cartella; non c'è → da creare; data diversa, o file e testo in disaccordo → chiede; senza dati nel nome → chiede (${fUsa.decisione?.cosa}, ${fCrea.decisione?.cosa}, ${fIncerto.decisione?.cosa}, ${fContro.decisione?.cosa})`);
 
     // 3c — una scansione che il Mac sta leggendo: la pagina chiede a che punto è, senza aprire il file né scrivere nel registro.
     const [regPrima] = await query<{ n: number }>(`select count(*)::int as n from document_access_log where document_id = $1`, [doc]);

@@ -268,3 +268,44 @@ test('dividi, contenuto: il documento va nella sottocartella del suo contenuto, 
   assert.ok(p[0].segnali.includes('era in «08_Intervento cardiologico»') && p[0].sicurezza === 'media');
   assert.ok(!p[3].segnali.some((x) => x.startsWith('era in')), 'ciò che non è di un altro genere resta dov\'è');
 });
+
+// ---- Di chi è la cartella, dal nome del file (15.10.2026). Nomi e date INVENTATI. ----
+import { chiDalNomeFile, decidiChi } from './dividi/chi';
+test('dividi, di chi è: dal nome del file «Cognome Nome data di nascita» — usa, crea, o chiede quando è incerto', () => {
+  const oggi = new Date(Date.UTC(2026, 9, 15));
+  const f = (n: string) => chiDalNomeFile(n, oggi);
+  assert.deepEqual(f('Provadividi Anna 03.04.1950.pdf'), { cognome: 'Provadividi', nome: 'Anna', nascita: '1950-04-03', certo: true, perche: undefined });
+  for (const n of ['provadividi_anna_03-04-1950.pdf', 'Provadividi Anna 1950-04-03 cartella.pdf', 'Provadividi Anna 03041950.pdf', 'Provadividi, Anna, 3.4.1950.pdf'])
+    assert.equal(JSON.stringify([f(n)?.cognome, f(n)?.nome, f(n)?.nascita, f(n)?.certo]), '["Provadividi","Anna","1950-04-03",true]', n);
+  assert.equal(f('DE PROVA Anna Maria 03.04.1950.pdf')?.cognome, 'De Prova');
+  assert.equal(f('DE PROVA Anna Maria 03.04.1950.pdf')?.certo, true, 'il cognome in maiuscolo dice dove finisce');
+  assert.equal(f('De Prova Anna 03.04.1950.pdf')?.certo, false, 'tre parole senza maiuscole: non si sa dove finisce il cognome');
+  assert.equal(f('Provadividi Anna 03.04.50.pdf')?.certo, false, 'anno con due cifre');
+  assert.equal(f('Provadividi Anna 12.03.2024.pdf')?.certo, false, 'una data recente è forse quella dell’esame');
+  for (const n of ['Cartella completa.pdf', 'Scansione 2026-10-15.pdf', 'Provadividi 03.04.1950.pdf', 'Provadividi Anna 31.02.1950.pdf', '2026 Provadividi Anna.pdf'])
+    assert.equal(f(n), null, n);
+
+  const paz = [
+    { id: 'a', cognome: 'Provadividi', nome: 'Anna', data_nascita: '1950-04-03' },
+    { id: 'b', cognome: 'Inventato', nome: 'Bruno', data_nascita: '1960-01-01' },
+    { id: 'c', cognome: 'Inventato', nome: 'Bruna', data_nascita: '1971-07-07' },
+    { id: 'd', cognome: 'Senzadata', nome: 'Carla', data_nascita: null },
+  ];
+  const decidi = (n: string, testo: { nome: string; nascita: string | null } | null = null) => decidiChi(f(n), testo, paz);
+  assert.deepEqual([decidi('Provadividi Anna 03.04.1950.pdf').cosa, decidi('Provadividi Anna 03.04.1950.pdf').id], ['usa', 'a']);
+  assert.equal(decidi('Anna Provadividi 03.04.1950.pdf').id, 'a', 'nome e cognome scambiati: è la stessa persona');
+  assert.equal(decidi('Provadividi Anna 03.04.1950.pdf', { nome: 'Provadividi Anna', nascita: '1950-04-03' }).cosa, 'usa', 'file e testo d’accordo');
+  assert.equal(decidi('Nuovissimo Dario 05.06.1955.pdf').cosa, 'crea', 'nessuno così: si crea');
+  assert.equal(decidi('De Prova Anna 03.04.1950.pdf').cosa, 'chiedi', 'incerto: non si crea');
+  assert.equal(decidi('Provadividi Anna 04.03.1950.pdf').cosa, 'chiedi', 'stesso nome con un’altra data: forse un errore di battitura');
+  assert.equal(decidi('Provadividi Anna 04.03.1950.pdf').simile, 'a', 'e la pagina offre la sua cartella');
+  assert.equal(decidi('Inventato Bruna 01.01.1960.pdf').cosa, 'chiedi', 'stessa data e nome quasi uguale: doppione?');
+  assert.equal(decidi('Senzadata Carla 02.02.1952.pdf').cosa, 'chiedi', 'c’è già qualcuno con questo nome senza data');
+  const contro = decidi('Provadividi Anna 03.04.1950.pdf', { nome: 'Inventato Bruno', nascita: '1960-01-01' });
+  assert.equal(contro.cosa, 'chiedi', 'il nome del file e il testo dicono due persone diverse');
+  assert.match(contro.motivo ?? '', /Controlla di chi è/);
+  // Solo dal testo: si usa una cartella che combacia, ma non se ne crea una nuova.
+  assert.equal(decidiChi(null, { nome: 'Provadividi Anna', nascita: '1950-04-03' }, paz).cosa, 'usa');
+  assert.equal(decidiChi(null, { nome: 'Nuovissimo Dario', nascita: '1955-06-05' }, paz).cosa, 'chiedi');
+  assert.equal(decidiChi(null, null, paz).cosa, 'chiedi');
+});
