@@ -10,7 +10,7 @@ Che cosa è vero oggi (13.10.2026). Una cartella completa arriva spesso come **u
    - oppure si cerca a mano qualcuno che c'è già.
    Finché non si conferma di chi è, sul server non arriva né il file né un paziente nuovo; il testo delle pagine serve solo a quella proposta e non resta da nessuna parte. Se la persona esiste già con gli stessi tre dati si usa la sua cartella: mai un doppione.
    In alternativa si parte dal paziente (cercato per cognome) e gli si carica il PDF o se ne prende uno già nella sua cartella.
-2. **Il file** (fino a 50 MB) entra nella cartella come documento «cartella completa, da dividere»; se è una scansione senza testo va in coda per l'OCR come ogni altro documento.
+2. **Il file** (un PDF fino a **300 MB**, intero: dal 15.10.2026, su richiesta dello studio, una cartella oltre i 50 MB non va più spezzata a mano — presa intera, perché spezzata un documento a cavallo fra due pezzi si dividerebbe in due e le proposte da confermare sarebbero due; le cartelle vere stanno sui 0,3 MB a pagina, quindi 300 MB sono circa mille pagine, sotto le 1500 accettate) entra nella cartella come documento «cartella completa, da dividere»; se è una scansione senza testo va in coda per l'OCR come ogni altro documento.
 3. **La proposta**: i documenti trovati, **raggruppati per sezione** (una sottocartella per ogni foglio separatore), ognuno con le miniature delle sue pagine, il tipo, la data e il nome proposti. Arriva in due tempi: subito quella delle sole regole, poi — quando il Mac ha finito di ragionare (vedi sotto) — quella definitiva; la pagina aspetta e si aggiorna da sola, e dice quante pagine ha già letto.
 4. **Si corregge**: ✂ fra due pagine taglia; «Unisci al precedente» incolla; «Lascia fuori» esclude le pagine bianche o doppie; tipo, data e nome si riscrivono (finché il nome è quello proposto segue tipo e data); il nome di una sottocartella si riscrive in testa alla sezione e vale per tutti i suoi documenti. Una pagina si apre in grande con un clic, e da lì si scorre con le frecce e si taglia o si unisce.
 5. **«Crea N documenti»**: nascono nella cartella del paziente, col tipo scelto, **nella loro sottocartella**, e la nota «dalla cartella completa, pagine a–b». Si aprono, si scaricano uno per uno o **tutti in uno .zip, con le stesse sottocartelle**.
@@ -90,7 +90,7 @@ Regole, istruzioni del modello e banco sono fatti su testi **inventati**: non si
 
 ## Quello che ancora non c'è
 
-- File oltre i 50 MB (vanno divisi prima).
+- PDF oltre i 300 MB (circa mille pagine).
 - Riprendere una divisione lasciata a metà (le correzioni fatte a mano non si salvano: ricaricando si riparte dalla proposta).
 - I nomi delle sezioni modificabili dalle impostazioni invece che nel codice.
 - Leggere (non solo riconoscere) le pagine scritte a mano.

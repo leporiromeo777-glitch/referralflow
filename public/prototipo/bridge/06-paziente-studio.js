@@ -597,11 +597,12 @@ PAGES.profile = () => {
 
 /* ---------- «Carica documento» vero (28.9.2026) ----------
    Prima il tasto era dimostrativo: diceva «Documento caricato» e non
-   caricava nulla. Ora: più file insieme, fino a 50 MB l'uno (una cartella
+   caricava nulla. Ora: più file insieme, fino a 50 MB l'uno e 300 i PDF (una cartella
    cartacea scansionata ci sta), categoria e descrizione per file, un file
    alla volta verso /api/prototipo/pazienti/<id>/documenti con l'avanzamento,
    e, per un PDF senza testo, l'OCR fatto dal Mac (src/lib/documenti-ocr.ts). */
-const RF_DOC_MAX_MB = 50;
+const RF_DOC_MAX_MB = 50, RF_DOC_MAX_MB_PDF = 300;      // un PDF può essere una cartella intera (15.10.2026)
+const rfDocMassimo = (f) => /\.pdf$/i.test(f.name) ? RF_DOC_MAX_MB_PDF : RF_DOC_MAX_MB;
 const RF_DOC_CAT = { altro: 'Documento', referto: 'Referto', ecg: 'ECG', holter: 'Holter', ett: 'ETT (ecocardiogramma)', ciclo: 'Ciclo (cicloergometria)', laboratorio: 'Laboratorio', imaging: 'Imaging', lettera: 'Lettera', dimissione: 'Lettera di dimissione', consenso: 'Consenso firmato' };
 const rfDocUploadDemo = MODALS.upload;
 MODALS.upload = function () {
@@ -614,7 +615,7 @@ MODALS.upload = function () {
     : `<input class="input" id="rf-doc-paz" list="rf-doc-paz-l" placeholder="Cerca il paziente (cognome nome)" autocomplete="off"><datalist id="rf-doc-paz-l">${reali.map(p => `<option value="${rfEsc(fullName(p))}${p.dob ? ' · ' + rfEsc(p.dob) : ''}"></option>`).join('')}</datalist>`;
   openModal('Carica documento', `
     <div class="field"><label>Paziente</label>${chi}</div>
-    <label class="rf-doc-drop mt-16" id="rf-doc-drop">${ICONS.upload}<span><b>Scegli i file</b> o trascinali qui</span><span class="caption">PDF, immagini, Word, DICOM · fino a ${RF_DOC_MAX_MB} MB l'uno · più file insieme</span>
+    <label class="rf-doc-drop mt-16" id="rf-doc-drop">${ICONS.upload}<span><b>Scegli i file</b> o trascinali qui</span><span class="caption">PDF, immagini, Word, DICOM · fino a ${RF_DOC_MAX_MB} MB l'uno, i PDF fino a ${RF_DOC_MAX_MB_PDF} · più file insieme</span>
       <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.heic,.heif,.tif,.tiff,.docx,.doc,.txt,.dcm" style="display:none" onchange="rfDocScegli(this.files)"></label>
     <div id="rf-doc-lista"></div>
     <p class="caption mt-8">Per le scansioni: PDF in scala di grigi, 200–300 dpi. Se il PDF non ha il testo (niente OCR, o esportato da DocuWare), lo aggiunge il Mac da solo; le pagine scritte a mano restano immagini. Una cartella lunga si può dividere per contenuto (ECG, laboratorio, lettere…): si ritrova meglio.</p>`,
@@ -650,7 +651,7 @@ function rfDocIndovina(nome) {
 function rfDocScegli(files) {
   for (const f of Array.from(files || [])) {
     if (RF.docFile.some(x => x.f.name === f.name && x.f.size === f.size)) continue;
-    RF.docFile.push({ f, categoria: rfDocIndovina(f.name), nota: '', stato: f.size > RF_DOC_MAX_MB * 1048576 ? 'grande' : 'pronto', msg: '' });
+    RF.docFile.push({ f, categoria: rfDocIndovina(f.name), nota: '', stato: f.size > rfDocMassimo(f) * 1048576 ? 'grande' : 'pronto', msg: '' });
   }
   rfDocLista();
 }
@@ -658,7 +659,7 @@ function rfDocLista() {
   const el = document.getElementById('rf-doc-lista'); if (!el) return;
   const mb = (b) => b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`;
   const stato = (x) => ({
-    pronto: '', grande: `<span class="badge danger">oltre ${RF_DOC_MAX_MB} MB: dividilo</span>`, invio: `<span class="caption">${x.msg || 'carico…'}</span>`,
+    pronto: '', grande: `<span class="badge danger">oltre ${rfDocMassimo(x.f)} MB</span>`, invio: `<span class="caption">${x.msg || 'carico…'}</span>`,
     fatto: `<span class="badge success">✓ caricato${x.msg ? ' · ' + rfEsc(x.msg) : ''}</span>`, senzatesto: `<span class="badge success">✓ caricato${x.msg ? ' · ' + rfEsc(x.msg) : ''}</span> <span class="caption">senza testo: il Mac aggiunge l'OCR appena la catena dei referti è ferma</span>`, errore: `<span class="badge danger">${rfEsc(x.msg || 'errore')}</span>`,
   })[x.stato] || '';
   const fermo = (x) => ['invio', 'fatto', 'senzatesto'].includes(x.stato);

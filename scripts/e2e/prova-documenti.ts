@@ -105,9 +105,10 @@ async function main() {
     verifica(x2?.tipo === 'ecg' && x2.da === 2 && x2.motivi.some((m: string) => m.startsWith('sulla pagina: ECG')), `proposte: stessa data su un altro esame → l'ECG a pagina 2, segnalato (${JSON.stringify(x2 ?? pr2)})`);
     await query('delete from referti_bozze where id = $1', [boz2]);
 
-    const grande = Buffer.alloc(51 * 1024 * 1024, 0x20); grande.write('%PDF-1.4\n');
-    const c = await carica(paz!, grande, 'enorme.pdf');
-    verifica(c.status === 413, `oltre 50 MB respinto (${c.status})`);
+    // dal 15.10.2026 un PDF arriva a 300 MB (una cartella intera, provato in prova-dividi); gli altri file restano a 50
+    const grande = Buffer.alloc(51 * 1024 * 1024, 0x61);
+    const c = await carica(paz!, grande, 'enorme.txt');
+    verifica(c.status === 413, `un file non PDF oltre 50 MB respinto (${c.status})`);
     const d = await carica('ag-scansioneprova', pdf('x'), 'x.pdf');
     verifica(d.status === 409, 'paziente solo d\'agenda: prima la scheda (409)');
     const e = await carica(paz!, Buffer.from('MZ'), 'programma.exe');

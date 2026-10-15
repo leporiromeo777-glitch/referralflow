@@ -34,6 +34,11 @@ export const MAX_UPLOAD_SIZE = 10 * 1024 * 1024; // 10 MB
 // caricamenti interni: il portale degli invianti e gli allegati per posta
 // restano a 10 MB.
 export const MAX_CARTELLA_SIZE = 50 * 1024 * 1024; // 50 MB
+// Un PDF può arrivare a 300 MB (15.10.2026, richiesta dello studio: sopra i 50 MB la cartella andava spezzata a mano).
+// Si prende INTERO: spezzato, un documento a cavallo fra due pezzi si dividerebbe in due e le proposte da confermare
+// sarebbero due. Le cartelle vere stanno sui 0,3 MB a pagina: 300 MB sono un migliaio di pagine, sotto le 1500 che
+// «Dividi cartella» accetta; l'OCR fa mezzo secondo a pagina (limite 45 minuti).
+export const MAX_CARTELLA_PDF_SIZE = 300 * 1024 * 1024; // 300 MB
 
 function extensionOf(filename: string): string {
   const i = filename.lastIndexOf('.');

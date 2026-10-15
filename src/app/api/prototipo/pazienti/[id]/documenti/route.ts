@@ -6,7 +6,7 @@ import { query } from '@/lib/db';
 import { CATEGORIE, isUuid, logDocumento } from '@/lib/cartella';
 import { vietato } from '@/lib/permessi';
 import { putFile } from '@/lib/storage';
-import { isAllowedInternalUpload, MAX_CARTELLA_SIZE } from '@/lib/upload';
+import { isAllowedInternalUpload, MAX_CARTELLA_PDF_SIZE, MAX_CARTELLA_SIZE } from '@/lib/upload';
 import { dopoCaricamento } from '@/lib/documenti-ocr';
 
 export const runtime = 'nodejs';
@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic';
 // «Carica documento» nella scheda del paziente (28.9.2026): prima il tasto
 // della nuova interfaccia era dimostrativo e non caricava nulla. Un file per
 // chiamata (l'interfaccia li manda uno alla volta, con l'avanzamento), fino a
-// 50 MB: una cartella cartacea scansionata ci sta. Un PDF senza testo
+// 50 MB, un PDF fino a 300 MB (una cartella cartacea scansionata intera, 15.10.2026). Un PDF senza testo
 // (scansione senza OCR) va in coda per l'OCR sul Mac (src/lib/documenti-ocr.ts). Nei log solo id abbreviati e numeri.
 //   POST multipart { file, categoria?, nota? } → { id, pagine?, senza_testo?, ocr? }
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -32,7 +32,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   const form = await req.formData().catch(() => null);
   const file = form?.get('file');
   if (!(file instanceof File) || file.size === 0) return NextResponse.json({ errore: 'Nessun file.' }, { status: 400 });
-  if (file.size > MAX_CARTELLA_SIZE) return NextResponse.json({ errore: `Il file supera i ${MAX_CARTELLA_SIZE / 1024 / 1024} MB: dividilo in più parti.` }, { status: 413 });
+  const massimo = /\.pdf$/i.test(file.name) ? MAX_CARTELLA_PDF_SIZE : MAX_CARTELLA_SIZE;
+  if (file.size > massimo) return NextResponse.json({ errore: `Il file supera i ${massimo / 1024 / 1024} MB.` }, { status: 413 });
   if (!isAllowedInternalUpload(file)) return NextResponse.json({ errore: 'Formato non ammesso: PDF, immagini (JPG, PNG, HEIC, TIFF), Word, testo, DICOM.' }, { status: 415 });
   const categoriaRaw = String(form?.get('categoria') ?? '').trim();
   const categoria = categoriaRaw in CATEGORIE ? categoriaRaw : 'altro';

@@ -197,6 +197,23 @@ async function main() {
       && JSON.stringify(dentro) === JSON.stringify(['01_Rapporti/2019.03.12 Provadividi Anna Lettera.pdf', '01_Rapporti/2020.05.15 Provadividi Anna Lettera.pdf', '05_Apparecchi/2023.10.18 Provadividi Anna Holter.pdf']),
       `i documenti nascono nella loro sottocartella, e lo zip ha le stesse sottocartelle (${dentro.length} file)`);
 
+
+    // 6 — una cartella oltre i 50 MB entra intera (15.10.2026, prima andava spezzata a mano): la stessa cartella di prova
+    // con 70 MB di dati a caso allegati dentro il PDF; un file che non è un PDF resta a 50 MB.
+    const rumore = path.join(TMP, 'rumore.bin'), grande = path.join(TMP, 'grande.pdf');
+    await fs.writeFile(rumore, (await import('node:crypto')).randomBytes(70 * 1024 * 1024));
+    execFileSync('/opt/homebrew/bin/qpdf', [file, '--add-attachment', rumore, '--', grande], { stdio: 'ignore' });
+    const fdG = new FormData();
+    fdG.append('file', new Blob([await fs.readFile(grande)], { type: 'application/pdf' }), 'Cartella grande.pdf'); fdG.append('categoria', 'altro'); fdG.append('nota', 'cartella completa, da dividere');
+    const suG = await fetch(`${base}/api/prototipo/pazienti/${pa}/documenti`, { method: 'POST', headers: { cookie: C_SEG }, body: fdG });
+    const docG = (await suG.json().catch(() => ({})) as any).id as string;
+    const prG = docG ? await leggi(C_SEG, `?documento=${docG}`) : { stato: 0, j: {} as any };
+    const fdT = new FormData();
+    fdT.append('file', new Blob([Buffer.alloc(51 * 1024 * 1024, 97)], { type: 'text/plain' }), 'note.txt');
+    const suT = await fetch(`${base}/api/prototipo/pazienti/${pa}/documenti`, { method: 'POST', headers: { cookie: C_SEG }, body: fdT });
+    verifica(suG.status === 201 && (await fs.stat(grande)).size > 70 * 1024 * 1024 && prG.stato === 200 && prG.j.pagine === 8 && (prG.j.pezzi ?? []).length === 4 && suT.status === 413,
+      `una cartella PDF oltre i 50 MB si carica intera e si divide come le altre; un file di testo oltre i 50 MB no (${suG.status}, ${prG.j.pagine}, ${suT.status})`);
+
   } finally {
     await pulisci().catch(() => null);
     await fs.rm(TMP, { recursive: true, force: true }).catch(() => null);

@@ -836,3 +836,8 @@ col rischio di togliere parole della lettera. Dettaglio in [[Piattaforma/Dittafo
 **15.10.2026 — comandi a voce: «riprendimi la lettera fino a…».** Richiesta dello studio (il messaggio si è
 interrotto dopo «fino a»: interpretato come «fino a una parte della lettera»). Scelto: «fino a X» = **X compresa**;
 «fino a prima di X» o «X escluso/a» = fino a dove X comincia. Dettaglio in [[Piattaforma/Dittafono]].
+
+**15.10.2026 — Dividi cartella: oltre i 50 MB la cartella si prende intera (fino a 300 MB), non si spezza.** Lo
+studio non vuole più spezzare a mano le cartelle grandi. Scelto di accettarle intere invece di tagliarle in pezzi da
+50 MB: un taglio a caso cadrebbe in mezzo a un documento e le proposte da confermare diventerebbero due. Gli altri
+file restano a 50 MB. Dettaglio in [[Piattaforma/Dividi cartella]].

@@ -99,7 +99,7 @@ function rfDivDropFile(e) { e.preventDefault(); rfDivDrop(e, false); if (e.dataT
 function rfDivFile(file) {
   if (!file) return;
   if (!/\.pdf$/i.test(file.name)) { toast('Serve un PDF'); return; }
-  if (file.size > 50 * 1024 * 1024) { toast('Il file supera i 50 MB: dividilo in due parti prima di caricarlo'); return; }
+  if (file.size > 300 * 1024 * 1024) { toast('Il file supera i 300 MB'); return; }
   if (RF.div.pid) { void rfDivCarica(file); return; }
   RF.div.attesa = { file, stato: 'leggo', letto: null, trovato: null, cognome: '', nome: '', nascita: '', pagine: null, salvo: false };
   RF.div.errore = null; RF.div.cerca = ''; render();
@@ -160,7 +160,7 @@ async function rfDivCreaPaziente() {
 function rfDivCarica(file) {
   if (!file || !RF.div.pid) return;
   if (!/\.pdf$/i.test(file.name)) { toast('Serve un PDF'); return; }
-  if (file.size > 50 * 1024 * 1024) { toast('Il file supera i 50 MB: dividilo in due parti prima di caricarlo'); return; }
+  if (file.size > 300 * 1024 * 1024) { toast('Il file supera i 300 MB'); return; }
   RF.div.invio = 0; RF.div.errore = null; render();
   const fd = new FormData(); fd.append('file', file); fd.append('categoria', 'altro'); fd.append('nota', 'cartella completa, da dividere');
   const x = new XMLHttpRequest();
@@ -480,7 +480,7 @@ PAGES.dividi = () => {
         <div class="row mt-8" style="gap:10px;align-items:center"><span class="badge accent">${rfEsc(v.nome)}</span><button class="btn sm ghost" onclick="rfDivCambia()">Cambia</button></div></div>
       <div class="card mt-16"><div class="section-title">La cartella completa, in PDF</div>
         ${zona('Trascina qui il PDF, oppure')}
-        <p class="meta" style="margin:10px 0 0;line-height:1.55">Fino a 50 MB. Il file entra nella cartella del paziente così com’è, poi lo si divide. Se è una scansione senza testo, il Mac la legge prima (qualche minuto).</p>
+        <p class="meta" style="margin:10px 0 0;line-height:1.55">Fino a 300 MB, anche una cartella intera: non serve spezzarla. Il file entra nella cartella del paziente così com’è, poi lo si divide. Se è una scansione senza testo, il Mac la legge prima (qualche minuto).</p>
         ${v.documenti === null ? '<div class="caption mt-16">Cerco i PDF già in cartella…</div>' : v.documenti.length ? `<div class="section-title mt-16">…oppure un PDF già nella sua cartella</div>
           <div class="list mt-8">${v.documenti.map(x => `<div class="list-item"><div class="grow"><div class="name">${rfEsc(x.filename)}</div><div class="sub">caricato il ${rfEsc(rfDivGiorno(x.caricato))}${x.ocr_stato === 'da_fare' ? ' · in lettura sul Mac' : ''}</div></div><button class="btn sm" onclick="rfDivApri('${x.id}')">Dividi</button></div>`).join('')}</div>` : ''}</div>
       ${limite}`;
@@ -491,7 +491,7 @@ PAGES.dividi = () => {
     ${errore}
     <div class="card"><div class="section-title">Trascina qui la cartella completa, in PDF</div>
       ${zona('Anche di un paziente che <b>non è ancora in ReferralFlow</b>: la sua cartella si crea qui, subito dopo.<br>Trascina il PDF, oppure')}
-      <p class="meta" style="margin:10px 0 0;line-height:1.55">Fino a 50 MB. Nome e data di nascita si leggono dal PDF, quando ci sono, e li confermi tu.</p></div>
+      <p class="meta" style="margin:10px 0 0;line-height:1.55">Fino a 300 MB, anche una cartella intera. Nome e data di nascita si leggono dal PDF, quando ci sono, e li confermi tu.</p></div>
     <div class="card mt-16"><div class="section-title">…oppure parti da un paziente che c’è già</div>
       <div class="row mt-8" style="gap:8px;flex-wrap:wrap;align-items:center"><input class="input" id="rf-div-cerca" style="width:260px" placeholder="Scrivi il cognome" value="${rfEsc(v.cerca)}" oninput="rfDivCerca(this.value)">${trovati.map(p => `<button class="btn sm" onclick="rfDivPaziente('${p.id}')">${rfEsc(fullName(p))}${p.dob ? ` · ${rfEsc(p.dob)}` : ''}</button>`).join('')}</div>
       <p class="meta" style="margin:10px 0 0">Così puoi anche dividere un PDF che ha già nella sua cartella.</p></div>
