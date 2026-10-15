@@ -127,7 +127,7 @@ function rfSmHtml() {
         <textarea id="sm-testo" lang="it" spellcheck="true" ${conf ? 'readonly' : ''} oninput="rfSmScrive(this)" aria-label="Testo della lettera">${rfEsc(sm.testo)}</textarea>
       </div>
       <div class="sm-lato">
-        <div class="sm-box"><div class="sm-audio"><button class="btn sm" id="rv-play" onclick="rvToggle()">${ICONS.play || ''} Play</button><div class="sm-barra" onclick="rfSmBarra(event, this)"><div id="rv-ph" style="left:0"></div></div><span class="sm-tempo"><span id="rv-t">0:00</span> / ${rfEsc(RV_AUDIO.label || '')}</span></div></div>
+        <div class="sm-box"><div class="sm-audio"><button class="btn sm" id="rv-play" onclick="rvToggle()">${ICONS.play || ''} Play</button><div class="sm-barra" onclick="rfSmBarra(event, this)"><div id="rv-ph" style="left:0"></div></div><span class="sm-tempo"><span id="rv-t">0:00</span> / ${rfEsc(RV_AUDIO.label || '')}</span></div>${typeof rfPedHtml === 'function' ? `<div class="rf-ped-riga" style="margin-top:8px">${rfPedHtml()}</div>` : ''}</div>
         <div class="sm-box"><h3>Da controllare${restano ? ` · ${restano}` : ''}</h3>${riassunto}
           ${numeri.map(punto).join('')}
           ${altri.length ? (numeri.length ? `<details class="sm-altri" ${daFare(numeri) ? '' : 'open'}><summary>Altre parole (${daFare(altri)} da guardare)</summary>${altri.map(punto).join('')}</details>` : altri.map(punto).join('')) : ''}

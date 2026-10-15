@@ -860,3 +860,6 @@ meno correzioni, la schermata deve essere pulita e facile da imparare per le seg
 sola — la lettera da correggere come un documento, l'audio, i soli punti dove Dragon e il Mac differiscono (numeri per primi),
 Word e Conferma —; i passi della correzione guidata non compaiono (sono sul testo del Mac). La revisione completa resta a un
 tasto. Il cancello della conferma resta: i numeri non controllati chiedono la presa d'atto.
+
+**15.10.2026 — la pedaliera nella revisione: un colpo avvia/ferma, tenuto suona finché premuto.** Le due abitudini dei
+programmi di trascrizione insieme, senza un'impostazione da scegliere; la pedaliera si impara come il tasto del microfono.
