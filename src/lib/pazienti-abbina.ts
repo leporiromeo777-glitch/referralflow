@@ -7,11 +7,11 @@ import { abbina, daTitoloAgenda, indicePazienti, type PazienteMinimo } from './p
 // o cambia un paziente, quando arriva l'agenda, quando si conferma un
 // referto. Non tocca ciò che è già abbinato, e non stacca mai niente.
 // Nei log solo conteggi: mai nomi.
-export async function riabbinaPazienti(studioId: string, solo?: { bozzaId?: string }): Promise<{ appuntamenti: number; referti: number }> {
+export async function riabbinaPazienti(studioId: string, solo?: { bozzaId?: string }): Promise<{ appuntamenti: number; referti: number; nascite: number }> {
   const pazienti = await query<PazienteMinimo>(`select id, cognome, nome, data_nascita::text from patients where studio_id = $1`, [studioId]);
-  if (!pazienti.length) return { appuntamenti: 0, referti: 0 };
+  if (!pazienti.length) return { appuntamenti: 0, referti: 0, nascite: 0 };
   const idx = indicePazienti(pazienti);
-  let appuntamenti = 0, referti = 0;
+  let appuntamenti = 0, referti = 0, nascite = 0;
 
   if (!solo?.bozzaId) {
     // Per TITOLO distinto, non per appuntamento: la stessa persona torna decine di volte.
@@ -29,6 +29,18 @@ export async function riabbinaPazienti(studioId: string, solo?: { bozzaId?: stri
         `update appointments set patient_id = $2 where studio_id = $1 and patient_id is null and coalesce(paziente_nome, titolo) = any($3::text[]) returning id`, [studioId, pid, tt]);
       appuntamenti += r.length;
     }
+    // La data di nascita che manca nella scheda (15.10.2026, dallo studio: il Word della lettera dettata deve avere nome e
+    // data di nascita, e 10 schede su 68 non l'avevano): dai titoli dei SUOI appuntamenti, che MediOnline scrive
+    // «Cognome Nome (gg.mm.aaaa / N° …)». Solo se tutti dicono la stessa data; una data già scritta non si tocca mai.
+    const senza = await query<{ id: string; titoli: string[] }>(
+      `select p.id, array_agg(distinct coalesce(a.paziente_nome, a.titolo)) as titoli from patients p join appointments a on a.patient_id = p.id
+        where p.studio_id = $1 and p.data_nascita is null and coalesce(a.paziente_nome, a.titolo) is not null group by p.id`, [studioId]);
+    for (const s of senza) {
+      const date = new Set(s.titoli.map((t) => daTitoloAgenda(t)).filter((x) => x.persona && /^\d{4}-\d{2}-\d{2}$/.test(x.nascita)).map((x) => x.nascita));
+      if (date.size !== 1) continue;
+      const r = await query<{ id: string }>(`update patients set data_nascita = $2::date where id = $1 and data_nascita is null returning id`, [s.id, [...date][0]]);
+      nascite += r.length;
+    }
   }
 
   const bozze = await query<{ id: string; nome: string | null; nascita: string | null }>(
@@ -43,6 +55,6 @@ export async function riabbinaPazienti(studioId: string, solo?: { bozzaId?: stri
     await query(`update referti_bozze set patient_id = $2 where id = $1 and patient_id is null`, [b.id, e.id]);
     referti++;
   }
-  if (appuntamenti || referti) console.log(`[pazienti] riabbinati: appuntamenti=${appuntamenti} referti=${referti}`);
-  return { appuntamenti, referti };
+  if (appuntamenti || referti || nascite) console.log(`[pazienti] riabbinati: appuntamenti=${appuntamenti} referti=${referti} date di nascita dall'agenda=${nascite}`);
+  return { appuntamenti, referti, nascite };
 }

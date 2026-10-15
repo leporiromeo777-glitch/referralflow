@@ -45,7 +45,7 @@ test('dettato: senza l\'uno o l\'altro testo il confronto non inventa niente', (
 });
 
 // ---- Il foglio del dittafono (12.10.2026). Testi INVENTATI. ----
-import { letteraDalFoglio, nomeDestinatario, pulisciFoglio } from './dittafono-foglio-regole';
+import { letteraDalFoglio, nomeDestinatario, pazienteDalTesto, pulisciFoglio } from './dittafono-foglio-regole';
 
 test('foglio: dalla lettera sul foglio al testo da rivedere — saluto, corpo, chiusura e firma', () => {
   const foglio = pulisciFoglio({ destinatario: 'Egregio Signor\nDr. med. Altro Inventato\nFMH Medicina interna\nVia e-mail: altro@example.org', data: '12.10.2026', titolo: 'Visita del 12.10.2026', paziente: 'Paziente\nProva Anna – 03.04.1950',
@@ -58,6 +58,12 @@ test('foglio: dalla lettera sul foglio al testo da rivedere — saluto, corpo, c
   assert.equal(nomeDestinatario('Gentile Signora\nDr.ssa med. Terza Inventata'), 'Dr.ssa med. Terza Inventata');
   assert.equal(pulisciFoglio(null), null);
   assert.equal(pulisciFoglio({ saluto: '   ' }), null, 'un foglio vuoto non è un foglio');
+  // il paziente del foglio per il Word (15.10.2026; nomi inventati)
+  assert.deepEqual({ ...pazienteDalTesto('Paziente\nProvafoglio Anna – 03.04.1950') }, { nome_paziente: 'Provafoglio Anna', data_nascita: '03.04.1950' });
+  assert.deepEqual({ ...pazienteDalTesto('PROVAFOGLIO Anna, 3.4.1950') }, { nome_paziente: 'PROVAFOGLIO Anna', data_nascita: '03.04.1950' });
+  assert.deepEqual({ ...pazienteDalTesto('Provafoglio Anna 03.04.1950') }, { nome_paziente: 'Provafoglio Anna', data_nascita: '03.04.1950' });
+  assert.deepEqual({ ...pazienteDalTesto('Provafoglio Anna') }, { nome_paziente: 'Provafoglio Anna' });
+  assert.deepEqual({ ...pazienteDalTesto('Paziente') }, {});
   assert.equal(pulisciFoglio({ saluto: 'x'.repeat(5000) })!.saluto.length, 300);
 });
 

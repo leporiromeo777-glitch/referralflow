@@ -32,3 +32,12 @@ export function nomeDestinatario(destinatario: string): string {
   const nome = conTitolo.replace(/^(prof\.?\s*)?(dr\.?(ssa)?|dott\.?(ssa)?|dottor(e|essa)?)\.?\s*(med\.?\s*)?/i, '').trim();
   return nome.length >= 3 ? conTitolo : '';
 }
+
+// Il paziente scritto sul foglio («Paziente», poi «Cognome Nome – 31.12.1950»): nome e data di nascita per i campi del Word.
+export function pazienteDalTesto(testo: string): Record<string, string> {
+  const riga = String(testo ?? '').split('\n').map((r) => r.trim()).filter((r) => r && !/^paziente:?$/i.test(r))[0] ?? '';
+  const d = /(\d{1,2})[./](\d{1,2})[./](\d{4})/.exec(riga);
+  const nome = riga.replace(/^paziente:?\s*/i, '').split(/\s+[–—-]\s+|,\s*|\s+(?=\d{1,2}[./])/)[0].trim();
+  return { ...(nome && /[A-Za-zÀ-ÿ]/.test(nome) ? { nome_paziente: nome.slice(0, 120) } : {}), ...(d ? { data_nascita: `${d[1].padStart(2, '0')}.${d[2].padStart(2, '0')}.${d[3]}` } : {}) };
+}
+

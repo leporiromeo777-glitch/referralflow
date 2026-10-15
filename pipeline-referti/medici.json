@@ -10,7 +10,8 @@
       "formato": "lettera",
       "intestazione": [
         "Via Pretorio 9, 6900 Lugano (CH)",
-        "Tel: {telefono}"
+        "Tel: +4191 640 40 40",
+        "e-mail: Segretariato.cardioticino@hin.ch"
       ],
       "titolo_rapporto": "RAPPORTO AMBULATORIALE del {data_visita}",
       "chiusura": "Cordiali saluti,",
@@ -120,7 +121,8 @@
         "Spec. FMH Medicina Interna e Cardiologia",
         "Certificazione Studi Avanzati (CAS) in Insufficienza Cardiaca-HF",
         "Via Pretorio 9, 6900 Lugano (CH)",
-        "Tel: {telefono}"
+        "Tel: +4191 640 40 40",
+        "e-mail: Segretariato.cardioticino@hin.ch"
       ],
       "titolo_rapporto": "VISITA AMBULATORIALE, RAPPORTO",
       "chiusura": "",

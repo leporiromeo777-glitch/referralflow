@@ -62,10 +62,11 @@ async function main() {
     const c = await carica(C, { dettato_testo: dettato, dettato_foglio: JSON.stringify(foglio), dettato_fonte: 'dragon' });
     const sulFoglio = await nuova(c.id);
     const fatto = await applicaFoglio(S, sulFoglio, c.id ?? null), nonFatto = await applicaFoglio(S, senzaDettato, b.id ?? null);
-    const [bz] = await query<any>(`select testo_finale, payload->'foglio'->>'fonte' as fonte, payload->>'testo_corretto' as catena, campi_confermati->>'medico_destinatario' as dest from referti_bozze where id = $1`, [sulFoglio]);
+    const [bz] = await query<any>(`select testo_finale, payload->'foglio'->>'fonte' as fonte, payload->>'testo_corretto' as catena, campi_confermati->>'medico_destinatario' as dest, campi_confermati->>'nome_paziente' as paz, campi_confermati->>'data_nascita' as nascita from referti_bozze where id = $1`, [sulFoglio]);
     const d3 = ((await (await fetch(`${base}/api/prototipo/referti/${sulFoglio}`, { headers: { cookie: C } })).json()) as any);
     verifica(c.stato === 201 && fatto === true && nonFatto === false && bz?.testo_finale === `Caro collega,\n\n${dettato}\n\nCon i migliori saluti\n\nDr. med. Inventato` && bz?.fonte === 'dragon' && bz?.dest === 'Dr. med. Altro Inventato'
-      && /bisoprololo 2,5 mg/.test(bz?.catena ?? '') && d3.dettato?.foglio === true && d3.versione?.dalla_catena === false && d3.testo_attuale === bz?.testo_finale,      // la revisione semplice (15.10.2026) parte da questo testo
+      && /bisoprololo 2,5 mg/.test(bz?.catena ?? '') && bz?.paz === 'Prova Anna' && bz?.nascita === '03.04.1950'      // il paziente del foglio va nei campi del Word, con la data di nascita (15.10.2026)
+      && d3.dettato?.foglio === true && d3.versione?.dalla_catena === false && d3.testo_attuale === bz?.testo_finale,      // la revisione semplice (15.10.2026) parte da questo testo
       `la lettera dettata sul foglio diventa il testo da rivedere (saluto, corpo, saluti e firma), col destinatario fra i campi; il testo della catena resta come controllo; un dettato senza foglio non cambia (${fatto}, ${nonFatto})`);
 
     // I comandi a voce (12.10.2026): «per favore, inserisci la lettera più recente» — il server dà il corpo della

@@ -1,7 +1,7 @@
 import 'server-only';
 import { registraTestoMacchina } from './audit/lineage';
 import { query } from './db';
-import { letteraDalFoglio, nomeDestinatario, pulisciFoglio, type Foglio } from './dittafono-foglio-regole';
+import { letteraDalFoglio, nomeDestinatario, pazienteDalTesto, pulisciFoglio, type Foglio } from './dittafono-foglio-regole';
 import { appellativo, conTitolo } from './referti-lettera';
 import { profiloMedico } from './referti-medici';
 
@@ -50,19 +50,33 @@ export async function foglioPer(studioId: string, medicoId: string | null, patie
 // Rende true se l'ha fatto. Il testo della catena è la «versione prima» nel registro delle versioni.
 export async function applicaFoglio(studioId: string, bozzaId: string, audioId: string | null): Promise<boolean> {
   if (!audioId) return false;
-  const [a] = await query<{ dettato_testo: string | null; dettato_foglio: unknown; dettato_fonte: string | null }>(
-    'select dettato_testo, dettato_foglio, dettato_fonte from referti_audio where id = $1 and studio_id = $2', [audioId, studioId]);
+  const [a] = await query<{ dettato_testo: string | null; dettato_foglio: unknown; dettato_fonte: string | null; patient_id: string | null }>(
+    'select dettato_testo, dettato_foglio, dettato_fonte, patient_id from referti_audio where id = $1 and studio_id = $2', [audioId, studioId]);
   const foglio = pulisciFoglio(a?.dettato_foglio), corpo = (a?.dettato_testo ?? '').trim();
   if (!foglio || !corpo) return false;
   const lettera = letteraDalFoglio(foglio, corpo), destinatario = nomeDestinatario(foglio.destinatario);
+  const chi = await pazienteDelFoglio(studioId, a?.patient_id ?? null, foglio.paziente);
   const [b] = await query<{ prima: string | null }>(
     `update referti_bozze set testo_finale = $3,
             payload = jsonb_set(payload, '{foglio}', $4::jsonb),
             campi_confermati = coalesce(campi_confermati, '{}'::jsonb) || $5::jsonb
       where id = $1 and studio_id = $2 and stato = 'bozza' returning payload->>'testo_corretto' as prima`,
-    [bozzaId, studioId, lettera, JSON.stringify({ fonte: a?.dettato_fonte ?? 'dettatura', applicato_il: new Date().toISOString() }), JSON.stringify(destinatario ? { medico_destinatario: destinatario } : {})]);
+    [bozzaId, studioId, lettera, JSON.stringify({ fonte: a?.dettato_fonte ?? 'dettatura', applicato_il: new Date().toISOString() }), JSON.stringify({ ...(destinatario ? { medico_destinatario: destinatario } : {}), ...chi })]);
   if (!b) return false;
   await registraTestoMacchina({ studioId, bozzaId, nome: 'lettera_dal_foglio', modello: a?.dettato_fonte ?? 'dettatura', regole: 'lettera dettata sul foglio del dittafono: saluto, corpo dettato, chiusura e firma', prima: b.prima, dopo: lettera });
   console.log(`[foglio] bozza ${bozzaId.slice(0, 8)}: la lettera dettata sul foglio è il testo da rivedere (${lettera.length} caratteri)`);
   return true;
+}
+
+// Il paziente del foglio, per i campi del Word (riga sotto il titolo e piè di pagina): nome e data di nascita dalla cartella
+// del paziente scelto nel dittafono, o — scritto a mano — da ciò che c'è sul foglio («Cognome Nome – 31.12.1950»). Prima
+// il Word li prendeva dai campi che la catena ricava dal dettato, e la data di nascita, che il medico non detta, mancava
+// (15.10.2026, dallo studio). → { nome_paziente?, data_nascita? }
+export async function pazienteDelFoglio(studioId: string, patientId: string | null, testo: string): Promise<Record<string, string>> {
+  if (patientId) {
+    const [p] = await query<{ cognome: string; nome: string; nascita: string | null }>(
+      `select cognome, nome, to_char(data_nascita, 'DD.MM.YYYY') as nascita from patients where id = $1 and studio_id = $2`, [patientId, studioId]);
+    if (p) return { nome_paziente: `${p.cognome} ${p.nome}`.trim(), ...(p.nascita ? { data_nascita: p.nascita } : {}) };
+  }
+  return pazienteDalTesto(testo);
 }
