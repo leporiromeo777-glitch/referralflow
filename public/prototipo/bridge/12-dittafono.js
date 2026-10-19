@@ -216,7 +216,7 @@ function rfDitComandoStato(html) { RF.dit.cmdStato = html || ''; const el = docu
 function rfDitComandoDice(corpo) { try { void fetch('/api/prototipo/dittafono/comando', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comando: 'non_capito', ...corpo }) }).catch(() => {}); } catch (_) { /* niente */ } }
 function rfDitComandoProgramma() {
   const d = RF.dit; clearTimeout(d.cmdAttesa);
-  if (!rfDitDettatura() || typeof RFComandi === 'undefined' || !/per\s*favore|lettera\s+(?:all['’]?\s*indirizzo|indirizzata|destinata)/i.test(d.testo || '')) return;
+  if (!rfDitDettatura() || typeof RFComandi === 'undefined' || !/per\s*favore|lettera\s+(?:che\s+)?(?:(?:va|è|andrà|deve\s+andare)\s+)?(?:all['’]?\s*indirizzo|indirizzata|destinata)/i.test(d.testo || '')) return;
   d.cmdAttesa = setTimeout(rfDitComandoCerca, 1500);
 }
 // Un programma di dettatura non sempre avvisa la pagina quando scrive (a volte cambia il testo senza l'evento che la

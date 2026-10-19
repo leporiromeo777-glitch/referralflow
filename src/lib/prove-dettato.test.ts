@@ -286,6 +286,12 @@ test('detto la lettera all’indirizzo di…: la frase si riconosce; medico e pa
   assert.deepEqual([r.medico, r.paziente, r.nascita, r.donna], ['Maria Provamedico', 'Provapaziente Anna', '03.04.1950', true]);
   assert.equal(K.trovaIndirizzo("Detto la lettera indirizzata al Dr. med. Provamedico per il signor Gialli").medico, 'Provamedico');
   assert.equal(K.trovaIndirizzo("Per favore, detto la lettera all'indirizzo del dottor Provamedico").paziente, '');
+  // senza «detto» (Dragon spesso non lo scrive, 19.10.2026) a inizio frase o riga, e con «che va»
+  assert.equal(K.trovaIndirizzo("La lettera che va all'indirizzo del dottor Provamedico per il paziente Bianchi.").medico, 'Provamedico');
+  assert.equal(K.trovaIndirizzo("Bene.\nla lettera che va all'indirizzo della dottoressa Verdi").donna, true);
+  assert.equal(K.trovaIndirizzo("Detto la lettera che va all'indirizzo del dottor Provamedico").medico, 'Provamedico');
+  for (const t of ["Ho visto che la lettera va all'indirizzo del dottor Provamedico per sbaglio", 'il paziente porta la lettera all’indirizzo del dottor Provamedico'])
+    assert.equal(K.trovaIndirizzo(t), null, t);
   for (const t of ['Ho dettato la lettera al collega.', 'La lettera è indirizzata al paziente.', 'ho rivisto il paziente per il controllo']) assert.equal(K.trovaIndirizzo(t), null, t);
   assert.deepEqual(paroleNome('Dr. med. Mario Rossi'), ['mario', 'rossi']);
   const rubrica = [{ nome: 'Provamedico Mario' }, { nome: 'Provamedico Maria' }, { nome: 'Altroinventato Luca' }, { nome: 'Bianchi Paolo' }];
