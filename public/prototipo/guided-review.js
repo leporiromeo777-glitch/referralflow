@@ -93,7 +93,10 @@ function rvListen(issue) {
 /* ---------- rendering ---------- */
 PAGES.review = () => {
   const p = P.p1;
-  if (!RV.issues.length) rvInit();
+  // Una volta per bozza (19.10.2026, dallo studio: «se metto in pausa e riparto, l'audio ricomincia da capo»): prima
+  // si ripartiva da zero a OGNI ridisegno quando la bozza non aveva segnalazioni — audio all'inizio, testo ricaricato
+  // dall'ultimo salvataggio. rfCaricaRevisione azzera RV.pronto quando carica una bozza.
+  if (RV.pronto !== RV_KEY) { rvInit(); RV.pronto = RV_KEY; }
   setTimeout(rvAfterRender, 0);
   return `
   <div class="rv ${RV.mode === 'read' ? 'read' : ''}">
@@ -228,10 +231,16 @@ function rvIdDelParagrafo(sec) {
 }
 function rvHumanEdit(pEl) {
   const presenti = new Set();
+  // Una frase che il browser ha spezzato in due pezzi (Invio dentro la frase) ha due elementi con lo stesso id: il suo
+  // testo è la loro somma, non l'ultimo pezzo (19.10.2026).
+  const testi = new Map();
+  pEl.querySelectorAll('.rv-span').forEach(sp => { const id = sp.dataset.span; testi.set(id, testi.has(id) ? `${testi.get(id)} ${sp.innerText}` : sp.innerText); });
+  const visti = new Set();
   pEl.querySelectorAll('.rv-span').forEach(sp => {
     const id = sp.dataset.span;
     presenti.add(id);
-    const txt = sp.innerText;
+    if (visti.has(id)) return; visti.add(id);
+    const txt = testi.get(id);
     const agg = RV.added.find(a => a.id === id);
     if (agg) { if (agg.text !== txt) agg.text = txt; return; }
     if (RV.text[id] !== undefined && RV.text[id] !== txt) {
@@ -255,14 +264,26 @@ function rvHumanEdit(pEl) {
 // e l'altra): uscendo dal paragrafo diventa un'aggiunta al suo posto, così
 // entra nel referto e si salva.
 function rvRaccogliFuori(pEl) {
-  const sec = pEl.dataset.secBody; let dopo = '^', trovato = false;
-  pEl.childNodes.forEach(n => {
-    if (n.nodeType === 1 && n.classList && n.classList.contains('rv-span')) { dopo = n.dataset.span; return; }
-    const t = (n.textContent || '').replace(/\s+/g, ' ').trim();
-    if (!t || (n.nodeType === 1 && n.classList && n.classList.contains('caption') && t === '—')) return;
+  // Solo il testo che sta davvero FUORI dalle frasi (19.10.2026, dallo studio: «in fondo alla lettera compare un
+  // doppione di quello che ho corretto»). Prima ogni elemento che non fosse una frase valeva come testo nuovo — anche il
+  // contenitore che il browser crea quando si preme Invio dentro una frase, con dentro il pezzo della frase stessa: quel
+  // pezzo finiva due volte nel referto. Ora si guardano i singoli pezzi di testo: quelli dentro una frase sono della
+  // frase (li registra rvHumanEdit), gli altri diventano un'aggiunta dopo l'ultima frase che li precede.
+  const sec = pEl.dataset.secBody; let dopo = '^', trovato = false, buf = '';
+  const metti = () => {
+    const t = buf.replace(/\s+/g, ' ').trim(); buf = '';
+    if (!t || t === '—') return;
     RV.added.push({ id: 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), section: sec, text: t, after: dopo });
     trovato = true;
-  });
+  };
+  const giro = document.createTreeWalker(pEl, NodeFilter.SHOW_TEXT);
+  let n;
+  while ((n = giro.nextNode())) {
+    const sp = n.parentElement && n.parentElement.closest('.rv-span');
+    if (sp && pEl.contains(sp)) { if (n.textContent.trim()) { metti(); dopo = sp.dataset.span; } continue; }
+    buf += `${n.textContent} `;
+  }
+  metti();
   if (trovato) { rvRenderReport(); rvSave(); }
 }
 

@@ -232,7 +232,7 @@ async function rfCaricaRevisione(id) {
       });
       localStorage.setItem(RV_KEY, JSON.stringify({ issues: esiti, metrics: rp.metrics || {}, log: rp.log || [], cur: Math.min(rp.cur || 0, Math.max(0, RV_ISSUES.length - 1)), t: 0, removed }));
     } else localStorage.removeItem(RV_KEY);
-    RV.issues = [];
+    RV.issues = []; RV.pronto = null;      // la revisione riparte da questa bozza (una volta: vedi PAGES.review)
     rfAudioSetup(j.audio.url, j.tracce);
     render();
   } catch (e) { RF.loading = null; toast('Bozza non disponibile'); }
