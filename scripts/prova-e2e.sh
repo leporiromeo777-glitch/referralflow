@@ -134,6 +134,10 @@ DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2
 grep -E "^NO" "$TMP/istruzioni.txt"; echo "   $(grep -c '^ok' "$TMP/istruzioni.txt") ok, $(grep -c '^NO' "$TMP/istruzioni.txt") no"
 
 echo "→ seconda traccia unita: in fondo alla bozza, base della misura delle correzioni"
+echo "→ lettera dettata con Dragon: in revisione subito, il controllo della catena si aggiunge dopo"
+DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-lettera-subito.ts "http://localhost:$PORTA" "$C_MEDICO" "$STUDIO" > "$TMP/subito.txt" 2>&1 || { fallito "prova-lettera-subito"; cut -c1-300 "$TMP/subito.txt"; }
+grep -E "^NO" "$TMP/subito.txt"; echo "   $(grep -c '^ok' "$TMP/subito.txt") ok, $(grep -c '^NO' "$TMP/subito.txt") no"
+
 DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-tracce.ts "http://localhost:$PORTA" "$C_MEDICO" "$STUDIO" > "$TMP/tracce.txt" 2>&1 || { fallito "prova-tracce"; cut -c1-300 "$TMP/tracce.txt"; }
 grep -E "^NO" "$TMP/tracce.txt"; echo "   $(grep -c '^ok' "$TMP/tracce.txt") ok, $(grep -c '^NO' "$TMP/tracce.txt") no"
 

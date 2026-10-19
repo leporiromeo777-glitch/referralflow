@@ -58,10 +58,13 @@ export async function GET(_req: Request, props: { params: Promise<{ id: string }
   ];
   // Il testo scritto da un programma di dettatura mentre si registrava (11.10.2026), messo a confronto con le parole
   // che la catena ha ricavato dall'audio: dove non coincidono c'è un punto da riascoltare.
-  let dettato: (Confronto & { fonte: string; foglio: boolean }) | null = null;
+  let dettato: (Confronto & { fonte: string; foglio: boolean; in_attesa: boolean }) | null = null;
   if (b.audio_id) {
     const [dt] = await query<{ dettato_testo: string | null; dettato_fonte: string | null }>('select dettato_testo, dettato_fonte from referti_audio where id = $1 and studio_id = $2', [b.audio_id, session.studioId]);
-    if (dt?.dettato_testo) dettato = { ...confronta(dt.dettato_testo, Array.isArray(p.parole) ? p.parole : []), fonte: dt.dettato_fonte ?? 'dettatura', foglio: !!p.foglio };      // foglio: la lettera in revisione È quella dettata (src/lib/dittafono-foglio.ts)
+    // `in_attesa` (19.10.2026): la lettera del foglio è già in revisione ma le parole del Mac non sono ancora arrivate —
+    // nessun confronto (senza di esse ogni parola risulterebbe «diversa»).
+    const inAttesa = !Array.isArray(p.parole) || !p.parole.length;
+    if (dt?.dettato_testo) dettato = { ...(inAttesa ? { pezzi: [], parole_dettato: 0, parole_mac: 0, uguali: 0, punti: 0, troncato: false } : confronta(dt.dettato_testo, p.parole)), fonte: dt.dettato_fonte ?? 'dettatura', foglio: !!p.foglio, in_attesa: inAttesa && p.controllo_audio === 'in_corso' };      // foglio: la lettera in revisione È quella dettata (src/lib/dittafono-foglio.ts)
   }
   const [inArrivo] = await query<{ n: number }>(`select count(*)::int as n from referti_audio where aggiunge_a = $1 and stato in ('in_coda', 'elaborazione')`, [b.id]);
 
@@ -87,7 +90,9 @@ export async function GET(_req: Request, props: { params: Promise<{ id: string }
     istruzioni_traccia: p.istruzioni_traccia && typeof p.istruzioni_traccia === 'object'
       ? { stato: p.istruzioni_traccia.stato, testo: p.istruzioni_traccia.testo, note: p.istruzioni_traccia.note ?? [], esiti: p.istruzioni_traccia.esiti ?? [], non_capite: p.istruzioni_traccia.non_capite ?? [], fatta_il: p.istruzioni_traccia.fatta_il ?? null }
       : null,
-    livello_verifica: typeof p.manifesto?.livello_verifica === 'string' ? p.manifesto.livello_verifica : 'pieno',
+    // Con la catena leggera il manifesto parla del testo del Mac, che non è la lettera: non vale per la conferma.
+    livello_verifica: p.catena_leggera ? 'pieno' : typeof p.manifesto?.livello_verifica === 'string' ? p.manifesto.livello_verifica : 'pieno',
+    catena_leggera: p.catena_leggera === true,
     medico_id: typeof p.medico?.id === 'string' ? p.medico.id : null,
     tipo: b.tipo,
     paziente: campo('nome_paziente') || null,

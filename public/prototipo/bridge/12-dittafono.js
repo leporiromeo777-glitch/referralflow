@@ -803,7 +803,7 @@ async function rfDitInvia() {
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { d.errore = j.errore === 'medico_mancante' ? 'Scegli il medico che ha dettato.' : j.errore === 'troppo_grande' ? 'Registrazione troppo lunga per un invio solo.' : 'Invio non riuscito: la registrazione resta qui, riprova.'; d.invio = false; render(); return; }
     d.pcm = new Int16Array(0); d.stato = 'pronto'; d.invio = false; d.paziente = ''; d.testo = ''; d.tempi = []; d.cursore = null; d.foglio = null; d.foglioToccato = {}; d.foglioPer = null; d.cmdUltimo = null; d.cmdStato = ''; d.cmdFallito = ''; d.cmdNonCapito = null; d.cmdIgnora = []; d.fonte = null; d.fonteChiusa = null; d.pazienteScelto = null; d.indirizzo = null; rfDitAudio(); rfDitRilasciaMicrofono(); rfDitCuffieFerma(); void rfDitSvuota();
-    toast(dettato ? 'Lettera e audio inviati: arriva tra i referti in pochi minuti, quando il Mac ha finito il controllo con l’audio' : 'Dettato in coda: la bozza arriva tra i referti in pochi minuti');
+    toast(j.bozza ? 'Lettera inviata: è già tra i referti; il controllo con l’audio arriva fra un paio di minuti' : dettato ? 'Lettera e audio inviati: arriva tra i referti in pochi minuti, quando il Mac ha finito il controllo con l’audio' : 'Dettato in coda: la bozza arriva tra i referti in pochi minuti');
     render(); setTimeout(rfCaricaDati, 3000);
   } catch (_) { d.errore = 'Piattaforma non raggiungibile: la registrazione resta su questo dispositivo, riprova.'; d.invio = false; render(); }
 }

@@ -24,8 +24,10 @@ export async function GET(req: NextRequest) {
   // coda: il Mac può essersi spento a metà (i retry sono idempotenti).
   // `medico`: il profilo scelto al caricamento — la pipeline lo mette nel
   // nome del file locale (medico-<id>--) e da lì adegua la catena.
-  const righe = await query<{ id: string; filename: string; tipo: string; medico: string | null }>(
-    `select id, filename, tipo, medico from referti_audio
+  // `dragon` (19.10.2026): lettera dettata sul foglio con Dragon — la lettera c'è già, la catena fa solo il controllo
+  // (catena leggera, pipeline-referti/pipeline.py _e_dragon).
+  const righe = await query<{ id: string; filename: string; tipo: string; medico: string | null; dragon: boolean }>(
+    `select id, filename, tipo, medico, (dettato_foglio is not null and coalesce(dettato_testo, '') <> '') as dragon from referti_audio
       where studio_id = $1
         and (stato = 'in_coda' or (stato = 'elaborazione' and updated_at < now() - interval '1 hour'))
       order by created_at asc

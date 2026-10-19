@@ -1,6 +1,7 @@
 import 'server-only';
 import { registraTestoMacchina } from './audit/lineage';
 import { query } from './db';
+import { registraEvento } from './referti-eventi';
 import { letteraDalFoglio, nomeDestinatario, pazienteDalTesto, pulisciFoglio, type Foglio } from './dittafono-foglio-regole';
 import { appellativo, conTitolo } from './referti-lettera';
 import { profiloMedico } from './referti-medici';
@@ -88,3 +89,38 @@ export function destinatarioDi(inv: Inviante | null, formato: 'lettera' | 'rappo
     ? (inv ? [appellativo(inv.nome, donna), nomeInv, inv.specialita ? `FMH ${inv.specialita}` : '', posta ? `Via e-mail: ${posta}` : 'Via e-mail'] : ['Egregio Signor', 'Dr. med. ', 'Via e-mail']).filter(Boolean).join('\n')
     : [nomeInv || 'Dr. med. ', 'Via email'].join('\n');
 }
+
+// LA LETTERA SUBITO (19.10.2026, decisione dello studio: «con Dragon la lettera arrivava alla segretaria dopo 7-18
+// minuti»). La lettera dettata sul foglio è pronta all'«Invia»: diventa subito la bozza da rivedere, senza aspettare la
+// catena. La catena (leggera) arriva dopo e porta solo il CONTROLLO — le parole sentite dal Mac coi loro tempi, le note
+// per la segreteria — che si aggiunge a questa bozza (api/referti/bozza). → id della bozza, o null se non è un foglio.
+export async function letteraSubito(studioId: string, audioId: string, userId: string | null): Promise<string | null> {
+  const [a] = await query<{ dettato_testo: string | null; dettato_foglio: unknown; dettato_fonte: string | null; patient_id: string | null; medico: string | null; tipo: string; creato: string }>(
+    `select dettato_testo, dettato_foglio, dettato_fonte, patient_id, medico, tipo, created_at::text as creato from referti_audio where id = $1 and studio_id = $2 and bozza_id is null`, [audioId, studioId]);
+  const foglio = pulisciFoglio(a?.dettato_foglio), corpo = (a?.dettato_testo ?? '').trim();
+  if (!a || !foglio || !corpo) return null;
+  const lettera = letteraDalFoglio(foglio, corpo), destinatario = nomeDestinatario(foglio.destinatario);
+  const chi = await pazienteDelFoglio(studioId, a.patient_id, foglio.paziente);
+  const profilo = a.medico ? await profiloMedico(studioId, a.medico) : null;
+  const fonte = a.dettato_fonte ?? 'dettatura';
+  const payload = {
+    foglio: { fonte, applicato_il: new Date().toISOString(), subito: true },
+    controllo_audio: 'in_corso',
+    dettato_il: new Date(a.creato).toISOString(),
+    testo_corretto: lettera,
+    note_segreteria: [],
+    medico: profilo ? { id: profilo.id, nome: profilo.nome, modalita: profilo.modalita, formato: profilo.formato } : null,
+  };
+  const [b] = await query<{ id: string }>(
+    `insert into referti_bozze (studio_id, file_id, payload, tipo, medico, testo_finale, campi_confermati, patient_id)
+     values ($1, 'foglio-' || $2, $3, $4, $5, $6, $7, $8) on conflict (studio_id, file_id) do nothing returning id`,
+    [studioId, audioId, JSON.stringify(payload), a.tipo === 'visita' ? 'visita' : 'referto', a.medico, lettera,
+      JSON.stringify({ ...(destinatario ? { medico_destinatario: destinatario } : {}), ...chi }), a.patient_id]);
+  if (!b) return null;
+  await query(`update referti_audio set bozza_id = $3 where id = $1 and studio_id = $2 and bozza_id is null`, [audioId, studioId, b.id]);
+  await registraTestoMacchina({ studioId, bozzaId: b.id, nome: 'lettera_dal_foglio', modello: fonte, regole: 'lettera dettata sul foglio del dittafono: saluto, corpo dettato, chiusura e firma (subito, prima della catena)', prima: null, dopo: lettera });
+  await registraEvento(studioId, b.id, 'bozza_dal_foglio', userId, { caratteri: lettera.length }).catch(() => null);
+  console.log(`[foglio] bozza ${b.id.slice(0, 8)}: la lettera dettata sul foglio è subito da rivedere (${lettera.length} caratteri); il controllo con l'audio arriva dalla catena`);
+  return b.id;
+}
+

@@ -125,7 +125,10 @@ async function main() {
   } finally {
     const chiavi = fatti.length ? await query<{ storage_key: string }>(`select storage_key from referti_audio where id = any($1::uuid[])`, [fatti]) : [];
     if (fatti.length) await query(`delete from referti_audio where id = any($1::uuid[])`, [fatti]);
+    // le lettere «subito» (19.10.2026) nate dagli invii di prova col foglio
+    if (fatti.length) for (const { id } of await query<{ id: string }>(`select id from referti_bozze where file_id = any($1::text[])`, [fatti.map((f) => `foglio-${f}`)])) bozze.push(id);
     if (bozze.length) await togliAudit(bozze).catch(() => null);
+    if (bozze.length) await query(`delete from referti_eventi where bozza_id = any($1::uuid[])`, [bozze]).catch(() => null);
     if (bozze.length) await query(`delete from referti_bozze where id = any($1::uuid[])`, [bozze]);
     if (pazienti.length) await query(`delete from patients where id = any($1::uuid[])`, [pazienti]);
     for (const c of chiavi) await deleteFile(c.storage_key).catch(() => null);

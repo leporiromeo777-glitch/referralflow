@@ -111,7 +111,9 @@ function rfSmHtml() {
       <div class="sm-p-az">${p.s != null ? `<button class="btn sm" onclick="rfSmAscolta(${p.k})">${ICONS.play || ''} Ascolta</button>` : ''}${conf ? '' : `<button class="btn sm" onclick="rfSmFatto(${p.k}, 'tenuto')">Va bene così</button>${p.mac ? `<button class="btn sm" onclick="rfSmMetti(${p.k})">${p.t ? 'Metti' : 'Aggiungi'} «${rfEsc(p.mac.length > 24 ? p.mac.slice(0, 24) + '…' : p.mac)}»</button>` : ''}`}</div></div>`;
   };
   const restano = daFare(punti);
-  const riassunto = !punti.length ? '<div class="sm-vuoto">Niente da controllare: Dragon e il Mac hanno capito le stesse parole.</div>'
+  const attesa = !!(m.dettato && m.dettato.in_attesa);
+  const riassunto = attesa ? '<div class="sm-vuoto">⏳ <b>Controllo con l’audio in corso.</b> I punti da controllare arrivano fra un paio di minuti; intanto la lettera si può già leggere e correggere.</div>'
+    : !punti.length ? '<div class="sm-vuoto">Niente da controllare: Dragon e il Mac hanno capito le stesse parole.</div>'
     : !restano ? '<div class="sm-vuoto">✓ Tutto controllato.</div>'
     : `<div class="caption" style="margin-bottom:6px">Dove Dragon e il Mac hanno capito cose diverse. Ascolta e scegli; se va bene, «Va bene così».</div>`;
   const note = (Array.isArray(m.note_segreteria) ? m.note_segreteria : []).filter(n => typeof n === 'string' && n.trim());
@@ -146,8 +148,33 @@ function rfSmHtml() {
 function rfSmDopo(cursore) {
   const el = document.getElementById('sm-testo'); if (!el) return;
   rfSmAlto(el);
+  rfSmAttendi();
   if (cursore) { try { el.focus({ preventScroll: true }); el.setSelectionRange(cursore[0], cursore[1]); } catch (_) { /* niente */ } }
   if (typeof rvTick === 'function') rvTick();
+}
+// La lettera del foglio è in revisione da subito (19.10.2026); il controllo con l'audio arriva dalla catena dopo un
+// paio di minuti. Finché non c'è, la pagina chiede ogni 20 secondi; quando arriva aggiunge i punti — la lettera non si tocca.
+function rfSmAttendi() {
+  const m = RF.meta || {}, id = RF.loaded;
+  if (!(m.dettato && m.dettato.in_attesa) || RF.smAttesa === id) return;
+  RF.smAttesa = id;
+  const giro = async () => {
+    if (RF.loaded !== id || state.route !== 'review') { RF.smAttesa = null; return; }
+    try {
+      const r = await fetch(`/api/prototipo/referti/${id}`, { credentials: 'include', cache: 'no-store' });
+      const j = await r.json();
+      if (r.ok && j.dettato && !j.dettato.in_attesa && RF.loaded === id) {
+        Object.assign(RF.meta, { dettato: j.dettato, note_segreteria: j.note_segreteria, livello_verifica: j.livello_verifica, catena_leggera: j.catena_leggera, richiamo_proposto: j.richiamo_proposto });
+        if (j.audio && j.audio.dur) { RV_AUDIO.dur = j.audio.dur; RV_AUDIO.label = j.audio.label; }
+        RF.smAttesa = null; rfSmRidisegna();
+        const n = rfSmPunti(RF.meta).length;
+        toast(n ? `Controllo con l’audio arrivato: ${n === 1 ? 'un punto' : `${n} punti`} da guardare` : 'Controllo con l’audio arrivato: niente da controllare');
+        return;
+      }
+    } catch (_) { /* si riprova */ }
+    setTimeout(giro, 20000);
+  };
+  setTimeout(giro, 20000);
 }
 function rfSmAlto(el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight + 4}px`; }
 function rfSmScrive(el) { RF.sm.testo = el.value; rfSmAlto(el); rfSmProgramma(); }
@@ -232,12 +259,13 @@ async function rfSmConferma() {
   if (!(await rfSmSalva())) { toast('La lettera non si è salvata: riprova'); return; }
   const punti = rfSmPunti(m), numeri = punti.filter(p => p.numero), aperti = numeri.filter(p => !sm.fatti[p.k]);
   const parziale = m.livello_verifica && m.livello_verifica !== 'pieno';
-  const presa = aperti.length || parziale;
+  const attesa = !!(m.dettato && m.dettato.in_attesa);
+  const presa = aperti.length || parziale || attesa;
   const altriAperti = punti.filter(p => !p.numero && !sm.fatti[p.k]).length;
   openModal('Conferma la lettera', `<p>La lettera viene chiusa: da qui si scarica il Word e si prepara la mail.</p>
     ${altriAperti ? `<p class="caption">${altriAperti === 1 ? 'Una parola' : `${altriAperti} parole`} dove Dragon e il Mac hanno capito diverso ${altriAperti === 1 ? 'non è stata guardata' : 'non sono state guardate'}: resta com'è nella lettera.</p>` : ''}
     ${m.richiamo_proposto && !m.richiamo ? `<label class="row mt-16" style="gap:8px;align-items:flex-start;cursor:pointer"><input type="checkbox" id="sm-richiamo" checked style="margin-top:3px"><span>Crea anche il <b>richiamo fra ${m.richiamo_proposto.mesi} mesi</b> (dal dettato)</span></label>` : ''}
-    ${presa ? `<label class="row mt-16" style="gap:8px;align-items:flex-start;cursor:pointer"><input type="checkbox" id="sm-presa" style="margin-top:3px"><span>${aperti.length ? `<b>${aperti.length === 1 ? 'Un numero' : `${aperti.length} numeri`} non ancora controllat${aperti.length === 1 ? 'o' : 'i'}</b>: confermo lo stesso.` : ''}${parziale ? ' La trascrizione di controllo del Mac è parziale: confermo lo stesso.' : ''}</span></label>` : ''}`,
+    ${presa ? `<label class="row mt-16" style="gap:8px;align-items:flex-start;cursor:pointer"><input type="checkbox" id="sm-presa" style="margin-top:3px"><span>${aperti.length ? `<b>${aperti.length === 1 ? 'Un numero' : `${aperti.length} numeri`} non ancora controllat${aperti.length === 1 ? 'o' : 'i'}</b>: confermo lo stesso.` : ''}${parziale ? ' La trascrizione di controllo del Mac è parziale: confermo lo stesso.' : ''}${attesa ? ' <b>Il controllo con l’audio non è ancora arrivato</b>: confermo lo stesso.' : ''}</span></label>` : ''}`,
     `<button class="btn" data-close>Continua a correggere</button><button class="btn primary" id="sm-conferma">Conferma</button>`);
   document.getElementById('sm-conferma').onclick = async () => {
     const pa = document.getElementById('sm-presa');

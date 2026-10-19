@@ -7,6 +7,7 @@ import { mediciDelloStudio } from '@/lib/referti-medici';
 import { ESTENSIONI_DITTAFONO, wavDaDittafono } from '@/lib/dittafono';
 import { TIPI_AUDIO, MAX_BYTES_AUDIO } from '@/lib/referti-audio-tipi';
 import { pulisciFoglio } from '@/lib/dittafono-foglio-regole';
+import { letteraSubito } from '@/lib/dittafono-foglio';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -100,6 +101,13 @@ export async function POST(req: NextRequest) {
     [session.studioId, file.name.slice(0, 200), key, TIPI[ext], session.id, tipo, ids.has(medico) ? medico : null, pazienteId, dettatoTesto, dettatoTempi ? JSON.stringify(dettatoTempi) : null, dettatoFonte, dettatoFoglio ? JSON.stringify(dettatoFoglio) : null]
   );
 
+  // Lettera dettata sul foglio (19.10.2026): è già la lettera, e va subito in revisione; la catena porta dopo il controllo.
+  let bozzaSubito: string | null = null;
+  if (dettatoFoglio && dettatoTesto) {
+    try { bozzaSubito = await letteraSubito(session.studioId, row.id, session.id); }
+    catch (e: any) { console.error(`[foglio] lettera subito: ${e?.code ?? e?.name ?? 'errore'}`); }
+  }
+
   // L'arrivo di un dettato è «visita finita» per quel medico (16.9.2026,
   // Piattaforma/Orchestrazione sale §7): un segnale che esisteva già e nessuno
   // usava. Best-effort, e senza nome del paziente: solo il medico.
@@ -112,5 +120,5 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, id: row.id }, { status: 201 });
+  return NextResponse.json({ ok: true, id: row.id, ...(bozzaSubito ? { bozza: bozzaSubito } : {}) }, { status: 201 });
 }

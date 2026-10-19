@@ -351,7 +351,9 @@ export async function GET() {
     const duplicato = !!(a.bozza_id && a.bozza_creata && new Date(a.bozza_creata).getTime() < new Date(a.created_at).getTime() - 60_000);
     // Una seconda traccia finita è dentro la sua bozza: non è una bozza nuova
     // né un doppione, e non si disegna a parte.
-    const state = a.stato === 'fatto' ? (a.bozza_id ? (a.aggiunge_a ? 'ready' : duplicato ? 'duplicate' : 'ready') : 'failed') : 'processing';
+    // La lettera dettata sul foglio è una bozza già dall'«Invia» (19.10.2026): mentre la catena fa il controllo l'audio
+    // non è una scheda «in elaborazione» a parte — la scheda è la bozza.
+    const state = a.stato === 'fatto' ? (a.bozza_id ? (a.aggiunge_a ? 'ready' : duplicato ? 'duplicate' : 'ready') : 'failed') : (a.bozza_id && !a.aggiunge_a ? 'ready' : 'processing');
     return { id: a.id, name: a.filename, state, fase: a.fase ?? a.stato, at: ora(a.created_at), medico: a.medico, bozza: a.bozza_id, aggiunge_a: a.aggiunge_a ?? null, bozzaStato: a.bozza_stato, bozzaData: dCh(a.bozza_creata), paziente: a.bozza_paziente };
   });
 

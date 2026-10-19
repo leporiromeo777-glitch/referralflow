@@ -243,6 +243,14 @@ def _():
     assert m._audio_id_da_nome("piattaforma-" + uuid + ".m4a") == uuid
     assert m._e_visita("piattaforma-visita-medico-moccetti--" + uuid + ".m4a")
     assert not m._e_visita("piattaforma-medico-moccetti--" + uuid + ".m4a")
+    # dettato con Dragon sul foglio (19.10.2026): catena leggera, e il resto del nome si legge come prima
+    assert m._e_dragon("piattaforma-dragon-medico-moccetti--" + uuid + ".wav")
+    assert m._medico_da_nome("piattaforma-dragon-medico-moccetti--" + uuid + ".wav") == "moccetti"
+    assert m._audio_id_da_nome("piattaforma-dragon-medico-moccetti--" + uuid + ".wav") == uuid
+    assert m._audio_id_da_nome("piattaforma-dragon-" + uuid + ".wav") == uuid
+    assert not m._e_visita("piattaforma-dragon-" + uuid + ".wav")
+    assert not m._e_dragon("piattaforma-medico-moccetti--" + uuid + ".wav")
+    assert not m._e_dragon("dragon-dettato.m4a"), "solo dalla piattaforma"
 
 
 @caso("doctor profile drives atempo, unknown doctor stays default")

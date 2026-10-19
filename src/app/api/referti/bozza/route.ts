@@ -120,6 +120,8 @@ export async function POST(req: NextRequest) {
     file_id: fileId,
     timestamp: typeof body?.timestamp === 'string' ? body.timestamp.slice(0, 40) : null,
     testo_corretto: testo,
+    // Catena leggera (19.10.2026): dettato con Dragon sul foglio, la catena ha fatto solo il controllo.
+    ...(body?.catena_leggera === true ? { catena_leggera: true } : {}),
     // Frasi che il medico ha rivolto alla segreteria, separate dal referto
     // dalla fase «segretaria» della pipeline (SPEC §6.4).
     note_segreteria: lista(body?.note_segreteria)
@@ -471,13 +473,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const [inserita] = await query<{ id: string }>(
-    `insert into referti_bozze (studio_id, file_id, payload, tipo, medico)
-       values ($1, $2, $3, $4, $5)
-       on conflict (studio_id, file_id) do nothing
-       returning id`,
-    [studio.id, fileId, JSON.stringify(payload), tipo, medicoId]
-  );
   // Audit/lineage (9.9.2026): la corsa, le tappe e gli artefatti nascono dal
   // payload appena arrivato. Best-effort: mai bloccare la consegna.
   const registraAudit = async (bozzaId: string) => {
@@ -486,6 +481,34 @@ export async function POST(req: NextRequest) {
       await registraCorsa(studio.id, bozzaId, payload, { audioStorage: au?.storage_key ?? null });
     } catch (e: any) { console.error('audit corsa:', e?.code ?? e?.name ?? 'errore'); }
   };
+  // La lettera dettata sul foglio è già in revisione dall'«Invia» (19.10.2026, letteraSubito): la catena porta solo il
+  // CONTROLLO. Si aggiunge al payload di quella bozza — parole coi tempi, note per la segreteria, testo del Mac — senza
+  // toccare la lettera, i campi, lo stato (anche se è già confermata) né la revisione fatta nel frattempo.
+  if (audioId && !(payload as any).ombra) {
+    const [gia] = await query<{ id: string; stato: string }>(
+      `select b.id, b.stato from referti_audio a join referti_bozze b on b.id = a.bozza_id
+        where a.id = $1 and a.studio_id = $2 and b.payload->'foglio'->>'subito' = 'true'`, [audioId, studio.id]);
+    if (gia) {
+      await query(
+        `update referti_bozze set payload = $3::jsonb
+            || jsonb_strip_nulls(jsonb_build_object('foglio', payload->'foglio', 'revisione_prototipo', payload->'revisione_prototipo', 'dettato_il', payload->'dettato_il', 'medico', payload->'medico'))
+            || '{"controllo_audio": "fatto"}'::jsonb
+          where id = $1 and studio_id = $2`, [gia.id, studio.id, JSON.stringify(payload)]);
+      await collega(gia.id);
+      await registraAudit(gia.id);
+      await registraEvento(studio.id, gia.id, 'controllo_arrivato', null, { versione: String((payload as any).versione_catena?.pipeline ?? ''), leggera: (payload as any).catena_leggera === true, stato: gia.stato });
+      console.log(`[foglio] bozza ${gia.id.slice(0, 8)}: arrivato il controllo con l'audio (${gia.stato})`);
+      return NextResponse.json({ id: gia.id }, { status: 201 });
+    }
+  }
+
+  const [inserita] = await query<{ id: string }>(
+    `insert into referti_bozze (studio_id, file_id, payload, tipo, medico)
+       values ($1, $2, $3, $4, $5)
+       on conflict (studio_id, file_id) do nothing
+       returning id`,
+    [studio.id, fileId, JSON.stringify(payload), tipo, medicoId]
+  );
   if (inserita) {
     await collega(inserita.id);
     await registraAudit(inserita.id);

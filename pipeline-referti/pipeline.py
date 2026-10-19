@@ -195,6 +195,8 @@ def _medico_da_nome(nome_file: str) -> str | None:
         resto = resto[len(_PREFISSO_PIATTAFORMA):]
     if resto.startswith("visita-"):
         resto = resto[len("visita-"):]
+    if resto.startswith("dragon-"):
+        resto = resto[len("dragon-"):]
     m = _RX_MARCATORE_MEDICO.match(resto)
     return m.group(1) if m else None
 
@@ -1905,6 +1907,21 @@ Rispondi SOLO con la nota, senza commenti prima o dopo.
 
 CONVERSAZIONE:
 {testo}"""
+
+
+def _e_dragon(nome_file: str) -> bool:
+    """Dettato scritto sul foglio del dittafono con Dragon (19.10.2026, decisione dello studio): la lettera è il testo
+    di Dragon, già in revisione da quando il medico ha premuto «Invia». La catena serve solo da CONTROLLO — dove Dragon
+    e l'audio non coincidono, e da che secondo riascoltarlo —: «catena leggera», whisper e i tempi delle parole, più le
+    note per la segreteria. Le fasi che lavorano sul testo del Mac (secondo motore, arbitro, correzione, pertinenza,
+    senso, avvocato, ispezione, doppioni, estrazione) non servono: quel testo non diventa la lettera."""
+    resto = nome_file.lower()
+    if not resto.startswith(_PREFISSO_PIATTAFORMA):
+        return False
+    resto = resto[len(_PREFISSO_PIATTAFORMA):]
+    if resto.startswith("visita-"):
+        return False
+    return resto.startswith("dragon-")
 
 
 def _e_visita(nome_file: str) -> bool:
@@ -7667,6 +7684,8 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
     _TRASPORTI.pop(file_id, None)
     # Visita registrata o dettato classico? Dal nome del file (vedi _e_visita).
     visita = _e_visita(ingresso.name)
+    # Lettera scritta con Dragon sul foglio: catena leggera, solo controllo (vedi _e_dragon).
+    leggera = _e_dragon(ingresso.name) and not visita
     # Chi detta? Dal marcatore nel nome del file (vedi _medico_da_nome): il
     # profilo decide il rallentamento e i file propri del medico. Un id
     # sconosciuto (profilo tolto dopo il caricamento) = catena di serie.
@@ -7678,8 +7697,8 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
     avvisi: list[str] = []
     # La configurazione nel log (mai contenuti): serve a sapere, a posteriori,
     # con quali impostazioni è stata prodotta una corsa.
-    log.info("fase=avvio file=%s atempo=%s denoise=%d vad=%d visita=%d medico=%s",
-             file_id, atempo_corsa(), int(DENOISE), int(USA_VAD), int(visita),
+    log.info("fase=avvio file=%s atempo=%s denoise=%d vad=%d visita=%d leggera=%d medico=%s",
+             file_id, atempo_corsa(), int(DENOISE), int(USA_VAD), int(visita), int(leggera),
              medico["id"] if medico else "-")
 
     def percorso(suffisso: str) -> Path:
@@ -7763,7 +7782,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # Voxtral parte ORA, in parallelo a whisper (interruttore dedicato).
         voxtral_avvio = None
         if (VOXTRAL_B_SWITCH.is_file() and VOXTRAL_PARALLELO_SWITCH.is_file()
-                and not visita):
+                and not visita and not leggera):
             voxtral_avvio = avvia_voxtral_b(
                 ingresso, percorso(".b.txt"), percorso(".voxtral.wav"), file_id)
         trascrivi(percorso(".wav"), percorso(".txt"), file_id, fase, vocab, con_tempi=True)
@@ -7836,7 +7855,12 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # Doppia trascrizione: con l'interruttore acceso la passata B la fa
         # Voxtral (testimone indipendente); su visite o intoppi, whisper B.
         fatto_b = False
-        if voxtral_avvio is not None:
+        if leggera:
+            # Catena leggera: nessuna seconda trascrizione. B = A, così il resto della catena (anti-loop, confronto,
+            # sentinelle) lavora com'è, senza divergenze da arbitrare.
+            shutil.copyfile(percorso(".txt"), percorso(".b.txt"))
+            log.info("fase=trascrizione_b file=%s esito=saltata motivo=leggera", file_id)
+        elif voxtral_avvio is not None:
             fatto_b = concludi_voxtral_b(
                 voxtral_avvio, percorso(".b.txt"), file_id,
                 len(percorso(".txt").read_text(encoding="utf-8")))
@@ -7844,12 +7868,12 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             fatto_b = trascrivi_voxtral_b(
                 ingresso, percorso(".b.txt"), percorso(".voxtral.wav"),
                 file_id, len(percorso(".txt").read_text(encoding="utf-8")))
-        if not fatto_b:
+        if not fatto_b and not leggera:
             trascrivi(percorso(".wav"), percorso(".b.txt"), file_id, fase, vocab)
         # Ricerca 18 §6: senza Voxtral la passata B è ancora whisper. Non è
         # un secondo testimone: chi rivede deve saperlo, e il punteggio di
         # rischio non deve leggere l'accordo A/B come forte.
-        if not fatto_b and not visita and VOXTRAL_B_SWITCH.is_file():
+        if not fatto_b and not visita and not leggera and VOXTRAL_B_SWITCH.is_file():
             avvisi.append("Il secondo motore di trascrizione (Voxtral) non era disponibile: le due "
                           "trascrizioni vengono entrambe da whisper e il loro accordo vale meno. "
                           "Riascolta con più attenzione numeri, negazioni e lateralità.")
@@ -8006,7 +8030,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # versioni nei punti di divergenza; i dubbi restano comunque in bozza.
         versioni["dopo_dizionario"] = corretto_a
         n_arb = 0
-        if divergenze:
+        if divergenze and not leggera:
             corretto_a, n_arb = arbitra_divergenze(corretto_a, divergenze, file_id)
         tappa("confronto", "codice", divergenze=len(divergenze))
         tappa("arbitro", "modello", scelte_b=n_arb, trasporto=_trasporto(file_id, "arbitro"))
@@ -8020,7 +8044,11 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
 
         fase = "correzione_llm"
         _ = notifica and notifica(fase)
-        finale = correggi_llm(corretto_a, file_id, percorso(".scarto_ai.json"))
+        if leggera:
+            finale = corretto_a      # il testo del Mac non diventa la lettera: niente correzione
+            log.info("fase=correzione_llm file=%s esito=saltata motivo=leggera", file_id)
+        else:
+            finale = correggi_llm(corretto_a, file_id, percorso(".scarto_ai.json"))
         percorso(".finale.txt").write_text(finale, encoding="utf-8")
         tappa("correzione", "modello+codice", riparazioni=len(RIPARAZIONI_APPLICATE.get(file_id, [])),
               trasporto=_trasporto(file_id, "correzione"))
@@ -8082,7 +8110,9 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             # di revisione le mostra spente; entra nel referto solo l'evidenziato.
             fase = "pertinenza"
             _ = notifica and notifica(fase)
-            if compatta is not None:
+            if leggera:
+                divagazioni = []
+            elif compatta is not None:
                 divagazioni = _filtra_divagazioni(
                     compatta["fuori_tema"], finale, file_id)
                 log.info("fase=pertinenza file=%s esito=compatta fuori_tema=%d",
@@ -8107,7 +8137,9 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             # ricostruzione dal glossario (stesso vocabolario dato a whisper).
             fase = "senso"
             _ = notifica and notifica(fase)
-            if compatta is not None:
+            if leggera:
+                frasi_da_chiarire = []
+            elif compatta is not None:
                 frasi_da_chiarire = _filtra_senso(
                     compatta["chiarire"], finale, file_id)
                 log.info("fase=senso file=%s esito=compatta segnalate=%d",
@@ -8143,7 +8175,9 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # rischio al posto delle due riletture intere. Se torna None, percorso
         # classico (avvocato + ispezione) come prima.
         verif = None
-        if (cfg_est and cfg_est.get("verificatore") == "1"
+        if leggera:
+            frasi_non_supportate = []
+        elif (cfg_est and cfg_est.get("verificatore") == "1"
                 and _esterno_attivo() == "openai" and not nota_visita and not visita):
             fase = "verificatore"
             _ = notifica and notifica(fase)
@@ -8154,7 +8188,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
             frasi_non_supportate, dubbi = verif
             tappa("verificatore", "modello", non_supportate=len(frasi_non_supportate), dubbi=len(dubbi),
                   trasporto=_trasporto(file_id, "verificatore"))
-        else:
+        elif not leggera:
             if (cfg_est and cfg_est.get("avvocato") == "1"
                     and _esterno_attivo() == "openai" and not nota_visita):
                 frasi_non_supportate = avvocato_esterno(finale, grezzo_a, file_id)
@@ -8176,7 +8210,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # Sulle visite l'ispezione lavorerebbe su una conversazione colloquiale
         # (tutto «privo di senso medico» per costruzione): si salta.
         if verif is None:
-            dubbi = [] if visita else ispeziona_llm(finale, file_id)
+            dubbi = [] if (visita or leggera) else ispeziona_llm(finale, file_id)
             tappa("avvocato", "modello", non_supportate=len(frasi_non_supportate))
             tappa("ispezione", "modello", dubbi=len(dubbi))
         # I punti dove l'anti-loop è intervenuto vanno in testa ai segmenti
@@ -8258,7 +8292,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # resto segnalato. Le frasi tolte restano in bozza, rimettibili.
         doppioni_tolti: list[dict] = []
         doppioni_dubbi: list[dict] = []
-        if not visita:
+        if not visita and not leggera:
             fase = "doppioni"
             _ = notifica and notifica(fase)
             try:
@@ -8308,8 +8342,14 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
 
         fase = "estrazione"
         _ = notifica and notifica(fase)
-        campi = estrai_campi(testo_integrale, file_id)
-        tappa("estrazione", "modello+codice", trasporto=_trasporto(file_id, "estrazione"))
+        if leggera:
+            # paziente e destinatario vengono dal foglio del dittafono: niente estrazione dal testo del Mac
+            campi = {k: "non indicato" for k in CAMPI_RICHIESTI}
+            campi["valori_numerici"] = []
+            log.info("fase=estrazione file=%s esito=saltata motivo=leggera", file_id)
+        else:
+            campi = estrai_campi(testo_integrale, file_id)
+            tappa("estrazione", "modello+codice", trasporto=_trasporto(file_id, "estrazione"))
         percorso(".campi.json").write_text(
             json.dumps(campi, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
@@ -8320,7 +8360,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         motore_tempi = "nessuno"
         n_avv_farmaci = 0
         # Terzo orecchio sulle cifre (Parakeet): solo avvisi, mai correzioni.
-        if PARAKEET_SWITCH.is_file() and not visita:
+        if PARAKEET_SWITCH.is_file() and not visita and not leggera:
             avvisi.extend(controllo_cifre_parakeet(
                 ingresso, percorso(".voxtral.wav"), finale, file_id))
         # Farmaci (registro Swissmedic): dosaggi inesistenti e nomi storpiati.
@@ -8484,6 +8524,8 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # Visita: la nota strutturata (se ha superato le guardie), altrimenti
         # la trascrizione integrale; dettato classico: il testo di sempre.
         "tipo": "visita" if visita else "referto",
+        # Catena leggera (dettato con Dragon sul foglio, 19.10.2026): solo controllo, la lettera è quella di Dragon.
+        **({"catena_leggera": True} if leggera else {}),
         # Chi ha dettato (profilo scelto al caricamento): la piattaforma lo
         # mostra, mette il suo nome in carta intestata e — in modalità
         # «aggiornamento» — chiede da sola la fusione con la lettera precedente.
@@ -8948,6 +8990,9 @@ def scarica_coda(cartelle: dict) -> None:
         # Le visite registrate portano il marcatore nel nome locale: da lì
         # elabora sceglie il binario della nota di visita (vedi _e_visita).
         marcatore = "visita-" if voce.get("tipo") == "visita" else ""
+        # Dettato col foglio di Dragon (19.10.2026): la catena leggera (vedi _e_dragon).
+        if voce.get("dragon") is True and not marcatore:
+            marcatore = "dragon-"
         # Il medico scelto al caricamento viaggia nel nome (medico-<id>--):
         # da lì elabora prende il profilo. Id non valido = nessun marcatore.
         mid = str(voce.get("medico") or "").strip().lower()
@@ -9085,12 +9130,14 @@ def sincronizza_dizionario() -> None:
 
 
 def _audio_id_da_nome(nome: str) -> str | None:
-    """piattaforma-[visita-][medico-<id>--]<uuid>.<ext> → <uuid>; altrimenti None."""
+    """piattaforma-[visita-][dragon-][medico-<id>--]<uuid>.<ext> → <uuid>; altrimenti None."""
     if not nome.startswith(_PREFISSO_PIATTAFORMA):
         return None
     resto = nome[len(_PREFISSO_PIATTAFORMA):]
     if resto.startswith("visita-"):
         resto = resto[len("visita-"):]
+    if resto.startswith("dragon-"):
+        resto = resto[len("dragon-"):]
     resto = _RX_MARCATORE_MEDICO.sub("", resto, count=1)
     punto = resto.rfind(".")
     candidato = resto[:punto] if punto != -1 else resto

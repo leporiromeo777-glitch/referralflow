@@ -799,7 +799,7 @@ vuole dettare su un foglio con la carta intestata e vedere la lettera prendere f
 - **quel che c'è sul foglio è la lettera da rivedere e firmare**; la trascrizione che il Mac ricava dall'audio resta
   come controllo (punti diversi evidenziati, riascolto);
 - **niente rifinitura automatica per ora**: il foglio è ciò che è stato dettato;
-- la catena non si tocca: continua a trascrivere l'audio, e i suoi controlli valgono per il suo testo.
+- la catena non si tocca: continua a trascrivere l'audio, e i suoi controlli valgono per il suo testo. *(Superata il 19.10.2026: per questi dettati la catena è «leggera», vedi sotto.)*
 
 **12.10.2026 — comandi a voce nel dittafono, parola d'ordine «per favore».** Lo studio vuole poter dare istruzioni
 mentre detta («prendi la lettera più recente del paziente e aggiungimela») e ha scelto la parola d'ordine:
@@ -867,3 +867,12 @@ programmi di trascrizione insieme, senza un'impostazione da scegliere; la pedali
 **15.10.2026 — «detto la lettera all'indirizzo del dottor … per il paziente …» senza «per favore».** La frase è già
 un'istruzione e nelle lettere non si scrive così. Medico e paziente si scelgono da soli solo se uno è chiaramente il più
 simile; altrimenti si propongono, mai un'indovinata.
+
+**19.10.2026 — lettera dettata con Dragon: subito in revisione, catena leggera (cambia la decisione del 12.10).** Lo
+studio: con Dragon la lettera arrivava alla segretaria dopo 7–18 minuti, e la catena faceva passaggi inutili sul proprio
+testo, che non diventa la lettera. Deciso (con l'ok dello studio): all'«Invia» la lettera del foglio è subito la bozza da
+rivedere; la catena per questi dettati fa solo il **controllo** — whisper, tempi delle parole, note per la segreteria (tenute
+su richiesta: sono le istruzioni del medico) — e niente secondo motore, arbitro, correzione, pertinenza, senso, avvocato,
+ispezione, doppioni, estrazione. Il controllo si aggiunge alla bozza quando arriva, senza toccare la lettera. Si può
+confermare anche prima, con la presa d'atto. Dettaglio in [[Catena/Panoramica]] e [[Piattaforma/Dittafono]].
+
