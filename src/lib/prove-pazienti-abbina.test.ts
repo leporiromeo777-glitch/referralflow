@@ -53,3 +53,9 @@ test('crea cartella: la proposta separa il cognome in maiuscolo dal nome, e mett
   assert.deepEqual(proponiAnagrafica('Prova Mario'), { cognome: 'Prova', nome: 'Mario', data_nascita: '' });
   assert.deepEqual(proponiAnagrafica("D'ESEMPIO Anna"), { cognome: "D'Esempio", nome: 'Anna', data_nascita: '' });
 });
+
+test('crea cartella dall\'agenda: la nota dopo il nome non entra nel nome (19.10.2026)', () => {
+  const an = proponiAnagrafica('Provanota Ljudmila conf. paz il 14.10 (03.04.1950 / N° 123456) · vpaio');
+  assert.deepEqual([an.cognome, an.nome, an.data_nascita], ['Provanota', 'Ljudmila', '1950-04-03']);
+  assert.equal(daTitoloAgenda('Provanota Ljudmila conf. paz il 14.10 (03.04.1950)').nome, 'Provanota Ljudmila');
+});

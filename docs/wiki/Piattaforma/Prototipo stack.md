@@ -150,7 +150,11 @@ Da fare quando serve: portare `RF_COLORI_TIPO` in una scheda di Studio, così i 
 ### Scheda dell'appuntamento (15.9.2026)
 Il riquadro dell'agenda si clicca e si apre una scheda in sola lettura: quando, paziente, **data di nascita**, **numero di paziente di MediOnline**, medico, sigla dell'agenda, tipo dal colore, prestazione, **stato in MediOnline** (la moneta o il visto con la «F») e se il paziente è in cartella. In fondo il testo grezzo com'è scritto nell'agenda, così non si nasconde nulla. Due tasti: «Apri la cartella» quando il paziente è abbinato, e «Briefing».
 
-Data di nascita, numero e sigla si ricavano dal testo del riquadro con `src/lib/agenda-titolo.ts` (7 test) — **sul server**, non nel browser: la funzione è una sola e testata. Da lì il riquadro in agenda mostra **solo il nome**: prima portava addosso anche «(12.03.1945 / N° 202847) · vpaio», ed era metà del disordine.
+Data di nascita, numero e sigla si ricavano dal testo del riquadro con `src/lib/agenda-titolo.ts` (9 test) — **sul server**, non nel browser: la funzione è una sola e testata. Da lì il riquadro in agenda mostra **solo il nome**: prima portava addosso anche «(12.03.1945 / N° 202847) · vpaio», ed era metà del disordine.
+
+Due cose che il testo del riquadro può portare oltre al nome (19.10.2026, dallo studio):
+- **una nota dopo il nome** («Rossi Anna conf. paz il 14.10 (…)»): se il titolo comincia con un nome scritto da nome — almeno due parole con l'iniziale maiuscola — il nome finisce alla prima parola che in un nome non sta (cifre, punti, «·», «/», «+», una minuscola che non sia una particella come «de» o «von»); la nota resta a parte (`resto`) e non entra mai nella scheda creata dall'agenda. Un titolo che non comincia così («in vacanza», «rossi anna») resta com'è;
+- **caratteri in codice HTML** («N&#176;» invece di «N°»): arrivati con l'importazione del 15.9 per gli appuntamenti dell'8–14.9 (263); si decodificano, e così la data di nascita si legge anche lì.
 
 ### «Sale oggi» non mostra le agende dei medici (15.9.2026)
 In MediOnline **una colonna è un'agenda, non un luogo**. Lo studio ne usa 15 e sono un misto: medici (frego = Rego, T.M. = Tiziano Moccetti, DG = Girola, vpaio = Paiocchi, M.M. = Marco Moccetti, GMOS = Moschovitis), apparecchi (Labor, Appar) e codici che sanno solo loro (DC, RIA, ASM, P-E V, SF, bcape, miped). Il campo `luogo` porta la sigla della colonna, e il riquadro «Sale oggi» mostrava così l'agenda del dottor Rego come se fosse una stanza.

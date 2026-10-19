@@ -876,3 +876,8 @@ su richiesta: sono le istruzioni del medico) — e niente secondo motore, arbitr
 ispezione, doppioni, estrazione. Il controllo si aggiunge alla bozza quando arriva, senza toccare la lettera. Si può
 confermare anche prima, con la presa d'atto. Dettaglio in [[Catena/Panoramica]] e [[Piattaforma/Dittafono]].
 
+## Nota nel titolo dell'agenda — 19.10.2026
+Dallo studio: una paziente compariva col nome «… conf. paz il 14.10 …», perché la segreteria scrive note nel riquadro
+di MediOnline subito dopo il nome. Deciso: il nome finisce alla prima parola che in un nome non può stare, ma solo se
+il titolo comincia con almeno due parole con l'iniziale maiuscola; altrimenti il titolo resta com'è (meglio un nome
+lungo che un nome tagliato a caso). La nota non entra mai nella scheda. Dettaglio in [[Piattaforma/Prototipo stack]].
