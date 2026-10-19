@@ -4,6 +4,7 @@ import path from 'path';
 import { query } from './db';
 import { riabbinaPazienti } from './pazienti-abbina';
 import { parseICal, type ICalEvent, avvisoColonne, colonneLette } from './ical';
+import { decodificaEntita, nomeENota } from './agenda-titolo';
 // Sincronizzazione di un feed iCal (agenda Cassa dei Medici) verso la tabella appointments.
 // Server-side: scarica l'URL, mappa il medico dagli alias, abbina le referral,
 // fa upsert idempotente e allinea le cancellazioni.
@@ -64,9 +65,12 @@ function matchProvider(ev: ICalEvent, field: string, providers: Provider[]): str
 // Nome paziente best-effort: parte del titolo prima di un separatore, senza il testo tra parentesi.
 export function extractPatientName(summary: string): string {
   if (!summary) return '';
-  let s = summary.split(/\s+[—–|;]\s+|\s+-\s+/)[0];
+  let s = decodificaEntita(summary).split(/\s+[—–|;]\s+|\s+-\s+/)[0];
+  const conData = s.search(/\(\s*\d{2}\.\d{2}\.\d{4}/);       // il nome sta prima della parentesi con la data di nascita
+  if (conData > 0) s = s.slice(0, conData);
   s = s.replace(/\s*\(.*?\)\s*/g, ' ');
-  return s.trim();
+  // la nota scritta dopo il nome («conf. paz il 14.10») e la sigla dopo «·» non sono il nome (19.10.2026)
+  return nomeENota(s.trim())[0];
 }
 
 // Abbina a una referral aperta dello stesso paziente. Preferisce quella con

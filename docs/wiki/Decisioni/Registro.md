@@ -880,4 +880,5 @@ confermare anche prima, con la presa d'atto. Dettaglio in [[Catena/Panoramica]] 
 Dallo studio: una paziente compariva col nome «… conf. paz il 14.10 …», perché la segreteria scrive note nel riquadro
 di MediOnline subito dopo il nome. Deciso: il nome finisce alla prima parola che in un nome non può stare, ma solo se
 il titolo comincia con almeno due parole con l'iniziale maiuscola; altrimenti il titolo resta com'è (meglio un nome
-lungo che un nome tagliato a caso). La nota non entra mai nella scheda. Dettaglio in [[Piattaforma/Prototipo stack]].
+lungo che un nome tagliato a caso). Dopo la parentesi con la data di nascita è sempre nota. La nota non entra mai nella
+scheda; i nomi già salvati con gli appuntamenti sono stati ricalcolati una volta (solo copia locale, solo accorciando). Dettaglio in [[Piattaforma/Prototipo stack]].

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { avvisoColonne, colonneLette } from './ical';
-import { leggiTitolo, nomePulito } from './agenda-titolo';
+import { leggiTitolo, nomeENota, nomePulito } from './agenda-titolo';
 
 test('titolo: nome, data di nascita, numero paziente e sigla', () => {
   const t = leggiTitolo('Rossi Rossi Mario Luca (06.03.1942 / N° 202847) · vpaio');
@@ -60,6 +60,15 @@ test('titolo: la nota scritta dopo il nome non diventa nome (dallo studio, 19.10
   assert.equal(leggiTitolo('in vacanza fino al 3.11').nome, 'in vacanza fino al 3.11');
   assert.equal(leggiTitolo('rossi anna 14.10').nome, 'rossi anna 14.10');
   assert.equal(leggiTitolo('Verdi Giuseppe').resto, '');
+  assert.deepEqual(nomeENota('Provanota Anna, 03.04.1950'), ['Provanota Anna', '03.04.1950']);
+  assert.deepEqual(nomeENota('Provanota Anna,'), ['Provanota Anna', '']);
+  // la nota DOPO la parentesi con la data, anche con la maiuscola
+  const d = leggiTitolo('Provanota Ljudmila (03.04.1950 / N° 123456) Conferma paz ok. · vpaio');
+  assert.deepEqual([d.nome, d.resto, d.nascita, d.sigla], ['Provanota Ljudmila', 'Conferma paz ok.', '03.04.1950', 'vpaio']);
+  assert.equal(leggiTitolo('Provanota Anna Maria (03.04.1950 / N° 123456) · vpaio').nome, 'Provanota Anna Maria');
+  // il nome salvato dalla sincronizzazione (tolte le parentesi, resta la sigla dopo «·»)
+  assert.deepEqual(nomeENota('Provanota Ljudmila conf. paz il 14.10 · vpaio'), ['Provanota Ljudmila', 'conf. paz il 14.10 · vpaio']);
+  assert.deepEqual(nomeENota('Provanota Anna · vpaio'), ['Provanota Anna', 'vpaio']);
 });
 
 test('nome: il cognome ripetuto si toglie una volta sola, il doppio cognome resta', () => {

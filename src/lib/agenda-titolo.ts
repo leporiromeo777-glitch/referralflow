@@ -27,7 +27,7 @@ const SOLO_NUMERO = /\(\s*N°?\s*(\d+)\s*\)/;
 const DURATA = /\((\d{1,2}:\d{2})\)/;
 
 const ENTITA: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', deg: '°', middot: '·', ndash: '–', mdash: '—', rsquo: '’' };
-function decodificaEntita(s: string): string {
+export function decodificaEntita(s: string): string {
   return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (x, c: string) => {
     if (c[0] === '#') { const n = c[1] === 'x' || c[1] === 'X' ? parseInt(c.slice(2), 16) : Number(c.slice(1)); return n > 0 && n < 0x110000 ? String.fromCodePoint(n) : x; }
     return ENTITA[c.toLowerCase()] ?? x;
@@ -51,11 +51,16 @@ export function leggiTitolo(titolo: string): TitoloAgenda {
     }
   }
 
+  let dopoNascita = '';
   const m = NASCITA.exec(t);
   if (m) {
     fuori.nascita = m[1];
     if (m[2]) fuori.nPaziente = m[2];
-    t = (t.slice(0, m.index) + ' ' + t.slice(m.index + m[0].length)).replace(/\s+/g, ' ').trim();
+    // MediOnline scrive il nome PRIMA della parentesi con la data: quel che viene dopo è una nota (anche se comincia
+    // con la maiuscola: «Rossi Anna (…) Conferma ok»). Se prima non c'è niente, si fa come sempre.
+    const prima = t.slice(0, m.index).trim(), dopo = t.slice(m.index + m[0].length).trim();
+    if (prima && dopo) { t = prima; dopoNascita = dopo; }
+    else t = (prima + ' ' + dopo).replace(/\s+/g, ' ').trim();
   } else {
     const n = SOLO_NUMERO.exec(t);
     if (n) {
@@ -73,7 +78,7 @@ export function leggiTitolo(titolo: string): TitoloAgenda {
   // maiuscoli: restano com'erano, non sono nomi.
   fuori.nome = t.replace(/^[—–-]\s*/, '').trim();
   const [nome, nota] = nomeENota(fuori.nome);
-  fuori.nome = nome; fuori.resto = nota;
+  fuori.nome = nome; fuori.resto = [nota, dopoNascita].filter(Boolean).join(' ');
   return fuori;
 }
 
@@ -86,6 +91,11 @@ const PAROLA_NOME = /^[A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ'’-]*$/;
 const PARTICELLE = new Set(['de', 'di', 'da', 'del', 'della', 'dei', 'degli', 'dal', 'dalla', 'van', 'von', 'der', 'den', 'ten', 'ter', 'zu', 'le', 'la', 'du', 'des', 'dos', 'das', 'do', 'el', 'al', 'y', 'e', 'bin', 'ben']);
 export function nomeENota(s: string): [string, string] {
   const p = (s ?? '').trim().split(/\s+/).filter(Boolean);
+  // «Rossi Anna, 03.04.1950»: la virgola chiude il nome
+  const v = p.findIndex((w) => w.endsWith(','));
+  if (v >= 1 && PAROLA_NOME.test(p[0]) && p.slice(0, v + 1).every((w) => PAROLA_NOME.test(w.replace(/,$/, '')) || PARTICELLE.has(w))) {
+    return [p.slice(0, v + 1).join(' ').replace(/,$/, ''), p.slice(v + 1).join(' ')];
+  }
   const diNome = (i: number) => PAROLA_NOME.test(p[i] ?? '') || (PARTICELLE.has(p[i] ?? '') && PAROLA_NOME.test(p[i + 1] ?? ''));
   if (p.length < 3 || !PAROLA_NOME.test(p[0]) || !diNome(1)) return [p.join(' '), ''];
   let k = 2;
