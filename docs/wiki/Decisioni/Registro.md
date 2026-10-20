@@ -929,3 +929,10 @@ pagina della piattaforma. Deciso così:
 - **Riuso**: le misure passano da `caricaProfilo` come quelle della pagina e della cartella; nessun calcolo nuovo, i
   grafici e i numeri sono quelli della pagina Pressione.
 Aperti: generare la chiave in produzione e incollarla nei generatori; profili Aktiia oltre gli otto giorni.
+
+## Eliminare un documento: storico e file tenuto — 20.10.2026
+Dallo studio: «Elimina» al posto della ✕, una conferma che si veda bene, e poter rintracciare chi ha eliminato cosa.
+Cambia la decisione di stamattina («togliere cancella davvero»): la riga eliminata, chi e quando restano nello storico
+(migrazione 093) e il file resta nel deposito, così un documento eliminato per sbaglio si può rimettere. Una cartella
+clinica non deve perdere documenti per un clic.
+

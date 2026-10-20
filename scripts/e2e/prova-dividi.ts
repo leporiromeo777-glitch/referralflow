@@ -68,6 +68,7 @@ async function main() {
   const pulisci = async () => {
     const chiavi = await query<{ storage_key: string }>(`select d.storage_key from patient_documents d join patients p on p.id = d.patient_id where p.studio_id = $1 and p.cognome = 'Provadividi'`, [S]);
     await query(`delete from document_access_log where document_id in (select d.id from patient_documents d join patients p on p.id = d.patient_id where p.studio_id = $1 and p.cognome = 'Provadividi')`, [S]).catch(() => null);
+    await query(`delete from documenti_eliminati where patient_id in (select id from patients where studio_id = $1 and cognome = 'Provadividi')`, [S]).catch(() => null);
     await query(`delete from patients where studio_id = $1 and cognome = 'Provadividi'`, [S]);
     await query(`delete from referti_bozze where studio_id = $1 and file_id like 'prova-dividi-%'`, [S]).catch(() => null);
     for (const c of chiavi) await deleteFile(c.storage_key).catch(() => null);
@@ -179,6 +180,8 @@ async function main() {
     verifica(giaPrima === 4 && rifatto.status === 201 && rj.creati?.length === 2 && rj.sostituiti === 3 && rj.tenuti === 1 && canc.n === 3
       && JSON.stringify(dopo.map((x) => x.filename)) === JSON.stringify(['Lettera 12.03.2019.pdf', 'Lettera rifatta.pdf', 'Resto rifatto.pdf']) && (await pagineDi(doc)) === 8 && giaDopo === 2,
       `dividere di nuovo sostituendo: nati 2, tolti i 3 di prima, tenuto quello allegato a un referto, 3 cancellazioni nel registro, originale intatto (${rj.sostituiti} tolti, ${rj.tenuti} tenuti, restano ${dopo.length})`);
+    const [stor] = await query<{ n: number; senza_file: number; con_chi: number }>(`select count(*)::int as n, count(*) filter (where not file_tenuto)::int as senza_file, count(*) filter (where eliminato_da is not null and motivo like 'sostituito%')::int as con_chi from documenti_eliminati where document_id = any($1::uuid[])`, [creati.map((x) => x.id)]);
+    verifica(stor.n === 3 && stor.senza_file === 3 && stor.con_chi === 3, `i 3 tolti dalla nuova divisione sono nello storico degli eliminati, con chi e perché, senza file (${JSON.stringify(stor)})`);
 
     // 5 — la cartella coi fogli separatori: il Mac li trova in sottofondo, e la proposta diventa sezioni e nomi.
     const fileB = path.join(TMP, 'barre.pdf');

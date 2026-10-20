@@ -5,7 +5,7 @@ import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { CATEGORIE, isUuid, logDocumento } from '@/lib/cartella';
 import { vietato } from '@/lib/permessi';
-import { deleteFile, putFile } from '@/lib/storage';
+import { putFile } from '@/lib/storage';
 import { nomeCartella, rinomina } from '@/lib/cartella-nomi';
 import { isAllowedInternalUpload, MAX_CARTELLA_PDF_SIZE, MAX_CARTELLA_SIZE } from '@/lib/upload';
 import { dopoCaricamento } from '@/lib/documenti-ocr';
@@ -77,6 +77,7 @@ async function chi(params: Promise<{ id: string }>) {
 //   PATCH { azione: 'sposta', ids: [..], cartella: '05_Apparecchi' | null }
 //   PATCH { azione: 'rinomina', id, titolo }
 //   PATCH { azione: 'rinomina_cartella', da, a }      — tutti i documenti del paziente in «da» passano in «a»
+//   PATCH { azione: 'ripristina', id }                — un documento dello storico degli eliminati torna nella cartella
 export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const c = await chi(props.params);
   if (c.no) return c.no;
@@ -111,12 +112,28 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     for (const x of r) await logDocumento(x.id, 'modifica', { studioId: sid, userId: session.id, dettaglio: 'sottocartella rinominata' });
     return NextResponse.json({ spostati: r.length });
   }
+  if (azione === 'ripristina') {
+    // Un documento eliminato torna nella cartella com'era (stesso id, stessa sottocartella), se il file c'è ancora.
+    const id = String(b?.id ?? '');
+    if (!isUuid(id)) return NextResponse.json({ errore: 'Non trovato.' }, { status: 404 });
+    const [r] = await query<{ id: string }>(
+      `with e as (select * from documenti_eliminati where id = $1 and studio_id = $2 and patient_id = $3 and file_tenuto and ripristinato_at is null
+                    and not exists (select 1 from patient_documents d where d.id = documenti_eliminati.document_id)),
+            dentro as (insert into patient_documents select (jsonb_populate_record(null::patient_documents, e.riga)).* from e returning id)
+       update documenti_eliminati set ripristinato_at = now(), ripristinato_da = $4 where id = $1 and exists (select 1 from dentro) returning document_id as id`,
+      [id, sid, pid, session.id]);
+    if (!r) return NextResponse.json({ errore: 'Non si può rimettere: è già nella cartella, o il file non c’è più.' }, { status: 409 });
+    await logDocumento(r.id, 'modifica', { studioId: sid, userId: session.id, dettaglio: 'rimesso nella cartella dallo storico degli eliminati' });
+    return NextResponse.json({ ok: true });
+  }
   return NextResponse.json({ errore: 'azione' }, { status: 400 });
 }
 
-// Togliere un documento dalla cartella (20.10.2026, chiesto dallo studio). Lo decide una persona, documento per
-// documento, dopo una conferma. Non si toglie un documento allegato a un referto (il referto lo cita). La riga del
-// registro resta: il registro non si cancella mai, sopravvive al documento.
+// Eliminare un documento dalla cartella (20.10.2026, chiesto dallo studio). Lo decide una persona, documento per
+// documento, dopo una conferma. Non si elimina un documento allegato a un referto (il referto lo cita). Dal 20.10.2026
+// (lo studio: «poter rintracciare chi ha eliminato cosa») la riga com'era, chi e quando restano in `documenti_eliminati`
+// (migrazione 093) e il file resta nel deposito: dallo storico il documento si può rimettere. Il registro degli accessi
+// non si cancella mai.
 //   DELETE ?documento=<id>
 export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const c = await chi(props.params);
@@ -124,15 +141,34 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
   const { session, sid, pid } = c;
   const id = req.nextUrl.searchParams.get('documento') ?? '';
   if (!isUuid(id)) return NextResponse.json({ errore: 'Documento non trovato.' }, { status: 404 });
-  const [d] = await query<{ storage_key: string; allegato: boolean }>(
-    `select storage_key, exists (select 1 from referti_allegati a where a.documento_id = d.id) as allegato
+  const [d] = await query<{ allegato: boolean }>(
+    `select exists (select 1 from referti_allegati a where a.documento_id = d.id) as allegato
        from patient_documents d where id = $1 and studio_id = $2 and patient_id = $3`, [id, sid, pid]);
   if (!d) return NextResponse.json({ errore: 'Documento non trovato.' }, { status: 404 });
-  if (d.allegato) return NextResponse.json({ errore: 'È allegato a un referto: non si può togliere.' }, { status: 409 });
-  const [via] = await query<{ id: string }>(`delete from patient_documents where id = $1 and studio_id = $2 returning id`, [id, sid]);
+  if (d.allegato) return NextResponse.json({ errore: 'È allegato a un referto: non si può eliminare.' }, { status: 409 });
+  // nello storico e fuori dalla cartella insieme: o tutte e due o niente
+  const [via] = await query<{ id: string }>(
+    `with tolto as (delete from patient_documents where id = $1 and studio_id = $2 and patient_id = $3 returning *)
+     insert into documenti_eliminati (studio_id, patient_id, document_id, filename, categoria, cartella, riga, eliminato_da, motivo)
+     select studio_id, patient_id, id, filename, categoria, cartella, to_jsonb(tolto), $4, 'eliminato dalla cartella del paziente' from tolto
+     returning document_id as id`, [id, sid, pid, session.id]);
   if (!via) return NextResponse.json({ errore: 'Documento non trovato.' }, { status: 404 });
-  await logDocumento(id, 'cancellazione', { studioId: sid, userId: session.id, dettaglio: 'tolto dalla cartella del paziente' });
-  await deleteFile(d.storage_key).catch(() => null);
-  console.log(`[cartella] documento ${id.slice(0, 8)} tolto dalla cartella`);
+  await logDocumento(id, 'cancellazione', { studioId: sid, userId: session.id, dettaglio: 'eliminato dalla cartella del paziente (nello storico)' });
+  console.log(`[cartella] documento ${id.slice(0, 8)} eliminato dalla cartella, nello storico`);
   return NextResponse.json({ ok: true });
+}
+
+// Lo storico degli eliminati di questo paziente: che cosa, quando, chi; e chi l'ha rimesso.
+//   GET ?eliminati=1 → { eliminati: [{ id, filename, cartella, categoria, eliminato_at, eliminato_da, motivo, si_rimette, ripristinato_at, ripristinato_da }] }
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const c = await chi(props.params);
+  if (c.no) return c.no;
+  const { sid, pid } = c;
+  if (req.nextUrl.searchParams.get('eliminati') !== '1') return NextResponse.json({ errore: 'richiesta' }, { status: 400 });
+  const eliminati = await query(
+    `select e.id, e.filename, e.cartella, e.categoria, e.eliminato_at, e.motivo, ue.email as eliminato_da,
+            e.file_tenuto and e.ripristinato_at is null as si_rimette, e.ripristinato_at, ur.email as ripristinato_da
+       from documenti_eliminati e left join users ue on ue.id = e.eliminato_da left join users ur on ur.id = e.ripristinato_da
+      where e.studio_id = $1 and e.patient_id = $2 order by e.eliminato_at desc limit 200`, [sid, pid]);
+  return NextResponse.json({ eliminati }, { headers: { 'Cache-Control': 'no-store' } });
 }

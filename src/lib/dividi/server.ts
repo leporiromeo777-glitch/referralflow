@@ -170,7 +170,12 @@ export async function crea(studioId: string, userId: string, id: string, grezzi:
         const nuovi = new Set(creati.map((x) => x.id));
         for (const v of (await pezziDiPrima(studioId, d.patient_id, id)).filter((x) => !nuovi.has(x.id))) {
           if (v.allegato) { tenuti++; continue; }
-          const [via] = await query<{ id: string }>(`delete from patient_documents where id = $1 and studio_id = $2 returning id`, [v.id, studioId]);
+          // nello storico degli eliminati (20.10.2026), senza file: era una copia di pagine dell'originale, che resta
+          const [via] = await query<{ id: string }>(
+            `with tolto as (delete from patient_documents where id = $1 and studio_id = $2 returning *)
+             insert into documenti_eliminati (studio_id, patient_id, document_id, filename, categoria, cartella, riga, file_tenuto, eliminato_da, motivo)
+             select studio_id, patient_id, id, filename, categoria, cartella, to_jsonb(tolto), false, $3, 'sostituito da una nuova divisione della cartella completa' from tolto
+             returning document_id as id`, [v.id, studioId, userId]);
           if (!via) continue;
           await logDocumento(v.id, 'cancellazione', { studioId, userId, dettaglio: `sostituito da una nuova divisione di ${id.slice(0, 8)}` });
           await deleteFile(v.storage_key).catch(() => null);

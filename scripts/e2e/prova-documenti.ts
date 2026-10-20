@@ -140,8 +140,21 @@ async function main() {
     tolti.push(s2.j.id);
     const reg = await query<{ azione: string; dettaglio: string }>(`select azione, dettaglio from document_access_log where document_id = $1 order by at`, [s2.j.id]);
     const file = await import('../../src/lib/storage').then((m) => m.getFile(chiave)).then(() => true, () => false);
-    verifica(via.status === 200 && !(await riga(s2.j.id)) && !file, 'tolto: sparito dalla cartella e il file cancellato');
-    verifica(reg.some((r) => r.azione === 'cancellazione') && reg.some((r) => r.azione === 'modifica') && reg.every((r) => !/nota|holter|prova/i.test(r.dettaglio ?? '')), 'nel registro: spostato, rinominato e tolto, senza nomi di file');
+    verifica(via.status === 200 && !(await riga(s2.j.id)) && file, 'eliminato: sparito dalla cartella, il file resta nel deposito');
+    verifica(reg.some((r) => r.azione === 'cancellazione') && reg.some((r) => r.azione === 'modifica') && reg.every((r) => !/nota|holter|prova/i.test(r.dettaglio ?? '')), 'nel registro: spostato, rinominato e eliminato, senza nomi di file');
+    // Lo storico degli eliminati (20.10.2026): chi, quando, che cosa; e si rimette.
+    const storia = await (await fetch(`${url}?eliminati=1`, { headers: { cookie } })).json() as any;
+    const voce = (storia.eliminati ?? []).find((x: any) => x.filename === 'nota.pdf');
+    verifica(!!voce && !!voce.eliminato_da && !!voce.eliminato_at && voce.cartella === '13_Prova rinominata' && voce.si_rimette === true, `storico degli eliminati: che cosa, da chi, quando, da dove (${JSON.stringify(voce ?? storia)})`);
+    const ri = await patch({ azione: 'ripristina', id: voce?.id });
+    const rimessa = await riga(s2.j.id);
+    const ri2 = await patch({ azione: 'ripristina', id: voce?.id });
+    const st2 = await (await fetch(`${url}?eliminati=1`, { headers: { cookie } })).json() as any;
+    const voce2 = (st2.eliminati ?? []).find((x: any) => x.id === voce?.id);
+    verifica(ri.status === 200 && rimessa?.cartella === '13_Prova rinominata' && rimessa.filename === 'nota.pdf' && ri2.status === 409 && !!voce2?.ripristinato_at && !!voce2.ripristinato_da && voce2.si_rimette === false,
+      `rimesso nella cartella com'era (stesso documento, stessa sottocartella), una volta sola, e lo storico dice da chi (${ri.status}, ${ri2.status})`);
+    const st401 = await fetch(`${url}?eliminati=1`, { headers: { cookie: 'rf_sess=nessuna' } });
+    verifica(st401.status === 401, 'storico degli eliminati: senza accesso no (401)');
     const d2 = await (await fetch(`${base}/api/prototipo/dati`, { headers: { cookie } })).json();
     const pd = (d2.patients ?? []).find((x: any) => x.id === paz);
     const vista = (pd?.docs ?? []).find((x: any) => x.id === s1.j.id);
@@ -174,6 +187,7 @@ async function main() {
       for (const x of docs) await deleteFile(x.storage_key).catch(() => null);
       await query('delete from document_access_log where document_id = any($1::uuid[])', [[...docs.map((x) => x.id), ...tolti]]).catch(() => null);
       await query('delete from patient_documents where patient_id = $1', [paz]);
+      await query('delete from documenti_eliminati where patient_id = $1', [paz]).catch(() => null);
       await query('delete from patients where id = $1', [paz]);
     }
     await pool.end();

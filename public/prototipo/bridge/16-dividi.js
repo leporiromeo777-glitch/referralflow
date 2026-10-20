@@ -417,6 +417,16 @@ function rfDivGruppi(lista, nomeDi = (x) => x.filename, cartellaDi = (x) => x.ca
 .rf-div-cart summary .rf-cart-fine { margin-left:auto; display:flex; gap:2px; }
 .rf-cart-dove { display:flex; flex-direction:column; gap:6px; max-height:52vh; overflow:auto; }
 .rf-cart-dove .btn { justify-content:flex-start; text-align:left; }
+.rf-cart-azioni .rf-cart-elimina { color:var(--danger, #b3261e); }
+.rf-cart-azioni .rf-cart-elimina:hover { background:var(--danger-soft, rgba(179,38,30,.1)); }
+.rf-cart-allarme { display:flex; gap:12px; align-items:flex-start; padding:12px 14px; border-radius:12px; background:var(--danger-soft, rgba(179,38,30,.1)); border:1px solid var(--danger, #b3261e); color:var(--text); line-height:1.5; }
+.rf-cart-allarme svg { width:22px; height:22px; flex:none; color:var(--danger, #b3261e); margin-top:1px; }
+.rf-cart-chi { margin-top:12px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; }
+.rf-cart-chi .name { font-weight:650; overflow-wrap:anywhere; }
+.rf-cart-chi .sub { font-size:12.5px; color:var(--text-2); margin-top:2px; }
+.rf-btn-elimina { background:var(--danger, #b3261e) !important; color:#fff !important; border-color:var(--danger, #b3261e) !important; }
+.rf-btn-elimina:hover { filter:brightness(.92); }
+.rf-cart-storico { margin-top:10px; }
 .rf-div-cart summary { flex-wrap:wrap; }
 .rf-cart-doc .grow { min-width:0; }
 @media (max-width:640px) {
@@ -463,10 +473,42 @@ function rfCartRinomina(pid, id) {
   const v = prompt('Il nome del documento:', d.t); if (v === null || !v.trim() || v.trim() === d.t) return;
   void rfCartChiedi(pid, 'PATCH', { azione: 'rinomina', id, titolo: v.trim() }, () => 'Rinominato');
 }
+// Eliminare (20.10.2026, dallo studio: un tasto «Elimina» e una conferma che si veda bene): una finestra rossa che dice
+// che cosa si elimina e di chi; il documento va nello storico degli eliminati (chi, quando) e da lì si può rimettere.
 function rfCartTogli(pid, id) {
   const p = P[pid], d = (((p || {}).docs) || []).find(x => x.id === id); if (!d) return;
-  if (!confirm(`Togliere «${d.t}» dalla cartella di ${fullName(p)}?\n\nIl documento si cancella e non si può recuperare. Nel registro degli accessi resta che è stato tolto, da chi e quando.`)) return;
-  void rfCartChiedi(pid, 'DELETE', id, () => 'Documento tolto dalla cartella');
+  RF.cart.elimina = { pid, id };
+  openModal('Eliminare il documento?', `<div class="rf-cart-allarme">${ICONS.alert || '⚠'}<div><b>Stai eliminando un documento dalla cartella di ${rfEsc(fullName(p))}.</b><br>Sparisce dalla cartella per tutti.</div></div>
+    <div class="rf-cart-chi"><div class="name">${rfEsc(d.t)}</div><div class="sub">${rfEsc(rfCartNome(d.cartella))} · ${DOC_TYPE[d.k] || d.k} · caricato il ${rfEsc(d.d)}</div></div>
+    <p class="caption" style="margin:10px 0 0;line-height:1.5">Resta nello <b>storico degli eliminati</b>, in fondo ai documenti del paziente: chi l’ha eliminato e quando. Da lì si può rimettere nella cartella. Un documento allegato a un referto non si può eliminare.</p>`,
+    `<button class="btn" data-close>Annulla</button><button class="btn rf-btn-elimina" onclick="rfCartEliminaOra()">Elimina il documento</button>`);
+}
+async function rfCartEliminaOra() {
+  const e = RF.cart.elimina; if (!e) return;
+  RF.cart.elimina = null; closeModal(); RF.cart.elimOk = null;
+  const j = await rfCartChiedi(e.pid, 'DELETE', e.id, () => 'Documento eliminato: è nello storico degli eliminati');
+  if (j && RF.cart.storicoAperto === e.pid) await rfCartEliminati(e.pid);
+}
+// Lo storico degli eliminati: si chiede al server quando lo si apre.
+async function rfCartEliminati(pid) {
+  RF.cart.eliminati = { pid, lista: null };
+  try { const r = await fetch(`${rfCartUrl(pid)}?eliminati=1`, { credentials: 'include', cache: 'no-store' }); const j = await r.json(); RF.cart.eliminati = { pid, lista: r.ok ? (j.eliminati || []) : [], errore: r.ok ? null : (j.errore || 'Non riesco a leggere lo storico') }; }
+  catch { RF.cart.eliminati = { pid, lista: [], errore: 'Piattaforma non raggiungibile' }; }
+  const el = document.getElementById('rf-cart-elim'); if (el) el.innerHTML = rfCartEliminatiHtml(pid);
+}
+function rfCartEliminatiHtml(pid) {
+  const e = RF.cart.eliminati;
+  if (!e || e.pid !== pid || !e.lista) return '<div class="caption" style="padding:6px 4px">Cerco…</div>';
+  if (e.errore) return `<div class="caption" style="padding:6px 4px">${rfEsc(e.errore)}</div>`;
+  if (!e.lista.length) return '<div class="caption" style="padding:6px 4px">Nessun documento eliminato.</div>';
+  const quando = (t) => t ? new Date(t).toLocaleString('it-CH', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+  return `<div class="list">${e.lista.map(x => `<div class="list-item"><div class="avatar-sm" style="opacity:.55">${ICONS.file}</div><div class="grow"><div class="name" style="${x.ripristinato_at ? '' : 'text-decoration:line-through;text-decoration-color:var(--danger, #b3261e)'}">${rfEsc(x.filename.replace(/\.[a-z0-9]{2,5}$/i, ''))}</div>
+    <div class="sub">eliminato il ${rfEsc(quando(x.eliminato_at))} da <b>${rfEsc(x.eliminato_da || 'utente non più presente')}</b>${x.cartella ? ` · era in ${rfEsc(x.cartella)}` : ''}${x.motivo && !/cartella del paziente/.test(x.motivo) ? ` · ${rfEsc(x.motivo)}` : ''}${x.ripristinato_at ? ` · <span style="color:var(--success, #1a7f4b)">rimesso il ${rfEsc(quando(x.ripristinato_at))} da ${rfEsc(x.ripristinato_da || '—')}</span>` : ''}</div></div>
+    ${x.si_rimette ? `<button class="btn sm" onclick="rfCartRimetti('${pid}', '${x.id}')">Rimetti nella cartella</button>` : ''}</div>`).join('')}</div>`;
+}
+async function rfCartRimetti(pid, id) {
+  const j = await rfCartChiedi(pid, 'PATCH', { azione: 'ripristina', id }, () => 'Documento rimesso nella cartella');
+  if (j) await rfCartEliminati(pid);
 }
 function rfCartRinominaCartella(pid, da) {
   const v = prompt('Il nome della sottocartella (vale per tutti i suoi documenti):', da); if (v === null || !v.trim() || v.trim() === da) return;
@@ -502,7 +544,7 @@ if (typeof patientDocs === 'function') {
     if (!RF.live || !rfUuid(p.id)) return rfDocsPrima(p);
     const pid = p.id, docs = p.docs || [];
     const riga = (d) => `<div class="list-item clickable rf-cart-doc" data-doc="${d.id}" draggable="true" ondragstart="rfCartPrendi(event, '${d.id}')" ondragend="rfCartFine()" title="Trascinalo su un’altra sottocartella per spostarlo"><div class="avatar-sm">${ICONS.file}</div><div class="grow"><div class="name">${rfEsc(d.t)}</div><div class="sub">${DOC_TYPE[d.k] || d.k} · caricato il ${d.d}</div></div>
-      <div class="rf-cart-azioni"><button class="btn sm ghost" data-doc="${d.id}" title="Apri il documento accanto">${ICONS.eye}</button><button class="btn sm ghost" onclick="event.stopPropagation();rfCartSposta('${pid}', '${d.id}')" title="Sposta in un’altra sottocartella">Sposta</button><button class="btn sm ghost" onclick="event.stopPropagation();rfCartRinomina('${pid}', '${d.id}')" title="Rinomina">Rinomina</button><button class="btn sm ghost" onclick="event.stopPropagation();rfCartTogli('${pid}', '${d.id}')" title="Togli dalla cartella">${ICONS.x}</button></div></div>`;
+      <div class="rf-cart-azioni"><button class="btn sm ghost" data-doc="${d.id}" title="Apri il documento accanto">${ICONS.eye}</button><button class="btn sm ghost" onclick="event.stopPropagation();rfCartSposta('${pid}', '${d.id}')" title="Sposta in un’altra sottocartella">Sposta</button><button class="btn sm ghost" onclick="event.stopPropagation();rfCartRinomina('${pid}', '${d.id}')" title="Rinomina">Rinomina</button><button class="btn sm ghost rf-cart-elimina" onclick="event.stopPropagation();rfCartTogli('${pid}', '${d.id}')" title="Elimina il documento dalla cartella (resta nello storico degli eliminati)">Elimina</button></div></div>`;
     const gruppi = new Map(rfDivGruppi(docs, (d) => d.filename, (d) => d.cartella));
     const nomi = [...rfCartTutte(p), ''];
     const cartella = (c) => {
@@ -516,7 +558,8 @@ if (typeof patientDocs === 'function') {
     };
     return `<div class="card"><div class="card-head"><span class="section-title">Documenti</span><button class="btn sm primary" data-modal="upload">${ICONS.upload} Carica</button></div>
       ${docs.length ? '<div class="caption" style="margin:-4px 0 6px">Trascina un documento su un’altra sottocartella per spostarlo (o «Sposta»). Mentre trascini compaiono anche le sottocartelle vuote.</div>' : '<div class="caption" style="margin:-4px 0 6px">Nessun documento: «Carica» o «Carica qui» in una sottocartella.</div>'}
-      <div class="rf-cart" id="rf-cart" data-pid="${pid}">${nomi.map(cartella).join('')}</div></div>`;
+      <div class="rf-cart" id="rf-cart" data-pid="${pid}">${nomi.map(cartella).join('')}</div>
+      <details class="rf-div-cart rf-cart-storico" ${RF.cart.storicoAperto === pid ? 'open' : ''} ontoggle="RF.cart.storicoAperto = this.open ? '${pid}' : null; if (this.open) void rfCartEliminati('${pid}')"><summary><span class="ico">${ICONS.clock || ''}</span><b>Storico degli eliminati</b><span class="caption">chi ha eliminato che cosa, e quando</span></summary><div id="rf-cart-elim">${rfCartEliminatiHtml(pid)}</div></details></div>`;
   };
 }
 
