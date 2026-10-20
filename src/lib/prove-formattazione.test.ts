@@ -97,3 +97,16 @@ test('date: con i punti, non con la barra; pressione e frazioni restano', () => 
   assert.equal(dopo.length, prima.length);
   assert.equal(dateColPunto('senza date'), 'senza date');
 });
+
+// Il nome del Word (20.10.2026): «AA.MM.GG Cognome Nome».
+import { intestazioneFile, nomeFileWord } from './nome-file-word';
+test('nome del Word: anno a due cifre, mese, giorno, cognome e nome', () => {
+  assert.equal(nomeFileWord('03.04.2026', { cognome: 'Provanome', nome: 'Anna' }), '26.04.03 Provanome Anna.docx');
+  assert.equal(nomeFileWord('3.4.2026', 'Provanome Anna Maria'), '26.04.03 Provanome Anna Maria.docx');
+  assert.equal(nomeFileWord('20.10.2026', { cognome: "D'Àmico/Rossi", nome: 'Zoë' }), "26.10.20 D'Àmico Rossi Zoë.docx");
+  assert.equal(nomeFileWord('20.10.2026', ''), '26.10.20.docx');
+  assert.equal(nomeFileWord('', null), 'referto.docx');
+  const h = intestazioneFile('26.10.20 Zoë Rossi.docx');
+  assert.match(h, /filename="26\.10\.20 Zoe Rossi\.docx"/);
+  assert.match(h, /filename\*=UTF-8''26\.10\.20%20Zo%C3%AB%20Rossi\.docx/);
+});

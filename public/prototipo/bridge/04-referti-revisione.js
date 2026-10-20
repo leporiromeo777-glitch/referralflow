@@ -709,8 +709,9 @@ async function rfWord(id) {
     const blob = await r.blob();
     if (!blob || blob.size < 1000) { toast('Il Word è arrivato vuoto: riprova'); return; }
     const cd = r.headers.get('Content-Disposition') || '';
-    const m = cd.match(/filename="?([^";]+)"?/);
-    const nome = (m && m[1]) || 'referto.docx';
+    // il nome col paziente (accenti compresi) sta in filename*; filename è la copia senza accenti
+    const m8 = cd.match(/filename\*=UTF-8''([^;]+)/i), m = cd.match(/filename="?([^";]+)"?/);
+    let nome = 'referto.docx'; try { nome = m8 ? decodeURIComponent(m8[1]) : (m && m[1]) || nome; } catch { nome = (m && m[1]) || nome; }
     const href = URL.createObjectURL(blob);
     const a = document.createElement('a');
     if ('download' in a) {
@@ -1535,9 +1536,10 @@ async function rfEmailPrepara(id) {
       const r = await fetch(`/api/prototipo/referti/${id}/email`, { credentials: 'include', cache: 'no-store' });
       if (!r.ok) { const j = await r.json().catch(() => ({})); toast(j.errore || `Errore ${r.status}`); return; }
       const blob = await r.blob();
-      const m = (r.headers.get('Content-Disposition') || '').match(/filename="?([^";]+)"?/);
+      const cd = r.headers.get('Content-Disposition') || '', m8 = cd.match(/filename\*=UTF-8''([^;]+)/i), m = cd.match(/filename="?([^";]+)"?/);
+      let nome = 'rapporto.eml'; try { nome = m8 ? decodeURIComponent(m8[1]) : (m && m[1]) || nome; } catch { nome = (m && m[1]) || nome; }
       const href = URL.createObjectURL(blob); const a = document.createElement('a');
-      a.href = href; a.download = (m && m[1]) || 'rapporto.eml'; document.body.appendChild(a); a.click(); a.remove();
+      a.href = href; a.download = nome; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(href), 60000);
       toast('Mail pronta: aprila e premi Invia dal programma di posta');
     } catch { toast('Non riesco a raggiungere la piattaforma'); }

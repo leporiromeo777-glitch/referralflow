@@ -42,7 +42,9 @@ async function main() {
     verifica(/\r\nTo: prova\.destinatario@hin\.ch\r\n/.test(eml) && /\r\nCc: carla\.copia@esempio\.invalid\r\n/.test(eml) && /\r\nX-Unsent: 1\r\n/.test(eml), 'intestazioni A, Copia, bozza da inviare');
     const confine = /boundary="([^"]+)"/.exec(eml)?.[1] ?? '';
     const parti = eml.split(`\r\n--${confine}`);
-    const word = parti.find((x) => /filename="rapporto-/.test(x)) ?? '';
+    // il Word si chiama «AA.MM.GG Cognome Nome.docx» (20.10.2026)
+    const word = parti.find((x) => /filename="\d{2}\.\d{2}\.\d{2}[^"]*\.docx"/.test(x)) ?? '';
+    verifica(!!word, `il Word allegato si chiama «AA.MM.GG Cognome Nome» (${/filename="([^"]*)"/.exec(word)?.[1] ?? 'non trovato'})`);
     const zip = await JSZip.loadAsync(Buffer.from(word.split('\r\n\r\n')[1]?.replace(/\r\n/g, '') ?? '', 'base64')).catch(() => null);
     verifica(!!zip?.file('word/document.xml'), 'il Word allegato si apre');
     const ecg = parti.find((x) => /allegato-1-ecg\.pdf/.test(x)) ?? '';

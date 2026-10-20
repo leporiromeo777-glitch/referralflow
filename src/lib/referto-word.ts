@@ -10,6 +10,7 @@ import { attorno, vociCopia, type Attorno } from './referti-inviante';
 import { vociValide } from './formattazione';
 import { firmaDellaLettera } from './firma-lettera';
 import { dateColPunto } from './date-punti';
+import { nomeFileWord } from './nome-file-word';
 
 // Il referto in Word con la carta intestata dello studio (stampo in
 // modelli/referto-carta-intestata.docx): pronto da rifinire e spedire.
@@ -29,11 +30,11 @@ export async function costruisciWord(sessione: { studioId: string; email?: strin
     stato: string; testo_finale: string | null; payload: any;
     campi_confermati: any; created_at: string;
     studio_nome: string; titolare: string | null; studio_telefono: string | null; studio_email: string | null;
-    reviewed_email: string | null;
+    reviewed_email: string | null; patient_id: string | null;
   }>(
     `select b.stato, b.testo_finale, b.payload, b.campi_confermati, b.created_at::text,
             s.nome as studio_nome, s.titolare, s.telefono as studio_telefono, s.notify_email as studio_email,
-            u.email as reviewed_email
+            u.email as reviewed_email, b.patient_id
        from referti_bozze b join studios s on s.id = b.studio_id
        left join users u on u.id = b.reviewed_by
       where b.id = $1 and b.studio_id = $2`,
@@ -174,6 +175,8 @@ export async function costruisciWord(sessione: { studioId: string; email?: strin
     formattazione: [...(vociValide(b.payload?.formattazione) ?? []).map((v) => ({ ...v, testo: dateColPunto(v.testo) })), ...firma.voci],
   });
 
-  const nomeFile = `referto-${dataBase.replaceAll('.', '-') || 'bozza'}.docx`;
+  // «AA.MM.GG Cognome Nome» (20.10.2026, dallo studio): il paziente della cartella, se la bozza è collegata
+  const [pz] = b.patient_id ? await query<{ cognome: string; nome: string }>('select cognome, nome from patients where id = $1 and studio_id = $2', [b.patient_id, sessione.studioId]) : [];
+  const nomeFile = nomeFileWord(dataBase, pz ?? pazienteNome);
   return { docx, nomeFile, stato: b.stato, intorno, dataBase };
 }

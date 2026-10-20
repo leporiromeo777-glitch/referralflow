@@ -8,6 +8,7 @@ import { vietato } from '@/lib/permessi';
 import { registraEvento } from '@/lib/referti-eventi';
 import { costruisciWord } from '@/lib/referto-word';
 import { componiEml, eHin, emailValida, type AllegatoEml } from '@/lib/eml';
+import { intestazioneFile } from '@/lib/nome-file-word';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -62,7 +63,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   const senzaEmail = (intorno?.copia.voci ?? []).filter((v) => !v.id || !emailCopie.some((r) => r.id === v.id && emailValida(r.email ?? ''))).map((v) => v.nome);
 
   // Allegati: il Word, poi i documenti della cartella che la lettera elenca.
-  const allegati: AllegatoEml[] = [{ nome: w.nomeFile.replace(/^referto-/, 'rapporto-'), tipo: MIME_DOCX, dati: w.docx }];
+  const allegati: AllegatoEml[] = [{ nome: w.nomeFile, tipo: MIME_DOCX, dati: w.docx }];
   const elenco: Preparata['allegati'] = [{ etichetta: 'Rapporto (Word)', file: allegati[0].nome }];
   const avvisi: string[] = [];
   let n = 0;
@@ -107,7 +108,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   return new NextResponse(eml, {
     headers: {
       'Content-Type': 'message/rfc822',
-      'Content-Disposition': `attachment; filename="${w.nomeFile.replace(/^referto-/, 'rapporto-').replace(/\.docx$/, '.eml')}"`,
+      'Content-Disposition': intestazioneFile(w.nomeFile.replace(/\.docx$/, '.eml')),
       'Cache-Control': 'private, no-store',
     },
   });

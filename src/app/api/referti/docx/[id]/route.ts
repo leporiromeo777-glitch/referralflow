@@ -6,6 +6,7 @@ import { isUuid } from '@/lib/cartella';
 import { registraEvento } from '@/lib/referti-eventi';
 import { misuraAlloScaricamento } from '@/lib/audit/misura-lavoro';
 import { costruisciWord } from '@/lib/referto-word';
+import { intestazioneFile } from '@/lib/nome-file-word';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -52,7 +53,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   return new NextResponse(new Uint8Array(w.docx), {
     headers: {
       'Content-Type': MIME_DOCX,
-      'Content-Disposition': `attachment; filename="${w.nomeFile}"`,
+      'Content-Disposition': intestazioneFile(w.nomeFile),
       'Cache-Control': 'private, no-store',
     },
   });
