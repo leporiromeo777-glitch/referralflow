@@ -15,9 +15,13 @@ Versione 1.0 · 7 ottobre 2026.
    certificato), con l'orologio del paziente. Una misura fuori dai limiti di plausibilità
    resta nel profilo ma non entra nei conti.
 2. **La terapia**: nome, dose e orari scritti dal medico o dall'aiuto medico per quel profilo.
-3. **La tabella dei farmaci**: per principio attivo, inizio, picco, durata, emivita (ore).
-   Una riga vale solo dopo la conferma di un medico (`confermato_da`, `confermato_il`);
-   cambiare un numero toglie la conferma.
+3. **La tabella dei farmaci**: per principio attivo, inizio, picco, durata, emivita (ore) e,
+   quando il testo ufficiale lo dà, il calo in mmHg rispetto al placebo alla dose abituale.
+   I numeri vengono dalla farmacocinetica letta sulle informazioni ufficiali del prodotto (UE,
+   USA, Germania; `cinetica-fonti.json`, ogni numero con documento, sezione e frase citata), e
+   dalla bozza dove il testo non li dà; la riga dice per ogni numero da dove viene.
+   Una riga vale solo dopo la conferma di un medico sul testo svizzero (`confermato_da`,
+   `confermato_il`, versione dei testi nel registro); cambiare un numero toglie la conferma.
 4. **Le impostazioni**: sveglia, ora di andare a letto, soglie (di partenza 135/85 di giorno,
    120/70 di notte; «troppo bassa» sotto 100 di giorno e 90 di notte, sistolica).
 
@@ -30,8 +34,10 @@ Versione 1.0 · 7 ottobre 2026.
   fra 10 e 20%); picco del mattino 15 (pieno fino a 35 mmHg); nessuna ora troppo bassa 15.
 - **Stima di uno spostamento**: per un farmaco preso una volta al giorno e per ciascun
   orario candidato (06, 07, 08, 12, 18, 20, 22), la pressione prevista in ogni ora è quella
-  misurata meno `EFFETTO_PIENO` × (livello nuovo − livello vecchio). `EFFETTO_PIENO` =
-  10/6 mmHg, **uguale per tutti i farmaci: è un'ipotesi di lavoro**, mostrata in ogni proposta.
+  misurata meno effetto pieno × (livello nuovo − livello vecchio). L'effetto pieno è il calo
+  del farmaco della riga confermata quando c'è (dal testo ufficiale), altrimenti
+  `EFFETTO_PIENO` = 10/6 mmHg: **è un'ipotesi di lavoro**, mostrata in ogni proposta con i
+  farmaci che usano il loro calo (`pa-orari-2`, 21.10.2026).
 - **Scelta**: si tiene, per farmaco, lo spostamento col punteggio stimato più alto, se il
   guadagno è di almeno 5 punti e non viola i limiti (diuretici entro le 14, nessuna ora in
   più sotto il valore basso, calo notturno non oltre il 20%). Al massimo tre proposte.

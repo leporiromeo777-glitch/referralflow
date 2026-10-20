@@ -10,6 +10,8 @@
 // sul testo ufficiale (swissmedicinfo.ch) e confermata, la pagina NON disegna
 // la sua finestra e non la usa in nessun calcolo. È lo stesso patto del
 // dizionario della trascrizione: vale solo ciò che una persona ha confermato.
+// Dal 21.10.2026 i numeri di bozza restano solo dove i testi ufficiali non danno
+// il numero: il resto viene dalla farmacocinetica letta sui testi (cinetica.ts).
 
 export type Classe = 'ace_inibitore' | 'sartano' | 'calcioantagonista' | 'diuretico' | 'betabloccante' | 'alfabloccante' | 'centrale' | 'antialdosteronico' | 'altro';
 
@@ -23,6 +25,8 @@ export type Farmaco = {
   radici: string[];           // come compare scritto: radici del nome nelle varie lingue
   marchi: string[];           // nomi commerciali noti (minuscolo)
   nota?: string;
+  // il calo pressorio del farmaco alla dose abituale, dal testo ufficiale rispetto al placebo (21.10.2026); assente = l'ipotesi uguale per tutti
+  effetto_sis?: number | null; effetto_dia?: number | null;
 };
 
 export const FONTE_BOZZA = 'Bozza da farmacologia generale: da verificare sull’informazione professionale (swissmedicinfo.ch) prima di confermare.';

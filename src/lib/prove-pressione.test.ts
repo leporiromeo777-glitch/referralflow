@@ -228,3 +228,61 @@ test('pressione: il rapporto in PDF del misuratore — misure dall’elenco, paz
   assert.equal(rapportoDaTesto('Referto di visita cardiologica. Pressione 130/80 il 01.03.2026.'), null);
 });
 
+
+// ── La farmacocinetica dai testi ufficiali (21.10.2026) ─────────────────────
+import { cineticaDi, concentrazione24, medio, numeriFinestra, principiConCinetica, tmaxAttivo, emivitaAttiva, valleSuPicco, VERSIONE_CINETICA } from './pressione/cinetica';
+
+test('cinetica: ogni farmaco della tabella ha la sua scheda dai testi, con fonti citate e un indirizzo', () => {
+  assert.match(VERSIONE_CINETICA, /^testi-\d{4}-\d{2}-\d{2}$/);
+  assert.deepEqual(principiConCinetica().sort(), FARMACI_BOZZA.map((f) => f.principio).sort());
+  for (const f of FARMACI_BOZZA) {
+    const c = cineticaDi(f.principio)!;
+    assert.ok(c.fonti.length >= 1, `${f.principio}: senza fonti`);
+    for (const x of c.fonti) { assert.match(x.url, /^https:\/\//, f.principio); assert.ok(x.citazione.trim().length >= 10, `${f.principio}: citazione vuota`); }
+    // il calo in mmHg o c'è per entrambe o per nessuna, e quando c'è dice da dove viene
+    assert.equal(c.effetto_sis == null, c.effetto_dia == null, f.principio);
+    if (c.effetto_sis != null) { assert.ok(c.effetto_sis > 0 && c.effetto_sis <= 20 && c.effetto_dia! > 0 && c.effetto_dia! <= 12, f.principio); assert.ok((c.effetto_come ?? '').length > 5, f.principio); }
+  }
+});
+
+test('cinetica: i quattro numeri vengono dal testo quando c’è, se no dalla bozza; il picco nel sangue non fa da picco dell’effetto', () => {
+  assert.deepEqual([medio(4), medio([2, 4]), medio([null, 2]), medio([6, null]), medio(null)], [4, 3, 2, 6, null]);
+  for (const f of FARMACI_BOZZA) {
+    const n = numeriFinestra(cineticaDi(f.principio), f);
+    assert.ok(n.inizio_h <= n.picco_h && n.picco_h <= n.durata_h && n.emivita_h > 0, `${f.principio}: finestra rovesciata ${JSON.stringify(n)}`);
+  }
+  // olmesartan: Tmax 1–2 h, ma il testo non dà il picco dell'effetto → resta la bozza, dichiarata
+  const olm = numeriFinestra(cineticaDi('olmesartan'), tab.get('olmesartan')!);
+  assert.deepEqual([olm.picco_h, olm.provenienza.picco_h], [tab.get('olmesartan')!.picco_h, 'bozza']);
+  // losartan: l'effetto passa dal metabolito attivo, emivita 6–9 h e non le 2 h del losartan
+  assert.equal(numeriFinestra(cineticaDi('losartan'), tab.get('losartan')!).emivita_h, 7.5);
+  // senza testo tutto resta di bozza
+  const nulla = numeriFinestra(null, tab.get('ramipril')!);
+  assert.deepEqual(Object.values(nulla.provenienza), ['bozza', 'bozza', 'bozza', 'bozza']);
+});
+
+test('cinetica: la curva della concentrazione ha il picco a Tmax e la valle che dice l’emivita', () => {
+  const c = concentrazione24(6, 40);
+  assert.equal(c.length, 25);
+  assert.equal(Math.max(...c), 1);
+  assert.ok(Math.abs(c.indexOf(1) - 6) <= 1, `picco a ${c.indexOf(1)} h`);
+  const aml = cineticaDi('amlodipina')!, cap = cineticaDi('captopril')!;
+  const vAml = valleSuPicco(concentrazione24(tmaxAttivo(aml)!, emivitaAttiva(aml)!))!, vCap = valleSuPicco(concentrazione24(tmaxAttivo(cap)!, emivitaAttiva(cap)!))!;
+  assert.ok(vAml > 0.6 && vCap < 0.05, `amlodipina ${vAml}, captopril ${vCap}`);
+  assert.deepEqual(concentrazione24(0, 10), []);
+});
+
+test('cinetica: le proposte usano il calo del farmaco quando la riga lo porta, e l’ipotesi lo dice', () => {
+  const m = profilo((h) => (h >= 2 && h < 8 ? 146 : notte(h) ? 110 : 128), (h) => (h >= 2 && h < 8 ? 86 : notte(h) ? 62 : 74));
+  const ore = orarie(m, IMPOSTAZIONI_BASE);
+  const corto: Farmaco = { ...tab.get('carvedilolo')!, durata_h: 14, emivita_h: 4 };
+  const prese: Presa[] = [{ id: 'p1', nome: 'Farmaco di prova', principio: 'carvedilolo', orari: ['08:00'] }];
+  const senza = proponi(ore, prese, new Map([['carvedilolo', corto]]), IMPOSTAZIONI_BASE, { affidabile: true });
+  const debole = proponi(ore, prese, new Map([['carvedilolo', { ...corto, effetto_sis: 6, effetto_dia: 4 }]]), IMPOSTAZIONI_BASE, { affidabile: true });
+  assert.match(senza.ipotesi, /uguale per tutti/);
+  assert.match(debole.ipotesi, /carvedilolo 6\/4/);
+  assert.equal(senza.versione, 'pa-orari-2');
+  // un farmaco che abbassa meno sposta meno: lo spostamento guadagna meno punti
+  assert.equal(debole.proposte.length, 1);
+  assert.ok(debole.proposte[0].punteggio_previsto - debole.proposte[0].punteggio_ora < senza.proposte[0].punteggio_previsto - senza.proposte[0].punteggio_ora);
+});

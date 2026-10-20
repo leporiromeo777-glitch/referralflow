@@ -293,9 +293,11 @@ export function punteggio(ore: Ora[], imp: Impostazioni): Punteggio | null {
 //
 // Come stima: sposta UNA presa di UN farmaco su uno degli orari candidati e
 // prevede il profilo togliendo l'effetto del vecchio orario e mettendo quello
-// del nuovo. Quanto vale l'effetto pieno di un farmaco in mmHg è un'IPOTESI
-// DI LAVORO, uguale per tutti e dichiarata: la conferma è il monitoraggio dopo.
-export const VERSIONE_REGOLE = 'pa-orari-1';
+// del nuovo. Quanto vale l'effetto pieno di un farmaco in mmHg: dal 21.10.2026 (pa-orari-2) quello del suo testo
+// ufficiale rispetto al placebo, se la riga confermata ce l'ha; se no un'IPOTESI DI LAVORO uguale per tutti e
+// dichiarata. La forma nel tempo (inizio, picco, durata, emivita) è sempre quella del farmaco. La conferma è il
+// monitoraggio dopo.
+export const VERSIONE_REGOLE = 'pa-orari-2';
 export const EFFETTO_PIENO = { sis: 10, dia: 6 };
 export const ORARI_CANDIDATI = ['06:00', '07:00', '08:00', '12:00', '18:00', '20:00', '22:00'];
 const GUADAGNO_MINIMO = 5;      // punti: sotto, non vale la pena proporre
@@ -320,7 +322,8 @@ export const fasciaTesto = (f: Pick<Fascia, 'da' | 'a'>) => `${hhmm(f.da)}–${h
 export function proponi(
   ore: Ora[], prese: Presa[], tabella: Map<string, Farmaco>, imp: Impostazioni, qualita: { affidabile: boolean },
 ): EsitoProposte {
-  const ipotesi = `Stima: l'effetto pieno di ogni farmaco vale ${EFFETTO_PIENO.sis}/${EFFETTO_PIENO.dia} mmHg, uguale per tutti. È un'ipotesi di lavoro: la conferma è un nuovo monitoraggio.`;
+  const conEffetto = [...new Set(prese.map((p) => tabella.get(p.principio)).filter((f): f is Farmaco => !!f && typeof f.effetto_sis === 'number' && typeof f.effetto_dia === 'number').map((f) => `${f.principio} ${f.effetto_sis}/${f.effetto_dia}`))];
+  const ipotesi = `Stima: ogni farmaco agisce nel tempo come dice la sua farmacocinetica (inizio, picco, durata, emivita). ${conEffetto.length ? `Effetto pieno dal testo ufficiale: ${conEffetto.join(', ')} mmHg; per gli altri ` : 'L’effetto pieno vale '}${EFFETTO_PIENO.sis}/${EFFETTO_PIENO.dia} mmHg${conEffetto.length ? '' : ', uguale per tutti'}: è un'ipotesi di lavoro, la conferma è un nuovo monitoraggio.`;
   const vuoto = (motivo: string): EsitoProposte => ({ versione: VERSIONE_REGOLE, ipotesi, proposte: [], avviso: null, motivo_nessuna: motivo });
   if (!qualita.affidabile) return vuoto('La registrazione non è abbastanza affidabile per proporre uno spostamento.');
   const ora0 = punteggio(ore, imp);
@@ -341,8 +344,9 @@ export function proponi(
       if (nuovo === p.orari[0]) continue;
       if (f.classe === 'diuretico' && oreDi(nuovo) > DIURETICO_ENTRO) continue;
       const dopo = livelli([nuovo], f);
+      const es = typeof f.effetto_sis === 'number' ? f.effetto_sis : EFFETTO_PIENO.sis, ed = typeof f.effetto_dia === 'number' ? f.effetto_dia : EFFETTO_PIENO.dia;
       const previsto: Ora[] = ore.map((o, h) => o.sis === null || o.dia === null ? o : {
-        ...o, sis: Math.round((o.sis - EFFETTO_PIENO.sis * (dopo[h] - prima[h])) * 10) / 10, dia: Math.round((o.dia - EFFETTO_PIENO.dia * (dopo[h] - prima[h])) * 10) / 10 });
+        ...o, sis: Math.round((o.sis - es * (dopo[h] - prima[h])) * 10) / 10, dia: Math.round((o.dia - ed * (dopo[h] - prima[h])) * 10) / 10 });
       const pt = punteggio(previsto, imp);
       if (!pt) continue;
       // Mai una proposta che, nella stima, porta un'ora sotto il valore basso o il calo notturno oltre il 20%.

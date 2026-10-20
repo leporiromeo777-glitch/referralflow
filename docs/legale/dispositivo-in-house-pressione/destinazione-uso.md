@@ -4,7 +4,7 @@ Versione 1.0 · 7 ottobre 2026 · bozza per il titolare dello studio.
 
 ## Nome e identificazione
 - **Nome**: Proposte di orario ReferralFlow (funzione della pagina Pressione).
-- **Versione delle regole**: `VERSIONE_REGOLE` in `src/lib/pressione/calcolo.ts` (oggi `pa-orari-1`),
+- **Versione delle regole**: `VERSIONE_REGOLE` in `src/lib/pressione/calcolo.ts` (oggi `pa-orari-2`),
   più l'hash del commit con cui è distribuito. Ogni proposta salvata registra la versione.
 - **Tipo**: software, funzione di un sistema più ampio, usato dal browser sui computer dello studio.
 - **Fabbricante**: lo studio medico (Centro Cardiologico Ticino), art. 9 ODmed / art. 5 par. 5 MDR.

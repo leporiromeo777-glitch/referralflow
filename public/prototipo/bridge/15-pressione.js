@@ -42,11 +42,30 @@ if (typeof NAV !== 'undefined') for (const r of ['secretary', 'assistant', 'doct
 .rf-pa-fascia b { font-variant-numeric:tabular-nums; white-space:nowrap; }
 .rf-pa-avviso { border:1px solid rgba(190,130,20,.4); background:rgba(255,236,190,.55); color:#6b4300; border-radius:12px; padding:10px 14px; font-size:13.5px; line-height:1.5; }
 :root[data-theme="dark"] .rf-pa-avviso { background:rgba(120,84,10,.28); color:#f3d089; }
+.rf-pa-tab tr.rf-pa-aperta td { border-bottom:0; }
+.rf-pa-tab td.rf-pa-scheda { padding:4px 8px 16px; white-space:normal; }
+.rf-pa-scroll { container-type:inline-size; }
+.rf-pa-tab td.rf-pa-scheda > .rf-pa-cin { position:sticky; left:0; box-sizing:border-box; width:calc(100cqw - 16px); }
+.rf-pa-da { display:block; font-size:10.5px; color:var(--text-3, var(--text-2)); margin-top:2px; text-align:right; }
+.rf-pa-da.t { color:var(--accent-text, var(--accent)); }
+.rf-pa-cin { display:grid; grid-template-columns:minmax(260px, 340px) 1fr; gap:14px 22px; border:1px solid var(--border); border-radius:16px; padding:14px 16px; background:var(--surface-2, var(--surface)); }
+@container (max-width: 760px) { .rf-pa-cin { grid-template-columns:1fr; } }
+.rf-pa-cin svg { display:block; width:100% !important; height:auto !important; max-width:420px; }
+.rf-pa-cin .kv { display:grid; grid-template-columns:max-content 1fr; gap:6px 14px; font-size:13px; margin:0; }
+.rf-pa-cin .kv b { font-weight:600; color:var(--text-2); white-space:nowrap; }
+.rf-pa-cin .kv span { line-height:1.45; }
+.rf-pa-fonti { grid-column:1 / -1; border-top:1px solid var(--border); padding-top:10px; font-size:12.5px; }
+.rf-pa-fonti summary { cursor:pointer; color:var(--text-2); font-weight:600; }
+.rf-pa-fonti ol { margin:8px 0 0; padding-left:18px; display:grid; gap:6px; }
+.rf-pa-fonti q { font-style:italic; }
+.rf-pa-diff { grid-column:1 / -1; font-size:12.5px; }
+.rf-pa-mm { display:flex; gap:4px; align-items:center; }
+.rf-pa-tab input.rf-pa-mmi { width:52px !important; text-align:right; font-variant-numeric:tabular-nums; }
 .rf-pa-trova { position:relative; }
 .rf-pa-trova .esiti { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
 `; document.head.appendChild(st); })();
 
-RF.pa = { vista: 'profili', lista: null, farmaci: null, aperto: null, dati: null, errore: null, info: null,
+RF.pa = { vista: 'profili', lista: null, farmaci: null, schedaFarmaco: null, aperto: null, dati: null, errore: null, info: null,
   nuovo: { pid: '', nome: '', cerca: '', testo: '', data: '', apparecchio: '', carico: false, errore: null },
   terapia: null, imp: null, mostraPrec: true };
 const RF_PA_URL = '/api/prototipo/pressione';
@@ -257,8 +276,9 @@ async function rfPaDecidi(id, stato) {
 
 /* ---------- tabella dei farmaci ---------- */
 async function rfPaFarmaco(principio, conferma) {
-  const v = (c) => Number(String((document.getElementById(`rf-pa-f-${principio}-${c}`) || {}).value || '').replace(',', '.'));
-  const j = await rfPaChiedi({ azione: 'farmaco', principio, inizio_h: v('inizio_h'), picco_h: v('picco_h'), durata_h: v('durata_h'), emivita_h: v('emivita_h'), conferma });
+  const testo = (c) => String((document.getElementById(`rf-pa-f-${principio}-${c}`) || {}).value || '').trim().replace(',', '.');
+  const v = (c) => Number(testo(c));
+  const j = await rfPaChiedi({ azione: 'farmaco', principio, inizio_h: v('inizio_h'), picco_h: v('picco_h'), durata_h: v('durata_h'), emivita_h: v('emivita_h'), effetto_sis: testo('effetto_sis'), effetto_dia: testo('effetto_dia'), conferma });
   if (j.errore) { toast(j.errore); return; }
   toast(conferma ? `${principio}: confermato` : `${principio}: salvato, da confermare`);
   await rfPaCaricaFarmaci();
@@ -518,22 +538,94 @@ function rfPaDettaglio() {
 }
 
 /* ---------- la tabella dei farmaci ---------- */
+function rfPaScheda(principio) { RF.pa.schedaFarmaco = RF.pa.schedaFarmaco === principio ? null : principio; render(); }
+
+// La curva della concentrazione nel sangue nelle 24 ore (dal server, in parti del massimo) con sotto la finestra
+// d'azione della riga: la fascia dall'inizio alla fine dell'effetto e il segno del picco.
+function rfPaCurvaSvg(x) {
+  const c = x.testi && x.testi.curva;
+  if (!c || !c.length) return '<div class="caption">Tmax o emivita non dati dai testi: niente curva.</div>';
+  const W = 320, H = 150, sx = 30, dx = 8, sy = 12, dy = 26, w = W - sx - dx, h = H - sy - dy;
+  const X = (t) => sx + (t / 24) * w, Y = (v) => sy + (1 - v) * h;
+  const linea = c.map((v, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+  const area = `${linea} L${X(24).toFixed(1)},${Y(0).toFixed(1)} L${X(0).toFixed(1)},${Y(0).toFixed(1)} Z`;
+  const fine = Math.min(24, Number(x.durata_h) || 0), ini = Math.min(24, Number(x.inizio_h) || 0), pic = Math.min(24, Number(x.picco_h) || 0);
+  const ore = [0, 6, 12, 18, 24].map(t => `<line x1="${X(t)}" x2="${X(t)}" y1="${sy}" y2="${Y(0)}" stroke="var(--border)" stroke-width="1"/><text x="${X(t)}" y="${H - 10}" font-size="10" text-anchor="middle" fill="var(--text-2)">${t} h</text>`).join('');
+  const assi = [0, 0.5, 1].map(v => `<text x="${sx - 5}" y="${Y(v) + 3}" font-size="10" text-anchor="end" fill="var(--text-2)">${Math.round(v * 100)}%</text>`).join('');
+  const fascia = fine > ini ? `<rect x="${X(ini)}" y="${Y(0) + 3}" width="${X(fine) - X(ini)}" height="5" rx="2.5" fill="var(--accent)" opacity=".35"/><circle cx="${X(pic)}" cy="${Y(0) + 5.5}" r="3.5" fill="var(--accent)"/>` : '';
+  const tmax = c.indexOf(Math.max(...c));
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Concentrazione nel sangue nelle 24 ore">${ore}${assi}
+    <path d="${area}" fill="var(--accent)" opacity=".12"/><path d="${linea}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
+    <circle cx="${X(tmax)}" cy="${Y(c[tmax])}" r="3.5" fill="var(--accent)"/>${fascia}</svg>
+    <div class="caption">Concentrazione nel sangue, una presa al giorno, a regime: un <b>disegno</b> da Tmax ${rfPaCifra(rfPaMedio(x.testi.tmax_attivo_h ?? x.testi.tmax_h))} h ed emivita ${rfPaCifra(rfPaMedio(x.testi.emivita_attiva_h ?? x.testi.emivita_h))} h${x.testi.molecola_attiva ? ` (${rfEsc(x.testi.molecola_attiva)})` : ''}, non una misura. Prima della presa successiva resta il ${rfPaN((x.testi.valle_su_picco || 0) * 100)}% del picco. Sotto: la finestra d’azione della riga (fascia) e il suo picco (punto).</div>`;
+}
+const rfPaMedio = (v) => (v === null || v === undefined ? null : typeof v === 'number' ? v : (typeof v[0] === 'number' ? (typeof v[1] === 'number' ? (v[0] + v[1]) / 2 : v[0]) : (typeof v[1] === 'number' ? v[1] : null)));
+const rfPaCifra = (n) => rfPaN(n, Number.isInteger(n) ? 0 : Number.isInteger(n * 10) ? 1 : 2);
+const rfPaInt = (v, u) => {
+  if (v === null || v === undefined) return '—';
+  if (typeof v === 'number') return `${rfPaCifra(v)} ${u}`;
+  const [a, b] = v;
+  if (a === null || a === undefined) return `fino a ${rfPaCifra(b)} ${u}`;
+  return b === null || b === undefined || b === a ? `${rfPaCifra(a)} ${u}` : `${rfPaCifra(a)}–${rfPaCifra(b)} ${u}`;
+};
+
+function rfPaSchedaHtml(x) {
+  const t = x.testi;
+  if (!t) return '<div class="caption">Per questo principio non ci sono ancora testi letti.</div>';
+  const riga = (k, v, nota) => (v ? `<b>${k}</b><span>${v}${nota ? `<div class="caption">${rfEsc(nota)}</div>` : ''}</span>` : '');
+  const eff = [t.inizio_effetto_h != null ? `inizio ${rfPaInt(t.inizio_effetto_h, 'h')}` : '', t.picco_effetto_h != null ? `massimo ${rfPaInt(t.picco_effetto_h, 'h')}` : '', t.durata_effetto_h != null ? `dura ${rfPaInt(t.durata_effetto_h, 'h')}` : ''].filter(Boolean).join(' · ');
+  const nomi = { inizio_h: 'inizio', picco_h: 'picco', durata_h: 'durata', emivita_h: 'emivita' };
+  const d = t.dai_testi;
+  const diversi = d ? Object.keys(nomi).filter(k => Math.abs(Number(x[k]) - Number(d[k])) > 0.01) : [];
+  const diff = !d ? '' : diversi.length
+    ? `<div class="rf-pa-diff rf-pa-avviso">La riga usa numeri diversi da quelli dei testi: ${diversi.map(k => `${nomi[k]} ${rfPaN(x[k], 2)} h (testi: ${rfPaN(d[k], 2)} h)`).join(', ')}.${x.confermato ? ' La conferma resta finché un medico non la toglie.' : ''}</div>`
+    : '';
+  const fonti = (t.fonti || []).map(f => `<li><b>${rfEsc(f.documento)}</b>${f.sezione ? `, sez. ${rfEsc(f.sezione)}` : ''}${f.data_testo ? ` (${rfEsc(f.data_testo)})` : ''}: <q>${rfEsc(f.citazione)}</q> <a href="${rfEsc(f.url)}" target="_blank" rel="noopener noreferrer">apri il testo</a></li>`).join('');
+  return `<div class="rf-pa-cin">
+    <div>${rfPaCurvaSvg(x)}</div>
+    <div class="kv">
+      ${riga('Forma', rfEsc(t.forma || ''))}
+      ${riga('Dose abituale', rfEsc(t.dose_usuale_mg || ''))}
+      ${riga('Picco nel sangue', t.tmax_h != null ? rfPaInt(t.tmax_h, 'h') : '', t.nota_tmax)}
+      ${riga('Biodisponibilità', t.biodisponibilita_pct != null ? rfPaInt(t.biodisponibilita_pct, '%') : '', t.nota_biodisponibilita)}
+      ${riga('Emivita', t.emivita_h != null ? rfPaInt(t.emivita_h, 'h') : '', t.nota_emivita)}
+      ${riga('A regime dopo', t.steady_state_giorni != null ? rfPaInt(t.steady_state_giorni, t.steady_state_giorni === 1 ? 'giorno' : 'giorni') : '')}
+      ${riga('Effetto sulla pressione', eff || 'tempi non dati dai testi', t.nota_effetto)}
+      ${riga('Quanto abbassa', rfEsc(t.effetto_pa || 'non dato dai testi rispetto al placebo'))}
+      ${riga('Calo usato nei calcoli', t.effetto_sis != null ? `${rfPaN(t.effetto_sis, 1)}/${rfPaN(t.effetto_dia, 1)} mmHg` : '', t.effetto_come)}
+      ${riga('Eliminazione', rfEsc(t.eliminazione || ''))}
+      ${riga('Cibo', rfEsc(t.cibo || ''))}
+      ${riga('Note', rfEsc(t.note || ''))}
+      ${t.forma_rp ? riga(rfEsc(t.forma_rp.forma || 'Rilascio prolungato'), [t.forma_rp.dose_usuale_mg ? rfEsc(t.forma_rp.dose_usuale_mg) : '', t.forma_rp.tmax_h != null ? `picco nel sangue ${rfPaInt(t.forma_rp.tmax_h, 'h')}` : '', t.forma_rp.emivita_h != null ? `emivita ${rfPaInt(t.forma_rp.emivita_h, 'h')}` : '', t.forma_rp.durata_effetto_h != null ? `effetto ${rfPaInt(t.forma_rp.durata_effetto_h, 'h')}` : ''].filter(Boolean).join(' · '), [t.forma_rp.nota_biodisponibilita, t.forma_rp.cibo, t.forma_rp.note].filter(Boolean).join(' ')) : ''}
+    </div>
+    ${diff}
+    <details class="rf-pa-fonti"><summary>Fonti: ${(t.fonti || []).length} frasi citate dai testi ufficiali · affidabilità ${rfEsc(t.affidabilita || '—')}</summary><ol>${fonti}</ol></details>
+  </div>`;
+}
+
 function rfPaFarmaciHtml() {
   const f = RF.pa.farmaci;
   if (!f) return '<div class="card"><div class="caption">Carico la tabella…</div></div>';
   const puo = f.puo && f.puo.decidere;
   const gruppi = {}; f.farmaci.forEach(x => { (gruppi[x.classe] = gruppi[x.classe] || []).push(x); });
-  const scritto = (v) => String(v).replace('.', ',');
-  const num = (x, c) => (puo ? `<input class="input rf-pa-num" id="rf-pa-f-${x.principio}-${c}" value="${scritto(x[c])}">` : `<span class="num">${scritto(x[c])}</span>`);
+  const scritto = (v) => (v === null || v === undefined ? '' : String(v).replace('.', ','));
+  const da = (x, c) => { const p = x.cinetica && x.cinetica.provenienza && x.cinetica.provenienza[c]; return x.numeri_a_mano ? '<span class="rf-pa-da">a mano</span>' : p === 'testo' ? '<span class="rf-pa-da t">dal testo</span>' : p === 'bozza' ? '<span class="rf-pa-da">bozza</span>' : ''; };
+  const num = (x, c) => (puo ? `<input class="input rf-pa-num" id="rf-pa-f-${x.principio}-${c}" value="${scritto(x[c])}">` : `<span class="num">${scritto(x[c])}</span>`) + da(x, c);
+  const mm = (x) => (puo
+    ? `<div class="rf-pa-mm"><input class="input rf-pa-mmi" id="rf-pa-f-${x.principio}-effetto_sis" value="${scritto(x.effetto_sis)}" placeholder="—" aria-label="calo sistolica">/<input class="input rf-pa-mmi" id="rf-pa-f-${x.principio}-effetto_dia" value="${scritto(x.effetto_dia)}" placeholder="—" aria-label="calo diastolica"></div>`
+    : `<span class="num">${x.effetto_sis != null ? `${scritto(x.effetto_sis)}/${scritto(x.effetto_dia)}` : '—'}</span>`);
+  const nome = (x) => (x.testi && x.testi.nome) || x.principio;
   const sez = Object.keys(RF_PA_CLASSE).filter(k => gruppi[k]).map(k => `
-    <tr><th colspan="7" style="padding-top:14px;border-bottom:0;color:var(--text)">${RF_PA_CLASSE[k]}</th></tr>
-    ${gruppi[k].map(x => `<tr><td><b>${rfEsc(x.principio)}</b>${x.orario_rilevante ? '' : '<div class="caption">senza finestra oraria</div>'}${x.nota ? `<div class="caption">${rfEsc(x.nota)}</div>` : ''}</td>
-      <td>${num(x, 'inizio_h')}</td><td>${num(x, 'picco_h')}</td><td>${num(x, 'durata_h')}</td><td>${num(x, 'emivita_h')}</td>
+    <tr><th colspan="9" style="padding-top:14px;border-bottom:0;color:var(--text)">${RF_PA_CLASSE[k]}</th></tr>
+    ${gruppi[k].map(x => { const aperta = RF.pa.schedaFarmaco === x.principio; return `<tr class="${aperta ? 'rf-pa-aperta' : ''}"><td><b>${rfEsc(nome(x))}</b>${x.orario_rilevante ? '' : '<div class="caption">senza finestra oraria</div>'}${x.nota ? `<div class="caption">${rfEsc(x.nota)}</div>` : ''}</td>
+      <td>${num(x, 'inizio_h')}</td><td>${num(x, 'picco_h')}</td><td>${num(x, 'durata_h')}</td><td>${num(x, 'emivita_h')}</td><td>${mm(x)}</td>
       <td>${x.confermato ? `<span class="badge success">confermato</span><div class="caption">${rfEsc(x.confermato_da || '')} · ${rfPaGiorno((x.confermato_il || '').replace(' ', 'T'))}</div>` : '<span class="badge warning">da confermare</span>'}</td>
-      <td style="white-space:nowrap">${puo ? (x.confermato ? `<button class="btn sm ghost" onclick="rfPaFarmacoTogli('${x.principio}')">Togli conferma</button>` : `<button class="btn sm primary" onclick="rfPaFarmaco('${x.principio}', true)">Conferma</button>`) + ` <button class="btn sm ghost" onclick="rfPaFarmaco('${x.principio}', false)">Salva</button>` : ''}</td></tr>`).join('')}`).join('');
-  return `<div class="rf-pa-avviso mb-16"><b>${f.confermati} su ${f.totale} confermati.</b> Questi numeri sono una <b>bozza</b> presa dalla farmacologia generale, non letta sull’informazione professionale di ogni prodotto. La pagina disegna la finestra d’azione di un farmaco <b>solo dopo</b> che un medico dello studio ha controllato i suoi quattro numeri sul testo ufficiale (swissmedicinfo.ch) e l’ha confermato. Cambiare un numero toglie la conferma.</div>
-    <div class="card"><div class="rf-pa-scroll"><table class="rf-pa-tab"><thead><tr><th>Principio attivo</th><th>Inizio (ore)</th><th>Picco (ore)</th><th>Durata (ore)</th><th>Emivita (ore)</th><th>Stato</th><th></th></tr></thead><tbody>${sez}</tbody></table></div>
-    <p class="caption mt-8">Ore dalla presa. Inizio: quando comincia l’effetto sulla pressione. Picco: quando è al massimo. Durata: fin quando l’effetto è dichiarato. ${puo ? '«Conferma» salva i numeri scritti nella riga e li dichiara controllati da te.' : 'La tabella la conferma il medico.'}</p></div>`;
+      <td><button class="btn sm ghost" onclick="rfPaScheda('${x.principio}')" aria-expanded="${aperta}">${aperta ? 'Chiudi' : 'Cinetica'}</button></td>
+      <td style="white-space:nowrap">${puo ? (x.confermato ? `<button class="btn sm ghost" onclick="rfPaFarmacoTogli('${x.principio}')">Togli conferma</button>` : `<button class="btn sm primary" onclick="rfPaFarmaco('${x.principio}', true)">Conferma</button>`) + ` <button class="btn sm ghost" onclick="rfPaFarmaco('${x.principio}', false)">Salva</button>` : ''}</td></tr>
+      ${aperta ? `<tr><td colspan="9" class="rf-pa-scheda">${rfPaSchedaHtml(x)}</td></tr>` : ''}`; }).join('')}`).join('');
+  return `<div class="rf-pa-avviso mb-16"><b>${f.confermati} su ${f.totale} confermati.</b> I numeri vengono dalla <b>farmacocinetica di ogni farmaco</b> letta sulle informazioni ufficiali del prodotto (UE e USA, con le frasi citate: apri «Cinetica»); dove il testo non dà un numero resta quello di bozza, e sotto ogni numero è scritto da dove viene. Le informazioni svizzere non si lasciano leggere in automatico: la pagina usa un farmaco (finestra, calcoli, proposte) <b>solo dopo</b> che un medico dello studio ha controllato la riga sul testo svizzero (swissmedicinfo.ch) e l’ha confermata. Cambiare un numero toglie la conferma.</div>
+    <div class="card"><div class="rf-pa-scroll"><table class="rf-pa-tab"><thead><tr><th>Principio attivo</th><th>Inizio (ore)</th><th>Picco (ore)</th><th>Durata (ore)</th><th>Emivita (ore)</th><th>Calo (mmHg)</th><th>Stato</th><th></th><th></th></tr></thead><tbody>${sez}</tbody></table></div>
+    <p class="caption mt-8">Ore dalla presa. Inizio: quando comincia l’effetto sulla pressione. Picco: quando è al massimo. Durata: fin quando l’effetto è dichiarato. Emivita: della molecola che agisce, decide quanto dura la coda dopo la durata. Calo: quanto abbassa sistolica/diastolica alla dose abituale rispetto al placebo, se il testo lo dice; vuoto = ${'10/6'} mmHg, uguale per tutti. ${puo ? '«Conferma» salva i numeri scritti nella riga e li dichiara controllati da te.' : 'La tabella la conferma il medico.'}</p></div>`;
 }
 
 PAGES.pressione = () => {

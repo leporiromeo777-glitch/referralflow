@@ -941,3 +941,14 @@ Dallo studio: nella revisione semplice niente correzioni guidate, e il foglio è
 Deciso: i punti Dragon/Mac non si mostrano più lì (restano nella revisione completa); il foglio usa le misure dello stampo
 e le parti calcolate dalla stessa funzione del Word; si scrive solo il testo, il resto viene dai campi sopra il foglio.
 
+
+## Pressione: la farmacocinetica di ogni farmaco dai testi ufficiali — 21.10.2026
+Dallo studio: tutti i farmaci della pressione correlati con la loro farmacocinetica (in quanto tempo agiscono, quanto, che
+concentrazione c'è nel sangue e quando), perché l'algoritmo si basi sulla cinetica di ogni farmaco.
+Deciso: i 45 principi letti sulle informazioni ufficiali del prodotto UE/USA/DE (ogni numero con documento, sezione, data e
+frase citata, in `cinetica-fonti.json`); i testi svizzeri non si leggono in automatico (anti-robot, accesso, condizioni) e
+non si aggirano. I quattro numeri vengono dal testo dove c'è, se no restano di bozza, dichiarato numero per numero; il
+Tmax non fa da picco dell'effetto; l'emivita è della molecola che agisce. Il calo in mmHg per farmaco solo dove il testo
+lo dà rispetto al placebo (20 su 45), altrimenti 10/6 per tutti: regole `pa-orari-2`. La regola del 7.10 resta: una riga
+vale solo dopo la conferma di un medico, sul testo svizzero; le righe confermate o scritte a mano non si aggiornano mai da
+sole. La curva della concentrazione è un disegno da Tmax ed emivita, non una misura, e non entra nei calcoli.

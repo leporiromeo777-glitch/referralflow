@@ -76,6 +76,16 @@ async function main() {
     const fMale = await manda(C_MED, { azione: 'farmaco', ...numeri, picco_h: 30, conferma: true });
     const fMed = await manda(C_MED, { azione: 'farmaco', ...numeri, conferma: true });
     verifica(fSeg.stato === 403 && fMale.stato === 400 && fMed.stato === 200, `conferma di un farmaco: la segreteria no, numeri incoerenti no, il medico sì (${fSeg.stato}, ${fMale.stato}, ${fMed.stato})`);
+    // 5b — la farmacocinetica dai testi ufficiali (21.10.2026): ogni riga ha la sua scheda con le fonti; i numeri dicono
+    // da dove vengono; il calo in mmHg dal testo dove c'è; un calo assurdo non passa.
+    const tf = (await leggi(C_MED, '?vista=farmaci')).j;
+    const olm = (tf.farmaci ?? []).find((x: any) => x.principio === 'olmesartan');
+    verifica((tf.farmaci ?? []).length >= 40 && tf.farmaci.every((x: any) => x.testi?.fonti?.length > 0 && [0, 25].includes(x.testi.curva?.length))
+      && olm?.effetto_sis === 10 && olm?.effetto_dia === 6 && olm?.cinetica?.provenienza?.emivita_h === 'testo' && /^testi-/.test(tf.versione_testi ?? ''),
+      `ogni farmaco ha la scheda dai testi con le fonti; olmesartan 10/6 mmHg ed emivita dal testo (${olm?.effetto_sis}/${olm?.effetto_dia})`);
+    const fMmhg = await manda(C_MED, { azione: 'farmaco', ...numeri, effetto_sis: 60, effetto_dia: 6, conferma: true });
+    const fMezzo = await manda(C_MED, { azione: 'farmaco', ...numeri, effetto_sis: 8, effetto_dia: '', conferma: true });
+    verifica(fMmhg.stato === 400 && fMezzo.stato === 400, `il calo in mmHg: 60 no, solo la sistolica no (${fMmhg.stato}, ${fMezzo.stato})`);
     const d3 = (await leggi(C_MED, `/${P1}`)).j;
     const fa = (d3.fasce ?? []).find((f: any) => f.stato === 'alta');
     verifica((d3.copertura ?? []).length === 1 && d3.copertura[0].livelli.length === 24 && fa?.scoperta === true && (fa?.al_minimo ?? []).includes('carvedilolo'),
@@ -123,7 +133,7 @@ async function main() {
     const reg = await query<{ azione: string; dettaglio: Record<string, unknown> }>(`select azione, dettaglio from pa_registro where studio_id = $1`, [S]);
     const chiavi = new Set(reg.flatMap((r) => Object.keys(r.dettaglio)));
     verifica(reg.length >= 8 && ['profilo_caricato', 'terapia_salvata', 'farmaco_confermato', 'proposte_generate', 'proposta_modificata'].every((a) => reg.some((r) => r.azione === a))
-      && [...chiavi].every((k) => ['misure', 'scartate', 'righe', 'principio', 'proposte', 'versione', 'soglie'].includes(k)), `registro: ${reg.length} righe, solo azioni e conteggi`);
+      && [...chiavi].every((k) => ['misure', 'scartate', 'righe', 'principio', 'proposte', 'versione', 'versione_testi', 'soglie'].includes(k)), `registro: ${reg.length} righe, solo azioni e conteggi`);
 
     // 10 — eliminare un profilo: il medico sì, la segreteria no; con lui vanno via misure e terapia.
     const eSeg = await manda(C_SEG, { azione: 'elimina', id: P2 });

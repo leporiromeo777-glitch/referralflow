@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
     if (!puoPa(session.role, 'decidere')) return nonPuoi('La tabella dei farmaci la conferma il medico.');
     const principio = String(c?.principio ?? '').slice(0, 60);
     if (azione === 'farmaco_togli') return esito(await togliConferma(sid, uid, principio));
-    return esito(await salvaFarmaco(sid, uid, principio, { inizio_h: c?.inizio_h, picco_h: c?.picco_h, durata_h: c?.durata_h, emivita_h: c?.emivita_h, orario_rilevante: c?.orario_rilevante, nota: c?.nota, fonte: c?.fonte, conferma: c?.conferma === true }));
+    return esito(await salvaFarmaco(sid, uid, principio, { inizio_h: c?.inizio_h, picco_h: c?.picco_h, durata_h: c?.durata_h, emivita_h: c?.emivita_h, effetto_sis: c?.effetto_sis, effetto_dia: c?.effetto_dia, orario_rilevante: c?.orario_rilevante, nota: c?.nota, fonte: c?.fonte, conferma: c?.conferma === true }));
   }
   if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 });
   // Un file arrivato dalla cartella e non agganciato da solo: lo assegna (o lo scarta) chi può caricare un profilo.

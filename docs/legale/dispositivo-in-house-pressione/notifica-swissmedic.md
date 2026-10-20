@@ -6,7 +6,7 @@ serviranno.
 
 ## 1. Dati
 - Istituzione: Centro Cardiologico Ticino — [indirizzo, numero d'identificazione].
-- Nome del dispositivo: Proposte di orario ReferralFlow. Versione: regole `pa-orari-1`.
+- Nome del dispositivo: Proposte di orario ReferralFlow. Versione: regole `pa-orari-2`.
 - Destinazione d'uso: vedi [destinazione-uso.md](destinazione-uso.md).
 - Classe: IIa (regola 11), salvo diversa valutazione.
 - Non ceduto ad altri: il software gira sul solo server dello studio; non esiste alcuna

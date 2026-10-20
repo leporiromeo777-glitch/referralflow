@@ -7,6 +7,7 @@ import { proponiAnagrafica } from '../pazienti-abbina-regole';
 import { riabbinaPazienti } from '../pazienti-abbina';
 import { validaAnagrafica } from '../pazienti-import';
 import { FARMACI_BOZZA, FONTE_BOZZA, controllaFarmaco, orario, riconosci, type Classe, type Farmaco } from './farmaci';
+import { VERSIONE_CINETICA, cineticaDi, concentrazione24, emivitaAttiva, numeriFinestra, tmaxAttivo, valleSuPicco, type Provenienza } from './cinetica';
 import {
   IMPOSTAZIONI_BASE, SOGLIE_BASE, avvisoFasce, confronta, copertura, fasce, leggiFile, proponi, punteggio, segnaScoperte, statistiche,
   type Impostazioni, type Misura, type Presa, type Soglie,
@@ -44,49 +45,90 @@ async function registra(studioId: string, userId: string | null, azione: string,
 // La bozza entra una volta sola, riga per riga «da confermare». Un principio
 // aggiunto al codice in seguito entra alla prima apertura; ciò che lo studio
 // ha già modificato o confermato non si tocca mai.
+// Poi la lettura dei testi ufficiali (cinetica-fonti.json, 21.10.2026): nelle righe NON confermate e senza numeri
+// scritti a mano, i quattro numeri diventano quelli del testo dove il testo li dà (gli altri restano di bozza, e la
+// riga dice quali), più il calo pressorio quando il testo lo dà. Una riga confermata resta com'è: il medico vede
+// accanto che cosa dicono i testi e, se vuole, toglie la conferma e la ridà.
+export const FONTE_TESTI = 'Dai testi ufficiali UE/USA del prodotto (fonti citate nella scheda): da controllare sull’informazione professionale svizzera (swissmedicinfo.ch) prima di confermare.';
 export async function assicuraFarmaci(studioId: string): Promise<void> {
-  const [{ n }] = await query<{ n: number }>(`select count(*)::int as n from pa_farmaci where studio_id = $1`, [studioId]);
-  if (n >= FARMACI_BOZZA.length) return;
+  const [{ n, da_leggere }] = await query<{ n: number; da_leggere: number }>(
+    `select count(*)::int as n, count(*) filter (where confermato_il is null and not numeri_a_mano and cinetica_versione is distinct from $2)::int as da_leggere
+       from pa_farmaci where studio_id = $1`, [studioId, VERSIONE_CINETICA]);
+  if (n >= FARMACI_BOZZA.length && da_leggere === 0) return;
   for (const f of FARMACI_BOZZA) {
     await query(
       `insert into pa_farmaci (studio_id, principio, classe, inizio_h, picco_h, durata_h, emivita_h, orario_rilevante, nota, fonte)
        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) on conflict (studio_id, principio) do nothing`,
       [studioId, f.principio, f.classe, f.inizio_h, f.picco_h, f.durata_h, f.emivita_h, f.orario_rilevante, f.nota ?? null, FONTE_BOZZA]);
+    const c = cineticaDi(f.principio);
+    if (!c) continue;
+    // senza finestra oraria (spironolattone) i quattro numeri restano quelli della bozza: l'effetto si costruisce in giorni
+    const w = f.orario_rilevante ? numeriFinestra(c, f) : numeriFinestra(null, f);
+    await query(
+      `update pa_farmaci set inizio_h = $3, picco_h = $4, durata_h = $5, emivita_h = $6, effetto_sis = $7, effetto_dia = $8,
+              cinetica = $9, cinetica_versione = $10, fonte = $11, aggiornato_il = now()
+        where studio_id = $1 and principio = $2 and confermato_il is null and not numeri_a_mano and cinetica_versione is distinct from $10`,
+      [studioId, f.principio, w.inizio_h, w.picco_h, w.durata_h, w.emivita_h, c.effetto_sis ?? null, c.effetto_dia ?? null,
+       JSON.stringify({ versione: VERSIONE_CINETICA, provenienza: w.provenienza }), VERSIONE_CINETICA, FONTE_TESTI]);
   }
 }
 
-type RigaFarmaco = { principio: string; classe: Classe; inizio_h: number; picco_h: number; durata_h: number; emivita_h: number; orario_rilevante: boolean; nota: string | null; fonte: string | null; confermato: boolean; confermato_il: string | null; confermato_da: string | null };
+type RigaFarmaco = { principio: string; classe: Classe; inizio_h: number; picco_h: number; durata_h: number; emivita_h: number; orario_rilevante: boolean; nota: string | null; fonte: string | null; confermato: boolean; confermato_il: string | null; confermato_da: string | null;
+  effetto_sis: number | null; effetto_dia: number | null; cinetica: { versione?: string; provenienza?: Record<string, Provenienza> } | null; cinetica_versione: string | null; numeri_a_mano: boolean };
 async function righeFarmaci(studioId: string): Promise<RigaFarmaco[]> {
   await assicuraFarmaci(studioId);
   return query<RigaFarmaco>(
     `select f.principio, f.classe, f.inizio_h::float8, f.picco_h::float8, f.durata_h::float8, f.emivita_h::float8, f.orario_rilevante, f.nota, f.fonte,
-            (f.confermato_il is not null) as confermato, f.confermato_il::text, u.email as confermato_da
+            (f.confermato_il is not null) as confermato, f.confermato_il::text, u.email as confermato_da,
+            f.effetto_sis::float8, f.effetto_dia::float8, f.cinetica, f.cinetica_versione, f.numeri_a_mano
        from pa_farmaci f left join users u on u.id = f.confermato_da where f.studio_id = $1 order by f.classe, f.principio`, [studioId]);
 }
 const comeFarmaco = (r: RigaFarmaco): Farmaco => {
   const bozza = FARMACI_BOZZA.find((b) => b.principio === r.principio);
-  return { principio: r.principio, classe: r.classe, inizio_h: r.inizio_h, picco_h: r.picco_h, durata_h: r.durata_h, emivita_h: r.emivita_h, orario_rilevante: r.orario_rilevante, radici: bozza?.radici ?? [], marchi: bozza?.marchi ?? [] };
+  return { principio: r.principio, classe: r.classe, inizio_h: r.inizio_h, picco_h: r.picco_h, durata_h: r.durata_h, emivita_h: r.emivita_h, orario_rilevante: r.orario_rilevante, radici: bozza?.radici ?? [], marchi: bozza?.marchi ?? [],
+    effetto_sis: r.effetto_sis, effetto_dia: r.effetto_dia };
 };
+
+// La scheda di ogni farmaco per la pagina: ciò che dicono i testi, la curva della concentrazione nelle 24 ore (un
+// disegno da Tmax ed emivita della molecola che agisce) e i numeri che i testi darebbero alla finestra, per vedere a
+// colpo d'occhio se la riga li usa.
+function schedaCinetica(r: RigaFarmaco) {
+  const c = cineticaDi(r.principio);
+  if (!c) return null;
+  const tmax = tmaxAttivo(c), emi = emivitaAttiva(c);
+  const curva = tmax && emi ? concentrazione24(tmax, emi) : [];
+  const bozza = FARMACI_BOZZA.find((b) => b.principio === r.principio);
+  const daiTesti = bozza ? (bozza.orario_rilevante ? numeriFinestra(c, bozza) : numeriFinestra(null, bozza)) : null;
+  return { ...c, curva, valle_su_picco: valleSuPicco(curva), dai_testi: daiTesti };
+}
 
 export async function elencoFarmaci(studioId: string) {
   const righe = await righeFarmaci(studioId);
-  return { farmaci: righe, confermati: righe.filter((r) => r.confermato).length, totale: righe.length };
+  return { farmaci: righe.map((r) => ({ ...r, testi: schedaCinetica(r) })), confermati: righe.filter((r) => r.confermato).length, totale: righe.length, versione_testi: VERSIONE_CINETICA };
 }
 
-export async function salvaFarmaco(studioId: string, userId: string, principio: string, v: { inizio_h: number; picco_h: number; durata_h: number; emivita_h: number; orario_rilevante?: boolean; nota?: string; fonte?: string; conferma?: boolean }): Promise<Esito<{ ok: true }>> {
+export async function salvaFarmaco(studioId: string, userId: string, principio: string, v: { inizio_h: number; picco_h: number; durata_h: number; emivita_h: number; effetto_sis?: unknown; effetto_dia?: unknown; orario_rilevante?: boolean; nota?: string; fonte?: string; conferma?: boolean }): Promise<Esito<{ ok: true }>> {
   const numeri = { inizio_h: Number(v.inizio_h), picco_h: Number(v.picco_h), durata_h: Number(v.durata_h), emivita_h: Number(v.emivita_h) };
   const sbaglio = controllaFarmaco(numeri);
   if (sbaglio) return err(sbaglio);
-  // Cambiare un numero toglie la conferma: la si ridà guardando il numero nuovo.
+  // il calo pressorio: vuoto = l'ipotesi uguale per tutti; se c'è, un numero di mmHg plausibile
+  const mmHg = (x: unknown): number | null | 'no' => (x === undefined || x === null || x === '' ? null : Number.isFinite(Number(x)) && Number(x) > 0 && Number(x) <= 40 ? Math.round(Number(x) * 10) / 10 : 'no');
+  const tocca = v.effetto_sis !== undefined || v.effetto_dia !== undefined;   // non mandato = resta com'è
+  const es = mmHg(v.effetto_sis), ed = mmHg(v.effetto_dia);
+  if (es === 'no' || ed === 'no') return err('Il calo pressorio va scritto in mmHg, fra 0 e 40 (vuoto = l’ipotesi uguale per tutti).');
+  if ((es === null) !== (ed === null)) return err('Il calo pressorio va scritto per la sistolica e per la diastolica, o lasciato vuoto per entrambe.');
+  // Cambiare un numero toglie la conferma: la si ridà guardando il numero nuovo. Un numero diverso da quello che c'era
+  // è «a mano»: una nuova lettura dei testi non lo sovrascrive più.
   const [r] = await query<{ id: string }>(
-    `update pa_farmaci set inizio_h = $3, picco_h = $4, durata_h = $5, emivita_h = $6, orario_rilevante = coalesce($7, orario_rilevante),
+    `update pa_farmaci set numeri_a_mano = numeri_a_mano or (inizio_h, picco_h, durata_h, emivita_h, effetto_sis, effetto_dia) is distinct from ($3::numeric, $4::numeric, $5::numeric, $6::numeric, case when $14 then $12::numeric else effetto_sis end, case when $14 then $13::numeric else effetto_dia end),
+            inizio_h = $3, picco_h = $4, durata_h = $5, emivita_h = $6, effetto_sis = case when $14 then $12::numeric else effetto_sis end, effetto_dia = case when $14 then $13::numeric else effetto_dia end, orario_rilevante = coalesce($7, orario_rilevante),
             nota = coalesce($8, nota), fonte = coalesce(nullif($9, ''), fonte), aggiornato_il = now(),
             confermato_da = case when $10 then $11::uuid else null end, confermato_il = case when $10 then now() else null end
       where studio_id = $1 and principio = $2 returning id`,
     [studioId, principio, numeri.inizio_h, numeri.picco_h, numeri.durata_h, numeri.emivita_h, typeof v.orario_rilevante === 'boolean' ? v.orario_rilevante : null,
-     typeof v.nota === 'string' ? v.nota.slice(0, 300) : null, typeof v.fonte === 'string' ? v.fonte.slice(0, 300) : '', v.conferma === true, userId]);
+     typeof v.nota === 'string' ? v.nota.slice(0, 300) : null, typeof v.fonte === 'string' ? v.fonte.slice(0, 300) : '', v.conferma === true, userId, es, ed, tocca]);
   if (!r) return err('Farmaco non trovato.', 404);
-  await registra(studioId, userId, v.conferma ? 'farmaco_confermato' : 'farmaco_modificato', null, { principio });
+  await registra(studioId, userId, v.conferma ? 'farmaco_confermato' : 'farmaco_modificato', null, { principio, versione_testi: VERSIONE_CINETICA });
   return { ok: true };
 }
 
