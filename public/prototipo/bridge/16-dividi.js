@@ -42,6 +42,8 @@ if (typeof NAV !== 'undefined') for (const r of ['secretary', 'assistant', 'doct
 .rf-div-zoom canvas { background:#fff; max-width:none; }
 .rf-div-drop { border:1.5px dashed var(--border); border-radius:12px; padding:18px; text-align:center; color:var(--text-2); font-size:13.5px; }
 .rf-div-drop.sopra { border-color:var(--accent); color:var(--accent); }
+.rf-div-paz { color:var(--accent); font-weight:inherit; text-decoration:underline; text-underline-offset:2px; }
+.rf-div-paz:hover { text-decoration-thickness:2px; }
 `; document.head.appendChild(st); })();
 
 RF.div = { pid: '', nome: '', cerca: '', documenti: null, doc: null, pezzi: [], proposti: [], carico: false, errore: null, creati: null, invio: null, pdf: null, pdfId: null, mini: {}, zoom: 0, attesa: null };
@@ -53,6 +55,9 @@ const rfDivGiorno = (iso) => (iso ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${is
 const rfDivDataNome = (d) => { const m = /^\s*(\d{1,2})\s?[./]\s?(\d{1,2})\s?[./]\s?(\d{4})\s*$/.exec(d || ''); return m ? `${m[3]}.${m[2].padStart(2, '0')}.${m[1].padStart(2, '0')}` : ''; };
 const rfDivTitolo = (p) => [rfDivDataNome(p.data), RF.div.nome, p.descr || rfDivEtichetta(p.categoria)].filter(Boolean).join(' ');
 
+// Il nome del paziente porta alla sua cartella (20.10.2026, richiesta dello studio). La divisione in corso resta qui:
+// tornando su «Dividi cartella» la si ritrova com'era (finché non si ricarica la pagina).
+const rfDivPaz = (pid, nome) => pid && rfUuid(pid) ? `<a href="#/patients/${rfEsc(pid)}" class="rf-div-paz" title="Apri la cartella del paziente">${rfEsc(nome)}</a>` : rfEsc(nome);
 async function rfDivChiedi(url, corpo) {
   try {
     const r = await fetch(url, corpo ? { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) } : { credentials: 'include', cache: 'no-store' });
@@ -76,7 +81,7 @@ function rfDivStoricoHtml() {
   if (!s.length) return '<div class="caption mt-8">Ancora nessuna: le cartelle che carichi qui restano in questo elenco, per riprenderle quando vuoi.</div>';
   return `<div class="list mt-8">${s.map(x => {
     const stato = x.divisa_il ? `<span class="badge success">divisa in ${x.documenti || '?'} documenti il ${rfEsc(rfDivGiorno(x.divisa_il))}</span>` : x.ocr_stato === 'da_fare' ? '<span class="badge warning">il Mac la sta leggendo</span>' : (x.analisi === 'da_fare' || x.analisi === 'in_corso') ? '<span class="badge warning">il Mac ci sta ragionando</span>' : '<span class="badge accent">da dividere</span>';
-    return `<div class="list-item"><div class="grow"><div class="name">${rfEsc(x.paziente)}</div><div class="sub">${rfEsc(x.filename)} · caricata il ${rfEsc(rfDivGiorno(x.caricato))}</div></div>${stato}
+    return `<div class="list-item"><div class="grow"><div class="name">${rfDivPaz(x.patient_id, x.paziente)}</div><div class="sub">${rfEsc(x.filename)} · caricata il ${rfEsc(rfDivGiorno(x.caricato))}</div></div>${stato}
       <button class="btn sm ghost" data-go="#/patients/${x.patient_id}">Cartella</button><button class="btn sm${x.divisa_il ? '' : ' primary'}" onclick="rfDivApri('${x.id}')">${x.divisa_il ? 'Dividi di nuovo' : 'Dividi'}</button></div>`; }).join('')}</div>`;
 }
 function rfDivCerca(v) { RF.div.cerca = v; render(); const e = document.getElementById('rf-div-cerca'); if (e) { e.focus(); e.setSelectionRange(e.value.length, e.value.length); } }
@@ -128,7 +133,7 @@ async function rfDivChiE(file) {
   if (a.letto) { a.cognome = a.letto.cognome || ''; a.nome = a.letto.nome || ''; a.nascita = rfDivGiorno(a.letto.nascita); }
   const da = a.decisione && a.decisione.fonte === 'file' ? 'dal nome del file' : 'dal PDF';
   if (a.decisione && a.decisione.cosa === 'usa' && a.trovato) {
-    RF.div.riconosciuto = `Riconosciuto ${da}: <b>${rfEsc(a.trovato.nome)}</b>${a.trovato.nascita ? `, ${rfEsc(rfDivGiorno(a.trovato.nascita))}` : ''} — la sua cartella c’era già.`;
+    RF.div.riconosciuto = `Riconosciuto ${da}: <b>${rfDivPaz(a.trovato.id, a.trovato.nome)}</b>${a.trovato.nascita ? `, ${rfEsc(rfDivGiorno(a.trovato.nascita))}` : ''} — la sua cartella c’era già.`;
     rfDivUsa(a.trovato.id, a.trovato.nome); return;
   }
   if (a.decisione && a.decisione.cosa === 'crea') {
@@ -158,7 +163,7 @@ async function rfDivCreaPaziente() {
   // 409 = quella persona c'è già (stesso cognome, nome e data di nascita): si usa la sua cartella, senza doppioni.
   if ((stato === 201 || stato === 409) && j.id) {
     if (stato === 409) toast('Questa persona c’era già: uso la sua cartella');
-    if (a.auto) RF.div.riconosciuto = `Riconosciuto ${a.auto}: <b>${rfEsc(`${a.cognome} ${a.nome}`.trim())}</b>, ${rfEsc(a.nascita)} — ${stato === 409 ? 'la sua cartella c’era già.' : 'non c’era: ho creato la sua cartella.'}`;
+    if (a.auto) RF.div.riconosciuto = `Riconosciuto ${a.auto}: <b>${rfDivPaz(j.id, `${a.cognome} ${a.nome}`.trim())}</b>, ${rfEsc(a.nascita)} — ${stato === 409 ? 'la sua cartella c’era già.' : 'non c’era: ho creato la sua cartella.'}`;
     void rfCaricaDati();
     rfDivUsa(j.id, `${a.cognome.trim()} ${a.nome.trim()}`);
     return;
@@ -234,7 +239,7 @@ function rfDivAspetta() {
   clearTimeout(rfDivTimer); rfDivTimer = null;
   const d = RF.div.doc; if (!d || !((d.ocr === 'da_fare' && rfDivPochi(d)) || rfDivAnalisiViva(d) || (!d.analisi && d.ocr !== 'pronta'))) return;
   rfDivTimer = setTimeout(async () => {
-    if (RF.div.doc !== d || !document.getElementById('rf-div-avviso')) return;      // si è cambiato documento o pagina
+    if (RF.div.doc !== d || !document.getElementById('rf-div-avviso')) { rfDivTimer = null; return; }      // si è cambiato documento o pagina: si riprende tornando
     const j = await rfDivChiedi(`${RF_DIV_URL}?stato=${encodeURIComponent(d.id)}`);
     if (RF.div.doc !== d) return;
     const avviso = () => { const el = document.getElementById('rf-div-avviso'); if (el) el.innerHTML = rfDivAvvisoHtml(); };
@@ -317,11 +322,12 @@ function rfDivCampo(k, campo, v) {
   // Finché il titolo è quello proposto, segue il tipo e la data che si scelgono.
   if (p.auto) { p.titolo = rfDivTitolo(p); const t = document.getElementById(`rf-div-t-${k}`); if (t) t.value = p.titolo; }
 }
-// Il nome di una sottocartella vale per tutti i documenti della sezione (fino al separatore dopo).
-function rfDivCartella(k, v) {
+// Il nome di una sottocartella vale per tutti i suoi documenti (e per i fogli separatori che la aprono).
+function rfDivCartella(vecchia, v) {
   RF.div.toccato = true;
-  const vecchia = RF.div.pezzi[k].cartella;
-  for (let i = k; i < RF.div.pezzi.length && RF.div.pezzi[i].cartella === vecchia && (i === k || RF.div.pezzi[i].foglio !== 'separatore'); i++) RF.div.pezzi[i].cartella = v.trim();
+  const nuova = v.trim();
+  for (const p of RF.div.pezzi) if ((p.cartella || '') === (vecchia || '') && p.foglio !== 'copertina') p.cartella = nuova;
+  rfDivAggiorna();
 }
 function rfDivDaCapo() {
   if (!RF.div.doc || !confirm('Tornare ai tagli proposti? Le correzioni fatte fin qui si perdono.')) return;
@@ -392,56 +398,188 @@ function rfDivGruppi(lista, nomeDi = (x) => x.filename, cartellaDi = (x) => x.ca
   for (const l of gruppi.values()) l.sort((a, b) => { const x = nomeDi(a) || '', y = nomeDi(b) || ''; return datato(x) !== datato(y) ? (datato(x) ? -1 : 1) : datato(x) ? y.localeCompare(x) : x.localeCompare(y); });
   return [...gruppi.entries()].sort((a, b) => (a[0] === '' ? 1 : b[0] === '' ? -1 : a[0].localeCompare(b[0])));
 }
-// La scheda «Documenti» del paziente: se la sua cartella ha sottocartelle (nate da una cartella divisa), le mostra.
+/* ---------- la cartella del paziente: sottocartelle (20.10.2026) ----------
+   Richiesta dello studio: «quando carico un documento devo poter scegliere in che sottocartella metterlo, e poter
+   modificare, togliere o spostare trascinando i file nelle varie sottocartelle». Le sottocartelle sono in ordine di
+   numero; si propongono sempre le dodici della cartella cartacea (anche vuote, come posto dove trascinare), più quelle
+   che il paziente ha già. Un documento si trascina su un'altra sottocartella, o si sposta con «Sposta» (sul telefono il
+   trascinamento non c'è). Rinominare e togliere: un documento alla volta, togliere dopo una conferma; un documento
+   allegato a un referto non si toglie. */
+(function () { const st = document.createElement('style'); st.textContent = `
+.rf-cart-doc[draggable="true"] { cursor:grab; }
+.rf-cart-doc.preso { opacity:.45; }
+.rf-cart-azioni { display:flex; gap:2px; flex-shrink:0; }
+.rf-cart-azioni .btn { padding:0 8px; }
+.rf-div-cart.sopra > summary { background:var(--accent-soft, rgba(80,90,220,.12)); border-radius:10px; outline:1.5px dashed var(--accent); }
+.rf-div-cart.vuota { display:none; }
+.rf-cart.trascino .rf-div-cart.vuota { display:block; }
+.rf-div-cart.vuota summary { color:var(--text-3, var(--text-2)); }
+.rf-div-cart summary .rf-cart-fine { margin-left:auto; display:flex; gap:2px; }
+.rf-cart-dove { display:flex; flex-direction:column; gap:6px; max-height:52vh; overflow:auto; }
+.rf-cart-dove .btn { justify-content:flex-start; text-align:left; }
+.rf-div-cart summary { flex-wrap:wrap; }
+.rf-cart-doc .grow { min-width:0; }
+@media (max-width:640px) {
+  .rf-cart-doc { flex-wrap:wrap; }
+  .rf-cart-doc .grow { flex:1 1 calc(100% - 52px); }
+  .rf-cart-azioni { width:100%; justify-content:flex-end; }
+  .rf-div-cart summary .rf-cart-fine { margin-left:0; width:100%; justify-content:flex-end; }
+}
+`; document.head.appendChild(st); })();
+RF.cart = RF.cart || { aperte: new Set(), preso: null };
+// Tutte le sottocartelle da proporre, in ordine di numero: le dodici dello studio e quelle che il paziente ha già.
+function rfCartTutte(p) {
+  const s = new Set([...((RF.data && RF.data.sottocartelle) || []), ...((p && p.docs) || []).map(d => d.cartella).filter(Boolean)]);
+  return [...s].sort((a, b) => a.localeCompare(b, 'it', { numeric: true }));
+}
+const rfCartUrl = (pid) => `/api/prototipo/pazienti/${encodeURIComponent(pid)}/documenti`;
+async function rfCartChiedi(pid, metodo, corpo, dopo) {
+  try {
+    const r = await fetch(rfCartUrl(pid) + (metodo === 'DELETE' ? `?documento=${encodeURIComponent(corpo)}` : ''), metodo === 'DELETE' ? { method: 'DELETE', credentials: 'include' } : { method: metodo, credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(j.errore === 'non_permesso' || j.errore === 'ruolo_non_ammesso' ? 'Il tuo ruolo non modifica la cartella' : (j.errore || `Non riuscito (${r.status})`)); return null; }
+    if (dopo) toast(dopo(j));
+    await rfCaricaDati(); render();
+    return j;
+  } catch { toast('Piattaforma non raggiungibile'); return null; }
+}
+const rfCartNome = (c) => c || 'Altri documenti';
+function rfCartVai(pid, ids, cartella) {
+  closeModal();
+  if (cartella) RF.cart.aperte.add(cartella);
+  return rfCartChiedi(pid, 'PATCH', { azione: 'sposta', ids, cartella: cartella || null }, (j) => j.spostati ? `Spostato in «${rfCartNome(j.cartella)}»` : 'Era già lì');
+}
+// «Sposta»: le sottocartelle da toccare, e una nuova se serve.
+function rfCartSposta(pid, id) {
+  const p = P[pid], d = ((p && p.docs) || []).find(x => x.id === id); if (!d) return;
+  RF.cart.sposta = { pid, id };
+  const voce = (c) => `<button class="btn ${c === (d.cartella || '') ? 'primary' : ''}" onclick="rfCartVai(RF.cart.sposta.pid, [RF.cart.sposta.id], this.dataset.c)" data-c="${rfEsc(c)}">${rfEsc(rfCartNome(c))}</button>`;
+  openModal('Sposta in un’altra sottocartella', `<p class="meta" style="margin:0 0 10px">${rfEsc(d.t)}</p><div class="rf-cart-dove">${rfCartTutte(p).map(voce).join('')}${voce('')}</div>
+    <div class="row mt-16" style="gap:8px;align-items:center"><input class="input" id="rf-cart-nuova" placeholder="…oppure una sottocartella nuova (es. 13_Fisioterapia)" style="flex:1"><button class="btn" onclick="const v=document.getElementById('rf-cart-nuova').value.trim(); if (v) rfCartVai(RF.cart.sposta.pid, [RF.cart.sposta.id], v)">Crea e sposta</button></div>`,
+    '<button class="btn" data-close>Annulla</button>');
+}
+function rfCartRinomina(pid, id) {
+  const d = (((P[pid] || {}).docs) || []).find(x => x.id === id); if (!d) return;
+  const v = prompt('Il nome del documento:', d.t); if (v === null || !v.trim() || v.trim() === d.t) return;
+  void rfCartChiedi(pid, 'PATCH', { azione: 'rinomina', id, titolo: v.trim() }, () => 'Rinominato');
+}
+function rfCartTogli(pid, id) {
+  const p = P[pid], d = (((p || {}).docs) || []).find(x => x.id === id); if (!d) return;
+  if (!confirm(`Togliere «${d.t}» dalla cartella di ${fullName(p)}?\n\nIl documento si cancella e non si può recuperare. Nel registro degli accessi resta che è stato tolto, da chi e quando.`)) return;
+  void rfCartChiedi(pid, 'DELETE', id, () => 'Documento tolto dalla cartella');
+}
+function rfCartRinominaCartella(pid, da) {
+  const v = prompt('Il nome della sottocartella (vale per tutti i suoi documenti):', da); if (v === null || !v.trim() || v.trim() === da) return;
+  RF.cart.aperte.add(v.trim());
+  void rfCartChiedi(pid, 'PATCH', { azione: 'rinomina_cartella', da, a: v.trim() }, (j) => `${j.spostati} ${j.spostati === 1 ? 'documento' : 'documenti'} in «${v.trim()}»`);
+}
+// Trascinare: le sottocartelle vuote compaiono come posto dove lasciarlo.
+function rfCartPrendi(e, id) {
+  RF.cart.preso = id; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', id); } catch { /* vecchi browser */ }
+  e.currentTarget.classList.add('preso');
+  setTimeout(() => { const c = document.getElementById('rf-cart'); if (c) c.classList.add('trascino'); }, 0);
+}
+function rfCartFine() {
+  RF.cart.preso = null;
+  const c = document.getElementById('rf-cart'); if (c) c.classList.remove('trascino');
+  document.querySelectorAll('.rf-cart-doc.preso, .rf-div-cart.sopra').forEach(el => el.classList.remove('preso', 'sopra'));
+}
+function rfCartSopra(e, el, si) { if (!RF.cart.preso) return; e.preventDefault(); el.classList.toggle('sopra', si); }
+function rfCartLascia(e, el) {
+  if (!RF.cart.preso) return;
+  e.preventDefault();
+  const id = RF.cart.preso, pid = el.closest('#rf-cart').dataset.pid, c = el.dataset.cartella || '';
+  rfCartFine();
+  const d = (((P[pid] || {}).docs) || []).find(x => x.id === id);
+  if (!d || (d.cartella || '') === c) return;
+  void rfCartVai(pid, [id], c);
+}
+function rfCartApri(el) { const c = el.dataset.cartella || ''; if (el.open) RF.cart.aperte.add(c); else RF.cart.aperte.delete(c); }
+
 if (typeof patientDocs === 'function') {
   const rfDocsPrima = patientDocs;
   patientDocs = function (p) {
-    if (!RF.live || !(p.docs || []).some(d => d.cartella)) return rfDocsPrima(p);
-    const riga = (d) => `<div class="list-item clickable" data-doc="${d.id}"><div class="avatar-sm">${ICONS.file}</div><div class="grow"><div class="name">${rfEsc(d.t)}</div><div class="sub">${DOC_TYPE[d.k] || d.k} · caricato il ${d.d}</div></div><button class="btn sm ghost" data-doc="${d.id}" title="Apri il documento accanto">${ICONS.eye}</button></div>`;
+    if (!RF.live || !rfUuid(p.id)) return rfDocsPrima(p);
+    const pid = p.id, docs = p.docs || [];
+    const riga = (d) => `<div class="list-item clickable rf-cart-doc" data-doc="${d.id}" draggable="true" ondragstart="rfCartPrendi(event, '${d.id}')" ondragend="rfCartFine()" title="Trascinalo su un’altra sottocartella per spostarlo"><div class="avatar-sm">${ICONS.file}</div><div class="grow"><div class="name">${rfEsc(d.t)}</div><div class="sub">${DOC_TYPE[d.k] || d.k} · caricato il ${d.d}</div></div>
+      <div class="rf-cart-azioni"><button class="btn sm ghost" data-doc="${d.id}" title="Apri il documento accanto">${ICONS.eye}</button><button class="btn sm ghost" onclick="event.stopPropagation();rfCartSposta('${pid}', '${d.id}')" title="Sposta in un’altra sottocartella">Sposta</button><button class="btn sm ghost" onclick="event.stopPropagation();rfCartRinomina('${pid}', '${d.id}')" title="Rinomina">Rinomina</button><button class="btn sm ghost" onclick="event.stopPropagation();rfCartTogli('${pid}', '${d.id}')" title="Togli dalla cartella">${ICONS.x}</button></div></div>`;
+    const gruppi = new Map(rfDivGruppi(docs, (d) => d.filename, (d) => d.cartella));
+    const nomi = [...rfCartTutte(p), ''];
+    const cartella = (c) => {
+      const lista = gruppi.get(c) || [];
+      if (!lista.length && !c && docs.length) return '';
+      const aperta = lista.length && (RF.cart.aperte.has(c) || (!c && !RF.cart.aperte.size) || nomi.filter(x => gruppi.has(x)).length === 1);
+      const dati = `data-cartella="${rfEsc(c)}" ondragover="rfCartSopra(event, this, true)" ondragleave="rfCartSopra(event, this, false)" ondrop="rfCartLascia(event, this)"`;
+      return `<details class="rf-div-cart${lista.length ? '' : ' vuota'}" ${dati} ${aperta ? 'open' : ''} ontoggle="rfCartApri(this)"><summary><span class="ico">${ICONS.documents || ''}</span><b>${rfEsc(rfCartNome(c))}</b><span class="caption">${lista.length || 'vuota: lascialo qui'}</span>
+        <span class="rf-cart-fine">${lista.length && c ? `<button class="btn sm ghost" onclick="event.preventDefault();event.stopPropagation();rfCartRinominaCartella('${pid}', this.closest('details').dataset.cartella)" title="Rinomina la sottocartella">Rinomina</button>` : ''}<button class="btn sm ghost" data-modal="upload" data-arg="${rfEsc(c)}" title="Carica un documento in questa sottocartella">${ICONS.upload} Carica qui</button></span></summary>
+        ${lista.length ? `<div class="list">${lista.map(riga).join('')}</div>` : ''}</details>`;
+    };
     return `<div class="card"><div class="card-head"><span class="section-title">Documenti</span><button class="btn sm primary" data-modal="upload">${ICONS.upload} Carica</button></div>
-      ${rfDivGruppi(p.docs, (d) => d.filename, (d) => d.cartella).map(([c, lista]) => `<details class="rf-div-cart" ${c ? '' : 'open'}><summary><span class="ico">${ICONS.documents || ''}</span><b>${rfEsc(c || 'Altri documenti')}</b><span class="caption">${lista.length}</span></summary><div class="list">${lista.map(riga).join('')}</div></details>`).join('')}</div>`;
+      ${docs.length ? '<div class="caption" style="margin:-4px 0 6px">Trascina un documento su un’altra sottocartella per spostarlo (o «Sposta»). Mentre trascini compaiono anche le sottocartelle vuote.</div>' : '<div class="caption" style="margin:-4px 0 6px">Nessun documento: «Carica» o «Carica qui» in una sottocartella.</div>'}
+      <div class="rf-cart" id="rf-cart" data-pid="${pid}">${nomi.map(cartella).join('')}</div></div>`;
   };
 }
 
 /* ---------- la pagina ---------- */
+// La proposta in ordine di sottocartella (20.10.2026, richiesta dello studio: «le separazioni in ordine dei numeri»).
+// Nella carta le sezioni non vengono in ordine di numero (il foglio 07 apre 09_Laboratorio, lo 08 11_Amministrativi…)
+// e i documenti spostati per contenuto finivano sotto una testata ripetuta: ora ogni sottocartella compare una volta
+// sola, 01, 02, 03…, coi suoi documenti in ordine di pagina. I tagli restano quelli delle pagine: «Unisci al
+// precedente» c'è solo se il pezzo prima nelle pagine sta nella stessa sottocartella; un pezzo si sposta con la sua tendina.
+function rfDivOrdine() {
+  const pezzi = RF.div.pezzi, gruppi = new Map();
+  pezzi.forEach((p, k) => { if (p.foglio === 'copertina') return; const c = p.cartella || ''; if (!gruppi.has(c)) gruppi.set(c, []); gruppi.get(c).push(k); });
+  return [...gruppi.entries()].sort((a, b) => (a[0] === '' ? 1 : b[0] === '' ? -1 : a[0].localeCompare(b[0], 'it', { numeric: true })));
+}
+function rfDivSottocartelle() {
+  return [...new Set([...((RF.data && RF.data.sottocartelle) || []), ...RF.div.pezzi.map(p => p.cartella).filter(Boolean)])].sort((a, b) => a.localeCompare(b, 'it', { numeric: true }));
+}
 function rfDivPezziHtml() {
   const pezzi = RF.div.pezzi;
   const mini = (n) => { const m = RF.div.mini[n]; return `<div class="rf-div-th" data-n="${n}" onclick="rfDivZoom(${n})" title="Pagina ${n}: guarda in grande">${m && m !== 'attesa' ? `<img src="${m}" alt="Pagina ${n}">` : '<div class="vuota"></div>'}<span>${n}</span></div>`; };
+  const tutte = rfDivSottocartelle(), conCartelle = pezzi.some(p => p.cartella);
   let numero = 0;
-  return pezzi.map((p, k) => {
+  const copertina = pezzi.filter(p => p.foglio === 'copertina').map(p => `<div class="rf-div-sez"><span class="caption">Pagina ${p.da}: copertina col codice del paziente, lasciata fuori</span></div>`).join('');
+  const pezzo = (k) => {
+    const p = pezzi[k];
     let pagine = '';
     for (let n = p.da; n <= p.a; n++) pagine += (n > p.da ? `<button class="rf-div-taglia" onclick="rfDivTaglia(${n})" title="Taglia qui: la pagina ${n} comincia un documento nuovo">✂</button>` : '') + mini(n);
-    // Una sezione comincia al suo foglio separatore (o, senza separatori, dove cambia la sottocartella).
     const prima = pezzi[k - 1];
-    const apre = p.foglio === 'separatore' || (!p.foglio && p.cartella && (!prima || prima.cartella !== p.cartella));
-    let quanti = 0; if (apre) for (let i = k; i < pezzi.length && pezzi[i].cartella === p.cartella && (i === k || pezzi[i].foglio !== 'separatore'); i++) if (!pezzi[i].escluso) quanti++;
-    const testa = apre ? `<div class="rf-div-sez"><span class="ico">${ICONS.documents || ''}</span><input class="input rf-div-in" style="width:300px;font-weight:650" value="${rfEsc(p.cartella)}" oninput="rfDivCartella(${k}, this.value)" aria-label="Nome della sottocartella" title="Il nome della sottocartella: vale per tutti i documenti di questa sezione"><span class="caption">${quanti} ${quanti === 1 ? 'documento' : 'documenti'}${p.foglio ? ` · foglio separatore a pagina ${p.da}, lasciato fuori` : ''}</span></div>` : '';
-    if (p.foglio) return p.foglio === 'copertina' ? `<div class="rf-div-sez"><span class="caption">Pagina ${p.da}: copertina col codice del paziente, lasciata fuori</span></div>` : testa;
     if (!p.escluso) numero++;
-    return `${testa}<div class="rf-div-pezzo ${p.escluso ? 'escluso' : ''}">
+    return `<div class="rf-div-pezzo ${p.escluso ? 'escluso' : ''}">
       <div class="rf-div-testa"><span class="n">${p.escluso ? 'fuori' : numero} · ${p.da === p.a ? `pagina ${p.da}` : `pagine ${p.da}–${p.a}`}</span>
         <select class="input rf-div-in" onchange="rfDivCampo(${k}, 'categoria', this.value)" aria-label="Tipo di documento">${RF_DIV_TIPI.map(([v, n]) => `<option value="${v}" ${p.categoria === v ? 'selected' : ''}>${n}</option>`).join('')}</select>
         <input class="input rf-div-in" style="width:118px" placeholder="data (12.03.2019)" value="${rfEsc(p.data)}" oninput="rfDivCampo(${k}, 'data', this.value)" aria-label="Data del documento">
         <input class="input rf-div-in" id="rf-div-t-${k}" style="flex:1;min-width:180px !important" placeholder="Nome del documento" value="${rfEsc(p.titolo)}" oninput="rfDivCampo(${k}, 'titolo', this.value)" aria-label="Nome del documento">
+        ${conCartelle ? `<select class="input rf-div-in" style="max-width:230px" onchange="rfDivSposta(${k}, this.value)" aria-label="Sottocartella" title="Sposta questo documento in un’altra sottocartella">${tutte.map(c => `<option value="${rfEsc(c)}" ${c === p.cartella ? 'selected' : ''}>${rfEsc(c)}</option>`).join('')}</select>` : ''}
         ${p.escluso ? '' : !p.data ? '<span class="badge warning" title="Nella prima pagina non ho trovato la data: scrivila tu, serve per l’ordine">senza data</span>' : ''}
         ${p.sicurezza === 'media' ? '<span class="badge warning" title="Il taglio è probabile ma non certo: guarda la prima pagina">da guardare</span>' : p.sicurezza === 'bassa' ? '<span class="badge warning">senza testo: taglia tu</span>' : p.sicurezza === 'tua' ? '<span class="badge">taglio tuo</span>' : ''}
         ${p.mano ? `<span class="badge" title="Il Mac ha guardato la pagina: è scritta a mano, quindi va negli Appunti">scritta a mano</span>` : ''}${p.dataOcchio ? `<span class="badge warning" title="La data non è nel testo: il Mac l’ha letta guardando la scrittura, può aver sbagliato">data letta a occhio: controlla</span>` : ''}${p.contenuto ? `<span class="badge" title="Messo in questa sottocartella per quello che contiene">${rfEsc(p.contenuto)}</span>` : ''}${p.era ? `<span class="caption" title="Nella cartella di carta stava dopo un altro foglio separatore">${rfEsc(p.era)}</span>` : ''}
-        ${prima && !prima.foglio ? `<button class="btn sm" onclick="rfDivUnisci(${k})" title="Questo pezzo è il seguito del precedente">Unisci al precedente</button>` : ''}
+        ${prima && !prima.foglio && (prima.cartella || '') === (p.cartella || '') ? `<button class="btn sm" onclick="rfDivUnisci(${k})" title="Questo pezzo è il seguito di quello prima (pagine ${prima.da}–${prima.a})">Unisci al precedente</button>` : ''}
         <button class="btn sm ghost" onclick="rfDivEscludi(${k})" title="Pagine bianche o doppie: non diventano un documento">${p.escluso ? 'Rimetti' : 'Lascia fuori'}</button></div>
       <div class="rf-div-pagine">${pagine}</div></div>`;
+  };
+  return copertina + rfDivOrdine().map(([c, ks]) => {
+    const fogli = ks.filter(k => pezzi[k].foglio === 'separatore').map(k => pezzi[k].da);
+    const doc = ks.filter(k => !pezzi[k].foglio);
+    const quanti = doc.filter(k => !pezzi[k].escluso).length;
+    const testa = c || conCartelle ? `<div class="rf-div-sez"><span class="ico">${ICONS.documents || ''}</span><input class="input rf-div-in" style="width:300px;font-weight:650" value="${rfEsc(c)}" placeholder="senza sottocartella" onchange="rfDivCartella(this.dataset.c, this.value)" data-c="${rfEsc(c)}" aria-label="Nome della sottocartella" title="Il nome della sottocartella: vale per tutti i suoi documenti"><span class="caption">${quanti} ${quanti === 1 ? 'documento' : 'documenti'}${fogli.length ? ` · ${fogli.length === 1 ? 'foglio separatore a pagina' : 'fogli separatori alle pagine'} ${fogli.join(', ')}, lasciat${fogli.length === 1 ? 'o' : 'i'} fuori` : ''}</span></div>` : '';
+    return testa + doc.map(pezzo).join('');
   }).join('');
 }
+function rfDivSposta(k, c) { RF.div.toccato = true; const p = RF.div.pezzi[k]; if (!p) return; p.cartella = c; rfDivAggiorna(); }
 
 PAGES.dividi = () => {
   if (!RF.live) return rfPaginaPiattaforma('Dividi cartella', 'Da un PDF unico ai singoli documenti');
   const v = RF.div; setTimeout(rfDivOsserva, 0);
+  if (v.doc && !rfDivTimer) setTimeout(rfDivAspetta, 0);      // tornati dalla cartella del paziente: il Mac va ancora seguito
   const testa = (sotto, azioni = '') => `<div class="page-head"><div><h2 class="page-title">Dividi cartella</h2><div class="page-sub">${sotto}</div></div>${azioni ? `<div class="actions">${azioni}</div>` : ''}</div>`;
   const limite = '<p class="rf-img-limite mt-16">I <b>fogli col codice a barre</b> aprono le sezioni (una sottocartella ciascuna) e restano fuori. Il <b>contenuto</b> può spostare un documento: le pagine <b>scritte a mano</b> vanno negli Appunti, le tabelle di valori in Laboratorio, procure e dispense fra i Documenti amministrativi, i piani di medicazione sotto Ricette — c’è scritto da dove vengono. Dentro ogni sezione dove comincia un documento, che data porta e che cos’è lo <b>propone</b> il Mac — regole più un modello che gira sul Mac dello studio e legge il contesto di ogni pagina — e lo <b>conferma una persona</b>: sbaglia, soprattutto sulle pagine scritte a mano o sbiadite, e per questo ogni pezzo si può unire, tagliare, rinominare o lasciare fuori. I nomi sono «anno.mese.giorno paziente documento», così in ogni sottocartella l’ordine è quello del tempo. Niente esce dallo studio. L’originale non si tocca.</p>';
   const errore = v.errore ? `<div class="rf-manc mb-16">${rfEsc(v.errore)}</div>` : '';
 
   // 3 — fatto: i documenti creati.
   if (v.creati) {
-    return `${testa(`${v.creati.length} documenti nella cartella di ${rfEsc(v.nome)}`, `<button class="btn" onclick="rfDivCambia()">Dividi un’altra cartella</button>`)}
+    return `${testa(`${v.creati.length} documenti nella cartella di ${rfDivPaz(v.pid, v.nome)}`, `<button class="btn" onclick="rfDivCambia()">Dividi un’altra cartella</button>`)}
       <div class="card"><div class="card-head"><span class="section-title">Documenti creati</span><span><button class="btn sm" onclick="rfDivZip()">Scarica tutti (.zip)</button> <button class="btn sm primary" data-go="#/patients/${v.pid}">Apri la cartella di ${rfEsc(v.nome)}</button></span></div>
         ${rfDivGruppi(v.creati).map(([c, lista]) => `${c ? `<div class="rf-div-sez"><span class="ico">${ICONS.documents || ''}</span><b>${rfEsc(c)}</b><span class="caption">${lista.length}</span></div>` : ''}<div class="list">${lista.map(x => `<div class="list-item"><div class="grow"><div class="name">${rfEsc(x.filename)}</div><div class="sub">${rfEsc(rfDivEtichetta(x.categoria))} · ${x.pagine} ${x.pagine === 1 ? 'pagina' : 'pagine'}</div></div>
           <button class="btn sm ghost" onclick="rfGuarda('/api/documents/${x.id}', '${rfEsc(x.filename).replace(/'/g, '&#39;')}', 1, '${x.id}')">Apri</button><a class="btn sm ghost" href="/api/documents/${x.id}" download="${rfEsc(x.filename)}">Scarica</a></div>`).join('')}</div>`).join('')}</div>
@@ -450,13 +588,13 @@ PAGES.dividi = () => {
   // 2 — la proposta da controllare.
   if (v.doc) {
     const d = v.doc;
-    return `${testa(`${rfEsc(v.nome)} · ${rfEsc(d.filename)} · ${d.pagine} pagine`, `<button class="btn" onclick="rfDivDaCapo()">Torna ai tagli proposti</button><button class="btn" onclick="rfDivCambia()">Cambia cartella</button>`)}
+    return `${testa(`${rfDivPaz(v.pid, v.nome)} · ${rfEsc(d.filename)} · ${d.pagine} pagine`, `<button class="btn" onclick="rfDivDaCapo()">Torna ai tagli proposti</button><button class="btn" onclick="rfDivCambia()">Cambia cartella</button>`)}
       ${errore}
       <div id="rf-div-avviso">${rfDivAvvisoHtml()}</div>
       ${d.gia > 0 ? `<div class="rf-manc mb-16"><b>Questa cartella è già stata divisa: ${d.gia} documenti creati la volta prima.</b> Creando quelli nuovi, <b>quelli di prima vengono tolti e sostituiti</b> (sono copie di pagine dell’originale, che resta). <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;margin-left:6px"><input type="checkbox" id="rf-div-tieni"> tienili accanto ai nuovi</label></div>` : ''}
       <div class="card"><div class="card-head"><span class="section-title">Documenti trovati</span><span class="caption">clicca una pagina per guardarla in grande · ✂ fra due pagine per tagliare</span></div>
         <div id="rf-div-pezzi">${rfDivPezziHtml()}</div>
-        <div class="row mt-16" style="gap:12px;justify-content:flex-end;align-items:center"><span class="caption">I documenti nascono nella cartella di ${rfEsc(v.nome)}; l’originale resta.</span><button class="btn primary" id="rf-div-crea" onclick="rfDivCrea()">${rfDivTastoCrea()}</button></div></div>
+        <div class="row mt-16" style="gap:12px;justify-content:flex-end;align-items:center"><span class="caption">I documenti nascono nella cartella di ${rfDivPaz(v.pid, v.nome)}; l’originale resta.</span><button class="btn primary" id="rf-div-crea" onclick="rfDivCrea()">${rfDivTastoCrea()}</button></div></div>
       ${limite}`;
   }
   if (v.carico) return `${testa('Leggo le pagine e cerco dove comincia ogni documento…')}<div class="card"><div class="caption">Per una cartella lunga ci vuole qualche secondo.</div></div>`;
@@ -488,7 +626,7 @@ PAGES.dividi = () => {
     return `${testa('Da un PDF unico con tutta la cartella ai singoli documenti')}
       ${errore}
       <div class="card"><div class="section-title">Di chi è la cartella</div>
-        <div class="row mt-8" style="gap:10px;align-items:center"><span class="badge accent">${rfEsc(v.nome)}</span><button class="btn sm ghost" onclick="rfDivCambia()">Cambia</button></div>${v.riconosciuto ? `<div class="caption mt-8">${v.riconosciuto} Se non è lui/lei: «Cambia», e togli il file dai suoi documenti.</div>` : ''}</div>
+        <div class="row mt-8" style="gap:10px;align-items:center"><span class="badge accent">${rfDivPaz(v.pid, v.nome)}</span><button class="btn sm ghost" onclick="rfDivCambia()">Cambia</button></div>${v.riconosciuto ? `<div class="caption mt-8">${v.riconosciuto} Se non è lui/lei: «Cambia», e togli il file dai suoi documenti.</div>` : ''}</div>
       <div class="card mt-16"><div class="section-title">La cartella completa, in PDF</div>
         ${zona('Trascina qui il PDF, oppure')}
         <p class="meta" style="margin:10px 0 0;line-height:1.55">Fino a 300 MB, anche una cartella intera: non serve spezzarla. Il file entra nella cartella del paziente così com’è, poi lo si divide. Se è una scansione senza testo, il Mac la legge prima (qualche minuto).</p>

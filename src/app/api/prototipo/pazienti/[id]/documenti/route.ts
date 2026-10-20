@@ -5,7 +5,8 @@ import { getSession } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { CATEGORIE, isUuid, logDocumento } from '@/lib/cartella';
 import { vietato } from '@/lib/permessi';
-import { putFile } from '@/lib/storage';
+import { deleteFile, putFile } from '@/lib/storage';
+import { nomeCartella, rinomina } from '@/lib/cartella-nomi';
 import { isAllowedInternalUpload, MAX_CARTELLA_PDF_SIZE, MAX_CARTELLA_SIZE } from '@/lib/upload';
 import { dopoCaricamento } from '@/lib/documenti-ocr';
 
@@ -17,7 +18,9 @@ export const dynamic = 'force-dynamic';
 // chiamata (l'interfaccia li manda uno alla volta, con l'avanzamento), fino a
 // 50 MB, un PDF fino a 300 MB (una cartella cartacea scansionata intera, 15.10.2026). Un PDF senza testo
 // (scansione senza OCR) va in coda per l'OCR sul Mac (src/lib/documenti-ocr.ts). Nei log solo id abbreviati e numeri.
-//   POST multipart { file, categoria?, nota? } → { id, pagine?, senza_testo?, ocr? }
+//   POST multipart { file, categoria?, nota?, cartella? } → { id, pagine?, senza_testo?, ocr? }
+// Dal 20.10.2026 il documento si mette subito nella sua sottocartella, e poi si sposta, si rinomina o si toglie
+// (PATCH, DELETE qui sotto; regole dei nomi in src/lib/cartella-nomi.ts).
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const session = await getSession();
@@ -38,6 +41,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   const categoriaRaw = String(form?.get('categoria') ?? '').trim();
   const categoria = categoriaRaw in CATEGORIE ? categoriaRaw : 'altro';
   const nota = String(form?.get('nota') ?? '').trim().slice(0, 200) || null;
+  const cartella = nomeCartella(form?.get('cartella'));
 
   let buffer = Buffer.from(await file.arrayBuffer());
   let ext = path.extname(file.name).toLowerCase();
@@ -50,11 +54,85 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   }
   const key = await putFile(buffer, tipo, ext);
   const [doc] = await query<{ id: string }>(
-    `insert into patient_documents (studio_id, patient_id, filename, storage_key, categoria, nota, uploaded_by)
-     values ($1, $2, $3, $4, $5, $6, $7) returning id`, [sid, params.id, nomeFile, key, categoria, nota, session.id]);
+    `insert into patient_documents (studio_id, patient_id, filename, storage_key, categoria, nota, uploaded_by, cartella)
+     values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`, [sid, params.id, nomeFile, key, categoria, nota, session.id, cartella]);
   await logDocumento(doc.id, 'caricamento', { studioId: sid, userId: session.id });
 
   const v = await dopoCaricamento(doc.id, buffer, ext);
   console.log(`[cartella] documento ${doc.id.slice(0, 8)} caricato: ${Math.round(file.size / 1024)} KB${v.pagine ? `, ${v.pagine} pagine` : ''}${v.senza_testo ? ', senza testo: in coda per l\'OCR' : ''}`);
   return NextResponse.json({ id: doc.id, ...v }, { status: 201 });
+}
+
+async function chi(params: Promise<{ id: string }>) {
+  const { id } = await params;
+  const session = await getSession();
+  if (!session || !session.studioId) return { no: NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 }) };
+  const no = vietato(session.role, 'patients');
+  if (no) return { no };
+  if (!isUuid(id)) return { no: NextResponse.json({ errore: 'Paziente non trovato.' }, { status: 404 }) };
+  return { session, sid: session.studioId, pid: id };
+}
+
+// Spostare, rinominare (20.10.2026). Nel registro solo che cosa si è fatto: mai nomi di file o di cartelle.
+//   PATCH { azione: 'sposta', ids: [..], cartella: '05_Apparecchi' | null }
+//   PATCH { azione: 'rinomina', id, titolo }
+//   PATCH { azione: 'rinomina_cartella', da, a }      — tutti i documenti del paziente in «da» passano in «a»
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const c = await chi(props.params);
+  if (c.no) return c.no;
+  const { session, sid, pid } = c;
+  const b = await req.json().catch(() => null) as Record<string, unknown> | null;
+  const azione = String(b?.azione ?? '');
+  if (azione === 'sposta') {
+    const ids = (Array.isArray(b?.ids) ? b!.ids : []).map(String).filter(isUuid).slice(0, 500);
+    if (!ids.length) return NextResponse.json({ errore: 'Nessun documento.' }, { status: 400 });
+    const cartella = nomeCartella(b?.cartella);
+    const r = await query<{ id: string }>(
+      `update patient_documents set cartella = $4 where studio_id = $1 and patient_id = $2 and id = any($3::uuid[]) and cartella is distinct from $4 returning id`,
+      [sid, pid, ids, cartella]);
+    for (const x of r) await logDocumento(x.id, 'modifica', { studioId: sid, userId: session.id, dettaglio: 'spostato di sottocartella' });
+    return NextResponse.json({ spostati: r.length, cartella });
+  }
+  if (azione === 'rinomina') {
+    const id = String(b?.id ?? '');
+    if (!isUuid(id)) return NextResponse.json({ errore: 'Documento non trovato.' }, { status: 404 });
+    const [d] = await query<{ filename: string; nota: string | null }>(`select filename, nota from patient_documents where id = $1 and studio_id = $2 and patient_id = $3`, [id, sid, pid]);
+    if (!d) return NextResponse.json({ errore: 'Documento non trovato.' }, { status: 404 });
+    const nuovo = rinomina(d, b?.titolo);
+    if (!nuovo) return NextResponse.json({ errore: 'Scrivi il nome.' }, { status: 400 });
+    await query(`update patient_documents set filename = coalesce($2, filename), nota = coalesce($3, nota) where id = $1`, [id, nuovo.filename ?? null, nuovo.nota ?? null]);
+    await logDocumento(id, 'modifica', { studioId: sid, userId: session.id, dettaglio: 'rinominato' });
+    return NextResponse.json({ ok: true });
+  }
+  if (azione === 'rinomina_cartella') {
+    const da = nomeCartella(b?.da), a = nomeCartella(b?.a);
+    if (!da || !a) return NextResponse.json({ errore: 'Scrivi il nome della sottocartella.' }, { status: 400 });
+    const r = await query<{ id: string }>(`update patient_documents set cartella = $4 where studio_id = $1 and patient_id = $2 and cartella = $3 returning id`, [sid, pid, da, a]);
+    for (const x of r) await logDocumento(x.id, 'modifica', { studioId: sid, userId: session.id, dettaglio: 'sottocartella rinominata' });
+    return NextResponse.json({ spostati: r.length });
+  }
+  return NextResponse.json({ errore: 'azione' }, { status: 400 });
+}
+
+// Togliere un documento dalla cartella (20.10.2026, chiesto dallo studio). Lo decide una persona, documento per
+// documento, dopo una conferma. Non si toglie un documento allegato a un referto (il referto lo cita). La riga del
+// registro resta: il registro non si cancella mai, sopravvive al documento.
+//   DELETE ?documento=<id>
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const c = await chi(props.params);
+  if (c.no) return c.no;
+  const { session, sid, pid } = c;
+  const id = req.nextUrl.searchParams.get('documento') ?? '';
+  if (!isUuid(id)) return NextResponse.json({ errore: 'Documento non trovato.' }, { status: 404 });
+  const [d] = await query<{ storage_key: string; allegato: boolean }>(
+    `select storage_key, exists (select 1 from referti_allegati a where a.documento_id = d.id) as allegato
+       from patient_documents d where id = $1 and studio_id = $2 and patient_id = $3`, [id, sid, pid]);
+  if (!d) return NextResponse.json({ errore: 'Documento non trovato.' }, { status: 404 });
+  if (d.allegato) return NextResponse.json({ errore: 'È allegato a un referto: non si può togliere.' }, { status: 409 });
+  const [via] = await query<{ id: string }>(`delete from patient_documents where id = $1 and studio_id = $2 returning id`, [id, sid]);
+  if (!via) return NextResponse.json({ errore: 'Documento non trovato.' }, { status: 404 });
+  await logDocumento(id, 'cancellazione', { studioId: sid, userId: session.id, dettaglio: 'tolto dalla cartella del paziente' });
+  await deleteFile(d.storage_key).catch(() => null);
+  console.log(`[cartella] documento ${id.slice(0, 8)} tolto dalla cartella`);
+  return NextResponse.json({ ok: true });
 }

@@ -309,3 +309,24 @@ test('dividi, di chi è: dal nome del file «Cognome Nome data di nascita» — 
   assert.equal(decidiChi(null, { nome: 'Nuovissimo Dario', nascita: '1955-06-05' }, paz).cosa, 'chiedi');
   assert.equal(decidiChi(null, null, paz).cosa, 'chiedi');
 });
+
+// La cartella del paziente: nomi di sottocartelle e documenti (20.10.2026).
+import { nomeCartella, rinomina, titoloMostrato } from './cartella-nomi';
+test('cartella del paziente: sottocartelle e nomi dei documenti', () => {
+  assert.equal(nomeCartella('  05_Apparecchi '), '05_Apparecchi');
+  assert.equal(nomeCartella('../a/b: c'), 'a b c');
+  assert.equal(nomeCartella('   '), null);
+  assert.equal(nomeCartella(null), null);
+  assert.equal(nomeCartella('x'.repeat(200))!.length, 80);
+  // si vede la descrizione scritta al caricamento; se non c'è, o è quella di una divisione, il nome del file
+  assert.equal(titoloMostrato({ filename: 'scan001.pdf', nota: 'ECG 2019–2023' }), 'ECG 2019–2023');
+  assert.equal(titoloMostrato({ filename: '2023.10.18 Provanome Anna Holter.pdf', nota: 'dalla cartella completa, pagine 3–5' }), '2023.10.18 Provanome Anna Holter');
+  assert.equal(titoloMostrato({ filename: 'cartella.pdf', nota: 'cartella completa, da dividere' }), 'cartella');
+  assert.equal(titoloMostrato({ filename: 'lettera.docx', nota: null }), 'lettera');
+  // rinominare cambia ciò che si vede
+  assert.deepEqual(rinomina({ filename: 'scan001.pdf', nota: 'ECG 2019–2023' }, 'ECG 2019–2024'), { nota: 'ECG 2019–2024' });
+  assert.deepEqual(rinomina({ filename: 'a.pdf', nota: 'dalla cartella completa, pagina 2' }, '2024.03.12 Holter'), { filename: '2024.03.12 Holter.pdf' });
+  assert.deepEqual(rinomina({ filename: 'a.pdf', nota: null }, 'nuovo.pdf'), { filename: 'nuovo.pdf' });
+  assert.deepEqual(rinomina({ filename: 'a.pdf', nota: null }, 'con/barra'), { filename: 'con barra.pdf' });
+  assert.equal(rinomina({ filename: 'a.pdf', nota: null }, '   '), null);
+});

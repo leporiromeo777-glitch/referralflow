@@ -6,6 +6,8 @@ import { costruisciRevisione } from '@/lib/prototipo-revisione';
 import { tipoEsame } from '@/lib/briefing-regole';
 import { estraiTerapia } from '@/lib/referti-terapia';
 import { leggiTitolo, nomePulito } from '@/lib/agenda-titolo';
+import { titoloMostrato } from '@/lib/cartella-nomi';
+import { SEZIONI } from '@/lib/dividi/sezioni';
 import { agendaEsclusa, agendeFuoriPiano, assegnaVisite, capienza, deduciMedici, escluso, fuoriDalPiano, leggiSale, prese, prestazioneEsclusa, prestazioniFuoriPiano, soloIn, titolare, applicaModifiche } from '@/lib/sale';
 import type { ModificaSala, RigaPiano } from '@/lib/sale';
 import { abbinaPrestazioneAgenda, tipoDaTesto, type VoceCatalogo } from '@/lib/prestazioni';
@@ -144,7 +146,7 @@ export async function GET() {
         const k = tipoEsame(d);
         return { id: d.id, t: d.nota || d.filename, d: dCh(d.uploaded_at), r: ETICHETTA_ESAME[k] ?? 'Documento', k, filename: d.filename };
       }),
-      docs: dd.map((d) => ({ id: d.id, t: d.cartella || /^(dalla cartella completa|cartella completa, da dividere)/.test(d.nota ?? '') ? d.filename.replace(/\.pdf$/i, '') : d.nota || d.filename, filename: d.filename, cartella: d.cartella, d: dCh(d.uploaded_at), k: DOC_TYPE[d.categoria] ?? 'admin', new: (adesso - new Date(d.uploaded_at).getTime()) < 7 * 86400000 })),
+      docs: dd.map((d) => ({ id: d.id, t: titoloMostrato(d), filename: d.filename, cartella: d.cartella, d: dCh(d.uploaded_at), k: DOC_TYPE[d.categoria] ?? 'admin', new: (adesso - new Date(d.uploaded_at).getTime()) < 7 * 86400000 })),
       assicurazione: p.assicurazione ?? '',
       // Tutte le visite in agenda del paziente (passate e future), per la scheda.
       visits: aa.map((a) => ({ id: a.id, d: dCh(a.starts_at), ora: ora(a.starts_at), medico: a.medico ?? '', motivo: a.motivo ?? a.titolo ?? '', fatta: !!a.completed_at || new Date(a.starts_at).getTime() < adesso, futura: new Date(a.starts_at).getTime() >= adesso })),
@@ -534,5 +536,7 @@ export async function GET() {
     today, agendaAvviso, doctors, patients: pazientiFuori, appts: apptsOggi, agenda, tasks, reports: puo(session.role, 'reports') ? reports : [], documents, inbox, audioInbox, stats, sale, agendeMedico, ruoliMedici, pianoSale: piano, capienzaSale: { ...cap, stanze: sale.length },
     risorse: risorse.map((r) => ({ id: r.id, tipo: r.tipo, nome: r.nome, posti: r.posti })),
     catalogo, coloriMedici, daChiamare, moduli_nascosti: stud?.moduli_nascosti ?? [],
+    // le sottocartelle della cartella cartacea dello studio, proposte al caricamento e per spostare i documenti
+    sottocartelle: Object.values(SEZIONI).map((x) => x.nome),
   });
 }

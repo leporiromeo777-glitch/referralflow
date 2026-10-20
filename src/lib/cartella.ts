@@ -47,7 +47,7 @@ export function documentiPaziente(patientId: string, studioId: string) {
 // Scrive una riga nel registro accessi. Mai dati clinici nel dettaglio.
 export async function logDocumento(
   documentId: string,
-  azione: 'caricamento' | 'lettura' | 'invio' | 'cancellazione',
+  azione: 'caricamento' | 'lettura' | 'invio' | 'cancellazione' | 'modifica',
   opts: { studioId?: string; userId?: string; dettaglio?: string } = {}
 ): Promise<void> {
   await query(

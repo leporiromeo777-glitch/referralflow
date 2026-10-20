@@ -33,10 +33,11 @@ function pdf(testo: string | null | string[], pagine = 1): Buffer {
   return Buffer.from(out, 'latin1');
 }
 
-async function carica(pid: string, dati: Buffer, nome: string, categoria = 'altro', nota = '') {
+async function carica(pid: string, dati: Buffer, nome: string, categoria = 'altro', nota = '', cartella = '') {
   const fd = new FormData();
   fd.append('file', new Blob([dati], { type: nome.endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream' }), nome);
   fd.append('categoria', categoria); fd.append('nota', nota);
+  if (cartella) fd.append('cartella', cartella);
   const r = await fetch(`${base}/api/prototipo/pazienti/${pid}/documenti`, { method: 'POST', headers: { cookie }, body: fd });
   return { status: r.status, j: await r.json().catch(() => ({})) as any };
 }
@@ -44,6 +45,7 @@ async function carica(pid: string, dati: Buffer, nome: string, categoria = 'altr
 async function main() {
   if (!/referralflow_demo/.test(process.env.DATABASE_URL ?? '')) throw new Error('solo sul database demo');
   let paz: string | null = null;
+  const tolti: string[] = [];
   try {
     [{ id: paz }] = await query(`insert into patients (studio_id, cognome, nome) values ($1,'Scansioneprova','Paziente') returning id`, [S]);
     const a = await carica(paz!, pdf('Esame di prova con testo leggibile', 3), 'cartella.pdf', 'laboratorio', 'Laboratorio 2020-2024');
@@ -105,6 +107,46 @@ async function main() {
     verifica(x2?.tipo === 'ecg' && x2.da === 2 && x2.motivi.some((m: string) => m.startsWith('sulla pagina: ECG')), `proposte: stessa data su un altro esame → l'ECG a pagina 2, segnalato (${JSON.stringify(x2 ?? pr2)})`);
     await query('delete from referti_bozze where id = $1', [boz2]);
 
+    // Sottocartelle (20.10.2026): si carica dentro una sottocartella, si sposta, si rinomina, si toglie.
+    const url = `${base}/api/prototipo/pazienti/${paz}/documenti`;
+    const patch = async (corpo: unknown, c = cookie) => { const r = await fetch(url, { method: 'PATCH', headers: { cookie: c, 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) }); return { status: r.status, j: await r.json().catch(() => ({})) as any }; };
+    const riga = async (id: string) => (await query<{ cartella: string | null; filename: string; nota: string | null }>('select cartella, filename, nota from patient_documents where id = $1', [id]))[0];
+    const s1 = await carica(paz!, pdf('Holter di prova'), 'holter.pdf', 'holter', '', '05_Apparecchi');
+    verifica(s1.status === 201 && (await riga(s1.j.id))?.cartella === '05_Apparecchi', 'caricato direttamente nella sottocartella scelta');
+    const s2 = await carica(paz!, pdf('Nota di prova'), 'nota.pdf', 'altro', '', '../a/b: c');
+    verifica((await riga(s2.j.id))?.cartella === 'a b c', 'nome di sottocartella con barre, due punti e punti iniziali ripulito');
+    const sp = await patch({ azione: 'sposta', ids: [s1.j.id], cartella: '04_ECG - tracciato PM-ICD' });
+    verifica(sp.status === 200 && sp.j.spostati === 1 && (await riga(s1.j.id))?.cartella === '04_ECG - tracciato PM-ICD', 'spostato in un\'altra sottocartella');
+    const sp0 = await patch({ azione: 'sposta', ids: [s1.j.id], cartella: null });
+    verifica(sp0.j.spostati === 1 && (await riga(s1.j.id))?.cartella === null, 'tolto dalle sottocartelle (Altri documenti)');
+    await patch({ azione: 'sposta', ids: [s1.j.id, s2.j.id], cartella: '13_Prova' });
+    const rc = await patch({ azione: 'rinomina_cartella', da: '13_Prova', a: '13_Prova rinominata' });
+    verifica(rc.j.spostati === 2 && (await riga(s2.j.id))?.cartella === '13_Prova rinominata', 'sottocartella rinominata: tutti i suoi documenti la seguono');
+    const rn = await patch({ azione: 'rinomina', id: s1.j.id, titolo: '2024.03.12 Holter 24 ore' });
+    verifica(rn.status === 200 && (await riga(s1.j.id))?.filename === '2024.03.12 Holter 24 ore.pdf', 'rinominato: il nome del file cambia e tiene l\'estensione');
+    const rnn = await patch({ azione: 'rinomina', id: a.j.id, titolo: 'Laboratorio 2020-2025' });
+    const ra = await riga(a.j.id);
+    verifica(rnn.status === 200 && ra?.nota === 'Laboratorio 2020-2025' && ra.filename === 'cartella.pdf', 'rinominato un documento con la descrizione: cambia la descrizione, il file resta');
+    const altrui = await patch({ azione: 'sposta', ids: [s1.j.id], cartella: 'x' }, 'rf_sess=nessuna');
+    verifica(altrui.status === 401, `senza accesso non si sposta niente (${altrui.status})`);
+    const allegato = await carica(paz!, pdf('Allegato a un referto'), 'allegato.pdf');
+    const [{ id: bozA }] = await query<{ id: string }>(`insert into referti_bozze (studio_id, file_id, payload, tipo, patient_id) values ($1, 'prova-togli-' || gen_random_uuid(), '{}', 'referto', $2) returning id`, [S, paz]);
+    await query(`insert into referti_allegati (studio_id, bozza_id, tipo, documento_id, etichetta) values ($1, $2, 'cartella', $3, 'Allegato di prova')`, [S, bozA, allegato.j.id]);
+    const no1 = await fetch(`${url}?documento=${allegato.j.id}`, { method: 'DELETE', headers: { cookie } });
+    verifica(no1.status === 409 && !!(await riga(allegato.j.id)), 'un documento allegato a un referto non si toglie (409)');
+    await query('delete from referti_bozze where id = $1', [bozA]);
+    const [{ storage_key: chiave }] = await query<{ storage_key: string }>('select storage_key from patient_documents where id = $1', [s2.j.id]);
+    const via = await fetch(`${url}?documento=${s2.j.id}`, { method: 'DELETE', headers: { cookie } });
+    tolti.push(s2.j.id);
+    const reg = await query<{ azione: string; dettaglio: string }>(`select azione, dettaglio from document_access_log where document_id = $1 order by at`, [s2.j.id]);
+    const file = await import('../../src/lib/storage').then((m) => m.getFile(chiave)).then(() => true, () => false);
+    verifica(via.status === 200 && !(await riga(s2.j.id)) && !file, 'tolto: sparito dalla cartella e il file cancellato');
+    verifica(reg.some((r) => r.azione === 'cancellazione') && reg.some((r) => r.azione === 'modifica') && reg.every((r) => !/nota|holter|prova/i.test(r.dettaglio ?? '')), 'nel registro: spostato, rinominato e tolto, senza nomi di file');
+    const d2 = await (await fetch(`${base}/api/prototipo/dati`, { headers: { cookie } })).json();
+    const pd = (d2.patients ?? []).find((x: any) => x.id === paz);
+    const vista = (pd?.docs ?? []).find((x: any) => x.id === s1.j.id);
+    verifica(Array.isArray(d2.sottocartelle) && d2.sottocartelle.length === 12 && d2.sottocartelle[0] === '01_Rapporti' && vista?.cartella === '13_Prova rinominata' && vista.t === '2024.03.12 Holter 24 ore', 'la scheda riceve le 12 sottocartelle dello studio, la sottocartella e il nome nuovo');
+
     // dal 15.10.2026 un PDF arriva a 300 MB (una cartella intera, provato in prova-dividi); gli altri file restano a 50
     const grande = Buffer.alloc(51 * 1024 * 1024, 0x61);
     const c = await carica(paz!, grande, 'enorme.txt');
@@ -130,7 +172,7 @@ async function main() {
     if (paz) {
       const docs = await query<{ id: string; storage_key: string }>('select id, storage_key from patient_documents where patient_id = $1', [paz]);
       for (const x of docs) await deleteFile(x.storage_key).catch(() => null);
-      await query('delete from document_access_log where document_id = any($1::uuid[])', [docs.map((x) => x.id)]).catch(() => null);
+      await query('delete from document_access_log where document_id = any($1::uuid[])', [[...docs.map((x) => x.id), ...tolti]]).catch(() => null);
       await query('delete from patient_documents where patient_id = $1', [paz]);
       await query('delete from patients where id = $1', [paz]);
     }

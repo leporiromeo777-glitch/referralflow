@@ -605,10 +605,12 @@ const RF_DOC_MAX_MB = 50, RF_DOC_MAX_MB_PDF = 300;      // un PDF può essere un
 const rfDocMassimo = (f) => /\.pdf$/i.test(f.name) ? RF_DOC_MAX_MB_PDF : RF_DOC_MAX_MB;
 const RF_DOC_CAT = { altro: 'Documento', referto: 'Referto', ecg: 'ECG', holter: 'Holter', ett: 'ETT (ecocardiogramma)', ciclo: 'Ciclo (cicloergometria)', laboratorio: 'Laboratorio', imaging: 'Imaging', lettera: 'Lettera', dimissione: 'Lettera di dimissione', consenso: 'Consenso firmato' };
 const rfDocUploadDemo = MODALS.upload;
-MODALS.upload = function () {
+// `cartella` (20.10.2026): la sottocartella in cui mettere i file — il «Carica qui» di una sottocartella la passa già scelta.
+MODALS.upload = function (cartella) {
   if (!RF.live) return rfDocUploadDemo();
-  RF.docFile = [];
+  RF.docFile = []; RF.docCartella = typeof cartella === 'string' ? cartella : '';
   const qui = state.route === 'patient' && P[state.params.id] ? P[state.params.id] : null;
+  RF.docSottocartelle = typeof rfCartTutte === 'function' ? rfCartTutte(qui) : (RF.data.sottocartelle || []);
   const reali = PATIENTS.filter(p => rfDocUuid(p.id)).sort((a, b) => fullName(a).localeCompare(fullName(b)));
   const chi = qui
     ? `<div class="rf-doc-chi"><b>${rfEsc(fullName(qui))}</b>${qui.dob ? ` <span class="caption">· ${rfEsc(qui.dob)}</span>` : ''}</div>${rfDocUuid(qui.id) ? '' : '<div class="rf-att-warn mt-8">Questo paziente ha solo la scheda dell\'agenda: crea prima la sua scheda in anagrafica, poi carica.</div>'}`
@@ -651,7 +653,7 @@ function rfDocIndovina(nome) {
 function rfDocScegli(files) {
   for (const f of Array.from(files || [])) {
     if (RF.docFile.some(x => x.f.name === f.name && x.f.size === f.size)) continue;
-    RF.docFile.push({ f, categoria: rfDocIndovina(f.name), nota: '', stato: f.size > rfDocMassimo(f) * 1048576 ? 'grande' : 'pronto', msg: '' });
+    RF.docFile.push({ f, categoria: rfDocIndovina(f.name), nota: '', cartella: RF.docCartella || '', stato: f.size > rfDocMassimo(f) * 1048576 ? 'grande' : 'pronto', msg: '' });
   }
   rfDocLista();
 }
@@ -668,6 +670,7 @@ function rfDocLista() {
       <div class="row between" style="gap:8px"><span class="rf-doc-nome">${rfEsc(x.f.name)} <span class="caption">· ${mb(x.f.size)}</span></span>${fermo(x) ? '' : `<button class="icon-btn" title="Togli dalla lista" onclick="RF.docFile.splice(${i},1);rfDocLista()">${ICONS.x}</button>`}</div>
       <div class="grid grid-2 mt-8" style="gap:6px"><select class="input sm" ${fermo(x) ? 'disabled' : ''} onchange="RF.docFile[${i}].categoria=this.value">${Object.entries(RF_DOC_CAT).map(([k, v]) => `<option value="${k}" ${k === x.categoria ? 'selected' : ''}>${v}</option>`).join('')}</select>
         <input class="input sm" ${fermo(x) ? 'disabled' : ''} placeholder="Descrizione (es. ECG 2019–2023)" value="${rfEsc(x.nota)}" oninput="RF.docFile[${i}].nota=this.value"></div>
+      <select class="input sm mt-8" style="width:100%" ${fermo(x) ? 'disabled' : ''} aria-label="Sottocartella" onchange="RF.docFile[${i}].cartella=this.value"><option value="" ${x.cartella ? '' : 'selected'}>Sottocartella: nessuna (Altri documenti)</option>${[...new Set([...(RF.docSottocartelle || []), ...(x.cartella ? [x.cartella] : [])])].map(c => `<option value="${rfEsc(c)}" ${c === x.cartella ? 'selected' : ''}>Sottocartella: ${rfEsc(c)}</option>`).join('')}</select>
       <div class="mt-8">${stato(x)}</div>
     </div>`).join('')}</div>` : '';
   const ok = document.getElementById('rf-doc-ok');
@@ -677,7 +680,7 @@ function rfDocLista() {
 function rfDocInvia(pid, x) {
   return new Promise((resolve) => {
     const fd = new FormData();
-    fd.append('file', x.f); fd.append('categoria', x.categoria); fd.append('nota', x.nota.trim());
+    fd.append('file', x.f); fd.append('categoria', x.categoria); fd.append('nota', x.nota.trim()); fd.append('cartella', x.cartella || '');
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `/api/prototipo/pazienti/${encodeURIComponent(pid)}/documenti`);
     xhr.withCredentials = true;

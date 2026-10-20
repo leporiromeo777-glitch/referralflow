@@ -882,3 +882,12 @@ di MediOnline subito dopo il nome. Deciso: il nome finisce alla prima parola che
 il titolo comincia con almeno due parole con l'iniziale maiuscola; altrimenti il titolo resta com'è (meglio un nome
 lungo che un nome tagliato a caso). Dopo la parentesi con la data di nascita è sempre nota. La nota non entra mai nella
 scheda; i nomi già salvati con gli appuntamenti sono stati ricalcolati una volta (solo copia locale, solo accorciando). Dettaglio in [[Piattaforma/Prototipo stack]].
+
+## Sottocartelle del paziente: spostare, rinominare, togliere — 20.10.2026
+Dallo studio: scegliere la sottocartella al caricamento, spostare trascinando, modificare e togliere i documenti.
+Deciso: togliere **cancella davvero** (riga e file), ma solo per mano di una persona, un documento alla volta e dopo una
+conferma che dice che non si recupera; un documento allegato a un referto non si toglie; il registro degli accessi
+resta. Le dodici sottocartelle della cartella cartacea si propongono sempre; le vuote si vedono solo mentre si
+trascina, per non allungare la scheda. Nella proposta di «Dividi» le sottocartelle si mostrano in ordine di numero,
+non nell'ordine della carta: i tagli restano per pagina.
+
