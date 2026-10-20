@@ -122,6 +122,21 @@ async function main() {
     const k3 = await comando({ comando: 'lettera_recente', paziente: vuoto }), k4 = await comando({ comando: 'cancella_tutto', paziente: paz }), k5 = await comando({ comando: 'lettera_recente', paziente: 'x' }), k6 = await comando({ comando: 'lettera_recente', paziente: paz }, '');
     verifica(k3.stato === 404 && typeof k3.j.errore === 'string' && !k3.j.testo && k4.stato === 400 && k5.stato === 400 && k6.stato === 401,
       `un paziente senza lettere dà un avviso e niente testo; un comando non previsto, un paziente non scelto e una richiesta senza sessione sono rifiutati (${k3.stato}, ${k4.stato}, ${k5.stato}, ${k6.stato})`);
+
+    // Il microfono di ogni medico (20.10.2026): tasto, microfono e Dragon salvati per profilo, solo i campi mandati cambiano.
+    const disp = async (corpo: unknown, cookie = C) => { const r = await fetch(`${base}/api/prototipo/dittafono/dispositivi`, corpo === undefined ? { headers: cookie ? { cookie } : {} } : { method: 'POST', headers: { ...(cookie ? { cookie } : {}), 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) }); return { stato: r.status, j: (await r.json().catch(() => ({}))) as any }; };
+    try {
+      const tasto = { tipo: 'hid', vid: 0x0911, pid: 0x0c1c, rid: 0, i: 2, maschera: 4, premuto: 4, tipo0: 0x80, nome: 'SpeechMike di prova' };
+      const d1 = await disp({ medico: 'prova-dispositivi', tasto, microfono: 'SpeechMike III (prova)', dettatura: true });
+      const d2 = await disp({ medico: 'prova-dispositivi', microfono: 'Microfono di prova 2' });
+      const g = await disp(undefined), pr = g.j.profili?.['prova-dispositivi'];
+      verifica(d1.stato === 200 && d2.stato === 200 && pr?.tasto?.vid === 0x0911 && pr.tasto.tipo0 === 0x80 && pr.microfono === 'Microfono di prova 2' && pr.dettatura === true,
+        `dispositivi del medico: salvati tasto, microfono e Dragon; cambiando solo il microfono il tasto resta (${d1.stato}, ${d2.stato}, ${JSON.stringify(pr)})`);
+      const d3 = await disp({ medico: 'prova-dispositivi', tasto: null }), pr3 = (await disp(undefined)).j.profili?.['prova-dispositivi'];
+      verifica(d3.stato === 200 && pr3?.tasto === null && pr3.microfono === 'Microfono di prova 2', 'dispositivi del medico: tasto scollegato, il microfono resta');
+      const e1 = await disp({ medico: 'prova-dispositivi', tasto: { tipo: 'hid', vid: 1 } }), e2 = await disp({ medico: 'Non valido!', dettatura: true }), e3 = await disp({ medico: 'prova-dispositivi', tasto: { tipo: 'tasto', code: '<script>' } }), e4 = await disp(undefined, ''), e5 = await disp({ medico: 'prova-dispositivi', dettatura: true }, '');
+      verifica(e1.stato === 400 && e2.stato === 400 && e3.stato === 400 && e4.stato === 401 && e5.stato === 401, `dispositivi del medico: tasto o medico non validi rifiutati, senza sessione no (${e1.stato}, ${e2.stato}, ${e3.stato}, ${e4.stato}, ${e5.stato})`);
+    } finally { await query(`delete from dittafono_dispositivi where studio_id = $1 and medico = 'prova-dispositivi'`, [S]); }
   } finally {
     const chiavi = fatti.length ? await query<{ storage_key: string }>(`select storage_key from referti_audio where id = any($1::uuid[])`, [fatti]) : [];
     if (fatti.length) await query(`delete from referti_audio where id = any($1::uuid[])`, [fatti]);

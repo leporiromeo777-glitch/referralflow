@@ -891,3 +891,10 @@ resta. Le dodici sottocartelle della cartella cartacea si propongono sempre; le 
 trascina, per non allungare la scheda. Nella proposta di «Dividi» le sottocartelle si mostrano in ordine di numero,
 non nell'ordine della carta: i tagli restano per pagina.
 
+## Il microfono di ogni medico — 20.10.2026
+Dallo studio: il medico detta sempre con lo stesso microfono, quindi non deve ricollegarlo. Deciso: tasto imparato,
+microfono (per nome) e Dragon si salvano sul server per profilo di «Chi detta» (migrazione 092), e «Chi detta» si
+sceglie da solo (accesso del medico, o l'ultimo su quel computer). Il permesso del browser per microfono e dispositivo
+USB resta una volta per computer: è una sicurezza del browser, non si aggira. Il tasto di un medico non passa mai da solo
+a un altro.
+

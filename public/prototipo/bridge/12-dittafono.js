@@ -185,9 +185,19 @@ function rfDitCuffieFerma() {
    È un'opzione da accendere, per dispositivo. */
 const RF_DIT_DETT = 'rf-dit-dettatura', RF_DIT_MIC = 'rf-dit-mic';
 function rfDitDettatura() { try { return localStorage.getItem(RF_DIT_DETT) === '1'; } catch (_) { return false; } }
-function rfDitDettaturaImposta(si) { try { localStorage.setItem(RF_DIT_DETT, si ? '1' : '0'); } catch (_) { /* resta per questa pagina */ } render(); }
-function rfDitMicScelto() { try { return localStorage.getItem(RF_DIT_MIC) || ''; } catch (_) { return ''; } }
-function rfDitMicImposta(id) { try { localStorage.setItem(RF_DIT_MIC, id || ''); } catch (_) { /* niente */ } if (RF.dit.stato !== 'registra') rfDitRilasciaMicrofono(); }
+function rfDitDettaturaImposta(si, daProfilo) { try { localStorage.setItem(RF_DIT_DETT, si ? '1' : '0'); } catch (_) { /* resta per questa pagina */ } if (!daProfilo) void rfDitProfiloSalva({ dettatura: !!si }); render(); }
+// Il microfono del medico si ricorda per NOME (20.10.2026): l'identificativo cambia da un computer all'altro, il nome no.
+function rfDitMicScelto() {
+  const voluto = rfDitMicVoluto(), x = voluto && (RF.dit.microfoni || []).find(m => m.nome === voluto);
+  if (x) return x.id;
+  try { return localStorage.getItem(RF_DIT_MIC) || ''; } catch (_) { return ''; }
+}
+function rfDitMicImposta(id) {
+  try { localStorage.setItem(RF_DIT_MIC, id || ''); } catch (_) { /* niente */ }
+  const x = (RF.dit.microfoni || []).find(m => m.id === id);
+  RF.dit.micNome = x ? x.nome : ''; void rfDitProfiloSalva({ microfono: x ? x.nome : null });
+  if (RF.dit.stato !== 'registra') rfDitRilasciaMicrofono();
+}
 // A che secondo dell'audio si è adesso (per segnare quando è arrivato il testo).
 function rfDitSecondi() {
   const d = RF.dit, campioni = d.nuovi.reduce((n, p) => n + p.length, 0);
@@ -581,7 +591,8 @@ function rfDitTastoLetto() {
 function rfDitTastoHtml() {
   const d = RF.dit, t = rfDitTastoLetto();
   if (d.impara) return `<b>Tieni premuto il tasto con cui detti, poi lascialo.</b> ${d.impara.nota || ''} <a href="javascript:void 0" onclick="rfDitTastoAnnulla()">Annulla</a>`;
-  if (t) return `Tasto del microfono: <b>${rfEsc(t.nome || 'collegato')}</b> — finché lo tieni premuto la pagina registra${RF.dit.tastoGiu ? ' · <b style="color:#b3261e">premuto</b>' : ''}. Se registra quando NON lo premi, scollegalo e ricollegalo. <a href="javascript:void 0" onclick="rfDitTastoScollega()">Scollega</a>${d.tastoErrore ? ` · <span style="color:#b3261e">${rfEsc(d.tastoErrore)}</span>` : ''}`;
+  if (t && t.tipo === 'hid' && d.tastoAutorizza) return `<b>Il microfono ${rfEsc(t.nome || 'da dettatura')}${d.medico ? ` di ${rfEsc(rfDitNomeMedico(d.medico))}` : ''} va permesso su questo computer, una volta sola:</b> <a href="javascript:void 0" onclick="rfDitTastoAutorizza()">permetti</a> (il browser chiede quale dispositivo: scegli il microfono). Poi parte da solo, anche le volte dopo.`;
+  if (t) return `Tasto del microfono${d.medico && rfDitProfilo(d.medico) && rfDitProfilo(d.medico).tasto ? ` di ${rfEsc(rfDitNomeMedico(d.medico))}` : ''}: <b>${rfEsc(t.nome || 'collegato')}</b> — finché lo tieni premuto la pagina registra${RF.dit.tastoGiu ? ' · <b style="color:#b3261e">premuto</b>' : ''}. Se registra quando NON lo premi, scollegalo e ricollegalo. <a href="javascript:void 0" onclick="rfDitTastoScollega()">Scollega</a>${d.tastoErrore ? ` · <span style="color:#b3261e">${rfEsc(d.tastoErrore)}</span>` : ''}`;
   return `${d.tastoErrore === 'da ricollegare' ? '<b style="color:#b3261e">Il tasto va ricollegato</b> (prima la pagina scambiava il movimento del microfono per il tasto). ' : ''}<a href="javascript:void 0" onclick="rfDitTastoCollega()">Collega il tasto con cui detti</a>: tenendolo premuto partono insieme il programma di dettatura e la registrazione, lasciandolo si fermano. Mentre lo colleghi tieni il microfono fermo in mano.`;
 }
 function rfDitTastoDisegna() { const el = document.getElementById('rf-dit-tasto'); if (el) el.innerHTML = rfDitTastoHtml(); const sp = document.getElementById('rf-dit-spia'); if (sp) sp.textContent = rfDitHidSpia(); const c = document.getElementById('rf-dit-centro'); if (c && RF.dit.stato !== 'registra') rfDitRidisegna(); }
@@ -603,9 +614,10 @@ async function rfDitTastoCollega() {
   } else if (d.impara) { d.impara.nota = 'Questo browser legge solo i tasti della tastiera (per i tasti del microfono servono Chrome o Edge).'; rfDitTastoDisegna(); }
 }
 function rfDitTastoAnnulla() { RF.dit.impara = null; rfDitTastoDisegna(); }
-function rfDitTastoScollega() { try { localStorage.removeItem(RF_DIT_TASTO); } catch (_) { /* niente */ } RF.dit.tastoPronto = false; RF.dit.tastoErrore = ''; if (RF.dit.stato !== 'registra') rfDitRilasciaMicrofono(); rfDitTastoDisegna(); }
+function rfDitTastoScollega() { try { localStorage.removeItem(RF_DIT_TASTO); } catch (_) { /* niente */ } void rfDitProfiloSalva({ tasto: null }); RF.dit.tastoPronto = false; RF.dit.tastoErrore = ''; if (RF.dit.stato !== 'registra') rfDitRilasciaMicrofono(); rfDitTastoDisegna(); }
 function rfDitTastoImparato(t) {
   try { localStorage.setItem(RF_DIT_TASTO, JSON.stringify(t)); } catch (_) { /* resta per questa pagina */ }
+  void rfDitProfiloSalva({ tasto: t });
   RF.dit.impara = null; RF.dit.tastoGiu = false; rfDitTastoDisegna(); rfDitTastoPronto();
   toast('Tasto collegato: tienilo premuto per dettare');
 }
@@ -682,13 +694,96 @@ function rfDitTastoPronto() {
     navigator.hid.getDevices().then(async (l) => {
       const miei = l.filter(x => x.vendorId === t.vid && x.productId === t.pid);
       let aperti = 0; for (const dev of miei) if (await rfDitHidApri(dev)) aperti++;
-      d.tastoErrore = aperti ? '' : 'il dispositivo non risponde: ricollegalo';
+      // Mai scelto su questo computer (il tasto viene dal profilo del medico): il browser vuole un clic, una volta sola.
+      d.tastoAutorizza = !miei.length;
+      d.tastoErrore = aperti || !miei.length ? '' : 'il dispositivo non risponde: ricollegalo';
       const el = document.getElementById('rf-dit-tasto'); if (el) el.innerHTML = rfDitTastoHtml();
     }).catch(() => {});
   }
   const pronto = () => { if (d.stato !== 'registra' && state.route === 'dittafono') void rfDitMicrofono(); };
   if (navigator.permissions && navigator.permissions.query) navigator.permissions.query({ name: 'microphone' }).then(p => { if (p.state === 'granted') pronto(); }).catch(() => {});
 }
+/* IL MICROFONO DI OGNI MEDICO (20.10.2026, richiesta dello studio: «il medico detta sempre con lo stesso microfono:
+   che sia già scelto, senza ricollegarlo col tasto ogni volta»). Il tasto imparato, il microfono (per nome) e «Detto con
+   Dragon» stanno sul server per ogni profilo di «Chi detta» (dittafono_dispositivi, migrazione 092): scelto il medico —
+   e la pagina lo sceglie da sola, dall'accesso o dall'ultima volta su questo computer — tutto è pronto e si detta subito,
+   da qualunque computer dello studio. Il browser, per sicurezza, vuole UNA volta per computer il permesso di usare il
+   microfono e di leggere il dispositivo USB: quella volta c'è un link «permetti», poi niente più. Tutto ciò che il medico
+   cambia (ricollega il tasto, sceglie un altro microfono, spegne Dragon) si salva nel suo profilo. */
+const RF_DIT_ULTIMO = 'rf-dit-medico', RF_DIT_TASTO_DI = 'rf-dit-tasto-di';      // di quale medico è il tasto salvato su questo computer
+function rfDitNomeMedico(id) { return ((RF.medici || []).find(m => m.id === id) || {}).nome || DOCTORS[id] || id; }
+function rfDitProfilo(m) { return (RF.ditProfili || {})[m] || null; }
+function rfDitMicVoluto() { return RF.dit.micNome || ''; }
+async function rfDitProfiliCarica() {
+  if (RF.ditProfiliChiesti) return; RF.ditProfiliChiesti = true;
+  try { const r = await fetch('/api/prototipo/dittafono/dispositivi', { credentials: 'include', cache: 'no-store' }); if (r.ok) RF.ditProfili = (await r.json()).profili || {}; } catch (_) { /* resta quello di questo computer */ }
+  RF.ditProfili = RF.ditProfili || {};
+  if (state.route === 'dittafono' && RF.dit.stato !== 'registra') { RF.dit.profiloDi = null; render(); }
+}
+async function rfDitProfiloSalva(campi) {
+  const m = RF.dit.medico; if (!m || !RF.ditProfili) return;
+  if ('tasto' in campi) { try { if (campi.tasto) localStorage.setItem(RF_DIT_TASTO_DI, m); else localStorage.removeItem(RF_DIT_TASTO_DI); } catch (_) { /* niente */ } }
+  RF.ditProfili[m] = Object.assign({ tasto: null, microfono: null, dettatura: null }, RF.ditProfili[m] || {}, campi);
+  try { await fetch('/api/prototipo/dittafono/dispositivi', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ medico: m }, campi)) }); } catch (_) { /* resta su questo computer */ }
+}
+// Chi detta, se non è ancora scelto: il medico dell'accesso (il nome dell'utente contiene il suo cognome), se no l'ultimo su questo computer.
+function rfDitMedicoIniziale() {
+  const d = RF.dit, medici = RF.medici || [];
+  if (d.medico || !medici.length) return;
+  const u = `${(RF.data && RF.data.utente && RF.data.utente.name) || ''} ${(RF.data && RF.data.utente && RF.data.utente.email) || ''}`.toLowerCase();
+  const mio = medici.filter(m => String(m.nome || '').toLowerCase().split(/[^a-zà-ÿ]+/).some(w => w.length >= 4 && !/^(dott|dottor|dottore|dottoressa|med|prof)$/.test(w) && u.includes(w)));
+  let ultimo = ''; try { ultimo = localStorage.getItem(RF_DIT_ULTIMO) || ''; } catch (_) { /* niente */ }
+  d.medico = mio.length === 1 ? mio[0].id : medici.some(m => m.id === ultimo) ? ultimo : '';
+}
+function rfDitMedicoScelto(v) {
+  RF.dit.medico = v; try { localStorage.setItem(RF_DIT_ULTIMO, v || ''); } catch (_) { /* niente */ }
+  RF.dit.profiloDi = null; rfFoglioCarica(); render();
+}
+// Il profilo del medico scelto entra in questo computer: tasto, Dragon, microfono. Se il medico non ne ha ancora uno, resta
+// quello che c'è qui (e si offre di tenerlo per lui).
+function rfDitProfiloApplica() {
+  const d = RF.dit, m = d.medico;
+  if (!RF.ditProfili || d.profiloDi === m || d.stato === 'registra' || d.impara) return;
+  d.profiloDi = m;
+  const p = m && rfDitProfilo(m);
+  d.micNome = p && p.microfono ? p.microfono : '';
+  const prima = JSON.stringify(rfDitTastoLetto());
+  let di = ''; try { di = localStorage.getItem(RF_DIT_TASTO_DI) || ''; } catch (_) { /* niente */ }
+  if (!p) {
+    // il tasto di questo computer era di un ALTRO medico: non vale per questo
+    if (di && di !== m) { try { localStorage.removeItem(RF_DIT_TASTO); localStorage.removeItem(RF_DIT_TASTO_DI); } catch (_) { /* niente */ } d.tastoPronto = false; d.tastoAutorizza = false; }
+    return;
+  }
+  try {
+    if (p.tasto) { localStorage.setItem(RF_DIT_TASTO, JSON.stringify(p.tasto)); localStorage.setItem(RF_DIT_TASTO_DI, m); } else { localStorage.removeItem(RF_DIT_TASTO); localStorage.removeItem(RF_DIT_TASTO_DI); }
+    if (typeof p.dettatura === 'boolean') localStorage.setItem(RF_DIT_DETT, p.dettatura ? '1' : '0');
+  } catch (_) { /* resta per questa pagina */ }
+  if (JSON.stringify(rfDitTastoLetto()) !== prima || (d.flusso && d.micNome)) { d.tastoPronto = false; d.tastoAutorizza = false; d.tastoErrore = ''; if (d.stato !== 'registra') rfDitRilasciaMicrofono(); }
+}
+// Il medico scelto non ha ancora un profilo, ma su questo computer un tasto (o un microfono) c'è: un clic e diventa suo.
+function rfDitProfiloOffri() {
+  const d = RF.dit, m = d.medico;
+  if (!m || !RF.ditProfili || rfDitProfilo(m) || d.stato === 'registra') return '';
+  const t = rfDitTastoLetto(); let mic = ''; try { mic = localStorage.getItem(RF_DIT_MIC) || ''; } catch (_) { /* niente */ }
+  if (!t && !mic) return '';
+  return `<div class="caption mt-8" id="rf-dit-offri"><b>${rfEsc(rfDitNomeMedico(m))} non ha ancora un microfono suo.</b> <a href="javascript:void 0" onclick="rfDitProfiloTieni()">Tieni per lui/lei${t ? ` il tasto ${rfEsc(t.nome || '')}` : ''}${mic ? ' e il microfono scelto qui' : ''}</a>: da qui in poi, scegliendo il suo nome, è già tutto pronto su ogni computer.</div>`;
+}
+function rfDitProfiloTieni() {
+  const d = RF.dit, x = (d.microfoni || []).find(m => m.id === rfDitMicScelto());
+  void rfDitProfiloSalva({ tasto: rfDitTastoLetto(), dettatura: rfDitDettatura(), ...(x ? { microfono: x.nome } : {}) }).then(() => { d.profiloDi = d.medico; d.micNome = x ? x.nome : ''; toast(`Tasto e microfono di ${rfDitNomeMedico(d.medico)} salvati`); render(); });
+}
+// Il permesso del browser per il dispositivo USB, su un computer dove non è mai stato scelto: con un clic, filtrato sul suo microfono.
+async function rfDitTastoAutorizza() {
+  const d = RF.dit, t = rfDitTastoLetto(); if (!t || t.tipo !== 'hid' || !navigator.hid) return;
+  try {
+    const scelti = await navigator.hid.requestDevice({ filters: [{ vendorId: t.vid, productId: t.pid }] });
+    let aperti = 0; for (const dev of scelti) if (await rfDitHidApri(dev)) aperti++;
+    d.tastoAutorizza = !scelti.length; d.tastoErrore = scelti.length && !aperti ? 'il dispositivo non risponde: forse lo tiene tutto per sé il programma di dettatura' : '';
+    if (aperti) toast('Microfono permesso: tieni premuto il tasto per dettare');
+  } catch (_) { /* finestra chiusa */ }
+  rfDitTastoDisegna();
+}
+
 // Mentre si detta o si registra la pagina non va ridisegnata dal ricarico periodico dei dati (ogni due minuti): la casella
 // verrebbe ricreata e il cursore ne uscirebbe — il programma di dettatura smetterebbe di scriverci (12.10.2026).
 function rfDitOccupato() {
@@ -708,11 +803,18 @@ async function rfDitMicrofono() {
     d.errore = 'Il microfono funziona solo sull’indirizzo sicuro dello studio (https). Da questo indirizzo il browser non lo concede.'; return false;
   }
   try {
+    d.micManca = '';
     const base = { channelCount: 1, echoCancellation: false, noiseSuppression: true, autoGainControl: true }, scelto = rfDitMicScelto();
     try { d.flusso = await navigator.mediaDevices.getUserMedia({ audio: scelto ? { ...base, deviceId: { exact: scelto } } : base }); }
     catch (e) { if (!scelto || !e || (e.name !== 'OverconstrainedError' && e.name !== 'NotFoundError')) throw e; d.flusso = await navigator.mediaDevices.getUserMedia({ audio: base }); }      // il microfono scelto non c'è più: quello di serie
     // Dopo il permesso il browser dice i nomi dei microfoni: servono a scegliere lo stesso che usa il programma di dettatura.
     try { d.microfoni = (await navigator.mediaDevices.enumerateDevices()).filter(x => x.kind === 'audioinput' && x.deviceId).map(x => ({ id: x.deviceId, nome: x.label || 'Microfono' })); } catch (_) { d.microfoni = []; }
+    // Il microfono del medico (per nome): se il browser ha aperto un altro microfono, si passa al suo.
+    const voluto = rfDitMicVoluto(), x = voluto && d.microfoni.find(m => m.nome === voluto);
+    const ora = (d.flusso.getAudioTracks()[0] && d.flusso.getAudioTracks()[0].getSettings().deviceId) || '';
+    if (x && x.id !== ora) { d.flusso.getTracks().forEach(t => t.stop()); d.flusso = await navigator.mediaDevices.getUserMedia({ audio: { ...base, deviceId: { exact: x.id } } }); }
+    if (x) { try { localStorage.setItem(RF_DIT_MIC, x.id); } catch (_) { /* niente */ } }
+    else if (voluto) d.micManca = voluto;
   } catch (e) {
     d.errore = e && e.name === 'NotAllowedError' ? 'Il browser non ha il permesso di usare il microfono: concedilo dalle impostazioni del sito e riprova.' : e && e.name === 'NotFoundError' ? 'Nessun microfono trovato su questo dispositivo.' : 'Non riesco ad aprire il microfono.';
     return false;
@@ -827,6 +929,7 @@ PAGES.dittafono = () => {
   if (!RF.live) return '<div class="page"><div class="card"><p class="meta" style="margin:0">Il dittafono è una funzione della piattaforma: qui, fuori, non registra.</p></div></div>';
   if (!(RF.medici || []).length && typeof rfCaricaMedici === 'function' && !d.mediciChiesti) { d.mediciChiesti = true; void rfCaricaMedici().then(() => { if (state.route === 'dittafono') render(); }); }
   void rfDitCercaRecupero();
+  void rfDitProfiliCarica(); rfDitMedicoIniziale(); rfDitProfiloApplica();
   rfDitTastoPronto();
   const durata = RFDittafono.formatta(RFDittafono.durata(d.pcm));
   const rec = d.stato === 'registra';
@@ -840,7 +943,7 @@ PAGES.dittafono = () => {
       <div class="row mt-8" style="gap:8px"><button class="btn primary sm" onclick="rfDitRiprendiRecupero()">Riprendila</button><button class="btn sm" onclick="rfDitScartaRecupero()">Scartala</button></div></div>` : ''}
     ${rfDitDettatura() ? `<div class="rf-dit-due ${d.fonte ? 'con-fonte' : ''}" id="rf-dit-due">` : ''}<div class="card ${rfDitDettatura() ? 'rf-dit-lato' : ''}">
       <div class="rf-dit-campi" id="rf-dit-campi">
-        <div class="field"><label for="rf-dit-medico">Chi detta</label><select class="input" id="rf-dit-medico" ${rec ? 'disabled' : ''} onchange="RF.dit.medico=this.value;rfFoglioCarica()"><option value="">${(RF.medici || []).length ? '— scegli il medico —' : 'nessun medico configurato'}</option>${medici}</select></div>
+        <div class="field"><label for="rf-dit-medico">Chi detta</label><select class="input" id="rf-dit-medico" ${rec ? 'disabled' : ''} onchange="rfDitMedicoScelto(this.value)"><option value="">${(RF.medici || []).length ? '— scegli il medico —' : 'nessun medico configurato'}</option>${medici}</select></div>
         <div class="field"><label for="rf-dit-tipo">Che cosa</label><select class="input" id="rf-dit-tipo" ${rec ? 'disabled' : ''} onchange="RF.dit.tipo=this.value"><option value="referto" ${d.tipo === 'referto' ? 'selected' : ''}>Referto</option><option value="visita" ${d.tipo === 'visita' ? 'selected' : ''}>Visita registrata</option></select></div>
         <div class="field"><label for="rf-dit-paz">Paziente <span class="caption">(facoltativo)</span></label><input class="input" id="rf-dit-paz" list="rf-paz-elenco" placeholder="Cognome Nome" autocomplete="off" value="${rfEsc(d.paziente || '')}" ${rec ? 'disabled' : ''} oninput="RF.dit.paziente=this.value;rfFoglioCarica();const ok=document.getElementById('rf-dit-paz-ok');if(ok)ok.innerHTML=rfDitPazStato()">${typeof rfPazElenco === 'function' ? rfPazElenco() : ''}${rfDitDettatura() ? `<div class="caption" id="rf-dit-paz-ok" style="margin-top:3px">${rfDitPazStato()}</div>` : ''}</div>
       </div>
@@ -856,7 +959,7 @@ PAGES.dittafono = () => {
       ${rfDitDettatura() ? `<div class="mt-16">
         <div class="row" style="justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap"><span class="section-title">Dettatura</span>
           <span id="rf-dit-micsel">${(d.microfoni || []).length > 1 ? `<span class="caption">Microfono <select class="input sm" style="max-width:260px" ${rec ? 'disabled' : ''} onchange="rfDitMicImposta(this.value)" aria-label="Microfono da registrare"><option value="">quello di serie</option>${d.microfoni.map(x => `<option value="${rfEsc(x.id)}" ${x.id === rfDitMicScelto() ? 'selected' : ''}>${rfEsc(x.nome)}</option>`).join('')}</select></span>` : ''}</span></div>
-        <div id="rf-dit-tasto" class="caption mt-8">${rfDitTastoHtml()}</div>
+        <div id="rf-dit-tasto" class="caption mt-8">${rfDitTastoHtml()}</div>${d.micManca ? `<div class="caption mt-8" style="color:#b3261e">Il microfono di ${rfEsc(rfDitNomeMedico(d.medico))} («${rfEsc(d.micManca)}») non è attaccato a questo computer: registro con quello di serie.</div>` : ''}${rfDitProfiloOffri()}
         <div id="rf-dit-spia" class="caption" style="opacity:.7">${rfDitHidSpia()}</div>
         <div class="caption mt-8">Comandi a voce: detta <b>«per favore, inserisci la lettera più recente»</b>, oppure solo una parte — <b>«per favore, inserisci l’anamnesi»</b>, «…FRCV e comorbidità», «…l’ECG», «…la conclusione», «…la terapia», oppure <b>«per favore riprendimi la lettera fino alla terapia»</b> (o «…fino a prima dell’esame clinico») — poi lascia il tasto; «per favore» va bene anche dopo il verbo (<b>«prendimi per favore l’anamnesi»</b>); <b>«per favore annulla»</b> toglie ciò che è entrato. Anche da qui, nel punto del cursore: <a href="javascript:void 0" onclick="rfDitComandoTasto('lettera_recente')">lettera intera</a>${[['anamnesi', 'anamnesi'], ['frcv', 'FRCV'], ['comorbidita', 'comorbidità'], ['conclusione', 'conclusione'], ['terapia', 'terapia']].map(([k, n]) => ` · <a href="javascript:void 0" onclick="rfDitComandoTasto('parti', '${k}')">${n}</a>`).join('')}</div>
         <div id="rf-dit-sordo" class="rf-manc mt-8" style="display:none"><b>Il testo arriva ma il microfono non sente niente.</b> Di solito il programma di dettatura tiene il microfono tutto per sé, oppure qui è scelto un altro microfono: metti in pausa e scegli sopra lo stesso che usa lui. Senza audio non c'è né riascolto né confronto.</div>

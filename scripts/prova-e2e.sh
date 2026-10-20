@@ -187,7 +187,7 @@ echo "→ pazienti: la data di nascita che manca nella scheda arriva dall'agenda
 DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-nascite-agenda.ts > "$TMP/nascite.txt" 2>&1 || { fallito "prova-nascite-agenda"; cut -c1-300 "$TMP/nascite.txt"; }
 grep -E "^NO" "$TMP/nascite.txt"; echo "   $(grep -c '^ok' "$TMP/nascite.txt") ok, $(grep -c '^NO' "$TMP/nascite.txt") no"
 
-echo "→ dettatura in tempo reale: il testo scritto mentre si registra viaggia con l'audio e si confronta con la trascrizione"
+echo "→ dettatura in tempo reale: il testo scritto mentre si registra viaggia con l'audio e si confronta con la trascrizione; microfono di ogni medico"
 DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-dettato.ts "http://localhost:$PORTA" "$STUDIO" "$C_MEDICO" > "$TMP/dettato.txt" 2>&1 || { fallito "prova-dettato"; cut -c1-300 "$TMP/dettato.txt"; }
 grep -E "^NO" "$TMP/dettato.txt"; echo "   $(grep -c '^ok' "$TMP/dettato.txt") ok, $(grep -c '^NO' "$TMP/dettato.txt") no"
 

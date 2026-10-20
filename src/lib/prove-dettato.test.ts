@@ -364,3 +364,22 @@ test('comandi a voce: le parti della lettera — anamnesi, FRCV, comorbidità, e
   // Un biglietto senza parti: resta solo il primo paragrafo come anamnesi.
   assert.deepEqual(Object.keys(partiDellaLettera('Caro collega,\n\nti ringrazio per l\'invio del paziente inventato, che vedrò volentieri il mese prossimo in studio.\n\nA presto')), ['anamnesi']);
 });
+
+// Il microfono di ogni medico (20.10.2026): che cosa si accetta di salvare.
+import { cambi, medicoValido, tastoValido } from './dittafono-dispositivi';
+test('dispositivi del medico: tasti, microfono e Dragon validi, il resto scartato', () => {
+  assert.equal(medicoValido(' Moccetti '), 'moccetti');
+  assert.equal(medicoValido('dr. rossi'), null);
+  assert.deepEqual(tastoValido({ tipo: 'tasto', code: 'F9', nome: 'tasto F9' }), { tipo: 'tasto', code: 'F9', nome: 'tasto F9' });
+  assert.deepEqual(tastoValido({ tipo: 'hid', vid: 2321, pid: 3100, rid: 0, i: 2, maschera: 4, premuto: 4, tipo0: 128, nome: 'SpeechMike', extra: 'via' }),
+    { tipo: 'hid', vid: 2321, pid: 3100, rid: 0, i: 2, maschera: 4, premuto: 4, tipo0: 128, nome: 'SpeechMike' });
+  assert.equal(tastoValido(null), null);
+  assert.equal(tastoValido({ tipo: 'hid', vid: 2321 }), undefined);
+  assert.equal(tastoValido({ tipo: 'hid', vid: 1, pid: 1, rid: 0, i: 0, maschera: 2, premuto: 4 }), undefined);      // premuto fuori dalla maschera
+  assert.equal(tastoValido({ tipo: 'tasto', code: '<b>' }), undefined);
+  assert.equal(tastoValido('F9'), undefined);
+  assert.deepEqual(cambi({ microfono: '  SpeechMike <III> ' }), { ok: { microfono: 'SpeechMike III' } });
+  assert.deepEqual(cambi({ dettatura: false, microfono: null }), { ok: { dettatura: false, microfono: null } });
+  assert.ok('errore' in cambi({ dettatura: 'sì' }));
+  assert.ok('errore' in cambi({}));
+});
