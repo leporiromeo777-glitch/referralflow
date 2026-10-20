@@ -23,8 +23,8 @@ export function LoginForm({ next = '' }: { next?: string }) {
       </div>
       <p className="muted center">La piattaforma delle referral tra studi medici</p>
       <label>
-        Email
-        <input name="email" type="email" required autoComplete="username" defaultValue={state?.email ?? ''} />
+        Nome o e-mail
+        <input name="email" type="text" required autoComplete="username" autoCapitalize="none" spellCheck={false} defaultValue={state?.email ?? ''} />
       </label>
       <label>
         Password

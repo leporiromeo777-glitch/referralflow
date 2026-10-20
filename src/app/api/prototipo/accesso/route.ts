@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { verifyPassword, createSession, createPending2fa } from '@/lib/auth';
 import { isLoginLocked, recordFailedLogin, clearLoginAttempts } from '@/lib/rate-limit';
+import { nomeAccesso } from '@/lib/nome-accesso';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,9 +20,10 @@ function clientIp(req: NextRequest): string {
 
 export async function POST(req: NextRequest) {
   const corpo = await req.json().catch(() => null);
-  const email = String(corpo?.email ?? '').trim().toLowerCase().slice(0, 160);
+  // l'e-mail o il nome dell'accesso, scritti come quando lo si è creato (src/lib/nome-accesso.ts)
+  const email = nomeAccesso(corpo?.email) ?? String(corpo?.email ?? '').trim().toLowerCase().slice(0, 160);
   const password = String(corpo?.password ?? '');
-  if (!email || !password) return NextResponse.json({ errore: 'Inserisci email e password.' }, { status: 400 });
+  if (!email || !password) return NextResponse.json({ errore: 'Inserisci nome (o e-mail) e password.' }, { status: 400 });
   const ip = clientIp(req);
   const lockedUntil = isLoginLocked(email, ip);
   if (lockedUntil) {

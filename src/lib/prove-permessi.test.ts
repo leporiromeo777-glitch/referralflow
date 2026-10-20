@@ -36,3 +36,18 @@ test('sale: l’aiuto medico registra ciò che succede coi pazienti, ma non camb
   assert.ok(puoOrch('admin', 'parametri') && !puoOrch('medico', 'parametri') && !puoOrch('assistente', 'parametri'));
   assert.ok(puoOrch('medico', 'durate') && !puoOrch('assistente', 'durate') && !puoOrch('segretaria', 'durate'));
 });
+
+// Con che cosa si entra (20.10.2026): un'e-mail o un nome semplice, scritto sempre allo stesso modo.
+import { nomeAccesso } from './nome-accesso';
+test('accesso: nome semplice o e-mail', () => {
+  assert.equal(nomeAccesso('moccetti'), 'moccetti');
+  assert.equal(nomeAccesso('  Marco Moccetti '), 'marco.moccetti');
+  assert.equal(nomeAccesso("D'Amico Anna"), 'd.amico.anna');
+  assert.equal(nomeAccesso('Ñoño Pérez'), 'nono.perez');
+  assert.equal(nomeAccesso('Segreteria@ReferralFlow.ch'), 'segreteria@referralflow.ch');
+  assert.equal(nomeAccesso('x'), null);
+  assert.equal(nomeAccesso('12'), null);
+  assert.equal(nomeAccesso('nome@sbagliato'), null);
+  assert.equal(nomeAccesso(''), null);
+  assert.equal(nomeAccesso('<script>'), 'script');
+});

@@ -5,6 +5,7 @@ import { catalogoDaPercorsi } from '@/lib/prestazioni';
 import { caricaPercorsi } from '@/lib/percorsi';
 import { isUuid } from '@/lib/cartella';
 import { syncFeed, riabbinaCodici } from '@/lib/agenda-sync';
+import { nomeAccesso } from '@/lib/nome-accesso';
 
 export const dynamic = 'force-dynamic';
 
@@ -181,6 +182,7 @@ export async function POST(req: NextRequest) {
   if (session.role !== 'admin' && session.role !== 'tecnico') return NextResponse.json({ errore: 'Solo l’amministratore dello studio può modificare.' }, { status: 403 });
   const sid = session.studioId;
   const s = (v: unknown, max = 200) => String(v ?? '').trim().slice(0, max);
+  let creato: string | null = null;      // il nome con cui si entra, per dirlo a chi ha creato l'accesso
   try {
     if (azione === 'studio_aggiorna') {
       const nome = s(c.nome, 120); if (!nome) return NextResponse.json({ errore: 'Il nome dello studio è obbligatorio.' }, { status: 400 });
@@ -189,12 +191,13 @@ export async function POST(req: NextRequest) {
       const voci = Array.isArray(c.voci) ? c.voci.map((v: unknown) => s(v, 30)).filter((v: string) => /^[a-z]+$/.test(v)).slice(0, 30) : [];
       await query(`update studios set moduli_nascosti = $2 where id = $1`, [sid, voci]);
     } else if (azione === 'utente_crea') {
-      const email = s(c.email, 160).toLowerCase(); const password = String(c.password ?? ''); const ruolo = RUOLI_VALIDI.has(s(c.ruolo)) ? s(c.ruolo) : 'segretaria';
-      if (!email.includes('@')) return NextResponse.json({ errore: 'E-mail non valida.' }, { status: 400 });
+      // un'e-mail o un nome semplice (20.10.2026): src/lib/nome-accesso.ts
+      const email = nomeAccesso(c.email); const password = String(c.password ?? ''); const ruolo = RUOLI_VALIDI.has(s(c.ruolo)) ? s(c.ruolo) : 'segretaria';
+      if (!email) return NextResponse.json({ errore: 'Scrivi un nome (almeno due lettere) o un’e-mail valida.' }, { status: 400 });
       if (password.length < 8) return NextResponse.json({ errore: 'La password deve avere almeno 8 caratteri.' }, { status: 400 });
       const [esiste] = await query<{ id: string }>('select id from users where email = $1', [email]);
-      if (esiste) return NextResponse.json({ errore: 'Esiste già un accesso con questa e-mail.' }, { status: 409 });
-      await query(`insert into users (studio_id, email, password_hash, role) values ($1, $2, $3, $4::user_role)`, [sid, email, await hashPassword(password), ruolo]);
+      if (esiste) return NextResponse.json({ errore: `Esiste già un accesso «${email}».` }, { status: 409 });
+      await query(`insert into users (studio_id, email, password_hash, role) values ($1, $2, $3, $4::user_role)`, [sid, email, await hashPassword(password), ruolo]); creato = email;
     } else if (azione === 'utente_password') {
       const id = s(c.id); const password = String(c.password ?? '');
       if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 });
@@ -311,7 +314,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ errore: 'Modifica non riuscita.' }, { status: 500 });
   }
   console.log(`[studio] azione=${azione} da=${session.id.slice(0, 8)}`);
-  return NextResponse.json({ ok: true, ...(await leggi(sid)) }, { headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json({ ok: true, ...(await leggi(sid)), ...(creato ? { creato } : {}) }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 // ── la verifica in due passi, la stessa della pagina vecchia ────────────────

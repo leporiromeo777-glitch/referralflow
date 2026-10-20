@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { query } from '@/lib/db';
 import { getSession, hashPassword, dimenticaRiscontro } from '@/lib/auth';
+import { nomeAccesso } from '@/lib/nome-accesso';
 
 const RUOLI_VALIDI = ['segretaria', 'medico', 'admin'];
 
@@ -18,12 +19,12 @@ async function requireAdmin() {
 export async function createUser(formData: FormData) {
   const session = await requireAdmin();
 
-  const email = String(formData.get('email') ?? '').trim().toLowerCase().slice(0, 160);
+  const email = nomeAccesso(formData.get('email')) ?? '';      // un'e-mail o un nome semplice (20.10.2026)
   const password = String(formData.get('password') ?? '');
   let ruolo = String(formData.get('ruolo') ?? 'segretaria');
   if (!RUOLI_VALIDI.includes(ruolo)) ruolo = 'segretaria';
 
-  if (!email || !email.includes('@')) redirect('/impostazioni/utenti?err=email');
+  if (!email) redirect('/impostazioni/utenti?err=email');
   if (password.length < 8) redirect('/impostazioni/utenti?err=password');
 
   // L'email è unica su tutta la piattaforma.

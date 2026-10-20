@@ -123,8 +123,8 @@ export default async function Utenti(
         <div className="card">
           <h2>Crea un accesso</h2>
           <form action={createUser} className="feed-form">
-            <label>Email
-              <input name="email" type="email" required maxLength={160}
+            <label>Nome o e-mail
+              <input name="email" type="text" required maxLength={160}
                 placeholder="collega@studio.ch" />
             </label>
             <label>Password (min. 8 caratteri)

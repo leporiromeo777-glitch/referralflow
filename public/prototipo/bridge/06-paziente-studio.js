@@ -414,9 +414,9 @@ async function rfStudioCreaAccesso() {
   const n = RF.studio.nuovo || {};
   const v = (id, k) => { const e = document.getElementById(id); return e && e.value ? e.value : (n[k] || ''); };
   const corpo = { azione: 'utente_crea', email: v('rf-u-email', 'email').trim(), password: v('rf-u-pw', 'pw'), ruolo: v('rf-u-ruolo', 'ruolo') || 'medico' };
-  if (!corpo.email.includes('@')) { RF.studio.errore = 'Scrivi l’e-mail del nuovo accesso.'; render(); return; }
+  if (corpo.email.length < 2) { RF.studio.errore = 'Scrivi il nome (o l’e-mail) del nuovo accesso.'; render(); return; }
   if (corpo.password.length < 8) { RF.studio.errore = 'La password deve avere almeno 8 caratteri.'; render(); return; }
-  if (await rfStudioAzione(corpo)) { RF.studio.nuovo = null; toast(`Accesso creato: ${corpo.email}`); render(); }
+  if (await rfStudioAzione(corpo)) { RF.studio.nuovo = null; const chi = (RF.studio.dati.creato || corpo.email); toast(`Accesso creato: si entra con «${chi}»`); render(); }
 }
 function rfStudioCampo(sel) { const e = document.querySelector(sel); return e ? e.value : ''; }
 const rfAdminPageOrig = PAGES.administration;
@@ -457,7 +457,7 @@ PAGES.administration = () => {
     // prima i campi si svuotavano — il clic su «Crea l'accesso» mandava una richiesta vuota («E-mail non valida»).
     const nuovo = RF.studio.nuovo = RF.studio.nuovo || { email: '', pw: '', ruolo: 'medico' };
     corpo = `<div class="card"><div class="card-head"><span class="section-title">Accessi del personale</span><span class="caption">${d.personale.filter(u => u.attivo).length} attivi</span></div>
-      <div class="table-wrap" style="box-shadow:none"><table class="dense"><thead><tr><th>E-mail</th><th>Ruolo</th><th>2FA</th><th>Stato</th>${admin ? '<th></th>' : ''}</tr></thead><tbody>
+      <div class="table-wrap" style="box-shadow:none"><table class="dense"><thead><tr><th>Accesso</th><th>Ruolo</th><th>2FA</th><th>Stato</th>${admin ? '<th></th>' : ''}</tr></thead><tbody>
       ${d.personale.map(u => `<tr>
         <td><b>${rfEsc(u.email)}</b>${u.id === d.io ? ' <span class="caption">(tu)</span>' : ''}</td>
         <td>${admin && u.id !== d.io ? `<select class="input sm" onchange="rfStudioAzione({ azione: 'utente_ruolo', id: '${u.id}', ruolo: this.value })">${Object.entries(ruoloIt).map(([k, l]) => `<option value="${k}" ${u.role === k ? 'selected' : ''}>${l}</option>`).join('')}</select>` : rfEsc(ruoloIt[u.role] || u.role)}</td>
@@ -466,10 +466,10 @@ PAGES.administration = () => {
         ${admin ? `<td style="white-space:nowrap"><div class="row" style="gap:6px;justify-content:flex-end">${u.id !== d.io ? `<button class="btn sm ghost" onclick="rfStudioPassword('${u.id}', '${rfJs(u.email)}')">Nuova password</button><button class="btn sm ghost" onclick="rfStudioAzione({ azione: 'utente_attivo', id: '${u.id}' })">${u.attivo ? 'Disattiva' : 'Riattiva'}</button>` : ''}</div></td>` : ''}
       </tr>`).join('')}</tbody></table></div></div>
       ${admin ? `<div class="card mt-16"><div class="section-title">Nuovo accesso</div><div class="grid grid-3 mt-8">
-        <div class="field"><label>E-mail</label><input class="input" id="rf-u-email" type="email" autocomplete="off" value="${rfEsc(nuovo.email)}" oninput="RF.studio.nuovo.email=this.value"></div>
+        <div class="field"><label>Nome o e-mail</label><input class="input" id="rf-u-email" type="text" autocapitalize="none" spellcheck="false" placeholder="es. moccetti" autocomplete="off" value="${rfEsc(nuovo.email)}" oninput="RF.studio.nuovo.email=this.value"></div>
         <div class="field"><label>Password iniziale (min. 8)</label><input class="input" id="rf-u-pw" type="password" autocomplete="new-password" value="${rfEsc(nuovo.pw)}" oninput="RF.studio.nuovo.pw=this.value"></div>
         <div class="field"><label>Ruolo</label><select class="input" id="rf-u-ruolo" onchange="RF.studio.nuovo.ruolo=this.value">${Object.entries(ruoloIt).map(([k, l]) => `<option value="${k}" ${nuovo.ruolo === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
-        <div class="row mt-16" style="gap:10px;align-items:center"><button class="btn primary" onclick="rfStudioCreaAccesso()">Crea l'accesso</button><span class="caption">La persona cambierà la password e potrà attivare la 2FA dal suo profilo. Gli accessi non si eliminano: si disattivano.</span></div></div>` : ''}`;
+        <div class="row mt-16" style="gap:10px;align-items:center"><button class="btn primary" onclick="rfStudioCreaAccesso()">Crea l'accesso</button><span class="caption">Basta un nome («Marco Moccetti» diventa «marco.moccetti»): si entra con quello. La persona cambierà la password e potrà attivare la 2FA dal suo profilo. Gli accessi non si eliminano: si disattivano.</span></div></div>` : ''}`;
     corpo += `<div class="card mt-16"><div class="card-head"><span class="section-title">Personale senza accesso</span><span class="caption">aiuto medico, segreteria a ore: solo nome, ruolo, percentuale e colore</span></div>
       <div class="list">${(d.personale_senza_accesso || []).map(x => `<div class="list-item"><i class="dot" style="background:${rfEsc(x.colore || 'var(--text-3)')}"></i><div class="grow"><div class="name">${rfEsc(x.nome)}${x.attivo ? '' : ' <span class="badge">non più in servizio</span>'}</div><div class="sub">${rfEsc(x.ruolo)}${x.percentuale != null ? ` · ${x.percentuale} %` : ''}</div></div>${admin ? `<button class="btn sm ghost" onclick="rfStudioPersona('${x.id}')">Modifica</button><button class="btn sm ghost" onclick="rfStudioAzione({ azione: 'personale_attivo', id: '${x.id}' })">${x.attivo ? 'Non più in servizio' : 'Di nuovo in servizio'}</button>` : ''}</div>`).join('') || '<div class="caption">Nessuno.</div>'}</div>
       ${admin ? `<div class="grid grid-4 mt-16"><div class="field"><label>Nome</label><input class="input" id="rf-ps-nome"></div><div class="field"><label>Ruolo</label><input class="input" id="rf-ps-ruolo" list="rf-ps-ruoli" value="aiuto medico"><datalist id="rf-ps-ruoli"><option value="aiuto medico"><option value="segreteria"><option value="infermiere"><option value="tecnico"></datalist></div><div class="field"><label>%</label><input class="input" id="rf-ps-perc" type="number" min="0" max="100" style="max-width:90px"></div><div class="field"><label>Colore</label><input class="input" id="rf-ps-colore" type="color" value="#8a938e" style="height:36px;padding:2px 4px"></div></div><div class="row mt-8"><button class="btn primary" onclick="rfStudioAzione({ azione: 'personale_crea', nome: rfStudioCampo('#rf-ps-nome'), ruolo: rfStudioCampo('#rf-ps-ruolo'), percentuale: rfStudioCampo('#rf-ps-perc'), colore: rfStudioCampo('#rf-ps-colore') })">Aggiungi</button></div>` : ''}</div>`;

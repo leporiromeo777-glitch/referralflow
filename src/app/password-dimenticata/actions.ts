@@ -20,7 +20,8 @@ async function clientIp(): Promise<string> {
 export async function requestReset(formData: FormData): Promise<void> {
   const email = String(formData.get('email') ?? '').trim().toLowerCase();
 
-  if (email) {
+  // un accesso con il solo nome (20.10.2026) non ha una casella: la password la rimette l'amministrazione
+  if (email && email.includes('@')) {
     const ip = await clientIp();
     // Se già troppe richieste, non mandiamo altra posta ma restiamo neutri.
     if (!isResetLocked(email, ip)) {

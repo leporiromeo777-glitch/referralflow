@@ -111,7 +111,7 @@ function rfPaginaAccesso(stato) {
     <form id="rf-acc-form" class="rf-auth-card">
       ${marchio}
       <p class="rf-auth-sub">La piattaforma delle referral tra studi medici</p>
-      <label>Email<input id="rf-acc-email" type="email" required autocomplete="username" inputmode="email"></label>
+      <label>Nome o e-mail<input id="rf-acc-email" type="text" required autocomplete="username" autocapitalize="none" spellcheck="false"></label>
       <label>Password<input id="rf-acc-password" type="password" required autocomplete="current-password"></label>
       <p class="rf-auth-forgot">Password dimenticata? La reimposta l’amministratore dello studio.</p>
       ${errore}

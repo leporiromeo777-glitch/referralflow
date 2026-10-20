@@ -1,6 +1,6 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-09-29
+aggiornata: 2026-10-20
 ---
 # Accessi e ruoli
 
@@ -24,6 +24,11 @@ Fino al 16.9.2026 in studio si entrava **tutti con lo stesso account** (`admin@d
 Uno per funzione, sullo studio vero: `medico@`, `aiuto@`, `segreteria@`, `amministrazione@`, `tecnico@` — tutti `@referralflow.ch`, che è il dominio dello studio. Le password sono state generate a caso e consegnate una volta sola: **vanno cambiate al primo accesso** (pagina Sicurezza). Il vecchio `admin@demo.ch` resta finché non si è sicuri che nessuno lo usi più.
 
 Negli stessi ruoli esiste anche la [[Piattaforma/Demo pubblica]], con una password sola per tutti e dati inventati: serve a far vedere che ogni ruolo vede una cosa diversa. **Le password della demo non aprono nulla dello studio**: sono due database diversi.
+
+## Accesso con un nome (20.10.2026)
+Richiesta dello studio: creare un accesso scrivendo solo un nome, non per forza un'e-mail. In **Studio → Personale → Nuovo accesso** il campo è «Nome o e-mail»: un nome si scrive sempre allo stesso modo — minuscole, senza accenti, spazi e apostrofi diventano un punto — sia quando si crea l'accesso sia quando si entra: «Marco Moccetti» e «marco.moccetti» sono lo stesso accesso (`src/lib/nome-accesso.ts`; nel database sta nella colonna dell'e-mail, che resta unica). Dopo la creazione la pagina dice con che cosa si entra. La pagina di accesso chiede «Nome o e-mail». Un accesso con il solo nome **non riceve e-mail**: «password dimenticata» non gli manda niente, la password la rimette l'amministrazione (o `scripts/reimposta-password.sh`).
+
+Lo stesso 20.10 il modulo «Nuovo accesso» si svuotava se la pagina veniva ridisegnata dal ricarico dei dati ogni due minuti, e il clic mandava una richiesta vuota («E-mail non valida»): ora ricorda quello che si scrive, e il ricarico non ridisegna mentre si scrive in un campo.
 
 ## Quello che ancora manca
 

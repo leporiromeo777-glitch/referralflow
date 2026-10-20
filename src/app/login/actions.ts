@@ -5,6 +5,7 @@ import { headers } from 'next/headers';
 import { query } from '@/lib/db';
 import { verifyPassword, createSession, createPending2fa } from '@/lib/auth';
 import { isLoginLocked, recordFailedLogin, clearLoginAttempts } from '@/lib/rate-limit';
+import { nomeAccesso } from '@/lib/nome-accesso';
 
 // `email` torna nel modulo: React 19 svuota il form dopo ogni azione, così
 // dopo un errore l'indirizzo resta scritto (la password no).
@@ -29,10 +30,10 @@ function destinazioneSicura(next: unknown): string | null {
 }
 
 export async function login(_prev: State, formData: FormData): Promise<State> {
-  const email = String(formData.get('email') ?? '').trim().toLowerCase();
+  const email = nomeAccesso(formData.get('email')) ?? String(formData.get('email') ?? '').trim().toLowerCase();
   const password = String(formData.get('password') ?? '');
   const next = destinazioneSicura(formData.get('next'));
-  if (!email || !password) return { error: 'Inserisci email e password.', email };
+  if (!email || !password) return { error: 'Inserisci nome (o e-mail) e password.', email };
 
   const ip = await clientIp();
   const lockedUntil = isLoginLocked(email, ip);
