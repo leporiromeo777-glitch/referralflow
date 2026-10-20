@@ -904,3 +904,8 @@ formattazione sta a parte (pezzo + quale comparsa), perché catena, audit, confr
 la applica. Tre stili (grassetto, corsivo, sottolineato) e «Togli». Il foglio della revisione semplice diventa un
 testo modificabile (una casella di testo non mostra la formattazione).
 
+## Firma per esteso e in grassetto — 20.10.2026
+Dallo studio: la firma del medico sempre completa («Dr. med. …») e in grassetto; la frase tra parentesi sotto il nome
+a 9 punti. Cambia la firma di Moccetti decisa il 14.9 («Marco»). Il Word lo applica a ogni lettera (anche a quelle
+scritte prima) dopo il saluto finale; la barra della revisione ha anche la dimensione del carattere.
+

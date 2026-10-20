@@ -53,7 +53,7 @@ const RUN = /<w:r[\s>](?:(?!<\/w:r>)[\s\S])*?<\/w:r>/g;
 // Un run con il suo stile: grassetto, corsivo, sottolineato al loro posto fra le proprietà, nell'ordine che vuole lo
 // schema (b, bCs, i, iCs dopo stile e font; u più in basso, prima di effetti, bordi, lingua…), creandole se il run
 // non ne ha. Un segno che il run ha già non si ripete.
-function conStile(run: string, z: { b?: boolean; i?: boolean; u?: boolean }): string {
+function conStile(run: string, z: { b?: boolean; i?: boolean; u?: boolean; s?: number }): string {
   let r = run;
   if (!/<w:rPr>/.test(r)) r = r.replace(/^<w:r(\s[^>]*)?>/, (m) => `${m}<w:rPr></w:rPr>`);
   const testa = [z.b && !/<w:b\/>|<w:b\s/.test(r) ? '<w:b/><w:bCs/>' : '', z.i && !/<w:i\/>|<w:i\s/.test(r) ? '<w:i/><w:iCs/>' : ''].join('');
@@ -62,6 +62,15 @@ function conStile(run: string, z: { b?: boolean; i?: boolean; u?: boolean }): st
     r = r.replace(/<w:rPr>([\s\S]*?)<\/w:rPr>/, (_m, dentro: string) => {
       const k = dentro.search(/<w:(effect|bdr|shd|fitText|vertAlign|rtl|cs|em|lang|eastAsianLayout|specVanish|oMath)\b/);
       return `<w:rPr>${k < 0 ? `${dentro}<w:u w:val="single"/>` : `${dentro.slice(0, k)}<w:u w:val="single"/>${dentro.slice(k)}`}</w:rPr>`;
+    });
+  }
+  // la dimensione (in mezzi punti): sostituisce quella del run, o va al suo posto (dopo colore e spaziature, prima di evidenziatore e sottolineato)
+  if (z.s) {
+    const sz = `<w:sz w:val="${z.s * 2}"/><w:szCs w:val="${z.s * 2}"/>`;
+    r = r.replace(/<w:sz\s[^>]*\/>/, '').replace(/<w:szCs\s[^>]*\/>/, '');
+    r = r.replace(/<w:rPr>([\s\S]*?)<\/w:rPr>/, (_m, dentro: string) => {
+      const k = dentro.search(/<w:(highlight|u|effect|bdr|shd|fitText|vertAlign|rtl|cs|em|lang|eastAsianLayout|specVanish|oMath)\b/);
+      return `<w:rPr>${k < 0 ? `${dentro}${sz}` : `${dentro.slice(0, k)}${sz}${dentro.slice(k)}`}</w:rPr>`;
     });
   }
   return r.replace('<w:rPr></w:rPr>', '');
@@ -81,13 +90,13 @@ function espandi(xml: string, chiave: string, valore: string, stili?: (righe: st
     return righe
       .map((riga, k) => {
         const pezzi = tutte ? tutte[k] : [];
-        if (pezzi.some((z) => z.b || z.i || z.u)) {
+        if (pezzi.some((z) => z.b || z.i || z.u || z.s)) {
           return par.replace(RUN, (run) => {
             if (!run.includes(segnaposto)) return run.replace(T_RUN, (_i, apre, _c, chiude) => apre + chiude);
             return pezzi.map((z) => {
               const r = run.replace(T_RUN, (_i, apre: string, _c, chiude) =>
                 (apre.includes('xml:space') ? apre : apre.replace(/>$/, ' xml:space="preserve">')) + escapeXml(z.t) + chiude);
-              return z.b || z.i || z.u ? conStile(r, z) : r;
+              return z.b || z.i || z.u || z.s ? conStile(r, z) : r;
             }).join('');
           });
         }

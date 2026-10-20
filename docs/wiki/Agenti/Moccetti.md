@@ -49,7 +49,7 @@ Cordiali saluti,
 - Forme di cortesia con la maiuscola: «Ti», «Te», «Tua», «Tuo».
 - «il paziente a margine» indica il paziente della lettera; poi «egli», «ella», «la paziente».
 - La conclusione comincia con «In conclusione, alla luce degli elementi di cui sopra,».
-- Il blocco «Terapia:» (una riga per farmaco: NOME dose schema, «IR» = in riserva) e la chiusura «Cordiali saluti,» con la firma «Marco» li mette il codice: il modello non li scrive.
+- Il blocco «Terapia:» (una riga per farmaco: NOME dose schema, «IR» = in riserva) e la chiusura «Cordiali saluti,» con la firma «Dr. med. Marco Moccetti» (dal 20.10.2026, per esteso; nel Word in grassetto) li mette il codice: il modello non li scrive.
 - «Copia:», «Allegato:», «(partito dopo dettatura)» stanno fuori dalla lettera: mai nel corpo.
 
 ## Farmaci frequenti

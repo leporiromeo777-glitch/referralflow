@@ -8,9 +8,13 @@
 // i paragrafi), sì a maiuscole e accenti: è il testo che la persona ha selezionato.
 // La stessa logica è nella pagina (bridge/19-formattazione.js): le due vanno tenute uguali.
 
-export type Voce = { testo: string; n: number; b?: boolean; i?: boolean; u?: boolean };
-export type Pezzo = { t: string; b: boolean; i?: boolean; u?: boolean };
+// `s`: la dimensione del carattere in punti (20.10.2026: «metti anche il font che puoi ingrandire»); senza, quella del Word (12).
+export type Voce = { testo: string; n: number; b?: boolean; i?: boolean; u?: boolean; s?: number };
+export type Pezzo = { t: string; b: boolean; i?: boolean; u?: boolean; s?: number };
 export const B = 1, I = 2, U = 4;
+export const DIMENSIONI = [9, 10, 11, 12, 14, 16, 18, 20, 24, 28];
+// Per ogni carattere un numero: i tre stili nei primi tre bit, la dimensione dal quarto in su (0 = quella del Word).
+export const stileDi = (v: number) => ({ f: v & 7, s: v >> 3 });
 
 const MAX_VOCI = 400;
 
@@ -25,8 +29,9 @@ export function vociValide(v: unknown): Voce[] | undefined {
     const n = r.n;
     if (!testo || testo.length > 2000 || typeof n !== 'number' || !Number.isInteger(n) || n < 0 || n > 5000) return undefined;
     for (const k of ['b', 'i', 'u']) if (r[k] !== undefined && typeof r[k] !== 'boolean') return undefined;
-    if (!r.b && !r.i && !r.u) continue;
-    out.push({ testo, n, ...(r.b ? { b: true } : {}), ...(r.i ? { i: true } : {}), ...(r.u ? { u: true } : {}) });
+    if (r.s !== undefined && !DIMENSIONI.includes(r.s as number)) return undefined;
+    if (!r.b && !r.i && !r.u && !r.s) continue;
+    out.push({ testo, n, ...(r.b ? { b: true } : {}), ...(r.i ? { i: true } : {}), ...(r.u ? { u: true } : {}), ...(r.s ? { s: r.s as number } : {}) });
   }
   return out;
 }
@@ -48,13 +53,13 @@ export function trovaVoce(testo: string, v: Voce): [number, number] | null {
   return null;
 }
 
-// Per ogni carattere del testo: B, I, U accesi.
-export function segniDi(testo: string, voci: Voce[]): Uint8Array {
-  const segni = new Uint8Array(testo.length);
+// Per ogni carattere del testo: B, I, U accesi e la dimensione (stileDi).
+export function segniDi(testo: string, voci: Voce[]): Uint16Array {
+  const segni = new Uint16Array(testo.length);
   for (const v of voci) {
     const r = trovaVoce(testo, v); if (!r) continue;
     const f = (v.b ? B : 0) | (v.i ? I : 0) | (v.u ? U : 0);
-    for (let k = r[0]; k < r[1]; k++) segni[k] |= f;
+    for (let k = r[0]; k < r[1]; k++) segni[k] = (segni[k] | f) & 7 | (v.s ? v.s << 3 : segni[k] & ~7);
   }
   return segni;
 }
@@ -74,7 +79,7 @@ export function vociDai(testo: string, segni: ArrayLike<number>): Voce[] {
       const pezzo = testo.slice(da, a), rx = modello(pezzo)!;
       let n = 0, m: RegExpExecArray | null;
       while ((m = rx.exec(testo)) && m.index < da) { if (!m[0].length) { rx.lastIndex++; continue; } n++; }
-      out.push({ testo: pezzo.replace(/\s+/g, ' '), n, ...(f & B ? { b: true } : {}), ...(f & I ? { i: true } : {}), ...(f & U ? { u: true } : {}) });
+      out.push({ testo: pezzo.replace(/\s+/g, ' '), n, ...(f & B ? { b: true } : {}), ...(f & I ? { i: true } : {}), ...(f & U ? { u: true } : {}), ...(f >> 3 ? { s: f >> 3 } : {}) });
     }
     k = j;
   }
@@ -89,14 +94,14 @@ export function righeFormattate(valore: string, voci: Voce[], grassettoDi?: (rig
   let inizio = 0;
   return righe.map((riga) => {
     const da = inizio; inizio += riga.length + 1;
-    const f = new Uint8Array(riga.length);
+    const f = new Uint16Array(riga.length);
     if (segni) for (let k = 0; k < riga.length; k++) f[k] = segni[da + k];
     if (grassettoDi) { let p = 0; for (const z of grassettoDi(riga)) { if (z.b) for (let k = p; k < p + z.t.length && k < f.length; k++) f[k] |= B; p += z.t.length; } }
     const pezzi: Pezzo[] = [];
     let k = 0;
     while (k < riga.length) {
       let j = k; while (j < riga.length && f[j] === f[k]) j++;
-      pezzi.push({ t: riga.slice(k, j), b: !!(f[k] & B), ...(f[k] & I ? { i: true } : {}), ...(f[k] & U ? { u: true } : {}) });
+      pezzi.push({ t: riga.slice(k, j), b: !!(f[k] & B), ...(f[k] & I ? { i: true } : {}), ...(f[k] & U ? { u: true } : {}), ...(f[k] >> 3 ? { s: f[k] >> 3 } : {}) });
       k = j;
     }
     return pezzi.length ? pezzi : [{ t: '', b: false }];

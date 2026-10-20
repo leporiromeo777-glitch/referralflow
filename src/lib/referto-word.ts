@@ -8,6 +8,7 @@ import { bloccoAllegato } from './referti-allegato-blocco';
 import { bloccoCopiaConoscenza } from './referti-copia';
 import { attorno, vociCopia, type Attorno } from './referti-inviante';
 import { vociValide } from './formattazione';
+import { firmaDellaLettera } from './firma-lettera';
 
 // Il referto in Word con la carta intestata dello studio (stampo in
 // modelli/referto-carta-intestata.docx): pronto da rifinire e spedire.
@@ -146,6 +147,7 @@ export async function costruisciWord(sessione: { studioId: string; email?: strin
     } catch { /* best-effort */ }
   }
 
+  const firma = nomeMedico ? firmaDellaLettera(testo, medico) : { testo, voci: [] };
   const docx = await generaDocxReferto({
     medico,
     intestazione,
@@ -158,14 +160,15 @@ export async function costruisciWord(sessione: { studioId: string; email?: strin
     // della segretaria (9 su 12, visto il 12.9.2026).
     paziente: (formato === 'lettera' && pazienteNome ? 'Paziente\n' : '') + ([pazienteNome, nascita].filter(Boolean).join(' – ') || ' '),
     piede: [pazienteNome, nascita].filter(Boolean).join(', ') + (formato === 'lettera' ? '' : (dataDettato ? `  ${dataDettato}` : '')),
-    testo: ricomponiParagrafi(testo),
+    // La firma (20.10.2026): il nome del medico sempre completo e in grassetto, la riga tra parentesi a 9 punti.
+    testo: ricomponiParagrafi(firma.testo),
     copia,
     // Nella lettera due paragrafi vuoti tra destinatario e data (segretaria).
     spaziDestinatario: formato === 'lettera' ? 2 : undefined,
     // Grassetto come nella lettera vecchia del paziente (6.10.2026).
     grassetti: !b.payload?.forma_lettera?.spento && Array.isArray(b.payload?.forma_lettera?.grassetti) ? b.payload.forma_lettera.grassetti : [],
     // Grassetto, corsivo, sottolineato messi a mano nella revisione (20.10.2026).
-    formattazione: vociValide(b.payload?.formattazione) ?? [],
+    formattazione: [...(vociValide(b.payload?.formattazione) ?? []), ...firma.voci],
   });
 
   const nomeFile = `referto-${dataBase.replaceAll('.', '-') || 'bozza'}.docx`;

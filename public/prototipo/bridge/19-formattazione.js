@@ -1,7 +1,7 @@
 /* LA BARRA DI FORMATTAZIONE della revisione (20.10.2026, richiesta dello studio: «nelle correzioni dei referti una
    barra per mettere in grassetto, corsivo… quello che ho evidenziato»). Vale nella revisione completa e in quella
-   semplice. Si seleziona il testo e si preme G, C o S (o ⌘/Ctrl + B, I, U); «Togli» toglie la formattazione dalla
-   selezione. Si vede subito nel foglio e il Word esce uguale.
+   semplice. Si seleziona il testo e si preme G, C o S (o ⌘/Ctrl + B, I, U), A− e A+ per la dimensione del carattere;
+   «Togli» toglie la formattazione dalla selezione. Si vede subito nel foglio e il Word esce uguale.
 
    Il testo della lettera resta testo semplice: la formattazione sta a parte (`payload.formattazione`, rotta
    /api/prototipo/referti/<id>/formattazione), come elenco di pezzi — il testo e QUALE delle sue comparse è — così
@@ -19,12 +19,16 @@
 .rf-fmt-barra button.togli { font-family: inherit; font-weight: 500; font-size: 12.5px; color: var(--text-2); }
 .rf-fmt-barra .sep { width: 1px; height: 18px; background: var(--border); margin: 0 3px; }
 .rf-fmt-barra .aiuto { font-size: 11.5px; color: var(--text-3); padding: 0 6px; white-space: nowrap; }
+.rf-fmt-barra .dim { min-width: 26px; text-align: center; font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--text-2); }
 @media (max-width: 700px) { .rf-fmt-barra .aiuto { display: none; } }
 #sm-testo { white-space: pre-wrap; overflow-wrap: break-word; cursor: text; }
 #sm-testo:empty::before { content: 'Il testo della lettera'; color: #9aa0ad; }
 `; document.head.appendChild(st); })();
 
 const RF_FMT_B = 1, RF_FMT_I = 2, RF_FMT_U = 4;
+// La dimensione del carattere (20.10.2026: «metti anche il font che puoi ingrandire»): in punti, come nel Word, il cui
+// testo è a 12. Nei segni sta dal quarto bit in su (0 = quella del Word).
+const RF_FMT_BASE = 12, RF_FMT_DIM = [9, 10, 11, 12, 14, 16, 18, 20, 24, 28];
 RF.fmt = RF.fmt || { id: null, voci: [], timer: null };
 
 /* ── i pezzi: la stessa logica di src/lib/formattazione.ts ── */
@@ -39,8 +43,8 @@ function rfFmtTrova(testo, v) {
   return null;
 }
 function rfFmtSegni(testo, voci) {
-  const s = new Uint8Array(testo.length);
-  for (const v of voci || []) { const r = rfFmtTrova(testo, v); if (!r) continue; const f = (v.b ? RF_FMT_B : 0) | (v.i ? RF_FMT_I : 0) | (v.u ? RF_FMT_U : 0); for (let k = r[0]; k < r[1]; k++) s[k] |= f; }
+  const s = new Uint16Array(testo.length);
+  for (const v of voci || []) { const r = rfFmtTrova(testo, v); if (!r) continue; const f = (v.b ? RF_FMT_B : 0) | (v.i ? RF_FMT_I : 0) | (v.u ? RF_FMT_U : 0); for (let k = r[0]; k < r[1]; k++) s[k] = (s[k] | f) & 7 | (v.s ? v.s << 3 : s[k] & ~7); }
   return s;
 }
 function rfFmtVoci(testo, segni) {
@@ -52,7 +56,7 @@ function rfFmtVoci(testo, segni) {
     if (a > da) {
       const pezzo = testo.slice(da, a), rx = rfFmtModello(pezzo); let n = 0, m;
       while ((m = rx.exec(testo)) && m.index < da) { if (!m[0].length) { rx.lastIndex++; continue; } n++; }
-      out.push(Object.assign({ testo: pezzo.replace(/\s+/g, ' '), n }, f & RF_FMT_B ? { b: true } : {}, f & RF_FMT_I ? { i: true } : {}, f & RF_FMT_U ? { u: true } : {}));
+      out.push(Object.assign({ testo: pezzo.replace(/\s+/g, ' '), n }, f & RF_FMT_B ? { b: true } : {}, f & RF_FMT_I ? { i: true } : {}, f & RF_FMT_U ? { u: true } : {}, f >> 3 ? { s: f >> 3 } : {}));
     }
     k = j;
   }
@@ -84,10 +88,11 @@ function rfFmtLeggi(f) {
   return { testo, nodi };
 }
 function rfFmtSegniDom(f, st) {
-  const s = new Uint8Array(st.testo.length);
+  const s = new Uint16Array(st.testo.length);
   for (const q of st.nodi) {
     const pe = q.n.parentElement; if (!pe) continue;
     let v = 0;
+    const dim = pe.closest('.rf-fmt[data-s]'); if (dim && RF_FMT_DIM.includes(Number(dim.dataset.s))) v |= Number(dim.dataset.s) << 3;
     if (pe.closest('.rf-fmt-b, b, strong')) v |= RF_FMT_B;
     if (pe.closest('.rf-fmt-i, i, em')) v |= RF_FMT_I;
     if (pe.closest('.rf-fmt-u, u')) v |= RF_FMT_U;
@@ -132,7 +137,7 @@ function rfFmtDipingi(f, voci) {
     for (let i = pezzi.length - 1; i >= 0; i--) {
       const [da, , v] = pezzi[i];
       const pezzo = da > 0 ? nodo.splitText(da) : nodo;
-      if (v) { const sp = document.createElement('span'); sp.className = `rf-fmt${v & RF_FMT_B ? ' rf-fmt-b' : ''}${v & RF_FMT_I ? ' rf-fmt-i' : ''}${v & RF_FMT_U ? ' rf-fmt-u' : ''}`; pezzo.parentNode.insertBefore(sp, pezzo); sp.appendChild(pezzo); }
+      if (v) { const sp = document.createElement('span'); sp.className = `rf-fmt${v & RF_FMT_B ? ' rf-fmt-b' : ''}${v & RF_FMT_I ? ' rf-fmt-i' : ''}${v & RF_FMT_U ? ' rf-fmt-u' : ''}`; if (v >> 3) { sp.dataset.s = String(v >> 3); sp.style.fontSize = `${(v >> 3) / RF_FMT_BASE}em`; } pezzo.parentNode.insertBefore(sp, pezzo); sp.appendChild(pezzo); }
       if (da === 0) break;
     }
   }
@@ -142,7 +147,7 @@ function rfFmtDipingi(f, voci) {
 /* ── la barra ── */
 function rfFmtBarraHtml() {
   const b = (k, testo, titolo, stile) => `<button type="button" data-fmt="${k}" title="${titolo}" onmousedown="event.preventDefault()" onclick="rfFmtApplica('${k}')" ${stile ? `style="${stile}"` : ''}>${testo}</button>`;
-  return `<div class="rf-fmt-barra" role="toolbar" aria-label="Formattazione">${b('b', 'G', 'Grassetto (⌘/Ctrl + B)', 'font-weight:800')}${b('i', 'C', 'Corsivo (⌘/Ctrl + I)', 'font-style:italic')}${b('u', 'S', 'Sottolineato (⌘/Ctrl + U)', 'text-decoration:underline')}<span class="sep"></span>${b('togli', 'Togli', 'Togli grassetto, corsivo e sottolineato dal testo selezionato')}<span class="aiuto">seleziona il testo, poi scegli</span></div>`;
+  return `<div class="rf-fmt-barra" role="toolbar" aria-label="Formattazione">${b('b', 'G', 'Grassetto (⌘/Ctrl + B)', 'font-weight:800')}${b('i', 'C', 'Corsivo (⌘/Ctrl + I)', 'font-style:italic')}${b('u', 'S', 'Sottolineato (⌘/Ctrl + U)', 'text-decoration:underline')}<span class="sep"></span>${b('meno', 'A−', 'Testo più piccolo', 'font-size:12px')}<span class="dim" id="rf-fmt-dim" title="Dimensione del testo selezionato, in punti come nel Word">12</span>${b('piu', 'A+', 'Testo più grande', 'font-size:16px')}<span class="sep"></span>${b('togli', 'Togli', 'Togli grassetto, corsivo e sottolineato dal testo selezionato')}<span class="aiuto">seleziona il testo, poi scegli</span></div>`;
 }
 function rfFmtApplica(k) {
   const f = rfFmtFoglio();
@@ -153,7 +158,13 @@ function rfFmtApplica(k) {
   const pieni = [];
   for (let x = sel[0]; x < sel[1]; x++) if (!/\s/.test(st.testo[x])) pieni.push(x);
   if (k === 'togli') { for (let x = sel[0]; x < sel[1]; x++) segni[x] = 0; }
-  else {
+  else if (k === 'piu' || k === 'meno') {
+    // ogni carattere un passo più grande (o più piccolo) della sua dimensione: le parti già diverse restano diverse
+    for (let x = sel[0]; x < sel[1]; x++) {
+      const ora = (segni[x] >> 3) || RF_FMT_BASE, i = RF_FMT_DIM.indexOf(ora), dopo = RF_FMT_DIM[Math.max(0, Math.min(RF_FMT_DIM.length - 1, (i < 0 ? RF_FMT_DIM.indexOf(RF_FMT_BASE) : i) + (k === 'piu' ? 1 : -1)))];
+      segni[x] = (segni[x] & 7) | (dopo === RF_FMT_BASE ? 0 : dopo << 3);
+    }
+  } else {
     const tutto = pieni.length && pieni.every(x => segni[x] & bit);
     for (let x = sel[0]; x < sel[1]; x++) segni[x] = tutto ? segni[x] & ~bit : segni[x] | bit;
   }
@@ -173,6 +184,13 @@ function rfFmtStatoBarra() {
     let on = false;
     if (segni && sel) { const a = Math.max(sel[1], sel[0] + 1); on = true; let visto = false; for (let x = sel[0]; x < a && x < st.testo.length; x++) { if (/\s/.test(st.testo[x])) continue; visto = true; if (!(segni[x] & bit)) { on = false; break; } } on = on && visto; }
     el.classList.toggle('acceso', on);
+  }
+  // la dimensione della selezione (o dove sta il cursore): una sola, o «—» se sono diverse
+  const d = document.getElementById('rf-fmt-dim');
+  if (d) {
+    let testo = String(RF_FMT_BASE);
+    if (segni && sel) { const viste = new Set(); for (let x = sel[0]; x < Math.max(sel[1], sel[0] + 1) && x < st.testo.length; x++) if (!/\s/.test(st.testo[x])) viste.add((segni[x] >> 3) || RF_FMT_BASE); if (viste.size === 1) testo = String([...viste][0]); else if (viste.size > 1) testo = '—'; }
+    d.textContent = testo;
   }
 }
 document.addEventListener('selectionchange', () => { if (state.route === 'review' && document.querySelector('.rf-fmt-barra')) rfFmtStatoBarra(); });
