@@ -26,8 +26,9 @@
 
 const RF_FMT_B = 1, RF_FMT_I = 2, RF_FMT_U = 4;
 // La dimensione del carattere (20.10.2026: «metti anche il font che puoi ingrandire»): in punti, come nel Word, il cui
-// testo è a 12. Nei segni sta dal quarto bit in su (0 = quella del Word).
-const RF_FMT_BASE = 12, RF_FMT_DIM = [9, 10, 11, 12, 14, 16, 18, 20, 24, 28];
+// testo è a 10 (Calibri Light 10 pt). Nei segni sta dal quarto bit in su (0 = quella del Word).
+const RF_FMT_BASE = 10,      // il corpo del Word è Calibri Light 10 pt (stile Normale dello stampo)
+      RF_FMT_DIM = [9, 10, 11, 12, 14, 16, 18, 20, 24, 28];
 RF.fmt = RF.fmt || { id: null, voci: [], timer: null };
 
 /* ── i pezzi: la stessa logica di src/lib/formattazione.ts ── */
@@ -146,7 +147,7 @@ function rfFmtDipingi(f, voci) {
 /* ── la barra ── */
 function rfFmtBarraHtml() {
   const b = (k, testo, titolo, stile) => `<button type="button" data-fmt="${k}" title="${titolo}" onmousedown="event.preventDefault()" onclick="rfFmtApplica('${k}')" ${stile ? `style="${stile}"` : ''}>${testo}</button>`;
-  return `<div class="rf-fmt-barra" role="toolbar" aria-label="Formattazione">${b('b', 'G', 'Grassetto (⌘/Ctrl + B)', 'font-weight:800')}${b('i', 'C', 'Corsivo (⌘/Ctrl + I)', 'font-style:italic')}${b('u', 'S', 'Sottolineato (⌘/Ctrl + U)', 'text-decoration:underline')}<span class="sep"></span>${b('meno', 'A−', 'Testo più piccolo', 'font-size:12px')}<span class="dim" id="rf-fmt-dim" title="Dimensione del testo selezionato, in punti come nel Word">12</span>${b('piu', 'A+', 'Testo più grande', 'font-size:16px')}<span class="sep"></span>${b('togli', 'Togli', 'Togli grassetto, corsivo, sottolineato e dimensione dal testo selezionato')}</div>`;
+  return `<div class="rf-fmt-barra" role="toolbar" aria-label="Formattazione">${b('b', 'G', 'Grassetto (⌘/Ctrl + B)', 'font-weight:800')}${b('i', 'C', 'Corsivo (⌘/Ctrl + I)', 'font-style:italic')}${b('u', 'S', 'Sottolineato (⌘/Ctrl + U)', 'text-decoration:underline')}<span class="sep"></span>${b('meno', 'A−', 'Testo più piccolo', 'font-size:12px')}<span class="dim" id="rf-fmt-dim" title="Dimensione del testo selezionato, in punti come nel Word">10</span>${b('piu', 'A+', 'Testo più grande', 'font-size:16px')}<span class="sep"></span>${b('togli', 'Togli', 'Togli grassetto, corsivo, sottolineato e dimensione dal testo selezionato')}</div>`;
 }
 function rfFmtApplica(k) {
   const f = rfFmtFoglio();

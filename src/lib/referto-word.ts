@@ -1,6 +1,6 @@
 import 'server-only';
 import { query } from './db';
-import { generaDocxReferto, ricomponiParagrafi } from './referto-docx';
+import { generaDocxReferto, ricomponiParagrafi, type DatiReferto } from './referto-docx';
 import { profiloMedico } from './referti-medici';
 import { appellativo, conTitolo, dataCh, dataVisitaDalTesto, destinatarioAffidabile, destinatarioDalSaluto, destinatarioInRubrica, scegliInRubrica, siglaDaEmail } from './referti-lettera';
 import { agganciaRiferimenti, documentiDelPaziente } from './referti-allegati';
@@ -25,7 +25,18 @@ import { nomeFileWord } from './nome-file-word';
 
 export type WordReferto = { docx: Buffer; nomeFile: string; stato: string; intorno: Attorno | null; dataBase: string };
 
+// Le parti del Word senza il Word (20.10.2026): la revisione semplice disegna il foglio con le STESSE parti — carta
+// intestata del medico, destinatario, data, titolo, paziente, piè di pagina, copia — così sullo schermo è come il Word.
+export type PartiWord = { dati: DatiReferto; nomeFile: string; stato: string; intorno: Attorno | null; dataBase: string; formato: string };
+
 export async function costruisciWord(sessione: { studioId: string; email?: string | null }, id: string): Promise<WordReferto | { errore: string; status: number }> {
+  const p = await partiWord(sessione, id);
+  if ('errore' in p) return p;
+  const docx = await generaDocxReferto(p.dati);
+  return { docx, nomeFile: p.nomeFile, stato: p.stato, intorno: p.intorno, dataBase: p.dataBase };
+}
+
+export async function partiWord(sessione: { studioId: string; email?: string | null }, id: string): Promise<PartiWord | { errore: string; status: number }> {
   const [b] = await query<{
     stato: string; testo_finale: string | null; payload: any;
     campi_confermati: any; created_at: string;
@@ -152,7 +163,7 @@ export async function costruisciWord(sessione: { studioId: string; email?: strin
   // Le date coi punti (20.10.2026): anche quelle scritte a mano in revisione o arrivate prima della regola.
   const testoWord = dateColPunto(testo);
   const firma = nomeMedico ? firmaDellaLettera(testoWord, medico) : { testo: testoWord, voci: [] };
-  const docx = await generaDocxReferto({
+  const dati: DatiReferto = {
     medico,
     intestazione,
     telefono,
@@ -173,10 +184,10 @@ export async function costruisciWord(sessione: { studioId: string; email?: strin
     grassetti: !b.payload?.forma_lettera?.spento && Array.isArray(b.payload?.forma_lettera?.grassetti) ? b.payload.forma_lettera.grassetti : [],
     // Grassetto, corsivo, sottolineato messi a mano nella revisione (20.10.2026).
     formattazione: [...(vociValide(b.payload?.formattazione) ?? []).map((v) => ({ ...v, testo: dateColPunto(v.testo) })), ...firma.voci],
-  });
+  };
 
   // «AA.MM.GG Cognome Nome» (20.10.2026, dallo studio): il paziente della cartella, se la bozza è collegata
   const [pz] = b.patient_id ? await query<{ cognome: string; nome: string }>('select cognome, nome from patients where id = $1 and studio_id = $2', [b.patient_id, sessione.studioId]) : [];
   const nomeFile = nomeFileWord(dataBase, pz ?? pazienteNome);
-  return { docx, nomeFile, stato: b.stato, intorno, dataBase };
+  return { dati, nomeFile, stato: b.stato, intorno, dataBase, formato };
 }

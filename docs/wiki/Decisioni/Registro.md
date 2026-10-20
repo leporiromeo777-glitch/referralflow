@@ -936,3 +936,8 @@ Cambia la decisione di stamattina («togliere cancella davvero»): la riga elimi
 (migrazione 093) e il file resta nel deposito, così un documento eliminato per sbaglio si può rimettere. Una cartella
 clinica non deve perdere documenti per un clic.
 
+## Revisione semplice: niente correzioni guidate, la pagina del Word — 20.10.2026
+Dallo studio: nella revisione semplice niente correzioni guidate, e il foglio è la pagina della lettera com'è nel Word.
+Deciso: i punti Dragon/Mac non si mostrano più lì (restano nella revisione completa); il foglio usa le misure dello stampo
+e le parti calcolate dalla stessa funzione del Word; si scrive solo il testo, il resto viene dai campi sopra il foglio.
+

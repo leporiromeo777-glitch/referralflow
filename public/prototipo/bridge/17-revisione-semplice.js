@@ -2,13 +2,16 @@
    meno correzioni e suggerimenti: la correzione guidata deve essere molto più pulita e intuitiva; le segretarie
    devono passare dal loro modo a questo, quindi deve essere facile da imparare»).
 
-   Vale per le lettere dettate SUL FOGLIO con Dragon: il medico ha visto il testo mentre lo dettava. I passi della
-   correzione guidata qui non servono (sono calcolati sul testo che il Mac ha ricavato dall'audio, non su questo).
-   La pagina è fatta come il lavoro di sempre della segreteria:
-   - la LETTERA, come un documento: ci si clicca e si scrive (correttore ortografico del browser acceso);
-   - a destra l'AUDIO e i soli PUNTI DA CONTROLLARE — dove Dragon e il Mac hanno capito cose diverse — con i numeri
-     per primi; per ognuno «Ascolta», «Va bene così», «Metti …»;
-   - in fondo «Scarica Word» e «Conferma la lettera».
+   Vale per le lettere dettate SUL FOGLIO con Dragon: il medico ha visto il testo mentre lo dettava.
+   Dal 20.10.2026 (lo studio: «togli tutte le correzioni guidate; il foglio non bianco ma quello della lettera, col cuore,
+   che si aggiorna col nome del paziente o del medico, con le dimensioni del Word, così l'impaginazione è identica»):
+   - niente punti da controllare: la lettera e basta;
+   - sopra il foglio i campi della lettera — paziente, data di nascita, destinatario, copia per conoscenza;
+   - il FOGLIO è la pagina del Word: A4, margini, intestazione col cuore e il medico, destinatario, «Lugano, data»,
+     titolo, paziente, testo, copia, piè di pagina, con le misure dello stampo (modelli/referto-carta-intestata.docx) e
+     le parti calcolate dalla stessa funzione del Word (/api/prototipo/referti/<id>/foglio). Si scrive solo il testo;
+     il resto si aggiorna da sé quando cambiano i campi. Dove il Word va a pagina nuova c'è una riga tratteggiata;
+   - a destra l'audio, le note del medico, «Scarica Word» e «Conferma la lettera».
    «Revisione completa» riporta alla revisione di prima, per chi la vuole. */
 (function () { const st = document.createElement('style'); st.textContent = `
 .sm-testa { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 16px; }
@@ -17,14 +20,27 @@
 .sm-testa .sm-dx { margin-left: auto; display: flex; gap: 8px; align-items: center; }
 .sm-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
 @media (max-width: 1100px) { .sm-grid { grid-template-columns: 1fr; } .sm-lato { position: static !important; } }
-.sm-carta { background: #fff; color: #1b1b1f; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 8px 28px rgba(20,30,70,.08); padding: 44px 56px 56px; max-width: 820px; margin: 0 auto; width: 100%; box-sizing: border-box; }
-@media (max-width: 700px) { .sm-carta { padding: 22px 18px 30px; } }
-.sm-a { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; font: 14px/1.5 Arial, Helvetica, sans-serif; color: #555; }
-.sm-a input { flex: 1; border: 0; border-bottom: 1px dashed #c9cdd8; background: transparent; font: inherit; color: #1b1b1f; padding: 2px 0; outline: none; }
-.sm-a input:focus { border-bottom-color: var(--accent); }
-.sm-a + .sm-a + * { margin-top: 18px; }
-.sm-a span { min-width: 46px; }
-#sm-testo { display: block; width: 100%; border: 0; outline: none; background: transparent; color: #1b1b1f; font: 15px/1.7 Arial, Helvetica, sans-serif; padding: 0; min-height: 360px; }
+.sm-carta { position: relative; min-width: 0; }
+.sm-campi { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, .8fr); gap: 8px 12px; margin: 0 84px 14px 0; }
+.sm-campi .field { margin: 0; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sm-campi .input { width: 100%; box-sizing: border-box; }
+.sm-campi label { font-size: 11.5px; color: var(--text-2); }
+.sm-campi .largo { grid-column: 1 / -1; }
+@media (max-width: 700px) { .sm-campi { grid-template-columns: 1fr; margin-right: 0; margin-top: 40px; } }
+.sm-tavolo { overflow-x: auto; padding: 4px 0 24px; }
+/* La pagina del Word: A4 (210 × 297 mm), margini 50 mm sopra e 20 mm ai lati e sotto, intestazione a 12,5 mm, logo
+   170 × 20 mm; corpo Calibri Light 10 pt a interlinea singola, giustificato; intestazione Avenir 8 pt; piè 10 pt. */
+.sm-pagina { position: relative; width: 210mm; min-height: 297mm; box-sizing: border-box; padding: 50mm 20mm 20mm; margin: 0 auto; background: #fff; color: #000; box-shadow: 0 1px 3px rgba(0,0,0,.1), 0 8px 28px rgba(20,30,70,.1); font-family: "Calibri Light", Calibri, Carlito, "Segoe UI", Arial, sans-serif; font-size: 10pt; line-height: 1.22; text-align: justify; }
+.sm-pagina .logo { position: absolute; left: 15.27mm; top: 6.43mm; width: 170mm; height: 19.95mm; }
+.sm-pagina .int { position: absolute; left: 20mm; right: 20mm; top: 26.6mm; font-family: "Avenir Book", Avenir, "Avenir Next", "Segoe UI", sans-serif; font-size: 8pt; line-height: 1.25; text-align: left; }
+.sm-pagina .piede { position: absolute; left: 20mm; right: 20mm; bottom: 9mm; font-size: 10pt; text-align: left; }
+.sm-pagina .r { min-height: 1.22em; white-space: pre-wrap; }
+.sm-pagina .titolo { text-transform: uppercase; letter-spacing: 1.5pt; margin-left: -1.9mm; }
+.sm-pagina .paziente { font-weight: 700; margin-left: -1.9mm; }
+.sm-pagina .copia { text-align: left; }
+.sm-pagina .salto { position: absolute; left: 0; right: 0; border-top: 1px dashed rgba(90,90,200,.55); pointer-events: none; }
+.sm-pagina .salto span { position: absolute; right: 6px; top: -9px; font: 10px/1 system-ui, sans-serif; color: rgba(90,90,200,.9); background: #fff; padding: 0 4px; }
+#sm-testo { display: block; width: 100%; border: 0; outline: none; background: transparent; color: #000; font: inherit; line-height: inherit; text-align: justify; padding: 0; min-height: 4em; }
 #sm-testo::selection { background: rgba(79,110,247,.25); }
 .sm-salvato { font-size: 12px; color: var(--text-3); }
 .sm-lato { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 14px; }
@@ -35,60 +51,17 @@
 .sm-barra { position: relative; flex: 1; height: 6px; border-radius: 3px; background: var(--surface-3); cursor: pointer; }
 .sm-barra #rv-ph { position: absolute; top: -4px; width: 3px; height: 14px; border-radius: 2px; background: var(--accent); }
 .sm-tempo { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.sm-p { border-top: 1px solid var(--border); padding: 11px 0 10px; }
-.sm-p:first-of-type { border-top: 0; }
-.sm-p-frase { font-size: 13.5px; line-height: 1.55; cursor: pointer; color: var(--text-2); }
-.sm-p-frase mark { background: rgba(214,92,42,.18); color: var(--text); border-radius: 4px; padding: 0 3px; font-weight: 600; }
-.sm-p-mac { font-size: 12.5px; color: var(--text-3); margin-top: 3px; }
-.sm-p-mac b { color: var(--text); }
-.sm-p-az { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 7px; }
-.sm-p.fatto { padding: 7px 0; }
-.sm-p.fatto .sm-p-frase { font-size: 12.5px; color: var(--text-3); }
-.sm-num { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #b3261e; margin-bottom: 2px; }
-.sm-vuoto { font-size: 13px; color: var(--text-2); }
 .sm-fine { display: flex; flex-direction: column; gap: 8px; }
 .sm-fine .btn { justify-content: center; }
 .sm-link { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; }
 .sm-link a { color: var(--accent); cursor: pointer; }
 .sm-note li { font-size: 13px; line-height: 1.5; margin: 4px 0; }
-.sm-altri summary { cursor: pointer; font-size: 13px; color: var(--text-2); padding-top: 8px; }
 `; document.head.appendChild(st); })();
 
 // La revisione semplice vale per la lettera dettata sul foglio, a meno che per questa bozza si sia chiesta quella completa.
 function rfSmVale(m) {
   return !!(m && m.dettato && m.dettato.foglio && typeof m.testo_attuale === 'string' && !((RF.revCompleta || {})[RF.loaded]));
 }
-// I punti da controllare: dove il testo di Dragon e la trascrizione del Mac non coincidono. Con le parole attorno
-// (per ritrovarli nella lettera e per farli capire a chi legge); fuori solo quelli che differiscono per spazi o punteggiatura.
-function rfSmPunti(m) {
-  const pz = (m.dettato && m.dettato.pezzi) || [], out = [];
-  const parole = (s) => String(s || '').split(/\s+/).filter(Boolean);
-  const osso = (s) => String(s || '').toLowerCase().replace(/[^a-zà-ÿ0-9%]/gi, '');
-  pz.forEach((p, k) => {
-    if (p.uguale) return;
-    if (p.t && p.mac && osso(p.t) === osso(p.mac)) return;
-    const prima = k > 0 && pz[k - 1].uguale ? parole(pz[k - 1].t).slice(-5).join(' ') : '';
-    const dopo = pz[k + 1] && pz[k + 1].uguale ? parole(pz[k + 1].t).slice(0, 4).join(' ') : '';
-    out.push({ k, t: p.t || '', mac: p.mac || '', s: p.s, prima, dopo, numero: /\d/.test(`${p.t || ''} ${p.mac || ''}`) });
-  });
-  return out;
-}
-// Dove sta un punto nella lettera di adesso (che può essere stata corretta): le parole di Dragon dopo il loro contesto.
-// → { da, a } (da === a: il punto in cui il Mac ha sentito una parola che Dragon non ha scritto), o null.
-function rfSmTrova(testo, p) {
-  const esc = (w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = (s) => String(s).split(/\s+/).filter(Boolean).map(esc).join('\\s+');
-  const prima = p.prima ? re(p.prima) : '', cosa = p.t ? re(p.t) : '', dopo = p.dopo ? re(p.dopo) : '';
-  for (const [a, b] of [[prima, dopo], [prima, ''], ['', dopo]]) {
-    if (!cosa && !a) continue;
-    if (!a && !b) continue;
-    const m = new RegExp(`(${a})(\\s*)(${cosa})${b ? `(?=\\s*${b})` : ''}`, 'i').exec(testo);
-    if (m) { const da = m.index + m[1].length + (cosa ? m[2].length : 0); return { da, a: da + (cosa ? m[3].length : 0) }; }
-  }
-  if (cosa) { const m = new RegExp(cosa, 'i').exec(testo); if (m) return { da: m.index, a: m.index + m[0].length }; }
-  return null;
-}
-
 function rfSmStato() {
   const id = RF.loaded, m = RF.meta || {};
   // si riparte dalla bozza appena caricata (un'altra finestra può averla cambiata), tranne se qui c'è ancora da salvare
@@ -101,25 +74,10 @@ function rfSmStato() {
 
 function rfSmHtml() {
   const m = RF.meta || {}, sm = rfSmStato(), id = RF.loaded, conf = m.stato !== 'bozza';
-  const punti = rfSmPunti(m), numeri = punti.filter(p => p.numero), altri = punti.filter(p => !p.numero);
-  const daFare = (l) => l.filter(p => !sm.fatti[p.k]).length;
   const quando = m.dettato_il ? new Date(m.dettato_il).toLocaleString('it-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
-  const punto = (p) => {
-    const fatto = sm.fatti[p.k];
-    const frase = `${p.prima ? `…${rfEsc(p.prima)} ` : ''}<mark>${p.t ? rfEsc(p.t) : '∅'}</mark>${p.dopo ? ` ${rfEsc(p.dopo)}…` : ''}`;
-    if (fatto) return `<div class="sm-p fatto"><div class="sm-p-frase" onclick="rfSmMostra(${p.k})">✓ ${fatto === 'cambiato' ? `Messo «${rfEsc(p.mac)}»` : `Lasciato «${rfEsc(p.t || '—')}»`} · <a onclick="event.stopPropagation();rfSmRiapri(${p.k})" style="color:var(--accent);cursor:pointer">riapri</a></div></div>`;
-    const mac = p.t ? (p.mac ? `Il Mac ha sentito: <b>${rfEsc(p.mac)}</b>` : 'Il Mac qui non ha sentito niente') : `Il Mac ha sentito anche: <b>${rfEsc(p.mac)}</b>`;
-    return `<div class="sm-p" id="sm-p-${p.k}">${p.numero ? '<span class="sm-num">Numero</span>' : ''}<div class="sm-p-frase" onclick="rfSmMostra(${p.k})" title="Mostralo nella lettera">${frase}</div><div class="sm-p-mac">${mac}</div>
-      <div class="sm-p-az">${p.s != null ? `<button class="btn sm" onclick="rfSmAscolta(${p.k})">${ICONS.play || ''} Ascolta</button>` : ''}${conf ? '' : `<button class="btn sm" onclick="rfSmFatto(${p.k}, 'tenuto')">Va bene così</button>${p.mac ? `<button class="btn sm" onclick="rfSmMetti(${p.k})">${p.t ? 'Metti' : 'Aggiungi'} «${rfEsc(p.mac.length > 24 ? p.mac.slice(0, 24) + '…' : p.mac)}»</button>` : ''}`}</div></div>`;
-  };
-  const restano = daFare(punti);
-  const attesa = !!(m.dettato && m.dettato.in_attesa);
-  const riassunto = attesa ? '<div class="sm-vuoto">⏳ <b>Controllo con l’audio in corso.</b> I punti da controllare arrivano fra un paio di minuti; intanto la lettera si può già leggere e correggere.</div>'
-    : !punti.length ? '<div class="sm-vuoto">Niente da controllare: Dragon e il Mac hanno capito le stesse parole.</div>'
-    : !restano ? '<div class="sm-vuoto">✓ Tutto controllato.</div>'
-    : `<div class="caption" style="margin-bottom:6px">Dove Dragon e il Mac hanno capito cose diverse. Ascolta e scegli; se va bene, «Va bene così».</div>`;
   const note = (Array.isArray(m.note_segreteria) ? m.note_segreteria : []).filter(n => typeof n === 'string' && n.trim());
-  const dest = (RF.campi && RF.campi.medico_destinatario) || '';
+  const c = RF.campi || {};
+  const campo = (k, etichetta, ph, classe = '') => `<div class="field ${classe}"><label for="sm-c-${k}">${etichetta}</label><input class="input" id="sm-c-${k}" value="${rfEsc(c[k] || '')}" placeholder="${ph}" ${conf ? 'readonly' : ''} oninput="rfSmCampo('${k}', this.value)" autocomplete="off"></div>`;
   return `<div class="sm-testa">
       <button class="btn sm ghost" onclick="go('#/reports')">${ICONS.arrowL || '←'} Referti</button>
       <div><h2>${rfEsc(m.paziente || 'Paziente non indicato')}</h2><div class="sm-chi">${rfEsc([m.nascita, m.medico ? `lettera di ${m.medico}` : 'lettera', quando ? `dettata il ${quando}` : ''].filter(Boolean).join(' · '))}</div></div>
@@ -127,16 +85,15 @@ function rfSmHtml() {
     </div>
     <div class="sm-grid">
       <div class="sm-carta">
-        <div class="sm-a"><span>A:</span><input id="sm-dest" value="${rfEsc(dest)}" placeholder="Destinatario (Dr. med. …)" ${conf ? 'readonly' : ''} oninput="rfSmDest(this.value)" aria-label="Destinatario"></div>
-        <div class="sm-a"><span>Copia:</span><input id="sm-cc" value="${rfEsc((RF.campi && RF.campi.copia_conoscenza) || '')}" placeholder="Copia per conoscenza (Dr. med. …; Dr. med. …)" ${conf ? 'readonly' : ''} oninput="rfSmCc(this.value)" aria-label="Copia per conoscenza" title="Uno o più medici, separati da «;»: nel Word escono sotto «Copia per conoscenza:» col loro indirizzo della rubrica"></div>
-        <div id="sm-testo" lang="it" spellcheck="true" role="textbox" aria-multiline="true" contenteditable="${conf ? 'false' : 'plaintext-only'}" oninput="rfSmScrive(this)" aria-label="Testo della lettera">${rfEsc(sm.testo)}</div>
+        <div class="sm-campi">
+          ${campo('nome_paziente', 'Paziente', 'Cognome Nome')}${campo('data_nascita', 'Data di nascita', 'gg.mm.aaaa')}
+          ${campo('medico_destinatario', 'Destinatario', 'Dr. med. …', 'largo')}
+          ${campo('copia_conoscenza', 'Copia per conoscenza', 'Dr. med. …; Dr. med. … (separati da «;»)', 'largo')}
+        </div>
+        <div class="sm-tavolo" id="sm-tavolo">${rfSmPaginaHtml(sm, conf)}</div>
       </div>
       <div class="sm-lato">
         <div class="sm-box"><div class="sm-audio"><button class="btn sm" id="rv-play" onclick="rvToggle()">${ICONS.play || ''} Play</button><div class="sm-barra" onclick="rfSmBarra(event, this)"><div id="rv-ph" style="left:0"></div></div><span class="sm-tempo"><span id="rv-t">0:00</span> / ${rfEsc(RV_AUDIO.label || '')}</span></div>${typeof rfPedHtml === 'function' ? `<div class="rf-ped-riga" style="margin-top:8px">${rfPedHtml()}</div>` : ''}</div>
-        <div class="sm-box"><h3>Da controllare${restano ? ` · ${restano}` : ''}</h3>${riassunto}
-          ${numeri.map(punto).join('')}
-          ${altri.length ? (numeri.length ? `<details class="sm-altri" ${daFare(numeri) ? '' : 'open'}><summary>Altre parole (${daFare(altri)} da guardare)</summary>${altri.map(punto).join('')}</details>` : altri.map(punto).join('')) : ''}
-        </div>
         ${note.length ? `<div class="sm-box"><h3>Note del medico per te</h3><ul class="sm-note" style="margin:6px 0 0;padding-left:18px">${note.map(n => `<li>${rfEsc(n)}</li>`).join('')}</ul></div>` : ''}
         <div class="sm-box sm-fine">
           <button class="btn" onclick="rfSmWord()">${ICONS.file || ''} Scarica Word</button>
@@ -147,82 +104,78 @@ function rfSmHtml() {
     </div>`;
 }
 
-// Dopo ogni disegno: altezza del foglio, e il cursore torna dov'era se si stava scrivendo.
+/* ── la pagina del Word ── */
+// Le parti attorno al testo, come le mette il Word (stessa funzione sul server). Si chiedono all'apertura, dopo che
+// cambiano i campi e, ogni tanto, dopo che cambia il testo (il saluto può decidere il destinatario).
+function rfSmRighe(t, classe = '') { return String(t || '').split('\n').map(r => `<div class="r ${classe}">${rfEsc(r)}</div>`).join(''); }
+function rfSmPartiHtml(f) {
+  if (!f) return { testa: '', sotto: '', int: '', piede: '' };
+  const vuoti = '<div class="r"></div>'.repeat(Math.max(0, f.vuoti || 0));
+  const testa = `<div class="r"></div>${rfSmRighe(f.destinatario)}${f.via && f.via.trim() ? rfSmRighe(f.via) : ''}${vuoti}<div class="r">Lugano, ${rfEsc(f.data || '')}</div><div class="r"></div>${f.titolo && f.titolo.trim() ? rfSmRighe(f.titolo, 'titolo') : ''}${f.paziente && f.paziente.trim() ? rfSmRighe(f.paziente, 'paziente') : ''}<div class="r"></div>`;
+  return { testa, sotto: f.copia && f.copia.trim() ? rfSmRighe(f.copia, 'copia') : '', int: `<b>${rfEsc(f.medico || '')}</b>${f.intestazione ? `<br>${String(f.intestazione).split('\n').map(rfEsc).join('<br>')}` : ''}`, piede: rfEsc(f.piede || '') };
+}
+function rfSmPaginaHtml(sm, conf) {
+  const p = rfSmPartiHtml(RF.smFoglio && RF.smFoglio.id === sm.id ? RF.smFoglio.parti : null);
+  return `<div class="sm-pagina" id="sm-pagina">
+      <img class="logo" src="carta-intestata-word.png" alt="">
+      <div class="int" id="sm-int">${p.int}</div>
+      <div id="sm-testa">${p.testa}</div>
+      <div id="sm-testo" lang="it" spellcheck="true" role="textbox" aria-multiline="true" contenteditable="${conf ? 'false' : 'plaintext-only'}" oninput="rfSmScrive(this)" aria-label="Testo della lettera">${rfEsc(sm.testo)}</div>
+      <div id="sm-sotto">${p.sotto}</div>
+      <div class="piede" id="sm-piede">${p.piede}</div>
+    </div>`;
+}
+async function rfSmFoglioCarica(forza) {
+  const id = RF.loaded; if (!id) return;
+  if (!forza && RF.smFoglio && RF.smFoglio.id === id && Date.now() - RF.smFoglio.il < 8000) return;
+  RF.smFoglio = Object.assign(RF.smFoglio && RF.smFoglio.id === id ? RF.smFoglio : { id }, { il: Date.now() });
+  try {
+    const r = await fetch(`/api/prototipo/referti/${id}/foglio`, { credentials: 'include', cache: 'no-store' });
+    if (!r.ok || RF.loaded !== id) return;
+    RF.smFoglio = { id, il: Date.now(), parti: await r.json() };
+    const p = rfSmPartiHtml(RF.smFoglio.parti);
+    const metti = (k, h) => { const el = document.getElementById(k); if (el && el.innerHTML !== h) el.innerHTML = h; };
+    metti('sm-int', p.int); metti('sm-testa', p.testa); metti('sm-sotto', p.sotto); metti('sm-piede', p.piede);
+    rfSmPagine();
+  } catch (_) { /* resta quello di prima */ }
+}
+// Dove il Word va a pagina nuova: ogni 227 mm di contenuto (297 − 50 sopra − 20 sotto), una riga tratteggiata.
+function rfSmPagine() {
+  const pg = document.getElementById('sm-pagina'); if (!pg) return;
+  pg.querySelectorAll('.salto').forEach(x => x.remove());
+  const mm = pg.offsetWidth / 210, alto = pg.scrollHeight;
+  for (let k = 1; 50 * mm + 227 * mm * k < alto - 20 * mm; k++) {
+    const d = document.createElement('div'); d.className = 'salto'; d.style.top = `${Math.round((50 + 227 * k) * mm)}px`;
+    d.innerHTML = `<span>nel Word qui comincia la pagina ${k + 1}</span>`; pg.appendChild(d);
+  }
+}
+// Il foglio largo 210 mm: se la colonna è più stretta, si rimpicciolisce tutto insieme (le righe vanno a capo come nel Word).
+function rfSmScala() {
+  const t = document.getElementById('sm-tavolo'), pg = document.getElementById('sm-pagina'); if (!t || !pg) return;
+  pg.style.zoom = ''; const z = Math.min(1, (t.clientWidth - 2) / pg.offsetWidth);
+  if (z < 1) pg.style.zoom = String(Math.max(0.4, z));
+}
+window.addEventListener('resize', () => { if (document.getElementById('sm-pagina')) { rfSmScala(); rfSmPagine(); } });
+
+// Dopo ogni disegno: il cursore torna dov'era se si stava scrivendo; le parti del Word e i salti di pagina.
 function rfSmDopo(cursore) {
   const el = document.getElementById('sm-testo'); if (!el) return;
-  rfSmAttendi();
   if (typeof rfFmtDopoDisegno === 'function') rfFmtDopoDisegno();      // grassetto, corsivo, sottolineato (20.10.2026)
   if (cursore) { try { el.focus({ preventScroll: true }); rfSmSeleziona(el, cursore[0], cursore[1]); } catch (_) { /* niente */ } }
+  rfSmScala(); rfSmPagine(); void rfSmFoglioCarica();
   if (typeof rvTick === 'function') rvTick();
-}
-// La lettera del foglio è in revisione da subito (19.10.2026); il controllo con l'audio arriva dalla catena dopo un
-// paio di minuti. Finché non c'è, la pagina chiede ogni 20 secondi; quando arriva aggiunge i punti — la lettera non si tocca.
-function rfSmAttendi() {
-  const m = RF.meta || {}, id = RF.loaded;
-  if (!(m.dettato && m.dettato.in_attesa) || RF.smAttesa === id) return;
-  RF.smAttesa = id;
-  const giro = async () => {
-    if (RF.loaded !== id || state.route !== 'review') { RF.smAttesa = null; return; }
-    try {
-      const r = await fetch(`/api/prototipo/referti/${id}`, { credentials: 'include', cache: 'no-store' });
-      const j = await r.json();
-      if (r.ok && j.dettato && !j.dettato.in_attesa && RF.loaded === id) {
-        Object.assign(RF.meta, { dettato: j.dettato, note_segreteria: j.note_segreteria, livello_verifica: j.livello_verifica, catena_leggera: j.catena_leggera, richiamo_proposto: j.richiamo_proposto });
-        if (j.audio && j.audio.dur) { RV_AUDIO.dur = j.audio.dur; RV_AUDIO.label = j.audio.label; }
-        RF.smAttesa = null; rfSmRidisegna();
-        const n = rfSmPunti(RF.meta).length;
-        toast(n ? `Controllo con l’audio arrivato: ${n === 1 ? 'un punto' : `${n} punti`} da guardare` : 'Controllo con l’audio arrivato: niente da controllare');
-        return;
-      }
-    } catch (_) { /* si riprova */ }
-    setTimeout(giro, 20000);
-  };
-  setTimeout(giro, 20000);
 }
 // Il foglio è un testo modificabile (dal 20.10.2026, per mostrare grassetto e corsivo; prima una casella di testo):
 // il suo valore e la selezione si leggono e si mettono per posizione nel testo.
 function rfSmValore(el) { return rfFmtLeggi({ parti: [el] }).testo; }
 function rfSmSeleziona(el, da, a) { return rfFmtSeleziona({ root: el, parti: [el] }, da, a); }
 function rfSmCursore(el) { const f = { root: el, parti: [el] }; return rfFmtSelezione(f, rfFmtLeggi(f)); }
-function rfSmScrive(el) { RF.sm.testo = rfSmValore(el); rfSmProgramma(); }
-function rfSmDest(v) { RF.campi = RF.campi || {}; RF.campi.medico_destinatario = v; RF.sm.campiCambiati = true; rfSmProgramma(); }
-// La copia per conoscenza (20.10.2026, dallo studio: «non viene salvata»): anche qui, salvata come il destinatario.
-function rfSmCc(v) { RF.campi = RF.campi || {}; RF.campi.copia_conoscenza = v; RF.sm.campiCambiati = true; rfSmProgramma(); }
+function rfSmScrive(el) { RF.sm.testo = rfSmValore(el); rfSmProgramma(); rfSmPagine(); }
+// I campi della lettera (paziente, nascita, destinatario, copia per conoscenza): si salvano con la lettera e il foglio si
+// aggiorna appena salvati.
+function rfSmCampo(k, v) { RF.campi = RF.campi || {}; RF.campi[k] = v; (RF.sm.campiToccati = RF.sm.campiToccati || new Set()).add(k); RF.sm.campiCambiati = true; rfSmProgramma(); }
 function rfSmBarra(e, el) { const r = el.getBoundingClientRect(); rvSeek(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * (RV_AUDIO.dur || 0), true); }
 
-// Mostra un punto nella lettera: lo seleziona e porta la pagina lì.
-function rfSmMostra(k) {
-  const p = rfSmPunti(RF.meta || {}).find(x => x.k === k), el = document.getElementById('sm-testo'); if (!p || !el) return null;
-  const dove = rfSmTrova(rfSmValore(el), p);
-  if (!dove) { toast('Questo punto nella lettera non c’è più: è già stato corretto'); return null; }
-  try { el.focus({ preventScroll: true }); } catch (_) { /* niente */ }
-  const r = rfSmSeleziona(el, dove.da, dove.a);
-  if (r) { const q = r.getBoundingClientRect(); window.scrollTo({ top: Math.max(0, q.top + window.scrollY - window.innerHeight / 3), behavior: 'smooth' }); }
-  return dove;
-}
-function rfSmAscolta(k) {
-  const p = rfSmPunti(RF.meta || {}).find(x => x.k === k); if (!p || p.s == null) return;
-  RF.sm.ascoltati.add(k); rfSmMostra(k);
-  rvPlay(Math.max(0, p.s - 1.5), p.s + 3);
-}
-function rfSmFatto(k, come) { RF.sm.fatti[k] = come; rfSmProgramma(); rfSmRidisegna(); }
-function rfSmRiapri(k) { delete RF.sm.fatti[k]; rfSmProgramma(); rfSmRidisegna(); }
-function rfSmMetti(k) {
-  const p = rfSmPunti(RF.meta || {}).find(x => x.k === k), el = document.getElementById('sm-testo'); if (!p || !el || !p.mac) return;
-  const valore = rfSmValore(el), dove = rfSmTrova(valore, p);
-  if (!dove) { toast('Non ritrovo il punto nella lettera: correggilo a mano'); return; }
-  let prima = valore.slice(0, dove.da), dopo = valore.slice(dove.a);
-  // «toracico.» + «oggi.» → «toracico oggi.»: la parola entra prima del punto, se il Mac ce l'ha dopo
-  const punto = !p.t && /[.,;:!?]$/.exec(prima.trimEnd());
-  if (punto && p.mac.endsWith(punto[0])) { prima = prima.trimEnd().slice(0, -1); dove.da = prima.length; }
-  const nuovo = p.t ? p.mac : `${/\s$/.test(prima) ? '' : ' '}${p.mac}${/^\s|^$/.test(dopo) ? '' : ' '}`;
-  // si scrive dentro il foglio come farebbe la persona: la formattazione attorno resta, e ⌘Z lo annulla
-  el.focus({ preventScroll: true }); rfSmSeleziona(el, prima.length, valore.length - dopo.length);
-  if (!document.execCommand('insertText', false, nuovo)) { el.textContent = prima + nuovo + dopo; }
-  RF.sm.testo = rfSmValore(el);
-  RF.sm.fatti[k] = 'cambiato'; rfSmProgramma(); rfSmRidisegna();
-  try { rfSmSeleziona(el, dove.da, dove.da + nuovo.length); } catch (_) { /* niente */ }
-}
 // Ridisegna solo la colonna di destra (il foglio non si ricrea: si perderebbe il cursore).
 function rfSmRidisegna() {
   const vecchia = document.querySelector('.sm-lato'); if (!vecchia) { render(); return; }
@@ -242,7 +195,7 @@ async function rfSmSalva() {
   try {
     const stato = { semplice: { fatti: sm.fatti, ascoltati: [...sm.ascoltati] } };
     const r = await fetch(`/api/prototipo/referti/${id}/testo`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, keepalive: true,
-      body: JSON.stringify({ testo: sm.testo, base: RF.base, stato, campi: sm.campiCambiati ? { medico_destinatario: (RF.campi || {}).medico_destinatario || '', ...((RF.campi || {}).copia_conoscenza !== undefined ? { copia_conoscenza: RF.campi.copia_conoscenza } : {}) } : undefined }) });
+      body: JSON.stringify({ testo: sm.testo, base: RF.base, stato, campi: sm.campiCambiati ? Object.fromEntries([...(sm.campiToccati || [])].map(k => [k, String((RF.campi || {})[k] ?? '')])) : undefined }) });
     const j = await r.json().catch(() => ({}));
     if (r.status === 409 && j.errore === 'cambiata') {
       openModal('La lettera è cambiata', '<p>Nel frattempo la lettera è stata salvata in un\'altra versione (da un\'altra finestra o da un altro computer). Per non sovrascriverla ricarico quella salvata: le ultime modifiche di questa pagina non sono state salvate.</p>', '<button class="btn primary" data-close>Va bene</button>');
@@ -250,8 +203,9 @@ async function rfSmSalva() {
     }
     if (!r.ok) throw new Error(String(r.status));
     if (j.impronta) RF.base = j.impronta;
-    sm.campiCambiati = false; sm.salvato = true;
+    const campi = sm.campiCambiati; sm.campiCambiati = false; sm.salvato = true;
     const e = document.getElementById('sm-salvato'); if (e) e.textContent = 'Salvato';
+    void rfSmFoglioCarica(campi);      // il foglio come lo farà il Word (subito se sono cambiati i campi)
     return true;
   } catch (_) { const e = document.getElementById('sm-salvato'); if (e) e.textContent = 'Non salvato: riprovo'; sm.timer = setTimeout(() => void rfSmSalva(), 5000); return false; }
 }
@@ -261,30 +215,18 @@ function rfSmCompleta() {
 }
 function rfSmSemplice() { const id = RF.loaded; RF.revCompleta = RF.revCompleta || {}; delete RF.revCompleta[id]; RF.sm = null; RF.loaded = null; render(); }
 
-// Conferma: se restano numeri da controllare lo dice e chiede di prenderne atto (lo stesso cancello della revisione completa).
+// Conferma (20.10.2026: senza i punti da controllare, tolti dalla revisione semplice).
 async function rfSmConferma() {
   const m = RF.meta || {}, sm = RF.sm, id = sm.id;
   if (!(await rfSmSalva())) { toast('La lettera non si è salvata: riprova'); return; }
-  const punti = rfSmPunti(m), numeri = punti.filter(p => p.numero), aperti = numeri.filter(p => !sm.fatti[p.k]);
-  const parziale = m.livello_verifica && m.livello_verifica !== 'pieno';
-  const attesa = !!(m.dettato && m.dettato.in_attesa);
-  const presa = aperti.length || parziale || attesa;
-  const altriAperti = punti.filter(p => !p.numero && !sm.fatti[p.k]).length;
   openModal('Conferma la lettera', `<p>La lettera viene chiusa: da qui si scarica il Word e si prepara la mail.</p>
-    ${altriAperti ? `<p class="caption">${altriAperti === 1 ? 'Una parola' : `${altriAperti} parole`} dove Dragon e il Mac hanno capito diverso ${altriAperti === 1 ? 'non è stata guardata' : 'non sono state guardate'}: resta com'è nella lettera.</p>` : ''}
-    ${m.richiamo_proposto && !m.richiamo ? `<label class="row mt-16" style="gap:8px;align-items:flex-start;cursor:pointer"><input type="checkbox" id="sm-richiamo" checked style="margin-top:3px"><span>Crea anche il <b>richiamo fra ${m.richiamo_proposto.mesi} mesi</b> (dal dettato)</span></label>` : ''}
-    ${presa ? `<label class="row mt-16" style="gap:8px;align-items:flex-start;cursor:pointer"><input type="checkbox" id="sm-presa" style="margin-top:3px"><span>${aperti.length ? `<b>${aperti.length === 1 ? 'Un numero' : `${aperti.length} numeri`} non ancora controllat${aperti.length === 1 ? 'o' : 'i'}</b>: confermo lo stesso.` : ''}${parziale ? ' La trascrizione di controllo del Mac è parziale: confermo lo stesso.' : ''}${attesa ? ' <b>Il controllo con l’audio non è ancora arrivato</b>: confermo lo stesso.' : ''}</span></label>` : ''}`,
+    ${m.richiamo_proposto && !m.richiamo ? `<label class="row mt-16" style="gap:8px;align-items:flex-start;cursor:pointer"><input type="checkbox" id="sm-richiamo" checked style="margin-top:3px"><span>Crea anche il <b>richiamo fra ${m.richiamo_proposto.mesi} mesi</b> (dal dettato)</span></label>` : ''}`,
     `<button class="btn" data-close>Continua a correggere</button><button class="btn primary" id="sm-conferma">Conferma</button>`);
   document.getElementById('sm-conferma').onclick = async () => {
-    const pa = document.getElementById('sm-presa');
-    if (presa && !(pa && pa.checked)) { toast('Spunta la casella per confermare con numeri non controllati'); return; }
     const b = document.getElementById('sm-conferma'); b.disabled = true; b.textContent = 'Confermo…';
     try {
-      const fatti = punti.filter(p => sm.fatti[p.k]);
       const r = await fetch(`/api/prototipo/referti/${id}/conferma`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-        testo: sm.testo, campi: RF.campi || {}, presa_atto: !!(pa && pa.checked), flag_totali: punti.length,
-        flag_accettati_senza_riascolto: fatti.filter(p => !sm.ascoltati.has(p.k)).length,
-        flag_critici_totali: numeri.length, flag_critici_chiusi: numeri.length - aperti.length,
+        testo: sm.testo, campi: RF.campi || {}, presa_atto: false, flag_totali: 0, flag_accettati_senza_riascolto: 0, flag_critici_totali: 0, flag_critici_chiusi: 0,
         tempo_revisione_s: Math.round((Date.now() - sm.inizio) / 1000), revisione_iniziata_at: new Date(sm.inizio).toISOString(),
       }) });
       if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.errore || String(r.status)); }
@@ -321,7 +263,7 @@ async function rfSmConferma() {
     let html = completa();
     const m = RF.meta || {};
     if (RF.live && id && RF.loaded === id && m.dettato && m.dettato.foglio && (RF.revCompleta || {})[id]) {
-      html = html.replace('<div class="rv-top-r">', `<div class="rv-top-r"><button class="btn sm primary" onclick="rfSmSemplice()" title="La lettera, l'audio e solo i punti da controllare">Revisione semplice</button>`);
+      html = html.replace('<div class="rv-top-r">', `<div class="rv-top-r"><button class="btn sm primary" onclick="rfSmSemplice()" title="La lettera sulla sua pagina del Word, con l'audio">Revisione semplice</button>`);
     }
     return html;
   };
