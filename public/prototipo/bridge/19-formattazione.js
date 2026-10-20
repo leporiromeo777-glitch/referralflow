@@ -253,6 +253,7 @@ function rfFmtDopoDisegno() {
   rfFmtCarica();
   const f = rfFmtFoglio(); if (!f) return;
   if (RF.fmt.voci.length) rfFmtDipingi(f, RF.fmt.voci);
+  if (typeof rfStoriaDopoDisegno === 'function') rfStoriaDopoDisegno(f);      // annulla e ripeti (20-annulla.js)
 }
 if (typeof rvRenderReport === 'function') {
   const rfFmtPrima = rvRenderReport;
