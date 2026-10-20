@@ -383,3 +383,14 @@ test('dispositivi del medico: tasti, microfono e Dragon validi, il resto scartat
   assert.ok('errore' in cambi({ dettatura: 'sì' }));
   assert.ok('errore' in cambi({}));
 });
+
+// La copia per conoscenza scritta sul foglio (20.10.2026): i medici, non il paziente.
+import { copieDalFoglio } from './dittafono-foglio-regole';
+test('foglio: la copia per conoscenza passa alla bozza', () => {
+  assert.deepEqual(copieDalFoglio('Copia: alla paziente'), []);
+  assert.deepEqual(copieDalFoglio('Copia: alla paziente\nCopia per conoscenza:\n- Dr. med. Mario Provacopia, Lugano\n- Dr.ssa Anna Altracopia'), ['Dr. med. Mario Provacopia, Lugano', 'Dr.ssa Anna Altracopia']);
+  assert.deepEqual(copieDalFoglio('Copia: alla paziente e al Dr. Provacopia'), ['Dr. Provacopia']);
+  assert.deepEqual(copieDalFoglio('copia al dottor Provacopia'), ['Provacopia']);
+  assert.deepEqual(copieDalFoglio('Copia: … , in sede'), []);
+  assert.deepEqual(copieDalFoglio(''), []);
+});

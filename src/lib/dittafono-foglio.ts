@@ -2,7 +2,7 @@ import 'server-only';
 import { registraTestoMacchina } from './audit/lineage';
 import { query } from './db';
 import { registraEvento } from './referti-eventi';
-import { letteraDalFoglio, nomeDestinatario, pazienteDalTesto, pulisciFoglio, type Foglio } from './dittafono-foglio-regole';
+import { letteraDalFoglio, nomeDestinatario, pazienteDalTesto, pulisciFoglio, type Foglio, copieDalFoglio } from './dittafono-foglio-regole';
 import { appellativo, conTitolo } from './referti-lettera';
 import { profiloMedico } from './referti-medici';
 import { dateColPunto } from './date-punti';
@@ -46,6 +46,11 @@ export async function foglioPer(studioId: string, medicoId: string | null, patie
 // Il dettato di questa bozza è stato scritto sul foglio? Allora la lettera del foglio diventa il testo da rivedere
 // (decisione dello studio, 12.10.2026); ciò che la catena ha ricavato dall'audio resta nel payload, come controllo.
 // Rende true se l'ha fatto. Il testo della catena è la «versione prima» nel registro delle versioni.
+// La copia per conoscenza scritta sul foglio va nel campo della bozza (20.10.2026): da lì la vedono la revisione, il Word e la mail.
+function copiaDelFoglio(copia: string): Record<string, string> {
+  const nomi = copieDalFoglio(copia);
+  return nomi.length ? { copia_conoscenza: nomi.join('; ') } : {};
+}
 export async function applicaFoglio(studioId: string, bozzaId: string, audioId: string | null): Promise<boolean> {
   if (!audioId) return false;
   const [a] = await query<{ dettato_testo: string | null; dettato_foglio: unknown; dettato_fonte: string | null; patient_id: string | null }>(
@@ -59,7 +64,7 @@ export async function applicaFoglio(studioId: string, bozzaId: string, audioId: 
             payload = jsonb_set(payload, '{foglio}', $4::jsonb),
             campi_confermati = coalesce(campi_confermati, '{}'::jsonb) || $5::jsonb
       where id = $1 and studio_id = $2 and stato = 'bozza' returning payload->>'testo_corretto' as prima`,
-    [bozzaId, studioId, lettera, JSON.stringify({ fonte: a?.dettato_fonte ?? 'dettatura', applicato_il: new Date().toISOString() }), JSON.stringify({ ...(destinatario ? { medico_destinatario: destinatario } : {}), ...chi })]);
+    [bozzaId, studioId, lettera, JSON.stringify({ fonte: a?.dettato_fonte ?? 'dettatura', applicato_il: new Date().toISOString() }), JSON.stringify({ ...(destinatario ? { medico_destinatario: destinatario } : {}), ...chi, ...copiaDelFoglio(foglio.copia) })]);
   if (!b) return false;
   await registraTestoMacchina({ studioId, bozzaId, nome: 'lettera_dal_foglio', modello: a?.dettato_fonte ?? 'dettatura', regole: 'lettera dettata sul foglio del dittafono: saluto, corpo dettato, chiusura e firma', prima: b.prima, dopo: lettera });
   console.log(`[foglio] bozza ${bozzaId.slice(0, 8)}: la lettera dettata sul foglio è il testo da rivedere (${lettera.length} caratteri)`);
@@ -116,7 +121,7 @@ export async function letteraSubito(studioId: string, audioId: string, userId: s
     `insert into referti_bozze (studio_id, file_id, payload, tipo, medico, testo_finale, campi_confermati, patient_id)
      values ($1, 'foglio-' || $2, $3, $4, $5, $6, $7, $8) on conflict (studio_id, file_id) do nothing returning id`,
     [studioId, audioId, JSON.stringify(payload), a.tipo === 'visita' ? 'visita' : 'referto', a.medico, lettera,
-      JSON.stringify({ ...(destinatario ? { medico_destinatario: destinatario } : {}), ...chi }), a.patient_id]);
+      JSON.stringify({ ...(destinatario ? { medico_destinatario: destinatario } : {}), ...chi, ...copiaDelFoglio(foglio.copia) }), a.patient_id]);
   if (!b) return null;
   await query(`update referti_audio set bozza_id = $3 where id = $1 and studio_id = $2 and bozza_id is null`, [audioId, studioId, b.id]);
   await registraTestoMacchina({ studioId, bozzaId: b.id, nome: 'lettera_dal_foglio', modello: fonte, regole: 'lettera dettata sul foglio del dittafono: saluto, corpo dettato, chiusura e firma (subito, prima della catena)', prima: null, dopo: lettera });

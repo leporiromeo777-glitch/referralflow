@@ -27,7 +27,7 @@ async function main() {
     pazienti.push(paz);
     const medici = ((await (await fetch(`${base}/api/referti/upload`, { headers: { cookie: C } })).json()) as any).medici ?? [];
     const corpo = 'ho rivisto la paziente inventata. Pressione arteriosa 130/80 mmHg. Prosegue bisoprololo 2,5 mg al mattino.';
-    const foglio = { destinatario: 'Egregio Signor\nDr. med. Altro Inventato\nVia e-mail', data: '19.10.2026', titolo: 'Visita', paziente: 'Paziente\nSubitoprova Anna – 03.04.1950', saluto: 'Caro collega,', chiusura: 'Con i migliori saluti\n\nDr. med. Inventato', copia: '' };
+    const foglio = { destinatario: 'Egregio Signor\nDr. med. Altro Inventato\nVia e-mail', data: '19.10.2026', titolo: 'Visita', paziente: 'Paziente\nSubitoprova Anna – 03.04.1950', saluto: 'Caro collega,', chiusura: 'Con i migliori saluti\n\nDr. med. Inventato', copia: 'Copia: alla paziente\nCopia per conoscenza:\n- Dr. med. Copia Inventata, Lugano' };
     const fd = new FormData(); fd.append('audio', new Blob([wav()], { type: 'audio/wav' }), 'prova-subito.wav'); fd.append('tipo', 'referto'); if (medici[0]) fd.append('medico', medici[0].id);
     fd.append('patient_id', paz); fd.append('dettato_testo', corpo); fd.append('dettato_foglio', JSON.stringify(foglio)); fd.append('dettato_fonte', 'dragon');
     const r = await fetch(`${base}/api/referti/upload`, { method: 'POST', headers: { cookie: C }, body: fd });
@@ -37,6 +37,15 @@ async function main() {
     const lettera = `Caro collega,\n\n${corpo}\n\nCon i migliori saluti\n\nDr. med. Inventato`;
     verifica(r.status === 201 && !!j.bozza && b?.t === lettera && b?.subito === 'true' && b?.controllo === 'in_corso' && b?.nascita === '03.04.1950' && b?.dest === 'Dr. med. Altro Inventato' && b?.patient_id === paz && a?.bozza_id === j.bozza && a?.stato === 'in_coda',
       `all'«Invia» la lettera del foglio è già la bozza da rivedere (destinatario, paziente con la data di nascita), l'audio resta in coda per il controllo (${r.status}, ${b?.controllo}, ${a?.stato})`);
+    // la copia per conoscenza scritta sul foglio arriva nella bozza (20.10.2026): prima si perdeva
+    const [cc] = j.bozza ? await query<{ cc: string | null }>(`select campi_confermati->>'copia_conoscenza' as cc from referti_bozze where id = $1`, [j.bozza]) : [];
+    const att = j.bozza ? ((await (await fetch(`${base}/api/prototipo/referti/${j.bozza}/allegati`, { headers: { cookie: C } })).json().catch(() => ({}))) as any) : {};
+    verifica(cc?.cc === 'Dr. med. Copia Inventata, Lugano', `la copia per conoscenza del foglio è nella bozza, senza «alla paziente» (${cc?.cc}; ${JSON.stringify(att?.copia?.voci ?? att?.attorno?.copia?.voci ?? null)})`);
+    // aggiunta a mano in revisione (come «Aggiungi un medico» nel riquadro): resta salvata, e la revisione la rilegge
+    const sa = await fetch(`${base}/api/prototipo/referti/${j.bozza}/testo`, { method: 'POST', headers: { cookie: C, 'Content-Type': 'application/json' }, body: JSON.stringify({ campi: { copia_conoscenza: 'Dr. med. Copia Inventata, Lugano; Dr. med. Seconda Inventata' } }) });
+    const att2 = (await (await fetch(`${base}/api/prototipo/referti/${j.bozza}/allegati`, { headers: { cookie: C } })).json().catch(() => ({}))) as any;
+    const nomi = (att2?.copia?.voci ?? []).map((x: any) => x.nome);
+    verifica(sa.status === 200 && att2?.copia?.fonte === 'revisione' && nomi.length === 2 && nomi.includes('Dr. med. Seconda Inventata'), `copia per conoscenza aggiunta in revisione: salvata e riletta (${sa.status}, ${JSON.stringify(nomi)})`);
     const coda = ((await (await fetch(`${base}/api/referti/coda`, { headers: { Authorization: `Bearer ${token}` } })).json()) as any).coda ?? [];
     const v = coda.find((x: any) => x.id === j.id);
     verifica(v?.dragon === true, `la coda dice alla catena che è un dettato Dragon: catena leggera (${v?.dragon})`);

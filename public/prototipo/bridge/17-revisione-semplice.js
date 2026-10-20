@@ -19,9 +19,11 @@
 @media (max-width: 1100px) { .sm-grid { grid-template-columns: 1fr; } .sm-lato { position: static !important; } }
 .sm-carta { background: #fff; color: #1b1b1f; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 8px 28px rgba(20,30,70,.08); padding: 44px 56px 56px; max-width: 820px; margin: 0 auto; width: 100%; box-sizing: border-box; }
 @media (max-width: 700px) { .sm-carta { padding: 22px 18px 30px; } }
-.sm-a { display: flex; align-items: baseline; gap: 10px; margin-bottom: 26px; font: 14px/1.5 Arial, Helvetica, sans-serif; color: #555; }
+.sm-a { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; font: 14px/1.5 Arial, Helvetica, sans-serif; color: #555; }
 .sm-a input { flex: 1; border: 0; border-bottom: 1px dashed #c9cdd8; background: transparent; font: inherit; color: #1b1b1f; padding: 2px 0; outline: none; }
 .sm-a input:focus { border-bottom-color: var(--accent); }
+.sm-a + .sm-a + * { margin-top: 18px; }
+.sm-a span { min-width: 46px; }
 #sm-testo { display: block; width: 100%; border: 0; outline: none; background: transparent; color: #1b1b1f; font: 15px/1.7 Arial, Helvetica, sans-serif; padding: 0; min-height: 360px; }
 #sm-testo::selection { background: rgba(79,110,247,.25); }
 .sm-salvato { font-size: 12px; color: var(--text-3); }
@@ -126,6 +128,7 @@ function rfSmHtml() {
     <div class="sm-grid">
       <div class="sm-carta">
         <div class="sm-a"><span>A:</span><input id="sm-dest" value="${rfEsc(dest)}" placeholder="Destinatario (Dr. med. …)" ${conf ? 'readonly' : ''} oninput="rfSmDest(this.value)" aria-label="Destinatario"></div>
+        <div class="sm-a"><span>Copia:</span><input id="sm-cc" value="${rfEsc((RF.campi && RF.campi.copia_conoscenza) || '')}" placeholder="Copia per conoscenza (Dr. med. …; Dr. med. …)" ${conf ? 'readonly' : ''} oninput="rfSmCc(this.value)" aria-label="Copia per conoscenza" title="Uno o più medici, separati da «;»: nel Word escono sotto «Copia per conoscenza:» col loro indirizzo della rubrica"></div>
         <div id="sm-testo" lang="it" spellcheck="true" role="textbox" aria-multiline="true" contenteditable="${conf ? 'false' : 'plaintext-only'}" oninput="rfSmScrive(this)" aria-label="Testo della lettera">${rfEsc(sm.testo)}</div>
       </div>
       <div class="sm-lato">
@@ -183,6 +186,8 @@ function rfSmSeleziona(el, da, a) { return rfFmtSeleziona({ root: el, parti: [el
 function rfSmCursore(el) { const f = { root: el, parti: [el] }; return rfFmtSelezione(f, rfFmtLeggi(f)); }
 function rfSmScrive(el) { RF.sm.testo = rfSmValore(el); rfSmProgramma(); }
 function rfSmDest(v) { RF.campi = RF.campi || {}; RF.campi.medico_destinatario = v; RF.sm.campiCambiati = true; rfSmProgramma(); }
+// La copia per conoscenza (20.10.2026, dallo studio: «non viene salvata»): anche qui, salvata come il destinatario.
+function rfSmCc(v) { RF.campi = RF.campi || {}; RF.campi.copia_conoscenza = v; RF.sm.campiCambiati = true; rfSmProgramma(); }
 function rfSmBarra(e, el) { const r = el.getBoundingClientRect(); rvSeek(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * (RV_AUDIO.dur || 0), true); }
 
 // Mostra un punto nella lettera: lo seleziona e porta la pagina lì.
@@ -237,7 +242,7 @@ async function rfSmSalva() {
   try {
     const stato = { semplice: { fatti: sm.fatti, ascoltati: [...sm.ascoltati] } };
     const r = await fetch(`/api/prototipo/referti/${id}/testo`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, keepalive: true,
-      body: JSON.stringify({ testo: sm.testo, base: RF.base, stato, campi: sm.campiCambiati ? { medico_destinatario: (RF.campi || {}).medico_destinatario || '' } : undefined }) });
+      body: JSON.stringify({ testo: sm.testo, base: RF.base, stato, campi: sm.campiCambiati ? { medico_destinatario: (RF.campi || {}).medico_destinatario || '', ...((RF.campi || {}).copia_conoscenza !== undefined ? { copia_conoscenza: RF.campi.copia_conoscenza } : {}) } : undefined }) });
     const j = await r.json().catch(() => ({}));
     if (r.status === 409 && j.errore === 'cambiata') {
       openModal('La lettera è cambiata', '<p>Nel frattempo la lettera è stata salvata in un\'altra versione (da un\'altra finestra o da un altro computer). Per non sovrascriverla ricarico quella salvata: le ultime modifiche di questa pagina non sono state salvate.</p>', '<button class="btn primary" data-close>Va bene</button>');

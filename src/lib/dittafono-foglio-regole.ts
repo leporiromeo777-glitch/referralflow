@@ -1,3 +1,4 @@
+import { copieDalDettato } from './referti-copia';
 // Il foglio del dittafono (12.10.2026, [[Piattaforma/Dittafono]]). PURO.
 //
 // Chi detta con un programma di dettatura non scrive più in una casella: scrive su un FOGLIO che ha già la carta
@@ -23,6 +24,33 @@ export function pulisciFoglio(grezzo: unknown): Foglio | null {
 export function letteraDalFoglio(foglio: Pick<Foglio, 'saluto' | 'chiusura'>, corpo: string): string {
   return [foglio.saluto, corpo, foglio.chiusura].map((x) => String(x ?? '').replace(/\r\n?/g, '\n').trim()).filter(Boolean).join('\n\n');
 }
+// La copia per conoscenza scritta sul foglio (20.10.2026, dallo studio: «la copia per conoscenza non viene salvata»):
+// la parte «Copia» del foglio non passava mai alla bozza. Qui se ne prendono i medici: ogni riga, tolti «Copia (per
+// conoscenza):», trattini e punti elenco; una riga come «copia al dottor Rossi e alla dottoressa Bianchi» si legge
+// come nel dettato. Il paziente e «in sede» non sono una copia per conoscenza (la riga «Copia: alla paziente» la mette
+// il profilo del medico). → i nomi, per il campo `copia_conoscenza` della bozza.
+const NON_MEDICO = /^(?:(?:al|alla|il|la|lo)\s+)?(?:paziente|pz\.?|signor[ae]?|interessat[oa])\b|^in\s+sede\b|^-+$/i;
+export function copieDalFoglio(copia: string): string[] {
+  const out: string[] = [];
+  const metti = (n: string) => {
+    // «… , in sede» è la riga del modello ancora da compilare: i puntini e «in sede» non sono un medico
+    const nome = n.replace(/…|\.{3}/g, '').replace(/,?\s*in\s+sede\s*$/i, '').replace(/^[\s\-–•*·,]+/, '').replace(/[\s.,;:]+$/, '').trim();
+    if (nome.length < 3 || !/[a-zà-ÿ]/i.test(nome) || NON_MEDICO.test(nome) || nome.length > 120) return;
+    if (!out.some((x) => x.toLowerCase() === nome.toLowerCase())) out.push(nome);
+  };
+  for (const grezza of String(copia ?? '').replace(/\r\n?/g, '\n').split('\n')) {
+    let r = grezza.trim().replace(/^[\-–•*·]+\s*/, '');
+    if (!r) continue;
+    const testa = /^(?:copia(?:\s+per\s+conoscenza)?|c\.\s?c\.|p\.\s?c\.|cc)\s*:\s*/i.exec(r);
+    if (testa) r = r.slice(testa[0].length).trim();
+    else if (/^(?:in\s+)?copia\b|^per\s+conoscenza\b/i.test(r)) { copieDalDettato(r).forEach(metti); continue; }
+    if (!r) continue;
+    // «alla paziente e al Dr. Rossi»: più persone sulla stessa riga
+    for (const pezzo of r.split(/\s*;\s*|\s+e\s+(?=(?:al|alla|il|la|dr|dott|prof)\b)/i)) metti(pezzo.replace(/^(?:al|alla|allo|ai|alle|a)\s+/i, ''));
+  }
+  return out;
+}
+
 // Il nome del destinatario dalle righe del blocco («Egregio Signor» / «Dr. med. Nome Cognome» / «FMH …» / «Via e-mail…»):
 // la riga col titolo, se c'è; se no la prima che non è un appellativo né un recapito. Vuoto se il blocco è ancora da compilare.
 export function nomeDestinatario(destinatario: string): string {

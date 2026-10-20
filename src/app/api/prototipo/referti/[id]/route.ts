@@ -83,7 +83,9 @@ export async function GET(_req: Request, props: { params: Promise<{ id: string }
     formato,
     tracce,
     tracce_in_arrivo: inArrivo?.n ?? 0,
-    campi: { nome_paziente: campo('nome_paziente'), data_nascita: campo('data_nascita'), medico_destinatario: campo('medico_destinatario'), medico_inviante: campo('medico_inviante') },
+    campi: { nome_paziente: campo('nome_paziente'), data_nascita: campo('data_nascita'), medico_destinatario: campo('medico_destinatario'), medico_inviante: campo('medico_inviante'),
+      // la copia per conoscenza, solo se scritta (dal foglio o in revisione): vuota non vuol dire «nessuna», vuol dire «dal dettato»
+      ...(typeof b.campi_confermati?.copia_conoscenza === 'string' ? { copia_conoscenza: b.campi_confermati.copia_conoscenza } : {}) },
     richiamo: p.richiamo && typeof p.richiamo === 'object' ? { mesi: Number(p.richiamo.mesi), creato_at: p.richiamo.creato_at ?? null } : null,
     richiamo_proposto: p.richiamo ? null : rilevaRichiamo([(b.testo_finale ?? p.testo_corretto ?? '') as string, ...(Array.isArray(p.note_segreteria) ? p.note_segreteria.filter((n: unknown) => typeof n === 'string') : [])]),
     revisione_prototipo: p.revisione_prototipo && typeof p.revisione_prototipo === 'object' ? p.revisione_prototipo : null,
