@@ -8,6 +8,7 @@ import { costruisciRevisione } from '@/lib/prototipo-revisione';
 import { formatoPerBozza } from '@/lib/referti-medici';
 import { rilevaRichiamo } from '@/lib/referti-richiami';
 import { vietato } from '@/lib/permessi';
+import { vociValide } from '@/lib/formattazione';
 
 export const dynamic = 'force-dynamic';
 
@@ -104,6 +105,8 @@ export async function GET(_req: Request, props: { params: Promise<{ id: string }
     dettato,
     // Il testo com'è, coi suoi paragrafi: la revisione semplice delle lettere dettate sul foglio lo mostra e lo corregge così (15.10.2026).
     testo_attuale: (b.testo_finale ?? p.testo_corretto ?? '') as string,
+    // grassetto, corsivo, sottolineato messi con la barra della revisione (20.10.2026)
+    formattazione: vociValide(p.formattazione) ?? [],
     ...rev,
   });
 }

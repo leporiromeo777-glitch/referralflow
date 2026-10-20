@@ -898,3 +898,9 @@ sceglie da solo (accesso del medico, o l'ultimo su quel computer). Il permesso d
 USB resta una volta per computer: è una sicurezza del browser, non si aggira. Il tasto di un medico non passa mai da solo
 a un altro.
 
+## Barra di formattazione nella revisione — 20.10.2026
+Dallo studio: grassetto, corsivo… su ciò che si evidenzia. Deciso: il testo della lettera resta testo semplice e la
+formattazione sta a parte (pezzo + quale comparsa), perché catena, audit, confronti e prove lavorano sul testo; il Word
+la applica. Tre stili (grassetto, corsivo, sottolineato) e «Togli». Il foglio della revisione semplice diventa un
+testo modificabile (una casella di testo non mostra la formattazione).
+

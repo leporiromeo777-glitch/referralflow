@@ -22,7 +22,7 @@
 .sm-a { display: flex; align-items: baseline; gap: 10px; margin-bottom: 26px; font: 14px/1.5 Arial, Helvetica, sans-serif; color: #555; }
 .sm-a input { flex: 1; border: 0; border-bottom: 1px dashed #c9cdd8; background: transparent; font: inherit; color: #1b1b1f; padding: 2px 0; outline: none; }
 .sm-a input:focus { border-bottom-color: var(--accent); }
-#sm-testo { display: block; width: 100%; border: 0; outline: none; resize: none; overflow: hidden; background: transparent; color: #1b1b1f; font: 15px/1.7 Arial, Helvetica, sans-serif; padding: 0; min-height: 360px; }
+#sm-testo { display: block; width: 100%; border: 0; outline: none; background: transparent; color: #1b1b1f; font: 15px/1.7 Arial, Helvetica, sans-serif; padding: 0; min-height: 360px; }
 #sm-testo::selection { background: rgba(79,110,247,.25); }
 .sm-salvato { font-size: 12px; color: var(--text-3); }
 .sm-lato { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 14px; }
@@ -126,7 +126,8 @@ function rfSmHtml() {
     <div class="sm-grid">
       <div class="sm-carta">
         <div class="sm-a"><span>A:</span><input id="sm-dest" value="${rfEsc(dest)}" placeholder="Destinatario (Dr. med. …)" ${conf ? 'readonly' : ''} oninput="rfSmDest(this.value)" aria-label="Destinatario"></div>
-        <textarea id="sm-testo" lang="it" spellcheck="true" ${conf ? 'readonly' : ''} oninput="rfSmScrive(this)" aria-label="Testo della lettera">${rfEsc(sm.testo)}</textarea>
+        ${conf || typeof rfFmtBarraHtml !== 'function' ? '' : rfFmtBarraHtml()}
+        <div id="sm-testo" lang="it" spellcheck="true" role="textbox" aria-multiline="true" contenteditable="${conf ? 'false' : 'plaintext-only'}" oninput="rfSmScrive(this)" aria-label="Testo della lettera">${rfEsc(sm.testo)}</div>
       </div>
       <div class="sm-lato">
         <div class="sm-box"><div class="sm-audio"><button class="btn sm" id="rv-play" onclick="rvToggle()">${ICONS.play || ''} Play</button><div class="sm-barra" onclick="rfSmBarra(event, this)"><div id="rv-ph" style="left:0"></div></div><span class="sm-tempo"><span id="rv-t">0:00</span> / ${rfEsc(RV_AUDIO.label || '')}</span></div>${typeof rfPedHtml === 'function' ? `<div class="rf-ped-riga" style="margin-top:8px">${rfPedHtml()}</div>` : ''}</div>
@@ -147,9 +148,9 @@ function rfSmHtml() {
 // Dopo ogni disegno: altezza del foglio, e il cursore torna dov'era se si stava scrivendo.
 function rfSmDopo(cursore) {
   const el = document.getElementById('sm-testo'); if (!el) return;
-  rfSmAlto(el);
   rfSmAttendi();
-  if (cursore) { try { el.focus({ preventScroll: true }); el.setSelectionRange(cursore[0], cursore[1]); } catch (_) { /* niente */ } }
+  if (typeof rfFmtDopoDisegno === 'function') rfFmtDopoDisegno();      // grassetto, corsivo, sottolineato (20.10.2026)
+  if (cursore) { try { el.focus({ preventScroll: true }); rfSmSeleziona(el, cursore[0], cursore[1]); } catch (_) { /* niente */ } }
   if (typeof rvTick === 'function') rvTick();
 }
 // La lettera del foglio è in revisione da subito (19.10.2026); il controllo con l'audio arriva dalla catena dopo un
@@ -176,23 +177,23 @@ function rfSmAttendi() {
   };
   setTimeout(giro, 20000);
 }
-function rfSmAlto(el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight + 4}px`; }
-function rfSmScrive(el) { RF.sm.testo = el.value; rfSmAlto(el); rfSmProgramma(); }
+// Il foglio è un testo modificabile (dal 20.10.2026, per mostrare grassetto e corsivo; prima una casella di testo):
+// il suo valore e la selezione si leggono e si mettono per posizione nel testo.
+function rfSmValore(el) { return rfFmtLeggi({ parti: [el] }).testo; }
+function rfSmSeleziona(el, da, a) { return rfFmtSeleziona({ root: el, parti: [el] }, da, a); }
+function rfSmCursore(el) { const f = { root: el, parti: [el] }; return rfFmtSelezione(f, rfFmtLeggi(f)); }
+function rfSmScrive(el) { RF.sm.testo = rfSmValore(el); rfSmProgramma(); }
 function rfSmDest(v) { RF.campi = RF.campi || {}; RF.campi.medico_destinatario = v; RF.sm.campiCambiati = true; rfSmProgramma(); }
 function rfSmBarra(e, el) { const r = el.getBoundingClientRect(); rvSeek(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * (RV_AUDIO.dur || 0), true); }
 
 // Mostra un punto nella lettera: lo seleziona e porta la pagina lì.
 function rfSmMostra(k) {
   const p = rfSmPunti(RF.meta || {}).find(x => x.k === k), el = document.getElementById('sm-testo'); if (!p || !el) return null;
-  const dove = rfSmTrova(el.value, p);
+  const dove = rfSmTrova(rfSmValore(el), p);
   if (!dove) { toast('Questo punto nella lettera non c’è più: è già stato corretto'); return null; }
-  // quanto è in basso il punto: un doppione invisibile del foglio, col testo fin lì
-  const c = document.createElement('div'), s = getComputedStyle(el);
-  Object.assign(c.style, { position: 'absolute', visibility: 'hidden', whiteSpace: 'pre-wrap', overflowWrap: 'break-word', width: `${el.clientWidth}px`, font: s.font, lineHeight: s.lineHeight });
-  c.textContent = el.value.slice(0, dove.da); document.body.appendChild(c);
-  const y = el.getBoundingClientRect().top + window.scrollY + c.scrollHeight; c.remove();
-  window.scrollTo({ top: Math.max(0, y - window.innerHeight / 3), behavior: 'smooth' });
-  try { el.focus({ preventScroll: true }); el.setSelectionRange(dove.da, dove.a); } catch (_) { /* niente */ }
+  try { el.focus({ preventScroll: true }); } catch (_) { /* niente */ }
+  const r = rfSmSeleziona(el, dove.da, dove.a);
+  if (r) { const q = r.getBoundingClientRect(); window.scrollTo({ top: Math.max(0, q.top + window.scrollY - window.innerHeight / 3), behavior: 'smooth' }); }
   return dove;
 }
 function rfSmAscolta(k) {
@@ -204,16 +205,19 @@ function rfSmFatto(k, come) { RF.sm.fatti[k] = come; rfSmProgramma(); rfSmRidise
 function rfSmRiapri(k) { delete RF.sm.fatti[k]; rfSmProgramma(); rfSmRidisegna(); }
 function rfSmMetti(k) {
   const p = rfSmPunti(RF.meta || {}).find(x => x.k === k), el = document.getElementById('sm-testo'); if (!p || !el || !p.mac) return;
-  const dove = rfSmTrova(el.value, p);
+  const valore = rfSmValore(el), dove = rfSmTrova(valore, p);
   if (!dove) { toast('Non ritrovo il punto nella lettera: correggilo a mano'); return; }
-  let prima = el.value.slice(0, dove.da), dopo = el.value.slice(dove.a);
+  let prima = valore.slice(0, dove.da), dopo = valore.slice(dove.a);
   // «toracico.» + «oggi.» → «toracico oggi.»: la parola entra prima del punto, se il Mac ce l'ha dopo
   const punto = !p.t && /[.,;:!?]$/.exec(prima.trimEnd());
   if (punto && p.mac.endsWith(punto[0])) { prima = prima.trimEnd().slice(0, -1); dove.da = prima.length; }
   const nuovo = p.t ? p.mac : `${/\s$/.test(prima) ? '' : ' '}${p.mac}${/^\s|^$/.test(dopo) ? '' : ' '}`;
-  el.value = prima + nuovo + dopo; RF.sm.testo = el.value;
+  // si scrive dentro il foglio come farebbe la persona: la formattazione attorno resta, e ⌘Z lo annulla
+  el.focus({ preventScroll: true }); rfSmSeleziona(el, prima.length, valore.length - dopo.length);
+  if (!document.execCommand('insertText', false, nuovo)) { el.textContent = prima + nuovo + dopo; }
+  RF.sm.testo = rfSmValore(el);
   RF.sm.fatti[k] = 'cambiato'; rfSmProgramma(); rfSmRidisegna();
-  const t = document.getElementById('sm-testo'); if (t) { try { t.focus({ preventScroll: true }); t.setSelectionRange(dove.da, dove.da + nuovo.length); } catch (_) { /* niente */ } }
+  try { rfSmSeleziona(el, dove.da, dove.da + nuovo.length); } catch (_) { /* niente */ }
 }
 // Ridisegna solo la colonna di destra (il foglio non si ricrea: si perderebbe il cursore).
 function rfSmRidisegna() {
@@ -305,7 +309,7 @@ async function rfSmConferma() {
   PAGES.review = () => {
     const id = state.params && state.params.id;
     if (RF.live && id && RF.loaded === id && rfSmVale(RF.meta)) {
-      const a = document.activeElement, cursore = a && a.id === 'sm-testo' ? [a.selectionStart, a.selectionEnd] : null;
+      const a = document.activeElement, cursore = a && a.id === 'sm-testo' ? rfSmCursore(a) : null;
       const html = rfSmHtml();
       setTimeout(() => rfSmDopo(cursore), 0);
       return html;
