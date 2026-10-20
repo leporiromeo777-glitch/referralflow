@@ -87,3 +87,13 @@ test('firma: nome del medico completo e in grassetto, parentesi a 9 punti', asyn
   assert.match(xml.slice(xml.lastIndexOf('<w:r>', k), k), /<w:b\/>/);
   assert.match(xml.slice(xml.lastIndexOf('<w:r>', j), j), /<w:sz w:val="18"\/>/);
 });
+
+// Le date coi punti (20.10.2026): la stessa regola della catena.
+import { dateColPunto } from './date-punti';
+test('date: con i punti, non con la barra; pressione e frazioni restano', () => {
+  const prima = 'Visita del 12/03/2024, controllo 3/4/24 e ECG 05/2023. PA 130/80 mmHg, 1/2 cp, punteggio 3/5, 31/12/2025, 32/12/2024.';
+  const dopo = dateColPunto(prima);
+  assert.equal(dopo, 'Visita del 12.03.2024, controllo 3.4.24 e ECG 05.2023. PA 130/80 mmHg, 1/2 cp, punteggio 3/5, 31.12.2025, 32/12/2024.');
+  assert.equal(dopo.length, prima.length);
+  assert.equal(dateColPunto('senza date'), 'senza date');
+});

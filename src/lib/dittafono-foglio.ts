@@ -5,6 +5,7 @@ import { registraEvento } from './referti-eventi';
 import { letteraDalFoglio, nomeDestinatario, pazienteDalTesto, pulisciFoglio, type Foglio } from './dittafono-foglio-regole';
 import { appellativo, conTitolo } from './referti-lettera';
 import { profiloMedico } from './referti-medici';
+import { dateColPunto } from './date-punti';
 
 // Il foglio del dittafono, lato server (12.10.2026, [[Piattaforma/Dittafono]]): (1) le parti del foglio già scritte,
 // prese dagli STESSI ingredienti del Word — profilo del medico che detta (intestazione, titolo, chiusura, firma, copia),
@@ -51,7 +52,7 @@ export async function applicaFoglio(studioId: string, bozzaId: string, audioId: 
     'select dettato_testo, dettato_foglio, dettato_fonte, patient_id from referti_audio where id = $1 and studio_id = $2', [audioId, studioId]);
   const foglio = pulisciFoglio(a?.dettato_foglio), corpo = (a?.dettato_testo ?? '').trim();
   if (!foglio || !corpo) return false;
-  const lettera = letteraDalFoglio(foglio, corpo), destinatario = nomeDestinatario(foglio.destinatario);
+  const lettera = dateColPunto(letteraDalFoglio(foglio, corpo)), destinatario = nomeDestinatario(foglio.destinatario);      // date coi punti (20.10.2026)
   const chi = await pazienteDelFoglio(studioId, a?.patient_id ?? null, foglio.paziente);
   const [b] = await query<{ prima: string | null }>(
     `update referti_bozze set testo_finale = $3,
@@ -99,7 +100,7 @@ export async function letteraSubito(studioId: string, audioId: string, userId: s
     `select dettato_testo, dettato_foglio, dettato_fonte, patient_id, medico, tipo, created_at::text as creato from referti_audio where id = $1 and studio_id = $2 and bozza_id is null`, [audioId, studioId]);
   const foglio = pulisciFoglio(a?.dettato_foglio), corpo = (a?.dettato_testo ?? '').trim();
   if (!a || !foglio || !corpo) return null;
-  const lettera = letteraDalFoglio(foglio, corpo), destinatario = nomeDestinatario(foglio.destinatario);
+  const lettera = dateColPunto(letteraDalFoglio(foglio, corpo)), destinatario = nomeDestinatario(foglio.destinatario);      // date coi punti (20.10.2026)
   const chi = await pazienteDelFoglio(studioId, a.patient_id, foglio.paziente);
   const profilo = a.medico ? await profiloMedico(studioId, a.medico) : null;
   const fonte = a.dettato_fonte ?? 'dettatura';

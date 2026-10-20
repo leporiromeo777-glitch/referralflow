@@ -897,6 +897,17 @@ def _():
     assert dentro.index("invia_bozze(cartelle)") > dentro.index("_processa_uno("), "la consegna segue ogni dettato"
 
 
+@caso("46 · le date con i punti: «12/03/2024» → «12.03.2024», mese/anno anche; pressione e frazioni restano, la lunghezza non cambia")
+def _():
+    prima = "Visita del 12/03/2024, controllo 3/4/24 e ECG 05/2023. PA 130/80 mmHg, 1/2 cp, punteggio 3/5, 31/12/2025, 32/12/2024."
+    dopo = m.date_coi_punti(prima)
+    assert dopo == "Visita del 12.03.2024, controllo 3.4.24 e ECG 05.2023. PA 130/80 mmHg, 1/2 cp, punteggio 3/5, 31.12.2025, 32/12/2024.", dopo
+    assert len(dopo) == len(prima)
+    assert m.date_coi_punti("senza date") == "senza date"
+    import inspect
+    assert '"testo_corretto": date_coi_punti(' in inspect.getsource(m.elabora)
+
+
 def main() -> int:
     larg = max(len(n) for n, _, _ in ESITI)
     ko = 0

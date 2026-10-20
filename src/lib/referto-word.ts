@@ -9,6 +9,7 @@ import { bloccoCopiaConoscenza } from './referti-copia';
 import { attorno, vociCopia, type Attorno } from './referti-inviante';
 import { vociValide } from './formattazione';
 import { firmaDellaLettera } from './firma-lettera';
+import { dateColPunto } from './date-punti';
 
 // Il referto in Word con la carta intestata dello studio (stampo in
 // modelli/referto-carta-intestata.docx): pronto da rifinire e spedire.
@@ -147,7 +148,9 @@ export async function costruisciWord(sessione: { studioId: string; email?: strin
     } catch { /* best-effort */ }
   }
 
-  const firma = nomeMedico ? firmaDellaLettera(testo, medico) : { testo, voci: [] };
+  // Le date coi punti (20.10.2026): anche quelle scritte a mano in revisione o arrivate prima della regola.
+  const testoWord = dateColPunto(testo);
+  const firma = nomeMedico ? firmaDellaLettera(testoWord, medico) : { testo: testoWord, voci: [] };
   const docx = await generaDocxReferto({
     medico,
     intestazione,
@@ -168,7 +171,7 @@ export async function costruisciWord(sessione: { studioId: string; email?: strin
     // Grassetto come nella lettera vecchia del paziente (6.10.2026).
     grassetti: !b.payload?.forma_lettera?.spento && Array.isArray(b.payload?.forma_lettera?.grassetti) ? b.payload.forma_lettera.grassetti : [],
     // Grassetto, corsivo, sottolineato messi a mano nella revisione (20.10.2026).
-    formattazione: [...(vociValide(b.payload?.formattazione) ?? []), ...firma.voci],
+    formattazione: [...(vociValide(b.payload?.formattazione) ?? []).map((v) => ({ ...v, testo: dateColPunto(v.testo) })), ...firma.voci],
   });
 
   const nomeFile = `referto-${dataBase.replaceAll('.', '-') || 'bozza'}.docx`;

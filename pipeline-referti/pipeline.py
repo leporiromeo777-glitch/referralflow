@@ -2898,6 +2898,22 @@ def chiama_ollama(prompt: str, file_id: str, fase: str, formato_json: bool = Fal
     raise RuntimeError("ollama non risponde")
 
 
+# Le date con i punti, non con la barra (20.10.2026, richiesta dello studio: «tutte le date della trascrizione con i
+# punti»): «12/03/2024» → «12.03.2024», «3/4/24» → «3.4.24», «03/2024» → «03.2024». Solo ciò che è una data: giorno
+# 1-31, mese 1-12, anno di 2 o 4 cifre (o mese/anno a 4 cifre); la pressione «130/80», le frazioni «1/2», «3/5» no.
+# Si fa per ultima, sul testo consegnato: la lunghezza non cambia (le posizioni delle segnalazioni restano giuste),
+# ma la firma numerica sì — per questo dopo tutti i controlli sui numeri.
+_DATA_BARRA = re.compile(r"(?<![\d/.,])(0?[1-9]|[12]\d|3[01])/(0?[1-9]|1[0-2])/(\d{4}|\d{2})(?![\d/])")
+_MESE_ANNO_BARRA = re.compile(r"(?<![\d/.,])(0?[1-9]|1[0-2])/((?:19|20)\d{2})(?![\d/])")
+
+
+def date_coi_punti(testo: str) -> str:
+    if not testo or "/" not in testo:
+        return testo
+    testo = _DATA_BARRA.sub(lambda x: f"{x.group(1)}.{x.group(2)}.{x.group(3)}", testo)
+    return _MESE_ANNO_BARRA.sub(lambda x: f"{x.group(1)}.{x.group(2)}", testo)
+
+
 def _numeri(testo: str) -> list[str]:
     """Tutti i numeri del testo (con eventuale decimale), ordinati: la firma
     numerica che la correzione AI non deve mai alterare."""
@@ -8534,7 +8550,7 @@ def elabora(ingresso: Path, dir_out: Path, sostituzioni, controlli, notifica=Non
         # Data di registrazione dal dittafono (header DSS), se c'è: è la data
         # della lettera. Per gli altri formati resta quella dei metadati audio.
         "dettato_il": dettato_il or (integ.get("creato") or None),
-        "testo_corretto": nota_visita if nota_visita else finale,
+        "testo_corretto": date_coi_punti(nota_visita if nota_visita else finale),
         "note_segreteria": note_segreteria,
         "campi_estratti": campi,
         "parole": parole,

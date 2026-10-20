@@ -909,3 +909,8 @@ Dallo studio: la firma del medico sempre completa («Dr. med. …») e in grasse
 a 9 punti. Cambia la firma di Moccetti decisa il 14.9 («Marco»). Il Word lo applica a ogni lettera (anche a quelle
 scritte prima) dopo il saluto finale; la barra della revisione ha anche la dimensione del carattere.
 
+## Date coi punti — 20.10.2026
+Dallo studio: tutte le date della trascrizione con i punti, non con la barra. Deciso: solo ciò che è sicuramente una
+data (giorno/mese/anno, mese/anno a 4 cifre); «12/3» senza anno resta com'è (potrebbe non essere una data). Nella
+catena per ultimo, dopo i controlli sui numeri; nella piattaforma per la lettera Dragon e nel Word.
+
