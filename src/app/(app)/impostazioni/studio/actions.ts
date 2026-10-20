@@ -83,6 +83,40 @@ export async function revocaRefertiToken() {
   redirect('/impostazioni/studio');
 }
 
+// ─── Chiave del generatore dei referti pressione Aktiia (20.10.2026) ───
+// Stesse regole del token delle bozze: in tabella solo l'hash, il chiaro si
+// mostra una volta sola. È una chiave diversa: chi la ha può solo mandare
+// profili pressori confermati, non bozze di referto.
+const PRESSIONE_FLASH_COOKIE = 'rf_pressione_token';
+
+export async function generaPressioneToken() {
+  const session = await getSession();
+  if (!session) redirect('/login');
+  if (session.role !== 'admin' && session.role !== 'tecnico') redirect('/');
+
+  const token = 'rfp_' + randomBytes(32).toString('hex');
+  const hash = createHash('sha256').update(token).digest('hex');
+  await query(
+    `update studios set pressione_token_hash = $2, pressione_token_set_at = now() where id = $1`,
+    [session.studioId, hash]
+  );
+  (await cookies()).set(PRESSIONE_FLASH_COOKIE, token, {
+    httpOnly: true, secure: cookieSecure(), sameSite: 'lax', path: '/impostazioni/studio', maxAge: 120,
+  });
+  revalidatePath('/impostazioni/studio');
+  redirect('/impostazioni/studio');
+}
+
+export async function revocaPressioneToken() {
+  const session = await getSession();
+  if (!session) redirect('/login');
+  if (session.role !== 'admin' && session.role !== 'tecnico') redirect('/');
+
+  await query(`update studios set pressione_token_hash = null, pressione_token_set_at = null where id = $1`, [session.studioId]);
+  revalidatePath('/impostazioni/studio');
+  redirect('/impostazioni/studio');
+}
+
 // ─── Finestre di disponibilità (slot proposto all'invio) ───
 // Lo studio dichiara quando visita (giorno + fascia oraria + durata slot). I
 // moduli d'invio ne ricavano i primi slot liberi. È indicativo: non tocca

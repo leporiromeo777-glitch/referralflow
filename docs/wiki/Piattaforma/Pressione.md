@@ -1,6 +1,6 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-10-08
+aggiornata: 2026-10-20
 ---
 # Pressione
 
@@ -34,6 +34,18 @@ Oltre a caricarlo dalla pagina, il file delle misure si può **mettere in una ca
 - **Dopo**: il file letto passa in **«Letti»**, e dopo **sette giorni** si cancella da solo (anche da «Non letti»): è un dato sanitario e ormai sta nel database. Lo stesso profilo rimesso nella cartella non si carica due volte. Assegnato o scartato, il testo del file non resta in `pa_arrivi`.
 - **Condivisa**: la pagina mostra se il Mac condivide la cartella in rete (`sharing -l`) e, quando sì, dà il file `.bat` per collegarla da Windows e l'indirizzo `smb://` per il Mac — lo stesso meccanismo della cartella dei dettati, senza credenziali dentro. La condivisione si accende **dal Mac**: Impostazioni di Sistema → Generali → Condivisione → Condivisione file, e col «+» si aggiunge la cartella. Solo nella rete dello studio, mai su servizi di sincronizzazione.
 - **Chi**: assegna o scarta un arrivo chi può caricare un profilo (segreteria, aiuto medico, medico).
+
+## Dal generatore dei referti Aktiia (20.10.2026)
+
+Lo studio misura la pressione con l'**Aktiia** (bracciale/braccialetto, più giorni a casa) e fa il referto con il **Generatore referti Aktiia**: un file HTML sui computer dello studio (cartella «Aktiia - Report generator/Generatore 2.0» sulla Scrivania del Mac; si copia sugli altri PC), che legge l'Excel dell'app così com'è e crea il referto Word nello stile dello studio. Dal generatore, **solo dopo la conferma del medico**, misure e referto arrivano qui.
+
+- **Come**: nel generatore, dopo «Genera referto Word», si apre il Word, lo si controlla, si spunta «Ho controllato il referto» e si preme «Conferma e invia». Il generatore manda a `POST /api/pressione/invio` paziente (cognome, nome, data di nascita), misure, sveglia e sonno usati nel referto, e il `.docx` (in base64, nel corpo). Se dopo aver creato il referto si cambia un dato, il referto non si invia più: va rigenerato.
+- **La chiave**: `Authorization: Bearer rfp_…`, una chiave **solo per questo** (non quella delle bozze di referto: `studios.pressione_token_hash`, migrazione 093, in tabella solo l'hash). La genera l'amministrazione in **Impostazioni dello studio → «Generatore referti pressione (Aktiia)»** (pagina `/impostazioni/studio`), si mostra una volta e si incolla nel «Collegamento ReferralFlow» del generatore, che la tiene nel browser di quel computer. Revocarla spegne l'invio da tutti i computer.
+- **Da file://**: il generatore si apre con un doppio clic, quindi la rotta risponde a qualunque origine (CORS `*`, anche al preflight) ma solo con la chiave: niente cookie, niente sessione.
+- **Di chi è**: la regola severa di sempre (`abbinaPaziente`): nome **e** data di nascita, una persona sola. Se combacia nasce il profilo (apparecchio «Aktiia», sveglia e sonno quelli del referto, così i conti partono dagli stessi orari) e il referto Word entra nei **Documenti** del paziente come «referto». Se no l'invio va fra gli **«Arrivati … da assegnare»** con tutto quello che serve (`pa_arrivi.impostazioni`, `referto_key`): assegnato, il profilo prende sveglia e sonno e il referto diventa un documento; scartato, il referto si cancella dallo storage.
+- **Doppioni**: lo stesso profilo rimandato risponde «già presente» (200), lo stesso invio che aspetta ancora «già in attesa» (200). Le risposte: 201 nel profilo, 202 da assegnare (col motivo: nessuno, nascita diversa, omonimi), 400 con la frase da mostrare, 401 chiave non valida.
+- **Limiti**: gli stessi del caricamento (almeno 10 misure, al massimo **otto giorni**); il generatore avvisa prima di inviare un profilo più lungo. Due misure allo stesso minuto diventano una (come in `leggiFile`): il referto ne conta una in più.
+- Nei log solo conteggi; nel corpo, mai nell'indirizzo.
 
 ## Che cosa calcola (tutto in `src/lib/pressione/calcolo.ts`, puro)
 
@@ -74,11 +86,11 @@ La conferma di una proposta non è il software: è **il monitoraggio dopo**, e i
 
 ## Quello che ancora non c'è
 
-- **Il formato vero dell'apparecchio dello studio**: non si sa ancora quale sia né come esporti. Il lettore è generico; al primo file vero si vede se serve un adattatore.
+- **Profili più lunghi di otto giorni** dall'Aktiia: oggi si rifiutano (anche dal generatore); se servono va deciso come mostrarli.
 - **La terapia presa dalla cartella**: oggi si scrive nella pagina (in cartella non c'è una terapia strutturata per tutti i medici).
 - **Il commento per il referto** scritto dall'AI dai numeri già calcolati.
 - **Tabella confermata, validazione, rilettura regolatoria, notifica a Swissmedic**: ancora aperte, a proposte già accese (8.10.2026).
 
 ## Le prove
 
-`src/lib/prove-pressione.test.ts` — 15 casi (due sulla cartella: identità dal file, che cosa si legge e perché no): lettura del file, medie e qualità, fasce a cavallo della mezzanotte, finestra d'azione, fascia scoperta, punteggio (il piatto non vince), proposta coi suoi numeri e ripetibile, limiti (qualità, diuretici, più prese, avviso che non giudica), riconoscimento dei nomi, coerenza della tabella, interruttore. `scripts/e2e/prova-pressione.ts` — 34 casi sul database demo (dall'8.10 anche la cartella: profilo da solo dal nome del file o dalle prime righe, niente doppioni, «da assegnare», assegna e scarta coi permessi, «Non letti» col perché, stato della condivisione) con profili inventati: permessi ruolo per ruolo, doppioni, conferma dei farmaci, proposte e decisioni, prima e dopo, registro senza valori, eliminazione.
+`src/lib/prove-pressione-invio.test.ts` — 3 casi sull'invio dal generatore (dal corpo al testo che `leggiFile` legge, rifiuti con la frase, referto solo .docx e nome pulito). `scripts/e2e/prova-pressione-invio.ts` — 14 casi sul database demo (preflight da file://, chiave giusta e sbagliata, la chiave delle bozze non vale, profilo con giorno/notte e referto nei documenti, doppioni, da assegnare col referto, assegna e scarta, limiti, registro senza valori). `src/lib/prove-pressione.test.ts` — 15 casi (due sulla cartella: identità dal file, che cosa si legge e perché no): lettura del file, medie e qualità, fasce a cavallo della mezzanotte, finestra d'azione, fascia scoperta, punteggio (il piatto non vince), proposta coi suoi numeri e ripetibile, limiti (qualità, diuretici, più prese, avviso che non giudica), riconoscimento dei nomi, coerenza della tabella, interruttore. `scripts/e2e/prova-pressione.ts` — 34 casi sul database demo (dall'8.10 anche la cartella: profilo da solo dal nome del file o dalle prime righe, niente doppioni, «da assegnare», assegna e scarta coi permessi, «Non letti» col perché, stato della condivisione) con profili inventati: permessi ruolo per ruolo, doppioni, conferma dei farmaci, proposte e decisioni, prima e dopo, registro senza valori, eliminazione.

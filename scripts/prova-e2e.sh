@@ -179,6 +179,10 @@ echo "→ pressione: profilo delle 24 ore, terapia, tabella dei farmaci da confe
 DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-pressione.ts "http://localhost:$PORTA" "$STUDIO" "$C_MEDICO" "$C_SEGR" "$C_TEC" "$TMP/pressione-cartella" > "$TMP/pressione.txt" 2>&1 || { fallito "prova-pressione"; cut -c1-300 "$TMP/pressione.txt"; }
 grep -E "^NO" "$TMP/pressione.txt"; echo "   $(grep -c '^ok' "$TMP/pressione.txt") ok, $(grep -c '^NO' "$TMP/pressione.txt") no"
 
+echo "→ pressione: invio dal generatore dei referti Aktiia (chiave, regola severa, referto nei documenti, da assegnare, limiti)"
+DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-pressione-invio.ts "http://localhost:$PORTA" "$STUDIO" "$C_SEGR" > "$TMP/pressione-invio.txt" 2>&1 || { fallito "prova-pressione-invio"; cut -c1-300 "$TMP/pressione-invio.txt"; }
+grep -E "^NO" "$TMP/pressione-invio.txt"; echo "   $(grep -c '^ok' "$TMP/pressione-invio.txt") ok, $(grep -c '^NO' "$TMP/pressione-invio.txt") no"
+
 echo "→ ciclo ed ECG: il referto della prova da sforzo e il tracciato vanno nella cartella del paziente, o aspettano da assegnare"
 DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-ciclo.ts "http://localhost:$PORTA" "$STUDIO" "$C_SEGR" "$C_TEC" "$TMP/ciclo-cartella" > "$TMP/ciclo.txt" 2>&1 || { fallito "prova-ciclo"; cut -c1-300 "$TMP/ciclo.txt"; }
 grep -E "^NO" "$TMP/ciclo.txt"; echo "   $(grep -c '^ok' "$TMP/ciclo.txt") ok, $(grep -c '^NO' "$TMP/ciclo.txt") no"

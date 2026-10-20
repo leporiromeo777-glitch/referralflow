@@ -1,5 +1,7 @@
 import 'server-only';
 import { query, transazione } from '../db';
+import { deleteFile, putFile } from '../storage';
+import { logDocumento } from '../cartella';
 import { proposteAccese } from './accese';
 import { proponiAnagrafica } from '../pazienti-abbina-regole';
 import { riabbinaPazienti } from '../pazienti-abbina';
@@ -356,19 +358,45 @@ export async function creaCartellaEAssegna(studioId: string, userId: string, arr
   return { ok: true, id: r.id, patient_id: pid, nuova: !gia };
 }
 export async function assegnaArrivo(studioId: string, userId: string, arrivoId: string, patientId: string): Promise<Esito<{ ok: true; id: string }>> {
-  const [a] = await query<{ testo: string }>(`select testo from pa_arrivi where id = $1 and studio_id = $2 and stato = 'in_attesa'`, [arrivoId, studioId]);
+  const [a] = await query<{ testo: string; impostazioni: { sveglia?: string; sonno?: string; apparecchio?: string } | null; referto_key: string | null; referto_nome: string | null }>(
+    `select testo, impostazioni, referto_key, referto_nome from pa_arrivi where id = $1 and studio_id = $2 and stato = 'in_attesa'`, [arrivoId, studioId]);
   if (!a) return err('Arrivo non trovato, o già assegnato.', 404);
-  const c = await caricaProfilo(studioId, userId, patientId, { testo: a.testo, apparecchio: 'dalla cartella' });
+  const c = await caricaProfilo(studioId, userId, patientId, { testo: a.testo, apparecchio: a.impostazioni?.apparecchio ?? 'dalla cartella' });
   if ('errore' in c) return c;
+  // Arrivato dal generatore dei referti Aktiia: giorno/notte del paziente e il referto Word confermato.
+  if (a.impostazioni?.sveglia && a.impostazioni?.sonno) await impostaGiornoNotte(c.id, a.impostazioni.sveglia, a.impostazioni.sonno);
+  if (a.referto_key) await allegaReferto(studioId, patientId, userId, { key: a.referto_key, nome: a.referto_nome ?? 'Referto pressione.docx' });
   // Assegnato: il testo del file non serve più qui, le misure stanno nel profilo.
-  await query(`update pa_arrivi set stato = 'assegnato', profilo_id = $2, deciso_da = $3, deciso_il = now(), testo = '' where id = $1`, [arrivoId, c.id, userId]);
+  await query(`update pa_arrivi set stato = 'assegnato', profilo_id = $2, deciso_da = $3, deciso_il = now(), testo = '', referto_key = null where id = $1`, [arrivoId, c.id, userId]);
   await registra(studioId, userId, 'arrivo_assegnato', c.id);
   return { ok: true, id: c.id };
 }
 export async function scartaArrivo(studioId: string, userId: string, arrivoId: string): Promise<Esito<{ ok: true }>> {
-  const [a] = await query<{ id: string }>(`update pa_arrivi set stato = 'scartato', deciso_da = $3, deciso_il = now(), testo = '' where id = $1 and studio_id = $2 and stato = 'in_attesa' returning id`, [arrivoId, studioId, userId]);
+  const [v] = await query<{ referto_key: string | null }>(`select referto_key from pa_arrivi where id = $1 and studio_id = $2 and stato = 'in_attesa'`, [arrivoId, studioId]);
+  const [a] = await query<{ id: string }>(`update pa_arrivi set stato = 'scartato', deciso_da = $3, deciso_il = now(), testo = '', referto_key = null where id = $1 and studio_id = $2 and stato = 'in_attesa' returning id`, [arrivoId, studioId, userId]);
   if (!a) return err('Arrivo non trovato, o già deciso.', 404);
+  // Scartato: il referto Word in attesa è un dato sanitario senza cartella, si toglie.
+  if (v?.referto_key) await deleteFile(v.referto_key).catch(() => null);
   await registra(studioId, userId, 'arrivo_scartato');
   return { ok: true };
+}
+
+// ── Dal generatore dei referti Aktiia (20.10.2026) ──────────────────────────
+// Giorno e notte li ha scelti chi ha fatto il referto: il profilo li prende uguali,
+// così i conti della pagina e quelli del referto partono dagli stessi orari.
+export async function impostaGiornoNotte(profiloId: string, sveglia: string, sonno: string): Promise<void> {
+  const sv = orario(sveglia), so = orario(sonno);
+  if (!sv || !so || sv === so) return;
+  await query(`update pa_profili set sveglia = $2, sonno = $3 where id = $1`, [profiloId, sv, so]);
+}
+export const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+// Il referto Word confermato dal medico entra nei documenti del paziente (categoria referto).
+export async function allegaReferto(studioId: string, patientId: string, userId: string | null, r: { key?: string; dati?: Buffer; nome: string }): Promise<string> {
+  const chiave = r.key ?? await putFile(r.dati as Buffer, DOCX, '.docx');
+  const [doc] = await query<{ id: string }>(
+    `insert into patient_documents (studio_id, patient_id, filename, storage_key, categoria, nota, uploaded_by)
+     values ($1, $2, $3, $4, 'referto', 'referto pressione dal generatore Aktiia', $5) returning id`, [studioId, patientId, r.nome, chiave, userId]);
+  await logDocumento(doc.id, 'caricamento', { studioId, userId: userId ?? undefined, dettaglio: 'dal generatore Aktiia' });
+  return doc.id;
 }
 

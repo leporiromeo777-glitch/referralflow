@@ -2277,3 +2277,12 @@ create table if not exists dittafono_dispositivi (
   aggiornato_da uuid references users(id) on delete set null,
   primary key (studio_id, medico)
 );
+
+-- 093 — Pressione: l'invio dal generatore dei referti Aktiia (20.10.2026). Il generatore manda, dopo la conferma
+-- del medico, misure e referto Word a /api/pressione/invio con una chiave dello studio (in tabella solo l'hash).
+-- Un invio che non si aggancia da solo a una persona aspetta fra gli arrivi con giorno/notte e il referto.
+alter table studios add column if not exists pressione_token_hash text;
+alter table studios add column if not exists pressione_token_set_at timestamptz;
+alter table pa_arrivi add column if not exists impostazioni jsonb;
+alter table pa_arrivi add column if not exists referto_key text;
+alter table pa_arrivi add column if not exists referto_nome text;

@@ -707,6 +707,7 @@ Richiesta dello studio: i rapporti veri coprono più giorni e in un grafico solo
 «Tutto» o un giorno; è una vista, i conti (medie, fasce, punteggio, proposte) restano su tutta la
 registrazione, e la legenda lo dice.
 
+
 ## 9.10.2026 — Immagini: i filmati vanno da soli, e lo schermo intero
 Richiesta dello studio: non far avanzare i filmati con la rotella, poterli muovere con una barra, vederli a
 schermo intero. Deciso così:
@@ -914,3 +915,17 @@ Dallo studio: tutte le date della trascrizione con i punti, non con la barra. De
 data (giorno/mese/anno, mese/anno a 4 cifre); «12/3» senza anno resta com'è (potrebbe non essere una data). Nella
 catena per ultimo, dopo i controlli sui numeri; nella piattaforma per la lettera Dragon e nel Word.
 
+## Pressione: i referti Aktiia confermati arrivano dal generatore — 20.10.2026
+Lo studio usa l'Aktiia e un generatore di referti tutto suo (un file HTML sui computer dello studio, che legge l'Excel
+dell'app e fa il Word nello stile del Centro). Ha chiesto che i referti **generati e confermati** arrivino da soli nella
+pagina Pressione. Scelta dello studio: il generatore resta un file separato e manda con una **chiave**, non diventa una
+pagina della piattaforma. Deciso così:
+- **Solo dopo la conferma**: il medico spunta «Ho controllato il referto» e preme «Conferma e invia»; un dato cambiato
+  dopo la creazione del referto blocca l'invio finché non lo si rigenera.
+- **Una chiave solo per la pressione** (`rfp_…`, hash in `studios`), separata da quella delle bozze: chi la trova può
+  mandare profili pressori, non bozze di referto. La genera l'amministrazione, si revoca in un clic.
+- **Stessa regola severa** della cartella: nome e data di nascita, una persona sola; se no «da assegnare», col referto.
+  Non si indovina. Il referto Word va nei documenti del paziente.
+- **Riuso**: le misure passano da `caricaProfilo` come quelle della pagina e della cartella; nessun calcolo nuovo, i
+  grafici e i numeri sono quelli della pagina Pressione.
+Aperti: generare la chiave in produzione e incollarla nei generatori; profili Aktiia oltre gli otto giorni.

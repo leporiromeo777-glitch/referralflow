@@ -4,6 +4,7 @@ import { query } from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import {
   updateStudio, generaRefertiToken, revocaRefertiToken,
+  generaPressioneToken, revocaPressioneToken,
   aggiungiFinestra, rimuoviFinestra,
 } from './actions';
 
@@ -27,9 +28,10 @@ export default async function ImpostazioniStudio(
     nome: string; slug: string; specialita: string | null;
     telefono: string | null; notify_email: string | null;
     referti_token_set_at: string | null;
+    pressione_token_set_at: string | null;
   }>(
     `select nome, slug, specialita, telefono, notify_email,
-            referti_token_set_at::text
+            referti_token_set_at::text, pressione_token_set_at::text
        from studios where id = $1`,
     [session.studioId]
   );
@@ -38,6 +40,7 @@ export default async function ImpostazioniStudio(
   // Token appena generato: si mostra una volta sola (cookie flash di 2 minuti),
   // poi resta solo l'hash in tabella.
   const tokenNuovo = (await cookies()).get('rf_referti_token')?.value ?? null;
+  const chiavePressioneNuova = (await cookies()).get('rf_pressione_token')?.value ?? null;
 
   const finestre = await query<{
     id: string; giorno: number; ora_inizio: string; ora_fine: string; durata_min: number;
@@ -134,6 +137,45 @@ export default async function ImpostazioniStudio(
           </form>
           {studio.referti_token_set_at && (
             <form action={revocaRefertiToken}>
+              <button className="btn" type="submit">Revoca (disattiva l'invio)</button>
+            </form>
+          )}
+        </div>
+      </div>
+
+      <div className="card">
+        <h2>Generatore referti pressione (Aktiia)</h2>
+        <p className="muted">
+          Chiave con cui il generatore dei referti Aktiia (il file HTML sui
+          computer dello studio) manda alla pagina Pressione le misure e il
+          referto Word, dopo la conferma del medico. Si incolla una volta in
+          «Collegamento ReferralFlow» del generatore, su ogni computer. È una
+          credenziale: si mostra una volta sola. Rigenerarla invalida la precedente.
+        </p>
+
+        {chiavePressioneNuova && (
+          <div className="card notice">
+            <p><strong>Nuova chiave generata.</strong> Copiala ora: non verrà più mostrata.</p>
+            <p><code style={{ wordBreak: 'break-all' }}>{chiavePressioneNuova}</code></p>
+          </div>
+        )}
+
+        {studio.pressione_token_set_at && !chiavePressioneNuova && (
+          <p className="muted">
+            Una chiave è attiva (generata il{' '}
+            {new Date(studio.pressione_token_set_at).toLocaleDateString('it-CH')}).
+            Per motivi di sicurezza non è più visibile: se l'hai persa, rigenerala.
+          </p>
+        )}
+
+        <div className="form-actions" style={{ display: 'flex', gap: 8 }}>
+          <form action={generaPressioneToken}>
+            <button className="btn btn-primary" type="submit">
+              {studio.pressione_token_set_at ? 'Rigenera chiave' : 'Genera chiave'}
+            </button>
+          </form>
+          {studio.pressione_token_set_at && (
+            <form action={revocaPressioneToken}>
               <button className="btn" type="submit">Revoca (disattiva l'invio)</button>
             </form>
           )}
