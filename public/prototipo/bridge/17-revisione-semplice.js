@@ -126,7 +126,6 @@ function rfSmHtml() {
     <div class="sm-grid">
       <div class="sm-carta">
         <div class="sm-a"><span>A:</span><input id="sm-dest" value="${rfEsc(dest)}" placeholder="Destinatario (Dr. med. …)" ${conf ? 'readonly' : ''} oninput="rfSmDest(this.value)" aria-label="Destinatario"></div>
-        ${conf || typeof rfFmtBarraHtml !== 'function' ? '' : rfFmtBarraHtml()}
         <div id="sm-testo" lang="it" spellcheck="true" role="textbox" aria-multiline="true" contenteditable="${conf ? 'false' : 'plaintext-only'}" oninput="rfSmScrive(this)" aria-label="Testo della lettera">${rfEsc(sm.testo)}</div>
       </div>
       <div class="sm-lato">

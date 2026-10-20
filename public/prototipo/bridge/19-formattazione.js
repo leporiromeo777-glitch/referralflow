@@ -1,6 +1,6 @@
 /* LA BARRA DI FORMATTAZIONE della revisione (20.10.2026, richiesta dello studio: «nelle correzioni dei referti una
    barra per mettere in grassetto, corsivo… quello che ho evidenziato»). Vale nella revisione completa e in quella
-   semplice. Si seleziona il testo e si preme G, C o S (o ⌘/Ctrl + B, I, U), A− e A+ per la dimensione del carattere;
+   semplice. La barra compare sopra il testo appena lo si seleziona. Si seleziona il testo e si preme G, C o S (o ⌘/Ctrl + B, I, U), A− e A+ per la dimensione del carattere;
    «Togli» toglie la formattazione dalla selezione. Si vede subito nel foglio e il Word esce uguale.
 
    Il testo della lettera resta testo semplice: la formattazione sta a parte (`payload.formattazione`, rotta
@@ -12,15 +12,14 @@
 .rf-fmt-b { font-weight: 700; }
 .rf-fmt-i { font-style: italic; }
 .rf-fmt-u { text-decoration: underline; text-underline-offset: 2px; }
-.rf-fmt-barra { position: sticky; top: 64px; z-index: 6; display: inline-flex; gap: 2px; align-items: center; padding: 3px; margin: 0 0 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: 0 2px 10px rgba(20,30,70,.08); }
+.rf-fmt-barra { position: fixed; z-index: 60; display: none; gap: 2px; align-items: center; padding: 3px; margin: 0; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: 0 2px 10px rgba(20,30,70,.08); }
 .rf-fmt-barra button { min-width: 32px; height: 30px; padding: 0 9px; border: 0; border-radius: 7px; background: transparent; color: var(--text); font: 600 14px/1 Georgia, 'Times New Roman', serif; cursor: pointer; }
 .rf-fmt-barra button:hover { background: var(--surface-3, rgba(0,0,0,.06)); }
 .rf-fmt-barra button.acceso { background: var(--accent-soft, rgba(79,110,247,.15)); color: var(--accent); }
 .rf-fmt-barra button.togli { font-family: inherit; font-weight: 500; font-size: 12.5px; color: var(--text-2); }
 .rf-fmt-barra .sep { width: 1px; height: 18px; background: var(--border); margin: 0 3px; }
-.rf-fmt-barra .aiuto { font-size: 11.5px; color: var(--text-3); padding: 0 6px; white-space: nowrap; }
+.rf-fmt-barra.su { display: inline-flex; }
 .rf-fmt-barra .dim { min-width: 26px; text-align: center; font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--text-2); }
-@media (max-width: 700px) { .rf-fmt-barra .aiuto { display: none; } }
 #sm-testo { white-space: pre-wrap; overflow-wrap: break-word; cursor: text; }
 #sm-testo:empty::before { content: 'Il testo della lettera'; color: #9aa0ad; }
 `; document.head.appendChild(st); })();
@@ -147,7 +146,7 @@ function rfFmtDipingi(f, voci) {
 /* ── la barra ── */
 function rfFmtBarraHtml() {
   const b = (k, testo, titolo, stile) => `<button type="button" data-fmt="${k}" title="${titolo}" onmousedown="event.preventDefault()" onclick="rfFmtApplica('${k}')" ${stile ? `style="${stile}"` : ''}>${testo}</button>`;
-  return `<div class="rf-fmt-barra" role="toolbar" aria-label="Formattazione">${b('b', 'G', 'Grassetto (⌘/Ctrl + B)', 'font-weight:800')}${b('i', 'C', 'Corsivo (⌘/Ctrl + I)', 'font-style:italic')}${b('u', 'S', 'Sottolineato (⌘/Ctrl + U)', 'text-decoration:underline')}<span class="sep"></span>${b('meno', 'A−', 'Testo più piccolo', 'font-size:12px')}<span class="dim" id="rf-fmt-dim" title="Dimensione del testo selezionato, in punti come nel Word">12</span>${b('piu', 'A+', 'Testo più grande', 'font-size:16px')}<span class="sep"></span>${b('togli', 'Togli', 'Togli grassetto, corsivo e sottolineato dal testo selezionato')}<span class="aiuto">seleziona il testo, poi scegli</span></div>`;
+  return `<div class="rf-fmt-barra" role="toolbar" aria-label="Formattazione">${b('b', 'G', 'Grassetto (⌘/Ctrl + B)', 'font-weight:800')}${b('i', 'C', 'Corsivo (⌘/Ctrl + I)', 'font-style:italic')}${b('u', 'S', 'Sottolineato (⌘/Ctrl + U)', 'text-decoration:underline')}<span class="sep"></span>${b('meno', 'A−', 'Testo più piccolo', 'font-size:12px')}<span class="dim" id="rf-fmt-dim" title="Dimensione del testo selezionato, in punti come nel Word">12</span>${b('piu', 'A+', 'Testo più grande', 'font-size:16px')}<span class="sep"></span>${b('togli', 'Togli', 'Togli grassetto, corsivo, sottolineato e dimensione dal testo selezionato')}</div>`;
 }
 function rfFmtApplica(k) {
   const f = rfFmtFoglio();
@@ -176,7 +175,7 @@ function rfFmtApplica(k) {
 }
 // I tasti della barra si accendono se la selezione è già tutta così.
 function rfFmtStatoBarra() {
-  const barra = document.querySelector('.rf-fmt-barra'); if (!barra) return;
+  const barra = document.getElementById('rf-fmt-barra'); if (!barra) return;
   const f = rfFmtFoglio(); let segni = null, sel = null, st = null;
   if (f) { st = rfFmtLeggi(f); sel = rfFmtSelezione(f, st); if (sel) segni = rfFmtSegniDom(f, st); }
   for (const [k, bit] of [['b', RF_FMT_B], ['i', RF_FMT_I], ['u', RF_FMT_U]]) {
@@ -193,7 +192,26 @@ function rfFmtStatoBarra() {
     d.textContent = testo;
   }
 }
-document.addEventListener('selectionchange', () => { if (state.route === 'review' && document.querySelector('.rf-fmt-barra')) rfFmtStatoBarra(); });
+// La barra compare solo quando si seleziona del testo nel foglio (20.10.2026, dallo studio: «non sempre visibile, solo
+// quando evidenzio qualcosa»): sopra la selezione, o sotto se in alto non c'è posto; sparisce quando la selezione sparisce.
+function rfFmtMostra() {
+  let barra = document.getElementById('rf-fmt-barra');
+  const f = state.route === 'review' ? rfFmtFoglio() : null;
+  const s = window.getSelection();
+  const r = f && f.modifica && s && s.rangeCount && !s.isCollapsed ? s.getRangeAt(0) : null;
+  if (!r || !f.root.contains(r.commonAncestorContainer)) { if (barra) barra.classList.remove('su'); return; }
+  if (!barra) { document.body.insertAdjacentHTML('beforeend', rfFmtBarraHtml()); barra = document.body.lastElementChild; barra.id = 'rf-fmt-barra'; }
+  const q = r.getBoundingClientRect(); if (!q.width && !q.height) { barra.classList.remove('su'); return; }
+  barra.classList.add('su');
+  const w = barra.offsetWidth, h = barra.offsetHeight;
+  const sopra = q.top - h - 8 > 64;
+  barra.style.top = `${Math.round(sopra ? q.top - h - 8 : q.bottom + 8)}px`;
+  barra.style.left = `${Math.round(Math.max(8, Math.min(window.innerWidth - w - 8, q.left + q.width / 2 - w / 2)))}px`;
+  rfFmtStatoBarra();
+}
+document.addEventListener('selectionchange', () => { clearTimeout(rfFmtMostra.t); rfFmtMostra.t = setTimeout(rfFmtMostra, 60); });
+window.addEventListener('scroll', () => { const b = document.getElementById('rf-fmt-barra'); if (b && b.classList.contains('su')) rfFmtMostra(); }, true);
+window.addEventListener('hashchange', () => { const b = document.getElementById('rf-fmt-barra'); if (b) b.classList.remove('su'); });
 
 /* ── salvare ── */
 function rfFmtProgramma() { clearTimeout(RF.fmt.timer); RF.fmt.timer = setTimeout(() => void rfFmtSalva(), 800); }
@@ -235,9 +253,6 @@ function rfFmtDopoDisegno() {
   rfFmtCarica();
   const f = rfFmtFoglio(); if (!f) return;
   if (RF.fmt.voci.length) rfFmtDipingi(f, RF.fmt.voci);
-  // la barra: nella completa sopra il foglio (non in lettura), nella semplice dentro la carta
-  const c = document.querySelector('#rv-main');
-  if (c && !document.getElementById('sm-testo') && f.modifica && !c.querySelector('.rf-fmt-barra')) c.insertAdjacentHTML('afterbegin', rfFmtBarraHtml());
 }
 if (typeof rvRenderReport === 'function') {
   const rfFmtPrima = rvRenderReport;
