@@ -278,6 +278,8 @@ window.addEventListener('load', () => {
   void rfCaricaDati();
   // Anche quando il primo caricamento non è mai riuscito: se no chi ha aperto
   // la pagina nel momento sbagliato resta bloccato finché non ricarica a mano.
-  setInterval(() => { if (RF.nonAutorizzato) return; if ((RF.live || RF.erroreCarico) && state.route !== 'review' && !(typeof rfDitOccupato === 'function' && rfDitOccupato())) void rfCaricaDati(); }, 120000);
+  // Non mentre si scrive in un campo (20.10.2026): il ridisegno svuotava i moduli a metà (Studio → Nuovo accesso).
+  const rfScrive = () => { const a = document.activeElement; return !!a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || a.isContentEditable) && a.type !== 'checkbox' && a.type !== 'button'; };
+  setInterval(() => { if (RF.nonAutorizzato) return; if ((RF.live || RF.erroreCarico) && state.route !== 'review' && !rfScrive() && !(typeof rfDitOccupato === 'function' && rfDitOccupato())) void rfCaricaDati(); }, 120000);
 });
 
