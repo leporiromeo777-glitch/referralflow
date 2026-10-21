@@ -24,7 +24,7 @@
 .sm-carta { position: relative; min-width: 0; }
 .sm-campi { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, .75fr); gap: 6px 8px; }
 .sm-campi .field { margin: 0; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.sm-campi .input { width: 100%; box-sizing: border-box; height: 30px; padding: 0 9px; font-size: 13px; }
+.sm-campi .input { width: 100%; min-width: 0 !important; box-sizing: border-box; height: 30px; padding: 0 9px; font-size: 13px; }
 .sm-campi select.input { padding-right: 4px; }
 .sm-campi label { font-size: 11px; color: var(--text-2); }
 .sm-campi .largo { grid-column: 1 / -1; }

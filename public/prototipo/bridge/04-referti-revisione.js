@@ -1401,7 +1401,7 @@ async function rfAllegati() {
       ? (liberi.length ? `<div class="row" style="gap:6px"><select class="input sm grow" id="rf-al-doc">${liberi.map(d => `<option value="${rfEsc(d.id)}">${rfEsc(d.etichetta)} · ${rfEsc(cat[d.categoria] || d.categoria)} · ${rfEsc(d.data)}</option>`).join('')}</select><button class="btn sm" onclick="rfAllegatoPost({ azione: 'allegato_aggiungi', documento_id: document.getElementById('rf-al-doc').value })">Aggiungi</button></div>${liberi.some(d => d.pdf) ? `<div class="row mt-8" style="gap:6px"><span class="caption grow">Un PDF con tutta la cartella? Allega solo le pagine che servono.</span><button class="btn sm ghost" onclick="rfEstraiPagine(document.getElementById('rf-al-doc').value, { bozza: RF.loaded })">Estrai pagine…</button></div>` : ''}` : '<div class="caption">Nella cartella non ci sono altri documenti.</div>')
       : '<div class="caption">Il paziente non è in cartella: carica il file qui sotto, resterà attaccato solo a questo referto.</div>'}
     <div class="rf-al-tit mt-16">Carica un file</div>
-    <div class="grid grid-2" style="gap:6px">
+    <div class="grid grid-2 rf-al-carica" style="gap:6px">
       <select class="input sm" id="rf-al-cat">${Object.entries(cat).map(([k, v]) => `<option value="${k}" ${a.ecg && a.ecg.citato && !a.ecg.trovato && k === 'ecg' ? 'selected' : ''}>${v}</option>`).join('')}</select>
       <input class="input sm" id="rf-al-nota" placeholder="Descrizione nella lettera (es. ECG a riposo)">
     </div>
@@ -1487,6 +1487,8 @@ function rfAttornoCopia(indice, nuovo) {
 .rf-att-voce { display:flex; justify-content:space-between; align-items:center; gap:6px; font-size:12.5px; }
 .rf-att-voce.nuovo > span:first-child { color:var(--text-2); }
 .rf-att-cambia summary { cursor:pointer; }
+.rf-al-carica .input, #rf-al-doc { min-width:0 !important; width:100%; box-sizing:border-box; }
+#rf-al-file { min-width:0; max-width:100%; }
 .rf-al-tit { font-size:11.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-3); margin-bottom:4px; }
 .rf-al-riga { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-top:1px solid var(--border); font-size:13px; }
 .rf-al-nome { min-width:0; overflow-wrap:anywhere; }
