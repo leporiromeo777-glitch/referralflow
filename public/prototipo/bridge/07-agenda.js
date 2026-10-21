@@ -189,12 +189,17 @@ PAGES.agenda = () => {
       : 'left:6px;right:6px';
     return `<div class="appt ${a.late ? 'LATE' : a.status}${sovra.has(a.id) ? ' rf-over' : ''}${n > 2 ? ' rf-stretta' : ''}" style="${geo};top:${top(a.start) + 2}px;height:${Math.max(24, a.dur / 30 * slotH - 4)}px${a.colore ? `;border-left:4px solid ${rfEsc(a.colore)};background:${rfEsc(a.colore)}1a` : (RF.data && RF.data.coloriMedici && RF.data.coloriMedici[a.doc] ? `;border-left:4px solid ${rfEsc(RF.data.coloriMedici[a.doc])}` : '')}" onclick="rfApptScheda('${rfJs(a.id)}')" title="${rfEsc(nomeDi(a))} · ${a.start}${a.prestazione || a.motivoVero ? ' · ' + rfEsc(a.prestazione || a.motivoVero) : (a.colore ? ' · ' + rfEsc(rfTipoColore(a.colore)) : '')}${a.room ? ' · ' + rfEsc(a.room) : ''} — clicca per la scheda"><div class="n"><i class="dot ${a.late ? 'warning' : a.status === 'COMPLETED' ? 'success' : 'accent'}"></i>${rfEsc(nomeDi(a))}</div><div class="s">${a.start}${n > 2 ? '' : `${(() => { const d = a.prestazione || a.motivoVero || (a.colore ? rfTipoColore(a.colore) : ''); return d && !String(d).startsWith('Altro · ') ? ` · ${rfEsc(d)}` : ''; })()}${a.room ? ` · <b>${rfEsc(a.room)}</b>` : ''}`}</div></div>`;
   };
+  // L'ora attuale (21.10.2026, dallo studio: «una riga rossa che indica l'orario attuale, almeno si vede subito a che
+  // appuntamento sono i medici»): una linea rossa attraverso tutte le colonne, solo nel giorno di oggi e dentro le ore
+  // disegnate. Si sposta da sola ogni minuto (rfAgendaOraOra), senza ridisegnare la pagina.
+  const oraLinea = giorno === oggi ? `<div class="rf-ora-ora" data-inizio="${startH}" data-fine="${endH}" data-slot="${slotH}" style="${rfAgendaOraStile(startH, endH, slotH)}"></div>` : '';
   const colHtml = (col) => {
     const dentro = lista.filter(col.test);
     const pos = disponi(dentro);
-    return `<div class="cal-col" style="height:${slots * slotH}px">${Array.from({ length: slots }, (_, i) => `<div class="cal-line ${i % 2 ? 'half' : ''}" style="top:${i * slotH}px"></div>`).join('')}${dentro.map(a => chip(a, pos.get(a.id))).join('')}</div>`;
+    return `<div class="cal-col" style="height:${slots * slotH}px">${Array.from({ length: slots }, (_, i) => `<div class="cal-line ${i % 2 ? 'half' : ''}" style="top:${i * slotH}px"></div>`).join('')}${dentro.map(a => chip(a, pos.get(a.id))).join('')}${oraLinea}</div>`;
   };
-  const times = Array.from({ length: slots }, (_, i) => i % 2 === 0 ? `<div class="cal-time num" style="top:${i * slotH}px">${String(startH + i / 2).padStart(2, '0')}:00</div>` : '').join('');
+  const times = Array.from({ length: slots }, (_, i) => i % 2 === 0 ? `<div class="cal-time num" style="top:${i * slotH}px">${String(startH + i / 2).padStart(2, '0')}:00</div>` : '').join('')
+    + (giorno === oggi ? `<div class="rf-ora-ora etichetta num" data-inizio="${startH}" data-fine="${endH}" data-slot="${slotH}" style="${rfAgendaOraStile(startH, endH, slotH)}"><span>${rfAgendaOraTesto()}</span></div>` : '');
   const d = new Date(`${giorno}T12:00:00`);
   const etichetta = d.toLocaleDateString('it-CH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const sposta = (n) => { const x = new Date(`${giorno}T12:00:00`); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
@@ -234,6 +239,30 @@ PAGES.agenda = () => {
     ${(() => { const c = {}; for (const a of lista) if (a.colore) c[a.colore] = (c[a.colore] || 0) + 1; const voci = Object.entries(c).sort((x, y) => y[1] - x[1]); return voci.length ? `<div class="row mt-16 caption wrap" style="gap:10px"><span>Colori dell'agenda originale:</span>${voci.map(([col, n]) => `<span class="status"><i class="dot" style="background:${rfEsc(col)}"></i>${n}</span>`).join('')}</div>` : ''; })()}
     <div class="row mt-16 caption wrap"><span class="status"><i class="dot accent"></i>Programmato</span><span class="status"><i class="dot success"></i>Completato</span><span class="status"><i class="dot warning"></i>In ritardo</span><span class="caption">Dal robot MediOnline, in sola lettura; si aggiorna ogni ora.</span></div>`;
 };
+
+/* ---------- la linea dell'ora attuale nella giornata ---------- */
+(function () { const st = document.createElement('style'); st.textContent = `
+.rf-ora-ora { position:absolute; left:0; right:0; height:0; border-top:2px solid #e5484d; z-index:3; pointer-events:none; }
+.cal-col .rf-ora-ora::before { content:''; position:absolute; left:-5px; top:-6px; width:10px; height:10px; border-radius:50%; background:#e5484d; }
+.cal-col + .cal-col .rf-ora-ora::before { display:none; }
+.cal-times .rf-ora-ora.etichetta { border-top:0; }
+.cal-times .rf-ora-ora.etichetta span { position:absolute; right:4px; top:-9px; font-size:11px; font-weight:650; color:#fff; background:#e5484d; border-radius:6px; padding:1px 5px; line-height:16px; }
+`; document.head.appendChild(st); })();
+function rfAgendaOraTesto() { const d = new Date(); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
+// Dove sta la linea: minuti da inizio giornata disegnata, in pixel; nascosta fuori dalle ore disegnate.
+function rfAgendaOraStile(inizioH, fineH, slotH) {
+  const d = new Date(), m = d.getHours() * 60 + d.getMinutes();
+  if (m < inizioH * 60 || m > fineH * 60) return 'display:none';
+  return `top:${((m - inizioH * 60) / 30 * slotH).toFixed(1)}px`;
+}
+function rfAgendaOraOra() {
+  const testo = rfAgendaOraTesto();
+  document.querySelectorAll('.rf-ora-ora').forEach((el) => {
+    el.setAttribute('style', rfAgendaOraStile(Number(el.dataset.inizio), Number(el.dataset.fine), Number(el.dataset.slot)));
+    const sp = el.querySelector('span'); if (sp) sp.textContent = testo;
+  });
+}
+if (!window.rfAgendaOraTimer) window.rfAgendaOraTimer = setInterval(rfAgendaOraOra, 30000);
 
 /* ---------- avvio: dentro la piattaforma niente demo, mai ---------- */
 function rfPaginaCarico() {
