@@ -195,8 +195,14 @@ export async function elencoCiclo(studioId: string) {
     `select count(*) filter (where stato in ('in_attesa', 'assegnato'))::int as totale, count(*) filter (where stato = 'assegnato')::int as in_cartella,
             to_char(max(quando) filter (where stato in ('in_attesa', 'assegnato')), 'YYYY-MM-DD"T"HH24:MI') as ultimo
        from ciclo_arrivi where studio_id = $1`, [studioId]);
+  // Gli ultimi già nella cartella di un paziente (21.10.2026, dallo studio: «la prova da sforzo non arriva nelle
+  // immagini»): si vedono anche qui, non solo quelli da assegnare. Il nome del paziente lo mette la pagina.
+  const recenti = await query<{ id: string; tipo: Tipo; esame_il: string | null; patient_id: string; documento_id: string | null; quando: string }>(
+    `select id, tipo, to_char(esame_il, 'YYYY-MM-DD"T"HH24:MI') as esame_il, patient_id, documento_id, to_char(quando, 'YYYY-MM-DD"T"HH24:MI') as quando
+       from ciclo_arrivi where studio_id = $1 and stato = 'assegnato' and patient_id is not null and quando > now() - interval '14 days'
+      order by coalesce(esame_il, quando) desc limit 20`, [studioId]);
   // Cognome e nome già separati dal referto («Cognome, Nome» non si conserva: si ripropone dalla prima parola).
-  return { arrivi: arrivi.map((a) => { const [cg, ...resto] = (a.nome_letto ?? '').split(' '); return { ...a, proposta: a.nome_letto ? { cognome: cg, nome: resto.join(' ') } : null }; }), conta: c ?? { totale: 0, in_cartella: 0, ultimo: null } };
+  return { arrivi: arrivi.map((a) => { const [cg, ...resto] = (a.nome_letto ?? '').split(' '); return { ...a, proposta: a.nome_letto ? { cognome: cg, nome: resto.join(' ') } : null }; }), recenti, conta: c ?? { totale: 0, in_cartella: 0, ultimo: null } };
 }
 export async function pdfArrivo(studioId: string, id: string): Promise<Buffer | null> {
   const [a] = await query<{ storage_key: string | null }>(`select storage_key from ciclo_arrivi where id = $1 and studio_id = $2 and stato = 'in_attesa'`, [id, studioId]);

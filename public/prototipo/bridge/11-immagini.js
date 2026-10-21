@@ -851,8 +851,9 @@ PAGES.imaging = () => {
 /* ---------- prova da sforzo: i referti PDF arrivati dalla ciclo (9.10.2026) ----------
    Il programma della ciclo crea il referto in PDF; una copia arriva sul Mac e la piattaforma la
    mette da sola nella cartella del paziente quando nome e data di nascita combaciano con una
-   persona sola. Qui: quelli che non si sono agganciati, da assegnare a mano. */
-RF.cic = { arrivi: [], conta: null, scelte: {} };
+   persona sola. Qui: quelli che non si sono agganciati, da assegnare a mano, e (21.10.2026) gli ultimi arrivati già
+   in cartella, col paziente e il PDF. */
+RF.cic = { arrivi: [], recenti: [], conta: null, scelte: {} };
 const RF_CIC_MOTIVO = { senza_nascita: 'sull’apparecchio non è stata scritta la data di nascita', senza_nome: 'sull’apparecchio non è stato scritto il nome', nessuno: 'nessuna cartella con questo nome', omonimi: 'più persone con questo nome', nascita_diversa: 'la data di nascita non combacia' };
 const rfCicQuando = (s) => (s ? `${s.slice(8, 10)}.${s.slice(5, 7)}.${s.slice(0, 4)} ${s.slice(11, 16)}` : 'data non letta');
 const rfCicGiorno = (s) => (s ? `${s.slice(8, 10)}.${s.slice(5, 7)}.${s.slice(0, 4)}` : '');
@@ -860,10 +861,10 @@ async function rfCicCarica() {
   try {
     const r = await fetch('/api/prototipo/ciclo', { credentials: 'include', cache: 'no-store' });
     if (!r.ok) return;
-    const j = await r.json(); const eraVuoto = !RF.cic.conta, quanti = (RF.cic.arrivi || []).length;
-    RF.cic.arrivi = j.arrivi || []; RF.cic.conta = j.conta || null;
+    const j = await r.json(); const eraVuoto = !RF.cic.conta, quanti = (RF.cic.arrivi || []).length + 1000 * (RF.cic.recenti || []).length;
+    RF.cic.arrivi = j.arrivi || []; RF.cic.recenti = j.recenti || []; RF.cic.conta = j.conta || null;
     // La scheda compare (o cambia) dopo che la pagina è già disegnata: la si ridisegna solo se c'è qualcosa di nuovo da mostrare.
-    if (state.route === 'imaging' && !RF.img.aperto && ((eraVuoto && j.conta && j.conta.totale) || quanti !== RF.cic.arrivi.length)) render();
+    if (state.route === 'imaging' && !RF.img.aperto && ((eraVuoto && j.conta && j.conta.totale) || quanti !== RF.cic.arrivi.length + 1000 * RF.cic.recenti.length)) render();
   } catch { /* la pagina resta quella degli esami */ }
 }
 async function rfCicChiedi(corpo) {
@@ -901,9 +902,18 @@ async function rfCicScarta(id) {
   if (!confirm('Scartare questo esame? Sul PC dell’apparecchio resta: da lì si può rimandare.')) return;
   await rfCicFatto(await rfCicChiedi({ azione: 'scarta', id }), 'Esame scartato');
 }
+// Gli ultimi esami già nella cartella di un paziente: tipo e ora, il paziente (apre la cartella) e il PDF.
+function rfCicRecentiHtml() {
+  const r = RF.cic.recenti || []; if (!r.length) return '';
+  const paz = (id) => (RF.data.patients || []).find(p => p.id === id);
+  return `<div class="rf-cic-tit">Arrivati negli ultimi 14 giorni, già in cartella</div>${r.map(x => { const p = paz(x.patient_id); return `<div class="rf-cic-rec">
+      <span class="num">${rfEsc(rfCicQuando(x.esame_il || x.quando))}</span><span class="badge ${x.tipo === 'ecg' ? 'accent' : 'success'}">${x.tipo === 'ecg' ? 'ECG' : 'Prova da sforzo'}</span>
+      ${p ? `<a onclick="go('#/patients/${rfEsc(p.id)}')">${rfEsc(fullName(p))}</a>${p.dob ? `<span class="caption">${rfEsc(p.dob)}</span>` : ''}` : '<span class="caption">paziente</span>'}
+      <span class="grow"></span>${x.documento_id ? `<a class="btn sm ghost" href="/api/documents/${rfEsc(x.documento_id)}" target="_blank" rel="noopener">Apri il PDF</a>` : ''}</div>`; }).join('')}`;
+}
 function rfCicScheda() {
   const a = RF.cic.arrivi || [], c = RF.cic.conta;
-  if (!a.length && !(c && c.totale)) return '';
+  if (!a.length && !(c && c.totale) && !(RF.cic.recenti || []).length) return '';
   const riga = (x) => {
     const s = RF.cic.scelte[x.id] || {}; const q = (s.cerca || '').trim().toLowerCase();
     const trovati = q.length >= 2 ? (RF.data.patients || []).filter(p => rfUuid(p.id) && fullName(p).toLowerCase().includes(q)).slice(0, 6) : [];
@@ -918,8 +928,14 @@ function rfCicScheda() {
   };
   return `<div class="card mt-16"><div class="card-head"><span class="section-title">ECG e prove da sforzo arrivati dagli apparecchi</span>${a.length ? `<span class="badge warning">${a.length} da assegnare</span>` : '<span class="badge success">tutti in cartella</span>'}</div>
     <p class="meta" style="margin:0 0 6px;line-height:1.55">L’<b>ECG</b> a fine esame e il referto della <b>prova da sforzo</b> (tasto «Report PDF» sulla ciclo) arrivano qui da soli e vanno nella cartella del paziente, fra i documenti «ECG» e «Ciclo», quando <b>nome e data di nascita</b> scritti sull’apparecchio combaciano con una persona sola.${c && c.totale ? ` Arrivati finora: <b>${c.totale}</b>, di cui ${c.in_cartella} già in cartella${c.ultimo ? `; l’ultimo il ${rfEsc(rfCicQuando(c.ultimo))}` : ''}.` : ''}</p>
-    ${a.map(riga).join('')}</div>`;
+    ${a.map(riga).join('')}${rfCicRecentiHtml()}</div>`;
 }
+(function () { const st = document.createElement('style'); st.textContent = `
+.rf-cic-tit { font-size:11.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-3); margin:14px 0 4px; }
+.rf-cic-rec { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:6px 0; border-top:1px solid var(--border); font-size:13.5px; }
+.rf-cic-rec a:not(.btn) { color:var(--accent); cursor:pointer; font-weight:600; }
+.rf-cic-rec .num { font-variant-numeric:tabular-nums; min-width:118px; }
+`; document.head.appendChild(st); })();
 
 /* L'archivio dello studio (6.10.2026). Al software Philips si chiede «che
    esami hai di questa persona?» e, quando se ne apre uno, ce lo si fa mandare:

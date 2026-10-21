@@ -86,6 +86,9 @@ async function main() {
     const dopo = await fetch(`${url}/${b.id}`, { headers: { cookie: C_SEG } });
     verifica(aSenza.stato === 400 && aTec.stato === 403 && aSeg.stato === 200 && aBis.stato === 404 && (await docDi(pa)).length === 2 && dopo.status === 404,
       `assegnare: senza paziente no, il tecnico no, la segreteria sì e il referto entra in cartella, due volte no (${aSenza.stato}, ${aTec.stato}, ${aSeg.stato}, ${aBis.stato})`);
+    const rec = ((await leggi(C_SEG)).j.recenti ?? []) as { id: string; patient_id: string; documento_id: string | null; tipo: string }[];
+    verifica(rec.filter((x) => x.patient_id === pa && x.documento_id && x.tipo === 'ciclo').length === 2 && rec.some((x) => x.id === b.id),
+      `nella pagina Immagini si vedono anche quelli già in cartella, col paziente e il documento (${rec.length})`);
 
     // 5 — la persona non ha ancora la cartella: nasce da qui, coi dati confermati.
     const C = 'STX_81_Dario_Provaciclonuovo_maschio__20260310090000__20260310091000__0.pdf';
