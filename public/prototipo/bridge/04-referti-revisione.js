@@ -1032,6 +1032,8 @@ async function rfCaricaAttorno(forza) {
   catch { RF.attorno = null; }
   RF.attornoPer = id; RF.attornoCarica = null; RF.attornoAltro = false;
   if (typeof rvRenderNav === 'function' && state.route === 'review') rvRenderNav();
+  // nella revisione semplice inviante e allegati stanno nella colonna di destra
+  if (typeof rfSmRidisegna === 'function' && document.querySelector('.sm-lato')) { rfSmRidisegna(); if (typeof rfSmFoglioCarica === 'function') void rfSmFoglioCarica(true); }
 }
 // «Altro…»: un medico qualunque della rubrica, cercandolo per nome.
 function rfAttornoAltroHtml(a) {

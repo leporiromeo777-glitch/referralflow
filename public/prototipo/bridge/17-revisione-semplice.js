@@ -6,12 +6,13 @@
    Dal 20.10.2026 (lo studio: «togli tutte le correzioni guidate; il foglio non bianco ma quello della lettera, col cuore,
    che si aggiorna col nome del paziente o del medico, con le dimensioni del Word, così l'impaginazione è identica»):
    - niente punti da controllare: la lettera e basta;
-   - sopra il foglio i campi della lettera — paziente, data di nascita, destinatario, copia per conoscenza;
+   - i campi della lettera (dal 21.10.2026 nella colonna di destra, tutti in una schermata senza scorrere): paziente,
+     data di nascita, destinatario, medico inviante dalla rubrica, copia per conoscenza, allegati;
    - il FOGLIO è la pagina del Word: A4, margini, intestazione col cuore e il medico, destinatario, «Lugano, data»,
      titolo, paziente, testo, copia, piè di pagina, con le misure dello stampo (modelli/referto-carta-intestata.docx) e
      le parti calcolate dalla stessa funzione del Word (/api/prototipo/referti/<id>/foglio). Si scrive solo il testo;
      il resto si aggiorna da sé quando cambiano i campi. Dove il Word va a pagina nuova c'è una riga tratteggiata;
-   - a destra l'audio, le note del medico, «Scarica Word» e «Conferma la lettera».
+   - a destra l'audio, i dati della lettera, le note del medico, «Scarica Word» e «Conferma la lettera».
    «Revisione completa» riporta alla revisione di prima, per chi la vuole. */
 (function () { const st = document.createElement('style'); st.textContent = `
 .sm-testa { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 16px; }
@@ -21,12 +22,16 @@
 .sm-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
 @media (max-width: 1100px) { .sm-grid { grid-template-columns: 1fr; } .sm-lato { position: static !important; } }
 .sm-carta { position: relative; min-width: 0; }
-.sm-campi { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, .8fr); gap: 8px 12px; margin: 0 84px 14px 0; }
-.sm-campi .field { margin: 0; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.sm-campi .input { width: 100%; box-sizing: border-box; }
-.sm-campi label { font-size: 11.5px; color: var(--text-2); }
+.sm-campi { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, .75fr); gap: 6px 8px; }
+.sm-campi .field { margin: 0; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sm-campi .input { width: 100%; box-sizing: border-box; height: 30px; padding: 0 9px; font-size: 13px; }
+.sm-campi select.input { padding-right: 4px; }
+.sm-campi label { font-size: 11px; color: var(--text-2); }
 .sm-campi .largo { grid-column: 1 / -1; }
-@media (max-width: 700px) { .sm-campi { grid-template-columns: 1fr; margin-right: 0; margin-top: 40px; } }
+.sm-campi .sm-avviso { font-size: 11.5px; color: var(--warning, #9a6200); line-height: 1.35; }
+.sm-campi .sm-avviso a, .sm-al a { color: var(--accent); cursor: pointer; }
+.sm-al { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 12px; }
+.sm-al .chip { border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; background: var(--surface-2, var(--surface)); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sm-tavolo { overflow-x: auto; padding: 4px 0 24px; }
 /* La pagina del Word: A4 (210 × 297 mm), margini 50 mm sopra e 20 mm ai lati e sotto, intestazione a 12,5 mm, logo
    170 × 20 mm; corpo Calibri Light 10 pt a interlinea singola, giustificato; intestazione Avenir 8 pt; piè 10 pt. */
@@ -43,19 +48,20 @@
 #sm-testo { display: block; width: 100%; border: 0; outline: none; background: transparent; color: #000; font: inherit; line-height: inherit; text-align: justify; padding: 0; min-height: 4em; }
 #sm-testo::selection { background: rgba(79,110,247,.25); }
 .sm-salvato { font-size: 12px; color: var(--text-3); }
-.sm-lato { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 14px; }
-.sm-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card, 14px); padding: 14px 16px; }
-.sm-box h3 { margin: 0 0 4px; font-size: 14.5px; }
+.sm-lato { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 92px); overflow-y: auto; }
+.sm-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card, 14px); padding: 11px 13px; }
+.sm-box h3 { margin: 0 0 6px; font-size: 13.5px; }
+.sm-box.sm-note-box { flex: 0 1 auto; min-height: 0; overflow-y: auto; max-height: 150px; }
 .sm-audio { display: flex; align-items: center; gap: 10px; }
 .sm-audio .btn { flex: none; }
 .sm-barra { position: relative; flex: 1; height: 6px; border-radius: 3px; background: var(--surface-3); cursor: pointer; }
 .sm-barra #rv-ph { position: absolute; top: -4px; width: 3px; height: 14px; border-radius: 2px; background: var(--accent); }
 .sm-tempo { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.sm-fine { display: flex; flex-direction: column; gap: 8px; }
+.sm-fine { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .sm-fine .btn { justify-content: center; }
 .sm-link { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; }
 .sm-link a { color: var(--accent); cursor: pointer; }
-.sm-note li { font-size: 13px; line-height: 1.5; margin: 4px 0; }
+.sm-note li { font-size: 12.5px; line-height: 1.45; margin: 3px 0; }
 `; document.head.appendChild(st); })();
 
 // La revisione semplice vale per la lettera dettata sul foglio, a meno che per questa bozza si sia chiesta quella completa.
@@ -85,23 +91,45 @@ function rfSmHtml() {
     </div>
     <div class="sm-grid">
       <div class="sm-carta">
-        <div class="sm-campi">
-          ${campo('nome_paziente', 'Paziente', 'Cognome Nome')}${campo('data_nascita', 'Data di nascita', 'gg.mm.aaaa')}
-          ${campo('medico_destinatario', 'Destinatario', 'Dr. med. …', 'largo')}
-          ${campo('copia_conoscenza', 'Copia per conoscenza', 'Dr. med. …; Dr. med. … (separati da «;»)', 'largo')}
-        </div>
         <div class="sm-tavolo" id="sm-tavolo">${rfSmPaginaHtml(sm, conf)}</div>
       </div>
       <div class="sm-lato">
         <div class="sm-box"><div class="sm-audio"><button class="btn sm" id="rv-play" onclick="rvToggle()">${ICONS.play || ''} Play</button><div class="sm-barra" onclick="rfSmBarra(event, this)"><div id="rv-ph" style="left:0"></div></div><span class="sm-tempo"><span id="rv-t">0:00</span> / ${rfEsc(RV_AUDIO.label || '')}</span></div>${typeof rfPedHtml === 'function' ? `<div class="rf-ped-riga" style="margin-top:8px">${rfPedHtml()}</div>` : ''}</div>
-        ${note.length ? `<div class="sm-box"><h3>Note del medico per te</h3><ul class="sm-note" style="margin:6px 0 0;padding-left:18px">${note.map(n => `<li>${rfEsc(n)}</li>`).join('')}</ul></div>` : ''}
+        <div class="sm-box"><h3>Dati della lettera</h3><div class="sm-campi">
+          ${campo('nome_paziente', 'Paziente', 'Cognome Nome')}${campo('data_nascita', 'Nascita', 'gg.mm.aaaa')}
+          ${campo('medico_destinatario', 'Destinatario', 'Dr. med. …', 'largo')}
+          ${rfSmInvianteHtml(conf)}
+          ${campo('copia_conoscenza', 'Copia per conoscenza', 'Dr. med. …; Dr. med. …', 'largo')}
+          ${rfSmAllegatiHtml()}
+        </div></div>
+        ${note.length ? `<div class="sm-box sm-note-box"><h3>Note del medico per te</h3><ul class="sm-note" style="margin:6px 0 0;padding-left:18px">${note.map(n => `<li>${rfEsc(n)}</li>`).join('')}</ul></div>` : ''}
         <div class="sm-box sm-fine">
           <button class="btn" onclick="rfSmWord()">${ICONS.file || ''} Scarica Word</button>
           ${conf ? `<button class="btn primary" onclick="rfEmailPrepara('${rfJs(id)}')">${ICONS.mail || ''} Prepara e-mail</button>` : `<button class="btn primary" onclick="rfSmConferma()">${ICONS.check || ''} Conferma la lettera</button>`}
-          <div class="sm-link"><a onclick="rfAllegati()">Allegati</a>${conf ? '' : `<a onclick="rfEmailPrepara('${rfJs(id)}')">Prepara e-mail</a>`}</div>
+          ${conf ? '' : `<div class="sm-link" style="grid-column:1 / -1"><a onclick="rfEmailPrepara('${rfJs(id)}')">Prepara e-mail</a></div>`}
         </div>
       </div>
     </div>`;
+}
+
+// Il medico inviante, dalla rubrica (lo stesso legame della revisione completa: rfAttornoInviante). Una tendina sola:
+// il nome collegato, o «— scegli —»; se il dettato nomina un medico che non è in rubrica, lo dice con «Aggiungi».
+function rfSmInvianteHtml(conf) {
+  if (RF.attornoPer !== RF.loaded) { void rfCaricaAttorno(); return '<div class="field largo"><label>Medico inviante</label><div class="caption">Cerco nella rubrica…</div></div>'; }
+  const a = RF.attorno; if (!a) return '';
+  const inv = a.inviante || {}, sel = inv.scelto ? inv.scelto.id : '';
+  const opz = `<option value="">— scegli —</option>${(a.rubrica || []).map(x => `<option value="${rfEsc(x.id)}" ${x.id === sel ? 'selected' : ''}>${rfEsc(x.nome)}${x.localita ? ' · ' + rfEsc(x.localita) : ''}</option>`).join('')}`;
+  const avviso = inv.scelto ? '' : inv.stato === 'nuovo'
+    ? `<div class="sm-avviso">${rfEsc(inv.nome || '')} non è nella rubrica.${conf ? '' : ' <a onclick="rfAttornoAggiungi()">Aggiungi</a>'}</div>`
+    : inv.stato === 'ambiguo' ? `<div class="sm-avviso">Il dettato dice ${rfEsc(inv.nome || '')}: scegli chi è.</div>` : '';
+  return `<div class="field largo"><label for="sm-c-inviante">Medico inviante</label><select class="input" id="sm-c-inviante" ${conf ? 'disabled' : ''} onchange="rfAttornoInviante(this.value)">${opz}</select>${avviso}</div>`;
+}
+// Gli allegati che partono col Word e con la mail: i nomi in breve e «Gestisci» (la finestra di sempre).
+function rfSmAllegatiHtml() {
+  const a = RF.attornoPer === RF.loaded ? RF.attorno : null;
+  const al = (a && a.allegati) || [];
+  const ecg = a && a.ecg && a.ecg.citato && !a.ecg.trovato ? '<div class="sm-avviso">Il medico parla di un ECG, ma nella cartella non c’è.</div>' : '';
+  return `<div class="field largo"><label>Allegati</label><div class="sm-al">${al.length ? al.map(x => `<span class="chip" title="${rfEsc(x.etichetta)}">${rfEsc(x.etichetta)}</span>`).join('') : '<span class="caption">nessuno</span>'}<a onclick="rfAllegati()">Gestisci</a></div>${ecg}</div>`;
 }
 
 /* ── la pagina del Word ── */
@@ -179,10 +207,15 @@ function rfSmBarra(e, el) { const r = el.getBoundingClientRect(); rvSeek(Math.ma
 // Ridisegna solo la colonna di destra (il foglio non si ricrea: si perderebbe il cursore).
 function rfSmRidisegna() {
   const vecchia = document.querySelector('.sm-lato'); if (!vecchia) { render(); return; }
+  const f = rfSmFuoco();
   const tmp = document.createElement('div'); tmp.innerHTML = rfSmHtml();
   const nuova = tmp.querySelector('.sm-lato'); if (nuova) vecchia.replaceWith(nuova);
+  rfSmRidaiFuoco(f);
   if (typeof rvTick === 'function') rvTick();
 }
+// Chi sta scrivendo in un campo della colonna non perde il punto in cui scriveva quando la colonna si ridisegna.
+function rfSmFuoco() { const a = document.activeElement; return a && a.id && a.id.startsWith('sm-c-') && a.tagName === 'INPUT' ? { id: a.id, da: a.selectionStart, a: a.selectionEnd } : null; }
+function rfSmRidaiFuoco(f) { if (!f) return; const el = document.getElementById(f.id); if (!el) return; el.focus(); try { el.setSelectionRange(f.da, f.a); } catch { /* ignora */ } }
 
 // Si salva da solo, un secondo e mezzo dopo l'ultima modifica: il testo nella bozza, e a che punto si è.
 function rfSmProgramma() {
@@ -255,9 +288,9 @@ async function rfSmConferma() {
   PAGES.review = () => {
     const id = state.params && state.params.id;
     if (RF.live && id && RF.loaded === id && rfSmVale(RF.meta)) {
-      const a = document.activeElement, cursore = a && a.id === 'sm-testo' ? rfSmCursore(a) : null;
+      const a = document.activeElement, cursore = a && a.id === 'sm-testo' ? rfSmCursore(a) : null, fuoco = rfSmFuoco();
       const html = rfSmHtml();
-      setTimeout(() => rfSmDopo(cursore), 0);
+      setTimeout(() => { rfSmDopo(cursore); rfSmRidaiFuoco(fuoco); }, 0);
       return html;
     }
     let html = completa();
