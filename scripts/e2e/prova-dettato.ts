@@ -87,6 +87,11 @@ async function main() {
       // la lettera di provenienza, da aprire accanto al foglio: qui un referto della piattaforma, quindi il suo testo intero
       && k1.j.apri?.tipo === 'referto' && k1.j.apri?.pdf === false && k1.j.apri?.docx === true && k1.j.saluto === 'Caro collega,' && !k2.j.saluto && k1.j.apri?.testo.startsWith('Caro collega,') && /cordiali saluti/.test(k1.j.apri?.testo ?? ''),
       `«inserisci la lettera più recente»: arriva il corpo della più recente (senza saluto, saluti e firma), trovata dal legame col paziente; «la terapia»: il suo blocco (${k1.stato}, ${k1.j.data}, ${k2.stato})`);
+    // Le frecce fra le lettere (21.10.2026): l'elenco in ordine di data dalla più recente, e una lettera per posizione.
+    const kl = await comando({ comando: 'lettere', paziente: paz }), ka = await comando({ comando: 'apri_lettera', paziente: paz, indice: 1 }), kz = await comando({ comando: 'apri_lettera', paziente: paz, indice: 2 });
+    verifica(kl.stato === 200 && kl.j.lettere?.length === 2 && kl.j.lettere[0].data === '20.06.2026' && kl.j.lettere[1].data === '10.01.2026' && !('testo' in kl.j.lettere[0])
+      && k1.j.indice === 0 && k1.j.totale === 2 && ka.stato === 200 && ka.j.indice === 1 && ka.j.totale === 2 && ka.j.data === '10.01.2026' && /visita vecchia/.test(ka.j.apri?.testo ?? '') && kz.stato === 404,
+      `frecce: le lettere in ordine di data (${kl.j.lettere?.map((x: any) => x.data).join(', ')}), la seconda si apre, oltre l'ultima no (${kz.stato})`);
     // La lettera vera accanto al foglio (15.10.2026): il Word con la carta intestata, in anteprima — non conta come scaricato.
     const wPrima = await query<{ n: number }>(`select count(*)::int as n from referti_eventi where bozza_id = $1 and azione = 'word_scaricato'`, [k1.j.apri?.id]).catch(() => [{ n: -1 }]);
     const w = await fetch(`${base}/api/referti/docx/${k1.j.apri?.id}?anteprima=1`, { headers: { cookie: C } }), wb = Buffer.from(await w.arrayBuffer());

@@ -53,6 +53,13 @@
 .rf-dit-fonte { display: none; position: sticky; top: 4px; max-height: calc(100vh - 20px); flex-direction: column; background: var(--surface, #fff); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
 .rf-dit-due.con-fonte .rf-dit-fonte { display: flex; }
 .rf-dit-fonte-bar { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.rf-dit-fonte-pos { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rf-dit-cart { background: var(--surface, #fff); padding: 6px 10px 12px; }
+.rf-dit-cart-tit { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-3); margin: 10px 0 4px; }
+.rf-dit-cart-sotto { font-size: 12px; font-weight: 600; color: var(--text-2); margin: 8px 0 2px; }
+.rf-dit-cart-voce { display: flex; gap: 10px; padding: 5px 6px; border-radius: 8px; font-size: 13px; cursor: pointer; color: var(--text); text-decoration: none; }
+.rf-dit-cart-voce:hover { background: var(--surface-2, #f1f3f8); }
+.rf-dit-cart-voce .num { flex: none; width: 76px; color: var(--text-2); font-variant-numeric: tabular-nums; }
 .rf-dit-fonte-bar .rf-dit-fonte-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
 .rf-dit-fonte-corpo { flex: 1; min-height: 60vh; overflow: auto; padding: 8px; background: var(--surface-2, #eef0ec); }
 .rf-dit-fonte-corpo canvas { display: block; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.12); margin: 0 auto 8px; }
@@ -288,7 +295,7 @@ async function rfDitComandoEsegui(comando, da, a, frase, parti, soloApri, esclus
       if (frase && el0.value.slice(da, a) !== frase) { const i = el0.value.indexOf(frase); if (i >= 0) { da = i; a = i + frase.length; } else { da = a = -1; } }
       if (da >= 0) { const t0 = RFComandi.sostituisci(el0.value, da, a, ''); rfDitTestoMetti(t0.testo, t0.inizio); }
       d.cmdFallito = '';
-      if (j.apri) rfDitFonteApri(j.apri, `${j.fonte || 'lettera'} · ${j.data || ''}`);
+      if (j.apri) rfDitFonteApri({ ...j.apri, indice: j.indice, totale: j.totale }, `${j.fonte || 'lettera'} · ${j.data || ''}`);
       rfDitComandoStato(`Aperta accanto la lettera del ${rfEsc(j.data || '')} (${rfEsc(j.fonte || '')}). Nel foglio non è entrato niente.`);
       return;
     }
@@ -302,7 +309,7 @@ async function rfDitComandoEsegui(comando, da, a, frase, parti, soloApri, esclus
     // l'hai scritto tu a mano (15.10.2026, richiesta dello studio). «Annulla» rimette quello di prima.
     if (j.saluto && !d.foglioToccato.saluto) { if (!d.foglio) d.foglio = {}; d.cmdUltimo.salutoPrima = d.foglio.saluto || ''; d.foglio.saluto = j.saluto; rfFoglioRiempi(); }
     rfDitTestoMetti(s.testo, s.fine);
-    if (j.apri) rfDitFonteApri(j.apri, `${j.fonte || 'lettera'} · ${j.data || ''}`);
+    if (j.apri) rfDitFonteApri({ ...j.apri, indice: j.indice, totale: j.totale }, `${j.fonte || 'lettera'} · ${j.data || ''}`);
     rfDitComandoStato(`Inserito dalla lettera del ${rfEsc(j.data || '')}: <b>${rfEsc(j.cosa || cosa)}</b> (${rfEsc(j.fonte || '')}) — ${s.fine - s.inizio} caratteri che non hai dettato tu, da rileggere.${(j.mancanti || []).length ? ` <span style="color:#b3261e">In quella lettera non trovo: ${rfEsc(j.mancanti.join(', '))}.</span>` : ''} <a href="javascript:void 0" onclick="rfDitComandoAnnulla()">Annulla</a>${frase ? ' · <a href="javascript:void 0" onclick="rfDitComandoAnnulla(true)">Non era un comando: rimetti la frase</a>' : ''}`);
   } catch (_) { fallito('Il server non risponde: riprova.', 'rete'); }
   finally { d.cmdInCorso = false; }
@@ -330,8 +337,69 @@ function rfDitZoomFoglio() {
   f.style.zoom = z === 1 ? '' : String(z); f.style.width = z === 1 ? '' : `calc(100% / ${z})`;
 }
 function rfDitFonteHtml() {
-  const f = RF.dit.fonte; if (!f) return '';
-  return `<div class="rf-dit-fonte-bar"><b class="rf-dit-fonte-nome" title="${rfEsc(f.titolo || '')}">${rfEsc(f.titolo || 'Lettera')}</b>${rfDitZoomHtml('fonte')}<button class="btn sm" onmousedown="event.preventDefault()" onclick="rfDitFonteChiudi()" aria-label="Chiudi" title="Chiudi">✕</button></div><div class="rf-dit-fonte-corpo" id="rf-dit-fonte-corpo"></div>`;
+  const f = RF.dit.fonte; if (!f) return rfDitCartellaHtml();
+  const md = 'onmousedown="event.preventDefault()"';      // i tasti non tolgono il cursore dal foglio: Dragon continua a scriverci
+  const frecce = Number.isInteger(f.indice) && f.totale > 1
+    ? `<button class="btn sm" ${md} onclick="rfDitLettera(${f.indice + 1})" ${f.indice + 1 >= f.totale ? 'disabled' : ''} title="La lettera prima (più vecchia)" aria-label="Lettera più vecchia">‹</button><span class="caption rf-dit-fonte-pos">${f.indice + 1} di ${f.totale}</span><button class="btn sm" ${md} onclick="rfDitLettera(${f.indice - 1})" ${f.indice <= 0 ? 'disabled' : ''} title="La lettera dopo (più recente)" aria-label="Lettera più recente">›</button>` : '';
+  return `<div class="rf-dit-fonte-bar">${frecce}<b class="rf-dit-fonte-nome" title="${rfEsc(f.titolo || '')}">${rfEsc(f.titolo || 'Lettera')}</b>${rfDitZoomHtml('fonte')}<button class="btn sm" ${md} onclick="rfDitFonteChiudi()" aria-label="Chiudi la lettera" title="${rfFoglioPazId() ? 'Chiudi la lettera e torna alla cartella' : 'Chiudi'}">✕</button></div><div class="rf-dit-fonte-corpo" id="rf-dit-fonte-corpo"></div>`;
+}
+/* LA CARTELLA DEL PAZIENTE ACCANTO AL FOGLIO (21.10.2026, dallo studio: «nella pagina della dettatura di fianco anche la
+   cartella del paziente che seleziono, e se chiedo di vedere una lettera delle frecce per spostarmi da una lettera
+   all'altra in ordine di data»). Scelto il paziente, la terza colonna mostra le sue lettere — le stesse dei comandi a
+   voce, dalla più recente — e i documenti della cartella per sottocartella. Un clic apre lì accanto; da una lettera,
+   ‹ › vanno alla più vecchia e alla più recente. */
+function rfDitCartellaHtml() {
+  const pid = rfFoglioPazId(); if (!pid) return '';
+  const c = RF.dit.cartella && RF.dit.cartella.pid === pid ? RF.dit.cartella : null;
+  if (!c) setTimeout(rfDitCartellaAggiorna, 0);      // aperta la pagina con un paziente già scelto: le sue lettere si cercano ora
+  const p = (typeof PATIENTS !== 'undefined' ? PATIENTS : []).find(x => x.id === pid);
+  const md = 'onmousedown="event.preventDefault()"';
+  const lettere = !c || c.carico ? '<div class="caption">Cerco le lettere…</div>' : c.errore ? `<div class="caption">${rfEsc(c.errore)}</div>`
+    : c.lettere.length ? c.lettere.map(l => `<a class="rf-dit-cart-voce" ${md} onclick="rfDitLettera(${l.indice})"><span class="num">${rfEsc(l.data)}</span><span>${rfEsc(l.fonte)}</span></a>`).join('') : '<div class="caption">Nessuna lettera trovata.</div>';
+  const gruppi = {};
+  for (const x of ((p && p.docs) || [])) (gruppi[x.cartella || 'Documenti'] = gruppi[x.cartella || 'Documenti'] || []).push(x);
+  const docs = Object.keys(gruppi).sort((a, b) => a.localeCompare(b, 'it', { numeric: true })).map(g => `<div class="rf-dit-cart-sotto">${rfEsc(g)}</div>${gruppi[g].map(x => `<a class="rf-dit-cart-voce" ${md} onclick="rfDitDocumento('${rfEsc(x.id)}')"><span class="num">${rfEsc(x.d || '')}</span><span>${rfEsc(x.t || x.filename || 'Documento')}</span></a>`).join('')}`).join('');
+  return `<div class="rf-dit-fonte-bar"><b class="rf-dit-fonte-nome">Cartella${p ? ` di ${rfEsc(fullName(p))}` : ''}</b>${p ? `<a class="btn sm ghost" href="#/patients/${rfEsc(pid)}" target="_blank" rel="noopener" title="Apre la cartella in un'altra scheda">Apri</a>` : ''}<button class="btn sm" ${md} onclick="rfDitCartellaNascondi()" aria-label="Chiudi" title="Chiudi">✕</button></div>
+    <div class="rf-dit-fonte-corpo rf-dit-cart"><div class="rf-dit-cart-tit">Lettere, dalla più recente</div>${lettere}<div class="rf-dit-cart-tit">Documenti</div>${docs || '<div class="caption">Nessun documento.</div>'}</div>`;
+}
+// Il paziente cambiato: la colonna accanto mostra la sua cartella (o niente se non c'è un paziente della cartella).
+function rfDitCartellaAggiorna() {
+  const d = RF.dit, pid = rfFoglioPazId();
+  if (pid && (!d.cartella || d.cartella.pid !== pid)) {
+    d.cartella = { pid, carico: true, lettere: [], errore: '' };
+    fetch('/api/prototipo/dittafono/comando', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comando: 'lettere', paziente: pid }) })
+      .then(r => r.json().then(j => ({ ok: r.ok, j }))).then(({ ok, j }) => { if (d.cartella && d.cartella.pid === pid) { d.cartella.carico = false; d.cartella.lettere = ok ? (j.lettere || []) : []; d.cartella.errore = ok ? '' : (j.errore || 'Non riesco a leggere le lettere.'); rfDitCartellaDisegna(); } })
+      .catch(() => { if (d.cartella && d.cartella.pid === pid) { d.cartella.carico = false; d.cartella.errore = 'Piattaforma non raggiungibile.'; rfDitCartellaDisegna(); } });
+  }
+  if (!pid) d.cartella = null;
+  rfDitCartellaDisegna();
+}
+function rfDitCartellaDisegna() {
+  const g = document.getElementById('rf-dit-due'), el = document.getElementById('rf-dit-fonte');
+  const pid = rfFoglioPazId(), cart = !!pid && RF.dit.cartellaChiusa !== pid;
+  if (g) g.classList.toggle('con-fonte', !!(RF.dit.fonte || cart));
+  if (el && !RF.dit.fonte) el.innerHTML = cart ? rfDitCartellaHtml() : '';
+  if (typeof rfDitRiapriMetti === 'function' && document.querySelector('.rf-dit-carta-bar')) rfDitRiapriMetti();
+  if (typeof rfFoglioRiempi === 'function') rfFoglioRiempi();
+}
+// Una lettera del paziente per posizione (0 = la più recente): dalla cartella o con le frecce.
+async function rfDitLettera(indice) {
+  const pid = rfFoglioPazId(); if (!pid || indice < 0) return;
+  const corpo = document.getElementById('rf-dit-fonte-corpo'); if (corpo && RF.dit.fonte) corpo.innerHTML = '<div class="caption" style="padding:14px">Apro la lettera…</div>';
+  try {
+    const r = await fetch('/api/prototipo/dittafono/comando', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comando: 'apri_lettera', paziente: pid, indice }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.apri) { if (typeof toast === 'function') toast(j.errore || 'Non riesco ad aprire la lettera.'); if (RF.dit.fonte) { const b = document.getElementById('rf-dit-fonte-corpo'); if (b) { b.dataset.fatto = ''; void rfDitFonteDisegna(); } } return; }
+    const nome = j.fonte || 'lettera';
+    rfDitFonteApri({ ...j.apri, indice: j.indice, totale: j.totale }, j.data && !nome.includes(j.data) ? `${nome} · ${j.data}` : nome);
+  } catch (_) { if (typeof toast === 'function') toast('Piattaforma non raggiungibile.'); }
+}
+// Un documento della cartella, aperto accanto: PDF alle sue pagine, Word com'è, immagine; il resto in un'altra scheda.
+function rfDitDocumento(id) {
+  const pid = rfFoglioPazId(), p = (typeof PATIENTS !== 'undefined' ? PATIENTS : []).find(x => x.id === pid);
+  const x = ((p && p.docs) || []).find(y => y.id === id); if (!x) return;
+  const n = String(x.filename || '').toLowerCase();
+  rfDitFonteApri({ tipo: 'documento', id, pdf: n.endsWith('.pdf'), docx: n.endsWith('.docx'), img: /\.(jpe?g|png|gif|webp)$/.test(n), testo: '', da: null, a: null }, `${x.t || x.filename || 'Documento'}${x.d ? ' · ' + x.d : ''}`);
 }
 function rfDitFonteApri(apri, titolo) {
   const d = RF.dit, stessa = d.fonte && d.fonte.id === apri.id && d.fonte.tipo === apri.tipo;
@@ -343,17 +411,21 @@ function rfDitFonteApri(apri, titolo) {
 }
 function rfDitFonteChiudi() {
   // la lettera chiusa resta a portata: «Riapri la lettera» sopra il foglio (15.10.2026, dallo studio: chiusa con la ✕
-  // non c'era modo di riaprirla se non con un altro comando)
+  // non c'era modo di riaprirla se non con un altro comando). Con un paziente scelto, al suo posto torna la cartella.
   RF.dit.fonteChiusa = RF.dit.fonte; RF.dit.fonte = null;
-  const g = document.getElementById('rf-dit-due'), el = document.getElementById('rf-dit-fonte');
-  if (g) g.classList.remove('con-fonte'); if (el) el.innerHTML = '';
+  RF.dit.cartellaChiusa = null;
+  rfDitCartellaDisegna();
   rfDitRiapriMetti();
   rfFoglioRiempi();
 }
 function rfDitRiapriHtml() {
-  const f = RF.dit.fonteChiusa;
-  return f && !RF.dit.fonte ? `<button class="btn sm" id="rf-dit-riapri" onmousedown="event.preventDefault()" onclick="rfDitFonteRiapri()" title="${rfEsc(f.titolo || 'La lettera')}">Riapri la lettera</button>` : '';
+  const f = RF.dit.fonteChiusa, pid = rfFoglioPazId(), md = 'onmousedown="event.preventDefault()"';
+  const lett = f && !RF.dit.fonte ? `<button class="btn sm" ${md} onclick="rfDitFonteRiapri()" title="${rfEsc(f.titolo || 'La lettera')}">Riapri la lettera</button>` : '';
+  const cart = pid && !RF.dit.fonte && RF.dit.cartellaChiusa === pid ? `<button class="btn sm" ${md} onclick="rfDitCartellaMostra()">Cartella</button>` : '';
+  return lett || cart ? `<span id="rf-dit-riapri" style="display:inline-flex;gap:6px">${lett}${cart}</span>` : '';
 }
+function rfDitCartellaMostra() { RF.dit.cartellaChiusa = null; rfDitCartellaDisegna(); }
+function rfDitCartellaNascondi() { RF.dit.cartellaChiusa = rfFoglioPazId(); rfDitCartellaDisegna(); }
 // Il tasto si mette e si toglie al suo posto, senza ridisegnare il foglio (il programma di dettatura ci sta scrivendo).
 function rfDitRiapriMetti() {
   const v = document.getElementById('rf-dit-riapri'); if (v) v.remove();
@@ -367,7 +439,8 @@ async function rfDitFonteDisegna() {
   const z = rfDitZoomDi('fonte'), chiave = `${f.tipo}:${f.id}:${f.da || 0}:${z}:${box.clientWidth}`;
   if (box.dataset.fatto === chiave) return;      // già disegnata così: non si rifà a ogni ridisegno della pagina
   box.dataset.fatto = chiave;
-  const testo = () => { box.innerHTML = `<div class="rf-dit-fonte-testo" style="font-size:${Math.round(13 * z)}px">${rfEsc(f.testo || '')}</div>`; };
+  const testo = () => { box.innerHTML = f.testo ? `<div class="rf-dit-fonte-testo" style="font-size:${Math.round(13 * z)}px">${rfEsc(f.testo || '')}</div>` : `<div class="caption" style="padding:14px">Questo file non si mostra qui: <a href="/api/documents/${encodeURIComponent(f.id)}" target="_blank" rel="noopener">aprilo in un’altra scheda</a>.</div>`; };
+  if (f.img) { box.innerHTML = `<img src="/api/documents/${encodeURIComponent(f.id)}" alt="" style="display:block;max-width:${Math.round(100 * z)}%;margin:0 auto;background:#fff">`; return; }
   if (f.docx) { void rfDitFonteWord(f, box, chiave, z, testo); return; }
   if (!f.pdf || typeof rfPdfJs !== 'function') { testo(); return; }
   try {
@@ -465,7 +538,7 @@ function rfDitIndPazienteMetti(p) {
   d.pazienteScelto = { id: p.id, testo: d.paziente.trim() };
   const inp = document.getElementById('rf-dit-paz'); if (inp) inp.value = d.paziente;
   const ok = document.getElementById('rf-dit-paz-ok'); if (ok) ok.innerHTML = rfDitPazStato();
-  void rfFoglioCarica();
+  void rfFoglioCarica(); rfDitCartellaAggiorna();
 }
 function rfDitIndMedicoScegli(i) { const x = RF.dit.indirizzo; const m = x && x.medico && x.medico.alternative[i]; if (!m) return; x.medico.scelta = m; rfDitIndMedicoMetti(m); rfDitIndStato(); }
 function rfDitIndPazienteScegli(i) { const x = RF.dit.indirizzo; const p = x && x.paziente && x.paziente.alternative[i]; if (!p) return; x.paziente.scelta = p; rfDitIndPazienteMetti(p); rfDitIndStato(); }
@@ -946,11 +1019,11 @@ PAGES.dittafono = () => {
       <div class="actions"><button class="btn" data-go="#/reports">Referti</button></div></div>
     ${d.recupero ? `<div class="rf-manc"><b>C'è una registrazione non inviata</b> di ${RFDittafono.formatta(d.recupero.pcm.byteLength / 2 / RFDittafono.FREQUENZA)}, rimasta su questo dispositivo.
       <div class="row mt-8" style="gap:8px"><button class="btn primary sm" onclick="rfDitRiprendiRecupero()">Riprendila</button><button class="btn sm" onclick="rfDitScartaRecupero()">Scartala</button></div></div>` : ''}
-    ${rfDitDettatura() ? `<div class="rf-dit-due ${d.fonte ? 'con-fonte' : ''}" id="rf-dit-due">` : ''}<div class="card ${rfDitDettatura() ? 'rf-dit-lato' : ''}">
+    ${rfDitDettatura() ? `<div class="rf-dit-due ${d.fonte || (rfFoglioPazId() && d.cartellaChiusa !== rfFoglioPazId()) ? 'con-fonte' : ''}" id="rf-dit-due">` : ''}<div class="card ${rfDitDettatura() ? 'rf-dit-lato' : ''}">
       <div class="rf-dit-campi" id="rf-dit-campi">
         <div class="field"><label for="rf-dit-medico">Chi detta</label><select class="input" id="rf-dit-medico" ${rec ? 'disabled' : ''} onchange="rfDitMedicoScelto(this.value)"><option value="">${(RF.medici || []).length ? '— scegli il medico —' : 'nessun medico configurato'}</option>${medici}</select></div>
         <div class="field"><label for="rf-dit-tipo">Che cosa</label><select class="input" id="rf-dit-tipo" ${rec ? 'disabled' : ''} onchange="RF.dit.tipo=this.value"><option value="referto" ${d.tipo === 'referto' ? 'selected' : ''}>Referto</option><option value="visita" ${d.tipo === 'visita' ? 'selected' : ''}>Visita registrata</option></select></div>
-        <div class="field"><label for="rf-dit-paz">Paziente <span class="caption">(facoltativo)</span></label><input class="input" id="rf-dit-paz" list="rf-paz-elenco" placeholder="Cognome Nome" autocomplete="off" value="${rfEsc(d.paziente || '')}" ${rec ? 'disabled' : ''} oninput="RF.dit.paziente=this.value;rfFoglioCarica();const ok=document.getElementById('rf-dit-paz-ok');if(ok)ok.innerHTML=rfDitPazStato()">${typeof rfPazElenco === 'function' ? rfPazElenco() : ''}${rfDitDettatura() ? `<div class="caption" id="rf-dit-paz-ok" style="margin-top:3px">${rfDitPazStato()}</div>` : ''}</div>
+        <div class="field"><label for="rf-dit-paz">Paziente <span class="caption">(facoltativo)</span></label><input class="input" id="rf-dit-paz" list="rf-paz-elenco" placeholder="Cognome Nome" autocomplete="off" value="${rfEsc(d.paziente || '')}" ${rec ? 'disabled' : ''} oninput="RF.dit.paziente=this.value;rfFoglioCarica();rfDitCartellaAggiorna();const ok=document.getElementById('rf-dit-paz-ok');if(ok)ok.innerHTML=rfDitPazStato()">${typeof rfPazElenco === 'function' ? rfPazElenco() : ''}${rfDitDettatura() ? `<div class="caption" id="rf-dit-paz-ok" style="margin-top:3px">${rfDitPazStato()}</div>` : ''}</div>
       </div>
       <div class="rf-dit-centro" id="rf-dit-centro">
         <div class="rf-dit-tempo" id="rf-dit-tempo">${durata}</div>
@@ -980,7 +1053,7 @@ PAGES.dittafono = () => {
           <button class="btn primary" onclick="rfDitInvia()" ${d.invio ? 'disabled' : ''}>${d.invio ? 'Invio…' : 'Invia alla trascrizione'}</button>
         </div>
         <p class="rf-dit-nota mt-8">Riascolta e ferma il cursore dove vuoi: <b>Inserisci qui</b> aggiunge un pezzo in quel punto, <b>Sovrascrivi da qui</b> rifà la dettatura da lì in avanti.</p></div>` : ''}</div>
-    </div>${rfDitDettatura() ? `<div class="rf-dit-carta"><div class="rf-dit-carta-bar"><div id="rf-dit-cmd-stato" class="rf-dit-cmd-stato ${RF.dit.cmdStato ? 'pieno' : ''}">${RF.dit.cmdStato || ''}</div>${rfDitRiapriHtml()}<span class="caption">Foglio</span>${rfDitZoomHtml('foglio')}</div>${rfFoglioHtml()}</div><div class="rf-dit-fonte" id="rf-dit-fonte">${rfDitFonteHtml()}</div></div>` : ''}
+    </div>${rfDitDettatura() ? `<div class="rf-dit-carta"><div class="rf-dit-carta-bar"><div id="rf-dit-cmd-stato" class="rf-dit-cmd-stato ${RF.dit.cmdStato ? 'pieno' : ''}">${RF.dit.cmdStato || ''}</div>${rfDitRiapriHtml()}<span class="caption">Foglio</span>${rfDitZoomHtml('foglio')}</div>${rfFoglioHtml()}</div><div class="rf-dit-fonte" id="rf-dit-fonte">${d.fonte || d.cartellaChiusa !== rfFoglioPazId() ? rfDitFonteHtml() : ''}</div></div>` : ''}
     ${rfDitRecenti()}
     <p class="rf-dit-nota">L'audio resta su questo dispositivo finché non premi «Invia»; se la pagina si chiude lo ritrovi qui. Una volta inviato segue la stessa strada di ogni dettato: trascrizione sul Mac dello studio, bozza nella pagina Referti.</p>
   </div>`;

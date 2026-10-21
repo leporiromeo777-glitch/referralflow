@@ -15,7 +15,8 @@ import { corpoDellaLettera, letteraFinoA, NOME_PARTE, partiDellaLettera, salutoD
 // piattaforma quello con la carta intestata, lo stesso che si scarica — e la pagina lo disegna com'è.
 export type DaAprire = { tipo: 'referto' | 'documento' | 'pagine'; id: string; pdf: boolean; docx: boolean; da: number | null; a: number | null; testo: string };
 // `saluto`: il saluto in testa alla lettera, quando si prende dall'inizio (lettera intera, «fino a…»).
-export type EsitoComando = { ok: true; testo: string; fonte: string; data: string; cosa: string; mancanti: string[]; apri: DaAprire; saluto?: string } | { errore: string };
+// `indice`/`totale` (21.10.2026): dove sta quella lettera fra le lettere del paziente, dalla più recente — per le frecce.
+export type EsitoComando = { ok: true; testo: string; fonte: string; data: string; cosa: string; mancanti: string[]; apri: DaAprire; saluto?: string; indice: number; totale: number } | { errore: string };
 const TETTO = 20000;
 
 export async function eseguiComando(studioId: string, userId: string | null, patientId: string, comando: Comando, parti: ParteLettera[] = [], esclusa = false): Promise<EsitoComando> {
@@ -26,17 +27,14 @@ export async function eseguiComando(studioId: string, userId: string | null, pat
   const letta = async (l: (typeof lettere)[number]) => {
     if (l.fonte.tipo !== 'referto') await logDocumento(l.fonte.id, 'lettura', { studioId, userId: userId ?? undefined, dettaglio: 'dittafono, comando a voce' }).catch(() => {});
   };
-  const daAprire = async (l: (typeof lettere)[number]): Promise<DaAprire> => {
-    let pdf = l.fonte.tipo === 'pagine', docx = l.fonte.tipo === 'referto';
-    if (l.fonte.tipo === 'documento') { const [f] = await query<{ filename: string }>('select filename from patient_documents where id = $1 and studio_id = $2', [l.fonte.id, studioId]); const n = (f?.filename ?? '').toLowerCase(); pdf = n.endsWith('.pdf'); docx = n.endsWith('.docx'); }
-    return { tipo: l.fonte.tipo, id: l.fonte.id, pdf, docx, da: l.fonte.da ?? null, a: l.fonte.a ?? null, testo: l.testo.replace(/\r\n?/g, '\n').trim().slice(0, 40000) };
-  };
+  const daAprire = (l: (typeof lettere)[number]) => apriDi(studioId, l);
+  const dove = (l: (typeof lettere)[number]) => ({ indice: lettere.indexOf(l), totale: lettere.length });
   if (comando === 'lettera_recente') {
     const l = lettere[0];
     const testo = corpoDellaLettera(l.testo).slice(0, TETTO);
     if (!testo) return { errore: 'La lettera più recente è vuota.' };
     await letta(l);
-    return { ok: true, testo, fonte: l.fonte.etichetta, data: l.fonte.data, cosa: 'la lettera', mancanti: [], apri: await daAprire(l), saluto: salutoDellaLettera(l.testo) };
+    return { ok: true, testo, fonte: l.fonte.etichetta, data: l.fonte.data, cosa: 'la lettera', mancanti: [], apri: await daAprire(l), saluto: salutoDellaLettera(l.testo), ...dove(l) };
   }
   // «Fino a…»: dalla lettera più recente — «la lettera» è quella (15.10.2026: prenderne una più vecchia senza dirlo
   // confonde). Se lì quella parte non è una parte a sé (per esempio i fattori di rischio citati dentro il racconto),
@@ -49,7 +47,7 @@ export async function eseguiComando(studioId: string, userId: string | null, pat
     const testo = letteraFinoA(l.testo, parte, esclusa).slice(0, TETTO);
     if (!testo) return { errore: `Nella lettera più recente (${l.fonte.data}) ${NOME_PARTE[parte]} non è una parte a sé${parte === 'frcv' || parte === 'comorbidita' ? ` (con «${NOME_PARTE[parte]}:» a inizio riga)` : ''}: non so dove fermarmi. Chiedi la lettera intera, o fino a un'altra parte.` };
     await letta(l);
-    return { ok: true, testo, fonte: l.fonte.etichetta, data: l.fonte.data, cosa, mancanti: [], apri: await daAprire(l), saluto: esclusa && parte === 'anamnesi' ? '' : salutoDellaLettera(l.testo) };
+    return { ok: true, testo, fonte: l.fonte.etichetta, data: l.fonte.data, cosa, mancanti: [], apri: await daAprire(l), saluto: esclusa && parte === 'anamnesi' ? '' : salutoDellaLettera(l.testo), ...dove(l) };
   }
   // Le parti chieste: dalla più recente fra le ultime quattro lettere che ne ha almeno una (un biglietto può non
   // averne nessuna). Tutte dalla STESSA lettera: quelle che lì non ci sono vengono dette, non cercate altrove.
@@ -61,8 +59,34 @@ export async function eseguiComando(studioId: string, userId: string | null, pat
     await letta(l);
     return {
       ok: true, testo: trovate.map((k) => sue[k]).join('\n\n').slice(0, TETTO), fonte: l.fonte.etichetta, data: l.fonte.data,
-      cosa: trovate.map((k) => NOME_PARTE[k]).join(', '), mancanti: parti.filter((k) => !sue[k]).map((k) => NOME_PARTE[k]), apri: await daAprire(l),
+      cosa: trovate.map((k) => NOME_PARTE[k]).join(', '), mancanti: parti.filter((k) => !sue[k]).map((k) => NOME_PARTE[k]), apri: await daAprire(l), ...dove(l),
     };
   }
   return { errore: `Nelle ultime lettere di questo paziente non trovo: ${parti.map((k) => NOME_PARTE[k]).join(', ')}.` };
+}
+
+// La lettera da mostrare accanto, com'è: per un referto della piattaforma il Word, per un documento il suo file.
+async function apriDi(studioId: string, l: { testo: string; fonte: { tipo: 'referto' | 'documento' | 'pagine'; id: string; da?: number; a?: number } }): Promise<DaAprire> {
+  let pdf = l.fonte.tipo === 'pagine', docx = l.fonte.tipo === 'referto';
+  if (l.fonte.tipo === 'documento') { const [f] = await query<{ filename: string }>('select filename from patient_documents where id = $1 and studio_id = $2', [l.fonte.id, studioId]); const n = (f?.filename ?? '').toLowerCase(); pdf = n.endsWith('.pdf'); docx = n.endsWith('.docx'); }
+  return { tipo: l.fonte.tipo, id: l.fonte.id, pdf, docx, da: l.fonte.da ?? null, a: l.fonte.a ?? null, testo: l.testo.replace(/\r\n?/g, '\n').trim().slice(0, 40000) };
+}
+
+// Le lettere del paziente in ordine di data, dalla più recente (21.10.2026, dallo studio: «quando chiedo di vedere una
+// lettera, delle frecce per spostarmi da una lettera all'altra in ordine di data»): la stessa ricerca dei comandi, così
+// le frecce partono proprio dalla lettera aperta. Qui solo etichetta e data; il testo arriva aprendone una.
+export async function lettereDelPaziente(studioId: string, patientId: string): Promise<{ indice: number; fonte: string; data: string; tipo: string }[] | null> {
+  const [p] = await query<{ cognome: string; nome: string }>('select cognome, nome from patients where id = $1 and studio_id = $2', [patientId, studioId]);
+  if (!p) return null;
+  const lettere = await lettereDelPazienteScelto(studioId, patientId, `${p.cognome} ${p.nome}`.trim());
+  return lettere.map((l, indice) => ({ indice, fonte: l.fonte.etichetta, data: l.fonte.data, tipo: l.fonte.tipo }));
+}
+export async function apriLettera(studioId: string, userId: string | null, patientId: string, indice: number): Promise<{ ok: true; apri: DaAprire; fonte: string; data: string; indice: number; totale: number } | { errore: string }> {
+  const [p] = await query<{ cognome: string; nome: string }>('select cognome, nome from patients where id = $1 and studio_id = $2', [patientId, studioId]);
+  if (!p) return { errore: 'Paziente non trovato.' };
+  const lettere = await lettereDelPazienteScelto(studioId, patientId, `${p.cognome} ${p.nome}`.trim());
+  const l = lettere[indice];
+  if (!l) return { errore: lettere.length ? 'Non c’è un’altra lettera.' : 'Nella cartella di questo paziente non trovo lettere.' };
+  if (l.fonte.tipo !== 'referto') await logDocumento(l.fonte.id, 'lettura', { studioId, userId: userId ?? undefined, dettaglio: 'dittafono, lettera aperta accanto' }).catch(() => {});
+  return { ok: true, apri: await apriDi(studioId, l), fonte: l.fonte.etichetta, data: l.fonte.data, indice, totale: lettere.length };
 }

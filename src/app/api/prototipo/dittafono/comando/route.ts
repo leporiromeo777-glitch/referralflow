@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
 import { COMANDI, PARTI_LETTERA, type Comando, type ParteLettera } from '@/lib/dittafono-comandi';
-import { eseguiComando } from '@/lib/dittafono-comandi-server';
+import { apriLettera, eseguiComando, lettereDelPaziente } from '@/lib/dittafono-comandi-server';
 import { cercaIndirizzo } from '@/lib/dittafono-indirizzo';
 import { vietato } from '@/lib/permessi';
 
@@ -37,6 +37,20 @@ export async function POST(req: NextRequest) {
     const r = await cercaIndirizzo(session.studioId, { medicoNome: testo('medico_nome'), pazienteNome: testo('paziente_nome'), nascita, donna: b?.donna === true, profilo: testo('medico') || null });
     return NextResponse.json(r, { headers: { 'Cache-Control': 'no-store' } });
   }
+  // Le lettere del paziente in ordine di data, e una lettera per posizione (21.10.2026: le frecce accanto al foglio).
+  if (b?.comando === 'lettere' || b?.comando === 'apri_lettera') {
+    const paz = String(b?.paziente ?? '');
+    if (!isUuid(paz)) return NextResponse.json({ errore: 'Scegli prima il paziente.' }, { status: 400 });
+    if (b.comando === 'lettere') {
+      const l = await lettereDelPaziente(session.studioId, paz);
+      return l ? NextResponse.json({ lettere: l }, { headers: { 'Cache-Control': 'no-store' } }) : NextResponse.json({ errore: 'Paziente non trovato.' }, { status: 404 });
+    }
+    const indice = Number(b?.indice);
+    if (!Number.isInteger(indice) || indice < 0 || indice > 500) return NextResponse.json({ errore: 'Lettera non trovata.' }, { status: 400 });
+    const r = await apriLettera(session.studioId, session.id, paz, indice);
+    console.log(`[dittafono-comando] apri_lettera → ${'errore' in r ? 'niente' : `ok fonte=${r.apri.tipo} ${r.indice + 1}/${r.totale}`}`);
+    return 'errore' in r ? NextResponse.json({ errore: r.errore }, { status: 404 }) : NextResponse.json(r, { headers: { 'Cache-Control': 'no-store' } });
+  }
   const comando = String(b?.comando ?? '') as Comando;
   const paziente = String(b?.paziente ?? '');
   if (!COMANDI.includes(comando)) return NextResponse.json({ errore: 'Comando non previsto.' }, { status: 400 });
@@ -47,5 +61,5 @@ export async function POST(req: NextRequest) {
   const r = await eseguiComando(session.studioId, session.id, paziente, comando, comando === 'fino' ? parti.slice(0, 1) : parti, esclusa);
   console.log(`[dittafono-comando] ${comando}${parti.length ? ` parti=${parti.join('+')}` : ''}${esclusa ? ' esclusa' : ''} → ${'errore' in r ? `niente (${r.errore.replace(/:.*/, '').slice(0, 60)})` : `ok fonte=${r.apri.tipo} pdf=${r.apri.pdf ? 'sì' : 'no'} caratteri=${r.testo.length} mancanti=${r.mancanti.length}`}`);
   return 'errore' in r ? NextResponse.json({ errore: r.errore }, { status: 404, headers: { 'Cache-Control': 'no-store' } })
-    : NextResponse.json({ testo: r.testo, fonte: r.fonte, data: r.data, cosa: r.cosa, mancanti: r.mancanti, apri: r.apri, saluto: r.saluto ?? '' }, { headers: { 'Cache-Control': 'no-store' } });
+    : NextResponse.json({ testo: r.testo, fonte: r.fonte, data: r.data, cosa: r.cosa, mancanti: r.mancanti, apri: r.apri, saluto: r.saluto ?? '', indice: r.indice, totale: r.totale }, { headers: { 'Cache-Control': 'no-store' } });
 }
