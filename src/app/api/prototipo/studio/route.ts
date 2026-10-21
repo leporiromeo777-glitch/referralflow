@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createHash, randomBytes } from 'crypto';
 import { getSession, hashPassword, dimenticaRiscontro } from '@/lib/auth';
 import { query } from '@/lib/db';
 import { catalogoDaPercorsi } from '@/lib/prestazioni';
@@ -27,8 +28,8 @@ const TIPI = new Set(['sala', 'apparecchio']);
 const posti = (v: unknown) => { const n = Math.round(Number(v)); return Number.isFinite(n) && n >= 1 ? Math.min(99, n) : 1; };
 
 async function leggi(studioId: string) {
-  const [studio] = await query<{ nome: string; telefono: string | null; notify_email: string | null; specialita: string | null; indirizzo: string | null; moduli_nascosti: string[] }>(
-    `select nome, telefono, notify_email, specialita, indirizzo, moduli_nascosti from studios where id = $1`, [studioId]);
+  const [studio] = await query<{ nome: string; telefono: string | null; notify_email: string | null; specialita: string | null; indirizzo: string | null; moduli_nascosti: string[]; pressione_chiave_dal: string | null }>(
+    `select nome, telefono, notify_email, specialita, indirizzo, moduli_nascosti, pressione_token_set_at::text as pressione_chiave_dal from studios where id = $1`, [studioId]);
   const personale = await query<{ id: string; email: string; role: string; attivo: boolean; totp: boolean; created_at: string }>(
     `select id, email, role::text, attivo, totp_enabled_at is not null as totp, created_at::text from users where studio_id = $1 order by attivo desc, role, email`, [studioId]);
   const medici = await query<{ id: string; nome: string; aliases: string[]; attivo: boolean; user_id: string | null; gln: string | null; rcc: string | null; colore: string | null; ruolo: string; professione: string | null }>(
@@ -183,8 +184,16 @@ export async function POST(req: NextRequest) {
   const sid = session.studioId;
   const s = (v: unknown, max = 200) => String(v ?? '').trim().slice(0, max);
   let creato: string | null = null;      // il nome con cui si entra, per dirlo a chi ha creato l'accesso
+  // La chiave del generatore dei referti pressione Aktiia (21.10.2026): torna in chiaro UNA volta, in questa
+  // risposta; in tabella solo l'hash. Mai nei log. Rigenerarla spegne la vecchia su tutti i computer.
+  let chiaveNuova: string | null = null;
   try {
-    if (azione === 'studio_aggiorna') {
+    if (azione === 'pressione_chiave_genera') {
+      chiaveNuova = 'rfp_' + randomBytes(32).toString('hex');
+      await query(`update studios set pressione_token_hash = $2, pressione_token_set_at = now() where id = $1`, [sid, createHash('sha256').update(chiaveNuova).digest('hex')]);
+    } else if (azione === 'pressione_chiave_revoca') {
+      await query(`update studios set pressione_token_hash = null, pressione_token_set_at = null where id = $1`, [sid]);
+    } else if (azione === 'studio_aggiorna') {
       const nome = s(c.nome, 120); if (!nome) return NextResponse.json({ errore: 'Il nome dello studio è obbligatorio.' }, { status: 400 });
       await query(`update studios set nome = $2, telefono = nullif($3, ''), notify_email = nullif($4, ''), specialita = nullif($5, ''), indirizzo = nullif($6, '') where id = $1`, [sid, nome, s(c.telefono, 40), s(c.notify_email, 160).toLowerCase(), s(c.specialita, 500), s(c.indirizzo, 200)]);
     } else if (azione === 'moduli_nascosti') {
@@ -314,7 +323,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ errore: 'Modifica non riuscita.' }, { status: 500 });
   }
   console.log(`[studio] azione=${azione} da=${session.id.slice(0, 8)}`);
-  return NextResponse.json({ ok: true, ...(await leggi(sid)), ...(creato ? { creato } : {}) }, { headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json({ ok: true, ...(await leggi(sid)), ...(creato ? { creato } : {}), ...(chiaveNuova ? { chiave_nuova: chiaveNuova } : {}) }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 // ── la verifica in due passi, la stessa della pagina vecchia ────────────────

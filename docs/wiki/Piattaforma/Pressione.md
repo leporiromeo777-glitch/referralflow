@@ -1,6 +1,6 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-10-20
+aggiornata: 2026-10-21
 ---
 # Pressione
 
@@ -40,7 +40,7 @@ Oltre a caricarlo dalla pagina, il file delle misure si può **mettere in una ca
 Lo studio misura la pressione con l'**Aktiia** (bracciale/braccialetto, più giorni a casa) e fa il referto con il **Generatore referti Aktiia**: un file HTML sui computer dello studio (cartella «Aktiia - Report generator/Generatore 2.0» sulla Scrivania del Mac; si copia sugli altri PC), che legge l'Excel dell'app così com'è e crea il referto Word nello stile dello studio. Dal generatore, **solo dopo la conferma del medico**, misure e referto arrivano qui.
 
 - **Come**: nel generatore, dopo «Genera referto Word», si apre il Word, lo si controlla, si spunta «Ho controllato il referto» e si preme «Conferma e invia». Il generatore manda a `POST /api/pressione/invio` paziente (cognome, nome, data di nascita), misure, sveglia e sonno usati nel referto, e il `.docx` (in base64, nel corpo). Se dopo aver creato il referto si cambia un dato, il referto non si invia più: va rigenerato.
-- **La chiave**: `Authorization: Bearer rfp_…`, una chiave **solo per questo** (non quella delle bozze di referto: `studios.pressione_token_hash`, migrazione 093, in tabella solo l'hash). La genera l'amministrazione in **Impostazioni dello studio → «Generatore referti pressione (Aktiia)»** (pagina `/impostazioni/studio`), si mostra una volta e si incolla nel «Collegamento ReferralFlow» del generatore, che la tiene nel browser di quel computer. Revocarla spegne l'invio da tutti i computer.
+- **La chiave**: `Authorization: Bearer rfp_…`, una chiave **solo per questo** (non quella delle bozze di referto: `studios.pressione_token_hash`, migrazione 093, in tabella solo l'hash). La genera l'amministrazione in **Studio → scheda «Dati» → riquadro «Generatore referti pressione (Aktiia)»** (dal 21.10.2026: prima stava solo nella pagina vecchia `/impostazioni/studio`, che non è nel menu, e lo studio non la trovava; c'è ancora anche lì). Si mostra una volta, col tasto «Copia», e si incolla nel «Collegamento ReferralFlow» del generatore, che la tiene nel browser di quel computer. Rigenera e Revoca chiedono conferma. Revocarla spegne l'invio da tutti i computer.
 - **Da file://**: il generatore si apre con un doppio clic, quindi la rotta risponde a qualunque origine (CORS `*`, anche al preflight) ma solo con la chiave: niente cookie, niente sessione.
 - **Di chi è**: la regola severa di sempre (`abbinaPaziente`): nome **e** data di nascita, una persona sola. Se combacia nasce il profilo (apparecchio «Aktiia», sveglia e sonno quelli del referto, così i conti partono dagli stessi orari) e il referto Word entra nei **Documenti** del paziente come «referto». Se no l'invio va fra gli **«Arrivati … da assegnare»** con tutto quello che serve (`pa_arrivi.impostazioni`, `referto_key`): assegnato, il profilo prende sveglia e sonno e il referto diventa un documento; scartato, il referto si cancella dallo storage.
 - **Doppioni**: lo stesso profilo rimandato risponde «già presente» (200), lo stesso invio che aspetta ancora «già in attesa» (200). Le risposte: 201 nel profilo, 202 da assegnare (col motivo: nessuno, nascita diversa, omonimi), 400 con la frase da mostrare, 401 chiave non valida.

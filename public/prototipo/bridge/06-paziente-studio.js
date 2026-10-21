@@ -418,6 +418,20 @@ async function rfStudioCreaAccesso() {
   if (corpo.password.length < 8) { RF.studio.errore = 'La password deve avere almeno 8 caratteri.'; render(); return; }
   if (await rfStudioAzione(corpo)) { RF.studio.nuovo = null; const chi = (RF.studio.dati.creato || corpo.email); toast(`Accesso creato: si entra con «${chi}»`); render(); }
 }
+// La chiave del generatore dei referti pressione Aktiia (21.10.2026, [[Piattaforma/Pressione]]): il generatore è un
+// file HTML sui computer dello studio e manda i referti confermati con questa chiave. Si vede una volta sola, qui.
+function rfStudioChiavePressione(d, admin) {
+  const st = d.studio || {}, nuova = d.chiave_nuova;
+  const stato = st.pressione_chiave_dal ? `Una chiave è attiva dal ${rfEsc(new Date(st.pressione_chiave_dal).toLocaleDateString('it-CH'))}. Per sicurezza non si rivede: se è persa, se ne genera una nuova.` : 'Nessuna chiave: il generatore non può inviare.';
+  return `<div class="card mt-16"><div class="section-title">Generatore referti pressione (Aktiia)</div>
+    <div class="caption mt-8">Il generatore dei referti Aktiia (il file HTML sui computer dello studio) manda alla pagina Pressione misure e referto Word dopo la conferma del medico. Nel generatore: «Collegamento ReferralFlow», indirizzo <b>https://cct.referralflow.ch</b> e questa chiave, una volta per computer.</div>
+    ${nuova ? `<div class="card mt-16" style="border:1px solid var(--accent, #5b5bd6)"><div><b>Chiave nuova: copiala adesso.</b> Non verrà più mostrata.</div>
+      <div class="mt-8" style="font-family:ui-monospace,Menlo,Consolas,monospace;word-break:break-all;user-select:all">${rfEsc(nuova)}</div>
+      <div class="row mt-16" style="gap:8px"><button class="btn primary" onclick="navigator.clipboard.writeText(RF.studio.dati.chiave_nuova).then(() => toast('Chiave copiata'), () => toast('Copia non riuscita: selezionala e copiala a mano'))">Copia</button><button class="btn ghost" onclick="delete RF.studio.dati.chiave_nuova; render()">L'ho copiata: nascondi</button></div></div>`
+      : `<div class="caption mt-8">${stato}</div>`}
+    ${admin ? `<div class="row mt-16" style="gap:8px"><button class="btn ${st.pressione_chiave_dal ? '' : 'primary'}" onclick="if (!RF.studio.dati.studio.pressione_chiave_dal || confirm('La chiave attuale smette di funzionare su tutti i computer: andrà incollata la nuova. Continuare?')) rfStudioAzione({ azione: 'pressione_chiave_genera' })">${st.pressione_chiave_dal ? 'Rigenera la chiave' : 'Genera la chiave'}</button>${st.pressione_chiave_dal ? `<button class="btn ghost" onclick="if (confirm('Revocare la chiave? Nessun generatore potrà più inviare finché non se ne genera una nuova.')) rfStudioAzione({ azione: 'pressione_chiave_revoca' })">Revoca</button>` : ''}</div>` : '<div class="caption mt-8">La genera l’amministratore dello studio.</div>'}
+  </div>`;
+}
 function rfStudioCampo(sel) { const e = document.querySelector(sel); return e ? e.value : ''; }
 const rfAdminPageOrig = PAGES.administration;
 PAGES.administration = () => {
@@ -451,7 +465,8 @@ PAGES.administration = () => {
       <div class="section-title mt-16">Voci del menu che questo studio non usa</div>
       <div class="row wrap mt-8" style="gap:8px">${['prestazioni', 'invianti', 'percorsi', 'moduli', 'documents', 'imaging', 'dittafono', 'converti', 'anonymize', 'inbox', 'ai', 'fatturazione', 'statistics', 'communications', 'visits'].map(k => `<label class="chip" style="cursor:pointer"><input type="checkbox" class="rf-mn" value="${k}" ${(RF.data.moduli_nascosti || []).includes(k) ? 'checked' : ''} ${admin ? '' : 'disabled'} style="margin:0 6px 0 0"> nascondi ${rfEsc((NAV_META[k] || [k])[0])}</label>`).join('')}</div>
       <div class="caption mt-8">Le voci nascoste spariscono dalla barra e dal menu del telefono per tutti i ruoli; Home e Studio restano sempre.</div>
-      ${admin ? `<div class="row mt-16"><button class="btn primary" onclick="rfStudioAzione({ azione: 'studio_aggiorna', nome: rfStudioCampo('#rf-st-nome'), telefono: rfStudioCampo('#rf-st-tel'), notify_email: rfStudioCampo('#rf-st-email'), specialita: rfStudioCampo('#rf-st-spec'), indirizzo: rfStudioCampo('#rf-st-indirizzo') }).then(() => rfStudioAzione({ azione: 'moduli_nascosti', voci: [...document.querySelectorAll('.rf-mn:checked')].map(e => e.value) }))">Salva</button></div>` : ''}</div>`;
+      ${admin ? `<div class="row mt-16"><button class="btn primary" onclick="rfStudioAzione({ azione: 'studio_aggiorna', nome: rfStudioCampo('#rf-st-nome'), telefono: rfStudioCampo('#rf-st-tel'), notify_email: rfStudioCampo('#rf-st-email'), specialita: rfStudioCampo('#rf-st-spec'), indirizzo: rfStudioCampo('#rf-st-indirizzo') }).then(() => rfStudioAzione({ azione: 'moduli_nascosti', voci: [...document.querySelectorAll('.rf-mn:checked')].map(e => e.value) }))">Salva</button></div>` : ''}</div>
+      ${rfStudioChiavePressione(d, admin)}`;
   } else if (scheda === 'personale') {
     // Il modulo «Nuovo accesso» ricorda quello che si scrive (20.10.2026): il ricarico dei dati ridisegna la pagina e
     // prima i campi si svuotavano — il clic su «Crea l'accesso» mandava una richiesta vuota («E-mail non valida»).
