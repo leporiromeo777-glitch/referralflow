@@ -58,8 +58,10 @@ export async function POST(req: NextRequest) {
   const parti = [...new Set((Array.isArray(b?.parti) ? (b.parti as unknown[]) : []).map(String))].filter((k): k is ParteLettera => (PARTI_LETTERA as readonly string[]).includes(k)).slice(0, 8);
   if ((comando === 'parti' || comando === 'fino') && !parti.length) return NextResponse.json({ errore: 'Non ho capito quale parte della lettera.' }, { status: 400 });
   const esclusa = comando === 'fino' && b?.esclusa === true;
-  const r = await eseguiComando(session.studioId, session.id, paziente, comando, comando === 'fino' ? parti.slice(0, 1) : parti, esclusa);
-  console.log(`[dittafono-comando] ${comando}${parti.length ? ` parti=${parti.join('+')}` : ''}${esclusa ? ' esclusa' : ''} → ${'errore' in r ? `niente (${r.errore.replace(/:.*/, '').slice(0, 60)})` : `ok fonte=${r.apri.tipo} pdf=${r.apri.pdf ? 'sì' : 'no'} caratteri=${r.testo.length} mancanti=${r.mancanti.length}`}`);
+  // «la lettera numero 2» (21.10.2026): la seconda dalla più recente, come numerata accanto al foglio
+  const numero = Number.isInteger(b?.numero) && b.numero >= 1 && b.numero <= 500 ? Number(b.numero) : null;
+  const r = await eseguiComando(session.studioId, session.id, paziente, comando, comando === 'fino' ? parti.slice(0, 1) : parti, esclusa, numero);
+  console.log(`[dittafono-comando] ${comando}${parti.length ? ` parti=${parti.join('+')}` : ''}${esclusa ? ' esclusa' : ''}${numero !== null ? ` numero=${numero}` : ''} → ${'errore' in r ? `niente (${r.errore.replace(/:.*/, '').slice(0, 60)})` : `ok fonte=${r.apri.tipo} pdf=${r.apri.pdf ? 'sì' : 'no'} caratteri=${r.testo.length} mancanti=${r.mancanti.length}`}`);
   return 'errore' in r ? NextResponse.json({ errore: r.errore }, { status: 404, headers: { 'Cache-Control': 'no-store' } })
     : NextResponse.json({ testo: r.testo, fonte: r.fonte, data: r.data, cosa: r.cosa, mancanti: r.mancanti, apri: r.apri, saluto: r.saluto ?? '', indice: r.indice, totale: r.totale }, { headers: { 'Cache-Control': 'no-store' } });
 }

@@ -92,6 +92,10 @@ async function main() {
     verifica(kl.stato === 200 && kl.j.lettere?.length === 2 && kl.j.lettere[0].data === '20.06.2026' && kl.j.lettere[1].data === '10.01.2026' && !('testo' in kl.j.lettere[0])
       && k1.j.indice === 0 && k1.j.totale === 2 && ka.stato === 200 && ka.j.indice === 1 && ka.j.totale === 2 && ka.j.data === '10.01.2026' && /visita vecchia/.test(ka.j.apri?.testo ?? '') && kz.stato === 404,
       `frecce: le lettere in ordine di data (${kl.j.lettere?.map((x: any) => x.data).join(', ')}), la seconda si apre, oltre l'ultima no (${kz.stato})`);
+    // le lettere per numero (21.10.2026): «l'anamnesi della lettera numero 2» è quella della più vecchia; la numero 3 non c'è
+    const kn = await comando({ comando: 'parti', parti: ['anamnesi'], paziente: paz, numero: 2 }), kn1 = await comando({ comando: 'lettera_recente', paziente: paz, numero: 2 }), kn3 = await comando({ comando: 'lettera_recente', paziente: paz, numero: 3 });
+    verifica(kn.stato === 200 && /visita vecchia/.test(kn.j.testo) && kn.j.data === '10.01.2026' && kn.j.indice === 1 && kn1.stato === 200 && /visita vecchia/.test(kn1.j.testo) && kn3.stato === 404 && /numero 3.*ne ha 2/.test(kn3.j.errore ?? ''),
+      `lettere per numero: la numero 2 è la più vecchia, la numero 3 non c'è e lo dice (${kn.stato}, ${kn1.stato}, ${kn3.stato})`);
     // La lettera vera accanto al foglio (15.10.2026): il Word con la carta intestata, in anteprima — non conta come scaricato.
     const wPrima = await query<{ n: number }>(`select count(*)::int as n from referti_eventi where bozza_id = $1 and azione = 'word_scaricato'`, [k1.j.apri?.id]).catch(() => [{ n: -1 }]);
     const w = await fetch(`${base}/api/referti/docx/${k1.j.apri?.id}?anteprima=1`, { headers: { cookie: C } }), wb = Buffer.from(await w.arrayBuffer());

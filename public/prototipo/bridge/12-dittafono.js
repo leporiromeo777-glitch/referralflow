@@ -59,6 +59,7 @@
 .rf-dit-cart-sotto { font-size: 12px; font-weight: 600; color: var(--text-2); margin: 8px 0 2px; }
 .rf-dit-cart-voce { display: flex; gap: 10px; padding: 5px 6px; border-radius: 8px; font-size: 13px; cursor: pointer; color: var(--text); text-decoration: none; }
 .rf-dit-cart-voce:hover { background: var(--surface-2, #f1f3f8); }
+.rf-dit-cart-n { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft, rgba(79,110,247,.12)); color: var(--accent-text, var(--accent)); font-size: 12px; display: inline-flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; }
 .rf-dit-cart-voce .num { flex: none; width: 76px; color: var(--text-2); font-variant-numeric: tabular-nums; }
 .rf-dit-fonte-bar .rf-dit-fonte-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
 .rf-dit-fonte-corpo { flex: 1; min-height: 60vh; overflow: auto; padding: 8px; background: var(--surface-2, #eef0ec); }
@@ -275,18 +276,18 @@ async function rfDitComandoCerca() {
     return;
   }
   if (c.comando === 'annulla') { const t = RFComandi.sostituisci(el.value, c.da, c.a, ''); const sposta = c.a <= (d.cmdUltimo ? d.cmdUltimo.inizio : -1) ? el.value.length - t.testo.length : 0; rfDitTestoMetti(t.testo, t.inizio); if (d.cmdUltimo && sposta) { d.cmdUltimo.inizio -= sposta; d.cmdUltimo.fine -= sposta; } rfDitComandoAnnulla(); }
-  else await rfDitComandoEsegui(c.comando, c.da, c.a, c.frase, c.parti, c.soloApri, c.escluso);
+  else await rfDitComandoEsegui(c.comando, c.da, c.a, c.frase, c.parti, c.soloApri, c.escluso, c.numero);
   if (RFComandi.trova(el.value, 0)) rfDitComandoProgramma();      // ce n'è un altro
 }
 // Chiede il pezzo al server e lo mette al posto della frase (o, dal tasto, dove sta il cursore).
-async function rfDitComandoEsegui(comando, da, a, frase, parti, soloApri, esclusa) {
-  const d = RF.dit, paz = rfFoglioPazId(), cosa = comando === 'parti' ? 'quella parte della lettera' : 'la lettera';
+async function rfDitComandoEsegui(comando, da, a, frase, parti, soloApri, esclusa, numero) {
+  const d = RF.dit, paz = rfFoglioPazId(), cosa = (comando === 'parti' ? 'quella parte della lettera' : 'la lettera') + (numero ? ` numero ${numero}` : '');
   const riprova = ' <a href="javascript:void 0" onclick="rfDitComandoRiprova()">Riprova</a>';
   const fallito = (perche, motivo) => { d.cmdFallito = frase || ''; rfDitComandoStato(`<span style="color:#b3261e">${rfEsc(perche)}</span>${frase ? riprova : ''}`); if (typeof toast === 'function') toast(perche); if (motivo) rfDitComandoDice({ motivo }); };
   if (!paz) { fallito('Comando capito, ma manca il paziente: sceglilo dall’elenco nel campo «Paziente», poi «Riprova».', 'senza_paziente'); return; }
   d.cmdInCorso = true; rfDitComandoStato('Cerco ' + cosa + ' nella cartella del paziente…');
   try {
-    const r = await fetch('/api/prototipo/dittafono/comando', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comando, parti: parti || [], esclusa: !!esclusa, paziente: paz }) });
+    const r = await fetch('/api/prototipo/dittafono/comando', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comando, parti: parti || [], esclusa: !!esclusa, paziente: paz, numero: numero || null }) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.testo) { fallito(j.errore || 'Non riesco a prendere ' + cosa + '.'); return; }
     // «Aprimi…», «fammi vedere…»: la frase si toglie, la lettera si apre accanto, nel foglio non entra niente.
@@ -340,7 +341,7 @@ function rfDitFonteHtml() {
   const f = RF.dit.fonte; if (!f) return rfDitCartellaHtml();
   const md = 'onmousedown="event.preventDefault()"';      // i tasti non tolgono il cursore dal foglio: Dragon continua a scriverci
   const frecce = Number.isInteger(f.indice) && f.totale > 1
-    ? `<button class="btn sm" ${md} onclick="rfDitLettera(${f.indice + 1})" ${f.indice + 1 >= f.totale ? 'disabled' : ''} title="La lettera prima (più vecchia)" aria-label="Lettera più vecchia">‹</button><span class="caption rf-dit-fonte-pos">${f.indice + 1} di ${f.totale}</span><button class="btn sm" ${md} onclick="rfDitLettera(${f.indice - 1})" ${f.indice <= 0 ? 'disabled' : ''} title="La lettera dopo (più recente)" aria-label="Lettera più recente">›</button>` : '';
+    ? `<button class="btn sm" ${md} onclick="rfDitLettera(${f.indice + 1})" ${f.indice + 1 >= f.totale ? 'disabled' : ''} title="La lettera prima (più vecchia)" aria-label="Lettera più vecchia">‹</button><span class="caption rf-dit-fonte-pos">n. ${f.indice + 1} di ${f.totale}</span><button class="btn sm" ${md} onclick="rfDitLettera(${f.indice - 1})" ${f.indice <= 0 ? 'disabled' : ''} title="La lettera dopo (più recente)" aria-label="Lettera più recente">›</button>` : '';
   return `<div class="rf-dit-fonte-bar">${frecce}<b class="rf-dit-fonte-nome" title="${rfEsc(f.titolo || '')}">${rfEsc(f.titolo || 'Lettera')}</b>${rfDitZoomHtml('fonte')}<button class="btn sm" ${md} onclick="rfDitFonteChiudi()" aria-label="Chiudi la lettera" title="${rfFoglioPazId() ? 'Chiudi la lettera e torna alla cartella' : 'Chiudi'}">✕</button></div><div class="rf-dit-fonte-corpo" id="rf-dit-fonte-corpo"></div>`;
 }
 /* LA CARTELLA DEL PAZIENTE ACCANTO AL FOGLIO (21.10.2026, dallo studio: «nella pagina della dettatura di fianco anche la
@@ -355,12 +356,12 @@ function rfDitCartellaHtml() {
   const p = (typeof PATIENTS !== 'undefined' ? PATIENTS : []).find(x => x.id === pid);
   const md = 'onmousedown="event.preventDefault()"';
   const lettere = !c || c.carico ? '<div class="caption">Cerco le lettere…</div>' : c.errore ? `<div class="caption">${rfEsc(c.errore)}</div>`
-    : c.lettere.length ? c.lettere.map(l => `<a class="rf-dit-cart-voce" ${md} onclick="rfDitLettera(${l.indice})"><span class="num">${rfEsc(l.data)}</span><span>${rfEsc(l.fonte)}</span></a>`).join('') : '<div class="caption">Nessuna lettera trovata.</div>';
+    : c.lettere.length ? c.lettere.map(l => `<a class="rf-dit-cart-voce" ${md} onclick="rfDitLettera(${l.indice})" title="Detta «lettera numero ${l.indice + 1}»"><b class="rf-dit-cart-n">${l.indice + 1}</b><span class="num">${rfEsc(l.data)}</span><span>${rfEsc(l.fonte)}</span></a>`).join('') : '<div class="caption">Nessuna lettera trovata.</div>';
   const gruppi = {};
   for (const x of ((p && p.docs) || [])) (gruppi[x.cartella || 'Documenti'] = gruppi[x.cartella || 'Documenti'] || []).push(x);
   const docs = Object.keys(gruppi).sort((a, b) => a.localeCompare(b, 'it', { numeric: true })).map(g => `<div class="rf-dit-cart-sotto">${rfEsc(g)}</div>${gruppi[g].map(x => `<a class="rf-dit-cart-voce" ${md} onclick="rfDitDocumento('${rfEsc(x.id)}')"><span class="num">${rfEsc(x.d || '')}</span><span>${rfEsc(x.t || x.filename || 'Documento')}</span></a>`).join('')}`).join('');
   return `<div class="rf-dit-fonte-bar"><b class="rf-dit-fonte-nome">Cartella${p ? ` di ${rfEsc(fullName(p))}` : ''}</b>${p ? `<a class="btn sm ghost" href="#/patients/${rfEsc(pid)}" target="_blank" rel="noopener" title="Apre la cartella in un'altra scheda">Apri</a>` : ''}<button class="btn sm" ${md} onclick="rfDitCartellaNascondi()" aria-label="Chiudi" title="Chiudi">✕</button></div>
-    <div class="rf-dit-fonte-corpo rf-dit-cart"><div class="rf-dit-cart-tit">Lettere, dalla più recente</div>${lettere}<div class="rf-dit-cart-tit">Documenti</div>${docs || '<div class="caption">Nessun documento.</div>'}</div>`;
+    <div class="rf-dit-fonte-corpo rf-dit-cart"><div class="rf-dit-cart-tit">Lettere, dalla più recente</div><div class="caption" style="margin:0 0 4px">Si chiamano col numero: «per favore riprendimi l’anamnesi della lettera numero 2».</div>${lettere}<div class="rf-dit-cart-tit">Documenti</div>${docs || '<div class="caption">Nessun documento.</div>'}</div>`;
 }
 // Il paziente cambiato: la colonna accanto mostra la sua cartella (o niente se non c'è un paziente della cartella).
 function rfDitCartellaAggiorna() {
@@ -1039,7 +1040,7 @@ PAGES.dittafono = () => {
           <span id="rf-dit-micsel">${(d.microfoni || []).length > 1 ? `<span class="caption">Microfono <select class="input sm" style="max-width:260px" ${rec ? 'disabled' : ''} onchange="rfDitMicImposta(this.value)" aria-label="Microfono da registrare"><option value="">quello di serie</option>${d.microfoni.map(x => `<option value="${rfEsc(x.id)}" ${x.id === rfDitMicScelto() ? 'selected' : ''}>${rfEsc(x.nome)}</option>`).join('')}</select></span>` : ''}</span></div>
         <div id="rf-dit-tasto" class="caption mt-8">${rfDitTastoHtml()}</div>${d.micManca ? `<div class="caption mt-8" style="color:#b3261e">Il microfono di ${rfEsc(rfDitNomeMedico(d.medico))} («${rfEsc(d.micManca)}») non è attaccato a questo computer: registro con quello di serie.</div>` : ''}${rfDitProfiloOffri()}
         <div id="rf-dit-spia" class="caption" style="opacity:.7">${rfDitHidSpia()}</div>
-        <div class="caption mt-8">Comandi a voce: detta <b>«per favore, inserisci la lettera più recente»</b>, oppure solo una parte — <b>«per favore, inserisci l’anamnesi»</b>, «…FRCV e comorbidità» (o <b>«…patologie associate»</b>, che Dragon scrive meglio), «…l’ECG», «…la conclusione», «…la terapia», oppure <b>«per favore riprendimi la lettera fino alla terapia»</b> (o «…fino a prima dell’esame clinico») — poi lascia il tasto; «per favore» va bene anche dopo il verbo (<b>«prendimi per favore l’anamnesi»</b>); <b>«per favore annulla»</b> toglie ciò che è entrato. Anche da qui, nel punto del cursore: <a href="javascript:void 0" onclick="rfDitComandoTasto('lettera_recente')">lettera intera</a>${[['anamnesi', 'anamnesi'], ['frcv', 'FRCV'], ['comorbidita', 'comorbidità'], ['conclusione', 'conclusione'], ['terapia', 'terapia']].map(([k, n]) => ` · <a href="javascript:void 0" onclick="rfDitComandoTasto('parti', '${k}')">${n}</a>`).join('')}</div>
+        <div class="caption mt-8">Comandi a voce: detta <b>«per favore, inserisci la lettera più recente»</b>, oppure solo una parte — <b>«per favore, inserisci l’anamnesi»</b>, «…FRCV e comorbidità» (o <b>«…patologie associate»</b>, che Dragon scrive meglio), «…l’ECG», e da una lettera precisa col suo numero accanto al foglio: <b>«…l’anamnesi della lettera numero 2»</b>, «…la conclusione», «…la terapia», oppure <b>«per favore riprendimi la lettera fino alla terapia»</b> (o «…fino a prima dell’esame clinico») — poi lascia il tasto; «per favore» va bene anche dopo il verbo (<b>«prendimi per favore l’anamnesi»</b>); <b>«per favore annulla»</b> toglie ciò che è entrato. Anche da qui, nel punto del cursore: <a href="javascript:void 0" onclick="rfDitComandoTasto('lettera_recente')">lettera intera</a>${[['anamnesi', 'anamnesi'], ['frcv', 'FRCV'], ['comorbidita', 'comorbidità'], ['conclusione', 'conclusione'], ['terapia', 'terapia']].map(([k, n]) => ` · <a href="javascript:void 0" onclick="rfDitComandoTasto('parti', '${k}')">${n}</a>`).join('')}</div>
         <div id="rf-dit-sordo" class="rf-manc mt-8" style="display:none"><b>Il testo arriva ma il microfono non sente niente.</b> Di solito il programma di dettatura tiene il microfono tutto per sé, oppure qui è scelto un altro microfono: metti in pausa e scegli sopra lo stesso che usa lui. Senza audio non c'è né riascolto né confronto.</div>
         <div id="rf-dit-fermo" class="rf-manc mt-8" style="display:none"><b>Stai dettando ma la registrazione è ferma.</b> Tocca il tasto per registrare: senza audio non c'è né riascolto né confronto.</div>
         <p class="rf-dit-nota mt-8">Quel che vedi sul foglio è la lettera che arriva in revisione: intestazione, destinatario, data, paziente, saluti e firma sono già scritti e si correggono cliccandoci; il corpo lo scrive il programma di dettatura. La registrazione resta sul dispositivo e poi sul Mac dello studio, che la trascrive per controllo.</p></div>` : ''}

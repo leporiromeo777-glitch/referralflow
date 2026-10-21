@@ -151,6 +151,22 @@ test('comandi a voce: «per favore» più un comando previsto — e solo quello 
     const r = K.trova(frase);
     assert.deepEqual(r && [r.comando, Array.from(r.parti), r.a >= frase.replace(/[?]$/, '').length], ['parti', parti, true], frase);
   }
+  // Le lettere per NUMERO (21.10.2026): 1 = la più recente, come numerate accanto al foglio; anche «riprendi» con la lettera detta.
+  for (const [frase, comando, parti, numero, solo] of [
+    ['per favore riprendimi l\'anamnesi della lettera numero 1', 'parti', ['anamnesi'], 1, false],
+    ['per favore inserisci la lettera numero 2', 'lettera_recente', null, 2, false],
+    ['per favore riprendimi la lettera 3', 'lettera_recente', null, 3, false],
+    ['per favore fammi vedere la lettera numero due', 'lettera_recente', null, 2, true],
+    ['per favore riprendimi la lettera numero 2 fino alla terapia', 'fino', ['terapia'], 2, false],
+    ['per favore inserisci FRCV e patologie associate della lettera n. 2', 'parti', ['frcv', 'comorbidita'], 2, false],
+    ['riprendimi per favore la terapia della lettera numero 3', 'parti', ['terapia'], 3, false],
+    ['per favore inserisci l\'anamnesi', 'parti', ['anamnesi'], null, false],
+  ] as [string, string, string[] | null, number | null, boolean][]) {
+    const r = K.trova(frase);
+    assert.deepEqual(r && [r.comando, r.parti && Array.from(r.parti), r.numero, r.soloApri, r.a], [comando, parti, numero, solo, frase.length], frase);
+  }
+  // «riprendi la terapia» senza dire la lettera resta testo
+  assert.equal(K.trova('per favore riprendi la terapia con cautela'), null);
   // I verbi del guardare aprono la lettera accanto senza mettere niente nel foglio; senza verbo vale se la frase finisce lì.
   for (const [frase, comando, solo] of [
     ['per favore aprimi la lettera', 'lettera_recente', true],

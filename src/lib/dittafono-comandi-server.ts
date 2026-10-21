@@ -19,20 +19,25 @@ export type DaAprire = { tipo: 'referto' | 'documento' | 'pagine'; id: string; p
 export type EsitoComando = { ok: true; testo: string; fonte: string; data: string; cosa: string; mancanti: string[]; apri: DaAprire; saluto?: string; indice: number; totale: number } | { errore: string };
 const TETTO = 20000;
 
-export async function eseguiComando(studioId: string, userId: string | null, patientId: string, comando: Comando, parti: ParteLettera[] = [], esclusa = false): Promise<EsitoComando> {
+// `numero` (21.10.2026): «la lettera numero 2» — la seconda dalla più recente, come numerata accanto al foglio. Con il
+// numero si usa solo QUELLA lettera: niente ricerca fra le ultime quattro.
+export async function eseguiComando(studioId: string, userId: string | null, patientId: string, comando: Comando, parti: ParteLettera[] = [], esclusa = false, numero: number | null = null): Promise<EsitoComando> {
   const [p] = await query<{ cognome: string; nome: string }>('select cognome, nome from patients where id = $1 and studio_id = $2', [patientId, studioId]);
   if (!p) return { errore: 'Paziente non trovato.' };
   const lettere = await lettereDelPazienteScelto(studioId, patientId, `${p.cognome} ${p.nome}`.trim());
   if (!lettere.length) return { errore: 'Nella cartella di questo paziente non trovo lettere.' };
+  if (numero !== null && !lettere[numero - 1]) return { errore: `Non c’è la lettera numero ${numero}: questo paziente ne ha ${lettere.length}${lettere.length === 1 ? '' : ' (da 1, la più recente, a ' + lettere.length + ')'}.` };
+  const scelta = numero !== null ? lettere[numero - 1] : lettere[0];
+  const quale = numero !== null ? `la lettera numero ${numero}` : 'la lettera più recente';
   const letta = async (l: (typeof lettere)[number]) => {
     if (l.fonte.tipo !== 'referto') await logDocumento(l.fonte.id, 'lettura', { studioId, userId: userId ?? undefined, dettaglio: 'dittafono, comando a voce' }).catch(() => {});
   };
   const daAprire = (l: (typeof lettere)[number]) => apriDi(studioId, l);
   const dove = (l: (typeof lettere)[number]) => ({ indice: lettere.indexOf(l), totale: lettere.length });
   if (comando === 'lettera_recente') {
-    const l = lettere[0];
+    const l = scelta;
     const testo = corpoDellaLettera(l.testo).slice(0, TETTO);
-    if (!testo) return { errore: 'La lettera più recente è vuota.' };
+    if (!testo) return { errore: `${quale[0].toUpperCase()}${quale.slice(1)} è vuota.` };
     await letta(l);
     return { ok: true, testo, fonte: l.fonte.etichetta, data: l.fonte.data, cosa: 'la lettera', mancanti: [], apri: await daAprire(l), saluto: salutoDellaLettera(l.testo), ...dove(l) };
   }
@@ -43,16 +48,16 @@ export async function eseguiComando(studioId: string, userId: string | null, pat
     const parte = parti[0];
     if (!parte) return { errore: 'Non ho capito fino a quale parte della lettera.' };
     const cosa = `la lettera fino ${esclusa ? 'a prima di' : 'a'} ${NOME_PARTE[parte]}${esclusa ? '' : ' compresa'}`;
-    const l = lettere[0];
+    const l = scelta;
     const testo = letteraFinoA(l.testo, parte, esclusa).slice(0, TETTO);
-    if (!testo) return { errore: `Nella lettera più recente (${l.fonte.data}) ${NOME_PARTE[parte]} non è una parte a sé${parte === 'frcv' || parte === 'comorbidita' ? ` (con «${NOME_PARTE[parte]}:» a inizio riga)` : ''}: non so dove fermarmi. Chiedi la lettera intera, o fino a un'altra parte.` };
+    if (!testo) return { errore: `Nella${numero !== null ? ` lettera numero ${numero}` : ' lettera più recente'} (${l.fonte.data}) ${NOME_PARTE[parte]} non è una parte a sé${parte === 'frcv' || parte === 'comorbidita' ? ` (con «${NOME_PARTE[parte]}:» a inizio riga)` : ''}: non so dove fermarmi. Chiedi la lettera intera, o fino a un'altra parte.` };
     await letta(l);
     return { ok: true, testo, fonte: l.fonte.etichetta, data: l.fonte.data, cosa, mancanti: [], apri: await daAprire(l), saluto: esclusa && parte === 'anamnesi' ? '' : salutoDellaLettera(l.testo), ...dove(l) };
   }
   // Le parti chieste: dalla più recente fra le ultime quattro lettere che ne ha almeno una (un biglietto può non
   // averne nessuna). Tutte dalla STESSA lettera: quelle che lì non ci sono vengono dette, non cercate altrove.
   if (!parti.length) return { errore: 'Non ho capito quale parte della lettera.' };
-  for (const l of lettere.slice(0, 4)) {
+  for (const l of numero !== null ? [scelta] : lettere.slice(0, 4)) {
     const sue = partiDellaLettera(l.testo);
     const trovate = parti.filter((k) => sue[k]);
     if (!trovate.length) continue;
@@ -62,7 +67,7 @@ export async function eseguiComando(studioId: string, userId: string | null, pat
       cosa: trovate.map((k) => NOME_PARTE[k]).join(', '), mancanti: parti.filter((k) => !sue[k]).map((k) => NOME_PARTE[k]), apri: await daAprire(l), ...dove(l),
     };
   }
-  return { errore: `Nelle ultime lettere di questo paziente non trovo: ${parti.map((k) => NOME_PARTE[k]).join(', ')}.` };
+  return { errore: numero !== null ? `Nella lettera numero ${numero} (${scelta.fonte.data}) non trovo: ${parti.map((k) => NOME_PARTE[k]).join(', ')}.` : `Nelle ultime lettere di questo paziente non trovo: ${parti.map((k) => NOME_PARTE[k]).join(', ')}.` };
 }
 
 // La lettera da mostrare accanto, com'è: per un referto della piattaforma il Word, per un documento il suo file.
