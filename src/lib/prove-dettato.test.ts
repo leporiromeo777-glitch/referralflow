@@ -141,6 +141,12 @@ test('comandi a voce: «per favore» più un comando previsto — e solo quello 
     ['Per favore, mi puoi inserire le co-morbidità?', ['comorbidita']],
     ['per favore puoi mettermi qui anche l\'ECG', ['ecg']],
     ['per favore dammi la terapia', ['terapia']],
+    // il ponte per le comorbidità (Dragon Medical One non scrive mai la parola): nel comando valgono i sinonimi
+    ['per favore inserisci le patologie associate', ['comorbidita']],
+    ['Per favore, inserisci FRCV e patologie associate dell\'ultima lettera', ['frcv', 'comorbidita']],
+    ['per favore prendimi le patologie concomitanti', ['comorbidita']],
+    ['per favore inserisci le altre patologie', ['comorbidita']],
+    ['per favore aggiungi le malattie associate e la terapia', ['comorbidita', 'terapia']],
   ] as [string, string[]][]) {
     const r = K.trova(frase);
     assert.deepEqual(r && [r.comando, Array.from(r.parti), r.a >= frase.replace(/[?]$/, '').length], ['parti', parti, true], frase);

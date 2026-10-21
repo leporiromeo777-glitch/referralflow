@@ -72,7 +72,10 @@
   var PARTI = [
     ['anamnesi', /\b(?:anamnesi|namnesi|anamnesis|amnesia|ha[ \t]+namnesi)(?![a-zà-ù])/i],
     ['frcv', /\b(?:f\.?\s?r\.?\s?c\.?\s?v\b\.?|effe\s+erre\s+ci\s+v[ui](?![a-zà-ù])|(?:fattori\s+di\s+rischio|fattore\s+di\s+rischio|rischio)(?:\s+cardio[\s-]?vascolar[ei])?(?![a-zà-ù]))/i],
-    ['comorbidita', /\b(?:co|con|com)?[\s-]?morbi[dl]it[aàá]/i],
+    // «Patologie associate» (21.10.2026, dallo studio: Dragon Medical One non scrive mai «comorbidità»): un PONTE solo nei
+    // comandi — «per favore inserisci le patologie associate» porta la parte delle comorbidità della lettera, che resta
+    // scritta com'era. Valgono anche «patologie/malattie concomitanti», «malattie associate», «altre patologie/malattie».
+    ['comorbidita', /\b(?:(?:co|con|com)?[\s-]?morbi[dl]it[aàá]|(?:patologi[ae]|malatti[ae])[ \t]+(?:associat[ae]|concomitant[ei])(?![a-zà-ù])|altr[ae][ \t]+(?:patologi[ae]|malatti[ae])(?![a-zà-ù]))/i],
     ['allergie', /\ballergie(?![a-zà-ù])/i],
     ['diagnosi', /\bdiagnosi(?![a-zà-ù])/i],
     ['esame', /\besame\s+(?:clinico|obiettivo)(?![a-zà-ù])/i],
