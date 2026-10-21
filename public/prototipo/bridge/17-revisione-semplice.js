@@ -97,8 +97,7 @@ function rfSmHtml() {
         <div class="sm-box"><div class="sm-audio"><button class="btn sm" id="rv-play" onclick="rvToggle()">${ICONS.play || ''} Play</button><div class="sm-barra" onclick="rfSmBarra(event, this)"><div id="rv-ph" style="left:0"></div></div><span class="sm-tempo"><span id="rv-t">0:00</span> / ${rfEsc(RV_AUDIO.label || '')}</span></div>${typeof rfPedHtml === 'function' ? `<div class="rf-ped-riga" style="margin-top:8px">${rfPedHtml()}</div>` : ''}</div>
         <div class="sm-box"><h3>Dati della lettera</h3><div class="sm-campi">
           ${campo('nome_paziente', 'Paziente', 'Cognome Nome')}${campo('data_nascita', 'Nascita', 'gg.mm.aaaa')}
-          ${campo('medico_destinatario', 'Destinatario', 'Dr. med. …', 'largo')}
-          ${rfSmInvianteHtml(conf)}
+          ${rfSmMedicoHtml(conf)}
           ${campo('copia_conoscenza', 'Copia per conoscenza', 'Dr. med. …; Dr. med. …', 'largo')}
           ${rfSmAllegatiHtml()}
         </div></div>
@@ -112,17 +111,30 @@ function rfSmHtml() {
     </div>`;
 }
 
-// Il medico inviante, dalla rubrica (lo stesso legame della revisione completa: rfAttornoInviante). Una tendina sola:
-// il nome collegato, o «— scegli —»; se il dettato nomina un medico che non è in rubrica, lo dice con «Aggiungi».
-function rfSmInvianteHtml(conf) {
-  if (RF.attornoPer !== RF.loaded) { void rfCaricaAttorno(); return '<div class="field largo"><label>Medico inviante</label><div class="caption">Cerco nella rubrica…</div></div>'; }
-  const a = RF.attorno; if (!a) return '';
-  const inv = a.inviante || {}, sel = inv.scelto ? inv.scelto.id : '';
-  const opz = `<option value="">— scegli —</option>${(a.rubrica || []).map(x => `<option value="${rfEsc(x.id)}" ${x.id === sel ? 'selected' : ''}>${rfEsc(x.nome)}${x.localita ? ' · ' + rfEsc(x.localita) : ''}</option>`).join('')}`;
-  const avviso = inv.scelto ? '' : inv.stato === 'nuovo'
-    ? `<div class="sm-avviso">${rfEsc(inv.nome || '')} non è nella rubrica.${conf ? '' : ' <a onclick="rfAttornoAggiungi()">Aggiungi</a>'}</div>`
-    : inv.stato === 'ambiguo' ? `<div class="sm-avviso">Il dettato dice ${rfEsc(inv.nome || '')}: scegli chi è.</div>` : '';
-  return `<div class="field largo"><label for="sm-c-inviante">Medico inviante</label><select class="input" id="sm-c-inviante" ${conf ? 'disabled' : ''} onchange="rfAttornoInviante(this.value)">${opz}</select>${avviso}</div>`;
+// Il medico della lettera: inviante e destinatario sono quasi sempre la stessa persona (21.10.2026, dallo studio: «basta
+// solo uno dei due»), quindi un campo solo che scrive tutti e due. Si scrive a mano o si sceglie dalla rubrica; scelto
+// dalla rubrica, la lettera si collega a lui (lo stesso legame della revisione completa: rfAttornoInviante), e il Word
+// prende da lì specialità ed e-mail. Se il nome non è in rubrica lo dice, con «Aggiungi».
+function rfSmMedicoHtml(conf) {
+  if (RF.attornoPer !== RF.loaded) void rfCaricaAttorno();
+  const a = RF.attornoPer === RF.loaded ? RF.attorno : null, c = RF.campi || {};
+  const inv = (a && a.inviante) || {};
+  const valore = c.medico_destinatario || c.medico_inviante || (inv.scelto && inv.scelto.nome) || '';
+  const stato = !a ? '' : inv.scelto ? `<div class="caption">✓ collegato alla rubrica${inv.scelto.email ? ` · ${rfEsc(inv.scelto.email)}` : ''}</div>`
+    : inv.stato === 'nuovo' ? `<div class="sm-avviso">${rfEsc(inv.nome || '')} non è nella rubrica.${conf ? '' : ' <a onclick="rfAttornoAggiungi()">Aggiungi</a>'}</div>`
+    : inv.stato === 'ambiguo' ? `<div class="sm-avviso">Il dettato dice ${rfEsc(inv.nome || '')}: sceglilo dall’elenco.</div>` : '';
+  return `<div class="field largo"><label for="sm-c-medico">Medico inviante e destinatario</label><input class="input" id="sm-c-medico" list="sm-rubrica" value="${rfEsc(valore)}" placeholder="Dr. med. … (scrivi o scegli dalla rubrica)" ${conf ? 'readonly' : ''} oninput="rfSmMedico(this.value)" onchange="rfSmMedicoScelto(this.value)" autocomplete="off">
+    <datalist id="sm-rubrica">${((a && a.rubrica) || []).map(x => `<option value="${rfEsc(x.nome)}">${rfEsc(x.localita || '')}</option>`).join('')}</datalist>${stato}</div>`;
+}
+function rfSmMedico(v) {
+  rfSmCampo('medico_destinatario', v);
+  RF.campi.medico_inviante = v; RF.sm.campiToccati.add('medico_inviante');
+}
+// Un nome che è nella rubrica, scelto o scritto per intero: la lettera si collega a quel medico.
+function rfSmMedicoScelto(v) {
+  const a = RF.attorno || {}, scelto = ((a.inviante || {}).scelto || {}).id;
+  const r = (a.rubrica || []).find(x => x.nome.toLowerCase() === String(v || '').trim().toLowerCase());
+  if (r && r.id !== scelto) void rfAttornoInviante(r.id);
 }
 // Gli allegati che partono col Word e con la mail: i nomi in breve e «Gestisci» (la finestra di sempre).
 function rfSmAllegatiHtml() {
