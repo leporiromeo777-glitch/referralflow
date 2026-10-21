@@ -588,12 +588,17 @@ function rfDitTastoLetto() {
     return t;
   } catch (_) { return null; }
 }
+// Safari (e l'app ReferralFlow fatta con Safari, «Aggiungi al Dock») non lascia leggere i dispositivi USB alle pagine:
+// i tasti del microfono da dettatura arrivano solo in Chrome e in Edge. Lo si dice PRIMA di provare (21.10.2026, dallo
+// studio: «per il microfono non mi trova il tasto nell'app»).
+const RF_DIT_SENZA_HID = 'Qui i tasti del microfono non si leggono: in Safari e nell’app ReferralFlow fatta con Safari arrivano solo i tasti della tastiera. Per il tasto del microfono apri ReferralFlow in <b>Chrome</b> o <b>Edge</b> (anche come app: in Chrome ⋮ → Trasmetti, salva e condividi → Installa pagina come app).';
 function rfDitTastoHtml() {
   const d = RF.dit, t = rfDitTastoLetto();
   if (d.impara) return `<b>Tieni premuto il tasto con cui detti, poi lascialo.</b> ${d.impara.nota || ''} <a href="javascript:void 0" onclick="rfDitTastoAnnulla()">Annulla</a>`;
   if (t && t.tipo === 'hid' && d.tastoAutorizza) return `<b>Il microfono ${rfEsc(t.nome || 'da dettatura')}${d.medico ? ` di ${rfEsc(rfDitNomeMedico(d.medico))}` : ''} va permesso su questo computer, una volta sola:</b> <a href="javascript:void 0" onclick="rfDitTastoAutorizza()">permetti</a> (il browser chiede quale dispositivo: scegli il microfono). Poi parte da solo, anche le volte dopo.`;
+  if (t && t.tipo === 'hid' && !navigator.hid) return `Il tasto di ${rfEsc(t.nome || 'questo microfono')} è salvato, ma ${RF_DIT_SENZA_HID}`;
   if (t) return `Tasto del microfono${d.medico && rfDitProfilo(d.medico) && rfDitProfilo(d.medico).tasto ? ` di ${rfEsc(rfDitNomeMedico(d.medico))}` : ''}: <b>${rfEsc(t.nome || 'collegato')}</b> — finché lo tieni premuto la pagina registra${RF.dit.tastoGiu ? ' · <b style="color:#b3261e">premuto</b>' : ''}. Se registra quando NON lo premi, scollegalo e ricollegalo. <a href="javascript:void 0" onclick="rfDitTastoScollega()">Scollega</a>${d.tastoErrore ? ` · <span style="color:#b3261e">${rfEsc(d.tastoErrore)}</span>` : ''}`;
-  return `${d.tastoErrore === 'da ricollegare' ? '<b style="color:#b3261e">Il tasto va ricollegato</b> (prima la pagina scambiava il movimento del microfono per il tasto). ' : ''}<a href="javascript:void 0" onclick="rfDitTastoCollega()">Collega il tasto con cui detti</a>: tenendolo premuto partono insieme il programma di dettatura e la registrazione, lasciandolo si fermano. Mentre lo colleghi tieni il microfono fermo in mano.`;
+  return `${d.tastoErrore === 'da ricollegare' ? '<b style="color:#b3261e">Il tasto va ricollegato</b> (prima la pagina scambiava il movimento del microfono per il tasto). ' : ''}<a href="javascript:void 0" onclick="rfDitTastoCollega()">Collega il tasto con cui detti</a>: tenendolo premuto partono insieme il programma di dettatura e la registrazione, lasciandolo si fermano. Mentre lo colleghi tieni il microfono fermo in mano.${navigator.hid ? '' : `<div class="caption" style="margin-top:4px">${RF_DIT_SENZA_HID}</div>`}`;
 }
 function rfDitTastoDisegna() { const el = document.getElementById('rf-dit-tasto'); if (el) el.innerHTML = rfDitTastoHtml(); const sp = document.getElementById('rf-dit-spia'); if (sp) sp.textContent = rfDitHidSpia(); const c = document.getElementById('rf-dit-centro'); if (c && RF.dit.stato !== 'registra') rfDitRidisegna(); }
 async function rfDitHidApri(dev) {
@@ -611,7 +616,7 @@ async function rfDitTastoCollega() {
       let aperti = 0; for (const dev of scelti) if (await rfDitHidApri(dev)) aperti++;
       if (d.impara) { d.impara.nota = scelti.length ? (aperti ? '' : 'Non riesco ad aprire quel dispositivo: forse lo tiene tutto per sé il programma di dettatura. Prova con un tasto della tastiera.') : 'Nessun dispositivo scelto: va bene anche un tasto della tastiera.'; rfDitTastoDisegna(); }
     } catch (_) { /* finestra chiusa: resta la tastiera */ }
-  } else if (d.impara) { d.impara.nota = 'Questo browser legge solo i tasti della tastiera (per i tasti del microfono servono Chrome o Edge).'; rfDitTastoDisegna(); }
+  } else if (d.impara) { d.impara.nota = 'Questo browser legge solo i tasti della tastiera: per i tasti del microfono apri ReferralFlow in Chrome o Edge.'; rfDitTastoDisegna(); }
 }
 function rfDitTastoAnnulla() { RF.dit.impara = null; rfDitTastoDisegna(); }
 function rfDitTastoScollega() { try { localStorage.removeItem(RF_DIT_TASTO); } catch (_) { /* niente */ } void rfDitProfiloSalva({ tasto: null }); RF.dit.tastoPronto = false; RF.dit.tastoErrore = ''; if (RF.dit.stato !== 'registra') rfDitRilasciaMicrofono(); rfDitTastoDisegna(); }
