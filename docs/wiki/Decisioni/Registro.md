@@ -952,3 +952,12 @@ Tmax non fa da picco dell'effetto; l'emivita è della molecola che agisce. Il ca
 lo dà rispetto al placebo (20 su 45), altrimenti 10/6 per tutti: regole `pa-orari-2`. La regola del 7.10 resta: una riga
 vale solo dopo la conferma di un medico, sul testo svizzero; le righe confermate o scritte a mano non si aggiornano mai da
 sole. La curva della concentrazione è un disegno da Tmax ed emivita, non una misura, e non entra nei calcoli.
+
+## «Conferma» conferma e basta, senza casella — 21.10.2026
+Dallo studio: la segretaria correggeva la lettera e non riusciva a confermarla («serve la spunta»), ma la spunta non c'era:
+dal 20.10 la revisione semplice non ha più la presa d'atto, mentre il server la chiedeva ancora quando la verifica della
+catena era ridotta (lettera dettata con Dragon prima che arrivi il controllo dell'audio) o restavano critiche aperte.
+Deciso dallo studio (cambia la regola del 15.10 «i numeri non controllati chiedono la presa d'atto», per l'interfaccia
+nuova): **premere «Conferma» è la presa d'atto**. Nessuna finestra prima né dopo nella revisione semplice; nella revisione
+completa niente casella. Resta registrato come prima: con critiche aperte o verifica ridotta la conferma è un override
+(`presa_atto` nella misura). La piattaforma classica tiene la sua casella.

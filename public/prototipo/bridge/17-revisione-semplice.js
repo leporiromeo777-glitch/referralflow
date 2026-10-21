@@ -262,35 +262,31 @@ function rfSmSemplice() { const id = RF.loaded; RF.revCompleta = RF.revCompleta 
 
 // Conferma (20.10.2026: senza i punti da controllare, tolti dalla revisione semplice).
 async function rfSmConferma() {
+  // Un clic e la lettera è confermata (21.10.2026, dallo studio: «se schiaccia conferma, glielo confermi e basta, senza
+  // nessuna conferma o cose così»): niente finestra prima né dopo. Il richiamo proposto dal referto, che prima era una
+  // casella già spuntata, si crea come allora.
   const m = RF.meta || {}, sm = RF.sm, id = sm.id;
-  if (!(await rfSmSalva())) { toast('La lettera non si è salvata: riprova'); return; }
-  openModal('Conferma la lettera', `<p>La lettera viene chiusa: da qui si scarica il Word e si prepara la mail.</p>
-    ${m.richiamo_proposto && !m.richiamo ? `<label class="row mt-16" style="gap:8px;align-items:flex-start;cursor:pointer"><input type="checkbox" id="sm-richiamo" checked style="margin-top:3px"><span>Crea anche il <b>richiamo fra ${m.richiamo_proposto.mesi} mesi</b> (dal dettato)</span></label>` : ''}`,
-    `<button class="btn" data-close>Continua a correggere</button><button class="btn primary" id="sm-conferma">Conferma</button>`);
-  document.getElementById('sm-conferma').onclick = async () => {
-    const b = document.getElementById('sm-conferma'); b.disabled = true; b.textContent = 'Confermo…';
-    try {
-      const r = await fetch(`/api/prototipo/referti/${id}/conferma`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-        testo: sm.testo, campi: RF.campi || {}, presa_atto: false, flag_totali: 0, flag_accettati_senza_riascolto: 0, flag_critici_totali: 0, flag_critici_chiusi: 0,
-        tempo_revisione_s: Math.round((Date.now() - sm.inizio) / 1000), revisione_iniziata_at: new Date(sm.inizio).toISOString(),
-      }) });
-      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.errore || String(r.status)); }
-      let nota = '';
-      const chk = document.getElementById('sm-richiamo');
-      if (chk && chk.checked) {
-        try {
-          const rr = await fetch(`/api/prototipo/referti/${id}/richiamo`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mesi: m.richiamo_proposto.mesi }) });
-          nota = rr.ok ? `<p>Richiamo creato fra ${m.richiamo_proposto.mesi} mesi.</p>` : '<p class="caption">Il richiamo non si è creato: fallo dalla scheda del paziente.</p>';
-        } catch (_) { nota = '<p class="caption">Il richiamo non si è creato: piattaforma non raggiungibile.</p>'; }
-      }
-      closeModal();
-      openModal('Lettera confermata', `<p>Fatto. Ora puoi scaricare il Word o preparare la mail per il medico.</p>${nota}`,
-        `<button class="btn" onclick="rfWord('${rfJs(id)}')">${ICONS.file || ''} Scarica Word</button><button class="btn" onclick="rfEmailPrepara('${rfJs(id)}')">${ICONS.mail || ''} Prepara e-mail</button><button class="btn primary" data-close onclick="RF.sm=null;RF.loaded=null;go('#/reports');void rfCaricaDati()">Torna ai referti</button>`);
-    } catch (e) {
-      b.disabled = false; b.textContent = 'Conferma';
-      toast(e.message === 'critici' ? 'Serve la spunta per confermare' : e.message === 'non_bozza' ? 'La lettera è già confermata' : 'Conferma non riuscita');
+  const b = document.querySelector('.sm-fine .btn.primary'); if (b) { b.disabled = true; b.textContent = 'Confermo…'; }
+  const riarma = (t) => { const x = document.querySelector('.sm-fine .btn.primary'); if (x) { x.disabled = false; x.innerHTML = `${ICONS.check || ''} Conferma la lettera`; } toast(t); };
+  if (!(await rfSmSalva())) { riarma('La lettera non si è salvata: riprova'); return; }
+  try {
+    const r = await fetch(`/api/prototipo/referti/${id}/conferma`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+      testo: sm.testo, campi: RF.campi || {}, presa_atto: true, flag_totali: 0, flag_accettati_senza_riascolto: 0, flag_critici_totali: 0, flag_critici_chiusi: 0,
+      tempo_revisione_s: Math.round((Date.now() - sm.inizio) / 1000), revisione_iniziata_at: new Date(sm.inizio).toISOString(),
+    }) });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.errore || String(r.status)); }
+    let nota = '';
+    if (m.richiamo_proposto && !m.richiamo) {
+      try {
+        const rr = await fetch(`/api/prototipo/referti/${id}/richiamo`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mesi: m.richiamo_proposto.mesi }) });
+        nota = rr.ok ? ` · richiamo fra ${m.richiamo_proposto.mesi} mesi creato` : ' · il richiamo non si è creato: fallo dalla scheda del paziente';
+      } catch (_) { nota = ' · il richiamo non si è creato'; }
     }
-  };
+    toast(`Lettera confermata${nota}`);
+    RF.sm = null; RF.loaded = null; render(); void rfCaricaDati();      // la pagina si riapre confermata: Word e e-mail a destra
+  } catch (e) {
+    riarma(e.message === 'non_bozza' ? 'La lettera è già confermata' : 'Conferma non riuscita');
+  }
 }
 
 // Dentro la pagina della revisione: se vale, la semplice al posto di quella completa; nella completa di una lettera

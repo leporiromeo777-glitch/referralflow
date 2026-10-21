@@ -127,7 +127,7 @@ async function main() {
         && i1.j.paziente?.stato === 'trovato' && i1.j.paziente?.scelta?.id === paz && i1.j.paziente?.scelta?.nascita === '03.04.1950'
         && i2.j.medico?.stato === 'nessuno' && i2.j.paziente?.stato === 'scegli' && (i2.j.paziente?.alternative ?? []).length === 2 && i3.stato === 401,
         `detto la lettera all'indirizzo di…: medico trovato nella rubrica anche storpiato, col destinatario pronto; paziente trovato con la data di nascita; un medico che non c'è viene detto; due pazienti con lo stesso cognome si propongono; senza sessione no (${i1.j.medico?.stato}, ${i1.j.paziente?.stato}, ${i2.j.medico?.stato}, ${i2.j.paziente?.stato}, ${i3.stato})`);
-    } finally { await query(`delete from referring_doctors where id = $1`, [inv]); }
+  } finally { await query(`delete from referring_doctors where id = $1`, [inv]); }
     const k3 = await comando({ comando: 'lettera_recente', paziente: vuoto }), k4 = await comando({ comando: 'cancella_tutto', paziente: paz }), k5 = await comando({ comando: 'lettera_recente', paziente: 'x' }), k6 = await comando({ comando: 'lettera_recente', paziente: paz }, '');
     verifica(k3.stato === 404 && typeof k3.j.errore === 'string' && !k3.j.testo && k4.stato === 400 && k5.stato === 400 && k6.stato === 401,
       `un paziente senza lettere dà un avviso e niente testo; un comando non previsto, un paziente non scelto e una richiesta senza sessione sono rifiutati (${k3.stato}, ${k4.stato}, ${k5.stato}, ${k6.stato})`);
@@ -146,6 +146,14 @@ async function main() {
       const e1 = await disp({ medico: 'prova-dispositivi', tasto: { tipo: 'hid', vid: 1 } }), e2 = await disp({ medico: 'Non valido!', dettatura: true }), e3 = await disp({ medico: 'prova-dispositivi', tasto: { tipo: 'tasto', code: '<script>' } }), e4 = await disp(undefined, ''), e5 = await disp({ medico: 'prova-dispositivi', dettatura: true }, '');
       verifica(e1.stato === 400 && e2.stato === 400 && e3.stato === 400 && e4.stato === 401 && e5.stato === 401, `dispositivi del medico: tasto o medico non validi rifiutati, senza sessione no (${e1.stato}, ${e2.stato}, ${e3.stato}, ${e4.stato}, ${e5.stato})`);
     } finally { await query(`delete from dittafono_dispositivi where studio_id = $1 and medico = 'prova-dispositivi'`, [S]); }
+    // «Conferma» conferma e basta (21.10.2026): una lettera con la verifica ridotta (catena leggera in corso) si conferma
+    // senza casella né presa d'atto mandata dalla pagina; resta registrata come presa d'atto.
+    const [{ id: rid }] = await query<{ id: string }>(`insert into referti_bozze (studio_id, file_id, payload, tipo, patient_id) values ($1, 'prova-conferma-' || gen_random_uuid(), $2, 'referto', $3) returning id`,
+      [S, JSON.stringify({ manifesto: { livello_verifica: 'ridotto' }, testo_corretto: 'Caro collega, lettera inventata per la prova della conferma.' }), paz]);
+    bozze.push(rid);
+    const conf = await fetch(`${base}/api/prototipo/referti/${rid}/conferma`, { method: 'POST', headers: { 'Content-Type': 'application/json', cookie: C }, body: JSON.stringify({ testo: 'Caro collega, lettera inventata per la prova della conferma.\n\nCordiali saluti', campi: {}, presa_atto: false }) });
+    const [st] = await query<{ stato: string }>(`select stato from referti_bozze where id = $1`, [rid]);
+    verifica(conf.status === 200 && st?.stato === 'confermata', `«Conferma» con la verifica ridotta passa senza casella (${conf.status}, ${st?.stato})`);
   } finally {
     const chiavi = fatti.length ? await query<{ storage_key: string }>(`select storage_key from referti_audio where id = any($1::uuid[])`, [fatti]) : [];
     if (fatti.length) await query(`delete from referti_audio where id = any($1::uuid[])`, [fatti]);

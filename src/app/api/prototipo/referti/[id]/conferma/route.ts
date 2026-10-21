@@ -38,7 +38,11 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       flag_critici_totali: corpo?.flag_critici_totali, flag_critici_chiusi: corpo?.flag_critici_chiusi,
       revisione_iniziata_at: typeof corpo?.revisione_iniziata_at === 'string' ? corpo.revisione_iniziata_at : null,
       livello_verifica: typeof manifesto.livello_verifica === 'string' ? manifesto.livello_verifica : '',
-      presa_atto: corpo?.presa_atto === true, origine: 'prototipo',
+      // Premere «Conferma» È la presa d'atto (21.10.2026, dallo studio: «se la segretaria schiaccia conferma, glielo confermi e
+      // basta, senza nessuna conferma»: la revisione semplice non ha più la casella e la conferma non passava mai quando la
+      // verifica era ridotta). Se restano critiche aperte o la verifica è ridotta, la conferma resta registrata come
+      // override, come prima con la casella.
+      presa_atto: true, origine: 'prototipo',
     },
   });
   if (!esito.ok) return NextResponse.json({ errore: esito.errore }, { status: esito.errore === 'critici' ? 412 : esito.errore === 'testo' ? 400 : 409 });
