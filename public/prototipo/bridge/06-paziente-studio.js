@@ -434,6 +434,13 @@ function rfStudioChiavePressione(d, admin) {
 }
 function rfStudioCampo(sel) { const e = document.querySelector(sel); return e ? e.value : ''; }
 const rfAdminPageOrig = PAGES.administration;
+// La sigla dopo la data nelle lettere quando non è scritta a mano: come la calcola il Word (siglaDaEmail, referti-lettera.ts).
+function rfSiglaDaAccesso(email) {
+  const loc = String(email || '').split('@')[0].toLowerCase().replace(/[^a-z.\-_]/g, ''); if (!loc) return '';
+  const p = loc.split(/[.\-_]+/).filter(Boolean);
+  return p.length >= 2 ? p.map(x => x[0]).join('').slice(0, 3) : loc.slice(0, 2);
+}
+(function () { const st = document.createElement('style'); st.textContent = '.rf-st-sigla { width: 64px !important; min-width: 0 !important; text-transform: lowercase; }'; document.head.appendChild(st); })();
 PAGES.administration = () => {
   if (!RF.live) return rfAdminPageOrig ? rfAdminPageOrig() : '';
   const d = RF.studio.dati;
@@ -472,10 +479,11 @@ PAGES.administration = () => {
     // prima i campi si svuotavano — il clic su «Crea l'accesso» mandava una richiesta vuota («E-mail non valida»).
     const nuovo = RF.studio.nuovo = RF.studio.nuovo || { email: '', pw: '', ruolo: 'medico' };
     corpo = `<div class="card"><div class="card-head"><span class="section-title">Accessi del personale</span><span class="caption">${d.personale.filter(u => u.attivo).length} attivi</span></div>
-      <div class="table-wrap" style="box-shadow:none"><table class="dense"><thead><tr><th>Accesso</th><th>Ruolo</th><th>2FA</th><th>Stato</th>${admin ? '<th></th>' : ''}</tr></thead><tbody>
+      <div class="table-wrap" style="box-shadow:none"><table class="dense"><thead><tr><th>Accesso</th><th>Ruolo</th><th title="Dopo la data nelle lettere: «Lugano, 22.10.2026/pc»">Sigla</th><th>2FA</th><th>Stato</th>${admin ? '<th></th>' : ''}</tr></thead><tbody>
       ${d.personale.map(u => `<tr>
         <td><b>${rfEsc(u.email)}</b>${u.id === d.io ? ' <span class="caption">(tu)</span>' : ''}</td>
         <td>${admin && u.id !== d.io ? `<select class="input sm" onchange="rfStudioAzione({ azione: 'utente_ruolo', id: '${u.id}', ruolo: this.value })">${Object.entries(ruoloIt).map(([k, l]) => `<option value="${k}" ${u.role === k ? 'selected' : ''}>${l}</option>`).join('')}</select>` : rfEsc(ruoloIt[u.role] || u.role)}</td>
+        <td>${admin ? `<input class="input sm rf-st-sigla" value="${rfEsc(u.sigla || '')}" placeholder="${rfEsc(rfSiglaDaAccesso(u.email))}" maxlength="4" aria-label="Sigla nelle lettere" title="Dopo la data nelle lettere; vuota = ${rfEsc(rfSiglaDaAccesso(u.email))}, dal nome dell'accesso" onchange="rfStudioAzione({ azione: 'utente_sigla', id: '${u.id}', sigla: this.value })">` : `<span class="num">${rfEsc(u.sigla || rfSiglaDaAccesso(u.email))}</span>`}</td>
         <td>${u.totp ? '<span class="badge success">attiva</span>' : '<span class="caption">no</span>'}</td>
         <td>${u.attivo ? '<span class="badge success">attivo</span>' : '<span class="badge">disattivato</span>'}</td>
         ${admin ? `<td style="white-space:nowrap"><div class="row" style="gap:6px;justify-content:flex-end">${u.id !== d.io ? `<button class="btn sm ghost" onclick="rfStudioPassword('${u.id}', '${rfJs(u.email)}')">Nuova password</button><button class="btn sm ghost" onclick="rfStudioAzione({ azione: 'utente_attivo', id: '${u.id}' })">${u.attivo ? 'Disattiva' : 'Riattiva'}</button>` : ''}</div></td>` : ''}

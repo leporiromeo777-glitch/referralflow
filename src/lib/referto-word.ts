@@ -41,11 +41,11 @@ export async function partiWord(sessione: { studioId: string; email?: string | n
     stato: string; testo_finale: string | null; payload: any;
     campi_confermati: any; created_at: string;
     studio_nome: string; titolare: string | null; studio_telefono: string | null; studio_email: string | null;
-    reviewed_email: string | null; patient_id: string | null;
+    reviewed_email: string | null; reviewed_sigla: string | null; patient_id: string | null;
   }>(
     `select b.stato, b.testo_finale, b.payload, b.campi_confermati, b.created_at::text,
             s.nome as studio_nome, s.titolare, s.telefono as studio_telefono, s.notify_email as studio_email,
-            u.email as reviewed_email, b.patient_id
+            u.email as reviewed_email, u.sigla as reviewed_sigla, b.patient_id
        from referti_bozze b join studios s on s.id = b.studio_id
        left join users u on u.id = b.reviewed_by
       where b.id = $1 and b.studio_id = $2`,
@@ -92,7 +92,11 @@ export async function partiWord(sessione: { studioId: string; email?: string | n
   const dettatoIl = typeof b.payload?.dettato_il === 'string' ? b.payload.dettato_il : '';
   const dataDettato = dataCh(dettatoIl) || dataCh(b.created_at);
   const dataOggi = dataCh(new Date().toISOString());
-  const sigla = siglaDaEmail(b.reviewed_email ?? sessione.email ?? '');
+  // La sigla (22.10.2026): quella scritta in Studio → Personale per chi ha confermato (o, se non è confermata, per chi
+  // scarica); se manca, dal nome dell'accesso come prima.
+  const siglaScritta = b.reviewed_email ? b.reviewed_sigla
+    : sessione.email ? (await query<{ sigla: string | null }>('select sigla from users where email = $1 and studio_id = $2', [sessione.email, sessione.studioId]))[0]?.sigla ?? null : null;
+  const sigla = (siglaScritta ?? '').trim() || siglaDaEmail(b.reviewed_email ?? sessione.email ?? '');
   // La segretaria data la lettera al giorno del dettato (12 lettere su 12,
   // visto il 12.9.2026), non al giorno in cui la scarica.
   const dataBase = dataDettato || dataOggi;

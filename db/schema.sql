@@ -2332,3 +2332,8 @@ alter table pa_farmaci add column if not exists numeri_a_mano boolean not null d
 -- profilo di chi detta: quale tasto imparato (come `tasto`) inserisce quale parte della lettera — { <parte>: <tasto> }.
 -- Niente dati clinici.
 alter table dittafono_dispositivi add column if not exists comandi jsonb;
+
+-- 096 — La sigla di chi scrive la lettera (22.10.2026, richiesta dello studio: «quando corregge l'account Valentina, le
+-- lettere accanto alla data siano pc, non va»). Dopo «Lugano, gg.mm.aaaa/» va la sigla di chi ha confermato (o scarica):
+-- finora presa dal nome dell'accesso; ora, se scritta qui, vale questa. Si cambia in Studio → Personale.
+alter table users add column if not exists sigla text;

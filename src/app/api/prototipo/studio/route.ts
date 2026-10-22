@@ -31,7 +31,7 @@ async function leggi(studioId: string) {
   const [studio] = await query<{ nome: string; telefono: string | null; notify_email: string | null; specialita: string | null; indirizzo: string | null; moduli_nascosti: string[]; pressione_chiave_dal: string | null }>(
     `select nome, telefono, notify_email, specialita, indirizzo, moduli_nascosti, pressione_token_set_at::text as pressione_chiave_dal from studios where id = $1`, [studioId]);
   const personale = await query<{ id: string; email: string; role: string; attivo: boolean; totp: boolean; created_at: string }>(
-    `select id, email, role::text, attivo, totp_enabled_at is not null as totp, created_at::text from users where studio_id = $1 order by attivo desc, role, email`, [studioId]);
+    `select id, email, role::text, attivo, totp_enabled_at is not null as totp, created_at::text, sigla from users where studio_id = $1 order by attivo desc, role, email`, [studioId]);
   const medici = await query<{ id: string; nome: string; aliases: string[]; attivo: boolean; user_id: string | null; gln: string | null; rcc: string | null; colore: string | null; ruolo: string; professione: string | null }>(
     `select id, nome, aliases, attivo, user_id, gln, rcc, colore, ruolo, professione from providers where studio_id = $1 order by attivo desc, nome`, [studioId]);
   const personaleSenzaAccesso = await query<{ id: string; nome: string; ruolo: string; percentuale: number | null; colore: string | null; attivo: boolean }>(
@@ -217,6 +217,12 @@ export async function POST(req: NextRequest) {
       if (!isUuid(id) || !RUOLI_VALIDI.has(ruolo)) return NextResponse.json({ errore: 'ruolo' }, { status: 400 });
       if (id === session.id) return NextResponse.json({ errore: 'Non puoi cambiare il tuo ruolo.' }, { status: 400 });
       await query('update users set role = $1::user_role where id = $2 and studio_id = $3', [ruolo, id, sid]);
+    } else if (azione === 'utente_sigla') {
+      // La sigla dopo la data nelle lettere (22.10.2026): da una a quattro lettere; vuota = dal nome dell'accesso.
+      const id = s(c.id); const sigla = String(c.sigla ?? '').trim().toLowerCase();
+      if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 });
+      if (sigla && !/^[a-zà-ÿ]{1,4}$/.test(sigla)) return NextResponse.json({ errore: 'La sigla: da una a quattro lettere, senza spazi né numeri.' }, { status: 400 });
+      await query('update users set sigla = nullif($1, \'\') where id = $2 and studio_id = $3', [sigla, id, sid]);
     } else if (azione === 'utente_attivo') {
       const id = s(c.id);
       if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 });
