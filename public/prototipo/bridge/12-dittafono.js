@@ -283,14 +283,14 @@ async function rfDitComandoCerca() {
   if (RFComandi.trova(el.value, 0)) rfDitComandoProgramma();      // ce n'è un altro
 }
 // Chiede il pezzo al server e lo mette al posto della frase (o, dal tasto, dove sta il cursore).
-async function rfDitComandoEsegui(comando, da, a, frase, parti, soloApri, esclusa, numero) {
+async function rfDitComandoEsegui(comando, da, a, frase, parti, soloApri, esclusa, numero, ripiego) {
   const d = RF.dit, paz = rfFoglioPazId(), cosa = (comando === 'parti' ? 'quella parte della lettera' : 'la lettera') + (numero ? ` numero ${numero}` : '');
   const riprova = ' <a href="javascript:void 0" onclick="rfDitComandoRiprova()">Riprova</a>';
   const fallito = (perche, motivo) => { d.cmdFallito = frase || ''; rfDitComandoStato(`<span style="color:#b3261e">${rfEsc(perche)}</span>${frase ? riprova : ''}`); if (typeof toast === 'function') toast(perche); if (motivo) rfDitComandoDice({ motivo }); };
   if (!paz) { fallito('Comando capito, ma manca il paziente: sceglilo dall’elenco nel campo «Paziente», poi «Riprova».', 'senza_paziente'); return; }
   d.cmdInCorso = true; rfDitComandoStato('Cerco ' + cosa + ' nella cartella del paziente…');
   try {
-    const r = await fetch('/api/prototipo/dittafono/comando', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comando, parti: parti || [], esclusa: !!esclusa, paziente: paz, numero: numero || null }) });
+    const r = await fetch('/api/prototipo/dittafono/comando', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comando, parti: parti || [], esclusa: !!esclusa, paziente: paz, numero: numero || null, ripiego: ripiego || null }) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.testo) { fallito(j.errore || 'Non riesco a prendere ' + cosa + '.'); return; }
     // «Aprimi…», «fammi vedere…»: la frase si toglie, la lettera si apre accanto, nel foglio non entra niente.
@@ -810,7 +810,7 @@ function rfDitTastoPronto() {
    IMPARA come quello per dettare (tieni premuto, poi lascia: un tasto del microfono o della tastiera) e si salva nel
    profilo del medico. Premuto, inserisce la sua parte dove sta il cursore — non mentre si registra. */
 const RF_DIT_COMANDI = 'rf-dit-comandi';
-const RF_DIT_CMD_NOMI = [['lettera', 'Lettera intera'], ['anamnesi', 'Anamnesi'], ['frcv', 'FRCV'], ['comorbidita', 'Comorbidità'], ['esame', 'Esame clinico'], ['ecg', 'ECG'], ['eco', 'Ecocardiogramma'], ['sforzo', 'Test da sforzo'], ['holter', 'Holter'], ['laboratorio', 'Laboratorio'], ['diagnosi', 'Diagnosi'], ['allergie', 'Allergie'], ['conclusione', 'Conclusione'], ['terapia', 'Terapia']];
+const RF_DIT_CMD_NOMI = [['lettera', 'Lettera intera'], ['fino_allergie', 'Fino ad allergie e intolleranze'], ['anamnesi', 'Anamnesi'], ['frcv', 'FRCV'], ['comorbidita', 'Comorbidità'], ['esame', 'Esame clinico'], ['ecg', 'ECG'], ['eco', 'Ecocardiogramma'], ['sforzo', 'Test da sforzo'], ['holter', 'Holter'], ['laboratorio', 'Laboratorio'], ['diagnosi', 'Diagnosi'], ['allergie', 'Allergie'], ['conclusione', 'Conclusione'], ['terapia', 'Terapia']];
 function rfDitComandiLetti() { try { return JSON.parse(localStorage.getItem(RF_DIT_COMANDI) || 'null') || {}; } catch (_) { return {}; } }
 const rfDitStessoTasto = (a, b) => !!a && !!b && a.tipo === b.tipo && (a.tipo === 'tasto' ? a.code === b.code : a.vid === b.vid && a.pid === b.pid && a.rid === b.rid && (a.tipo0 ?? -1) === (b.tipo0 ?? -1) && a.i === b.i && a.maschera === b.maschera);
 function rfDitComandiHtml() {
@@ -874,6 +874,9 @@ function rfDitComandoDaTasto(parte) {
   const el = document.getElementById('rf-dit-testo'); if (!el || d.cmdInCorso) return;
   const qui = typeof d.cursore === 'number' && d.cursore <= el.value.length ? d.cursore : el.value.length;
   const numero = d.fonte && Number.isInteger(d.fonte.indice) ? d.fonte.indice + 1 : 1;
+  // «Fino ad allergie e intolleranze» (22.10.2026): tutta la lettera dall'inizio fino alle allergie e intolleranze
+  // comprese; se non ci sono, fino alle comorbidità comprese.
+  if (parte === 'fino_allergie') { void rfDitComandoEsegui('fino', qui, qui, '', ['allergie'], false, false, numero, 'comorbidita'); return; }
   void rfDitComandoEsegui(parte === 'lettera' ? 'lettera_recente' : 'parti', qui, qui, '', parte === 'lettera' ? [] : [parte], false, false, numero);
 }
 // I microfoni dei comandi si aprono all'apertura della pagina, come quello del tasto per dettare (anche se per dettare si usa la tastiera).

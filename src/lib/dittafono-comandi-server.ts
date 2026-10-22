@@ -21,7 +21,9 @@ const TETTO = 20000;
 
 // `numero` (21.10.2026): «la lettera numero 2» — la seconda dalla più recente, come numerata accanto al foglio. Con il
 // numero si usa solo QUELLA lettera: niente ricerca fra le ultime quattro.
-export async function eseguiComando(studioId: string, userId: string | null, patientId: string, comando: Comando, parti: ParteLettera[] = [], esclusa = false, numero: number | null = null): Promise<EsitoComando> {
+// `ripiego` (22.10.2026): col «fino a…», la parte a cui fermarsi se nella lettera quella chiesta non c'è — il tasto «fino
+// alle allergie e intolleranze» si ferma alle comorbidità quando le allergie non ci sono.
+export async function eseguiComando(studioId: string, userId: string | null, patientId: string, comando: Comando, parti: ParteLettera[] = [], esclusa = false, numero: number | null = null, ripiego: ParteLettera | null = null): Promise<EsitoComando> {
   const [p] = await query<{ cognome: string; nome: string }>('select cognome, nome from patients where id = $1 and studio_id = $2', [patientId, studioId]);
   if (!p) return { errore: 'Paziente non trovato.' };
   const lettere = await lettereDelPazienteScelto(studioId, patientId, `${p.cognome} ${p.nome}`.trim());
@@ -45,12 +47,14 @@ export async function eseguiComando(studioId: string, userId: string | null, pat
   // confonde). Se lì quella parte non è una parte a sé (per esempio i fattori di rischio citati dentro il racconto),
   // lo dice: dove fermarsi non si indovina.
   if (comando === 'fino') {
-    const parte = parti[0];
+    let parte = parti[0];
     if (!parte) return { errore: 'Non ho capito fino a quale parte della lettera.' };
-    const cosa = `la lettera fino ${esclusa ? 'a prima di' : 'a'} ${NOME_PARTE[parte]}${esclusa ? '' : ' compresa'}`;
     const l = scelta;
-    const testo = letteraFinoA(l.testo, parte, esclusa).slice(0, TETTO);
-    if (!testo) return { errore: `Nella${numero !== null ? ` lettera numero ${numero}` : ' lettera più recente'} (${l.fonte.data}) ${NOME_PARTE[parte]} non è una parte a sé${parte === 'frcv' || parte === 'comorbidita' ? ` (con «${NOME_PARTE[parte]}:» a inizio riga)` : ''}: non so dove fermarmi. Chiedi la lettera intera, o fino a un'altra parte.` };
+    let testo = letteraFinoA(l.testo, parte, esclusa).slice(0, TETTO);
+    // col ripiego si prende TUTTO fino alla più lontana delle due (allergie scritte prima delle comorbidità comprese)
+    if (ripiego && ripiego !== parte) { const t2 = letteraFinoA(l.testo, ripiego, esclusa).slice(0, TETTO); if (t2.length > testo.length) { testo = t2; parte = ripiego; } }
+    const cosa = `la lettera fino ${esclusa ? 'a prima di' : 'a'} ${NOME_PARTE[parte]}${esclusa ? '' : ' compresa'}${parte !== parti[0] && !letteraFinoA(l.testo, parti[0], esclusa) ? ` (${NOME_PARTE[parti[0]]} non c'è)` : ''}`;
+    if (!testo) return { errore: `Nella${numero !== null ? ` lettera numero ${numero}` : ' lettera più recente'} (${l.fonte.data}) ${NOME_PARTE[parte]}${ripiego && ripiego !== parte ? ` e ${NOME_PARTE[ripiego]}` : ''} non è una parte a sé${parte === 'frcv' || parte === 'comorbidita' ? ` (con «${NOME_PARTE[parte]}:» a inizio riga)` : ''}: non so dove fermarmi. Chiedi la lettera intera, o fino a un'altra parte.` };
     await letta(l);
     return { ok: true, testo, fonte: l.fonte.etichetta, data: l.fonte.data, cosa, mancanti: [], apri: await daAprire(l), saluto: esclusa && parte === 'anamnesi' ? '' : salutoDellaLettera(l.testo), ...dove(l) };
   }

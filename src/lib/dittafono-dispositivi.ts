@@ -9,8 +9,9 @@ export type Tasto =
   | { tipo: 'tasto'; code: string; nome: string }
   | { tipo: 'hid'; vid: number; pid: number; rid: number; i: number; maschera: number; premuto: number; tipo0?: number; nome: string };
 // `comandi` (22.10.2026): i tasti dei comandi — quale tasto imparato inserisce quale parte della lettera
-// («lettera» = la lettera intera, le altre sono le parti dei comandi a voce).
-export const COMANDI_TASTO = ['lettera', 'anamnesi', 'frcv', 'comorbidita', 'allergie', 'diagnosi', 'esame', 'ecg', 'eco', 'sforzo', 'holter', 'laboratorio', 'conclusione', 'terapia'] as const;
+// («lettera» = la lettera intera; «fino_allergie» = dall'inizio fino alle allergie e intolleranze comprese, o fino alle
+// comorbidità se non ci sono; le altre sono le parti dei comandi a voce).
+export const COMANDI_TASTO = ['lettera', 'fino_allergie', 'anamnesi', 'frcv', 'comorbidita', 'allergie', 'diagnosi', 'esame', 'ecg', 'eco', 'sforzo', 'holter', 'laboratorio', 'conclusione', 'terapia'] as const;
 export type ComandoTasto = (typeof COMANDI_TASTO)[number];
 export type Dispositivi = { tasto: Tasto | null; microfono: string | null; dettatura: boolean | null; comandi: Partial<Record<ComandoTasto, Tasto>> | null };
 
