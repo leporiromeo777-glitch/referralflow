@@ -82,6 +82,33 @@ export function abbinaCartella(nomeCartella: string, date: Iterable<string>, paz
   return { id: null, motivo: daNome.length ? 'nascita_diversa' : 'nascita_non_trovata' };
 }
 
+// Il nome quasi uguale (22.10.2026): nessuno ha il nome intero della cartella, ma UN paziente ha un nome contenuto nel
+// suo o che lo contiene (un secondo nome in più o in meno, almeno cognome e nome) e la sua data di nascita è scritta
+// nelle lettere. È la stessa persona: si usa la scheda che c'è, non se ne crea un'altra.
+export function quasiStesso(nomeCartella: string, date: Iterable<string>, pazienti: Paz[]): string | null {
+  const fp = slugNome(nomeDaCartella(nomeCartella).nome).split(' ').filter(Boolean);
+  if (fp.length < 2) return null;
+  const viste = new Set([...date, ...dateNelTesto(nomeCartella)]);
+  const c = pazienti.filter((p) => {
+    const pp = slugNome(`${p.cognome} ${p.nome}`).split(' ').filter(Boolean);
+    const nasc = (p.data_nascita ?? '').slice(0, 10);
+    return pp.length >= 2 && !!nasc && viste.has(nasc) && (pp.every((w) => fp.includes(w)) || fp.every((w) => pp.includes(w)));
+  });
+  return c.length === 1 ? c[0].id : null;
+}
+
+// Cognome e nome dal nome della cartella («Cognome Nome», come lo studio le nomina): la prima parola è il cognome,
+// con le particelle attaccate («De Luca Mario», «Dal Pozzo Anna», «Van der Berg Jan»); il resto è il nome.
+const PARTICELLE = new Set(['de', 'di', 'da', 'del', 'della', 'dello', 'dei', 'degli', 'dal', 'dalla', 'dalle', 'van', 'von', 'der', 'den', 'la', 'le', 'lo', 'mc', 'mac', 'st', 'san', 'santa', 'dos', 'das', 'du', 'des']);
+export function dividiNome(nomeCartella: string): { cognome: string; nome: string } | null {
+  const parole = nomeDaCartella(nomeCartella).nome.replace(/[.,;]+/g, ' ').split(/\s+/).filter(Boolean);
+  if (parole.length < 2) return null;
+  let i = 0;
+  while (i < parole.length - 2 && PARTICELLE.has(parole[i].toLowerCase().replace(/['’]$/, ''))) i++;
+  const cognome = parole.slice(0, i + 1).join(' '), nome = parole.slice(i + 1).join(' ');
+  return cognome && nome ? { cognome, nome } : null;
+}
+
 // Una data di nascita da proporre quando la cartella aspetta (per «Crea la cartella»): la prima data scritta
 // accanto a «nato/nata», «geb.», «data di nascita», o subito dopo il nome. Solo una proposta: decide una persona.
 export function nascitaProposta(testo: string, nome: string): string | null {
@@ -98,6 +125,32 @@ export function nascitaProposta(testo: string, nome: string): string | null {
     if (parole.length && parole.every((p) => prima.includes(p))) candidati.push(d);
   }
   return candidati[0] ?? null;
+}
+
+// La data di nascita abbastanza sicura per CREARE un paziente (più severa della proposta): accanto a «nato/a il»,
+// «geb.», «data di nascita», oppure da sola subito dopo il nome sulla stessa riga («Paziente: Rossi Mario – 12.03.1950»),
+// e almeno un anno prima della lettera. Una data qualunque vicino al nome («Rossi Mario, coronarografia del 3.2.2019»)
+// non basta.
+export function nascitaSicura(testo: string, nome: string, primaLettera: string | null): string | null {
+  const t = String(testo ?? '').slice(0, 6000);
+  const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const prima = primaLettera ? Number(primaLettera.slice(0, 4)) : new Date().getFullYear();
+  const valida = (d: string | null) => (d && Number(d.slice(0, 4)) < prima ? d : null);
+  const k = norm(t).match(/\b(?:nat[oa]\s+il|nat[oa]|geb(?:oren)?\.?(?:\s+am)?|data di nascita|d\.\s*di\s*n\.)\s*:?\s*(\d{1,2})\s*[.\/-]\s*(\d{1,2})\s*[.\/-]\s*(\d{4})/);
+  if (k) { const d = valida(iso(Number(k[1]), Number(k[2]), Number(k[3]))); if (d) return d; }
+  const parole = slugNome(nome).split(' ').filter((p) => p.length >= 2);
+  if (parole.length < 2) return null;
+  for (const riga of t.split(/\r?\n/)) {
+    const r = norm(riga);
+    const m = r.match(/(\d{1,2})\s*[.\/-]\s*(\d{1,2})\s*[.\/-]\s*(\d{4})/);
+    if (!m || !parole.every((p) => new RegExp(`\\b${p}\\b`).test(r))) continue;
+    let resto = r.replace(m[0], ' ');
+    for (const p of parole) resto = resto.replace(new RegExp(`\\b${p}\\b`), ' ');
+    if (/^[\s,–—\-():;./]*(?:(?:paziente|pz|sig(?:\.|ra|nor|nora)?|concerne|oggetto)\s*[:.]?)?[\s,–—\-():;./]*$/.test(resto)) {
+      const d = valida(iso(Number(m[1]), Number(m[2]), Number(m[3]))); if (d) return d;
+    }
+  }
+  return null;
 }
 
 // Quali file sono lettere: Word (nuovo e vecchio) e PDF. Fuori i modelli, i file di blocco di Word («~$…»), i file

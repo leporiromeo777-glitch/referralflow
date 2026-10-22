@@ -6,7 +6,7 @@ import path from 'node:path';
 import { query, pool } from '../src/lib/db';
 import { slugNome } from '../src/lib/imaging-ordina';
 import { abbinaCartella, dateNelTesto, MAX_LETTERE_PAZIENTE, nomeDaCartella } from '../src/lib/comune/regole';
-import { cartellePazienti, lettereSulDisco } from '../src/lib/comune/scopri';
+import { cartellePazienti, lettereSulDisco, mediciScelti } from '../src/lib/comune/scopri';
 import { testoDi } from '../src/lib/comune/testo';
 
 const RADICE = process.argv[2] || process.env.COMUNE_LETTERE || '/Volumes/comune/CentroCardio/Pazienti';
@@ -15,7 +15,7 @@ const RADICE = process.argv[2] || process.env.COMUNE_LETTERE || '/Volumes/comune
   const [s] = await query<{ id: string }>(`select id from studios where attivo order by created_at limit 1`);
   const pazienti = await query<{ id: string; cognome: string; nome: string; data_nascita: string | null }>(`select id, cognome, nome, data_nascita::text from patients where studio_id = $1`, [s.id]);
   const nomi = new Set(pazienti.map((p) => slugNome(`${p.cognome} ${p.nome}`)));
-  const { trovate, sciolte } = await cartellePazienti(RADICE, nomi);
+  const { trovate, sciolte } = await cartellePazienti(RADICE, nomi, mediciScelti());
   const conti: Record<string, [number, number]> = {}; const perMedico: Record<string, Record<string, number>> = {};
   const add = (k: string, n: number, m: string) => { const c = conti[k] ?? [0, 0]; c[0]++; c[1] += n; conti[k] = c; (perMedico[m] ??= {})[k] = (perMedico[m][k] ?? 0) + 1; };
   for (const t of trovate) {
@@ -27,7 +27,14 @@ const RADICE = process.argv[2] || process.env.COMUNE_LETTERE || '/Volumes/comune
       const b = await fs.readFile(path.join(RADICE, f.rel)).catch(() => null);
       if (b) for (const d of dateNelTesto(await testoDi(b, f.formato))) date.add(d);
     }
-    add(abbinaCartella(t.nome, date, pazienti).motivo, tutti.length, t.medico);
+    const a = abbinaCartella(t.nome, date, pazienti);
+    add(a.motivo, tutti.length, t.medico);
+    // Nome quasi uguale (un nome in più o in meno) e la stessa data di nascita nelle lettere: quante sarebbero.
+    if (a.motivo === 'nessuno') {
+      const fp = new Set(slugNome(nomeDaCartella(t.nome).nome).split(' '));
+      const quasi = pazienti.filter((p) => { const pp = slugNome(`${p.cognome} ${p.nome}`).split(' '); return (pp.every((w) => fp.has(w)) || [...fp].every((w) => pp.includes(w))) && !!p.data_nascita && date.has(p.data_nascita.slice(0, 10)); });
+      if (quasi.length === 1) add('nessuno, ma nome quasi uguale e stessa nascita', tutti.length, t.medico);
+    }
   }
   for (const [m, c] of Object.entries(perMedico)) console.log(`cartella ${m}:`, c);
   console.log('esito → [cartelle, lettere]:', conti);

@@ -40,10 +40,14 @@ const pazienti: string[] = [];
     await fs.writeFile(R('Rapporti_Prova', 'Provacom Alda', '~$ provacom.docx'), 'blocco di Word');
     // Più in profondità, la data di nascita nel nome della cartella: un referto d'esame.
     await word(R('Esami_Prova', 'Esami 2015', 'Provacom Alda (12.03.1950)', 'eco.docx'), lettera('Provacom Alda', '', 'Esame di secondo livello.'));
-    // Sconosciuta: aspetta, con la data proposta.
+    // Sconosciuta con la data di nascita accanto a «nato il»: il paziente nasce da solo.
     await word(R('Rapporti_Prova', 'Ignotocom Bruno', '23 01 02 Ignotocom Bruno.docx'), `Lugano, 02.01.2023\nConcerne: Ignotocom Bruno, nato il 04.07.1955\n${'Testo di prova inventato. '.repeat(20)}`);
-    // Omonimo con un'altra data: aspetta.
+    // Un nome in più e la stessa nascita: la scheda che c'è, non una nuova.
+    await word(R('Rapporti_Prova', 'Provacom Alda Maria', 'x2.docx'), lettera('Provacom Alda Maria', '12.03.1950'));
+    // Un nome in più ma un'altra nascita: un'altra persona, nasce.
     await word(R('Rapporti_Prova', 'Provacom Alda Seconda', 'x.docx'), lettera('Provacom Alda Seconda', '01.01.1990'));
+    // Sconosciuta senza nessuna data: aspetta.
+    await word(R('Rapporti_Prova', 'Senzadata Carlo', 's.docx'), `Egregio collega,\n${'Testo di prova inventato senza date. '.repeat(20)}`);
     // Archivio: una cartella con centinaia di lettere nominate con un codice.
     await fs.mkdir(R('Rapporti_Prova', 'Vecchie', 'Lettere varie'), { recursive: true });
     for (let i = 0; i < 260; i++) await fs.writeFile(R('Rapporti_Prova', 'Vecchie', 'Lettere varie', `L${1000 + i}.doc`), 'x');
@@ -53,12 +57,16 @@ const pazienti: string[] = [];
 
     const non = await fetch(URL); verifica(non.status === 401, `senza sessione: 401 (${non.status})`);
     const g1 = await manda({ azione: 'controlla' });
-    verifica(g1.stato === 200 && g1.j.caricati === 3, `primo controllo: 3 caricate (${g1.stato} ${JSON.stringify({ c: g1.j.caricati, d: g1.j.doppioni, a: g1.j.in_attesa, n: g1.j.nuovi })})`);
+    verifica(g1.stato === 200 && g1.j.caricati === 6, `primo controllo: 6 caricate (${g1.stato} ${JSON.stringify({ c: g1.j.caricati, d: g1.j.doppioni, a: g1.j.in_attesa, n: g1.j.nuovi, cr: g1.j.creati })})`);
     verifica(g1.j.doppioni === 1, `il PDF del Word saltato come doppione (${g1.j.doppioni})`);
-    verifica(g1.j.in_attesa === 2, `due lettere in cartelle da assegnare (${g1.j.in_attesa})`);
+    verifica(g1.j.in_attesa === 1, `una lettera in una cartella da assegnare (senza data) (${g1.j.in_attesa})`);
+    verifica(g1.j.creati === 2, `due pazienti creati dalla cartella (${g1.j.creati})`);
+    const nati = await query<{ cognome: string; nome: string; nascita: string }>(`select cognome, nome, data_nascita::text as nascita from patients where studio_id = $1 and (cognome = 'Ignotocom' or (cognome = 'Provacom' and nome <> 'Alda')) order by cognome`, [S]);
+    verifica(nati.length === 2 && nati[0].nome === 'Bruno' && nati[0].nascita === '1955-07-04' && nati[1].nome === 'Alda Seconda' && nati[1].nascita === '1990-01-01', `i pazienti nuovi con cognome, nome e nascita giusti (${nati.map((x) => `${x.nome} ${x.nascita}`).join(', ')})`);
     const docs = await query<{ id: string; filename: string; categoria: string; giorno: string; nota: string }>(
       `select id, filename, categoria, to_char(uploaded_at, 'YYYY-MM-DD') as giorno, nota from patient_documents where patient_id = $1 order by filename`, [p.id]);
-    verifica(docs.length === 3, `tre documenti nella cartella del paziente (${docs.length})`);
+    verifica(docs.length === 4, `quattro documenti nella cartella del paziente, anche dalla cartella col nome quasi uguale (${docs.length})`);
+    verifica(docs.some((d) => d.filename === 'x2.docx'), 'la cartella «Provacom Alda Maria» nella scheda di Provacom Alda');
     const d1 = docs.find((d) => d.filename === '24 05 12 Provacom Alda.docx');
     verifica(!!d1 && d1.categoria === 'lettera' && d1.giorno === '2024-05-12' && /Rapporti Prova/.test(d1.nota), `lettera con la data del nome del file e la nota (${d1?.categoria} ${d1?.giorno})`);
     verifica(docs.some((d) => d.filename === 'L0001.docx' && d.categoria === 'lettera'), 'il Word vecchio convertito in .docx');
@@ -67,11 +75,11 @@ const pazienti: string[] = [];
 
     const st = await leggi();
     const attesa = st.j.attesa || [];
-    const ign = attesa.find((x: any) => x.nome_letto === 'Ignotocom Bruno');
-    verifica(st.stato === 200 && !!ign && ign.motivo === 'nessuno' && ign.nascita_proposta === '1955-07-04', `cartella sconosciuta da assegnare, con la nascita proposta (${ign?.motivo} ${ign?.nascita_proposta})`);
-    verifica(attesa.some((x: any) => x.nome_letto === 'Provacom Alda Seconda'), 'nome diverso (tre parole): aspetta, niente indovinato');
+    const ign = attesa.find((x: any) => x.nome_letto === 'Senzadata Carlo');
+    verifica(st.stato === 200 && !!ign && ign.motivo === 'nessuno' && !ign.nascita_proposta && attesa.length === 1, `senza una data di nascita la cartella aspetta (${ign?.motivo}, ${attesa.length})`);
+    verifica(st.j.conti?.creati === 2 && st.j.conti?.quasi === 1, `conteggi: 2 creati, 1 col nome quasi uguale (${st.j.conti?.creati}, ${st.j.conti?.quasi})`);
     verifica((st.j.non_pazienti || []).some((x: any) => /Vecchie/.test(x.percorso)), 'l’archivio lasciato fuori');
-    verifica(st.j.recenti?.length === 3 && st.j.conti?.caricati === 3, `ultimi sette giorni: 3 (${st.j.recenti?.length})`);
+    verifica(st.j.recenti?.length === 6 && st.j.conti?.caricati === 6, `ultimi sette giorni: 6 (${st.j.recenti?.length})`);
 
     const g2 = await manda({ azione: 'controlla' });
     verifica(g2.j.nuovi === 0 && g2.j.caricati === 0, `secondo controllo: niente di nuovo, niente doppioni (${g2.j.nuovi})`);
@@ -81,10 +89,10 @@ const pazienti: string[] = [];
     await word(R('Rapporti_Prova', 'Provacom Alda', '24 05 12 Provacom Alda.docx'), lettera('Provacom Alda', '12.03.1950', 'Corretta il giorno dopo.'));
     const g3 = await manda({ azione: 'controlla' });
     const [dopo] = await query<{ storage_key: string; n: number }>(`select storage_key, (select count(*)::int from patient_documents where patient_id = $2) as n from patient_documents where id = $1`, [d1!.id, p.id]);
-    verifica(g3.j.caricati === 1 && dopo.n === 3 && dopo.storage_key !== prima.storage_key, `lettera cambiata: lo stesso documento col file nuovo (${g3.j.caricati}, ${dopo.n})`);
+    verifica(g3.j.caricati === 1 && dopo.n === 4 && dopo.storage_key !== prima.storage_key, `lettera cambiata: lo stesso documento col file nuovo (${g3.j.caricati}, ${dopo.n})`);
 
     // Crea il paziente dalla cartella che aspetta: le sue lettere entrano.
-    const cr = await manda({ azione: 'crea_cartella', id: ign.id, cognome: 'Ignotocom', nome: 'Bruno', data_nascita: '04.07.1955' });
+    const cr = await manda({ azione: 'crea_cartella', id: ign.id, cognome: 'Senzadata', nome: 'Carlo', data_nascita: '04.07.1956' });
     verifica(cr.stato === 200 && cr.j.nuova === true, `crea il paziente (${cr.stato})`);
     if (cr.j.patient_id) pazienti.push(cr.j.patient_id);
     let n = 0;
@@ -94,6 +102,7 @@ const pazienti: string[] = [];
     verifica(sc.stato === 404, `una cartella già assegnata non si scarta (${sc.stato})`);
   } catch (e: any) { no++; console.log(`NO eccezione: ${e?.message ?? e}`); }
   finally {
+    pazienti.push(...(await query<{ id: string }>(`select id from patients where studio_id = $1 and cognome in ('Provacom', 'Ignotocom', 'Senzadata') and not (id = any($2::uuid[]))`, [S, pazienti])).map((x) => x.id));
     const chiavi = await query<{ k: string }>(`select storage_key as k from patient_documents where patient_id = any($1::uuid[])`, [pazienti]);
     for (const { k } of chiavi) await deleteFile(k).catch(() => null);
     await query(`delete from comune_giri where studio_id = $1`, [S]);

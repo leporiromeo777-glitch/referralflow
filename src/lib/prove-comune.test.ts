@@ -1,7 +1,7 @@
 // Le lettere della cartella comune (22.10.2026): regole pure. Nomi e date INVENTATI.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { abbinaCartella, cartellaDiPaziente, categoriaDi, dataDaNomeFile, dateNelTesto, formatoLettera, nascitaProposta, nomeDaCartella, stessaLettera, tocca } from './comune/regole';
+import { abbinaCartella, cartellaDiPaziente, categoriaDi, dividiNome, nascitaSicura, quasiStesso, dataDaNomeFile, dateNelTesto, formatoLettera, nascitaProposta, nomeDaCartella, stessaLettera, tocca } from './comune/regole';
 
 const P = [
   { id: 'a', cognome: 'Prova', nome: 'Alda', data_nascita: '1950-03-12' },
@@ -90,4 +90,31 @@ test('comune: il controllo tocca alle 2 di notte, o subito se resta lavoro', () 
   assert.equal(tocca(d('2026-10-22T10:00:00'), d('2026-10-21T23:00:00'), false), true);
   assert.equal(tocca(d('2026-10-22T01:00:00'), d('2026-10-21T02:30:00'), false), false);
   assert.equal(tocca(d('2026-10-22T10:00:00'), d('2026-10-22T09:00:00'), true), true);
+});
+
+test('comune: il nome quasi uguale con la stessa nascita è la scheda che c’è', () => {
+  assert.equal(quasiStesso('Prova Alda Maria', ['1950-03-12'], P), 'a');           // un nome in più nella cartella
+  assert.equal(quasiStesso('Finti Bruno', ['1961-11-02'], P), 'b');                // un nome in meno
+  assert.equal(quasiStesso('Prova Alda Maria', ['1990-01-01'], P), null);          // altra nascita
+  assert.equal(quasiStesso('Prova Alda Maria (12.03.1950)', [], P), 'a');          // la data nel nome della cartella
+  assert.equal(quasiStesso('Doppi Ugo Pio', ['1940-01-01', '1970-05-05'], P), null); // due persone: non si sceglie
+  assert.equal(quasiStesso('Prova', ['1950-03-12'], P), null);
+});
+
+test('comune: cognome e nome dal nome della cartella, con le particelle', () => {
+  assert.deepEqual(dividiNome('Prova Alda'), { cognome: 'Prova', nome: 'Alda' });
+  assert.deepEqual(dividiNome('Prova Alda Maria (12.03.1950)'), { cognome: 'Prova', nome: 'Alda Maria' });
+  assert.deepEqual(dividiNome('De Prova Mario'), { cognome: 'De Prova', nome: 'Mario' });
+  assert.deepEqual(dividiNome('Van der Prova Jan'), { cognome: 'Van der Prova', nome: 'Jan' });
+  assert.deepEqual(dividiNome('Prova_Alda'), { cognome: 'Prova', nome: 'Alda' });
+  assert.equal(dividiNome('Prova'), null);
+});
+
+test('comune: la data di nascita per creare un paziente, solo se sicura', () => {
+  assert.equal(nascitaSicura('Concerne: Ignoto Mario, nato il 4.7.1955', 'Ignoto Mario', '2024-01-02'), '1955-07-04');
+  assert.equal(nascitaSicura('Paziente\nIgnoto Mario – 04.07.1955\nLugano', 'Ignoto Mario', '2024-01-02'), '1955-07-04');
+  assert.equal(nascitaSicura('Paziente: Mario Ignoto (04.07.1955)', 'Ignoto Mario', '2024-01-02'), '1955-07-04');
+  assert.equal(nascitaSicura('Ignoto Mario, coronarografia del 03.02.2019', 'Ignoto Mario', '2024-01-02'), null);
+  assert.equal(nascitaSicura('Ignoto Mario – 03.02.2024', 'Ignoto Mario', '2024-01-02'), null);      // non prima della lettera
+  assert.equal(nascitaSicura('Lugano, 01.02.2024', 'Ignoto Mario', '2024-01-02'), null);
 });

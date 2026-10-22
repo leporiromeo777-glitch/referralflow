@@ -26,6 +26,16 @@ dal nome della cartella o dal **testo delle lettere** (le lettere dello studio l
 nome della cartella valgono come quelle del testo, perché a volte sono il giorno dell'esame. Solo cognome e data intera
 nel nome («Rossi 12.03.1950») bastano; solo il cognome no. Le date lette restano nella cartella (`date_lette`): quando
 nasce un paziente (a mano, da un'importazione) la cartella si riabbina al giro dopo senza rileggere i file.
+**Il nome che in ReferralFlow non c'è** (22.10.2026, dallo studio: «quelli che non ci sono su ReferralFlow creali»):
+- se UN paziente ha il **nome quasi uguale** (un secondo nome in più o in meno) e la sua data di nascita è nelle lettere,
+  è la stessa persona: la cartella va nella sua scheda (`quasiStesso`), niente doppione;
+- se no il **paziente si crea** da solo, con cognome e nome dal nome della cartella (`dividiNome`: la prima parola è il
+  cognome, con le particelle «De», «Dal», «Van der»…) e la data di nascita **sicura** (`nascitaSicura`): nel nome della
+  cartella, accanto a «nato/a il», «geb.», «data di nascita», o da sola subito dopo il nome sulla stessa riga
+  («Paziente: Rossi Mario – 12.03.1950»), e almeno un anno prima della lettera. Una data qualunque vicino al nome
+  («Rossi Mario, coronarografia del …») non basta. `COMUNE_CREA_PAZIENTI=0` lo spegne.
+- La pagina conta i pazienti creati e le cartelle col nome quasi uguale.
+
 Se no la cartella **aspetta** («da assegnare») col perché: nessun paziente con quel nome, la data non si trova, un'altra
 data, omonimi. Dalla pagina: scegli il paziente (proposti quelli col cognome nel nome della cartella), **crealo** (con la
 data di nascita trovata accanto a «nato/a» o al nome, da controllare), o **non caricare**. Assegnata, le sue lettere

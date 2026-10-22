@@ -9,7 +9,7 @@ import { riabbinaPazienti } from '../pazienti-abbina';
 import { validaAnagrafica } from '../pazienti-import';
 import { deleteFile, putFile } from '../storage';
 import { slugNome } from '../imaging-ordina';
-import { abbinaCartella, categoriaDi, dataDaNomeFile, dateNelTesto, MAX_LETTERE_PAZIENTE, nascitaProposta, nomeDaCartella, radice, stessaLettera, tocca, type Formato } from './regole';
+import { abbinaCartella, categoriaDi, dividiNome, nascitaSicura, quasiStesso, dataDaNomeFile, dateNelTesto, MAX_LETTERE_PAZIENTE, nascitaProposta, nomeDaCartella, radice, stessaLettera, tocca, type Formato } from './regole';
 import { cartellePazienti, lettereSulDisco, mediciScelti, type SulDisco } from './scopri';
 import { docxDaDoc, testoDi } from './testo';
 
@@ -25,6 +25,8 @@ import { docxDaDoc, testoDi } from './testo';
 // Senza COMUNE_LETTERE la cartella vera vale solo sul server vero (next start): un server di prova non la tocca mai.
 export const radiceComune = (): string => process.env.COMUNE_LETTERE || (process.env.NODE_ENV === 'production' ? '/Volumes/comune/CentroCardio/Pazienti' : '');
 const LOTTO = Number(process.env.COMUNE_LOTTO) || 150;
+// Creare i pazienti che in ReferralFlow non ci sono (decisione dello studio, 22.10.2026); COMUNE_CREA_PAZIENTI=0 lo spegne.
+const creaPazienti = (): boolean => process.env.COMUNE_CREA_PAZIENTI !== '0';
 const MAX_BYTE = 40 * 1024 * 1024;
 const FERMO_MS = 60_000;      // un file scritto nell'ultimo minuto lo stanno ancora salvando: al prossimo giro
 const MIME: Record<Formato, string> = {
@@ -38,10 +40,10 @@ export const PUO_COMUNE = {
 export const puoComune = (ruolo: string | null | undefined, cosa: keyof typeof PUO_COMUNE): boolean => !!ruolo && (PUO_COMUNE[cosa] as readonly string[]).includes(ruolo);
 
 type Paz = { id: string; cognome: string; nome: string; data_nascita: string | null };
-type Cartella = { id: string; percorso: string; stato: string; patient_id: string | null; date_lette: string[]; motivo: string | null };
+type Cartella = { id: string; percorso: string; stato: string; patient_id: string | null; date_lette: string[]; motivo: string | null; nascita_proposta: string | null };
 type Noto = { dimensione: string; modificato: Date; stato: string; sha256: string | null; documento_id: string | null };
 
-export type EsitoGiro = { sciolte: number; cartelle: number; nuovi: number; caricati: number; doppioni: number; in_attesa: number; non_letti: number; abbinate: number; restano: boolean; cartella?: 'assente'; gia_in_corso?: boolean };
+export type EsitoGiro = { creati: number; sciolte: number; cartelle: number; nuovi: number; caricati: number; doppioni: number; in_attesa: number; non_letti: number; abbinate: number; restano: boolean; cartella?: 'assente'; gia_in_corso?: boolean };
 
 async function caricaDocumento(studioId: string, patientId: string, medico: string, f: SulDisco, dati: Buffer, dataLettera: string | null, prima: { documento_id: string | null } | null): Promise<string> {
   let corpo = dati, nome = f.nome, formato: Formato = f.formato;
@@ -71,7 +73,7 @@ async function caricaDocumento(studioId: string, patientId: string, medico: stri
 
 let inCorso = false;
 export async function giroComune(opzioni: { lotto?: number; fermoMs?: number } = {}): Promise<EsitoGiro> {
-  const r: EsitoGiro = { sciolte: 0, cartelle: 0, nuovi: 0, caricati: 0, doppioni: 0, in_attesa: 0, non_letti: 0, abbinate: 0, restano: false };
+  const r: EsitoGiro = { creati: 0, sciolte: 0, cartelle: 0, nuovi: 0, caricati: 0, doppioni: 0, in_attesa: 0, non_letti: 0, abbinate: 0, restano: false };
   if (inCorso) return { ...r, gia_in_corso: true };
   inCorso = true;
   let giroId: string | null = null, studioId = '';
@@ -83,32 +85,58 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number } =
     studioId = studio.id;
     [{ id: giroId }] = await query<{ id: string }>(`insert into comune_giri (studio_id) values ($1) returning id`, [studioId]);
     const lotto = opzioni.lotto ?? LOTTO, fermo = opzioni.fermoMs ?? FERMO_MS;
-    const cartelle = new Map((await query<Cartella>(`select id, percorso, stato, patient_id, date_lette, motivo from comune_cartelle where studio_id = $1`, [studioId])).map((c) => [c.percorso, c]));
+    const cartelle = new Map((await query<Cartella>(`select id, percorso, stato, patient_id, date_lette, motivo, nascita_proposta::text from comune_cartelle where studio_id = $1`, [studioId])).map((c) => [c.percorso, c]));
     const noti = new Map<string, Noto>((await query<Noto & { percorso: string }>(`select percorso, dimensione::text, modificato, stato, sha256, documento_id from comune_file where studio_id = $1`, [studioId])).map((f) => [f.percorso, f]));
     const pazienti = await query<Paz>(`select id, cognome, nome, data_nascita::text from patients where studio_id = $1`, [studioId]);
     const nomi = new Set(pazienti.map((p) => slugNome(`${p.cognome} ${p.nome}`)));
     const { trovate, sciolte } = await cartellePazienti(base, nomi, mediciScelti());
     r.sciolte = sciolte;
     let letti = 0;
+    // Di chi è la cartella: regola severa; se il nome non c'è in ReferralFlow, il nome quasi uguale con la stessa nascita,
+    // o il paziente nuovo (22.10.2026, dallo studio: «quelli che non ci sono su ReferralFlow creali») — solo con una data
+    // di nascita sicura (nel nome della cartella, o `nascitaSicura` nelle lettere appena lette). Senza, aspetta con la proposta.
+    const decidi = async (c: Cartella, nomeCartella: string, date: string[], proposta: string | null, sicura: string | null = null): Promise<Cartella> => {
+      const a = abbinaCartella(nomeCartella, date, pazienti);
+      let id = a.id, motivo: string | null = null;
+      if (!id && a.motivo === 'nessuno' && creaPazienti()) {
+        id = quasiStesso(nomeCartella, date, pazienti);
+        if (id) motivo = 'nome_quasi';
+        const nascita = nomeDaCartella(nomeCartella).nascita ?? sicura;
+        const diviso = dividiNome(nomeCartella);
+        if (!id && nascita && diviso && Number(nascita.slice(0, 4)) < new Date().getFullYear()) {
+          const [gia] = await query<{ id: string }>(
+            `select id from patients where studio_id = $1 and lower(btrim(cognome)) = lower($2) and lower(btrim(nome)) = lower($3) and data_nascita = $4::date limit 1`,
+            [studioId, diviso.cognome, diviso.nome, nascita]);
+          id = gia?.id ?? (await query<{ id: string }>(`insert into patients (studio_id, cognome, nome, data_nascita) values ($1, $2, $3, $4::date) returning id`,
+            [studioId, diviso.cognome, diviso.nome, nascita]))[0].id;
+          if (!gia) { r.creati++; pazienti.push({ id, cognome: diviso.cognome, nome: diviso.nome, data_nascita: nascita }); nomi.add(slugNome(`${diviso.cognome} ${diviso.nome}`)); }
+          motivo = 'paziente_creato';
+        }
+      }
+      if (id) {
+        await query(`update comune_cartelle set stato = 'abbinata', patient_id = $2, motivo = $3, date_lette = $4 where id = $1`, [c.id, id, motivo, date]);
+        r.abbinate++;
+        return { ...c, stato: 'abbinata', patient_id: id, motivo, date_lette: date };
+      }
+      if (a.motivo !== c.motivo || date.length !== c.date_lette.length || (proposta && !c.nascita_proposta))
+        await query(`update comune_cartelle set motivo = $2, date_lette = $3, nascita_proposta = coalesce(nascita_proposta, $4::date) where id = $1`, [c.id, a.motivo, date, proposta]);
+      return { ...c, motivo: a.motivo, date_lette: date, nascita_proposta: c.nascita_proposta ?? proposta };
+    };
 
     for (const { rel, nome: nomeCartella, medico } of trovate) {
       let c = cartelle.get(rel);
       if (!c) {
         [c] = await query<Cartella>(
           `insert into comune_cartelle (studio_id, percorso, medico, nome_letto, stato, motivo) values ($1, $2, $3, $4, 'in_attesa', 'da_leggere')
-           on conflict (studio_id, percorso) do update set vista_il = now() returning id, percorso, stato, patient_id, date_lette, motivo`,
+           on conflict (studio_id, percorso) do update set vista_il = now() returning id, percorso, stato, patient_id, date_lette, motivo, nascita_proposta::text`,
           [studioId, rel, medico, nomeDaCartella(nomeCartella).nome.slice(0, 200)]);
         cartelle.set(rel, c);
       }
       if (c.stato === 'scartata' || c.stato === 'non_paziente') continue;
       r.cartelle++;
       // Una cartella che aspettava si riabbina con le date già lette (un paziente nato dopo, un'importazione).
-      if (c.stato === 'in_attesa' && c.date_lette.length) {
-        const a = abbinaCartella(nomeCartella, c.date_lette, pazienti);
-        if (a.id) {
-          await query(`update comune_cartelle set stato = 'abbinata', patient_id = $2, motivo = null where id = $1`, [c.id, a.id]);
-          c = { ...c, stato: 'abbinata', patient_id: a.id }; cartelle.set(rel, c); r.abbinate++;
-        }
+      if (c.stato === 'in_attesa' && c.motivo !== 'da_leggere' && (c.date_lette.length || c.nascita_proposta)) {
+        c = await decidi(c, nomeCartella, c.date_lette, c.nascita_proposta); cartelle.set(rel, c);
       }
       const sulDisco = await lettereSulDisco(base, rel);
       // Centinaia di lettere in una cartella sola che non porta il nome di un paziente conosciuto: è un archivio.
@@ -141,15 +169,10 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number } =
       const dateLette = [...date].sort().slice(-400);
 
       if (c.stato !== 'abbinata') {
-        const a = abbinaCartella(nomeCartella, dateLette, pazienti);
-        if (a.id) {
-          await query(`update comune_cartelle set stato = 'abbinata', patient_id = $2, motivo = null, date_lette = $3 where id = $1`, [c.id, a.id, dateLette]);
-          c = { ...c, stato: 'abbinata', patient_id: a.id, date_lette: dateLette }; r.abbinate++;
-        } else {
-          const proposta = letture.map((l) => nascitaProposta(l.testo, nomeDaCartella(nomeCartella).nome)).find(Boolean) ?? null;
-          await query(`update comune_cartelle set motivo = $2, date_lette = $3, nascita_proposta = coalesce(nascita_proposta, $4::date) where id = $1`, [c.id, a.motivo, dateLette, proposta]);
-          c = { ...c, date_lette: dateLette, motivo: a.motivo };
-        }
+        const proposta = c.nascita_proposta ?? letture.map((l) => nascitaProposta(l.testo, nomeDaCartella(nomeCartella).nome)).find(Boolean) ?? null;
+        const primaLettera = sulDisco.map((f) => dataDaNomeFile(f.nome) ?? f.modificato.toISOString().slice(0, 10)).sort()[0] ?? null;
+        const sicura = letture.map((l) => nascitaSicura(l.testo, nomeDaCartella(nomeCartella).nome, primaLettera)).find(Boolean) ?? null;
+        c = await decidi(c, nomeCartella, dateLette, sicura ?? proposta, sicura);
         cartelle.set(rel, c);
       } else {
         await query(`update comune_cartelle set date_lette = $2 where id = $1`, [c.id, dateLette]);
@@ -199,10 +222,11 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number } =
       }
       await query(`update comune_cartelle set lettere = $2, vista_il = now() where id = $1`, [c.id, sulDisco.length]);
     }
+    if (r.creati) { try { await riabbinaPazienti(studioId); } catch { /* best-effort */ } }
     await query(
       `update comune_giri set finito = now(), cartelle = $2, nuovi = $3, caricati = $4, doppioni = $5, in_attesa = $6, non_letti = $7, abbinate = $8, restano = $9, sciolte = $10 where id = $1`,
       [giroId, r.cartelle, r.nuovi, r.caricati, r.doppioni, r.in_attesa, r.non_letti, r.abbinate, r.restano, r.sciolte]);
-    if (r.nuovi || r.abbinate) console.log(`[comune] lettere: nuove ${r.nuovi} · caricate ${r.caricati} · doppioni ${r.doppioni} · da assegnare ${r.in_attesa} · non lette ${r.non_letti} · cartelle abbinate ${r.abbinate}${r.restano ? ' · ne restano' : ''}`);
+    if (r.nuovi || r.abbinate) console.log(`[comune] lettere: nuove ${r.nuovi} · caricate ${r.caricati} · doppioni ${r.doppioni} · da assegnare ${r.in_attesa} · non lette ${r.non_letti} · cartelle abbinate ${r.abbinate}${r.creati ? ` · pazienti creati ${r.creati}` : ''}${r.restano ? ' · ne restano' : ''}`);
     return r;
   } catch (e: any) {
     if (giroId) await query(`update comune_giri set finito = now(), errore = $2, restano = true where id = $1`, [giroId, String(e?.code ?? e?.name ?? 'errore').slice(0, 60)]).catch(() => null);
@@ -245,7 +269,8 @@ export async function stato(studioId: string) {
     `select to_char(iniziato, 'YYYY-MM-DD"T"HH24:MI') as iniziato, to_char(finito, 'YYYY-MM-DD"T"HH24:MI') as finito, sciolte, nuovi, caricati, doppioni, in_attesa, non_letti, abbinate, restano, errore
        from comune_giri where studio_id = $1 and (nuovi > 0 or abbinate > 0 or errore is not null or iniziato > now() - interval '2 days') order by iniziato desc limit 8`, [studioId]);
   const [conti] = await query<Record<string, number>>(
-    `select count(*) filter (where stato = 'abbinata')::int as abbinate, count(*) filter (where stato = 'in_attesa')::int as in_attesa,
+    `select count(*) filter (where stato = 'abbinata')::int as abbinate, count(*) filter (where stato = 'abbinata' and motivo = 'paziente_creato')::int as creati,
+            count(*) filter (where stato = 'abbinata' and motivo = 'nome_quasi')::int as quasi, count(*) filter (where stato = 'in_attesa')::int as in_attesa,
             count(*) filter (where stato = 'scartata')::int as scartate, count(*) filter (where stato = 'non_paziente')::int as non_pazienti,
             (select count(*)::int from comune_file where studio_id = $1 and stato = 'caricato') as caricati,
             (select count(*)::int from comune_file where studio_id = $1 and stato = 'doppione') as doppioni,
