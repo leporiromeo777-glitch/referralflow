@@ -968,3 +968,11 @@ comandi propri di Dragon, clic accanto al foglio e tasti dello SpeechMike lo stu
 parte (anamnesi, comorbidità…), imparati come il tasto per dettare e salvati nel profilo del medico. La parte viene dalla
 **lettera aperta accanto al foglio**, se c'è; **se no dalla più recente** (non «la più recente fra le ultime quattro che ce
 l'ha», come i comandi a voce). I comandi a voce restano.
+
+## Saturazione notturna: una pagina sua, i numeri del generatore — 22.10.2026
+Dallo studio: «una sezione per la saturazione notturna; i file arriveranno dal software che ho creato, come quelli della
+pressione» (anello Wellue O2Ring). Deciso: **una pagina dedicata**, sullo scheletro della pressione (invio dal generatore
+con la stessa chiave, regola severa nome + data di nascita, «da assegnare», rapporto nei documenti) ma separata. La
+piattaforma **non ricalcola** le notti: mostra i numeri del generatore, cioè del rapporto confermato dal medico, e fa i
+totali allo stesso modo; così pagina e rapporto non possono dire due cose diverse. Solo misure e livelli indicativi
+dell'ODI come nel rapporto: la valutazione è del medico.
