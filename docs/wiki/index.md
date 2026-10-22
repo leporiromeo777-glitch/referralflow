@@ -29,6 +29,7 @@ Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 - [[Piattaforma/Monitoraggio]] — monitoraggio remoto con dispositivi indossabili: modulo DIMOSTRATIVO (dati simulati), regole, avvisi, adattatori
 - [[Piattaforma/Pressione]] — profilo pressorio con la terapia sopra; cartella che si legge da sola; tabella dei farmaci da confermare; proposte di orario accese dall'8.10.2026 (dispositivo interno, validazione e notifica da fare)
 - [[Piattaforma/Saturazione notturna]] — le notti dell'anello O2Ring dal generatore dei referti (stessa chiave della pressione): totali, notte per notte, curve, istogramma, da assegnare; il generatore deve ancora avere «Conferma e invia»
+- [[Piattaforma/Cartella comune]] — le lettere della cartella comune dello studio nei documenti dei pazienti: cartella del paziente a ogni livello, regola severa (nome della cartella e data di nascita nelle lettere), ogni notte alle 2 e a lotti, da assegnare
 - [[Piattaforma/Dividi cartella]] — da un PDF unico con tutta la cartella ai singoli documenti: la piattaforma propone i tagli, una persona conferma
 - [[Piattaforma/Prova da sforzo]] — prova da sforzo (CubeStress) ed ECG a riposo (touchECG): referto e tracciato arrivano da soli nella cartella del paziente; quelli senza data di nascita si assegnano a mano
 - [[Piattaforma/Funzioni fatte]] — tutto ciò che esiste già, in ordine inverso

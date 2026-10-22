@@ -8,7 +8,7 @@ import { NextResponse } from 'next/server';
 
 export const SEZIONI = [
   'agenda', 'visite', 'richiami', 'sale', 'prestazioni', 'invianti', 'patients', 'percorsi',
-  'documents', 'dividi', 'moduli', 'imaging', 'monitoraggio', 'pressione', 'saturazione', 'reports', 'dittafono', 'converti', 'anonymize', 'inbox', 'ai',
+  'documents', 'dividi', 'moduli', 'imaging', 'monitoraggio', 'pressione', 'saturazione', 'comune', 'reports', 'dittafono', 'converti', 'anonymize', 'inbox', 'ai',
   'fatturazione', 'administration',
 ] as const;
 export type Sezione = (typeof SEZIONI)[number];
@@ -17,8 +17,9 @@ export type Sezione = (typeof SEZIONI)[number];
 // distinte (consultare, prendere in carico, regole, dispositivi) in monitoraggio/catalogo.ts.
 // 'pressione' (7.10.2026): il profilo pressorio delle 24 ore; chi fa che cosa dentro sta in pressione/archivio.ts (PUO_PA).
 // 'saturazione' (22.10.2026): la saturazione notturna dell'anello O2Ring; chi fa che cosa dentro in saturazione/archivio.ts (PUO_SAT).
+// 'comune' (22.10.2026): le lettere della cartella comune dello studio; chi fa che cosa dentro in comune/archivio.ts (PUO_COMUNE).
 // 'dividi' (9.10.2026): da un PDF unico con tutta la cartella ai singoli documenti; la vede chi lavora sulle cartelle.
-const CURA: Sezione[] = ['agenda', 'visite', 'richiami', 'sale', 'patients', 'percorsi', 'documents', 'dividi', 'moduli', 'imaging', 'monitoraggio', 'pressione', 'saturazione', 'inbox', 'ai'];
+const CURA: Sezione[] = ['agenda', 'visite', 'richiami', 'sale', 'patients', 'percorsi', 'documents', 'dividi', 'moduli', 'imaging', 'monitoraggio', 'pressione', 'saturazione', 'comune', 'inbox', 'ai'];
 const SEGRETERIA: Sezione[] = [...CURA, 'prestazioni', 'invianti', 'reports', 'converti', 'anonymize', 'fatturazione'];
 
 // Ruoli del database (users.role).

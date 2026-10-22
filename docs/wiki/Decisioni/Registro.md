@@ -976,3 +976,14 @@ con la stessa chiave, regola severa nome + data di nascita, «da assegnare», ra
 piattaforma **non ricalcola** le notti: mostra i numeri del generatore, cioè del rapporto confermato dal medico, e fa i
 totali allo stesso modo; così pagina e rapporto non possono dire due cose diverse. Solo misure e livelli indicativi
 dell'ODI come nel rapporto: la valutazione è del medico.
+
+## Cartella comune: le lettere nelle cartelle dei pazienti — 22.10.2026
+Dallo studio: «nella cartella comune ci sono tante lettere di tanti pazienti, vorrei sincronizzarla con ReferralFlow…
+con un controllo giornaliero di cosa è stato aggiunto», poi «ci sono solo le lettere degli ultimi anni, caricale tutte».
+Deciso: si abbina la **cartella** del paziente (non il singolo file), con la regola severa di sempre (nome della cartella
+e data di nascita, che deve stare nel nome o nel testo delle lettere; una persona sola); se no «da assegnare», mai
+indovinare, e nessun paziente nasce da solo. Lettere nei documenti col nome originale e la data della lettera; il PDF di
+un Word si salta; una lettera cambiata sostituisce il file dello stesso documento. Controllo ogni notte alle 2, a lotti la
+prima volta. La cartella comune si legge e basta. Fuori, per ora: gli archivi con lettere nominate con un codice (47 155
+file dal 2002, la richiesta parlava degli «ultimi anni») e le lettere sciolte fuori da una cartella di paziente.
+

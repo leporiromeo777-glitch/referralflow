@@ -1,0 +1,108 @@
+// Prova end-to-end delle lettere della cartella comune (22.10.2026) sul DB DEMO, con una cartella comune FINTA e
+// pazienti e lettere INVENTATI: cartelle di paziente a livelli diversi, regola severa (nome della cartella e data di
+// nascita nelle lettere), Word vecchio convertito, il PDF del Word saltato, i file di Word aperti ignorati, l'archivio
+// lasciato fuori, nessun doppione al secondo controllo, la lettera cambiata sostituita, la cartella da assegnare (crea
+// il paziente), il permesso. Poi toglie tutto.
+//   DATABASE_URL=…demo NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-comune.ts <base> <studio> <segretaria> <radice finta>
+import { execFileSync } from 'node:child_process';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import { query, pool } from '../../src/lib/db';
+import { deleteFile } from '../../src/lib/storage';
+
+const [base, S, C_SEG, RADICE] = process.argv.slice(2);
+let ok = 0, no = 0;
+const verifica = (cond: boolean, cosa: string) => { if (cond) { ok++; console.log(`ok ${cosa}`); } else { no++; console.log(`NO ${cosa}`); } };
+const URL = `${base}/api/prototipo/comune`;
+const manda = async (corpo: unknown, cookie = C_SEG) => { const r = await fetch(URL, { method: 'POST', headers: { cookie, 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) }); return { stato: r.status, j: await r.json().catch(() => ({})) as any }; };
+const leggi = async (cookie = C_SEG) => { const r = await fetch(URL, { headers: { cookie } }); return { stato: r.status, j: await r.json().catch(() => ({})) as any }; };
+const attendi = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Un Word (o un Word vecchio) col testo dato, fatto da textutil.
+async function word(file: string, testo: string, formato: 'docx' | 'doc' = 'docx') {
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  const txt = `${file}.txt`;
+  await fs.writeFile(txt, testo);
+  execFileSync('/usr/bin/textutil', ['-convert', formato, '-output', file, txt]);
+  await fs.rm(txt);
+}
+const lettera = (nome: string, nascita: string, extra = '') => `Studio di prova\nLugano, 12.05.2024\n\nPaziente\n${nome} – ${nascita}\n\nEgregio collega,\nvisita di controllo inventata per la prova. ${extra}\n${'Testo di riempimento della lettera di prova. '.repeat(12)}\nCordiali saluti`;
+
+const pazienti: string[] = [];
+(async () => {
+  try {
+    await fs.rm(RADICE, { recursive: true, force: true });
+    const R = (...p: string[]) => path.join(RADICE, ...p);
+    // Conosciuta: cartella sotto il medico, la data di nascita nella lettera.
+    await word(R('Rapporti_Prova', 'Provacom Alda', '24 05 12 Provacom Alda.docx'), lettera('Provacom Alda', '12.03.1950'));
+    await fs.writeFile(R('Rapporti_Prova', 'Provacom Alda', '24 05 12 Provacom Alda.pdf'), '%PDF-1.4\n%prova\n');       // il PDF del Word
+    await word(R('Rapporti_Prova', 'Provacom Alda', 'L0001.doc'), lettera('Provacom Alda', '12.03.1950', 'Lettera vecchia.'), 'doc');
+    await fs.writeFile(R('Rapporti_Prova', 'Provacom Alda', '~$ provacom.docx'), 'blocco di Word');
+    // Più in profondità, la data di nascita nel nome della cartella: un referto d'esame.
+    await word(R('Esami_Prova', 'Esami 2015', 'Provacom Alda (12.03.1950)', 'eco.docx'), lettera('Provacom Alda', '', 'Esame di secondo livello.'));
+    // Sconosciuta: aspetta, con la data proposta.
+    await word(R('Rapporti_Prova', 'Ignotocom Bruno', '23 01 02 Ignotocom Bruno.docx'), `Lugano, 02.01.2023\nConcerne: Ignotocom Bruno, nato il 04.07.1955\n${'Testo di prova inventato. '.repeat(20)}`);
+    // Omonimo con un'altra data: aspetta.
+    await word(R('Rapporti_Prova', 'Provacom Alda Seconda', 'x.docx'), lettera('Provacom Alda Seconda', '01.01.1990'));
+    // Archivio: una cartella con centinaia di lettere nominate con un codice.
+    await fs.mkdir(R('Rapporti_Prova', 'Vecchie', 'Lettere varie'), { recursive: true });
+    for (let i = 0; i < 260; i++) await fs.writeFile(R('Rapporti_Prova', 'Vecchie', 'Lettere varie', `L${1000 + i}.doc`), 'x');
+
+    const [p] = await query<{ id: string }>(`insert into patients (studio_id, cognome, nome, data_nascita) values ($1, 'Provacom', 'Alda', '1950-03-12') returning id`, [S]);
+    pazienti.push(p.id);
+
+    const non = await fetch(URL); verifica(non.status === 401, `senza sessione: 401 (${non.status})`);
+    const g1 = await manda({ azione: 'controlla' });
+    verifica(g1.stato === 200 && g1.j.caricati === 3, `primo controllo: 3 caricate (${g1.stato} ${JSON.stringify({ c: g1.j.caricati, d: g1.j.doppioni, a: g1.j.in_attesa, n: g1.j.nuovi })})`);
+    verifica(g1.j.doppioni === 1, `il PDF del Word saltato come doppione (${g1.j.doppioni})`);
+    verifica(g1.j.in_attesa === 2, `due lettere in cartelle da assegnare (${g1.j.in_attesa})`);
+    const docs = await query<{ id: string; filename: string; categoria: string; giorno: string; nota: string }>(
+      `select id, filename, categoria, to_char(uploaded_at, 'YYYY-MM-DD') as giorno, nota from patient_documents where patient_id = $1 order by filename`, [p.id]);
+    verifica(docs.length === 3, `tre documenti nella cartella del paziente (${docs.length})`);
+    const d1 = docs.find((d) => d.filename === '24 05 12 Provacom Alda.docx');
+    verifica(!!d1 && d1.categoria === 'lettera' && d1.giorno === '2024-05-12' && /Rapporti Prova/.test(d1.nota), `lettera con la data del nome del file e la nota (${d1?.categoria} ${d1?.giorno})`);
+    verifica(docs.some((d) => d.filename === 'L0001.docx' && d.categoria === 'lettera'), 'il Word vecchio convertito in .docx');
+    verifica(docs.some((d) => d.filename === 'eco.docx' && d.categoria === 'referto'), 'l’esame più in profondità, riconosciuto dalla data nel nome della cartella, come referto');
+    verifica(!docs.some((d) => d.filename.startsWith('~$')), 'il file di blocco di Word ignorato');
+
+    const st = await leggi();
+    const attesa = st.j.attesa || [];
+    const ign = attesa.find((x: any) => x.nome_letto === 'Ignotocom Bruno');
+    verifica(st.stato === 200 && !!ign && ign.motivo === 'nessuno' && ign.nascita_proposta === '1955-07-04', `cartella sconosciuta da assegnare, con la nascita proposta (${ign?.motivo} ${ign?.nascita_proposta})`);
+    verifica(attesa.some((x: any) => x.nome_letto === 'Provacom Alda Seconda'), 'nome diverso (tre parole): aspetta, niente indovinato');
+    verifica((st.j.non_pazienti || []).some((x: any) => /Vecchie/.test(x.percorso)), 'l’archivio lasciato fuori');
+    verifica(st.j.recenti?.length === 3 && st.j.conti?.caricati === 3, `ultimi sette giorni: 3 (${st.j.recenti?.length})`);
+
+    const g2 = await manda({ azione: 'controlla' });
+    verifica(g2.j.nuovi === 0 && g2.j.caricati === 0, `secondo controllo: niente di nuovo, niente doppioni (${g2.j.nuovi})`);
+
+    // La lettera cambiata sulla cartella comune: stesso documento, file nuovo.
+    const [prima] = await query<{ storage_key: string }>(`select storage_key from patient_documents where id = $1`, [d1!.id]);
+    await word(R('Rapporti_Prova', 'Provacom Alda', '24 05 12 Provacom Alda.docx'), lettera('Provacom Alda', '12.03.1950', 'Corretta il giorno dopo.'));
+    const g3 = await manda({ azione: 'controlla' });
+    const [dopo] = await query<{ storage_key: string; n: number }>(`select storage_key, (select count(*)::int from patient_documents where patient_id = $2) as n from patient_documents where id = $1`, [d1!.id, p.id]);
+    verifica(g3.j.caricati === 1 && dopo.n === 3 && dopo.storage_key !== prima.storage_key, `lettera cambiata: lo stesso documento col file nuovo (${g3.j.caricati}, ${dopo.n})`);
+
+    // Crea il paziente dalla cartella che aspetta: le sue lettere entrano.
+    const cr = await manda({ azione: 'crea_cartella', id: ign.id, cognome: 'Ignotocom', nome: 'Bruno', data_nascita: '04.07.1955' });
+    verifica(cr.stato === 200 && cr.j.nuova === true, `crea il paziente (${cr.stato})`);
+    if (cr.j.patient_id) pazienti.push(cr.j.patient_id);
+    let n = 0;
+    for (let i = 0; i < 20 && !n; i++) { await attendi(500); [{ n }] = await query<{ n: number }>(`select count(*)::int as n from patient_documents where patient_id = $1`, [cr.j.patient_id]); }
+    verifica(n === 1, `le lettere della cartella assegnata entrano subito (${n})`);
+    const sc = await manda({ azione: 'scarta', id: ign.id });
+    verifica(sc.stato === 404, `una cartella già assegnata non si scarta (${sc.stato})`);
+  } catch (e: any) { no++; console.log(`NO eccezione: ${e?.message ?? e}`); }
+  finally {
+    const chiavi = await query<{ k: string }>(`select storage_key as k from patient_documents where patient_id = any($1::uuid[])`, [pazienti]);
+    for (const { k } of chiavi) await deleteFile(k).catch(() => null);
+    await query(`delete from comune_giri where studio_id = $1`, [S]);
+    await query(`delete from comune_cartelle where studio_id = $1`, [S]);
+    await query(`delete from patient_documents where patient_id = any($1::uuid[])`, [pazienti]);
+    await query(`delete from patients where id = any($1::uuid[])`, [pazienti]);
+    await fs.rm(RADICE, { recursive: true, force: true });
+    console.log(`${ok} ok, ${no} no`);
+    await pool.end();
+    process.exit(no ? 1 : 0);
+  }
+})();

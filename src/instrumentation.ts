@@ -20,4 +20,10 @@ export async function register() {
     const { avviaCiclo } = await import('./lib/ciclo/cartella-server');
     avviaCiclo();
   }
+  // Le lettere della cartella comune (22.10.2026): un controllo ogni notte, e a lotti finché resta lavoro.
+  // Solo sul server vero (next start) o con COMUNE_LETTERE_GIRO=acceso; i server di prova non toccano la cartella comune.
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    const { avviaComune } = await import('./lib/comune/archivio');
+    avviaComune();
+  }
 }
