@@ -312,7 +312,7 @@ function rvSourceTab() {
         <button class="btn primary" id="rv-play" onclick="rvToggle()" title="Space">${ICONS.play} Play</button>
         <button class="btn sm ghost" onclick="rvNudge(3)" title="⌥→">+3s</button>
         ${i && i.ev ? `<button class="btn sm" onclick="rvListen()" title="R">↻ Riascolta</button>` : ''}
-        <select class="input sm" style="max-width:78px" onchange="RV.speed=+this.value">${[0.75, 0.9, 1, 1.1, 1.25].map(v => `<option value="${v}" ${v === RV.speed ? 'selected' : ''}>${v}×</option>`).join('')}</select>
+        <select class="input sm" style="max-width:78px" aria-label="Velocità dell'audio" onchange="if (typeof rfVelocita === 'function') rfVelocita(+this.value); else RV.speed=+this.value">${(typeof RF_VELOCITA !== 'undefined' ? RF_VELOCITA : [0.75, 0.9, 1, 1.1, 1.25]).map(v => `<option value="${v}" ${v === RV.speed ? 'selected' : ''}>${v}×</option>`).join('')}</select>
       </div>
     </div>
     <div class="rv-find"><input class="input sm" id="rv-find" placeholder="Cerca nell'audio… (es. Holter)"><div id="rv-find-res"></div></div>

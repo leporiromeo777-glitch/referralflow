@@ -56,6 +56,8 @@
 .sm-audio .btn { flex: none; }
 .sm-barra { position: relative; flex: 1; height: 6px; border-radius: 3px; background: var(--surface-3); cursor: pointer; }
 .sm-barra #rv-ph { position: absolute; top: -4px; width: 3px; height: 14px; border-radius: 2px; background: var(--accent); }
+.sm-audio-sotto { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.sm-audio-sotto .sm-vel { min-width: 0 !important; width: 72px; height: 28px; padding: 0 6px; font-size: 12.5px; margin-left: 4px; }
 .sm-tempo { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .sm-fine { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .sm-fine .btn { justify-content: center; }
@@ -104,7 +106,7 @@ function rfSmHtml() {
         <div class="sm-tavolo" id="sm-tavolo">${rfSmPaginaHtml(sm, conf)}</div>
       </div>
       <div class="sm-lato">
-        <div class="sm-box"><div class="sm-audio"><button class="btn sm" id="rv-play" onclick="rvToggle()">${ICONS.play || ''} Play</button><div class="sm-barra" onclick="rfSmBarra(event, this)"><div id="rv-ph" style="left:0"></div></div><span class="sm-tempo"><span id="rv-t">0:00</span> / ${rfEsc(RV_AUDIO.label || '')}</span></div>${typeof rfPedHtml === 'function' ? `<div class="rf-ped-riga" style="margin-top:8px">${rfPedHtml()}</div>` : ''}</div>
+        <div class="sm-box"><div class="sm-audio"><button class="btn sm" id="rv-play" onclick="rvToggle()">${ICONS.play || ''} Play</button><div class="sm-barra" onclick="rfSmBarra(event, this)"><div id="rv-ph" style="left:0"></div></div><span class="sm-tempo"><span id="rv-t">0:00</span> / ${rfEsc(RV_AUDIO.label || '')}</span></div><div class="sm-audio-sotto"><label class="caption">Velocità <select class="input sm sm-vel" aria-label="Velocità dell'audio" onchange="rfVelocita(+this.value)">${RF_VELOCITA.map(v => `<option value="${v}" ${v === (RV.speed || 1) ? 'selected' : ''}>${String(v).replace('.', ',')}×</option>`).join('')}</select></label>${typeof rfPedHtml === 'function' ? `<span class="rf-ped-riga">${rfPedHtml()}</span>` : ''}</div></div>
         <div class="sm-box"><h3>Dati della lettera</h3><div class="sm-campi">
           ${campo('nome_paziente', 'Paziente', 'Cognome Nome')}${campo('data_nascita', 'Nascita', 'gg.mm.aaaa')}
           ${rfSmMedicoHtml(conf)}

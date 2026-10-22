@@ -1001,6 +1001,16 @@ rvPlay = function (from, to) {
   RF.audioEl.play().catch(e => { RV.playing = false; if (!e || e.name !== 'AbortError') toast('Audio non riproducibile'); rvTick(); });
 };
 rvPause = function () { if (!RF.audioEl) return rfPauseOrig(); RF.audioEl.pause(); RV.playing = false; rvTick(); };
+// La velocità dell'audio (22.10.2026, dallo studio: anche nella revisione semplice): vale subito, anche mentre suona,
+// e si ricorda su questo computer per le bozze dopo, nelle due revisioni.
+const RF_VELOCITA = [0.5, 0.75, 0.9, 1, 1.1, 1.25, 1.5];
+function rfVelocita(v) {
+  if (!RF_VELOCITA.includes(v)) return;
+  RV.speed = v;
+  if (RF.audioEl) RF.audioEl.playbackRate = v;
+  try { localStorage.setItem('rf-audio-velocita', String(v)); } catch (_) { /* resta per questa pagina */ }
+}
+try { const v = Number(localStorage.getItem('rf-audio-velocita')); if (RF_VELOCITA.includes(v)) RV.speed = v; } catch (_) { /* 1× */ }
 // Play o pausa lo decide lo stato vero dell'audio, non quello ricordato.
 const rfToggleOrig = rvToggle;
 rvToggle = function () {
