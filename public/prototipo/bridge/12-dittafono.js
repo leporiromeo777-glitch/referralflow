@@ -54,6 +54,9 @@
 .rf-dit-due.con-fonte .rf-dit-fonte { display: flex; }
 .rf-dit-fonte-bar { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
 .rf-dit-fonte-pos { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rf-dit-cmd { display: grid; grid-template-columns: max-content 1fr max-content; gap: 3px 12px; margin-top: 6px; font-size: 13px; align-items: baseline; }
+.rf-dit-cmd-riga { display: contents; }
+.rf-dit-cmd-riga > span:nth-child(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rf-dit-cart { background: var(--surface, #fff); padding: 6px 10px 12px; }
 .rf-dit-cart-tit { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-3); margin: 10px 0 4px; }
 .rf-dit-cart-sotto { font-size: 12px; font-weight: 600; color: var(--text-2); margin: 8px 0 2px; }
@@ -682,7 +685,7 @@ function rfDitTastoLetto() {
 const RF_DIT_SENZA_HID = 'Qui i tasti del microfono non si leggono: in Safari e nell’app ReferralFlow fatta con Safari arrivano solo i tasti della tastiera. Per il tasto del microfono apri ReferralFlow in <b>Chrome</b> o <b>Edge</b> (anche come app: in Chrome ⋮ → Trasmetti, salva e condividi → Installa pagina come app).';
 function rfDitTastoHtml() {
   const d = RF.dit, t = rfDitTastoLetto();
-  if (d.impara) return `<b>Tieni premuto il tasto con cui detti, poi lascialo.</b> ${d.impara.nota || ''} <a href="javascript:void 0" onclick="rfDitTastoAnnulla()">Annulla</a>`;
+  if (d.impara && !d.impara.per) return `<b>Tieni premuto il tasto con cui detti, poi lascialo.</b> ${d.impara.nota || ''} <a href="javascript:void 0" onclick="rfDitTastoAnnulla()">Annulla</a>`;
   if (t && t.tipo === 'hid' && d.tastoAutorizza) return `<b>Il microfono ${rfEsc(t.nome || 'da dettatura')}${d.medico ? ` di ${rfEsc(rfDitNomeMedico(d.medico))}` : ''} va permesso su questo computer, una volta sola:</b> <a href="javascript:void 0" onclick="rfDitTastoAutorizza()">permetti</a> (il browser chiede quale dispositivo: scegli il microfono). Poi parte da solo, anche le volte dopo.`;
   if (t && t.tipo === 'hid' && !navigator.hid) return `Il tasto di ${rfEsc(t.nome || 'questo microfono')} è salvato, ma ${RF_DIT_SENZA_HID}`;
   if (t) return `Tasto del microfono${d.medico && rfDitProfilo(d.medico) && rfDitProfilo(d.medico).tasto ? ` di ${rfEsc(rfDitNomeMedico(d.medico))}` : ''}: <b>${rfEsc(t.nome || 'collegato')}</b> — finché lo tieni premuto la pagina registra${RF.dit.tastoGiu ? ' · <b style="color:#b3261e">premuto</b>' : ''}. Se registra quando NON lo premi, scollegalo e ricollegalo. <a href="javascript:void 0" onclick="rfDitTastoScollega()">Scollega</a>${d.tastoErrore ? ` · <span style="color:#b3261e">${rfEsc(d.tastoErrore)}</span>` : ''}`;
@@ -706,9 +709,10 @@ async function rfDitTastoCollega() {
     } catch (_) { /* finestra chiusa: resta la tastiera */ }
   } else if (d.impara) { d.impara.nota = 'Questo browser legge solo i tasti della tastiera: per i tasti del microfono apri ReferralFlow in Chrome o Edge.'; rfDitTastoDisegna(); }
 }
-function rfDitTastoAnnulla() { RF.dit.impara = null; rfDitTastoDisegna(); }
+function rfDitTastoAnnulla() { RF.dit.impara = null; rfDitTastoDisegna(); rfDitComandiDisegna(); }
 function rfDitTastoScollega() { try { localStorage.removeItem(RF_DIT_TASTO); } catch (_) { /* niente */ } void rfDitProfiloSalva({ tasto: null }); RF.dit.tastoPronto = false; RF.dit.tastoErrore = ''; if (RF.dit.stato !== 'registra') rfDitRilasciaMicrofono(); rfDitTastoDisegna(); }
 function rfDitTastoImparato(t) {
+  if (RF.dit.impara && RF.dit.impara.per) { rfDitComandoImparato(RF.dit.impara.per, t); return; }
   try { localStorage.setItem(RF_DIT_TASTO, JSON.stringify(t)); } catch (_) { /* resta per questa pagina */ }
   void rfDitProfiloSalva({ tasto: t });
   RF.dit.impara = null; RF.dit.tastoGiu = false; rfDitTastoDisegna(); rfDitTastoPronto();
@@ -749,6 +753,7 @@ function rfDitHidRapporto(e) {
     }
     return;
   }
+  rfDitComandiRapporto(dev, e.reportId, b);
   const t = rfDitTastoLetto();
   if (!t || t.tipo !== 'hid' || t.vid !== dev.vendorId || t.pid !== dev.productId || t.rid !== e.reportId || t.i >= b.length) return;
   if (typeof t.tipo0 === 'number' && b[0] !== t.tipo0) return;      // un altro tipo di messaggio (movimento, stato): non è il tasto
@@ -765,6 +770,8 @@ function rfDitTastoStato(giu) {
 window.addEventListener('keydown', (e) => {
   const d = RF.dit; if (state.route !== 'dittafono') return;
   if (d.impara) { if (e.repeat || ['Shift', 'Control', 'Alt', 'Meta', 'Tab', 'Escape'].includes(e.key)) return; e.preventDefault(); d.impara.tasto = e.code; return; }
+  const cmd = rfDitDettatura() && Object.entries(rfDitComandiLetti()).find(([, x]) => x && x.tipo === 'tasto' && x.code === e.code);
+  if (cmd) { e.preventDefault(); if (!e.repeat) rfDitComandoDaTasto(cmd[0]); return; }
   const t = rfDitTastoLetto(); if (!t || t.tipo !== 'tasto' || e.code !== t.code || !rfDitDettatura()) return;
   e.preventDefault(); if (!e.repeat) rfDitTastoStato(true);
 }, true);
@@ -779,6 +786,7 @@ window.addEventListener('blur', () => { const t = rfDitTastoLetto(); if (RF.dit.
 // All'apertura della pagina: si riapre il dispositivo già scelto (senza chiedere di nuovo) e si tiene pronto il microfono,
 // se il permesso c'è già — così la pressione del tasto registra subito.
 function rfDitTastoPronto() {
+  rfDitComandiPronti();
   const d = RF.dit, t = rfDitTastoLetto();
   if (!t || !rfDitDettatura() || d.tastoPronto) return;
   d.tastoPronto = true;
@@ -795,6 +803,85 @@ function rfDitTastoPronto() {
   }
   const pronto = () => { if (d.stato !== 'registra' && state.route === 'dittafono') void rfDitMicrofono(); };
   if (navigator.permissions && navigator.permissions.query) navigator.permissions.query({ name: 'microphone' }).then(p => { if (p.state === 'granted') pronto(); }).catch(() => {});
+}
+/* I TASTI DEI COMANDI (22.10.2026, dallo studio: «i comandi a voce ogni tanto non li capisce: usiamo i tasti dello
+   SpeechMike — un tasto "prendi solo l'anamnesi", un altro "solo le comorbidità" e così via. Se nella pagina c'è una
+   lettera aperta, dalla cartella del paziente accanto al foglio, prende quella; se no la più recente»). Ogni tasto si
+   IMPARA come quello per dettare (tieni premuto, poi lascia: un tasto del microfono o della tastiera) e si salva nel
+   profilo del medico. Premuto, inserisce la sua parte dove sta il cursore — non mentre si registra. */
+const RF_DIT_COMANDI = 'rf-dit-comandi';
+const RF_DIT_CMD_NOMI = [['lettera', 'Lettera intera'], ['anamnesi', 'Anamnesi'], ['frcv', 'FRCV'], ['comorbidita', 'Comorbidità'], ['esame', 'Esame clinico'], ['ecg', 'ECG'], ['eco', 'Ecocardiogramma'], ['sforzo', 'Test da sforzo'], ['holter', 'Holter'], ['laboratorio', 'Laboratorio'], ['diagnosi', 'Diagnosi'], ['allergie', 'Allergie'], ['conclusione', 'Conclusione'], ['terapia', 'Terapia']];
+function rfDitComandiLetti() { try { return JSON.parse(localStorage.getItem(RF_DIT_COMANDI) || 'null') || {}; } catch (_) { return {}; } }
+const rfDitStessoTasto = (a, b) => !!a && !!b && a.tipo === b.tipo && (a.tipo === 'tasto' ? a.code === b.code : a.vid === b.vid && a.pid === b.pid && a.rid === b.rid && (a.tipo0 ?? -1) === (b.tipo0 ?? -1) && a.i === b.i && a.maschera === b.maschera);
+function rfDitComandiHtml() {
+  const d = RF.dit, c = rfDitComandiLetti(), n = Object.keys(c).length, aperto = !!d.comandiAperti;
+  const fonte = d.fonte && Number.isInteger(d.fonte.indice) ? `la lettera aperta accanto (n. ${d.fonte.indice + 1})` : 'la lettera più recente';
+  const righe = RF_DIT_CMD_NOMI.map(([k, nome]) => {
+    const t = c[k], qui = d.impara && d.impara.per === k;
+    return `<div class="rf-dit-cmd-riga"><span>${nome}</span><span class="caption">${qui ? '<b>tieni premuto il tasto, poi lascialo…</b>' : t ? rfEsc(t.nome || 'tasto') : '—'}</span><span>${qui ? `<a href="javascript:void 0" onclick="rfDitTastoAnnulla()">Annulla</a>` : t ? `<a href="javascript:void 0" onclick="rfDitComandoScollega('${k}')">Togli</a>` : `<a href="javascript:void 0" onclick="rfDitComandoCollega('${k}')">Collega</a>`}</span></div>`;
+  }).join('');
+  return `<div class="caption"><a href="javascript:void 0" onclick="RF.dit.comandiAperti=!RF.dit.comandiAperti;rfDitComandiDisegna()">Tasti dei comandi${n ? ` (${n})` : ''} ${aperto ? '▴' : '▾'}</a> — un tasto per ogni parte: premuto, la mette dove sta il cursore, presa da ${fonte}.</div>
+    ${aperto ? `<div class="rf-dit-cmd">${righe}</div>${d.impara && d.impara.per && d.impara.nota ? `<div class="caption mt-8">${rfEsc(d.impara.nota)}</div>` : ''}` : ''}`;
+}
+function rfDitComandiDisegna() { const el = document.getElementById('rf-dit-comandi'); if (el) el.innerHTML = rfDitComandiHtml(); }
+async function rfDitComandoCollega(parte) {
+  const d = RF.dit; if (d.stato === 'registra') return;
+  d.impara = { visti: {}, nota: '', per: parte }; d.comandiAperti = true; rfDitComandiDisegna();
+  const t = document.getElementById('rf-dit-testo'); if (t) t.blur();
+  // Il microfono da dettatura già aperto (per il tasto o per un altro comando) non si richiede; se no il browser chiede quale.
+  if (navigator.hid && !(d.hid || []).length) {
+    try { const scelti = await navigator.hid.requestDevice({ filters: [] }); for (const dev of scelti) await rfDitHidApri(dev); }
+    catch (_) { /* finestra chiusa: resta la tastiera */ }
+  } else if (!navigator.hid && d.impara) { d.impara.nota = 'Qui si leggono solo i tasti della tastiera: per quelli del microfono apri ReferralFlow in Chrome o Edge.'; rfDitComandiDisegna(); }
+}
+function rfDitComandoImparato(parte, t) {
+  const d = RF.dit, c = rfDitComandiLetti();
+  d.impara = null;
+  if (rfDitStessoTasto(t, rfDitTastoLetto())) { toast('Quello è il tasto per dettare: scegline un altro'); rfDitComandiDisegna(); return; }
+  // un tasto che serve per scrivere non può fare da comando: scriverebbe e inserirebbe insieme
+  if (t.tipo === 'tasto' && /^(Key[A-Z]|Digit\d|Numpad\d|Space|Enter|NumpadEnter|Backspace|Delete|Tab|Minus|Equal|Bracket|Semicolon|Quote|Backquote|Comma|Period|Slash|Backslash|IntlBackslash|Arrow|Home|End|Page)/.test(t.code)) { toast('Quel tasto serve per scrivere: scegli un tasto del microfono, o F1–F12'); rfDitComandiDisegna(); return; }
+  const gia = Object.entries(c).find(([k, x]) => k !== parte && rfDitStessoTasto(x, t));
+  if (gia) { toast(`Quel tasto fa già «${(RF_DIT_CMD_NOMI.find(([k]) => k === gia[0]) || [, gia[0]])[1]}»: toglilo prima da lì`); rfDitComandiDisegna(); return; }
+  c[parte] = t;
+  try { localStorage.setItem(RF_DIT_COMANDI, JSON.stringify(c)); } catch (_) { /* resta per questa pagina */ }
+  void rfDitProfiloSalva({ comandi: c });
+  d.comandiGiu = {}; rfDitComandiDisegna();
+  toast(`Tasto collegato: «${(RF_DIT_CMD_NOMI.find(([k]) => k === parte) || [, parte])[1]}»`);
+}
+function rfDitComandoScollega(parte) {
+  const c = rfDitComandiLetti(); delete c[parte];
+  try { if (Object.keys(c).length) localStorage.setItem(RF_DIT_COMANDI, JSON.stringify(c)); else localStorage.removeItem(RF_DIT_COMANDI); } catch (_) { /* niente */ }
+  void rfDitProfiloSalva({ comandi: Object.keys(c).length ? c : null });
+  rfDitComandiDisegna();
+}
+// Un messaggio del microfono: un comando scatta quando il SUO bit si accende (non a ogni messaggio mentre resta premuto).
+function rfDitComandiRapporto(dev, rid, b) {
+  const d = RF.dit, c = rfDitComandiLetti(); if (!Object.keys(c).length) return;
+  d.comandiGiu = d.comandiGiu || {};
+  for (const [k, t] of Object.entries(c)) {
+    if (!t || t.tipo !== 'hid' || t.vid !== dev.vendorId || t.pid !== dev.productId || t.rid !== rid || t.i >= b.length) continue;
+    if (typeof t.tipo0 === 'number' && b[0] !== t.tipo0) continue;
+    const giu = (b[t.i] & t.maschera) === t.premuto;
+    if (giu && !d.comandiGiu[k]) rfDitComandoDaTasto(k);
+    d.comandiGiu[k] = giu;
+  }
+}
+// Il tasto premuto: la parte dalla lettera aperta accanto (se è una lettera del paziente), se no dalla più recente.
+function rfDitComandoDaTasto(parte) {
+  const d = RF.dit;
+  if (state.route !== 'dittafono' || !rfDitDettatura() || d.impara) return;
+  if (d.stato === 'registra') { toast('Lascia prima il tasto per dettare, poi premi il comando'); return; }
+  const el = document.getElementById('rf-dit-testo'); if (!el || d.cmdInCorso) return;
+  const qui = typeof d.cursore === 'number' && d.cursore <= el.value.length ? d.cursore : el.value.length;
+  const numero = d.fonte && Number.isInteger(d.fonte.indice) ? d.fonte.indice + 1 : 1;
+  void rfDitComandoEsegui(parte === 'lettera' ? 'lettera_recente' : 'parti', qui, qui, '', parte === 'lettera' ? [] : [parte], false, false, numero);
+}
+// I microfoni dei comandi si aprono all'apertura della pagina, come quello del tasto per dettare (anche se per dettare si usa la tastiera).
+function rfDitComandiPronti() {
+  const d = RF.dit; if (d.comandiPronti || !navigator.hid || !rfDitDettatura()) return;
+  const hid = Object.values(rfDitComandiLetti()).filter(t => t && t.tipo === 'hid'); if (!hid.length) return;
+  d.comandiPronti = true;
+  navigator.hid.getDevices().then(async (l) => { for (const dev of l) if (hid.some(t => t.vid === dev.vendorId && t.pid === dev.productId) && !(d.hid || []).includes(dev)) await rfDitHidApri(dev); }).catch(() => {});
 }
 /* IL MICROFONO DI OGNI MEDICO (20.10.2026, richiesta dello studio: «il medico detta sempre con lo stesso microfono:
    che sia già scelto, senza ricollegarlo col tasto ogni volta»). Il tasto imparato, il microfono (per nome) e «Detto con
@@ -816,7 +903,7 @@ async function rfDitProfiliCarica() {
 async function rfDitProfiloSalva(campi) {
   const m = RF.dit.medico; if (!m || !RF.ditProfili) return;
   if ('tasto' in campi) { try { if (campi.tasto) localStorage.setItem(RF_DIT_TASTO_DI, m); else localStorage.removeItem(RF_DIT_TASTO_DI); } catch (_) { /* niente */ } }
-  RF.ditProfili[m] = Object.assign({ tasto: null, microfono: null, dettatura: null }, RF.ditProfili[m] || {}, campi);
+  RF.ditProfili[m] = Object.assign({ tasto: null, microfono: null, dettatura: null, comandi: null }, RF.ditProfili[m] || {}, campi);
   try { await fetch('/api/prototipo/dittafono/dispositivi', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ medico: m }, campi)) }); } catch (_) { /* resta su questo computer */ }
 }
 // Chi detta, se non è ancora scelto: il medico dell'accesso (il nome dell'utente contiene il suo cognome), se no l'ultimo su questo computer.
@@ -844,12 +931,14 @@ function rfDitProfiloApplica() {
   let di = ''; try { di = localStorage.getItem(RF_DIT_TASTO_DI) || ''; } catch (_) { /* niente */ }
   if (!p) {
     // il tasto di questo computer era di un ALTRO medico: non vale per questo
-    if (di && di !== m) { try { localStorage.removeItem(RF_DIT_TASTO); localStorage.removeItem(RF_DIT_TASTO_DI); } catch (_) { /* niente */ } d.tastoPronto = false; d.tastoAutorizza = false; }
+    if (di && di !== m) { try { localStorage.removeItem(RF_DIT_TASTO); localStorage.removeItem(RF_DIT_TASTO_DI); localStorage.removeItem(RF_DIT_COMANDI); } catch (_) { /* niente */ } d.tastoPronto = false; d.tastoAutorizza = false; d.comandiPronti = false; }
     return;
   }
   try {
     if (p.tasto) { localStorage.setItem(RF_DIT_TASTO, JSON.stringify(p.tasto)); localStorage.setItem(RF_DIT_TASTO_DI, m); } else { localStorage.removeItem(RF_DIT_TASTO); localStorage.removeItem(RF_DIT_TASTO_DI); }
     if (typeof p.dettatura === 'boolean') localStorage.setItem(RF_DIT_DETT, p.dettatura ? '1' : '0');
+    if (p.comandi) localStorage.setItem(RF_DIT_COMANDI, JSON.stringify(p.comandi)); else localStorage.removeItem(RF_DIT_COMANDI);
+    d.comandiPronti = false;
   } catch (_) { /* resta per questa pagina */ }
   if (JSON.stringify(rfDitTastoLetto()) !== prima || (d.flusso && d.micNome)) { d.tastoPronto = false; d.tastoAutorizza = false; d.tastoErrore = ''; if (d.stato !== 'registra') rfDitRilasciaMicrofono(); }
 }
@@ -863,7 +952,8 @@ function rfDitProfiloOffri() {
 }
 function rfDitProfiloTieni() {
   const d = RF.dit, x = (d.microfoni || []).find(m => m.id === rfDitMicScelto());
-  void rfDitProfiloSalva({ tasto: rfDitTastoLetto(), dettatura: rfDitDettatura(), ...(x ? { microfono: x.nome } : {}) }).then(() => { d.profiloDi = d.medico; d.micNome = x ? x.nome : ''; toast(`Tasto e microfono di ${rfDitNomeMedico(d.medico)} salvati`); render(); });
+  const cm = rfDitComandiLetti();
+  void rfDitProfiloSalva({ tasto: rfDitTastoLetto(), dettatura: rfDitDettatura(), ...(x ? { microfono: x.nome } : {}), ...(Object.keys(cm).length ? { comandi: cm } : {}) }).then(() => { d.profiloDi = d.medico; d.micNome = x ? x.nome : ''; toast(`Tasto e microfono di ${rfDitNomeMedico(d.medico)} salvati`); render(); });
 }
 // Il permesso del browser per il dispositivo USB, su un computer dove non è mai stato scelto: con un clic, filtrato sul suo microfono.
 async function rfDitTastoAutorizza() {
@@ -1054,6 +1144,7 @@ PAGES.dittafono = () => {
           <span id="rf-dit-micsel">${(d.microfoni || []).length > 1 ? `<span class="caption">Microfono <select class="input sm" style="max-width:260px" ${rec ? 'disabled' : ''} onchange="rfDitMicImposta(this.value)" aria-label="Microfono da registrare"><option value="">quello di serie</option>${d.microfoni.map(x => `<option value="${rfEsc(x.id)}" ${x.id === rfDitMicScelto() ? 'selected' : ''}>${rfEsc(x.nome)}</option>`).join('')}</select></span>` : ''}</span></div>
         <div id="rf-dit-tasto" class="caption mt-8">${rfDitTastoHtml()}</div>${d.micManca ? `<div class="caption mt-8" style="color:#b3261e">Il microfono di ${rfEsc(rfDitNomeMedico(d.medico))} («${rfEsc(d.micManca)}») non è attaccato a questo computer: registro con quello di serie.</div>` : ''}${rfDitProfiloOffri()}
         <div id="rf-dit-spia" class="caption" style="opacity:.7">${rfDitHidSpia()}</div>
+        <div id="rf-dit-comandi" class="mt-8">${rfDitComandiHtml()}</div>
         <div class="caption mt-8">Comandi a voce: detta <b>«per favore, inserisci la lettera più recente»</b>, oppure solo una parte — <b>«per favore, inserisci l’anamnesi»</b>, «…FRCV e comorbidità» (o <b>«…patologie associate»</b>, che Dragon scrive meglio), «…l’ECG», e da una lettera precisa col suo numero accanto al foglio: <b>«…l’anamnesi della lettera numero 2»</b>, «…la conclusione», «…la terapia», oppure <b>«per favore riprendimi la lettera fino alla terapia»</b> (o «…fino a prima dell’esame clinico») — poi lascia il tasto; «per favore» va bene anche dopo il verbo (<b>«prendimi per favore l’anamnesi»</b>); <b>«per favore annulla»</b> toglie ciò che è entrato. Anche da qui, nel punto del cursore: <a href="javascript:void 0" onclick="rfDitComandoTasto('lettera_recente')">lettera intera</a>${[['anamnesi', 'anamnesi'], ['frcv', 'FRCV'], ['comorbidita', 'comorbidità'], ['conclusione', 'conclusione'], ['terapia', 'terapia']].map(([k, n]) => ` · <a href="javascript:void 0" onclick="rfDitComandoTasto('parti', '${k}')">${n}</a>`).join('')}</div>
         <div id="rf-dit-sordo" class="rf-manc mt-8" style="display:none"><b>Il testo arriva ma il microfono non sente niente.</b> Di solito il programma di dettatura tiene il microfono tutto per sé, oppure qui è scelto un altro microfono: metti in pausa e scegli sopra lo stesso che usa lui. Senza audio non c'è né riascolto né confronto.</div>
         <div id="rf-dit-fermo" class="rf-manc mt-8" style="display:none"><b>Stai dettando ma la registrazione è ferma.</b> Tocca il tasto per registrare: senza audio non c'è né riascolto né confronto.</div>

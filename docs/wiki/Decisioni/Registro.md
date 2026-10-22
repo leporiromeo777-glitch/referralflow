@@ -961,3 +961,10 @@ Deciso dallo studio (cambia la regola del 15.10 «i numeri non controllati chied
 nuova): **premere «Conferma» è la presa d'atto**. Nessuna finestra prima né dopo nella revisione semplice; nella revisione
 completa niente casella. Resta registrato come prima: con critiche aperte o verifica ridotta la conferma è un override
 (`presa_atto` nella misura). La piattaforma classica tiene la sua casella.
+
+## Comandi del dittafono coi tasti dello SpeechMike — 22.10.2026
+Dallo studio: i comandi a voce («per favore…») a volte non vengono capiti perché Dragon li scrive in modi diversi. Fra
+comandi propri di Dragon, clic accanto al foglio e tasti dello SpeechMike lo studio ha scelto **i tasti**: un tasto per
+parte (anamnesi, comorbidità…), imparati come il tasto per dettare e salvati nel profilo del medico. La parte viene dalla
+**lettera aperta accanto al foglio**, se c'è; **se no dalla più recente** (non «la più recente fra le ultime quattro che ce
+l'ha», come i comandi a voce). I comandi a voce restano.

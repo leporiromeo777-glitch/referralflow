@@ -8,7 +8,11 @@
 export type Tasto =
   | { tipo: 'tasto'; code: string; nome: string }
   | { tipo: 'hid'; vid: number; pid: number; rid: number; i: number; maschera: number; premuto: number; tipo0?: number; nome: string };
-export type Dispositivi = { tasto: Tasto | null; microfono: string | null; dettatura: boolean | null };
+// `comandi` (22.10.2026): i tasti dei comandi — quale tasto imparato inserisce quale parte della lettera
+// («lettera» = la lettera intera, le altre sono le parti dei comandi a voce).
+export const COMANDI_TASTO = ['lettera', 'anamnesi', 'frcv', 'comorbidita', 'allergie', 'diagnosi', 'esame', 'ecg', 'eco', 'sforzo', 'holter', 'laboratorio', 'conclusione', 'terapia'] as const;
+export type ComandoTasto = (typeof COMANDI_TASTO)[number];
+export type Dispositivi = { tasto: Tasto | null; microfono: string | null; dettatura: boolean | null; comandi: Partial<Record<ComandoTasto, Tasto>> | null };
 
 const intero = (v: unknown, max: number): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= max ? v : null);
 const testo = (v: unknown, max: number): string => String(v ?? '').replace(/[\u0000-\u001f<>]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -37,11 +41,33 @@ export function tastoValido(v: unknown): Tasto | null | undefined {
   return undefined;
 }
 
+// I tasti dei comandi: solo parti previste, ognuna con un tasto valido; due comandi sullo stesso tasto no.
+// undefined = non valido; null = nessuno.
+export function comandiValidi(v: unknown): Partial<Record<ComandoTasto, Tasto>> | null | undefined {
+  if (v === null) return null;
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  const out: Partial<Record<ComandoTasto, Tasto>> = {}, visti = new Set<string>();
+  for (const [k, t] of Object.entries(v as Record<string, unknown>)) {
+    if (!(COMANDI_TASTO as readonly string[]).includes(k)) return undefined;
+    const tv = tastoValido(t);
+    if (!tv) return undefined;
+    const chiave = stessoTasto(tv);
+    if (visti.has(chiave)) return undefined;
+    visti.add(chiave); out[k as ComandoTasto] = tv;
+  }
+  return Object.keys(out).length ? out : null;
+}
+// Che tasto è, al di là del nome: per riconoscere lo stesso tasto usato due volte.
+export function stessoTasto(t: Tasto): string {
+  return t.tipo === 'tasto' ? `k:${t.code}` : `h:${t.vid}:${t.pid}:${t.rid}:${t.tipo0 ?? '-'}:${t.i}:${t.maschera}`;
+}
+
 // Solo i campi mandati cambiano. → i campi da scrivere, o un errore.
 export function cambi(b: Record<string, unknown>): { ok: Partial<Dispositivi> } | { errore: string } {
   const out: Partial<Dispositivi> = {};
   if ('tasto' in b) { const t = tastoValido(b.tasto); if (t === undefined) return { errore: 'tasto non valido' }; out.tasto = t; }
   if ('microfono' in b) out.microfono = b.microfono === null ? null : testo(b.microfono, 120) || null;
   if ('dettatura' in b) { if (typeof b.dettatura !== 'boolean') return { errore: 'dettatura non valida' }; out.dettatura = b.dettatura; }
+  if ('comandi' in b) { const c = comandiValidi(b.comandi); if (c === undefined) return { errore: 'comandi non validi' }; out.comandi = c; }
   return Object.keys(out).length ? { ok: out } : { errore: 'niente da salvare' };
 }

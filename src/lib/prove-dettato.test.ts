@@ -416,3 +416,20 @@ test('foglio: la copia per conoscenza passa alla bozza', () => {
   assert.deepEqual(copieDalFoglio('Copia: … , in sede'), []);
   assert.deepEqual(copieDalFoglio(''), []);
 });
+
+// I tasti dei comandi (22.10.2026): solo parti previste, ognuna col suo tasto, mai lo stesso tasto per due comandi.
+import { comandiValidi } from './dittafono-dispositivi';
+test('tasti dei comandi: parti previste, tasti validi, nessun doppione', () => {
+  const f1 = { tipo: 'tasto', code: 'F1', nome: 'tasto F1' }, mic = { tipo: 'hid', vid: 0x0911, pid: 0x0c1c, rid: 0, i: 3, maschera: 4, premuto: 4, tipo0: 0x80, nome: 'SpeechMike' };
+  assert.deepEqual(comandiValidi({ anamnesi: f1, comorbidita: mic }), { anamnesi: f1, comorbidita: mic });
+  assert.equal(comandiValidi(null), null);
+  assert.equal(comandiValidi({}), null);
+  assert.equal(comandiValidi({ ricetta: f1 }), undefined, 'una parte che non esiste');
+  assert.equal(comandiValidi({ anamnesi: f1, terapia: { ...f1, nome: 'altro nome' } }), undefined, 'lo stesso tasto per due comandi');
+  assert.equal(comandiValidi({ anamnesi: { tipo: 'hid', vid: 1 } }), undefined);
+  assert.equal(comandiValidi([f1]), undefined);
+  const c = cambi({ comandi: { lettera: f1 } });
+  const l = 'ok' in c ? c.ok.comandi?.lettera : undefined;
+  assert.ok(l && l.tipo === 'tasto' && l.code === 'F1');
+  assert.ok('errore' in cambi({ comandi: { lettera: { tipo: 'tasto', code: '<script>' } } }));
+});

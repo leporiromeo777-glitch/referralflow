@@ -145,6 +145,12 @@ async function main() {
       verifica(d3.stato === 200 && pr3?.tasto === null && pr3.microfono === 'Microfono di prova 2', 'dispositivi del medico: tasto scollegato, il microfono resta');
       const e1 = await disp({ medico: 'prova-dispositivi', tasto: { tipo: 'hid', vid: 1 } }), e2 = await disp({ medico: 'Non valido!', dettatura: true }), e3 = await disp({ medico: 'prova-dispositivi', tasto: { tipo: 'tasto', code: '<script>' } }), e4 = await disp(undefined, ''), e5 = await disp({ medico: 'prova-dispositivi', dettatura: true }, '');
       verifica(e1.stato === 400 && e2.stato === 400 && e3.stato === 400 && e4.stato === 401 && e5.stato === 401, `dispositivi del medico: tasto o medico non validi rifiutati, senza sessione no (${e1.stato}, ${e2.stato}, ${e3.stato}, ${e4.stato}, ${e5.stato})`);
+      // i tasti dei comandi (22.10.2026): si salvano nel profilo, il tasto per dettare resta; due comandi sullo stesso tasto no
+      const c1 = await disp({ medico: 'prova-dispositivi', comandi: { anamnesi: { tipo: 'tasto', code: 'F2', nome: 'tasto F2' }, comorbidita: { tipo: 'hid', vid: 0x0911, pid: 0x0c1c, rid: 0, i: 3, maschera: 8, premuto: 8, tipo0: 0x80, nome: 'SpeechMike' } } });
+      const c2 = await disp({ medico: 'prova-dispositivi', comandi: { anamnesi: { tipo: 'tasto', code: 'F2', nome: 'a' }, terapia: { tipo: 'tasto', code: 'F2', nome: 'b' } } });
+      const pc = (await disp(undefined)).j.profili?.['prova-dispositivi'];
+      verifica(c1.stato === 200 && c2.stato === 400 && pc?.comandi?.anamnesi?.code === 'F2' && pc?.comandi?.comorbidita?.i === 3 && pc.microfono === 'Microfono di prova 2',
+        `tasti dei comandi: salvati nel profilo del medico, il resto resta; lo stesso tasto per due comandi no (${c1.stato}, ${c2.stato})`);
     } finally { await query(`delete from dittafono_dispositivi where studio_id = $1 and medico = 'prova-dispositivi'`, [S]); }
     // «Conferma» conferma e basta (21.10.2026): una lettera con la verifica ridotta (catena leggera in corso) si conferma
     // senza casella né presa d'atto mandata dalla pagina; resta registrata come presa d'atto.
