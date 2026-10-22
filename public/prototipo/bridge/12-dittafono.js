@@ -290,7 +290,7 @@ async function rfDitComandoEsegui(comando, da, a, frase, parti, soloApri, esclus
   if (!paz) { fallito('Comando capito, ma manca il paziente: sceglilo dall’elenco nel campo «Paziente», poi «Riprova».', 'senza_paziente'); return; }
   d.cmdInCorso = true; rfDitComandoStato('Cerco ' + cosa + ' nella cartella del paziente…');
   try {
-    const r = await fetch('/api/prototipo/dittafono/comando', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comando, parti: parti || [], esclusa: !!esclusa, paziente: paz, numero: numero || null, ripiego: ripiego || null }) });
+    const r = await fetch('/api/prototipo/dittafono/comando', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comando, parti: parti || [], esclusa: !!esclusa, paziente: paz, numero: numero || null, ripiego: ripiego || [] }) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.testo) { fallito(j.errore || 'Non riesco a prendere ' + cosa + '.'); return; }
     // «Aprimi…», «fammi vedere…»: la frase si toglie, la lettera si apre accanto, nel foglio non entra niente.
@@ -875,8 +875,8 @@ function rfDitComandoDaTasto(parte) {
   const qui = typeof d.cursore === 'number' && d.cursore <= el.value.length ? d.cursore : el.value.length;
   const numero = d.fonte && Number.isInteger(d.fonte.indice) ? d.fonte.indice + 1 : 1;
   // «Fino ad allergie e intolleranze» (22.10.2026): tutta la lettera dall'inizio fino alle allergie e intolleranze
-  // comprese; se non ci sono, fino alle comorbidità comprese.
-  if (parte === 'fino_allergie') { void rfDitComandoEsegui('fino', qui, qui, '', ['allergie'], false, false, numero, 'comorbidita'); return; }
+  // comprese; se non ci sono, fino alle comorbidità; se non ci sono neanche quelle, fino ai fattori di rischio.
+  if (parte === 'fino_allergie') { void rfDitComandoEsegui('fino', qui, qui, '', ['allergie'], false, false, numero, ['comorbidita', 'frcv']); return; }
   void rfDitComandoEsegui(parte === 'lettera' ? 'lettera_recente' : 'parti', qui, qui, '', parte === 'lettera' ? [] : [parte], false, false, numero);
 }
 // I microfoni dei comandi si aprono all'apertura della pagina, come quello del tasto per dettare (anche se per dettare si usa la tastiera).

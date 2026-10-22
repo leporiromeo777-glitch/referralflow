@@ -97,8 +97,10 @@ async function main() {
     verifica(kn.stato === 200 && /visita vecchia/.test(kn.j.testo) && kn.j.data === '10.01.2026' && kn.j.indice === 1 && kn1.stato === 200 && /visita vecchia/.test(kn1.j.testo) && kn3.stato === 404 && /numero 3.*ne ha 2/.test(kn3.j.errore ?? ''),
       `lettere per numero: la numero 2 è la più vecchia, la numero 3 non c'è e lo dice (${kn.stato}, ${kn1.stato}, ${kn3.stato})`);
     // «fino ad allergie e intolleranze» (22.10.2026): senza allergie nella lettera si ferma alle comorbidità, comprese
-    const ka1 = await comando({ comando: 'fino', parti: ['allergie'], ripiego: 'comorbidita', paziente: paz, numero: 2 }), ka2 = await comando({ comando: 'fino', parti: ['allergie'], paziente: paz, numero: 2 });
-    verifica(ka1.stato === 200 && /Comorbidità: nessuna di rilievo\.?$/.test(ka1.j.testo ?? '') && /FRCV/.test(ka1.j.testo ?? '') && !/Terapia/.test(ka1.j.testo ?? '') && /comorbidità compresa \(allergie non c'è\)/.test(ka1.j.cosa ?? '') && ka2.stato === 404,
+    const ka1 = await comando({ comando: 'fino', parti: ['allergie'], ripiego: ['comorbidita', 'frcv'], paziente: paz, numero: 2 }), ka2 = await comando({ comando: 'fino', parti: ['allergie'], paziente: paz, numero: 2 });
+    // la lettera più recente non ha né allergie né comorbidità né FRCV: lo dice
+    const ka3 = await comando({ comando: 'fino', parti: ['allergie'], ripiego: ['comorbidita', 'frcv'], paziente: paz, numero: 1 });
+    verifica(ka1.stato === 200 && /Comorbidità: nessuna di rilievo\.?$/.test(ka1.j.testo ?? '') && /FRCV/.test(ka1.j.testo ?? '') && !/Terapia/.test(ka1.j.testo ?? '') && /comorbidità compresa \(allergie non c'è\)/.test(ka1.j.cosa ?? '') && ka2.stato === 404 && ka3.stato === 404 && /allergie, comorbidità, FRCV non sono parti/.test(ka3.j.errore ?? ''),
       `fino ad allergie e intolleranze: senza allergie la lettera fino alle comorbidità comprese; senza ripiego no (${ka1.stato}, ${ka2.stato})`);
     // La lettera vera accanto al foglio (15.10.2026): il Word con la carta intestata, in anteprima — non conta come scaricato.
     const wPrima = await query<{ n: number }>(`select count(*)::int as n from referti_eventi where bozza_id = $1 and azione = 'word_scaricato'`, [k1.j.apri?.id]).catch(() => [{ n: -1 }]);

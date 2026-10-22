@@ -433,3 +433,26 @@ test('tasti dei comandi: parti previste, tasti validi, nessun doppione', () => {
   assert.ok(l && l.tipo === 'tasto' && l.code === 'F1');
   assert.ok('errore' in cambi({ comandi: { lettera: { tipo: 'tasto', code: '<script>' } } }));
 });
+
+// Il tasto «fino ad allergie e intolleranze» (22.10.2026): allergie → se mancano comorbidità → se mancano FRCV; sempre fino alla più lontana.
+import { finoAlPiuLontano } from './dittafono-comandi';
+test('fino ad allergie e intolleranze: ripiega su comorbidità e poi su FRCV, fino alla più lontana', () => {
+  const corpo = 'Ho rivisto il paziente inventato per un controllo, senza novità di rilievo dall’ultima visita.';
+  const coda = '\n\nAll’ECG ritmo sinusale.\n\nCordiali saluti';
+  const tutte = `Caro collega,\n\n${corpo}\n\nFRCV: ipertensione.\n\nComorbidità: nessuna.\n\nAllergie e intolleranze: nessuna nota.${coda}`;
+  const senzaAllergie = `Caro collega,\n\n${corpo}\n\nFRCV: ipertensione.\n\nComorbidità: nessuna.${coda}`;
+  const soloFrcv = `Caro collega,\n\n${corpo}\n\nFRCV: ipertensione.${coda}`;
+  const niente = `Caro collega,\n\n${corpo}${coda}`;
+  const rip = ['comorbidita', 'frcv'] as const;
+  const a = finoAlPiuLontano(tutte, 'allergie', [...rip]);
+  assert.equal(a.parte, 'allergie'); assert.match(a.testo, /Allergie e intolleranze: nessuna nota\.$/); assert.doesNotMatch(a.testo, /ECG/);
+  const b = finoAlPiuLontano(senzaAllergie, 'allergie', [...rip]);
+  assert.equal(b.parte, 'comorbidita'); assert.match(b.testo, /FRCV: ipertensione\.\n\nComorbidità: nessuna\.$/);
+  const c = finoAlPiuLontano(soloFrcv, 'allergie', [...rip]);
+  assert.equal(c.parte, 'frcv'); assert.match(c.testo, /Ho rivisto[\s\S]*FRCV: ipertensione\.$/);
+  assert.equal(finoAlPiuLontano(niente, 'allergie', [...rip]).testo, '');
+  // allergie scritte prima delle comorbidità: si prende fino alla più lontana
+  const rovescia = `Caro collega,\n\n${corpo}\n\nAllergie: nessuna.\n\nComorbidità: diabete.${coda}`;
+  const d = finoAlPiuLontano(rovescia, 'allergie', [...rip]);
+  assert.equal(d.parte, 'comorbidita'); assert.match(d.testo, /Allergie: nessuna\.\n\nComorbidità: diabete\.$/);
+});

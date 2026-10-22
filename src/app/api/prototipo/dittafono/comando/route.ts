@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
   // «la lettera numero 2» (21.10.2026): la seconda dalla più recente, come numerata accanto al foglio
   const numero = Number.isInteger(b?.numero) && b.numero >= 1 && b.numero <= 500 ? Number(b.numero) : null;
   // il ripiego del «fino a» (22.10.2026): dove fermarsi se la parte chiesta nella lettera non c'è
-  const ripiego = comando === 'fino' && (PARTI_LETTERA as readonly string[]).includes(String(b?.ripiego ?? '')) ? (String(b.ripiego) as ParteLettera) : null;
+  const ripiego = comando !== 'fino' ? [] : (Array.isArray(b?.ripiego) ? (b.ripiego as unknown[]) : [b?.ripiego]).map(String).filter((k): k is ParteLettera => (PARTI_LETTERA as readonly string[]).includes(k)).slice(0, 4);
   const r = await eseguiComando(session.studioId, session.id, paziente, comando, comando === 'fino' ? parti.slice(0, 1) : parti, esclusa, numero, ripiego);
   console.log(`[dittafono-comando] ${comando}${parti.length ? ` parti=${parti.join('+')}` : ''}${esclusa ? ' esclusa' : ''}${numero !== null ? ` numero=${numero}` : ''} → ${'errore' in r ? `niente (${r.errore.replace(/:.*/, '').slice(0, 60)})` : `ok fonte=${r.apri.tipo} pdf=${r.apri.pdf ? 'sì' : 'no'} caratteri=${r.testo.length} mancanti=${r.mancanti.length}`}`);
   return 'errore' in r ? NextResponse.json({ errore: r.errore }, { status: 404, headers: { 'Cache-Control': 'no-store' } })

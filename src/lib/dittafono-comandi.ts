@@ -185,3 +185,12 @@ export function letteraFinoA(testo: string, parte: ParteLettera, esclusa = false
   }
   return pulisci(t.slice(0, fine));
 }
+
+// «Fino a…» con ripiego (22.10.2026, il tasto «fino ad allergie e intolleranze»): la lettera dall'inizio fino alla più
+// lontana fra la parte chiesta e quelle di ripiego che nella lettera ci sono — senza allergie fino alle comorbidità,
+// senza nemmeno quelle fino ai fattori di rischio. → { testo, parte } (la parte a cui si è fermata), testo vuoto se nessuna.
+export function finoAlPiuLontano(testo: string, parte: ParteLettera, ripiego: ParteLettera[] = [], esclusa = false): { testo: string; parte: ParteLettera } {
+  let out = { testo: letteraFinoA(testo, parte, esclusa), parte };
+  for (const r of ripiego) { if (r === parte) continue; const t = letteraFinoA(testo, r, esclusa); if (t.length > out.testo.length) out = { testo: t, parte: r }; }
+  return out;
+}
