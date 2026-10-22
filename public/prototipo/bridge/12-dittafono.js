@@ -344,6 +344,20 @@ function rfDitFonteHtml() {
     ? `<button class="btn sm" ${md} onclick="rfDitLettera(${f.indice + 1})" ${f.indice + 1 >= f.totale ? 'disabled' : ''} title="La lettera prima (più vecchia)" aria-label="Lettera più vecchia">‹</button><span class="caption rf-dit-fonte-pos">n. ${f.indice + 1} di ${f.totale}</span><button class="btn sm" ${md} onclick="rfDitLettera(${f.indice - 1})" ${f.indice <= 0 ? 'disabled' : ''} title="La lettera dopo (più recente)" aria-label="Lettera più recente">›</button>` : '';
   return `<div class="rf-dit-fonte-bar">${frecce}<b class="rf-dit-fonte-nome" title="${rfEsc(f.titolo || '')}">${rfEsc(f.titolo || 'Lettera')}</b>${rfDitZoomHtml('fonte')}<button class="btn sm" ${md} onclick="rfDitFonteChiudi()" aria-label="Chiudi la lettera" title="${rfFoglioPazId() ? 'Chiudi la lettera e torna alla cartella' : 'Chiudi'}">✕</button></div><div class="rf-dit-fonte-corpo" id="rf-dit-fonte-corpo"></div>`;
 }
+// Tab scrive una tabulazione nel foglio, non passa al campo dopo (22.10.2026, dallo studio: «si deve poter schiacciare
+// tab, per la tabella dei dosaggi della terapia»). Maiuscolo+Tab esce dal foglio come prima. Il Word la tiene come
+// tabulazione vera. Con insertText l'annulla del browser e il salvataggio funzionano come per ogni altra lettera scritta.
+function rfTabScrive(e) {
+  if (e.key !== 'Tab' || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
+  e.preventDefault();
+  const el = e.target;
+  if (!(document.execCommand && document.execCommand('insertText', false, '\t'))) {
+    const da = el.selectionStart, a = el.selectionEnd;
+    if (typeof el.setRangeText !== 'function') return;
+    el.setRangeText('\t', da, a, 'end');
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+}
 /* LA CARTELLA DEL PAZIENTE ACCANTO AL FOGLIO (21.10.2026, dallo studio: «nella pagina della dettatura di fianco anche la
    cartella del paziente che seleziono, e se chiedo di vedere una lettera delle frecce per spostarmi da una lettera
    all'altra in ordine di data»). Scelto il paziente, la terza colonna mostra le sue lettere — le stesse dei comandi a
@@ -627,7 +641,7 @@ function rfFoglioHtml() {
     ${riga('titolo', 'Titolo', 'rf-fg-titolo')}
     ${area('paziente', 2, 'Paziente', 'rf-fg-paziente')}
     ${riga('saluto', 'Saluto (Caro collega,)')}
-    <textarea class="rf-fg rf-fg-corpo" id="rf-dit-testo" spellcheck="false" placeholder="Tieni premuto il tasto del microfono e detta: il testo compare qui." oninput="rfDitTesto(this); rfFoglioAlto(this)" onblur="RF.dit.cursore=this.selectionStart" onkeyup="RF.dit.cursore=this.selectionStart" onclick="RF.dit.cursore=this.selectionStart">${rfEsc(d.testo || '')}</textarea>
+    <textarea class="rf-fg rf-fg-corpo" id="rf-dit-testo" spellcheck="false" onkeydown="rfTabScrive(event)" placeholder="Tieni premuto il tasto del microfono e detta: il testo compare qui." oninput="rfDitTesto(this); rfFoglioAlto(this)" onblur="RF.dit.cursore=this.selectionStart" onkeyup="RF.dit.cursore=this.selectionStart" onclick="RF.dit.cursore=this.selectionStart">${rfEsc(d.testo || '')}</textarea>
     ${area('chiusura', 4, 'Saluti e firma')}
     ${riga('copia', 'Copia: …', 'rf-fg-copia')}
   </div>`;

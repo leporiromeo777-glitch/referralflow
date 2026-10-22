@@ -70,7 +70,7 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
     studio: b.studio_nome,
     titolo,
     meta,
-    corpo: ricomponiParagrafi(testo),
+    corpo: ricomponiParagrafi(testo).replace(/\t/g, '    '),
     avvertenza: 'Generato da ReferralFlow. Trascrizione automatica rivista da una persona.',
   });
 

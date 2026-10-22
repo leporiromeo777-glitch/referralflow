@@ -110,3 +110,22 @@ test('nome del Word: anno a due cifre, mese, giorno, cognome e nome', () => {
   assert.match(h, /filename="26\.10\.20 Zoe Rossi\.docx"/);
   assert.match(h, /filename\*=UTF-8''26\.10\.20%20Zo%C3%AB%20Rossi\.docx/);
 });
+
+// Tab nel foglio (22.10.2026, dallo studio: la tabella dei dosaggi della terapia): nel Word è una tabulazione vera, e
+// le righe con la tabulazione restano righe — non si fondono come le righe spezzate dalla trascrizione.
+import { ricomponiParagrafi } from './referto-docx';
+test('tabulazioni: righe di tabella intatte e <w:tab/> nel Word, anche con la formattazione', async () => {
+  const testo = 'Terapia:\nAspirina\t100 mg\t1-0-0\nBisoprololo\t5 mg\t1-0-0\nresto della frase che continua\nsulla riga dopo.';
+  assert.equal(ricomponiParagrafi(testo), 'Terapia:\nAspirina\t100 mg\t1-0-0\nBisoprololo\t5 mg\t1-0-0\nresto della frase che continua sulla riga dopo.');
+  assert.equal(ricomponiParagrafi('Farmaco\tdose\n\tsolo rientro'), 'Farmaco\tdose\n\tsolo rientro');
+  const docx = await generaDocxReferto({ medico: 'Dr. med. Prova', intestazione: '', telefono: '', destinatario: 'Dr. Prova', via: '', data: '22.10.2026', titolo: 'PROVA', paziente: 'Paziente di prova', piede: '', copia: '',
+    testo: 'Aspirina\t100 mg\t1-0-0', formattazione: [] });
+  const xml = await (await JSZip.loadAsync(docx)).file('word/document.xml')!.async('string');
+  assert.match(xml, /Aspirina<\/w:t><w:tab\/><w:t[^>]*>100 mg<\/w:t><w:tab\/><w:t[^>]*>1-0-0/);
+  assert.doesNotMatch(xml, /\t/);
+  const conB = await generaDocxReferto({ medico: 'Dr. med. Prova', intestazione: '', telefono: '', destinatario: 'Dr. Prova', via: '', data: '22.10.2026', titolo: 'PROVA', paziente: 'Paziente di prova', piede: '', copia: '',
+    testo: 'Aspirina\t100 mg\t1-0-0', formattazione: [{ testo: 'Aspirina', n: 0, b: true }] });
+  const xmlB = await (await JSZip.loadAsync(conB)).file('word/document.xml')!.async('string');
+  assert.match(xmlB, /<w:tab\/><w:t[^>]*>100 mg/);
+  assert.doesNotMatch(xmlB, /\t/);
+});

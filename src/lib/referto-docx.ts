@@ -78,6 +78,9 @@ function conStile(run: string, z: { b?: boolean; i?: boolean; u?: boolean; s?: n
 
 // `stili` (righe già divise in pezzi col loro stile: il grassetto della lettera vecchia, 6.10.2026, e dal 20.10.2026
 // grassetto, corsivo e sottolineato messi a mano nella revisione). Il run del segnaposto si ripete, uno per pezzo.
+// Una tabulazione scritta nel testo (22.10.2026, dallo studio: le tabelle dei dosaggi della terapia) diventa una
+// tabulazione vera del Word: il testo del pezzo si chiude, <w:tab/>, e riprende con lo stesso tag d'apertura.
+const conTab = (apre: string, testo: string): string => escapeXml(testo).split('\t').join(`</w:t><w:tab/>${apre}`);
 function espandi(xml: string, chiave: string, valore: string, stili?: (righe: string[]) => Pezzo[][]): string {
   const segnaposto = `{{${chiave}}}`;
   return xml.replace(PARAGRAFO, (par) => {
@@ -94,8 +97,10 @@ function espandi(xml: string, chiave: string, valore: string, stili?: (righe: st
           return par.replace(RUN, (run) => {
             if (!run.includes(segnaposto)) return run.replace(T_RUN, (_i, apre, _c, chiude) => apre + chiude);
             return pezzi.map((z) => {
-              const r = run.replace(T_RUN, (_i, apre: string, _c, chiude) =>
-                (apre.includes('xml:space') ? apre : apre.replace(/>$/, ' xml:space="preserve">')) + escapeXml(z.t) + chiude);
+              const r = run.replace(T_RUN, (_i, apre: string, _c, chiude) => {
+                const a = apre.includes('xml:space') ? apre : apre.replace(/>$/, ' xml:space="preserve">');
+                return a + conTab(a, z.t) + chiude;
+              });
               return z.b || z.i || z.u || z.s ? conStile(r, z) : r;
             }).join('');
           });
@@ -105,7 +110,7 @@ function espandi(xml: string, chiave: string, valore: string, stili?: (righe: st
           const apre2 = apre.includes('xml:space')
             ? apre
             : apre.replace(/>$/, ' xml:space="preserve">');
-          return apre2 + escapeXml(corpo.replace(segnaposto, riga)) + chiude;
+          return apre2 + conTab(apre2, corpo.replace(segnaposto, riga)) + chiude;
         });
       })
       .join('');
@@ -152,6 +157,8 @@ export function ricomponiParagrafi(testo: string): string {
   };
   for (let i = 0; i < righe.length; i++) {
     let r = righe[i].trim();
+    // Una riga con una tabulazione è una riga di tabella (terapia, dosaggi): resta com'è, rientro compreso.
+    if (r && righe[i].includes('\t')) { chiudi(); out.push(righe[i].replace(/[ \r]+$/, '').replace(/^ +/, '')); continue; }
     if (!r) {
       chiudi();
       out.push('');

@@ -45,7 +45,7 @@
 .sm-pagina .copia { text-align: left; }
 .sm-pagina .salto { position: absolute; left: 0; right: 0; border-top: 1px dashed rgba(90,90,200,.55); pointer-events: none; }
 .sm-pagina .salto span { position: absolute; right: 6px; top: -9px; font: 10px/1 system-ui, sans-serif; color: rgba(90,90,200,.9); background: #fff; padding: 0 4px; }
-#sm-testo { display: block; width: 100%; border: 0; outline: none; background: transparent; color: #000; font: inherit; line-height: inherit; text-align: justify; padding: 0; min-height: 4em; }
+#sm-testo { white-space: pre-wrap; display: block; width: 100%; border: 0; outline: none; background: transparent; color: #000; font: inherit; line-height: inherit; text-align: justify; padding: 0; min-height: 4em; }
 #sm-testo::selection { background: rgba(79,110,247,.25); }
 .sm-salvato { font-size: 12px; color: var(--text-3); }
 .sm-lato { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 92px); overflow-y: auto; }
@@ -160,7 +160,7 @@ function rfSmPaginaHtml(sm, conf) {
       <img class="logo" src="carta-intestata-word.png" alt="">
       <div class="int" id="sm-int">${p.int}</div>
       <div id="sm-testa">${p.testa}</div>
-      <div id="sm-testo" lang="it" spellcheck="true" role="textbox" aria-multiline="true" contenteditable="${conf ? 'false' : 'plaintext-only'}" oninput="rfSmScrive(this)" aria-label="Testo della lettera">${rfEsc(sm.testo)}</div>
+      <div id="sm-testo" lang="it" spellcheck="true" role="textbox" aria-multiline="true" contenteditable="${conf ? 'false' : 'plaintext-only'}" onkeydown="if (typeof rfTabScrive === 'function') rfTabScrive(event)" oninput="rfSmScrive(this)" aria-label="Testo della lettera">${rfEsc(sm.testo)}</div>
       <div id="sm-sotto">${p.sotto}</div>
       <div class="piede" id="sm-piede">${p.piede}</div>
     </div>`;
