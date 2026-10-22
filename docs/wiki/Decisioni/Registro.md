@@ -986,4 +986,4 @@ indovinare, e nessun paziente nasce da solo. Lettere nei documenti col nome orig
 un Word si salta; una lettera cambiata sostituisce il file dello stesso documento. Controllo ogni notte alle 2, a lotti la
 prima volta. La cartella comune si legge e basta. Fuori, per ora: gli archivi con lettere nominate con un codice (47 155
 file dal 2002, la richiesta parlava degli «ultimi anni») e le lettere sciolte fuori da una cartella di paziente.
-
+Poco dopo, dallo studio: «fai il tutto solo dei rapporti di Marco Moccetti» → si legge **solo «Rapporti_Moccetti»** (`COMUNE_MEDICI`); le altre cartelle dei medici (Prof. Moccetti compreso), gli esami e le convocazioni restano fuori.

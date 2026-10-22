@@ -8,7 +8,7 @@ con ReferralFlow, le lettere vanno nei pazienti, con un controllo giornaliero di
 `public/prototipo/bridge/22-comune.js`, migrazione 098.
 
 ## Che cosa si legge
-- **Radice**: `CentroCardio/Pazienti` (variabile `COMUNE_LETTERE`). Sotto, una cartella per medico («Rapporti_Moccetti»,
+- **Radice**: `CentroCardio/Pazienti` (variabile `COMUNE_LETTERE`). **Solo la cartella «Rapporti_Moccetti»** (22.10.2026, dallo studio: «fai il tutto solo dei rapporti di Marco Moccetti»; non «Rapporti_PROF_MOCCETTI»): variabile `COMUNE_MEDICI`, nomi separati da virgola, vuota = tutte. Sotto, una cartella per medico («Rapporti_Moccetti»,
   «Rapporti_Paiocchi», «Esami_II livello»…). Le cartelle «Rapporti_…» danno documenti **lettera**, «Convocazioni_lettere» **altro** (il dittafono non le riprende), le altre («Esami_II livello», «Device (PM + DEFI)») **referto**.
 - **Cartelle dei pazienti a qualunque livello** (`cartellaDiPaziente`): lo è una cartella che porta il nome di un paziente
   conosciuto, o una data («Cognome Nome (12.03.1950)», «Cognome 12.03.1950»), o una cartella senza sottocartelle con

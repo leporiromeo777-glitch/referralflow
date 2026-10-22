@@ -10,7 +10,7 @@ import { validaAnagrafica } from '../pazienti-import';
 import { deleteFile, putFile } from '../storage';
 import { slugNome } from '../imaging-ordina';
 import { abbinaCartella, categoriaDi, dataDaNomeFile, dateNelTesto, MAX_LETTERE_PAZIENTE, nascitaProposta, nomeDaCartella, radice, stessaLettera, tocca, type Formato } from './regole';
-import { cartellePazienti, lettereSulDisco, type SulDisco } from './scopri';
+import { cartellePazienti, lettereSulDisco, mediciScelti, type SulDisco } from './scopri';
 import { docxDaDoc, testoDi } from './testo';
 
 // Le lettere della cartella comune (22.10.2026, [[Piattaforma/Cartella comune]]).
@@ -87,7 +87,7 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number } =
     const noti = new Map<string, Noto>((await query<Noto & { percorso: string }>(`select percorso, dimensione::text, modificato, stato, sha256, documento_id from comune_file where studio_id = $1`, [studioId])).map((f) => [f.percorso, f]));
     const pazienti = await query<Paz>(`select id, cognome, nome, data_nascita::text from patients where studio_id = $1`, [studioId]);
     const nomi = new Set(pazienti.map((p) => slugNome(`${p.cognome} ${p.nome}`)));
-    const { trovate, sciolte } = await cartellePazienti(base, nomi);
+    const { trovate, sciolte } = await cartellePazienti(base, nomi, mediciScelti());
     r.sciolte = sciolte;
     let letti = 0;
 
@@ -250,16 +250,18 @@ export async function stato(studioId: string) {
             (select count(*)::int from comune_file where studio_id = $1 and stato = 'caricato') as caricati,
             (select count(*)::int from comune_file where studio_id = $1 and stato = 'doppione') as doppioni,
             (select count(*)::int from comune_file where studio_id = $1 and stato = 'non_letto') as non_letti
-       from comune_cartelle where studio_id = $1`, [studioId]);
+       from comune_cartelle where studio_id = $1 and (cardinality($2::text[]) = 0 or medico = any($2))`, [studioId, mediciScelti()]);
   const attesa = await query<{ id: string; percorso: string; medico: string; nome_letto: string; motivo: string | null; lettere: number; nascita_proposta: string | null }>(
     `select id, percorso, medico, nome_letto, motivo, lettere, nascita_proposta::text from comune_cartelle
-      where studio_id = $1 and stato = 'in_attesa' and motivo is distinct from 'da_leggere' order by medico, nome_letto limit 8000`, [studioId]);
+      where studio_id = $1 and stato = 'in_attesa' and motivo is distinct from 'da_leggere' and (cardinality($2::text[]) = 0 or medico = any($2))
+      order by medico, nome_letto limit 8000`, [studioId, mediciScelti()]);
   const recenti = await query<{ patient_id: string; cognome: string; nome: string; filename: string; data_lettera: string | null; quando: string; documento_id: string }>(
     `select c.patient_id, p.cognome, p.nome, d.filename, f.data_lettera::text, to_char(f.quando, 'YYYY-MM-DD"T"HH24:MI') as quando, f.documento_id
        from comune_file f join comune_cartelle c on c.id = f.cartella_id join patients p on p.id = c.patient_id join patient_documents d on d.id = f.documento_id
       where f.studio_id = $1 and f.stato = 'caricato' and f.quando > now() - interval '7 days' order by f.quando desc limit 150`, [studioId]);
-  const nonPazienti = await query<{ id: string; percorso: string }>(`select id, percorso from comune_cartelle where studio_id = $1 and stato = 'non_paziente' order by percorso limit 50`, [studioId]);
-  return { radice: radiceComune(), collegata, giri, conti, attesa, recenti, non_pazienti: nonPazienti };
+  const nonPazienti = await query<{ id: string; percorso: string }>(
+    `select id, percorso from comune_cartelle where studio_id = $1 and stato = 'non_paziente' and (cardinality($2::text[]) = 0 or medico = any($2)) order by percorso limit 50`, [studioId, mediciScelti()]);
+  return { radice: radiceComune(), medici: mediciScelti(), collegata, giri, conti, attesa, recenti, non_pazienti: nonPazienti };
 }
 
 type Esito<T> = T | { errore: string; stato: number };
