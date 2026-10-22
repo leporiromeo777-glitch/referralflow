@@ -66,6 +66,12 @@
 .rf-dit-cart-voce .num { flex: none; width: 76px; color: var(--text-2); font-variant-numeric: tabular-nums; }
 .rf-dit-fonte-bar .rf-dit-fonte-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
 .rf-dit-fonte-corpo { flex: 1; min-height: 60vh; overflow: auto; padding: 8px; background: var(--surface-2, #eef0ec); }
+.rf-dit-scorri-segno { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); width: min(320px, 80%); z-index: 3; pointer-events: none; height: 26px; border-radius: 13px; overflow: hidden; background: var(--surface, #fff); box-shadow: 0 1px 6px rgba(0,0,0,.15); display: flex; align-items: center; justify-content: center; font-size: 12px; }
+.rf-dit-scorri-segno.su { top: 52px; bottom: auto; }
+.rf-dit-scorri-segno span { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent-soft, rgba(79,110,247,.18)); }
+.rf-dit-scorri-segno b { position: relative; font-weight: 600; color: var(--text); }
+.rf-dit-cart-dett summary { padding: 6px 4px; font-size: 13px; }
+.rf-dit-cart-dett .rf-dit-cart-voce { margin-left: 26px; }
 .rf-dit-fonte-corpo canvas { display: block; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.12); margin: 0 auto 8px; }
 .rf-dit-fonte-word section.docx { background: #fff; color: #000; box-shadow: 0 1px 3px rgba(0,0,0,.12); margin: 0 0 8px; padding: 22px 26px !important; width: auto !important; min-height: 0 !important; box-sizing: border-box; }
 .rf-dit-fonte-word section.docx img { max-width: 100%; height: auto; }
@@ -374,9 +380,16 @@ function rfDitCartellaHtml() {
   const md = 'onmousedown="event.preventDefault()"';
   const lettere = !c || c.carico ? '<div class="caption">Cerco le lettere…</div>' : c.errore ? `<div class="caption">${rfEsc(c.errore)}</div>`
     : c.lettere.length ? c.lettere.map(l => `<a class="rf-dit-cart-voce" ${md} onclick="rfDitLettera(${l.indice})" title="Detta «lettera numero ${l.indice + 1}»"><b class="rf-dit-cart-n">${l.indice + 1}</b><span class="num">${rfEsc(l.data)}</span><span>${rfEsc(l.fonte)}</span></a>`).join('') : '<div class="caption">Nessuna lettera trovata.</div>';
-  const gruppi = {};
-  for (const x of ((p && p.docs) || [])) (gruppi[x.cartella || 'Documenti'] = gruppi[x.cartella || 'Documenti'] || []).push(x);
-  const docs = Object.keys(gruppi).sort((a, b) => a.localeCompare(b, 'it', { numeric: true })).map(g => `<div class="rf-dit-cart-sotto">${rfEsc(g)}</div>${gruppi[g].map(x => `<a class="rf-dit-cart-voce" ${md} onclick="rfDitDocumento('${rfEsc(x.id)}')"><span class="num">${rfEsc(x.d || '')}</span><span>${rfEsc(x.t || x.filename || 'Documento')}</span></a>`).join('')}`).join('');
+  // I documenti per sottocartella, come nella cartella del paziente (22.10.2026, dallo studio): le stesse sottocartelle,
+  // nello stesso ordine (01_, 02_…), chiuse; un clic apre la sottocartella, un altro il documento lì accanto.
+  const lista = (p && p.docs) || [];
+  const gruppi = typeof rfDivGruppi === 'function' ? rfDivGruppi(lista, (x) => x.filename, (x) => x.cartella)
+    : [...lista.reduce((m, x) => m.set(x.cartella || '', [...(m.get(x.cartella || '') || []), x]), new Map()).entries()];
+  const aperte = RF.dit.cartAperte || (RF.dit.cartAperte = new Set());
+  const nomeCart = (c) => (typeof rfCartNome === 'function' ? rfCartNome(c) : (c || 'Altri documenti'));
+  const docs = gruppi.map(([c, l]) => `<details class="rf-div-cart rf-dit-cart-dett" ${aperte.has(c) || gruppi.length === 1 ? 'open' : ''} ontoggle="RF.dit.cartAperte[this.open ? 'add' : 'delete'](${rfEsc(JSON.stringify(c))})">
+      <summary ${md}><span class="ico">${(typeof ICONS !== 'undefined' && ICONS.documents) || ''}</span><b>${rfEsc(nomeCart(c))}</b><span class="caption">${l.length}</span></summary>
+      ${l.map(x => `<a class="rf-dit-cart-voce" ${md} onclick="rfDitDocumento('${rfEsc(x.id)}')"><span class="num">${rfEsc(x.d || '')}</span><span>${rfEsc(x.t || x.filename || 'Documento')}</span></a>`).join('')}</details>`).join('');
   return `<div class="rf-dit-fonte-bar"><b class="rf-dit-fonte-nome">Cartella${p ? ` di ${rfEsc(fullName(p))}` : ''}</b>${p ? `<a class="btn sm ghost" href="#/patients/${rfEsc(pid)}" target="_blank" rel="noopener" title="Apre la cartella in un'altra scheda">Apri</a>` : ''}<button class="btn sm" ${md} onclick="rfDitCartellaNascondi()" aria-label="Chiudi" title="Chiudi">✕</button></div>
     <div class="rf-dit-fonte-corpo rf-dit-cart"><div class="rf-dit-cart-tit">Lettere, dalla più recente</div><div class="caption" style="margin:0 0 4px">Si chiamano col numero: «per favore riprendimi l’anamnesi della lettera numero 2».</div>${lettere}<div class="rf-dit-cart-tit">Documenti</div>${docs || '<div class="caption">Nessun documento.</div>'}</div>`;
 }
@@ -452,15 +465,63 @@ function rfDitRiapriMetti() {
   if (stato) stato.insertAdjacentHTML('afterend', html); else bar.insertAdjacentHTML('afterbegin', html);
 }
 function rfDitFonteRiapri() { const f = RF.dit.fonteChiusa; if (!f) return; const { pdfDoc, docxDati, titolo, ...apri } = f; rfDitFonteApri(apri, titolo); RF.dit.fonte.pdfDoc = pdfDoc || null; RF.dit.fonte.docxDati = docxDati || null; }
+/* SCORRERE PER CAMBIARE LETTERA (22.10.2026, dallo studio: «se scorro in basso fino alla fine e continuo a scorrere, mi
+   apre automaticamente la lettera dopo, andando indietro nel tempo»). Arrivati in fondo alla lettera aperta, continuare a
+   scorrere apre la più vecchia, dall'inizio; arrivati in cima, continuare a scorrere in su apre la più recente, dalla
+   fine. Serve una spinta decisa (non basta l'ultimo colpo di rotella che arriva in fondo), con la rotella, il trackpad o
+   il dito. Le frecce ‹ › restano. Solo per le lettere numerate (non per un documento aperto dalla sottocartella). */
+const RF_DIT_SPINTA = 380;
+function rfDitScorriAttacca(box) {
+  if (!box || box.dataset.scorri) return;
+  box.dataset.scorri = '1';
+  let spinta = 0, ultima = 0, verso = 0, y0 = null;
+  const pronta = () => { const f = RF.dit.fonte; return f && Number.isInteger(f.indice) && f.totale > 1 && !RF.dit.cambioLettera ? f : null; };
+  const spingi = (dy) => {
+    const f = pronta(); if (!f) return;
+    const fondo = box.scrollTop + box.clientHeight >= box.scrollHeight - 2, cima = box.scrollTop <= 0;
+    const v = dy > 0 && fondo && f.indice + 1 < f.totale ? 1 : dy < 0 && cima && f.indice > 0 ? -1 : 0;
+    const ora = Date.now();
+    if (!v || v !== verso || ora - ultima > 700) spinta = 0;
+    verso = v; ultima = ora;
+    if (!v) { rfDitScorriSegno(box, 0, 0); return; }
+    spinta += Math.abs(dy);
+    rfDitScorriSegno(box, v, Math.min(1, spinta / RF_DIT_SPINTA));
+    if (spinta < RF_DIT_SPINTA) return;
+    spinta = 0; RF.dit.cambioLettera = true; RF.dit.scorriVerso = v;
+    void rfDitLettera(f.indice + v).finally(() => { setTimeout(() => { RF.dit.cambioLettera = false; }, 400); });
+  };
+  box.addEventListener('wheel', (e) => spingi(e.deltaMode === 1 ? e.deltaY * 30 : e.deltaY), { passive: true });
+  box.addEventListener('touchstart', (e) => { y0 = e.touches[0] ? e.touches[0].clientY : null; }, { passive: true });
+  box.addEventListener('touchmove', (e) => { if (y0 === null || !e.touches[0]) return; const y = e.touches[0].clientY; spingi((y0 - y) * 1.5); y0 = y; }, { passive: true });
+  box.addEventListener('touchend', () => { y0 = null; }, { passive: true });
+}
+// La striscia in fondo (o in cima) che si riempie mentre si spinge: dice quale lettera si sta per aprire.
+// Sta sopra la lettera (nella colonna, non dentro ciò che scorre: se no allungherebbe la pagina e il fondo si sposterebbe).
+function rfDitScorriSegno(box, verso, quanto) {
+  const host = box.parentElement; if (!host) return;
+  let s = host.querySelector(':scope > .rf-dit-scorri-segno');
+  if (!verso) { if (s) s.remove(); return; }
+  const f = RF.dit.fonte, n = f.indice + verso + 1;
+  if (!s) { s = document.createElement('div'); s.className = 'rf-dit-scorri-segno'; if (getComputedStyle(host).position === 'static') host.style.position = 'relative'; host.appendChild(s); }
+  s.classList.toggle('su', verso < 0);
+  s.innerHTML = `<span style="width:${Math.round(quanto * 100)}%"></span><b>${verso > 0 ? '↓' : '↑'} lettera n. ${n}${verso > 0 ? ', più vecchia' : ', più recente'}</b>`;
+}
+// Dopo un cambio scorrendo: la lettera più vecchia si legge dall'inizio, quella più recente dalla fine.
+function rfDitScorriDopo(box) {
+  rfDitScorriAttacca(box); rfDitScorriSegno(box, 0, 0);
+  const v = RF.dit.scorriVerso; RF.dit.scorriVerso = 0;
+  if (v < 0) box.scrollTop = box.scrollHeight; else if (v > 0) box.scrollTop = 0;
+}
 async function rfDitFonteDisegna() {
   const d = RF.dit, f = d.fonte, box = document.getElementById('rf-dit-fonte-corpo'); if (!f || !box) return;
   const z = rfDitZoomDi('fonte'), chiave = `${f.tipo}:${f.id}:${f.da || 0}:${z}:${box.clientWidth}`;
   if (box.dataset.fatto === chiave) return;      // già disegnata così: non si rifà a ogni ridisegno della pagina
   box.dataset.fatto = chiave;
+  rfDitScorriAttacca(box);
   const testo = () => { box.innerHTML = f.testo ? `<div class="rf-dit-fonte-testo" style="font-size:${Math.round(13 * z)}px">${rfEsc(f.testo || '')}</div>` : `<div class="caption" style="padding:14px">Questo file non si mostra qui: <a href="/api/documents/${encodeURIComponent(f.id)}" target="_blank" rel="noopener">aprilo in un’altra scheda</a>.</div>`; };
-  if (f.img) { box.innerHTML = `<img src="/api/documents/${encodeURIComponent(f.id)}" alt="" style="display:block;max-width:${Math.round(100 * z)}%;margin:0 auto;background:#fff">`; return; }
+  if (f.img) { box.innerHTML = `<img src="/api/documents/${encodeURIComponent(f.id)}" alt="" style="display:block;max-width:${Math.round(100 * z)}%;margin:0 auto;background:#fff">`; rfDitScorriDopo(box); return; }
   if (f.docx) { void rfDitFonteWord(f, box, chiave, z, testo); return; }
-  if (!f.pdf || typeof rfPdfJs !== 'function') { testo(); return; }
+  if (!f.pdf || typeof rfPdfJs !== 'function') { testo(); rfDitScorriDopo(box); return; }
   try {
     if (!f.pdfDoc) {
       box.innerHTML = '<div class="caption" style="padding:14px">Apro la lettera…</div>';
@@ -480,8 +541,8 @@ async function rfDitFonteDisegna() {
       if (!attuale()) return;
       tele.push(c);
     }
-    box.innerHTML = ''; tele.forEach(c => box.appendChild(c));
-  } catch (_) { if (RF.dit.fonte === f) testo(); }      // il file non si apre qui: resta il testo della lettera
+    box.innerHTML = ''; tele.forEach(c => box.appendChild(c)); rfDitScorriDopo(box);
+  } catch (_) { if (RF.dit.fonte === f) { testo(); rfDitScorriDopo(box); } }      // il file non si apre qui: resta il testo della lettera
 }
 // Una lettera Word disegnata com'è (15.10.2026, dallo studio: «mi apre un testo, non la lettera vera»): per un referto
 // della piattaforma il Word con la carta intestata, lo stesso che si scarica (`?anteprima=1`: non conta come scaricato).
@@ -507,8 +568,8 @@ async function rfDitFonteWord(f, box, chiave, z, testo) {
     if (!attuale()) return;
     foglio.style.zoom = String(Math.round(z * 85) / 100);
     foglio.className = 'rf-dit-fonte-word';
-    box.innerHTML = ''; box.appendChild(foglio);
-  } catch (_) { if (RF.dit.fonte === f) testo(); }
+    box.innerHTML = ''; box.appendChild(foglio); rfDitScorriDopo(box);
+  } catch (_) { if (RF.dit.fonte === f) { testo(); rfDitScorriDopo(box); } }
 }
 /* «DETTO LA LETTERA ALL'INDIRIZZO DEL DOTTOR … PER IL PAZIENTE …» (15.10.2026, richiesta dello studio). La frase si toglie dal
    foglio (è un'istruzione, non testo della lettera); il medico si cerca nella rubrica degli invianti e il paziente in

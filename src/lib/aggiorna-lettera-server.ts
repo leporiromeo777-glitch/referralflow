@@ -116,7 +116,7 @@ export async function lettereVecchie(studioId: string, bozzaId: string, nomePazi
     `select id, filename, nota, storage_key, uploaded_at, ocr_stato, categoria from patient_documents
       where patient_id = $1 and studio_id = $2 and (ocr_stato is null or ocr_stato <> 'da_fare')
         and (lower(filename) like '%.docx' or lower(filename) like '%.txt' or lower(filename) like '%.pdf')
-      order by uploaded_at desc limit 20`, [patientId, studioId]);
+      order by uploaded_at desc limit 60`, [patientId, studioId]);      // 60 (22.10.2026): con la cartella comune un paziente ne ha anche decine, e nel dittafono si sfogliano
   const rx = data ? rxDataPagina(data) : null;
   for (const d of docs.filter((x) => x.categoria === 'lettera')) {
     try {
@@ -124,7 +124,9 @@ export async function lettereVecchie(studioId: string, bozzaId: string, nomePazi
       const testo = d.filename.toLowerCase().endsWith('.pdf') ? pulisciScansione(grezzo) : grezzo;
       if (testo.trim().length < 200) continue;
       if (rx && !rx.test(`${d.nota ?? ''} ${d.filename} ${testo.slice(0, 600)}`)) continue;
-      out.push({ fonte: { tipo: 'documento', id: d.id, etichetta: `lettera in cartella: ${etichettaDocumento(d) || d.filename}`, data: fmt(d.uploaded_at) }, testo });
+      // Le lettere della cartella comune hanno tutte la stessa nota: si dice di chi sono i rapporti («lettera, Rapporti Moccetti»).
+      const comune = (d.nota ?? '').match(/^dalla cartella comune \((.+)\)$/)?.[1];
+      out.push({ fonte: { tipo: 'documento', id: d.id, etichetta: comune ? `lettera, ${comune}` : `lettera in cartella: ${etichettaDocumento(d) || d.filename}`, data: fmt(d.uploaded_at) }, testo });
     } catch { /* file che non si legge */ }
   }
   if (data && !out.length) {
@@ -412,8 +414,15 @@ function lettereDelPaziente(studioId: string, bozzaId: string, nome: string): Pr
 // Dal PAZIENTE, quando una bozza non c'è ancora (12.10.2026): chi detta sul foglio del dittafono chiede «la lettera
 // più recente» prima che la catena abbia consegnato qualcosa. Stessa ricerca, col paziente dato e nessuna bozza da escludere.
 const NESSUNA_BOZZA = '00000000-0000-0000-0000-000000000000';
+// Sfogliando nel dittafono (scorrendo, con le frecce) si chiede la stessa lista a ogni lettera: per due minuti vale quella letta.
+const sceltePaziente = new Map<string, { quando: number; lista: Promise<Trovata[]> }>();
 export async function lettereDelPazienteScelto(studioId: string, patientId: string, nome: string): Promise<{ testo: string; fonte: Fonte }[]> {
-  return leggiLettereDelPaziente(studioId, NESSUNA_BOZZA, nome, patientId);
+  const k = `${studioId}:${patientId}:${nome}`, c = sceltePaziente.get(k);
+  if (c && Date.now() - c.quando < 120_000) return c.lista;
+  const lista = leggiLettereDelPaziente(studioId, NESSUNA_BOZZA, nome, patientId).catch((e) => { sceltePaziente.delete(k); throw e; });
+  sceltePaziente.set(k, { quando: Date.now(), lista });
+  if (sceltePaziente.size > 30) sceltePaziente.delete(sceltePaziente.keys().next().value as string);
+  return lista;
 }
 async function leggiLettereDelPaziente(studioId: string, bozzaId: string, nome: string, paziente: string | null = null): Promise<Trovata[]> {
   const cand: { t: Trovata; quando: number }[] = [];
