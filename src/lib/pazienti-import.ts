@@ -57,17 +57,22 @@ export function validaAnagrafica(c: Record<string, unknown>): { dati: Anagrafica
   return { dati, errori };
 }
 
-// Intestazioni riconosciute (minuscole, senza accenti) → campo.
+// Intestazioni riconosciute (minuscole, senza accenti né punti; «n°» → «n») → campo. Dal 22.10.2026 anche quelle
+// dell'esportazione dei pazienti di MediOnline (dallo studio: la lista non si importava): «Data nasc.», «M/F»,
+// «N° AVS», «N° tel. 1/2/3», «Assicurazione LAMal», «N° assicurato LAMal». Le altre assicurazioni (LAInf, LCA, LAM,
+// LAI) e le colonne di gestione restano fuori, e l'anteprima le elenca.
 const INTESTAZIONI: [RegExp, keyof Anagrafica][] = [
   [/^(cognome|nachname|surname|last ?name)$/, 'cognome'], [/^(nome|vorname|first ?name|nome proprio)$/, 'nome'],
-  [/^(data di nascita|nascita|nato|nata|geburtsdatum|birth|dob)$/, 'data_nascita'], [/^(sesso|geschlecht|sex|genere)$/, 'sesso'],
-  [/^(telefono|tel|phone|cellulare|natel)$/, 'telefono'], [/^(e-?mail|mail)$/, 'email'],
+  [/^(data di nascita|data nascita|data nasc|nascita|nato|nata|nato il|nata il|geburtsdatum|geb datum|birth|dob|date of birth)$/, 'data_nascita'],
+  [/^(sesso|geschlecht|sex|genere|m ?\/ ?f|f ?\/ ?m)$/, 'sesso'],
+  [/^(telefono|tel|phone|cellulare|natel|n tel ?[1-3]?|numero di telefono|telefono [1-3])$/, 'telefono'], [/^(e-?mail|mail)$/, 'email'],
   [/^(via|indirizzo|strasse|street|address)$/, 'via'], [/^(npa|cap|plz|zip)$/, 'npa'], [/^(localita|citta|luogo|ort|city|comune)$/, 'localita'],
-  [/^(avs|ahv|n\.? ?avs|numero avs)$/, 'avs'], [/^(cassa|cassa malati|assicurazione|krankenkasse|insurer)$/, 'assicurazione'],
-  [/^(n\.? ?assicurato|numero assicurato|veka|versichertennummer|tessera)$/, 'n_assicurato'], [/^(indicazione|diagnosi|indicazione clinica)$/, 'indicazione'], [/^(percorso|percorso id)$/, 'percorso_id'],
+  [/^(avs|ahv|n ?avs|numero avs|n ahv)$/, 'avs'], [/^(cassa|cassa malati|assicurazione|assicurazione lamal|krankenkasse|insurer)$/, 'assicurazione'],
+  [/^(n ?assicurato|numero assicurato|n assicurato lamal|veka|versichertennummer|tessera)$/, 'n_assicurato'], [/^(indicazione|diagnosi|indicazione clinica)$/, 'indicazione'], [/^(percorso|percorso id)$/, 'percorso_id'],
 ];
 function chiave(h: string): keyof Anagrafica | null {
-  const k = h.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[«»"']/g, '').trim();
+  const k = h.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[«»"']/g, '')
+    .replace(/\bn\s*[°º�]\s*/g, 'n ').replace(/\bno\.\s*/g, 'n ').replace(/\./g, ' ').replace(/\s+/g, ' ').trim();
   for (const [r, c] of INTESTAZIONI) if (r.test(k)) return c;
   return null;
 }
@@ -75,33 +80,47 @@ function separatore(riga: string): string {
   const conta = (c: string) => riga.split(c).length;
   return [';', '\t', ','].sort((a, b) => conta(b) - conta(a))[0];
 }
-function celle(riga: string, sep: string): string[] {
-  const out: string[] = []; let cur = ''; let inQ = false;
-  for (let i = 0; i < riga.length; i++) {
-    const ch = riga[i];
-    if (ch === '"') { if (inQ && riga[i + 1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
-    else if (ch === sep && !inQ) { out.push(cur); cur = ''; }
+// Le righe del file con le loro celle. Un a capo DENTRO le virgolette (una nota su più righe) resta nella cella: prima
+// spezzava il paziente in due righe sbagliate.
+function tabella(testo: string, sep: string): string[][] {
+  const out: string[][] = []; let riga: string[] = []; let cur = ''; let inQ = false;
+  for (let i = 0; i < testo.length; i++) {
+    const ch = testo[i];
+    if (ch === '"') { if (inQ && testo[i + 1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+    else if (ch === sep && !inQ) { riga.push(cur.trim()); cur = ''; }
+    else if ((ch === '\n' || ch === '\r') && !inQ) { if (ch === '\r' && testo[i + 1] === '\n') i++; riga.push(cur.trim()); cur = ''; if (riga.some((x) => x)) out.push(riga); riga = []; }
     else cur += ch;
   }
-  out.push(cur);
-  return out.map((x) => x.trim());
+  riga.push(cur.trim()); if (riga.some((x) => x)) out.push(riga);
+  return out;
 }
 
-export type RigaImport = { n: number; dati: Anagrafica; errori: Record<string, string> };
+export type RigaImport = { n: number; dati: Anagrafica; errori: Record<string, string>; avvisi?: Record<string, string> };
+// Nell'importazione solo cognome e nome bloccano la riga: un campo secondario scritto male (un NPA straniero, un'e-mail
+// senza @, un AVS incompleto, una data illeggibile) si lascia vuoto e si dice, e il paziente entra lo stesso.
+const BLOCCANO = new Set(['cognome', 'nome']);
 export function analizzaCsvPazienti(testo: string): { colonne: (keyof Anagrafica | null)[]; ignorate: string[]; righe: RigaImport[] } {
-  const righe = testo.replace(/^﻿/, '').split(/\r?\n/).filter((r) => r.trim());
-  if (!righe.length) return { colonne: [], ignorate: [], righe: [] };
-  const sep = separatore(righe[0]);
-  const testa = celle(righe[0], sep);
+  const t = testo.replace(/^﻿/, '');
+  const prima = t.split(/\r?\n/, 1)[0] ?? '';
+  if (!prima.trim()) return { colonne: [], ignorate: [], righe: [] };
+  const sep = separatore(prima);
+  const tutte = tabella(t, sep);
+  if (!tutte.length) return { colonne: [], ignorate: [], righe: [] };
+  const testa = tutte[0];
   const colonne = testa.map(chiave);
   const ignorate = testa.filter((_, i) => !colonne[i]);
   const out: RigaImport[] = [];
-  righe.slice(1).forEach((r, i) => {
-    const c = celle(r, sep);
+  tutte.slice(1).forEach((c, i) => {
     const grezzo: Record<string, string> = {};
-    colonne.forEach((k, j) => { if (k && c[j] !== undefined) grezzo[k] = c[j]; });
+    // più colonne per lo stesso campo (i tre numeri di telefono): vale la prima piena
+    colonne.forEach((k, j) => { if (k && c[j] !== undefined && c[j] !== '' && !grezzo[k]) grezzo[k] = c[j]; });
     const { dati, errori } = validaAnagrafica(grezzo);
-    out.push({ n: i + 2, dati, errori });
+    const bloccano: Record<string, string> = {}, avvisi: Record<string, string> = {};
+    for (const [k, v] of Object.entries(errori)) {
+      if (BLOCCANO.has(k)) bloccano[k] = v;
+      else { avvisi[k] = v; (dati as Record<string, unknown>)[k] = k === 'data_nascita' ? null : ''; }
+    }
+    out.push({ n: i + 2, dati, errori: bloccano, ...(Object.keys(avvisi).length ? { avvisi } : {}) });
   });
   return { colonne, ignorate, righe: out };
 }

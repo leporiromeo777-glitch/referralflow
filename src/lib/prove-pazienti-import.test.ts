@@ -46,3 +46,31 @@ test('anagrafica: una data impossibile non è una data', () => {
   // Excel in locale americano: mese e giorno scambiati, meglio niente che il 31° mese
   assert.equal(normalizzaData('12/31/1950'), null);
 });
+
+// L'esportazione dei pazienti di MediOnline (22.10.2026): titoli delle colonne come nel file vero, pazienti INVENTATI.
+test('import pazienti: l’esportazione di MediOnline — data, sesso, AVS, telefono, cassa; note su più righe; un campo sbagliato non ferma il paziente', () => {
+  const testa = ['Titolo', 'Intitolato lettera', 'Cognome', 'Agg. indirizzo', 'Nome', 'Via', 'NPA', 'Località', 'Tel. 1', 'N° tel. 1', 'Tel. 2', 'N° tel. 2', 'Paese', 'Osservazione',
+    'Data nasc.', 'N° paziente', 'N° AVS', 'E-mail', 'M/F', 'N° assicurato LAMal', 'Assicurazione LAMal', 'Assicurazione LCA'];
+  const q = (r: string[]) => r.map((x) => `"${x}"`).join(';');
+  const csv = [
+    q(testa),
+    q(['Signor', 'Caro', 'Provamedi', '', 'Ugo', 'Via Inventata 1', '6900', 'Lugano', 'Domicilio', '', 'Cellulare', '079 000 00 01', 'Svizzera', 'nota\nsu due righe', '05.03.1968', '1', '756.0000.0000.02', '', 'M', '12345', 'CASSA DI PROVA', 'ALTRA']),
+    q(['Signora', 'Cara', 'Provamedi', '', 'Ada', 'Via Altrove 2', '20100', 'Milano', 'Cellulare', '079 000 00 02', '', '', 'Italia', '', '31.12.1950', '2', '', 'senza-chiocciola', 'F', '', '', '']),
+    q(['', '', '', '', 'Senzacognome', '', '', '', '', '', '', '', '', '', '', '3', '', '', '', '', '', '']),
+  ].join('\r\n');
+  // la stessa intestazione salvata da Windows e letta male: «N�» al posto di «N°»
+  const rovinata = csv.replace(/N°/g, 'N�');
+  for (const t of [csv, rovinata]) {
+    const r = analizzaCsvPazienti(t);
+    assert.equal(r.righe.length, 3, 'la nota su due righe non spezza il paziente');
+    const [a, b, c] = r.righe;
+    assert.deepEqual([a.dati.cognome, a.dati.nome, a.dati.data_nascita, a.dati.sesso, a.dati.telefono, a.dati.avs, a.dati.assicurazione, a.dati.n_assicurato, a.dati.npa],
+      ['Provamedi', 'Ugo', '1968-03-05', 'M', '079 000 00 01', '756.0000.0000.02', 'CASSA DI PROVA', '12345', '6900']);
+    assert.deepEqual(a.errori, {});
+    assert.deepEqual([b.dati.data_nascita, b.dati.telefono, b.dati.npa, b.dati.email, b.dati.localita], ['1950-12-31', '079 000 00 02', '', '', 'Milano']);
+    assert.deepEqual(b.errori, {}, 'NPA straniero ed e-mail sbagliata non fermano il paziente');
+    assert.ok(b.avvisi && b.avvisi.npa && b.avvisi.email);
+    assert.ok(c.errori.cognome, 'senza cognome la riga non entra');
+    assert.ok(r.ignorate.includes('Titolo') && r.ignorate.includes('Assicurazione LCA') && !r.ignorate.some((x) => /Data nasc|M\/F|AVS|LAMal/.test(x)));
+  }
+});

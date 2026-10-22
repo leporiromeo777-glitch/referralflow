@@ -70,7 +70,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ proposta: proponiAnagrafica(String(c?.titolo ?? '').slice(0, 300)) });
   }
   if (azione === 'importa' || azione === 'importa_conferma') {
-    const testo = String(c?.csv ?? '').slice(0, 2_000_000);
+    // fino a 12 milioni di caratteri (22.10.2026): l'esportazione completa di MediOnline (5000 pazienti, una sessantina di colonne) stava sui 2
+    const testo = String(c?.csv ?? '').slice(0, 12_000_000);
     const an = analizzaCsvPazienti(testo);
     if (!an.righe.length) return NextResponse.json({ errore: 'Nessuna riga: serve un\'intestazione (cognome; nome; data di nascita; …) e almeno un paziente.' }, { status: 400 });
     if (!an.colonne.includes('cognome') || !an.colonne.includes('nome')) return NextResponse.json({ errore: 'Mancano le colonne «cognome» e «nome».', ignorate: an.ignorate }, { status: 400 });
@@ -80,9 +81,10 @@ export async function POST(req: NextRequest) {
       const k = chiave(r.dati);
       const stato = Object.keys(r.errori).length ? 'errore' : gia.has(k) ? 'esiste' : visti.has(k) ? 'doppione' : 'nuovo';
       visti.add(k);
-      return { n: r.n, stato, dati: r.dati, errori: r.errori };
+      return { n: r.n, stato, dati: r.dati, errori: r.errori, avvisi: r.avvisi ?? null };
     });
-    const riepilogo = { totale: righe.length, nuovi: righe.filter((r) => r.stato === 'nuovo').length, esistenti: righe.filter((r) => r.stato === 'esiste').length, errori: righe.filter((r) => r.stato === 'errore').length, doppioni: righe.filter((r) => r.stato === 'doppione').length };
+    const riepilogo = { totale: righe.length, nuovi: righe.filter((r) => r.stato === 'nuovo').length, esistenti: righe.filter((r) => r.stato === 'esiste').length, errori: righe.filter((r) => r.stato === 'errore').length, doppioni: righe.filter((r) => r.stato === 'doppione').length,
+      con_avvisi: righe.filter((r) => r.stato === 'nuovo' && r.avvisi).length, senza_nascita: righe.filter((r) => r.stato === 'nuovo' && !r.dati.data_nascita).length };
     if (azione === 'importa') return NextResponse.json({ colonne: an.colonne, ignorate: an.ignorate, righe, riepilogo });
     let inseriti = 0;
     for (const r of righe) if (r.stato === 'nuovo') { await inserisci(sid, r.dati); inseriti++; }

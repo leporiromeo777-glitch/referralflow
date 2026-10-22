@@ -463,9 +463,16 @@ function rfPazienteModifica(id) {
 }
 function rfPazientiImporta() {
   openModal('Importa pazienti da CSV', `<p class="meta" style="margin:0 0 10px;line-height:1.5">Prima riga = intestazione: <code>cognome; nome; data di nascita; telefono; e-mail; via; npa; località; avs; cassa; n. assicurato; sesso</code> (bastano cognome e nome; l'ordine non conta; separatore ; , o tabulazione; date 31.12.1950). Le righe già in cartella (stesso cognome, nome e nascita) non si duplicano.</p>
-    <input type="file" id="rf-imp-file" accept=".csv,.txt,text/csv" class="mb-16"><textarea class="rf-imp-area" id="rf-imp-testo" placeholder="oppure incolla qui il CSV…"></textarea>
+    <input type="file" id="rf-imp-file" accept=".csv,.txt,text/csv,text/plain" class="mb-16"><textarea class="rf-imp-area" id="rf-imp-testo" placeholder="oppure incolla qui il CSV…"></textarea>
     <div id="rf-imp-esito" class="mt-16"></div>`, `<button class="btn" data-close>Chiudi</button><button class="btn" id="rf-imp-anteprima">Anteprima</button><button class="btn primary" id="rf-imp-conferma" disabled>Importa</button>`);
-  const file = document.getElementById('rf-imp-file'); file.onchange = () => { const f = file.files && file.files[0]; if (!f) return; const rd = new FileReader(); rd.onload = () => { document.getElementById('rf-imp-testo').value = String(rd.result || ''); }; rd.readAsText(f); };
+  // Il file si legge come UTF-8 e, se non lo è, con la codifica di Windows (22.10.2026: l'esportazione di MediOnline
+  // arrivava con «N�» al posto di «N°» e gli accenti rovinati). Un .xlsx si apre in Excel e si incolla qui.
+  const file = document.getElementById('rf-imp-file'); file.onchange = async () => {
+    const f = file.files && file.files[0]; if (!f) return;
+    const buf = await f.arrayBuffer(); let testo;
+    try { testo = new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch { testo = new TextDecoder('windows-1252').decode(buf); }
+    document.getElementById('rf-imp-testo').value = testo;
+  };
   const manda = async (azione) => {
     const csv = document.getElementById('rf-imp-testo').value; if (!csv.trim()) { toast('Incolla o carica un CSV'); return null; }
     const r = await fetch('/api/prototipo/pazienti', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ azione, csv }) });
@@ -474,11 +481,20 @@ function rfPazientiImporta() {
   document.getElementById('rf-imp-anteprima').onclick = async () => {
     const j = await manda('importa'); if (!j) return;
     const et = { nuovo: 'nuovo', esiste: 'già in cartella', errore: 'errore', doppione: 'doppione nel file' };
-    document.getElementById('rf-imp-esito').innerHTML = `<div class="row wrap" style="gap:6px"><span class="badge success">${j.riepilogo.nuovi} nuovi</span><span class="badge">${j.riepilogo.esistenti} già in cartella</span>${j.riepilogo.errori ? `<span class="badge danger">${j.riepilogo.errori} con errori</span>` : ''}${j.riepilogo.doppioni ? `<span class="badge warning">${j.riepilogo.doppioni} doppioni</span>` : ''}${j.ignorate.length ? `<span class="caption">colonne ignorate: ${rfEsc(j.ignorate.join(', '))}</span>` : ''}</div>
-      <div class="table-wrap mt-8" style="max-height:260px;box-shadow:none"><table class="dense rf-imp-tab"><thead><tr><th>#</th><th>Cognome</th><th>Nome</th><th>Nascita</th><th>AVS</th><th>Esito</th></tr></thead><tbody>${j.righe.map(r => `<tr class="${r.stato}"><td class="num">${r.n}</td><td>${rfEsc(r.dati.cognome)}</td><td>${rfEsc(r.dati.nome)}</td><td class="num">${rfEsc(r.dati.data_nascita || '')}</td><td class="num">${rfEsc(r.dati.avs || '')}</td><td>${et[r.stato]}${r.stato === 'errore' ? ': ' + rfEsc(Object.values(r.errori).join(' ')) : ''}</td></tr>`).join('')}</tbody></table></div>`;
+    // In testa le righe da guardare (errori, doppioni, avvisi), poi i nuovi: al massimo 400 righe a schermo.
+    const ord = { errore: 0, doppione: 1, nuovo: 2, esiste: 3 };
+    const viste = j.righe.slice().sort((a, b) => (ord[a.stato] - ord[b.stato]) || ((b.avvisi ? 1 : 0) - (a.avvisi ? 1 : 0)) || a.n - b.n).slice(0, 400);
+    const R = j.riepilogo;
+    document.getElementById('rf-imp-esito').innerHTML = `<div class="row wrap" style="gap:6px"><span class="badge success">${R.nuovi} nuovi</span><span class="badge">${R.esistenti} già in cartella</span>${R.errori ? `<span class="badge danger">${R.errori} non importabili</span>` : ''}${R.doppioni ? `<span class="badge warning">${R.doppioni} doppioni nel file</span>` : ''}${R.con_avvisi ? `<span class="badge warning">${R.con_avvisi} nuovi con un campo lasciato vuoto</span>` : ''}${R.senza_nascita ? `<span class="badge warning">${R.senza_nascita} nuovi senza data di nascita</span>` : ''}</div>
+      <div class="caption mt-8">Colonne lette: ${rfEsc([...new Set(j.colonne.filter(Boolean))].join(', ') || '—')}.${j.ignorate.length ? ` Ignorate: ${rfEsc(j.ignorate.join(', '))}.` : ''}</div>
+      <div class="table-wrap mt-8" style="max-height:260px;box-shadow:none"><table class="dense rf-imp-tab"><thead><tr><th>#</th><th>Cognome</th><th>Nome</th><th>Nascita</th><th>AVS</th><th>Esito</th></tr></thead><tbody>${viste.map(r => `<tr class="${r.stato}"><td class="num">${r.n}</td><td>${rfEsc(r.dati.cognome)}</td><td>${rfEsc(r.dati.nome)}</td><td class="num">${rfEsc(r.dati.data_nascita || '')}</td><td class="num">${rfEsc(r.dati.avs || '')}</td><td>${et[r.stato]}${r.stato === 'errore' ? ': ' + rfEsc(Object.values(r.errori).join(' ')) : ''}${r.avvisi ? `<span class="caption"> · lasciato vuoto: ${rfEsc(Object.entries(r.avvisi).map(([k, v]) => `${k.replace('_', ' ')} (${v})`).join(', '))}</span>` : ''}</td></tr>`).join('')}</tbody></table></div>${j.righe.length > viste.length ? `<div class="caption mt-8">A schermo le prime ${viste.length} righe di ${j.righe.length} (prima quelle da guardare).</div>` : ''}`;
     const b = document.getElementById('rf-imp-conferma'); b.disabled = !j.riepilogo.nuovi; b.textContent = `Importa ${j.riepilogo.nuovi} nuovi`;
   };
-  document.getElementById('rf-imp-conferma').onclick = async () => { const j = await manda('importa_conferma'); if (!j) return; toast(`${j.inseriti} pazienti importati`); closeModal(); void rfCaricaDati(); };
+  document.getElementById('rf-imp-conferma').onclick = async () => {
+    const b = document.getElementById('rf-imp-conferma'), prima = b.textContent; b.disabled = true; b.textContent = 'Importo… (può volerci un minuto)';
+    const j = await manda('importa_conferma'); if (!j) { b.disabled = false; b.textContent = prima; return; }
+    toast(`${j.inseriti} pazienti importati`); closeModal(); void rfCaricaDati();
+  };
 }
 document.addEventListener('input', (e) => {
   if (!e.target || e.target.id !== 'rf-paz-q') return;
