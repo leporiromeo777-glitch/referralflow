@@ -65,8 +65,18 @@
 `; document.head.appendChild(st); })();
 
 // La revisione semplice vale per la lettera dettata sul foglio, a meno che per questa bozza si sia chiesta quella completa.
+// Dal 22.10.2026 (dallo studio: «voglio poter fare la revisione semplice anche con la catena normale dei referti») anche
+// per le altre lettere, a scelta: «Revisione semplice» nella completa. La scelta si ricorda su questo computer, così la
+// lettera dopo si apre allo stesso modo.
+const RF_REV_PREF = 'rf-rev-pref';
+const rfSmPref = () => { try { return localStorage.getItem(RF_REV_PREF) || ''; } catch (_) { return ''; } };
+const rfSmPrefImposta = (v) => { try { localStorage.setItem(RF_REV_PREF, v); } catch (_) { /* resta così */ } };
+const rfSmDalFoglio = (m) => !!(m && m.dettato && m.dettato.foglio);
 function rfSmVale(m) {
-  return !!(m && m.dettato && m.dettato.foglio && typeof m.testo_attuale === 'string' && !((RF.revCompleta || {})[RF.loaded]));
+  if (!m || typeof m.testo_attuale !== 'string') return false;
+  if ((RF.revCompleta || {})[RF.loaded]) return false;
+  if ((RF.revSemplice || {})[RF.loaded] || rfSmDalFoglio(m)) return true;
+  return rfSmPref() === 'semplice';
 }
 function rfSmStato() {
   const id = RF.loaded, m = RF.meta || {};
@@ -256,9 +266,35 @@ async function rfSmSalva() {
 }
 async function rfSmWord() { if (RF.meta && RF.meta.stato === 'bozza' && !(await rfSmSalva())) { toast('Prima salvo la lettera: riprova fra un attimo'); return; } void rfWord(RF.loaded); }
 function rfSmCompleta() {
-  void rfSmSalva().then(() => { RF.revCompleta = RF.revCompleta || {}; RF.revCompleta[RF.sm ? RF.sm.id : RF.loaded] = true; RF.sm = null; RF.loaded = null; render(); });
+  const m = RF.meta || {};
+  void rfSmSalva().then(() => {
+    const id = RF.sm ? RF.sm.id : RF.loaded;
+    RF.revCompleta = RF.revCompleta || {}; RF.revCompleta[id] = true; if (RF.revSemplice) delete RF.revSemplice[id];
+    if (!rfSmDalFoglio(m)) rfSmPrefImposta('completa');
+    RF.sm = null; RF.loaded = null; render();
+  });
 }
-function rfSmSemplice() { const id = RF.loaded; RF.revCompleta = RF.revCompleta || {}; delete RF.revCompleta[id]; RF.sm = null; RF.loaded = null; render(); }
+// Dalla completa alla semplice. Per una lettera della catena le correzioni fatte nella completa si salvano prima (la
+// semplice riparte dal testo salvato della bozza).
+async function rfSmSemplice() {
+  const id = RF.loaded, m = RF.meta || {};
+  if (!rfSmDalFoglio(m) && typeof rfTestoRicomposto === 'function' && m.stato === 'bozza') {
+    const testo = rfTestoRicomposto();
+    if (testo.trim() && testo !== (m.testo_attuale || '')) {
+      try {
+        const r = await fetch(`/api/prototipo/referti/${id}/testo`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ testo, base: RF.base }) });
+        const j = await r.json().catch(() => ({}));
+        if (r.status === 409 && j.errore === 'cambiata') { toast('La bozza è stata salvata in un’altra versione nel frattempo: riapri la revisione'); return; }
+        if (!r.ok) { toast('Non riesco a salvare le correzioni: resto nella revisione completa'); return; }
+      } catch (_) { toast('Piattaforma non raggiungibile: resto nella revisione completa'); return; }
+    }
+  }
+  RF.revCompleta = RF.revCompleta || {}; delete RF.revCompleta[id];
+  RF.revSemplice = RF.revSemplice || {}; RF.revSemplice[id] = true;
+  if (!rfSmDalFoglio(m)) rfSmPrefImposta('semplice');
+  try { localStorage.removeItem(RV_KEY); } catch (_) { /* niente */ }
+  RF.sm = null; RF.loaded = null; render();
+}
 
 // Conferma (20.10.2026: senza i punti da controllare, tolti dalla revisione semplice).
 async function rfSmConferma() {
@@ -303,8 +339,8 @@ async function rfSmConferma() {
     }
     let html = completa();
     const m = RF.meta || {};
-    if (RF.live && id && RF.loaded === id && m.dettato && m.dettato.foglio && (RF.revCompleta || {})[id]) {
-      html = html.replace('<div class="rv-top-r">', `<div class="rv-top-r"><button class="btn sm primary" onclick="rfSmSemplice()" title="La lettera sulla sua pagina del Word, con l'audio">Revisione semplice</button>`);
+    if (RF.live && id && RF.loaded === id && typeof m.testo_attuale === 'string') {
+      html = html.replace('<div class="rv-top-r">', `<div class="rv-top-r"><button class="btn sm primary" onclick="rfSmSemplice()" title="La lettera sulla sua pagina del Word, con l'audio, senza i punti da controllare">Revisione semplice</button>`);
     }
     return html;
   };
