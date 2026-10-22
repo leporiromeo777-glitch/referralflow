@@ -73,6 +73,7 @@ test('comune: quali file sono lettere, la data dal nome del file, la categoria',
   assert.equal(dataDaNomeFile('Prova Alda 2024.docx'), null);
   assert.equal(categoriaDi('Rapporti_Moccetti'), 'lettera');
   assert.equal(categoriaDi('Esami_II livello'), 'referto');
+  assert.equal(categoriaDi('Convocazioni_lettere'), 'altro');
 });
 
 test('comune: il PDF che è la stessa lettera del Word', () => {

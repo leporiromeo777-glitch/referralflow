@@ -144,5 +144,6 @@ export function tocca(adesso: Date, ultimoCompleto: Date | null, restano: boolea
   return ultimoCompleto < soglia;
 }
 
-// Le cartelle «Rapporti_…» sono lettere; le altre (es. «Esami_II livello») referti d'esame.
-export const categoriaDi = (medico: string): 'lettera' | 'referto' => (/^rapp/i.test(medico) ? 'lettera' : 'referto');
+// Le cartelle «Rapporti_…» sono lettere; le convocazioni sono «altro» (non lettere cliniche: il dittafono non le
+// riprende); le altre («Esami_II livello», «Device (PM + DEFI)») referti d'esame.
+export const categoriaDi = (medico: string): 'lettera' | 'referto' | 'altro' => (/^rapp/i.test(medico) ? 'lettera' : /^convoc/i.test(medico) ? 'altro' : 'referto');
