@@ -496,26 +496,45 @@ function rfPazientiImporta() {
     toast(`${j.inseriti} pazienti importati`); closeModal(); void rfCaricaDati();
   };
 }
+// La ricerca scorre TUTTI i pazienti e a schermo ne mette al massimo 300 (22.10.2026: con quasi 6000 pazienti la
+// tabella intera rallentava la pagina; prima il server ne mandava solo 500 e gli altri non si trovavano).
+const RF_PAZ_MAX = 300;
+function rfPazTesto(p) { return `${p.last} ${p.first} ${p.first} ${p.last} ${p.dob || ''} ${p.avs || ''} ${p.phone || ''} ${p.email || ''} ${p.indicazione || ''}`.toLowerCase(); }
+function rfPazFiltrati(q) {
+  const parole = String(q || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const tutti = [...PATIENTS.filter(p => rfUuid(p.id)), ...PATIENTS.filter(p => !rfUuid(p.id))];
+  return parole.length ? tutti.filter(p => { const t = rfPazTesto(p); return parole.every(w => t.includes(w)); }) : tutti;
+}
 document.addEventListener('input', (e) => {
   if (!e.target || e.target.id !== 'rf-paz-q') return;
-  const q = e.target.value.trim().toLowerCase(); let n = 0;
-  document.querySelectorAll('tr[data-paz]').forEach((tr) => { const ok = !q || tr.getAttribute('data-paz').includes(q); tr.hidden = !ok; if (ok) n++; });
-  const c = document.getElementById('rf-paz-n'); if (c) c.textContent = `${n} ${n === 1 ? 'paziente' : 'pazienti'}`;
+  RF.pazQ = e.target.value;
+  const corpo = document.getElementById('rf-paz-corpo'); if (corpo) corpo.innerHTML = rfPazRighe();
+  const c = document.getElementById('rf-paz-n'); if (c) { const n = rfPazFiltrati(RF.pazQ).length; c.textContent = RF.pazQ.trim() ? `${n} ${n === 1 ? 'trovato' : 'trovati'}` : `${PATIENTS.filter(p => rfUuid(p.id)).length} in cartella`; }
 });
 const rfPatientsOrig = PAGES.patients;
 PAGES.patients = () => {
   if (!RF.live) return rfPatientsOrig();
   const inCartella = PATIENTS.filter(p => rfUuid(p.id));
   const soloAgenda = PATIENTS.length - inCartella.length;
-  const riga = (p) => `<tr data-go="#/patients/${p.id}" data-paz="${rfEsc(`${p.last} ${p.first} ${p.avs || ''} ${p.phone || ''} ${p.email || ''} ${p.indicazione || ''}`.toLowerCase())}"><td><div class="row"><div class="avatar-sm">${initials(p)}</div><b>${rfEsc(fullName(p))}</b>${rfUuid(p.id) ? '' : ' <span class="caption">solo agenda</span>'}</div></td><td class="num">${p.dob ? `${p.dob} <span class="caption">(${p.age})</span>` : '—'}</td><td class="num">${rfEsc(p.avs || '—')}</td><td class="num">${rfEsc(p.phone || '—')}</td><td>${rfEsc(p.assicurazione || '—')}</td><td>${rfEsc(p.indicazione || '—')}</td><td class="num">${p.lastVisit || '—'}</td><td class="num">${p.next || '—'}</td><td><div class="row">${p.docs.some(d => d.new) ? '<span class="badge accent">Doc. nuovi</span>' : ''}${TASKS.some(t => t.p === p.id && t.status !== 'DONE') ? '<span class="badge">Task</span>' : ''}${p.flags.length ? `<span class="badge warning">${rfEsc(p.flags[0])}</span>` : ''}</div></td></tr>`;
-  return `
-    <div class="page-head"><div><h2 class="page-title">Pazienti</h2><div class="page-sub"><span id="rf-paz-n">${inCartella.length} in cartella</span>${soloAgenda ? ` · ${soloAgenda} solo in agenda` : ''}</div></div>
-      <div class="actions"><button class="btn" onclick="rfPazientiImporta()">${ICONS.upload} Importa CSV</button><button class="btn primary" onclick="rfPazienteModifica(null)">${ICONS.plus} Nuovo paziente</button></div></div>
-    <div class="toolbar"><input class="input" id="rf-paz-q" placeholder="Cerca cognome, nome, AVS, telefono, e-mail, indicazione…" autocomplete="off" style="min-width:320px"><button class="btn ai" data-ai="Pazienti con richiamo scaduto">${ICONS.ai} Chiedi a Cleo</button></div>
-    <div class="table-wrap"><table><thead><tr><th>Paziente</th><th>Nascita</th><th>AVS</th><th>Telefono</th><th>Cassa</th><th>Indicazione</th><th>Ultima visita</th><th>Prossimo</th><th>Indicatori</th></tr></thead><tbody>
-      ${PATIENTS.length ? [...inCartella, ...PATIENTS.filter(p => !rfUuid(p.id))].map(riga).join('') : '<tr><td colspan="9" class="caption">Nessun paziente in cartella: «Nuovo paziente» o «Importa CSV».</td></tr>'}
-    </tbody></table></div>`;
+  return rfPazPagina(inCartella, soloAgenda);
 };
+function rfPazRighe() {
+  const l = rfPazFiltrati(RF.pazQ || '');
+  if (!PATIENTS.length) return '<tr><td colspan="9" class="caption">Nessun paziente in cartella: «Nuovo paziente» o «Importa CSV».</td></tr>';
+  if (!l.length) return '<tr><td colspan="9" class="caption">Nessun paziente trovato.</td></tr>';
+  return l.slice(0, RF_PAZ_MAX).map(rfPazRigaHtml).join('') + (l.length > RF_PAZ_MAX ? `<tr><td colspan="9" class="caption">A schermo i primi ${RF_PAZ_MAX} di ${l.length}: scrivi qualche lettera del cognome per trovare gli altri.</td></tr>` : '');
+}
+function rfPazPagina(inCartella, soloAgenda) {
+  const q = RF.pazQ || '';
+  return `
+    <div class="page-head"><div><h2 class="page-title">Pazienti</h2><div class="page-sub"><span id="rf-paz-n">${q.trim() ? `${rfPazFiltrati(q).length} trovati` : `${inCartella.length} in cartella`}</span>${soloAgenda ? ` · ${soloAgenda} solo in agenda` : ''}</div></div>
+      <div class="actions"><button class="btn" onclick="rfPazientiImporta()">${ICONS.upload} Importa CSV</button><button class="btn primary" onclick="rfPazienteModifica(null)">${ICONS.plus} Nuovo paziente</button></div></div>
+    <div class="toolbar"><input class="input" id="rf-paz-q" value="${rfEsc(q)}" placeholder="Cerca cognome, nome, data di nascita, AVS, telefono, e-mail…" autocomplete="off" style="min-width:320px"><button class="btn ai" data-ai="Pazienti con richiamo scaduto">${ICONS.ai} Chiedi a Cleo</button></div>
+    <div class="table-wrap"><table><thead><tr><th>Paziente</th><th>Nascita</th><th>AVS</th><th>Telefono</th><th>Cassa</th><th>Indicazione</th><th>Ultima visita</th><th>Prossimo</th><th>Indicatori</th></tr></thead><tbody id="rf-paz-corpo">
+      ${rfPazRighe()}
+    </tbody></table></div>`;
+}
+const rfPazRigaHtml = (p) => `<tr data-go="#/patients/${p.id}" data-paz><td><div class="row"><div class="avatar-sm">${initials(p)}</div><b>${rfEsc(fullName(p))}</b>${rfUuid(p.id) ? '' : ' <span class="caption">solo agenda</span>'}</div></td><td class="num">${p.dob ? `${p.dob} <span class="caption">(${p.age})</span>` : '—'}</td><td class="num">${rfEsc(p.avs || '—')}</td><td class="num">${rfEsc(p.phone || '—')}</td><td>${rfEsc(p.assicurazione || '—')}</td><td>${rfEsc(p.indicazione || '—')}</td><td class="num">${p.lastVisit || '—'}</td><td class="num">${p.next || '—'}</td><td><div class="row">${p.docs.some(d => d.new) ? '<span class="badge accent">Doc. nuovi</span>' : ''}${TASKS.some(t => t.p === p.id && t.status !== 'DONE') ? '<span class="badge">Task</span>' : ''}${p.flags.length ? `<span class="badge warning">${rfEsc(p.flags[0])}</span>` : ''}</div></td></tr>`;
 // Scheda paziente → Overview: tessere, terapia derivata dai referti, fatti del grafo.
 const rfOverviewOrig = typeof patientOverview === 'function' ? patientOverview : null;
 if (rfOverviewOrig) patientOverview = function (p, clinical) {
