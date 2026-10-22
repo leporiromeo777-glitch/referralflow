@@ -1,7 +1,7 @@
 // Le lettere della cartella comune (22.10.2026): regole pure. Nomi e date INVENTATI.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { abbinaCartella, cartellaDiPaziente, categoriaDi, dividiNome, nascitaSicura, quasiStesso, dataDaNomeFile, dateNelTesto, formatoLettera, nascitaProposta, nomeDaCartella, stessaLettera, tocca } from './comune/regole';
+import { abbinaCartella, abbinaScansione, cartellaDiPaziente, categoriaDi, dividiNome, nascitaSicura, nomeDaScansione, quasiStesso, dataDaNomeFile, dateNelTesto, formatoLettera, nascitaProposta, nomeDaCartella, stessaLettera, tocca } from './comune/regole';
 
 const P = [
   { id: 'a', cognome: 'Prova', nome: 'Alda', data_nascita: '1950-03-12' },
@@ -117,4 +117,25 @@ test('comune: la data di nascita per creare un paziente, solo se sicura', () => 
   assert.equal(nascitaSicura('Ignoto Mario, coronarografia del 03.02.2019', 'Ignoto Mario', '2024-01-02'), null);
   assert.equal(nascitaSicura('Ignoto Mario – 03.02.2024', 'Ignoto Mario', '2024-01-02'), null);      // non prima della lettera
   assert.equal(nascitaSicura('Lugano, 01.02.2024', 'Ignoto Mario', '2024-01-02'), null);
+});
+
+test('comune: le scansioni DocuWare — nome dal file, cognome solo con la nascita nel testo', () => {
+  assert.equal(nomeDaScansione('123456_Prova_Alda.pdf'), 'Prova Alda');
+  assert.equal(nomeDaScansione('123456_De Prova_Mario.pdf'), 'De Prova Mario');
+  assert.equal(nomeDaScansione('123456_Prova.pdf'), 'Prova');
+  assert.deepEqual(abbinaScansione('123456_Prova_Alda.pdf', ['1950-03-12'], P), { id: 'a', motivo: 'abbinato' });
+  assert.deepEqual(abbinaScansione('123456_Prova_Alda.pdf', [], P), { id: null, motivo: 'nascita_non_trovata' });
+  assert.deepEqual(abbinaScansione('123456_Prova.pdf', ['1950-03-12'], P), { id: 'a', motivo: 'abbinato' });   // solo cognome + nascita nel testo
+  assert.deepEqual(abbinaScansione('123456_Prova.pdf', ['2001-01-01'], P), { id: null, motivo: 'nascita_non_trovata' });
+  assert.deepEqual(abbinaScansione('123456_Doppi.pdf', ['1940-01-01', '1970-05-05'], P), { id: null, motivo: 'omonimi' });
+  assert.deepEqual(abbinaScansione('123456_Ignoto.pdf', ['1950-03-12'], P), { id: null, motivo: 'nessuno' });
+});
+
+test('comune: la scansione riconosciuta dal numero di MediOnline E dal nome, anche senza la data', () => {
+  const Q = [...P, { id: 'n', cognome: 'Numer', nome: 'Ada', data_nascita: '1944-04-04', numero: '123456' }, { id: 'm', cognome: 'Altro', nome: 'Ugo', data_nascita: null, numero: '000777' }];
+  assert.deepEqual(abbinaScansione('123456_Numer_Ada.pdf', [], Q), { id: 'n', motivo: 'abbinato' });
+  assert.deepEqual(abbinaScansione('123456_Numer.pdf', [], Q), { id: 'n', motivo: 'abbinato' });          // solo cognome, ma col numero
+  assert.deepEqual(abbinaScansione('777_Altro_Ugo.pdf', [], Q), { id: 'm', motivo: 'abbinato' });          // zeri davanti
+  assert.notEqual(abbinaScansione('123456_Prova_Alda.pdf', [], Q).id, 'n');                                 // numero di un altro: no
+  assert.equal(abbinaScansione('999999_Numer_Ada.pdf', [], Q).id, null);                                    // numero sconosciuto, niente data
 });

@@ -5,7 +5,7 @@
 // lettera dal nome del file, quando un PDF è la stessa lettera di un Word. Niente I/O.
 import { slugNome } from '../imaging-ordina';
 
-type Paz = { id: string; cognome: string; nome: string; data_nascita: string | null };
+type Paz = { id: string; cognome: string; nome: string; data_nascita: string | null; numero?: string | null };
 
 const RX_DATA = /(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})/;
 const iso = (g: number, m: number, a: number): string | null => {
@@ -80,6 +80,31 @@ export function abbinaCartella(nomeCartella: string, date: Iterable<string>, paz
   if (conNascita.length === 1) return { id: conNascita[0].id, motivo: 'abbinato' };
   if (conNascita.length > 1 || stessoNome.length > 1) return { id: null, motivo: 'omonimi' };
   return { id: null, motivo: daNome.length ? 'nascita_diversa' : 'nascita_non_trovata' };
+}
+
+// Le cartelle cartacee scansionate (DocuWare, 22.10.2026): «123456_Cognome_Nome.pdf», il numero è quello della cartella.
+export function nomeDaScansione(file: string): string {
+  return String(file ?? '').replace(/\.[A-Za-z0-9]{1,5}$/, '').replace(/^\s*\d+\s*[_ -]+/, '').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+// Di chi è una scansione: come le cartelle (nome E data di nascita, che qui viene dal testo delle prime pagine); col
+// solo cognome nel nome del file, il cognome E la data di nascita intera nel testo, una persona sola.
+// Prima di tutto il numero di MediOnline del nome del file: se è di UN paziente e le parole del nome del file stanno nel
+// suo nome, è lui (numero E nome), anche senza la data di nascita.
+export function abbinaScansione(file: string, date: Iterable<string>, pazienti: Paz[]): Abbinamento {
+  const nome = nomeDaScansione(file);
+  const parole = slugNome(nome).split(' ').filter(Boolean);
+  const numero = String(file ?? '').match(/^\s*0*(\d{3,10})\s*[_ -]/)?.[1];
+  if (numero && parole.length) {
+    const c = pazienti.filter((p) => p.numero && p.numero.replace(/^0+/, '') === numero);
+    if (c.length === 1 && parole.every((w) => slugNome(`${c[0].cognome} ${c[0].nome}`).split(' ').includes(w))) return { id: c[0].id, motivo: 'abbinato' };
+  }
+  if (parole.length >= 2) return abbinaCartella(nome, date, pazienti);
+  if (!parole.length) return { id: null, motivo: 'senza_nome' };
+  const viste = new Set(date);
+  const stesso = pazienti.filter((p) => slugNome(p.cognome) === parole[0]);
+  if (!stesso.length) return { id: null, motivo: 'nessuno' };
+  const c = stesso.filter((p) => p.data_nascita && viste.has(p.data_nascita.slice(0, 10)));
+  return c.length === 1 ? { id: c[0].id, motivo: 'abbinato' } : { id: null, motivo: c.length > 1 ? 'omonimi' : 'nascita_non_trovata' };
 }
 
 // Il nome quasi uguale (22.10.2026): nessuno ha il nome intero della cartella, ma UN paziente ha un nome contenuto nel

@@ -31,6 +31,25 @@ export async function cartellePazienti(base: string, nomi: Set<string>, solo: st
   return { trovate, medici, sciolte };
 }
 
+// Le scansioni DocuWare: un PDF per paziente, in qualche sottocartella. `rel` comincia col nome della cartella delle
+// scansioni (si legge da quella che la contiene), così i percorsi non si confondono con quelli delle lettere.
+export async function scansioniSulDisco(radice: string): Promise<{ base: string; file: SulDisco[] }> {
+  const base = path.dirname(radice), primo = path.basename(radice);
+  const file: SulDisco[] = [];
+  const giro = async (rel: string, prof: number) => {
+    let voci; try { voci = await fs.readdir(path.join(base, rel), { withFileTypes: true }); } catch { return; }
+    for (const v of voci) {
+      if (v.name.startsWith('.') || v.name.startsWith('~')) continue;
+      const r = path.join(rel, v.name);
+      if (v.isDirectory()) { if (prof < 3) await giro(r, prof + 1); continue; }
+      if (!v.isFile() || !/\.pdf$/i.test(v.name)) continue;
+      try { const st = await fs.stat(path.join(base, r)); file.push({ rel: r, nome: v.name, formato: 'pdf', dimensione: st.size, modificato: st.mtime }); } catch { /* sparito */ }
+    }
+  };
+  await giro(primo, 0);
+  return { base, file: file.sort((a, b) => a.rel.localeCompare(b.rel)) };
+}
+
 export async function lettereSulDisco(base: string, rel: string, prof = 0): Promise<SulDisco[]> {
   const out: SulDisco[] = [];
   let voci; try { voci = await fs.readdir(path.join(base, rel), { withFileTypes: true }); } catch { return out; }

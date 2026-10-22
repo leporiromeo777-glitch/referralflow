@@ -29,6 +29,14 @@ async function inserisci(studioId: string, a: Anagrafica): Promise<string> {
   return r.id;
 }
 
+// Il numero di MediOnline si scrive solo dove manca, e solo se non è già di un altro paziente.
+async function segnaNumero(studioId: string, id: string, numero: string): Promise<boolean> {
+  const r = await query<{ id: string }>(
+    `update patients set numero = $3 where id = $1 and studio_id = $2 and numero is null
+       and not exists (select 1 from patients q where q.studio_id = $2 and q.numero = $3) returning id`, [id, studioId, numero]);
+  return r.length > 0;
+}
+
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session || !session.studioId) return NextResponse.json({ errore: 'non_autorizzato' }, { status: 401 });
@@ -81,13 +89,19 @@ export async function POST(req: NextRequest) {
       const k = chiave(r.dati);
       const stato = Object.keys(r.errori).length ? 'errore' : gia.has(k) ? 'esiste' : visti.has(k) ? 'doppione' : 'nuovo';
       visti.add(k);
-      return { n: r.n, stato, dati: r.dati, errori: r.errori, avvisi: r.avvisi ?? null };
+      return { n: r.n, stato, dati: r.dati, errori: r.errori, avvisi: r.avvisi ?? null, numero: r.numero ?? null, id: gia.get(k) ?? null };
     });
     const riepilogo = { totale: righe.length, nuovi: righe.filter((r) => r.stato === 'nuovo').length, esistenti: righe.filter((r) => r.stato === 'esiste').length, errori: righe.filter((r) => r.stato === 'errore').length, doppioni: righe.filter((r) => r.stato === 'doppione').length,
       con_avvisi: righe.filter((r) => r.stato === 'nuovo' && r.avvisi).length, senza_nascita: righe.filter((r) => r.stato === 'nuovo' && !r.dati.data_nascita).length };
     if (azione === 'importa') return NextResponse.json({ colonne: an.colonne, ignorate: an.ignorate, righe, riepilogo });
     let inseriti = 0;
-    for (const r of righe) if (r.stato === 'nuovo') { await inserisci(sid, r.dati); inseriti++; }
+    let numeri = 0;
+    for (const r of righe) {
+      if (r.stato === 'nuovo') { const id = await inserisci(sid, r.dati); inseriti++; if (r.numero) numeri += (await segnaNumero(sid, id, r.numero)) ? 1 : 0; }
+      // Chi c'era già si prende il numero di MediOnline, se non l'aveva (22.10.2026: riconosce le scansioni DocuWare).
+      else if (r.stato === 'esiste' && r.numero && r.id) numeri += (await segnaNumero(sid, r.id, r.numero)) ? 1 : 0;
+    }
+    if (numeri) console.log(`[pazienti] numeri di MediOnline scritti: ${numeri}`);
     console.log(`[pazienti] importati ${inseriti} su ${righe.length} righe (esistenti ${riepilogo.esistenti}, errori ${riepilogo.errori})`);
     // Con l'anagrafica dentro, agenda e referti trovano le loro cartelle in un colpo solo.
     const abbinati = inseriti ? await riabbinaPazienti(sid).catch(() => ({ appuntamenti: 0, referti: 0 })) : { appuntamenti: 0, referti: 0 };

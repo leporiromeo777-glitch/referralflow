@@ -95,10 +95,15 @@ function tabella(testo: string, sep: string): string[][] {
   return out;
 }
 
-export type RigaImport = { n: number; dati: Anagrafica; errori: Record<string, string>; avvisi?: Record<string, string> };
+export type RigaImport = { n: number; dati: Anagrafica; errori: Record<string, string>; avvisi?: Record<string, string>; numero?: string };
 // Nell'importazione solo cognome e nome bloccano la riga: un campo secondario scritto male (un NPA straniero, un'e-mail
 // senza @, un AVS incompleto, una data illeggibile) si lascia vuoto e si dice, e il paziente entra lo stesso.
 const BLOCCANO = new Set(['cognome', 'nome']);
+// Il numero del paziente di MediOnline (22.10.2026): non fa parte dell'anagrafica che si modifica, si tiene a parte.
+const RX_NUMERO = /^(n|nr|numero|n paziente|numero paziente|nr paziente|n pz|id|id paziente|pid|n cartella|numero cartella)$/;
+const normaTesta = (h: string) => h.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[«»"']/g, '')
+  .replace(/\bn\s*[°º\ufffd]\s*/g, 'n ').replace(/\bno\.\s*/g, 'n ').replace(/\./g, ' ').replace(/\s+/g, ' ').trim();
+
 export function analizzaCsvPazienti(testo: string): { colonne: (keyof Anagrafica | null)[]; ignorate: string[]; righe: RigaImport[] } {
   const t = testo.replace(/^﻿/, '');
   const prima = t.split(/\r?\n/, 1)[0] ?? '';
@@ -108,7 +113,8 @@ export function analizzaCsvPazienti(testo: string): { colonne: (keyof Anagrafica
   if (!tutte.length) return { colonne: [], ignorate: [], righe: [] };
   const testa = tutte[0];
   const colonne = testa.map(chiave);
-  const ignorate = testa.filter((_, i) => !colonne[i]);
+  const colNumero = testa.findIndex((h, i) => !colonne[i] && RX_NUMERO.test(normaTesta(h)));
+  const ignorate = testa.filter((_, i) => !colonne[i] && i !== colNumero);
   const out: RigaImport[] = [];
   tutte.slice(1).forEach((c, i) => {
     const grezzo: Record<string, string> = {};
@@ -120,7 +126,8 @@ export function analizzaCsvPazienti(testo: string): { colonne: (keyof Anagrafica
       if (BLOCCANO.has(k)) bloccano[k] = v;
       else { avvisi[k] = v; (dati as Record<string, unknown>)[k] = k === 'data_nascita' ? null : ''; }
     }
-    out.push({ n: i + 2, dati, errori: bloccano, ...(Object.keys(avvisi).length ? { avvisi } : {}) });
+    const numero = colNumero >= 0 ? (String(c[colNumero] ?? '').match(/^\s*0*(\d{1,10})\s*$/)?.[1] ?? '') : '';
+    out.push({ n: i + 2, dati, errori: bloccano, ...(Object.keys(avvisi).length ? { avvisi } : {}), ...(numero ? { numero } : {}) });
   });
   return { colonne, ignorate, righe: out };
 }

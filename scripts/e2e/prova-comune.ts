@@ -3,14 +3,15 @@
 // nascita nelle lettere), Word vecchio convertito, il PDF del Word saltato, i file di Word aperti ignorati, l'archivio
 // lasciato fuori, nessun doppione al secondo controllo, la lettera cambiata sostituita, la cartella da assegnare (crea
 // il paziente), il permesso. Poi toglie tutto.
-//   DATABASE_URL=…demo NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-comune.ts <base> <studio> <segretaria> <radice finta>
+// Anche le cartelle cartacee scansionate (DocuWare): una col nome intero, una col solo cognome (nascita nel testo).
+//   DATABASE_URL=…demo NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-comune.ts <base> <studio> <segretaria> <radice finta> <scansioni finte>
 import { execFileSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { query, pool } from '../../src/lib/db';
 import { deleteFile } from '../../src/lib/storage';
 
-const [base, S, C_SEG, RADICE] = process.argv.slice(2);
+const [base, S, C_SEG, RADICE, SCANSIONI] = process.argv.slice(2);
 let ok = 0, no = 0;
 const verifica = (cond: boolean, cosa: string) => { if (cond) { ok++; console.log(`ok ${cosa}`); } else { no++; console.log(`NO ${cosa}`); } };
 const URL = `${base}/api/prototipo/comune`;
@@ -26,12 +27,25 @@ async function word(file: string, testo: string, formato: 'docx' | 'doc' = 'docx
   execFileSync('/usr/bin/textutil', ['-convert', formato, '-output', file, txt]);
   await fs.rm(txt);
 }
+// Un PDF con lo strato di testo (come una scansione già passata dall'OCR), fatto da cupsfilter.
+async function pdf(file: string, testo: string) {
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  const txt = `${file}.txt`;
+  await fs.writeFile(txt, testo);
+  await fs.writeFile(file, execFileSync('/usr/sbin/cupsfilter', ['-m', 'application/pdf', txt], { stdio: ['ignore', 'pipe', 'ignore'] }));
+  await fs.rm(txt);
+}
 const lettera = (nome: string, nascita: string, extra = '') => `Studio di prova\nLugano, 12.05.2024\n\nPaziente\n${nome} – ${nascita}\n\nEgregio collega,\nvisita di controllo inventata per la prova. ${extra}\n${'Testo di riempimento della lettera di prova. '.repeat(12)}\nCordiali saluti`;
 
 const pazienti: string[] = [];
 (async () => {
   try {
     await fs.rm(RADICE, { recursive: true, force: true });
+    await fs.rm(SCANSIONI, { recursive: true, force: true });
+    await pdf(path.join(SCANSIONI, 'Lotto 1', '123456_Provacom_Alda.pdf'), `Cartella clinica\nProvacom Alda, nata il 12.03.1950\n${'Testo inventato. '.repeat(30)}`);
+    await pdf(path.join(SCANSIONI, 'Lotto 1', '654321_Provacom.pdf'), `Cartella clinica\nProvacom, nata il 12.03.1950\n${'Testo inventato. '.repeat(30)}`);
+    await pdf(path.join(SCANSIONI, 'Lotto 2', '222222_Numerocom_Ada.pdf'), `Cartella clinica\nNumerocom Ada\n${'Testo inventato senza date. '.repeat(30)}`);
+    await pdf(path.join(SCANSIONI, 'Lotto 2', '111111_Scancom.pdf'), `Cartella clinica\nScancom Ugo, nato il 01.02.1945\n${'Testo inventato. '.repeat(30)}`);
     const R = (...p: string[]) => path.join(RADICE, ...p);
     // Conosciuta: cartella sotto il medico, la data di nascita nella lettera.
     await word(R('Rapporti_Prova', 'Provacom Alda', '24 05 12 Provacom Alda.docx'), lettera('Provacom Alda', '12.03.1950'));
@@ -54,18 +68,25 @@ const pazienti: string[] = [];
 
     const [p] = await query<{ id: string }>(`insert into patients (studio_id, cognome, nome, data_nascita) values ($1, 'Provacom', 'Alda', '1950-03-12') returning id`, [S]);
     pazienti.push(p.id);
+    const [pn] = await query<{ id: string }>(`insert into patients (studio_id, cognome, nome, numero) values ($1, 'Numerocom', 'Ada', '222222') returning id`, [S]);
+    pazienti.push(pn.id);
 
     const non = await fetch(URL); verifica(non.status === 401, `senza sessione: 401 (${non.status})`);
     const g1 = await manda({ azione: 'controlla' });
-    verifica(g1.stato === 200 && g1.j.caricati === 6, `primo controllo: 6 caricate (${g1.stato} ${JSON.stringify({ c: g1.j.caricati, d: g1.j.doppioni, a: g1.j.in_attesa, n: g1.j.nuovi, cr: g1.j.creati })})`);
+    verifica(g1.j.scansioni === 3, `tre scansioni caricate (una dal numero di MediOnline, senza data) (${g1.j.scansioni})`);
+    verifica(g1.stato === 200 && g1.j.caricati === 9, `primo controllo: 9 caricate (6 lettere, 3 scansioni) (${g1.stato} ${JSON.stringify({ c: g1.j.caricati, d: g1.j.doppioni, a: g1.j.in_attesa, n: g1.j.nuovi, cr: g1.j.creati })})`);
     verifica(g1.j.doppioni === 1, `il PDF del Word saltato come doppione (${g1.j.doppioni})`);
-    verifica(g1.j.in_attesa === 1, `una lettera in una cartella da assegnare (senza data) (${g1.j.in_attesa})`);
+    verifica(g1.j.in_attesa === 2, `una lettera senza data e una scansione col cognome che non c'è aspettano (${g1.j.in_attesa})`);
     verifica(g1.j.creati === 2, `due pazienti creati dalla cartella (${g1.j.creati})`);
     const nati = await query<{ cognome: string; nome: string; nascita: string }>(`select cognome, nome, data_nascita::text as nascita from patients where studio_id = $1 and (cognome = 'Ignotocom' or (cognome = 'Provacom' and nome <> 'Alda')) order by cognome`, [S]);
     verifica(nati.length === 2 && nati[0].nome === 'Bruno' && nati[0].nascita === '1955-07-04' && nati[1].nome === 'Alda Seconda' && nati[1].nascita === '1990-01-01', `i pazienti nuovi con cognome, nome e nascita giusti (${nati.map((x) => `${x.nome} ${x.nascita}`).join(', ')})`);
     const docs = await query<{ id: string; filename: string; categoria: string; giorno: string; nota: string }>(
       `select id, filename, categoria, to_char(uploaded_at, 'YYYY-MM-DD') as giorno, nota from patient_documents where patient_id = $1 order by filename`, [p.id]);
-    verifica(docs.length === 4, `quattro documenti nella cartella del paziente, anche dalla cartella col nome quasi uguale (${docs.length})`);
+    verifica(docs.length === 6, `sei documenti nella cartella del paziente: anche la cartella col nome quasi uguale e due scansioni (${docs.length})`);
+    const [{ n: nNum }] = await query<{ n: number }>(`select count(*)::int as n from patient_documents where patient_id = $1`, [pn.id]);
+    verifica(nNum === 1, `la scansione col numero di MediOnline nella cartella giusta (${nNum})`);
+    const scans = docs.filter((d) => d.nota === 'cartella cartacea scansionata (DocuWare)');
+    verifica(scans.length === 2 && scans.every((d) => d.categoria === 'altro'), `le scansioni come documento, nota DocuWare (${scans.length})`);
     verifica(docs.some((d) => d.filename === 'x2.docx'), 'la cartella «Provacom Alda Maria» nella scheda di Provacom Alda');
     const d1 = docs.find((d) => d.filename === '24 05 12 Provacom Alda.docx');
     verifica(!!d1 && d1.categoria === 'lettera' && d1.giorno === '2024-05-12' && /Rapporti Prova/.test(d1.nota), `lettera con la data del nome del file e la nota (${d1?.categoria} ${d1?.giorno})`);
@@ -76,10 +97,11 @@ const pazienti: string[] = [];
     const st = await leggi();
     const attesa = st.j.attesa || [];
     const ign = attesa.find((x: any) => x.nome_letto === 'Senzadata Carlo');
-    verifica(st.stato === 200 && !!ign && ign.motivo === 'nessuno' && !ign.nascita_proposta && attesa.length === 1, `senza una data di nascita la cartella aspetta (${ign?.motivo}, ${attesa.length})`);
+    verifica(attesa.some((x: any) => x.medico === 'Lavori archivio DocuWare' && x.nome_letto === 'Scancom' && x.motivo === 'nessuno'), 'la scansione col solo cognome sconosciuto aspetta (non si crea)');
+    verifica(st.stato === 200 && !!ign && ign.motivo === 'nessuno' && !ign.nascita_proposta && attesa.length === 2, `senza una data di nascita la cartella aspetta (${ign?.motivo}, ${attesa.length})`);
     verifica(st.j.conti?.creati === 2 && st.j.conti?.quasi === 1, `conteggi: 2 creati, 1 col nome quasi uguale (${st.j.conti?.creati}, ${st.j.conti?.quasi})`);
     verifica((st.j.non_pazienti || []).some((x: any) => /Vecchie/.test(x.percorso)), 'l’archivio lasciato fuori');
-    verifica(st.j.recenti?.length === 6 && st.j.conti?.caricati === 6, `ultimi sette giorni: 6 (${st.j.recenti?.length})`);
+    verifica(st.j.recenti?.length === 9 && st.j.conti?.caricati === 9, `ultimi sette giorni: 9 (${st.j.recenti?.length})`);
 
     const g2 = await manda({ azione: 'controlla' });
     verifica(g2.j.nuovi === 0 && g2.j.caricati === 0, `secondo controllo: niente di nuovo, niente doppioni (${g2.j.nuovi})`);
@@ -89,7 +111,7 @@ const pazienti: string[] = [];
     await word(R('Rapporti_Prova', 'Provacom Alda', '24 05 12 Provacom Alda.docx'), lettera('Provacom Alda', '12.03.1950', 'Corretta il giorno dopo.'));
     const g3 = await manda({ azione: 'controlla' });
     const [dopo] = await query<{ storage_key: string; n: number }>(`select storage_key, (select count(*)::int from patient_documents where patient_id = $2) as n from patient_documents where id = $1`, [d1!.id, p.id]);
-    verifica(g3.j.caricati === 1 && dopo.n === 4 && dopo.storage_key !== prima.storage_key, `lettera cambiata: lo stesso documento col file nuovo (${g3.j.caricati}, ${dopo.n})`);
+    verifica(g3.j.caricati === 1 && dopo.n === 6 && dopo.storage_key !== prima.storage_key, `lettera cambiata: lo stesso documento col file nuovo (${g3.j.caricati}, ${dopo.n})`);
 
     // Crea il paziente dalla cartella che aspetta: le sue lettere entrano.
     const cr = await manda({ azione: 'crea_cartella', id: ign.id, cognome: 'Senzadata', nome: 'Carlo', data_nascita: '04.07.1956' });
@@ -110,6 +132,7 @@ const pazienti: string[] = [];
     await query(`delete from patient_documents where patient_id = any($1::uuid[])`, [pazienti]);
     await query(`delete from patients where id = any($1::uuid[])`, [pazienti]);
     await fs.rm(RADICE, { recursive: true, force: true });
+    await fs.rm(SCANSIONI, { recursive: true, force: true });
     console.log(`${ok} ok, ${no} no`);
     await pool.end();
     process.exit(no ? 1 : 0);

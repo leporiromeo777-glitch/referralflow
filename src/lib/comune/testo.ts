@@ -39,6 +39,28 @@ export async function testoDi(dati: Buffer, formato: Formato): Promise<string> {
   } catch { return ''; }
 }
 
+// Le prime pagine di una scansione senza testo, lette da Tesseract (per sapere di chi è: nome e data di nascita stanno
+// all'inizio della cartella). Il resto lo fa l'OCR dei documenti, dopo il caricamento.
+const GS = process.env.GS_BIN || '/opt/homebrew/bin/gs';
+const TESSERACT = process.env.TESSERACT_BIN || '/opt/homebrew/bin/tesseract';
+function esegui(bin: string, args: string[], ms: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(bin, args, { timeout: ms, maxBuffer: 1 << 26 }, (err, stdout) =>
+      (err ? reject(Object.assign(new Error(path.basename(bin)), { code: (err as any).code ?? 'errore' })) : resolve(String(stdout))));
+  });
+}
+export async function ocrPrimePagine(dati: Buffer, pagine = 3): Promise<string> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'rf-comune-ocr-'));
+  try {
+    const ingresso = path.join(dir, 'in.pdf');
+    await fs.writeFile(ingresso, dati, { mode: 0o600 });
+    await esegui(GS, ['-q', '-dNOPAUSE', '-dBATCH', '-dSAFER', '-sDEVICE=pnggray', '-r200', '-dFirstPage=1', `-dLastPage=${pagine}`, `-sOutputFile=${path.join(dir, 'p-%02d.png')}`, ingresso], 120_000);
+    const testi: string[] = [];
+    for (const f of (await fs.readdir(dir)).filter((n) => n.endsWith('.png')).sort()) testi.push(await esegui(TESSERACT, [path.join(dir, f), '-', '-l', 'ita+deu+fra+eng'], 120_000));
+    return testi.join('\n');
+  } catch { return ''; } finally { await fs.rm(dir, { recursive: true, force: true }).catch(() => {}); }
+}
+
 // Il Word vecchio diventa .docx: la piattaforma (dittafono, aggiornamento della lettera) legge solo quello.
 export async function docxDaDoc(dati: Buffer): Promise<Buffer | null> {
   try {

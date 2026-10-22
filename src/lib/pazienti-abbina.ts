@@ -56,6 +56,15 @@ export async function riabbinaPazienti(studioId: string, solo?: { bozzaId?: stri
     await query(`update referti_bozze set patient_id = $2 where id = $1 and patient_id is null`, [b.id, e.id]);
     referti++;
   }
+  // Il numero di MediOnline (22.10.2026): dai titoli dei SUOI appuntamenti («… / N° 123456)»), solo se tutti dicono lo
+  // stesso numero e quel numero non è già di un altro; un numero già scritto non si tocca. Serve alle scansioni DocuWare.
+  if (!solo?.bozzaId) await query(
+    `update patients p set numero = x.n from (
+       select a.patient_id, min(substring(a.titolo from 'N°\\s*(\\d{3,8})')) as n from appointments a
+        where a.studio_id = $1 and a.patient_id is not null and a.titolo ~ 'N°\\s*\\d{3,8}'
+        group by a.patient_id having count(distinct substring(a.titolo from 'N°\\s*(\\d{3,8})')) = 1) x
+      where p.id = x.patient_id and p.studio_id = $1 and p.numero is null
+        and not exists (select 1 from patients q where q.studio_id = $1 and q.numero = x.n)`, [studioId]).catch(() => null);
   if (appuntamenti || referti || nascite) console.log(`[pazienti] riabbinati: appuntamenti=${appuntamenti} referti=${referti} date di nascita dall'agenda=${nascite}`);
   return { appuntamenti, referti, nascite };
 }

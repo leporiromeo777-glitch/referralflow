@@ -9,9 +9,9 @@ import { riabbinaPazienti } from '../pazienti-abbina';
 import { validaAnagrafica } from '../pazienti-import';
 import { deleteFile, putFile } from '../storage';
 import { slugNome } from '../imaging-ordina';
-import { abbinaCartella, categoriaDi, dividiNome, nascitaSicura, quasiStesso, dataDaNomeFile, dateNelTesto, MAX_LETTERE_PAZIENTE, nascitaProposta, nomeDaCartella, radice, stessaLettera, tocca, type Formato } from './regole';
-import { cartellePazienti, lettereSulDisco, mediciScelti, type SulDisco } from './scopri';
-import { docxDaDoc, testoDi } from './testo';
+import { abbinaCartella, abbinaScansione, categoriaDi, dividiNome, nascitaSicura, nomeDaScansione, quasiStesso, dataDaNomeFile, dateNelTesto, MAX_LETTERE_PAZIENTE, nascitaProposta, nomeDaCartella, radice, stessaLettera, tocca, type Formato } from './regole';
+import { cartellePazienti, lettereSulDisco, mediciScelti, scansioniSulDisco, type SulDisco } from './scopri';
+import { docxDaDoc, ocrPrimePagine, testoDi } from './testo';
 
 // Le lettere della cartella comune (22.10.2026, [[Piattaforma/Cartella comune]]).
 //
@@ -25,6 +25,14 @@ import { docxDaDoc, testoDi } from './testo';
 // Senza COMUNE_LETTERE la cartella vera vale solo sul server vero (next start): un server di prova non la tocca mai.
 export const radiceComune = (): string => process.env.COMUNE_LETTERE || (process.env.NODE_ENV === 'production' ? '/Volumes/comune/CentroCardio/Pazienti' : '');
 const LOTTO = Number(process.env.COMUNE_LOTTO) || 150;
+// Le cartelle cartacee scansionate (DocuWare, 22.10.2026, dallo studio: «metti anche quelle»): un PDF per paziente.
+// Pesano (OCR delle prime pagine qui, di tutte dopo): poche per giro, solo quando la coda dell'OCR è quasi vuota, e dal
+// controllo automatico solo la sera, la notte e nel fine settimana. COMUNE_SCANSIONI vuota le spegne.
+export const radiceScansioni = (): string => process.env.COMUNE_SCANSIONI ?? (process.env.NODE_ENV === 'production' ? '/Volumes/comune/Lavori archivio DocuWare' : '');
+export const MEDICO_SCANSIONI = 'Lavori archivio DocuWare';
+const LOTTO_SCANSIONI = Number(process.env.COMUNE_LOTTO_SCANSIONI) || 6;
+const MAX_BYTE_SCANSIONE = 300 * 1024 * 1024;
+export const oraDelleScansioni = (d = new Date()): boolean => d.getDay() === 0 || d.getDay() === 6 || d.getHours() >= 20 || d.getHours() < 6;
 // Creare i pazienti che in ReferralFlow non ci sono (decisione dello studio, 22.10.2026); COMUNE_CREA_PAZIENTI=0 lo spegne.
 const creaPazienti = (): boolean => process.env.COMUNE_CREA_PAZIENTI !== '0';
 const MAX_BYTE = 40 * 1024 * 1024;
@@ -39,13 +47,13 @@ export const PUO_COMUNE = {
 } as const;
 export const puoComune = (ruolo: string | null | undefined, cosa: keyof typeof PUO_COMUNE): boolean => !!ruolo && (PUO_COMUNE[cosa] as readonly string[]).includes(ruolo);
 
-type Paz = { id: string; cognome: string; nome: string; data_nascita: string | null };
+type Paz = { id: string; cognome: string; nome: string; data_nascita: string | null; numero?: string | null };
 type Cartella = { id: string; percorso: string; stato: string; patient_id: string | null; date_lette: string[]; motivo: string | null; nascita_proposta: string | null };
 type Noto = { dimensione: string; modificato: Date; stato: string; sha256: string | null; documento_id: string | null };
 
-export type EsitoGiro = { creati: number; sciolte: number; cartelle: number; nuovi: number; caricati: number; doppioni: number; in_attesa: number; non_letti: number; abbinate: number; restano: boolean; cartella?: 'assente'; gia_in_corso?: boolean };
+export type EsitoGiro = { scansioni: number; scansioni_restano: boolean; creati: number; sciolte: number; cartelle: number; nuovi: number; caricati: number; doppioni: number; in_attesa: number; non_letti: number; abbinate: number; restano: boolean; cartella?: 'assente'; gia_in_corso?: boolean };
 
-async function caricaDocumento(studioId: string, patientId: string, medico: string, f: SulDisco, dati: Buffer, dataLettera: string | null, prima: { documento_id: string | null } | null): Promise<string> {
+async function caricaDocumento(studioId: string, patientId: string, medico: string, f: SulDisco, dati: Buffer, dataLettera: string | null, prima: { documento_id: string | null } | null, scansione = false): Promise<string> {
   let corpo = dati, nome = f.nome, formato: Formato = f.formato;
   if (f.formato === 'doc') {
     const conv = await docxDaDoc(dati);
@@ -65,15 +73,17 @@ async function caricaDocumento(studioId: string, patientId: string, medico: stri
   const [doc] = await query<{ id: string }>(
     `insert into patient_documents (studio_id, patient_id, filename, storage_key, categoria, nota, uploaded_at)
      values ($1, $2, $3, $4, $8, $5, coalesce($6::date::timestamptz + interval '12 hours', $7::timestamptz)) returning id`,
-    [studioId, patientId, nome, key, `dalla cartella comune (${medico.replace(/_/g, ' ')})`, dataLettera, f.modificato, categoriaDi(medico)]);
+    // La scansione entra con l'ora di adesso: la coda dell'OCR va in ordine di caricamento, e non deve passare davanti.
+    scansione ? [studioId, patientId, nome, key, 'cartella cartacea scansionata (DocuWare)', null, new Date(), 'altro']
+      : [studioId, patientId, nome, key, `dalla cartella comune (${medico.replace(/_/g, ' ')})`, dataLettera, f.modificato, categoriaDi(medico)]);
   await logDocumento(doc.id, 'caricamento', { studioId, dettaglio: 'dalla cartella comune' });
   if (formato === 'pdf') await dopoCaricamento(doc.id, corpo, '.pdf').catch(() => null);
   return doc.id;
 }
 
 let inCorso = false;
-export async function giroComune(opzioni: { lotto?: number; fermoMs?: number } = {}): Promise<EsitoGiro> {
-  const r: EsitoGiro = { creati: 0, sciolte: 0, cartelle: 0, nuovi: 0, caricati: 0, doppioni: 0, in_attesa: 0, non_letti: 0, abbinate: 0, restano: false };
+export async function giroComune(opzioni: { lotto?: number; fermoMs?: number; scansioni?: boolean } = {}): Promise<EsitoGiro> {
+  const r: EsitoGiro = { scansioni: 0, scansioni_restano: false, creati: 0, sciolte: 0, cartelle: 0, nuovi: 0, caricati: 0, doppioni: 0, in_attesa: 0, non_letti: 0, abbinate: 0, restano: false };
   if (inCorso) return { ...r, gia_in_corso: true };
   inCorso = true;
   let giroId: string | null = null, studioId = '';
@@ -87,16 +97,26 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number } =
     const lotto = opzioni.lotto ?? LOTTO, fermo = opzioni.fermoMs ?? FERMO_MS;
     const cartelle = new Map((await query<Cartella>(`select id, percorso, stato, patient_id, date_lette, motivo, nascita_proposta::text from comune_cartelle where studio_id = $1`, [studioId])).map((c) => [c.percorso, c]));
     const noti = new Map<string, Noto>((await query<Noto & { percorso: string }>(`select percorso, dimensione::text, modificato, stato, sha256, documento_id from comune_file where studio_id = $1`, [studioId])).map((f) => [f.percorso, f]));
-    const pazienti = await query<Paz>(`select id, cognome, nome, data_nascita::text from patients where studio_id = $1`, [studioId]);
+    const pazienti = await query<Paz>(`select id, cognome, nome, data_nascita::text, numero from patients where studio_id = $1`, [studioId]);
     const nomi = new Set(pazienti.map((p) => slugNome(`${p.cognome} ${p.nome}`)));
-    const { trovate, sciolte } = await cartellePazienti(base, nomi, mediciScelti());
+    const { trovate: cartelleTrovate, sciolte } = await cartellePazienti(base, nomi, mediciScelti());
     r.sciolte = sciolte;
+    type Unita = { rel: string; nome: string; medico: string; base: string; scansione?: SulDisco };
+    const trovate: Unita[] = cartelleTrovate.map((t) => ({ ...t, base }));
+    // Le scansioni: ogni PDF è un'unità come una cartella, col nome dal nome del file.
+    const rs = opzioni.scansioni === false ? '' : radiceScansioni();
+    if (rs) {
+      const sc = await scansioniSulDisco(rs).catch(() => null);
+      if (sc) for (const f of sc.file) trovate.push({ rel: f.rel, nome: nomeDaScansione(f.nome), medico: MEDICO_SCANSIONI, base: sc.base, scansione: f });
+    }
+    const ocrInCoda = async () => (await query<{ n: number }>(`select count(*)::int as n from patient_documents where ocr_stato = 'da_fare'`))[0].n;
+    let scansioniLette = 0;
     let letti = 0;
     // Di chi è la cartella: regola severa; se il nome non c'è in ReferralFlow, il nome quasi uguale con la stessa nascita,
     // o il paziente nuovo (22.10.2026, dallo studio: «quelli che non ci sono su ReferralFlow creali») — solo con una data
     // di nascita sicura (nel nome della cartella, o `nascitaSicura` nelle lettere appena lette). Senza, aspetta con la proposta.
-    const decidi = async (c: Cartella, nomeCartella: string, date: string[], proposta: string | null, sicura: string | null = null): Promise<Cartella> => {
-      const a = abbinaCartella(nomeCartella, date, pazienti);
+    const decidi = async (c: Cartella, nomeCartella: string, date: string[], proposta: string | null, sicura: string | null = null, fileScansione: string | null = null): Promise<Cartella> => {
+      const a = fileScansione ? abbinaScansione(fileScansione, date, pazienti) : abbinaCartella(nomeCartella, date, pazienti);
       let id = a.id, motivo: string | null = null;
       if (!id && a.motivo === 'nessuno' && creaPazienti()) {
         id = quasiStesso(nomeCartella, date, pazienti);
@@ -123,7 +143,7 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number } =
       return { ...c, motivo: a.motivo, date_lette: date, nascita_proposta: c.nascita_proposta ?? proposta };
     };
 
-    for (const { rel, nome: nomeCartella, medico } of trovate) {
+    for (const { rel, nome: nomeCartella, medico, base, scansione } of trovate) {
       let c = cartelle.get(rel);
       if (!c) {
         [c] = await query<Cartella>(
@@ -136,11 +156,11 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number } =
       r.cartelle++;
       // Una cartella che aspettava si riabbina con le date già lette (un paziente nato dopo, un'importazione).
       if (c.stato === 'in_attesa' && c.motivo !== 'da_leggere' && (c.date_lette.length || c.nascita_proposta)) {
-        c = await decidi(c, nomeCartella, c.date_lette, c.nascita_proposta); cartelle.set(rel, c);
+        c = await decidi(c, nomeCartella, c.date_lette, c.nascita_proposta, null, scansione?.nome ?? null); cartelle.set(rel, c);
       }
-      const sulDisco = await lettereSulDisco(base, rel);
+      const sulDisco = scansione ? [scansione] : await lettereSulDisco(base, rel);
       // Centinaia di lettere in una cartella sola che non porta il nome di un paziente conosciuto: è un archivio.
-      if (sulDisco.length > MAX_LETTERE_PAZIENTE && c.stato !== 'abbinata' && !nomi.has(slugNome(nomeDaCartella(nomeCartella).nome))) {
+      if (!scansione && sulDisco.length > MAX_LETTERE_PAZIENTE && c.stato !== 'abbinata' && !nomi.has(slugNome(nomeDaCartella(nomeCartella).nome))) {
         await query(`update comune_cartelle set stato = 'non_paziente', motivo = 'archivio', lettere = $2 where id = $1`, [c.id, sulDisco.length]);
         r.cartelle--; continue;
       }
@@ -152,17 +172,27 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number } =
         return c!.stato === 'abbinata' && k.stato === 'in_attesa';
       });
       if (!daFare.length) continue;
-      if (letti >= lotto) { r.restano = true; continue; }
-      const lot = daFare.slice(0, lotto - letti);
-      if (lot.length < daFare.length) r.restano = true;
-      letti += lot.length;
+      let lot: SulDisco[];
+      if (scansione) {
+        // Poche per giro, e solo se l'OCR dei documenti è quasi in pari (le scansioni senza testo vanno in coda lì).
+        if (scansioniLette >= LOTTO_SCANSIONI || (await ocrInCoda()) >= 3) { r.scansioni_restano = true; continue; }
+        scansioniLette++; lot = daFare;
+      } else {
+        if (letti >= lotto) { r.restano = true; continue; }
+        lot = daFare.slice(0, lotto - letti);
+        if (lot.length < daFare.length) r.restano = true;
+        letti += lot.length;
+      }
 
       // Letti i file nuovi: impronta, testo, date.
       const letture: { f: SulDisco; dati: Buffer | null; sha: string; testo: string }[] = [];
       for (const f of lot) {
-        if (f.dimensione === 0 || f.dimensione > MAX_BYTE) { letture.push({ f, dati: null, sha: '', testo: '' }); continue; }
+        if (f.dimensione === 0 || f.dimensione > (scansione ? MAX_BYTE_SCANSIONE : MAX_BYTE)) { letture.push({ f, dati: null, sha: '', testo: '' }); continue; }
         const dati = await fs.readFile(path.join(base, f.rel)).catch(() => null);
-        letture.push({ f, dati, sha: dati ? createHash('sha256').update(dati).digest('hex') : '', testo: dati ? await testoDi(dati, f.formato) : '' });
+        let testo = dati ? await testoDi(dati, f.formato) : '';
+        // Una scansione senza testo: le prime pagine con Tesseract, per sapere di chi è.
+        if (dati && scansione && testo.replace(/\s+/g, '').length < 200) testo = `${testo}\n${await ocrPrimePagine(dati)}`;
+        letture.push({ f, dati, sha: dati ? createHash('sha256').update(dati).digest('hex') : '', testo });
       }
       const date = new Set(c.date_lette);
       for (const l of letture) for (const d of dateNelTesto(l.testo)) date.add(d);
@@ -172,7 +202,7 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number } =
         const proposta = c.nascita_proposta ?? letture.map((l) => nascitaProposta(l.testo, nomeDaCartella(nomeCartella).nome)).find(Boolean) ?? null;
         const primaLettera = sulDisco.map((f) => dataDaNomeFile(f.nome) ?? f.modificato.toISOString().slice(0, 10)).sort()[0] ?? null;
         const sicura = letture.map((l) => nascitaSicura(l.testo, nomeDaCartella(nomeCartella).nome, primaLettera)).find(Boolean) ?? null;
-        c = await decidi(c, nomeCartella, dateLette, sicura ?? proposta, sicura);
+        c = await decidi(c, nomeCartella, dateLette, sicura ?? proposta, sicura, scansione?.nome ?? null);
         cartelle.set(rel, c);
       } else {
         await query(`update comune_cartelle set date_lette = $2 where id = $1`, [c.id, dateLette]);
@@ -215,10 +245,11 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number } =
           await segna(l.f, 'doppione', { sha: l.sha, motivo: 'pdf_del_word' }); r.doppioni++; continue;
         }
         if (l.f.formato !== 'pdf' && !l.testo.trim()) { await segna(l.f, 'non_letto', { sha: l.sha, motivo: 'non_si_legge' }); r.non_letti++; continue; }
-        const doc = await caricaDocumento(studioId, c.patient_id!, medico, l.f, l.dati, dataLettera, prima?.documento_id ? { documento_id: prima.documento_id } : null);
+        const doc = await caricaDocumento(studioId, c.patient_id!, medico, l.f, l.dati, scansione ? null : dataLettera, prima?.documento_id ? { documento_id: prima.documento_id } : null, !!scansione);
         caricatiSha.add(l.sha);
-        await segna(l.f, 'caricato', { sha: l.sha, doc, data: dataLettera });
+        await segna(l.f, 'caricato', { sha: l.sha, doc, data: scansione ? null : dataLettera });
         r.caricati++;
+        if (scansione) r.scansioni++;
       }
       await query(`update comune_cartelle set lettere = $2, vista_il = now() where id = $1`, [c.id, sulDisco.length]);
     }
@@ -226,7 +257,8 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number } =
     await query(
       `update comune_giri set finito = now(), cartelle = $2, nuovi = $3, caricati = $4, doppioni = $5, in_attesa = $6, non_letti = $7, abbinate = $8, restano = $9, sciolte = $10 where id = $1`,
       [giroId, r.cartelle, r.nuovi, r.caricati, r.doppioni, r.in_attesa, r.non_letti, r.abbinate, r.restano, r.sciolte]);
-    if (r.nuovi || r.abbinate) console.log(`[comune] lettere: nuove ${r.nuovi} · caricate ${r.caricati} · doppioni ${r.doppioni} · da assegnare ${r.in_attesa} · non lette ${r.non_letti} · cartelle abbinate ${r.abbinate}${r.creati ? ` · pazienti creati ${r.creati}` : ''}${r.restano ? ' · ne restano' : ''}`);
+    scansioniRestano = r.scansioni_restano;
+    if (r.nuovi || r.abbinate) console.log(`[comune] lettere: nuove ${r.nuovi} · caricate ${r.caricati} · doppioni ${r.doppioni} · da assegnare ${r.in_attesa} · non lette ${r.non_letti} · cartelle abbinate ${r.abbinate}${r.creati ? ` · pazienti creati ${r.creati}` : ''}${r.scansioni ? ` · scansioni caricate ${r.scansioni}` : ''}${r.restano ? ' · ne restano' : ''}${r.scansioni_restano ? ' · restano scansioni' : ''}`);
     return r;
   } catch (e: any) {
     if (giroId) await query(`update comune_giri set finito = now(), errore = $2, restano = true where id = $1`, [giroId, String(e?.code ?? e?.name ?? 'errore').slice(0, 60)]).catch(() => null);
@@ -239,6 +271,7 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number } =
 // Acceso solo sul server vero (next start) o con COMUNE_LETTERE_GIRO=acceso; COMUNE_LETTERE_GIRO=spento lo spegne.
 // I server di prova (next dev, DB demo) non toccano mai la cartella comune.
 let timer: NodeJS.Timeout | null = null;
+let scansioniRestano = true;
 export function avviaComune(): void {
   const acceso = process.env.COMUNE_LETTERE_GIRO === 'acceso' || (process.env.NODE_ENV === 'production' && process.env.COMUNE_LETTERE_GIRO !== 'spento');
   if (!acceso || timer) return;
@@ -250,10 +283,12 @@ export function avviaComune(): void {
       const [u] = await query<{ finito: Date | null; restano: boolean; ultimo: Date | null }>(
         `select (select max(finito) from comune_giri where studio_id = $1 and not restano and errore is null) as ultimo,
                 coalesce((select restano from comune_giri where studio_id = $1 and finito is not null order by iniziato desc limit 1), false) as restano, null as finito`, [s.id]);
-      if (!tocca(new Date(), u?.ultimo ?? null, !!u?.restano)) return;
+      // Le scansioni vanno avanti da sole la sera, la notte e nel fine settimana; di giorno solo le lettere.
+      const scansioni = oraDelleScansioni() && scansioniRestano;
+      if (!tocca(new Date(), u?.ultimo ?? null, !!u?.restano) && !scansioni) return;
       // La cartella non è collegata: si riprova, ma lo si dice una volta all'ora.
       if (assenteDal && Date.now() - assenteDal < 10 * 60_000) return;
-      const e = await giroComune();
+      const e = await giroComune({ scansioni: oraDelleScansioni() });
       if (e.cartella === 'assente') { if (!assenteDal || Date.now() - assenteDal > 3_600_000) console.log('[comune] cartella comune non collegata'); assenteDal = Date.now(); }
       else assenteDal = 0;
     } catch (e: any) { console.error(`[comune] passo: ${e?.code ?? e?.name ?? 'errore'}`); }
@@ -275,17 +310,17 @@ export async function stato(studioId: string) {
             (select count(*)::int from comune_file where studio_id = $1 and stato = 'caricato') as caricati,
             (select count(*)::int from comune_file where studio_id = $1 and stato = 'doppione') as doppioni,
             (select count(*)::int from comune_file where studio_id = $1 and stato = 'non_letto') as non_letti
-       from comune_cartelle where studio_id = $1 and (cardinality($2::text[]) = 0 or medico = any($2))`, [studioId, mediciScelti()]);
+       from comune_cartelle where studio_id = $1 and (cardinality($2::text[]) = 0 or medico = any($2) or medico = 'Lavori archivio DocuWare')`, [studioId, mediciScelti()]);
   const attesa = await query<{ id: string; percorso: string; medico: string; nome_letto: string; motivo: string | null; lettere: number; nascita_proposta: string | null }>(
     `select id, percorso, medico, nome_letto, motivo, lettere, nascita_proposta::text from comune_cartelle
-      where studio_id = $1 and stato = 'in_attesa' and motivo is distinct from 'da_leggere' and (cardinality($2::text[]) = 0 or medico = any($2))
+      where studio_id = $1 and stato = 'in_attesa' and motivo is distinct from 'da_leggere' and (cardinality($2::text[]) = 0 or medico = any($2) or medico = 'Lavori archivio DocuWare')
       order by medico, nome_letto limit 8000`, [studioId, mediciScelti()]);
   const recenti = await query<{ patient_id: string; cognome: string; nome: string; filename: string; data_lettera: string | null; quando: string; documento_id: string }>(
     `select c.patient_id, p.cognome, p.nome, d.filename, f.data_lettera::text, to_char(f.quando, 'YYYY-MM-DD"T"HH24:MI') as quando, f.documento_id
        from comune_file f join comune_cartelle c on c.id = f.cartella_id join patients p on p.id = c.patient_id join patient_documents d on d.id = f.documento_id
       where f.studio_id = $1 and f.stato = 'caricato' and f.quando > now() - interval '7 days' order by f.quando desc limit 150`, [studioId]);
   const nonPazienti = await query<{ id: string; percorso: string }>(
-    `select id, percorso from comune_cartelle where studio_id = $1 and stato = 'non_paziente' and (cardinality($2::text[]) = 0 or medico = any($2)) order by percorso limit 50`, [studioId, mediciScelti()]);
+    `select id, percorso from comune_cartelle where studio_id = $1 and stato = 'non_paziente' and (cardinality($2::text[]) = 0 or medico = any($2) or medico = 'Lavori archivio DocuWare') order by percorso limit 50`, [studioId, mediciScelti()]);
   return { radice: radiceComune(), medici: mediciScelti(), collegata, giri, conti, attesa, recenti, non_pazienti: nonPazienti };
 }
 

@@ -52,6 +52,28 @@ entrano subito, e quelle che arriveranno ci vanno da sole.
 - La cartella comune si **legge e basta**: niente si sposta, rinomina o cancella. Un file salvato nell'ultimo minuto si
   lascia al giro dopo.
 
+## Le cartelle cartacee scansionate (DocuWare)
+Dal 22.10.2026 (dallo studio: le cartelle vecchie dei pazienti A–F scansionate fino al 2024 — «metti anche quelle»):
+`/Volumes/comune/Lavori archivio DocuWare` (variabile `COMUNE_SCANSIONI`), 1541 PDF in qualche sottocartella, uno per
+paziente, «123456_Cognome_Nome.pdf» (a volte solo il cognome). **Il numero è il N° del paziente di MediOnline**: lo stesso
+che l'agenda scrive nei titoli («… / N° 123456)»). Ogni PDF è un'unità come una cartella:
+- **di chi è** (`abbinaScansione`): prima il **numero E il nome** — il numero è di un paziente solo e le parole del nome
+  del file stanno nel suo nome; poi la regola delle cartelle (nome e data di nascita nel testo; col solo cognome, cognome e
+  data di nascita intera). Il testo è lo strato del PDF o, se manca, le **prime tre pagine lette da Tesseract**. Pazienti
+  nuovi e nome quasi uguale come sopra (col solo cognome non si crea nessuno);
+- **il numero** sta in `patients.numero` (migrazione 099): lo scrive `riabbinaPazienti` dai titoli degli appuntamenti del
+  paziente (tutti lo stesso numero, non già di un altro; il 22.10.2026 970 pazienti) e l'**importazione dei pazienti**
+  se l'esportazione ha una colonna «N° paziente» / «N°» / «Nr.» / «ID» (anche per chi c'era già; mai sopra un numero
+  scritto). Non fa parte dell'anagrafica che si modifica;
+- **entra** fra i documenti del paziente come «Documento», nota «cartella cartacea scansionata (DocuWare)», con l'ora
+  del caricamento (la coda dell'OCR va in quell'ordine); l'OCR completo lo fa poi la coda dei documenti, a catena ferma.
+  Il dittafono trova le lettere dentro per data; «Dividi cartella» la separa quando serve (non parte da sola);
+- **quando**: al massimo 6 per giro e solo se la coda dell'OCR ha meno di 3 documenti; dal controllo automatico solo la
+  sera (dalle 20), la notte (fino alle 6) e nel fine settimana; «Controlla adesso» anche di giorno.
+- Campione di 41 file (22.10.2026, solo conteggi): 24 col testo, 17 senza; col numero dall'agenda 9 riconosciuti da soli,
+  1 col nome quasi uguale, 23 col nome ma senza la data nelle prime pagine (li sblocca il numero, se l'esportazione di
+  MediOnline lo porta), 8 sconosciuti.
+
 ## Quando
 Un controllo **ogni notte alle 2** (`tocca`), e **a lotti di 150 lettere ogni due minuti** finché resta lavoro: la prima
 volta sono migliaia. «Controlla adesso» fa un lotto subito. Acceso solo sul server vero (`next start`); i server di prova

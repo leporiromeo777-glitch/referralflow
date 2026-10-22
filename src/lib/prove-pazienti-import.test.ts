@@ -74,3 +74,12 @@ test('import pazienti: l’esportazione di MediOnline — data, sesso, AVS, tele
     assert.ok(r.ignorate.includes('Titolo') && r.ignorate.includes('Assicurazione LCA') && !r.ignorate.some((x) => /Data nasc|M\/F|AVS|LAMal/.test(x)));
   }
 });
+
+test('importazione: il numero del paziente di MediOnline si tiene a parte (22.10.2026)', () => {
+  const r = analizzaCsvPazienti('N° paziente;Cognome;Nome;Data nasc.\n00123456;Prova;Alda;12.03.1950\n;Finti;Bruno;\nx12;Altri;Ugo;\n');
+  assert.equal(r.righe[0].numero, '123456');
+  assert.equal(r.righe[1].numero, undefined);
+  assert.equal(r.righe[2].numero, undefined);
+  assert.ok(!r.ignorate.includes('N° paziente'));
+  assert.equal((r.righe[0].dati as Record<string, unknown>).numero, undefined);   // non entra nell'anagrafica che si modifica
+});

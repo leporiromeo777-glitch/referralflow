@@ -79,7 +79,7 @@ REFERTI_IMAGING_BASE="$ARCH" "$PY" imaging/ricevi-dicom.py > "$TMP/ricezione.log
 RIC_PID=$!
 # Monitoraggio: sul server di prova il motore è spento (lo guidano le prove, col tempo simulato) e l'AI pure;
 # la demo è quella COMPLETA (13 pazienti, tutte le situazioni), non i quattro che si vedono di serie.
-MONITORAGGIO_DEMO=completa MONITORAGGIO_MOTORE=spento MONITORAGGIO_AI=spenta PRESSIONE_PROPOSTE=1 PRESSIONE_CARTELLA="$TMP/pressione-cartella" PRESSIONE_CARTELLA_GIRO=spento CICLO_CARTELLA="$TMP/ciclo-cartella" ECG_CARTELLA="$TMP/ciclo-cartella-ecg" CICLO_CARTELLA_GIRO=spento COMUNE_LETTERE="$TMP/comune" COMUNE_MEDICI= DIVIDI_LLM=spento REFERTI_IMAGING_BASE="$ARCH" IMAGING_MISURE=1 DATABASE_URL="$URL_DB" PORT="$PORTA" npx next dev -p "$PORTA" > "$TMP/server.log" 2>&1 &
+MONITORAGGIO_DEMO=completa MONITORAGGIO_MOTORE=spento MONITORAGGIO_AI=spenta PRESSIONE_PROPOSTE=1 PRESSIONE_CARTELLA="$TMP/pressione-cartella" PRESSIONE_CARTELLA_GIRO=spento CICLO_CARTELLA="$TMP/ciclo-cartella" ECG_CARTELLA="$TMP/ciclo-cartella-ecg" CICLO_CARTELLA_GIRO=spento COMUNE_LETTERE="$TMP/comune" COMUNE_SCANSIONI="$TMP/docuware" COMUNE_MEDICI= DIVIDI_LLM=spento REFERTI_IMAGING_BASE="$ARCH" IMAGING_MISURE=1 DATABASE_URL="$URL_DB" PORT="$PORTA" npx next dev -p "$PORTA" > "$TMP/server.log" 2>&1 &
 SERVER_PID=$!
 for _ in $(seq 1 60); do curl -s -o /dev/null "http://localhost:$PORTA/login" && break; sleep 2; done
 curl -s -o /dev/null "http://localhost:$PORTA/login" || { fallito "il server di prova non è partito (vedi $TMP/server.log)"; tail -5 "$TMP/server.log"; exit 1; }
@@ -188,7 +188,7 @@ DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2
 grep -E "^NO" "$TMP/saturazione.txt"; echo "   $(grep -c '^ok' "$TMP/saturazione.txt") ok, $(grep -c '^NO' "$TMP/saturazione.txt") no"
 
 echo "→ cartella comune: lettere nelle cartelle dei pazienti, regola severa, doppioni, archivi, da assegnare"
-DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-comune.ts "http://localhost:$PORTA" "$STUDIO" "$C_SEGR" "$TMP/comune" > "$TMP/comune.txt" 2>&1 || { fallito "prova-comune"; cut -c1-300 "$TMP/comune.txt" | tail -8; }
+DATABASE_URL="$URL_DB" NODE_OPTIONS=--conditions=react-server npx tsx scripts/e2e/prova-comune.ts "http://localhost:$PORTA" "$STUDIO" "$C_SEGR" "$TMP/comune" "$TMP/docuware" > "$TMP/comune.txt" 2>&1 || { fallito "prova-comune"; cut -c1-300 "$TMP/comune.txt" | tail -8; }
 grep -E "^NO" "$TMP/comune.txt"; echo "   $(grep -c '^ok' "$TMP/comune.txt") ok, $(grep -c '^NO' "$TMP/comune.txt") no"
 
 echo "→ ciclo ed ECG: il referto della prova da sforzo e il tracciato vanno nella cartella del paziente, o aspettano da assegnare"
