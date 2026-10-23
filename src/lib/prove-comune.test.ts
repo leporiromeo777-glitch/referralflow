@@ -151,7 +151,8 @@ test('comune: le lettere sciolte — il nome dal nome del file', () => {
 test('comune: le cartelle del Prof. Moccetti — data coi trattini bassi, codici e iniziali via', () => {
   assert.deepEqual(nomeDaCartella('Prova_Alda_12A3456_M_12_03_1950'), { nome: 'Prova Alda', nascita: '1950-03-12' });
   assert.deepEqual(abbinaCartella('Prova_Alda_12A3456_M_12_03_1950', [], P), { id: 'a', motivo: 'abbinato' });
-  assert.equal(nomeDaCartella('Prova A.').nome, 'Prova');
+  assert.equal(nomeDaCartella('D Prova Alda').nome, 'D Prova Alda');      // la parola di una lettera di un cognome resta
+  assert.deepEqual(abbinaCartella('D Prova Ada', ['1960-01-01'], [{ id: 'd', cognome: "D'Prova", nome: 'Ada', data_nascita: '1960-01-01' }]), { id: 'd', motivo: 'abbinato' });
   assert.equal(cartellaDiPaziente('Ignoto_Mario_12_03_1950', true, new Set()), true);
 });
 

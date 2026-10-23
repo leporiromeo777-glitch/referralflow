@@ -40,9 +40,10 @@ export function nomeDaCartella(nome: string): { nome: string; nascita: string | 
   // «Cognome_Nome_12nov2023_ECO_…»: il nome sono le parole prima del primo pezzo con delle cifre
   const pezzi = grezzo.split(/[_\s]+/).filter(Boolean), primaCifra = pezzi.findIndex((x) => /\d/.test(x));
   if (grezzo.includes('_') && primaCifra >= 2) nome = pezzi.slice(0, primaCifra).join(' ');
-  // via date, cifre, codici e iniziali di una lettera sola («Rossi M.», «12A3456»): restano cognome e nome
+  // via date e cifre; le parole di una lettera restano (un cognome come «D Andrea» la porta: 23.10.2026, toglierle
+  // faceva sparire metà cognome). I codici delle cartelle del Prof. Moccetti li toglie già la regola qui sopra.
   const pulito = String(nome ?? '').replace(new RegExp(RX_DATA.source, 'g'), ' ').replace(/[_()\[\]]+/g, ' ').replace(/\d+/g, ' ')
-    .replace(/\s+-\s+/g, ' ').split(/\s+/).filter((w) => w.replace(/[.'’-]/g, '').length >= 2).join(' ').trim();
+    .replace(/\s+-\s+/g, ' ').replace(/\s+/g, ' ').trim();
   return { nome: pulito, nascita };
 }
 
