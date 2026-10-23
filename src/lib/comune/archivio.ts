@@ -30,6 +30,7 @@ const LOTTO = Number(process.env.COMUNE_LOTTO) || 150;
 // controllo automatico solo la sera, la notte e nel fine settimana. COMUNE_SCANSIONI vuota le spegne.
 export const radiceScansioni = (): string => process.env.COMUNE_SCANSIONI ?? (process.env.NODE_ENV === 'production' ? '/Volumes/comune/Lavori archivio DocuWare' : '');
 export const MEDICO_SCANSIONI = 'Lavori archivio DocuWare';
+export const SOTTOCARTELLA_SCANSIONI = 'Cartella cartacea scansionata';
 const LOTTO_SCANSIONI = Number(process.env.COMUNE_LOTTO_SCANSIONI) || 6;
 const MAX_BYTE_SCANSIONE = 300 * 1024 * 1024;
 export const oraDelleScansioni = (d = new Date()): boolean => d.getDay() === 0 || d.getDay() === 6 || d.getHours() >= 20 || d.getHours() < 6;
@@ -71,11 +72,12 @@ async function caricaDocumento(studioId: string, patientId: string, medico: stri
     }
   }
   const [doc] = await query<{ id: string }>(
-    `insert into patient_documents (studio_id, patient_id, filename, storage_key, categoria, nota, uploaded_at)
-     values ($1, $2, $3, $4, $8, $5, coalesce($6::date::timestamptz + interval '12 hours', $7::timestamptz)) returning id`,
+    `insert into patient_documents (studio_id, patient_id, filename, storage_key, categoria, nota, uploaded_at, cartella)
+     values ($1, $2, $3, $4, $8, $5, coalesce($6::date::timestamptz + interval '12 hours', $7::timestamptz), $9) returning id`,
     // La scansione entra con l'ora di adesso: la coda dell'OCR va in ordine di caricamento, e non deve passare davanti.
-    scansione ? [studioId, patientId, nome, key, 'cartella cartacea scansionata (DocuWare)', null, new Date(), 'altro']
-      : [studioId, patientId, nome, key, `dalla cartella comune (${medico.replace(/_/g, ' ')})`, dataLettera, f.modificato, categoriaDi(medico)]);
+    // Nella sottocartella giusta della scheda (23.10.2026): le lettere in «01_Rapporti», le scansioni intere a parte.
+    scansione ? [studioId, patientId, nome, key, 'cartella cartacea scansionata (DocuWare)', null, new Date(), 'altro', SOTTOCARTELLA_SCANSIONI]
+      : [studioId, patientId, nome, key, `dalla cartella comune (${medico.replace(/_/g, ' ')})`, dataLettera, f.modificato, categoriaDi(medico), categoriaDi(medico) === 'lettera' ? '01_Rapporti' : null]);
   await logDocumento(doc.id, 'caricamento', { studioId, dettaglio: 'dalla cartella comune' });
   if (formato === 'pdf') await dopoCaricamento(doc.id, corpo, '.pdf').catch(() => null);
   return doc.id;

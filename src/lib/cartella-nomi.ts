@@ -15,7 +15,9 @@ export function nomeCartella(v: unknown): string | null {
 }
 
 // La nota che porta un documento nato da «Dividi cartella» o la cartella completa da dividere: non è una descrizione.
-export const NOTA_DI_SERVIZIO = /^(dalla cartella completa|cartella completa, da dividere)/;
+// Nemmeno quella dei documenti arrivati dalla cartella comune (23.10.2026, dallo studio: «non vedo i file nei documenti» —
+// si chiamavano tutti «dalla cartella comune (Rapporti Moccetti)»): di loro si vede il nome del file.
+export const NOTA_DI_SERVIZIO = /^(dalla cartella completa|cartella completa, da dividere|dalla cartella comune|cartella cartacea scansionata)/;
 
 // Che cosa si mostra di un documento: la descrizione scritta al caricamento, se c'è; se no il nome del file senza
 // estensione (i documenti nati da una divisione hanno già il nome «AAAA.MM.GG Cognome Nome Che cos'è»).

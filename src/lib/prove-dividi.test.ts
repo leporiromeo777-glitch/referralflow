@@ -320,6 +320,8 @@ test('cartella del paziente: sottocartelle e nomi dei documenti', () => {
   assert.equal(nomeCartella('x'.repeat(200))!.length, 80);
   // si vede la descrizione scritta al caricamento; se non c'è, o è quella di una divisione, il nome del file
   assert.equal(titoloMostrato({ filename: 'scan001.pdf', nota: 'ECG 2019–2023' }), 'ECG 2019–2023');
+  assert.equal(titoloMostrato({ filename: '24 05 12 Provanome Anna.docx', nota: 'dalla cartella comune (Rapporti Moccetti)' }), '24 05 12 Provanome Anna');
+  assert.equal(titoloMostrato({ filename: '123456_Provanome_Anna.pdf', nota: 'cartella cartacea scansionata (DocuWare)' }), '123456_Provanome_Anna');
   assert.equal(titoloMostrato({ filename: '2023.10.18 Provanome Anna Holter.pdf', nota: 'dalla cartella completa, pagine 3–5' }), '2023.10.18 Provanome Anna Holter');
   assert.equal(titoloMostrato({ filename: 'cartella.pdf', nota: 'cartella completa, da dividere' }), 'cartella');
   assert.equal(titoloMostrato({ filename: 'lettera.docx', nota: null }), 'lettera');

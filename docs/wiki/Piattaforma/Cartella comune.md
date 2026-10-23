@@ -42,7 +42,7 @@ data di nascita trovata accanto a «nato/a» o al nome, da controllare), o **non
 entrano subito, e quelle che arriveranno ci vanno da sole.
 
 ## Come entrano
-- Documento del paziente con il **nome del file originale**, la nota «dalla cartella comune (Rapporti Moccetti)», e come
+- Documento del paziente nella sottocartella **«01_Rapporti»** (le lettere; le scansioni intere in «Cartella cartacea scansionata») e, nella scheda, col **nome del file** (23.10.2026, dallo studio: «non vedo i file nei documenti» — stavano tutti in «Altri documenti» e si chiamavano tutti «dalla cartella comune (…)»: la nota ora è di servizio, `NOTA_DI_SERVIZIO`). Il documento ha il **nome del file originale**, la nota «dalla cartella comune (Rapporti Moccetti)», e come
   data quella della lettera: dal nome del file («24 05 12 …» = 12.5.2024), se no l'ora di modifica del file. Così
   l'elenco dei documenti e le «lettere del paziente» del dittafono stanno in ordine di data.
 - **Doppioni**: lo stesso file (impronta) nella stessa cartella una volta sola; il **PDF della stessa lettera** di un Word

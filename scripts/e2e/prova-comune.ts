@@ -80,8 +80,8 @@ const pazienti: string[] = [];
     verifica(g1.j.creati === 2, `due pazienti creati dalla cartella (${g1.j.creati})`);
     const nati = await query<{ cognome: string; nome: string; nascita: string }>(`select cognome, nome, data_nascita::text as nascita from patients where studio_id = $1 and (cognome = 'Ignotocom' or (cognome = 'Provacom' and nome <> 'Alda')) order by cognome`, [S]);
     verifica(nati.length === 2 && nati[0].nome === 'Bruno' && nati[0].nascita === '1955-07-04' && nati[1].nome === 'Alda Seconda' && nati[1].nascita === '1990-01-01', `i pazienti nuovi con cognome, nome e nascita giusti (${nati.map((x) => `${x.nome} ${x.nascita}`).join(', ')})`);
-    const docs = await query<{ id: string; filename: string; categoria: string; giorno: string; nota: string }>(
-      `select id, filename, categoria, to_char(uploaded_at, 'YYYY-MM-DD') as giorno, nota from patient_documents where patient_id = $1 order by filename`, [p.id]);
+    const docs = await query<{ id: string; filename: string; categoria: string; giorno: string; nota: string; cartella: string | null }>(
+      `select id, filename, categoria, to_char(uploaded_at, 'YYYY-MM-DD') as giorno, nota, cartella from patient_documents where patient_id = $1 order by filename`, [p.id]);
     verifica(docs.length === 6, `sei documenti nella cartella del paziente: anche la cartella col nome quasi uguale e due scansioni (${docs.length})`);
     const [{ n: nNum }] = await query<{ n: number }>(`select count(*)::int as n from patient_documents where patient_id = $1`, [pn.id]);
     verifica(nNum === 1, `la scansione col numero di MediOnline nella cartella giusta (${nNum})`);
@@ -89,6 +89,7 @@ const pazienti: string[] = [];
     verifica(scans.length === 2 && scans.every((d) => d.categoria === 'altro'), `le scansioni come documento, nota DocuWare (${scans.length})`);
     verifica(docs.some((d) => d.filename === 'x2.docx'), 'la cartella «Provacom Alda Maria» nella scheda di Provacom Alda');
     const d1 = docs.find((d) => d.filename === '24 05 12 Provacom Alda.docx');
+    verifica(!!d1 && d1.cartella === '01_Rapporti' && docs.filter((d) => d.nota === 'cartella cartacea scansionata (DocuWare)').every((d) => d.cartella === 'Cartella cartacea scansionata'), `sottocartelle: la lettera in 01_Rapporti, le scansioni a parte (${d1?.cartella})`);
     verifica(!!d1 && d1.categoria === 'lettera' && d1.giorno === '2024-05-12' && /Rapporti Prova/.test(d1.nota), `lettera con la data del nome del file e la nota (${d1?.categoria} ${d1?.giorno})`);
     verifica(docs.some((d) => d.filename === 'L0001.docx' && d.categoria === 'lettera'), 'il Word vecchio convertito in .docx');
     verifica(docs.some((d) => d.filename === 'eco.docx' && d.categoria === 'referto'), 'l’esame più in profondità, riconosciuto dalla data nel nome della cartella, come referto');
