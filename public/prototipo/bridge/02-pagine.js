@@ -508,7 +508,8 @@ function rfPazFiltrati(q) {
 document.addEventListener('input', (e) => {
   if (!e.target || e.target.id !== 'rf-paz-q') return;
   RF.pazQ = e.target.value;
-  const corpo = document.getElementById('rf-paz-corpo'); if (corpo) corpo.innerHTML = rfPazRighe();
+  // le righe nuove vanno ricollegate al clic (23.10.2026, dallo studio: «non mi aprono le cartelle dei pazienti quando li ricerco»)
+  const corpo = document.getElementById('rf-paz-corpo'); if (corpo) { corpo.innerHTML = rfPazRighe(); if (typeof bindCommon === 'function') bindCommon(corpo); }
   const c = document.getElementById('rf-paz-n'); if (c) { const n = rfPazFiltrati(RF.pazQ).length; c.textContent = RF.pazQ.trim() ? `${n} ${n === 1 ? 'trovato' : 'trovati'}` : `${PATIENTS.filter(p => rfUuid(p.id)).length} in cartella`; }
 });
 const rfPatientsOrig = PAGES.patients;
