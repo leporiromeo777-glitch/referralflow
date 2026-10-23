@@ -19,13 +19,17 @@ async function vaDetect() {
     const j = await r.json();
     if (j.ok) { VA.engine = 'local'; VA.model = j.model; VA.ready = j.ready; return; }
   } catch { /* server locale non raggiungibile */ }
+  // Con i dati veri MAI il riconoscimento del browser: manda la voce al cloud del produttore (nLPD; 23.10.2026). Senza il
+  // servizio vocale locale l'assistente vocale non parte e si scrive la domanda.
+  if (typeof RF !== 'undefined' && RF.live) { VA.engine = 'none'; return; }
   VA.engine = ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) ? 'browser' : 'none';
 }
 
 async function vaStart() {
   if (VA.listening || VA.busy) return;
+  if (VA.engine === 'browser' && typeof RF !== 'undefined' && RF.live) VA.engine = 'none';      // rilevato prima che arrivassero i dati veri
   if (VA.engine === 'none') await vaDetect();
-  if (VA.engine === 'none') { toast('Nessun motore vocale disponibile: avvia voice-server o usa un browser con riconoscimento vocale'); return; }
+  if (VA.engine === 'none') { toast(typeof RF !== 'undefined' && RF.live ? 'Il riconoscimento vocale dello studio non è raggiungibile da questo computer: scrivi la domanda (la voce non esce mai dallo studio).' : 'Nessun motore vocale disponibile: avvia voice-server o usa un browser con riconoscimento vocale'); return; }
   if (!['doctor', 'org_admin', 'assistant', 'secretary'].includes(state.role)) { toast('Assistente vocale non disponibile per questo ruolo'); return; }
   if (VA.engine === 'local') return vaStartLocal();
   return vaStartBrowser();

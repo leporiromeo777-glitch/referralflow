@@ -106,7 +106,7 @@ export async function GET() {
        from referrals r left join referring_doctors d on d.id = r.referring_doctor_id
       where r.studio_id = $1 order by r.created_at desc limit 2000`, [sid]);
   const docs = await query<{ id: string; patient_id: string; filename: string; categoria: string; nota: string | null; uploaded_at: string; cartella: string | null }>(
-    `select id, patient_id, filename, categoria, nota, uploaded_at::text, cartella from patient_documents where studio_id = $1 order by uploaded_at desc limit 20000`, [sid]);
+    `select id, patient_id, filename, categoria, nota, uploaded_at::text, cartella from patient_documents where studio_id = $1 order by uploaded_at desc limit 80000`, [sid]);
   const appts = await query<{ id: string; provider_id: string | null; medico: string | null; starts_at: string; ends_at: string | null; titolo: string | null; paziente_nome: string | null; motivo: string | null; luogo: string | null; completed_at: string | null; referral_id: string | null; colore: string | null; stato_medionline: string | null; patient_id: string | null }>(
     `select a.id, a.provider_id, pr.nome as medico, a.starts_at::text, a.ends_at::text, a.titolo, a.paziente_nome, a.motivo, a.luogo, a.completed_at::text, a.referral_id, a.colore, a.stato_medionline, a.patient_id
        from appointments a left join providers pr on pr.id = a.provider_id

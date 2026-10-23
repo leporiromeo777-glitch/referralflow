@@ -8,6 +8,13 @@ Che cos'è vero **oggi** del progetto, per argomento. La storia sta in git; qui 
 Chi modifica il codice aggiorna la pagina dell'argomento (non appende in coda).
 Niente dati clinici, mai: solo regole, forme, misure e decisioni.
 
+
+## Guida d'uso (la conoscenza di Cleo)
+Scritta per chi lavora in studio: una sezione per domanda («Come confermo un referto?»), coi tasti come si vedono.
+Cleo risponde da qui ([[Guida/Cleo]]); chi cambia qualcosa di visibile aggiorna la pagina.
+- [[Guida/Agenda e giornata]] · [[Guida/Pazienti e documenti]] · [[Guida/Cartella comune e Dividi cartella]] · [[Guida/Referti]] · [[Guida/Dittafono]]
+- [[Guida/Immagini ed esami]] · [[Guida/Pressione e saturazione]] · [[Guida/Moduli percorsi e monitoraggio]] · [[Guida/Studio e accessi]] · [[Guida/Cleo]] · [[Guida/Problemi comuni]]
+
 ## Regole che non si negoziano
 - [[Regole/nLPD e sessione]] — dati sanitari, che cosa non leggere mai, come si distribuisce, chi paga
 - [[Regole/Controllo di sicurezza 2026-10-13]] — che cosa è stato guardato, corretto e che cosa resta da decidere (accessi, dati in uscita, web, Mac)

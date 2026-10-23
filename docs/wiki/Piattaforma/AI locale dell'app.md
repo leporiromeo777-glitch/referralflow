@@ -12,7 +12,7 @@ Gira su Ollama sul Mac dello studio, nessun cloud, nessun dato fuori dal compute
 | dove | route | cosa fa |
 |---|---|---|
 | riquadro «Chiedi ai tuoi dati» in Statistiche | `POST /api/statistiche/chiedi` | una domanda sugli aggregati dello studio; mai dati di singoli pazienti, mai SQL generato dal modello |
-| sidebar AI del prototipo (⌘/) | `POST /api/prototipo/assistente` | risponde solo sui dati già in pagina, filtrati per il ruolo |
+| sidebar AI del prototipo (⌘/), «Cleo» | `POST /api/prototipo/assistente` | risponde sui dati già in pagina, filtrati per il ruolo; dal 23.10.2026 **sa anche come si usa il software**: a ogni domanda prende i pezzi della guida d'uso (`docs/wiki/Guida/`, peso pieno) e della documentazione (Piattaforma, Catena, Regole, Glossario) che c'entrano (`src/lib/guida.ts`: sezioni «##», BM25 con titolo e riga «Parole:», parole corte che valgono per le lunghe), e le domande su come si usa (come faccio, dov'è, cosa fa, non funziona) vanno dritte al modello con la guida invece che alle risposte rapide; nella traccia «Da dove viene» le sezioni usate |
 | briefing pre-visita nel prototipo | `POST /api/prototipo/briefing` | il codice decide i passi, il modello (`PROTOTIPO_LLM`, default gemma3:12b) scrive solo la sintesi; traccia salvata ([[Piattaforma/Procedure e tracce]]) |
 | le altre sei procedure del prototipo | `POST /api/prototipo/procedura` | solo codice, nessun modello: confronti e conteggi con traccia |
 | anonimizzazione nell'interfaccia nuova | `POST /api/prototipo/anonimizza` | stessa libreria di `/anonimizza`: modello `ANONIMIZZA_LLM`, il codice sostituisce; niente persistenza |

@@ -18,6 +18,8 @@ Regole d'uso in `docs/wiki/Wiki/Come si usa.md` (SilverBullet su :3400 in LAN la
   farmaci; agenti: attenzioni ed esempi finti). `pipeline-referti/compila-conoscenza.py` le compila in
   `medici.json` e `conoscenza-agenti.json` (distribuisci.sh lo fa da solo): non modificare quei campi a mano,
   modifica la pagina e ricompila. Ogni cambiamento si misura col banco dell'agente.
+- **La guida d'uso `docs/wiki/Guida/` è la conoscenza di Cleo** (l'assistente risponde allo studio da lì): ogni cambiamento
+  visibile allo studio (un tasto, una pagina, un messaggio) si scrive anche nella sua pagina della guida, sezioni «## domanda» con la riga «Parole:».
 - Niente dati clinici nella wiki, mai esempi presi da referti veri.
 
 ## Regole che non si negoziano (dettaglio in `docs/wiki/Regole/`)

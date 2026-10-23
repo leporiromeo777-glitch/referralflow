@@ -999,3 +999,13 @@ Poi (23.10.2026): «sincronizza anche i rapporti degli altri medici per creare u
 Poi (23.10.2026), dallo studio: «tutti quelli che sto caricando dalla pagina Cartella comune hanno nome e cognome identici alle cartelle di ReferralFlow, solo in posizione invertita; se c'è solo un nome non caricarlo». Deciso: per la cartella comune nome e cognome identici (in qualunque ordine, almeno due parole) a una persona sola bastano, anche senza la data di nascita; col solo cognome no; un'altra data di nascita nel nome della cartella resta un no.
 Poi (23.10.2026): «quelli con un solo nome o un solo cognome li voglio scartati» → un'unità col nome di una parola sola che non si abbina (col numero o con cognome e nascita intera) viene scartata da sola.
 Poi (23.10.2026): «tutti quelli indecisi: basta aprire il file e vedere nome e data di nascita, fallo fare all'AI locale» → il modello sul Mac legge l'inizio della lettera; il codice usa nome e nascita solo se sono scritti davvero nel testo e il nome c'entra con la cartella; poi le regole di sempre (anche creare il paziente). Mai il cloud.
+
+## Cleo sa come si usa il software — 23.10.2026
+Dallo studio: «tra poco dovrò andare all'estero: in studio devono sapere le cose più importanti e, se hanno domande, non
+devono contattare me. Inserisci nella conoscenza di Cleo tutto quello che deve sapere su come funziona il software, dove
+sono i tasti, cosa fanno, cosa è capace di fare e dove si trovano le funzioni» e poi «Cleo deve sapere tutto del software,
+letteralmente tutto». Deciso: una **guida d'uso nella wiki** (`docs/wiki/Guida/`, 11 pagine, ~320 domande, scritta dal
+codice dell'interfaccia e dalla wiki) più tutta la documentazione tecnica (Piattaforma, Catena, Regole, Glossario) come
+seconda fonte; Cleo sceglie a ogni domanda i pezzi che c'entrano e risponde da lì, col modello locale. Una wiki e non un
+grafo: si legge e si corregge come il resto, e chi cambia qualcosa di visibile aggiorna la guida (CLAUDE.md).
+

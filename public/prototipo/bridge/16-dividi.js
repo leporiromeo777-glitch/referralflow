@@ -540,7 +540,7 @@ function rfCartApri(el) { const c = el.dataset.cartella || ''; if (el.open) RF.c
 
 if (typeof patientDocs === 'function') {
   const rfDocsPrima = patientDocs;
-  patientDocs = function (p) {
+  const rfCartDisegna = function (p) {
     if (!RF.live || !rfUuid(p.id)) return rfDocsPrima(p);
     const pid = p.id, docs = p.docs || [];
     const riga = (d) => `<div class="list-item clickable rf-cart-doc" data-doc="${d.id}" draggable="true" ondragstart="rfCartPrendi(event, '${d.id}')" ondragend="rfCartFine()" title="Trascinalo su un’altra sottocartella per spostarlo"><div class="avatar-sm">${ICONS.file}</div><div class="grow"><div class="name">${rfEsc(d.t)}</div><div class="sub">${DOC_TYPE[d.k] || d.k} · caricato il ${d.d}</div></div>
@@ -560,6 +560,14 @@ if (typeof patientDocs === 'function') {
       ${docs.length ? '<div class="caption" style="margin:-4px 0 6px">Trascina un documento su un’altra sottocartella per spostarlo (o «Sposta»). Mentre trascini compaiono anche le sottocartelle vuote.</div>' : '<div class="caption" style="margin:-4px 0 6px">Nessun documento: «Carica» o «Carica qui» in una sottocartella.</div>'}
       <div class="rf-cart" id="rf-cart" data-pid="${pid}">${nomi.map(cartella).join('')}</div>
       <details class="rf-div-cart rf-cart-storico" ${RF.cart.storicoAperto === pid ? 'open' : ''} ontoggle="RF.cart.storicoAperto = this.open ? '${pid}' : null; if (this.open) void rfCartEliminati('${pid}')"><summary><span class="ico">${ICONS.clock || ''}</span><b>Storico degli eliminati</b><span class="caption">chi ha eliminato che cosa, e quando</span></summary><div id="rf-cart-elim">${rfCartEliminatiHtml(pid)}</div></details></div>`;
+  };
+  // Le schede che le altre parti aggiungono sotto i documenti — «Immagini», «Moduli compilati» — restano (23.10.2026:
+  // questa vista le sostituiva tutte, e le immagini del paziente non si vedevano più nella sua cartella).
+  patientDocs = function (p) {
+    const mio = rfCartDisegna(p);
+    if (!RF.live || !rfUuid(p.id)) return mio;
+    const prima = rfDocsPrima(p), base = typeof rfPatientDocsOrig === 'function' ? rfPatientDocsOrig(p) : '';
+    return mio + (base && prima.startsWith(base) ? prima.slice(base.length) : '');
   };
 }
 

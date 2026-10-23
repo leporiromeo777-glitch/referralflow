@@ -665,6 +665,9 @@ askAI = function (q) {
   state.aiMessages.push({ html: `<div class="ai-msg user">${rfEsc(q)}</div>` });
   const org = rfRispostaOrganizzazione(q);
   if (org) { rfRispondiSubito(org); return; }
+  // Le domande su come si usa ReferralFlow (23.10.2026: «Cleo deve sapere tutto del software») vanno dritte al modello
+  // con la guida, non alle procedure né alle risposte rapide del codice (che risponderebbero coi numeri della giornata).
+  if (rfDomandaGuida(q)) { rfRispondiLibera(q, true); return; }
   if (RF.procedure.length) { void rfInterpretaEAgisci(q); return; } else {
   if (rfDomandaChiusura(q)) { const mese = rfMeseDaDomanda(q); rfProcedura(mese ? { nome: 'chiusura_mensile', mese } : { nome: 'chiusura_mensile' }, 'Raccolgo i numeri del mese…'); return; }
   if (rfDomandaLettere(q)) { rfProcedura({ nome: 'lettere_ritardo' }, 'Cerco le lettere in ritardo…'); return; }
@@ -692,8 +695,10 @@ askAI = function (q) {
   }
   rfRispondiLibera(q);
 };
-function rfRispondiLibera(q) {
-  const immediata = rfRispostaImmediata(q);
+// Stessa regola di src/lib/guida.ts (RX_DOMANDA_GUIDA): come faccio, dov'è, cosa fa, non funziona, tasto, pagina…
+function rfDomandaGuida(q) { return /\b(come (faccio|si fa|si |posso|devo|funziona|mai)|dove (trovo|si trova|sono|è|e'|metto|vedo|clicco|schiaccio)|dov'?è|a cosa serv|cosa (fa|serve|significa|vuol dire)|che cos'?è|non (funziona|riesco|trovo|vedo|parte|si apre|arriva|carica|va)|si può|è possibile|e' possibile|tast[oi]|pulsant[ei]|bottone|menu|pagina|spiegami|istruzion|guida|aiuto|help|impostazion|configur|perché non|perche non|errore|bloccat)/i.test(q); }
+function rfRispondiLibera(q, guida) {
+  const immediata = guida ? null : rfRispostaImmediata(q);
   if (immediata) {
     state.aiMessages.push({ html: `<div class="ai-msg ai">${immediata}<div class="srcs"><span class="src">Piattaforma · immediato</span></div></div>` });
     state.aiState = 'idle'; render(); return;
@@ -707,7 +712,7 @@ function rfRispondiLibera(q) {
     state.aiMessages.push({ html: `<div class="ai-msg ai">${html}<div class="srcs"><span class="src">${fonte}</span></div></div>` });
     state.aiState = 'idle'; render();
   };
-  fetch('/api/prototipo/assistente', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domanda: q, ruolo: state.role, contesto: rfContestoBot(), documento_id: DV.open && DV.item && DV.item.live ? DV.item.id : null, paziente_id: state.patientCtx && rfUuid(state.patientCtx) ? state.patientCtx : null }) })
+  fetch('/api/prototipo/assistente', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domanda: q, guida: !!guida, ruolo: state.role, contesto: rfContestoBot(), documento_id: DV.open && DV.item && DV.item.live ? DV.item.id : null, paziente_id: state.patientCtx && rfUuid(state.patientCtx) ? state.patientCtx : null }) })
     .then(async r => {
       if (!r.ok || !r.body) { fine('L\'assistente non è raggiungibile in questo momento.', 'Piattaforma'); return; }
       const fonte = r.headers.get('X-Fonte') === 'modello locale' ? 'Modello locale · dati della piattaforma' : 'Piattaforma';

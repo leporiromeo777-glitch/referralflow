@@ -155,5 +155,5 @@ PAGES.comune = () => {
         : '<div class="caption">Nessuna lettera nuova negli ultimi sette giorni.</div>'}</div>
     ${rfComAttesaHtml()}
     ${(d.non_pazienti || []).length ? `<div class="card mt-16"><div class="card-head"><span class="section-title">Lasciate fuori: archivi</span><span class="badge">${(d.non_pazienti || []).length}</span></div><p class="meta" style="margin:0 0 6px;line-height:1.5">Cartelle con centinaia di lettere che non portano il nome di un paziente (lettere nominate con un codice): non si caricano.</p>${d.non_pazienti.map(x => `<div class="rf-com-perc">${rfEsc(x.percorso)}</div>`).join('')}</div>` : ''}
-    ${ultimoFinito && ultimoFinito.sciolte ? `<p class="caption mt-8">${rfComN(ultimoFinito.sciolte)} lettere stanno fuori da una cartella di paziente (cartelle per giorno o per anno): per ora non si caricano.</p>` : ''}`;
+    `;
 };

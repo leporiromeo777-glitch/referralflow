@@ -9,6 +9,8 @@ import { elencoPerPrompt, trovaProcedura } from '@/lib/procedure-registro';
 import { caricaOrganizzazione, organizzazionePerPrompt } from '@/lib/organizzazione';
 import { caricaPercorsi, percorsiPerPrompt, trovaPercorso } from '@/lib/percorsi';
 import { leggiSale, salePerPrompt } from '@/lib/sale';
+import { guidaPerPrompt, RX_DOMANDA_GUIDA, scegliPezzi } from '@/lib/guida';
+import { indiceGuida } from '@/lib/guida-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -69,6 +71,14 @@ export async function POST(req: NextRequest) {
   }
   const bloccoPercorsi = percorsoNominato || /percors|sequenz|quali esami|che esami|iter\b/i.test(domanda) ? percorsiPerPrompt(percorsoNominato ? [percorsoNominato] : percorsi) : '';
   const proceduraSimile = trovaProcedura(domanda, ruolo);
+  // La conoscenza del software (23.10.2026, dallo studio: «Cleo deve sapere tutto del software, letteralmente tutto»):
+  // i pezzi della guida d'uso e della documentazione che c'entrano con la domanda. Una domanda su come si usa (come
+  // faccio, dov'è, cosa fa, non funziona) li prende sempre; le altre solo se c'entrano molto.
+  const domandaGuida = corpo?.guida === true || RX_DOMANDA_GUIDA.test(domanda);
+  let pezziGuida: ReturnType<typeof scegliPezzi> = [];
+  try { pezziGuida = scegliPezzi(await indiceGuida(), domanda, domandaGuida ? 6 : 3, domandaGuida ? 6500 : 3000); } catch { pezziGuida = []; }
+  if (!domandaGuida && (!pezziGuida.length || pezziGuida[0].punti < 9)) pezziGuida = [];
+  const bloccoGuida = pezziGuida.length ? guidaPerPrompt(pezziGuida) : '';
   const blocccoDoc = doc ? `\n\nDOCUMENTO APERTO («${doc.nota || doc.filename}»${doc.troncato ? ', troncato' : ''}):\n${doc.testo || '(nessun testo estraibile: immagine o scansione senza OCR)'}` : '';
 
   const testoSemplice = (t: string, fonte: string) =>
@@ -76,8 +86,13 @@ export async function POST(req: NextRequest) {
   if (!(await ollamaAttivo())) {
     return testoSemplice('Il modello locale non è raggiungibile in questo momento: i numeri della giornata sono nelle schede in alto.', 'codice');
   }
-  const prompt = `Ti chiami Cleo e sei l'assistente di ReferralFlow, la piattaforma di uno studio medico svizzero (se te lo chiedono, ti chiami Cleo; non sei una persona e non hai altri nomi). Rispondi in italiano, asciutto. Se c'è una cosa sola da dire, al massimo ${doc ? 6 : 3} frasi. Se la risposta ha più parti (per esempio agenda, cose da fare, referti, richiami), dividila: ogni parte comincia con una riga di solo titolo tra doppi asterischi (**Titolo**) seguita da poche righe che iniziano con «- ». Mai un elenco unico che mescola argomenti diversi, mai più di quattro parti. Usa SOLO i dati qui sotto (JSON con i numeri e le liste della giornata, già filtrati per il ruolo «${ruolo}»${doc ? ', e il testo del documento aperto' : ''}). Se il dato non c'è, dillo: non inventare nomi, numeri o date. Riporta i valori esattamente come sono scritti. Niente consigli clinici, niente diagnosi: puoi riassumere, elencare valori e conclusioni scritte dal medico refertante.
+  const regoleGuida = bloccoGuida ? `
+COME SI USA REFERRALFLOW (pezzi della guida d'uso e della documentazione del software, scelti per questa domanda). Se la domanda è su come si usa il programma — dove si trova una cosa, come si fa, cosa fa un tasto, cosa vuol dire un messaggio, perché qualcosa non funziona — rispondi da QUI: i passi in ordine (righe che iniziano con «1.», «2.»…), il nome della pagina e dei tasti esattamente come sono scritti tra «…», dove stanno sullo schermo. Preferisci la Guida alla Documentazione; della Documentazione non citare file, codice, variabili o nomi tecnici: spiega con parole semplici. Se qui non c'è la risposta, dillo chiaramente («nella guida non lo trovo») e suggerisci a chi chiedere; non inventare tasti o funzioni.
+${bloccoGuida}
+` : '';
+  const prompt = `Ti chiami Cleo e sei l'assistente di ReferralFlow, la piattaforma di uno studio medico svizzero (se te lo chiedono, ti chiami Cleo; non sei una persona e non hai altri nomi). Rispondi in italiano, asciutto. Se c'è una cosa sola da dire, al massimo ${doc ? 6 : bloccoGuida ? 10 : 3} frasi (o righe di passi). Se la risposta ha più parti (per esempio agenda, cose da fare, referti, richiami), dividila: ogni parte comincia con una riga di solo titolo tra doppi asterischi (**Titolo**) seguita da poche righe che iniziano con «- ». Mai un elenco unico che mescola argomenti diversi, mai più di quattro parti. Usa SOLO i dati qui sotto (JSON con i numeri e le liste della giornata, già filtrati per il ruolo «${ruolo}»${doc ? ', e il testo del documento aperto' : ''}). Se il dato non c'è, dillo: non inventare nomi, numeri o date. Riporta i valori esattamente come sono scritti. Niente consigli clinici, niente diagnosi: puoi riassumere, elencare valori e conclusioni scritte dal medico refertante.
 
+${regoleGuida}
 PROCEDURE DISPONIBILI (se la domanda corrisponde a una di queste, rispondi in una riga suggerendo di chiederla con quel nome, senza eseguirla):
 ${elencoPerPrompt(ruolo)}
 ${bloccoOrg ? `\nORGANIZZAZIONE DELLO STUDIO (chi fa che cosa; rispondi con il ruolo, mai con nomi di persone):\n${bloccoOrg}\n` : ''}
@@ -94,7 +109,7 @@ RISPOSTA:`;
     r = await fetch(`${configurazioneOllama.url}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: MODELLO, prompt, stream: true, keep_alive: '30m', options: { temperature: 0, num_predict: doc ? 400 : 320 } }),
+      body: JSON.stringify({ model: MODELLO, prompt, stream: true, keep_alive: '30m', options: { temperature: 0, num_predict: doc ? 400 : bloccoGuida ? 650 : 320 } }),
       signal: AbortSignal.timeout(240_000),
       cache: 'no-store',
     });
@@ -113,6 +128,7 @@ RISPOSTA:`;
       : { passo: 'Documento aperto', esito: 'vuoto', fonti: [], nota: 'nessun documento aperto' },
     { passo: 'Grafo dei fatti del paziente aperto', esito: fatti.length ? 'ok' : 'vuoto', fonti: pazienteId ? [pazienteId] : [], nota: pazienteId ? `${fatti.length} fatti` : 'nessun paziente aperto' },
     { passo: 'Registro delle procedure e organizzazione dello studio nel prompt', esito: 'ok', fonti: [], nota: proceduraSimile ? `somiglia a «${proceduraSimile.titolo}»` : `${org.responsabilita.length} responsabilità` },
+    { passo: 'Guida del software (wiki): i pezzi che c\'entrano con la domanda', esito: pezziGuida.length ? 'ok' : 'vuoto', fonti: [], nota: pezziGuida.length ? pezziGuida.map((x) => `${x.pezzo.pagina} › ${x.pezzo.titolo}`).join(' · ').slice(0, 400) : 'nessun pezzo' },
     { passo: 'Risposta del modello locale, solo sui dati passati', esito: 'ok', fonti: [], nota: MODELLO },
   ];
   let tracciaId = 0;
