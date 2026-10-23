@@ -119,8 +119,9 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number; sc
       const nome = nomeDaFileSciolto(f.nome);
       if (slugNome(nome).split(' ').filter((w) => w.length >= 2).length >= 2) trovate.push({ rel: f.rel, nome, medico: f.medico, base, sciolto: f });
     }
-    // Le scansioni: ogni PDF è un'unità come una cartella, col nome dal nome del file.
-    const rs = opzioni.scansioni === false ? '' : radiceScansioni();
+    // Le scansioni: ogni PDF è un'unità come una cartella, col nome dal nome del file. Si elencano sempre (decidere
+    // di chi sono le scansioni già lette costa poco); leggerne di nuove solo se il giro lo permette (sera, notte).
+    const rs = radiceScansioni(), leggiScansioni = opzioni.scansioni !== false;
     if (rs) {
       const sc = await scansioniSulDisco(rs).catch(() => null);
       if (sc) for (const f of sc.file) trovate.push({ rel: f.rel, nome: nomeDaScansione(f.nome), medico: MEDICO_SCANSIONI, base: sc.base, scansione: f });
@@ -200,7 +201,7 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number; sc
       let lot: SulDisco[];
       if (scansione) {
         // Poche per giro, e solo se l'OCR dei documenti è quasi in pari (le scansioni senza testo vanno in coda lì).
-        if (scansioniLette >= LOTTO_SCANSIONI || (await ocrInCoda()) >= 3) { r.scansioni_restano = true; continue; }
+        if (!leggiScansioni || scansioniLette >= LOTTO_SCANSIONI || (await ocrInCoda()) >= 3) { r.scansioni_restano = true; continue; }
         scansioniLette++; lot = daFare;
       } else {
         if (letti >= lotto) { r.restano = true; continue; }

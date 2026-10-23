@@ -72,8 +72,8 @@ che l'agenda scrive nei titoli («… / N° 123456)»). Ogni PDF è un'unità co
 - **entra** fra i documenti del paziente come «Documento», nota «cartella cartacea scansionata (DocuWare)», con l'ora
   del caricamento (la coda dell'OCR va in quell'ordine); l'OCR completo lo fa poi la coda dei documenti, a catena ferma.
   Il dittafono trova le lettere dentro per data; «Dividi cartella» la separa quando serve (non parte da sola);
-- **quando**: al massimo 6 per giro e solo se la coda dell'OCR ha meno di 3 documenti; dal controllo automatico solo la
-  sera (dalle 20), la notte (fino alle 6) e nel fine settimana; «Controlla adesso» anche di giorno.
+- **quando**: si **leggono** al massimo 6 per giro e solo se la coda dell'OCR ha meno di 3 documenti; dal controllo automatico solo la
+  sera (dalle 20), la notte (fino alle 6) e nel fine settimana; «Controlla adesso» anche di giorno. **Decidere** di chi è una scansione già letta (riabbinare, scartare un nome solo) si fa a ogni giro, anche di giorno.
 - Campione di 41 file (22.10.2026, solo conteggi): 24 col testo, 17 senza; col numero dall'agenda 9 riconosciuti da soli,
   1 col nome quasi uguale, 23 col nome ma senza la data nelle prime pagine (li sblocca il numero, se l'esportazione di
   MediOnline lo porta), 8 sconosciuti.
