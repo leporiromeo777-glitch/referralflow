@@ -267,3 +267,52 @@ export function tocca(adesso: Date, ultimoCompleto: Date | null, restano: boolea
 // Le cartelle «Rapporti_…» sono lettere; le convocazioni sono «altro» (non lettere cliniche: il dittafono non le
 // riprende); le altre («Esami_II livello», «Device (PM + DEFI)») referti d'esame.
 export const categoriaDi = (medico: string): 'lettera' | 'referto' | 'altro' => (/^rapp/i.test(medico) ? 'lettera' : /^convoc/i.test(medico) ? 'altro' : 'referto');
+
+// ── L'AI locale legge le cartelle che aspettano (23.10.2026) ──────────────────────────────────────────────────────
+// Dallo studio: «tutti quelli indecisi: basta aprire il file e vedere nome e data di nascita, fallo fare all'AI locale».
+// Il modello sul Mac legge l'inizio della lettera e dice di chi è; il CODICE controlla che nome e data di nascita siano
+// scritti davvero nel testo e che il nome c'entri col nome della cartella. Un modello che inventa non passa.
+export function domandaPaziente(testo: string): string {
+  return `Questo è l'inizio di un documento medico (lettera, rapporto, referto) di uno studio di cardiologia.
+Chi è il PAZIENTE di cui parla? Non il medico che scrive, non il medico a cui è indirizzato.
+Rispondi solo con un oggetto JSON: {"cognome": "...", "nome": "...", "nascita": "GG.MM.AAAA"}
+- usa null per un campo che nel testo non c'è o non è sicuro;
+- "nascita" è la data di NASCITA del paziente (non la data della lettera né di un esame), solo se è scritta.
+
+DOCUMENTO:
+<<<
+${String(testo ?? '').slice(0, 3500)}
+>>>`;
+}
+export type Lettura = { cognome: string; nome: string; nascita: string | null };
+export function leggiPaziente(risposta: string): Lettura | null {
+  try {
+    const o = JSON.parse(String(risposta).slice(String(risposta).indexOf('{'), String(risposta).lastIndexOf('}') + 1));
+    const s = (v: unknown) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, 80) : '');
+    const cognome = s(o?.cognome), nome = s(o?.nome);
+    if (!cognome || !nome || /^null$/i.test(cognome) || /^null$/i.test(nome)) return null;
+    const d = dateNelTesto(s(o?.nascita)).filter((x) => x.slice(0, 2) === '19' || x.slice(0, 2) === '20');
+    return { cognome, nome, nascita: d.length ? d.sort()[0] : null };
+  } catch { return null; }
+}
+// Il controllo del codice: il nome scritto nel testo (ogni parola), la data di nascita scritta nel testo, e almeno una
+// parola del nome in comune col nome della cartella (o del file), se la cartella ne ha uno.
+export function letturaVera(l: Lettura, testo: string, nomeUnita: string): { ok: boolean; perche?: string } {
+  const t = ` ${slugNome(testo).split(' ').join(' ')} `;
+  const parole = slugNome(`${l.cognome} ${l.nome}`).split(' ').filter((w) => w.length >= 2);
+  if (!parole.length || !parole.every((w) => t.includes(` ${w} `))) return { ok: false, perche: 'nome_non_nel_testo' };
+  if (!l.nascita || !dateNelTesto(testo).includes(l.nascita)) return { ok: false, perche: 'nascita_non_nel_testo' };
+  const unita = slugNome(nomeDaCartella(nomeUnita).nome).split(' ').filter((w) => w.length >= 3);
+  if (unita.length && !unita.some((w) => parole.includes(w))) return { ok: false, perche: 'nome_diverso_dalla_cartella' };
+  return { ok: true };
+}
+// Di chi è, dalla lettura controllata: nome (in qualunque ordine) E nascita; poi il nome quasi uguale con la stessa nascita.
+export function abbinaLettura(l: Lettura, pazienti: Paz[]): string | null {
+  if (!l.nascita) return null;
+  const k = slugNome(`${l.cognome} ${l.nome}`), w = k.split(' ');
+  const nasc = (p: Paz) => (p.data_nascita ?? '').slice(0, 10);
+  const esatti = pazienti.filter((p) => nasc(p) === l.nascita && slugNome(`${p.cognome} ${p.nome}`) === k);
+  if (esatti.length) return unaPersona(esatti)?.id ?? null;
+  const quasi = pazienti.filter((p) => { const pw = slugNome(`${p.cognome} ${p.nome}`).split(' '); return nasc(p) === l.nascita && pw.length >= 2 && (pw.every((x) => w.includes(x)) || w.every((x) => pw.includes(x))); });
+  return unaPersona(quasi)?.id ?? null;
+}

@@ -64,7 +64,7 @@ async function rfComControlla() {
   RF.com.lavora = false;
   if (j.errore) toast(j.errore);
   else if (j.gia_in_corso) toast('Un controllo è già in corso: tra poco i numeri si aggiornano');
-  else toast(`${j.caricati} ${j.caricati === 1 ? 'lettera caricata' : 'lettere caricate'}${j.in_attesa ? ` · ${j.in_attesa} in cartelle da assegnare` : ''}${j.restano ? ' · ne restano: si continua da soli ogni due minuti' : ''}`);
+  else toast(`${j.caricati} ${j.caricati === 1 ? 'lettera caricata' : 'lettere caricate'}${j.in_attesa ? ` · ${j.in_attesa} in cartelle da assegnare` : ''}${j.ai && j.ai.letti ? ` · l'AI locale ne ha lette ${j.ai.letti}, riconosciute ${j.ai.abbinati}` : ''}${j.restano ? ' · ne restano: si continua da soli ogni due minuti' : ''}`);
   await rfComCarica();
 }
 
@@ -116,7 +116,7 @@ function rfComAttesaHtml() {
       <div><b>${rfEsc(x.nome_letto || 'Cartella')}</b> · ${x.lettere} ${x.lettere === 1 ? 'lettera' : 'lettere'}${x.nascita_proposta ? ` · nelle lettere: nato/a il ${rfComGiorno(x.nascita_proposta)}` : ''}</div>
       <div class="rf-com-perc">${rfEsc(x.percorso)}</div>
       ${(x.file || []).length ? `<div class="row" style="gap:6px;flex-wrap:wrap">${x.file.map(f => `<a class="btn sm" href="${RF_COM_URL}?file=${encodeURIComponent(f.id)}" target="_blank" rel="noopener" title="Apri il documento in un'altra scheda">Apri${x.file.length > 1 ? ` · ${rfEsc(f.nome)}` : ''}</a>`).join('')}</div>` : ''}
-      <div class="caption">${rfEsc(RF_COM_MOTIVO[x.motivo] || 'da assegnare')}.</div>
+      <div class="caption">${rfEsc(RF_COM_MOTIVO[x.motivo] || 'da assegnare')}.${x.ai_il ? (x.ai_nome ? ` L'AI locale legge: <b>${rfEsc(x.ai_nome)}</b>${x.ai_nascita ? `, ${rfComGiorno(x.ai_nascita)}` : ''} — in ReferralFlow non lo trovo così.` : ' L’AI locale non ha trovato nome e data di nascita sicuri.') : ''}</div>
       ${puo ? `<div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
         ${s.nuova ? `<input class="input" style="width:150px" placeholder="Cognome" value="${rfEsc(s.cognome)}" oninput="RF.com.scelte['${x.id}'].cognome=this.value"><input class="input" style="width:150px" placeholder="Nome" value="${rfEsc(s.nome)}" oninput="RF.com.scelte['${x.id}'].nome=this.value"><input class="input" style="width:120px" placeholder="31.12.1950" value="${rfEsc(s.nascita)}" oninput="RF.com.scelte['${x.id}'].nascita=this.value"><button class="btn sm primary" onclick="rfComCrea('${x.id}')">Crea il paziente e carica</button><button class="btn sm ghost" onclick="delete RF.com.scelte['${x.id}'];render()">Annulla</button>`
           : s.pid ? `<span class="badge accent">${rfEsc(s.nome)}</span><button class="btn sm ghost" onclick="delete RF.com.scelte['${x.id}'];render()">Cambia</button><button class="btn sm primary" onclick="rfComAssegna('${x.id}')">Carica nella sua cartella</button>`
@@ -149,7 +149,7 @@ PAGES.comune = () => {
       <p class="meta" style="margin:8px 0 0;line-height:1.5">${ultimoFinito ? `Ultimo controllo ${rfComQuando(ultimoFinito.finito)}: ${rfComN(ultimoFinito.nuovi)} ${ultimoFinito.nuovi === 1 ? 'lettera nuova' : 'lettere nuove'}, ${rfComN(ultimoFinito.caricati)} caricate${ultimoFinito.in_attesa ? `, ${rfComN(ultimoFinito.in_attesa)} in cartelle da assegnare` : ''}${ultimoFinito.doppioni ? `, ${rfComN(ultimoFinito.doppioni)} doppioni saltati` : ''}.` : 'Ancora nessun controllo.'}
       ${inCorsoPrima ? ' <b>Caricamento in corso</b>: la prima volta sono migliaia di lettere, un lotto ogni due minuti finché non sono finite.' : ''}</p>
     </div>
-    <div class="rf-com-tiles mt-16">${tile(c.caricati, 'lettere caricate')}${tile(c.abbinate, 'cartelle di pazienti riconosciute')}${tile(c.creati, 'pazienti creati dalla cartella')}${tile(c.quasi, 'col nome quasi uguale e la stessa nascita')}${tile(c.in_attesa, 'cartelle da assegnare')}${tile(c.doppioni, 'doppioni saltati (anche il PDF di un Word)')}${tile(c.scartate, 'cartelle lasciate fuori')}</div>
+    <div class="rf-com-tiles mt-16">${tile(c.caricati, 'lettere caricate')}${tile(c.abbinate, 'cartelle di pazienti riconosciute')}${tile(c.creati, 'pazienti creati dalla cartella')}${tile(c.quasi, 'col nome quasi uguale e la stessa nascita')}${tile(c.ai, 'riconosciute dall’AI locale')}${tile(c.in_attesa, 'cartelle da assegnare')}${tile(c.doppioni, 'doppioni saltati (anche il PDF di un Word)')}${tile(c.scartate, 'cartelle lasciate fuori')}</div>
     <div class="card mt-16"><div class="card-head"><span class="section-title">Arrivate negli ultimi sette giorni</span><span class="badge">${rfComN(recenti.length)}</span></div>
       ${recenti.length ? `<div class="rf-com-scroll"><table class="rf-com-tab"><thead><tr><th>Paziente</th><th>Lettera</th><th>Data della lettera</th><th>Caricata</th></tr></thead><tbody>${recenti.map(x => `<tr class="clic" onclick="location.hash='#/patients/${x.patient_id}'"><td><b>${rfEsc(`${x.cognome} ${x.nome}`)}</b></td><td>${rfEsc(x.filename)}</td><td class="num">${rfComGiorno(x.data_lettera)}</td><td class="num">${rfComQuando(x.quando)}</td></tr>`).join('')}</tbody></table></div>`
         : '<div class="caption">Nessuna lettera nuova negli ultimi sette giorni.</div>'}</div>

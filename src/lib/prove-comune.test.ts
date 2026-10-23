@@ -1,7 +1,7 @@
 // Le lettere della cartella comune (22.10.2026): regole pure. Nomi e date INVENTATI.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { unaPersona, abbinaCartella, abbinaScansione, cartellaDiPaziente, categoriaDi, dividiNome, nascitaSicura, nomeDaFileSciolto, nomeDaScansione, quasiStesso, dataDaNomeFile, dateNelTesto, formatoLettera, nascitaProposta, nomeDaCartella, stessaLettera, tocca } from './comune/regole';
+import { abbinaLettura, leggiPaziente, letturaVera, unaPersona, abbinaCartella, abbinaScansione, cartellaDiPaziente, categoriaDi, dividiNome, nascitaSicura, nomeDaFileSciolto, nomeDaScansione, quasiStesso, dataDaNomeFile, dateNelTesto, formatoLettera, nascitaProposta, nomeDaCartella, stessaLettera, tocca } from './comune/regole';
 
 const P = [
   { id: 'a', cognome: 'Prova', nome: 'Alda', data_nascita: '1950-03-12' },
@@ -175,4 +175,19 @@ test('comune: la stessa persona due volte (cognome e nome scambiati, stessa nasc
   assert.deepEqual(abbinaCartella('Doppi Ugo', ['1940-01-01', '1970-05-05'], D), { id: null, motivo: 'omonimi' });   // persone diverse
   assert.equal(quasiStesso('Prova Alda Maria', ['1950-03-12'], D), 'y');
   assert.equal(unaPersona([]), null);
+});
+
+test('comune: la lettura dell’AI locale si controlla nel testo prima di usarla', () => {
+  const testo = 'Lugano, 01.02.2024\nEgregio collega,\nConcerne: Prova Alda, nata il 12.03.1950\nvisita di controllo';
+  assert.deepEqual(leggiPaziente('{"cognome": "Prova", "nome": "Alda", "nascita": "12.03.1950"}'), { cognome: 'Prova', nome: 'Alda', nascita: '1950-03-12' });
+  assert.equal(leggiPaziente('{"cognome": null, "nome": "Alda"}'), null);
+  assert.equal(leggiPaziente('niente'), null);
+  const l = leggiPaziente('{"cognome": "Prova", "nome": "Alda", "nascita": "12.03.1950"}')!;
+  assert.deepEqual(letturaVera(l, testo, 'Alda Provva'), { ok: true });                       // una parola in comune con la cartella
+  assert.equal(letturaVera({ ...l, nascita: '1951-03-12' }, testo, 'Prova Alda').perche, 'nascita_non_nel_testo');   // data inventata
+  assert.equal(letturaVera({ ...l, cognome: 'Altro' }, testo, 'Prova Alda').perche, 'nome_non_nel_testo');          // nome inventato
+  assert.equal(letturaVera(l, testo, 'Bianchi Ugo').perche, 'nome_diverso_dalla_cartella');
+  assert.equal(abbinaLettura(l, P), 'a');
+  assert.equal(abbinaLettura({ cognome: 'Alda', nome: 'Prova', nascita: '1950-03-12' }, P), 'a');                    // invertiti
+  assert.equal(abbinaLettura({ ...l, nascita: '1999-01-01' }, P), null);
 });

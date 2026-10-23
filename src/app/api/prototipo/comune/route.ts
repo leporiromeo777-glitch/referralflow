@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
-import { assegna, creaCartellaEAssegna, fileDaGuardare, giroComune, puoComune, scarta, stato } from '@/lib/comune/archivio';
+import { assegna, creaCartellaEAssegna, fileDaGuardare, giroAi, giroComune, puoComune, scarta, stato } from '@/lib/comune/archivio';
 import { vietato } from '@/lib/permessi';
 
 export const dynamic = 'force-dynamic';
@@ -48,9 +48,12 @@ export async function POST(req: Request) {
   const c = await req.json().catch(() => null);
   const azione = String(c?.azione ?? '');
   if (azione === 'controlla') {
-    const r = await giroComune({ fermoMs: 0 });
+    let r = await giroComune({ fermoMs: 0 });
+    // poi l'AI locale su qualche cartella che aspetta; se ne abbina, le sue lettere entrano subito
+    const ai = await giroAi(5);
+    if (ai.abbinati) r = await giroComune({ fermoMs: 0 });
     if (r.cartella === 'assente') return NextResponse.json({ errore: 'La cartella comune non è collegata a questo Mac: aprila dal Finder (Vai → Connessione al server) e riprova.' }, { status: 409 });
-    return NextResponse.json({ ok: true, ...r }, no);
+    return NextResponse.json({ ok: true, ...r, ai }, no);
   }
   const id = String(c?.id ?? '');
   if (!isUuid(id)) return NextResponse.json({ errore: 'id' }, { status: 400 });

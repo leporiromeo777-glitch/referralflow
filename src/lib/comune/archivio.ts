@@ -3,13 +3,15 @@ import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { logDocumento } from '../cartella';
+import { catenaOccupata } from '../esporta-grezze';
+import { generaOllamaEsito } from '../ollama';
 import { query } from '../db';
 import { dopoCaricamento } from '../documenti-ocr';
 import { riabbinaPazienti } from '../pazienti-abbina';
 import { validaAnagrafica } from '../pazienti-import';
 import { deleteFile, putFile } from '../storage';
 import { slugNome } from '../imaging-ordina';
-import { abbinaCartella, abbinaScansione, categoriaDi, dividiNome, nascitaSicura, nomeDaFileSciolto, nomeDaScansione, quasiStesso, dataDaNomeFile, dateNelTesto, MAX_LETTERE_PAZIENTE, nascitaProposta, nomeDaCartella, radice, stessaLettera, tocca, type Formato } from './regole';
+import { abbinaCartella, abbinaLettura, abbinaScansione, categoriaDi, domandaPaziente, leggiPaziente, letturaVera, dividiNome, nascitaSicura, nomeDaFileSciolto, nomeDaScansione, quasiStesso, dataDaNomeFile, dateNelTesto, MAX_LETTERE_PAZIENTE, nascitaProposta, nomeDaCartella, radice, stessaLettera, tocca, type Formato } from './regole';
 import { cartellePazienti, lettereSulDisco, mediciScelti, scansioniSulDisco, type SulDisco } from './scopri';
 import { docxDaDoc, htmlDi, ocrPrimePagine, testoDi } from './testo';
 
@@ -311,7 +313,9 @@ export function avviaComune(): void {
                 coalesce((select restano from comune_giri where studio_id = $1 and finito is not null order by iniziato desc limit 1), false) as restano, null as finito`, [s.id]);
       // Le scansioni vanno avanti da sole la sera, la notte e nel fine settimana; di giorno solo le lettere.
       const scansioni = oraDelleScansioni() && scansioniRestano;
-      if (!tocca(new Date(), u?.ultimo ?? null, !!u?.restano) && !scansioni) return;
+      // L'AI locale legge le cartelle che aspettano (a catena ferma); se ne ha abbinate, le loro lettere entrano subito.
+      const ai = await giroAi();
+      if (!tocca(new Date(), u?.ultimo ?? null, !!u?.restano) && !scansioni && !ai.abbinati) return;
       // La cartella non è collegata: si riprova, ma lo si dice una volta all'ora.
       if (assenteDal && Date.now() - assenteDal < 10 * 60_000) return;
       const e = await giroComune({ scansioni: oraDelleScansioni() });
@@ -331,15 +335,16 @@ export async function stato(studioId: string) {
        from comune_giri where studio_id = $1 and (nuovi > 0 or abbinate > 0 or errore is not null or iniziato > now() - interval '2 days') order by iniziato desc limit 8`, [studioId]);
   const [conti] = await query<Record<string, number>>(
     `select count(*) filter (where stato = 'abbinata')::int as abbinate, count(*) filter (where stato = 'abbinata' and motivo = 'paziente_creato')::int as creati,
-            count(*) filter (where stato = 'abbinata' and motivo = 'nome_quasi')::int as quasi, count(*) filter (where stato = 'in_attesa')::int as in_attesa,
+            count(*) filter (where stato = 'abbinata' and motivo = 'nome_quasi')::int as quasi,
+            count(*) filter (where stato = 'abbinata' and motivo = 'letto_da_ai')::int as ai, count(*) filter (where stato = 'in_attesa')::int as in_attesa,
             count(*) filter (where stato = 'scartata')::int as scartate, count(*) filter (where stato = 'non_paziente')::int as non_pazienti,
             (select count(*)::int from comune_file where studio_id = $1 and stato = 'caricato') as caricati,
             (select count(*)::int from comune_file where studio_id = $1 and stato = 'doppione') as doppioni,
             (select count(*)::int from comune_file where studio_id = $1 and stato = 'non_letto') as non_letti
        from comune_cartelle where studio_id = $1 and (($2::text[] is null and medico ~* '^rap+orti') or cardinality($2::text[]) = 0 or medico = any($2) or medico = 'Lavori archivio DocuWare')`, [studioId, mediciScelti()]);
   // con i suoi file (fino a 15), per aprirli prima di decidere (23.10.2026, dallo studio: «poter schiacciare un tasto per aprire il documento»)
-  const attesa = await query<{ id: string; percorso: string; medico: string; nome_letto: string; motivo: string | null; lettere: number; nascita_proposta: string | null; file: { id: string; nome: string }[] | null }>(
-    `select c.id, c.percorso, c.medico, c.nome_letto, c.motivo, c.lettere, c.nascita_proposta::text,
+  const attesa = await query<{ id: string; percorso: string; medico: string; nome_letto: string; motivo: string | null; lettere: number; nascita_proposta: string | null; ai_il: string | null; ai_nome: string | null; ai_nascita: string | null; file: { id: string; nome: string }[] | null }>(
+    `select c.id, c.percorso, c.medico, c.nome_letto, c.motivo, c.lettere, c.nascita_proposta::text, c.ai_il::text, c.ai_nome, c.ai_nascita::text,
             (select json_agg(json_build_object('id', f.id, 'nome', regexp_replace(f.percorso, '^.*/', '')) order by f.percorso)
                from (select id, percorso from comune_file where cartella_id = c.id order by percorso limit 15) f) as file
        from comune_cartelle c
@@ -408,5 +413,69 @@ export async function fileDaGuardare(studioId: string, id: string): Promise<{ co
   if (/\.pdf$/i.test(pieno)) return { corpo: dati, tipo: 'application/pdf' };
   const html = await htmlDi(dati, /\.docx$/i.test(pieno) ? 'docx' : 'doc');
   return html ? { corpo: Buffer.from(html, 'utf-8'), tipo: 'text/html; charset=utf-8' } : err('Questo Word non si apre qui.', 415);
+}
+
+// ── L'AI locale legge le cartelle che aspettano (23.10.2026) ──────────────────────────────────────────────────────
+// Dallo studio: «tutti quelli indecisi: basta aprire il file e vedere nome e data di nascita, fallo fare all'AI locale».
+// Per ogni cartella in attesa (una volta sola): il testo del primo documento (le prime pagine con Tesseract se è una
+// scansione senza testo), il modello sul Mac (COMUNE_AI, default gemma3:12b; «spento» = no) dice chi è il paziente, il
+// codice controlla che nome e nascita siano scritti nel testo e c'entrino col nome della cartella, poi abbina (nome e
+// nascita, nome quasi uguale) o crea il paziente con le cautele di sempre. Solo a catena ferma. Nei log solo conteggi.
+const MODELLO_AI = process.env.COMUNE_AI ?? process.env.DIVIDI_LLM ?? 'gemma3:12b';
+let aiInCorso = false;
+export async function giroAi(limite = 12): Promise<{ letti: number; abbinati: number; creati: number; dubbi: number; spento?: boolean }> {
+  const r = { letti: 0, abbinati: 0, creati: 0, dubbi: 0 };
+  if (MODELLO_AI === 'spento') return { ...r, spento: true };
+  if (aiInCorso) return r;
+  aiInCorso = true;
+  try {
+    const [studio] = await query<{ id: string }>(`select id from studios where attivo order by created_at limit 1`);
+    if (!studio) return r;
+    const studioId = studio.id;
+    const da = await query<{ id: string; percorso: string; medico: string; nome_letto: string; file: string | null }>(
+      `select c.id, c.percorso, c.medico, c.nome_letto,
+              (select f.percorso from comune_file f where f.cartella_id = c.id order by f.data_lettera desc nulls last, f.percorso limit 1) as file
+         from comune_cartelle c
+        where c.studio_id = $1 and c.stato = 'in_attesa' and c.ai_il is null and c.motivo in ('nessuno', 'nascita_non_trovata', 'omonimi', 'nascita_diversa')
+        order by c.vista_il desc limit $2`, [studioId, limite]);
+    if (!da.length) return r;
+    let pazienti: Paz[] | null = null;
+    for (const c of da) {
+      if (await catenaOccupata()) break;
+      const segna = (campi: { nome?: string | null; nascita?: string | null } = {}) =>
+        query(`update comune_cartelle set ai_il = now(), ai_nome = $2, ai_nascita = $3::date where id = $1`, [c.id, campi.nome ?? null, campi.nascita ?? null]);
+      if (!c.file) { await segna(); continue; }
+      const base = c.medico === MEDICO_SCANSIONI ? path.dirname(radiceScansioni()) : radiceComune();
+      const dati = base ? await fs.readFile(path.resolve(base, c.file)).catch(() => null) : null;
+      if (!dati) continue;                                   // la cartella comune non c'è: si riprova al giro dopo
+      const formato = (c.file.match(/\.(docx|doc|pdf)$/i)?.[1]?.toLowerCase() ?? 'pdf') as Formato;
+      let testo = await testoDi(dati, formato);
+      if (formato === 'pdf' && testo.replace(/\s+/g, '').length < 200) testo = `${testo}\n${await ocrPrimePagine(dati, 2)}`;
+      r.letti++;
+      const risposta = testo.trim() ? await generaOllamaEsito(domandaPaziente(testo), { json: true, modello: MODELLO_AI, timeoutMs: 180_000 }) : null;
+      if (risposta && !risposta.ok) { console.log(`[comune] AI locale: ${risposta.causa}`); break; }     // spenta o lenta: si riprova dopo
+      const l = risposta?.ok ? leggiPaziente(risposta.testo) : null;
+      const nomeUnita = c.medico === MEDICO_SCANSIONI ? nomeDaScansione(path.basename(c.percorso)) : /\.(docx?|pdf)$/i.test(c.percorso) ? nomeDaFileSciolto(path.basename(c.percorso)) : path.basename(c.percorso);
+      const vera = l ? letturaVera(l, testo, nomeUnita) : { ok: false };
+      if (!l || !vera.ok) { await segna(); r.dubbi++; continue; }
+      pazienti ??= await query<Paz>(`select id, cognome, nome, data_nascita::text, numero from patients where studio_id = $1`, [studioId]);
+      let pid = abbinaLettura(l, pazienti), motivo = 'letto_da_ai';
+      if (!pid && creaPazienti() && l.nascita && Number(l.nascita.slice(0, 4)) <= new Date().getFullYear() - 10) {
+        const [p] = await query<{ id: string }>(`insert into patients (studio_id, cognome, nome, data_nascita) values ($1, $2, $3, $4::date) returning id`, [studioId, l.cognome, l.nome, l.nascita]);
+        pid = p.id; motivo = 'paziente_creato'; r.creati++;
+        pazienti.push({ id: pid, cognome: l.cognome, nome: l.nome, data_nascita: l.nascita });
+      }
+      await segna({ nome: `${l.cognome} ${l.nome}`.slice(0, 160), nascita: l.nascita });
+      if (!pid) { r.dubbi++; continue; }
+      await query(`update comune_cartelle set stato = 'abbinata', patient_id = $2, motivo = $3 where id = $1 and stato = 'in_attesa'`, [c.id, pid, motivo]);
+      r.abbinati++;
+    }
+    if (r.creati) { try { await riabbinaPazienti(studioId); } catch { /* best-effort */ } }
+    if (r.letti) console.log(`[comune] AI locale: lette ${r.letti} · abbinate ${r.abbinati} · pazienti creati ${r.creati} · ancora da decidere ${r.dubbi}`);
+    return r;
+  } catch (e: any) {
+    console.error(`[comune] AI locale: ${e?.code ?? e?.name ?? 'errore'}`);
+    return r;
+  } finally { aiInCorso = false; }
 }
 
