@@ -71,3 +71,17 @@ export async function docxDaDoc(dati: Buffer): Promise<Buffer | null> {
     });
   } catch { return null; }
 }
+
+// Un Word da leggere nel browser: textutil lo scrive in HTML (testo, grassetti, tabelle), senza script.
+export async function htmlDi(dati: Buffer, formato: 'doc' | 'docx'): Promise<string | null> {
+  try {
+    return await conDocVecchio(dati, async (ingresso, dir) => {
+      const doc = path.join(dir, `lettera.${formato}`);
+      await fs.rename(ingresso, doc);
+      const uscita = path.join(dir, 'lettera.html');
+      await textutil(['-convert', 'html', '-output', uscita, doc]);
+      return await fs.readFile(uscita, 'utf-8');
+    });
+  } catch { return null; }
+}
+

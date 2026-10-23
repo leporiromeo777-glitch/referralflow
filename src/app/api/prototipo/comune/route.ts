@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { isUuid } from '@/lib/cartella';
-import { assegna, creaCartellaEAssegna, giroComune, puoComune, scarta, stato } from '@/lib/comune/archivio';
+import { assegna, creaCartellaEAssegna, fileDaGuardare, giroComune, puoComune, scarta, stato } from '@/lib/comune/archivio';
 import { vietato } from '@/lib/permessi';
 
 export const dynamic = 'force-dynamic';
@@ -24,8 +24,20 @@ async function sessione() {
   return { session };
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const s = await sessione(); if ('errore' in s) return s.errore;
+  // ?file=<id>: un file della cartella comune da guardare prima di decidere
+  const file = new URL(req.url).searchParams.get('file');
+  if (file !== null) {
+    if (!isUuid(file)) return NextResponse.json({ errore: 'file' }, { status: 400 });
+    const f = await fileDaGuardare(s.session.studioId!, file);
+    if ('errore' in f) return NextResponse.json({ errore: f.errore }, { status: f.stato });
+    console.log('[comune] file guardato prima di decidere');
+    const intestazioni: Record<string, string> = { 'Content-Type': f.tipo, 'Content-Disposition': 'inline', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' };
+    // il Word diventato pagina: niente script né risorse esterne (il PDF no: il lettore del browser non partirebbe)
+    if (f.tipo.startsWith('text/html')) intestazioni['Content-Security-Policy'] = "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'";
+    return new NextResponse(new Uint8Array(f.corpo), { headers: intestazioni });
+  }
   return NextResponse.json({ ...(await stato(s.session.studioId!)), puo: { assegnare: puoComune(s.session.role, 'assegnare') } }, no);
 }
 

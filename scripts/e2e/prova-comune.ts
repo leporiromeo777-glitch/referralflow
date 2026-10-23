@@ -105,6 +105,12 @@ const pazienti: string[] = [];
     const [sca] = await query<{ stato: string; motivo: string }>(`select stato, motivo from comune_cartelle where studio_id = $1 and nome_letto = 'Scancom'`, [S]);
     verifica(!attesa.some((x: any) => x.nome_letto === 'Scancom') && sca?.stato === 'scartata' && sca?.motivo === 'un_nome_solo', `un nome solo: scartata, non da assegnare (${sca?.stato} ${sca?.motivo})`);
     verifica(st.stato === 200 && !!ign && ign.motivo === 'nessuno' && !ign.nascita_proposta && attesa.length === 1, `senza una data di nascita la cartella aspetta (${ign?.motivo}, ${attesa.length})`);
+    const fileId = ign?.file?.[0]?.id;
+    const apri = fileId ? await fetch(`${URL}?file=${fileId}`, { headers: { cookie: C_SEG } }) : null;
+    const apriTesto = apri ? await apri.text() : '';
+    const apriSenza = fileId ? (await fetch(`${URL}?file=${fileId}`)).status : 0;
+    verifica(!!apri && apri.status === 200 && /text\/html/.test(apri.headers.get('content-type') ?? '') && /senza date/.test(apriTesto) && apriSenza === 401,
+      `«Apri»: il Word della cartella da assegnare si legge come pagina; senza sessione 401 (${apri?.status}, ${apriSenza})`);
     verifica(st.j.conti?.creati === 2 && st.j.conti?.quasi === 2, `conteggi: 2 creati, 2 col nome quasi uguale (la cartella e la lettera sciolta) (${st.j.conti?.creati}, ${st.j.conti?.quasi})`);
     verifica((st.j.non_pazienti || []).some((x: any) => /Vecchie/.test(x.percorso)), 'l’archivio lasciato fuori');
     verifica(st.j.recenti?.length === 10 && st.j.conti?.caricati === 10, `ultimi sette giorni: 10 (${st.j.recenti?.length})`);

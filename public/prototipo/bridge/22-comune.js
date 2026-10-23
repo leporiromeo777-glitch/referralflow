@@ -115,6 +115,7 @@ function rfComAttesaHtml() {
     return `<div class="rf-com-arr">
       <div><b>${rfEsc(x.nome_letto || 'Cartella')}</b> · ${x.lettere} ${x.lettere === 1 ? 'lettera' : 'lettere'}${x.nascita_proposta ? ` · nelle lettere: nato/a il ${rfComGiorno(x.nascita_proposta)}` : ''}</div>
       <div class="rf-com-perc">${rfEsc(x.percorso)}</div>
+      ${(x.file || []).length ? `<div class="row" style="gap:6px;flex-wrap:wrap">${x.file.map(f => `<a class="btn sm" href="${RF_COM_URL}?file=${encodeURIComponent(f.id)}" target="_blank" rel="noopener" title="Apri il documento in un'altra scheda">Apri${x.file.length > 1 ? ` · ${rfEsc(f.nome)}` : ''}</a>`).join('')}</div>` : ''}
       <div class="caption">${rfEsc(RF_COM_MOTIVO[x.motivo] || 'da assegnare')}.</div>
       ${puo ? `<div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
         ${s.nuova ? `<input class="input" style="width:150px" placeholder="Cognome" value="${rfEsc(s.cognome)}" oninput="RF.com.scelte['${x.id}'].cognome=this.value"><input class="input" style="width:150px" placeholder="Nome" value="${rfEsc(s.nome)}" oninput="RF.com.scelte['${x.id}'].nome=this.value"><input class="input" style="width:120px" placeholder="31.12.1950" value="${rfEsc(s.nascita)}" oninput="RF.com.scelte['${x.id}'].nascita=this.value"><button class="btn sm primary" onclick="rfComCrea('${x.id}')">Crea il paziente e carica</button><button class="btn sm ghost" onclick="delete RF.com.scelte['${x.id}'];render()">Annulla</button>`

@@ -11,7 +11,7 @@ import { deleteFile, putFile } from '../storage';
 import { slugNome } from '../imaging-ordina';
 import { abbinaCartella, abbinaScansione, categoriaDi, dividiNome, nascitaSicura, nomeDaFileSciolto, nomeDaScansione, quasiStesso, dataDaNomeFile, dateNelTesto, MAX_LETTERE_PAZIENTE, nascitaProposta, nomeDaCartella, radice, stessaLettera, tocca, type Formato } from './regole';
 import { cartellePazienti, lettereSulDisco, mediciScelti, scansioniSulDisco, type SulDisco } from './scopri';
-import { docxDaDoc, ocrPrimePagine, testoDi } from './testo';
+import { docxDaDoc, htmlDi, ocrPrimePagine, testoDi } from './testo';
 
 // Le lettere della cartella comune (22.10.2026, [[Piattaforma/Cartella comune]]).
 //
@@ -337,10 +337,14 @@ export async function stato(studioId: string) {
             (select count(*)::int from comune_file where studio_id = $1 and stato = 'doppione') as doppioni,
             (select count(*)::int from comune_file where studio_id = $1 and stato = 'non_letto') as non_letti
        from comune_cartelle where studio_id = $1 and (($2::text[] is null and medico ~* '^rap+orti') or cardinality($2::text[]) = 0 or medico = any($2) or medico = 'Lavori archivio DocuWare')`, [studioId, mediciScelti()]);
-  const attesa = await query<{ id: string; percorso: string; medico: string; nome_letto: string; motivo: string | null; lettere: number; nascita_proposta: string | null }>(
-    `select id, percorso, medico, nome_letto, motivo, lettere, nascita_proposta::text from comune_cartelle
+  // con i suoi file (fino a 15), per aprirli prima di decidere (23.10.2026, dallo studio: «poter schiacciare un tasto per aprire il documento»)
+  const attesa = await query<{ id: string; percorso: string; medico: string; nome_letto: string; motivo: string | null; lettere: number; nascita_proposta: string | null; file: { id: string; nome: string }[] | null }>(
+    `select c.id, c.percorso, c.medico, c.nome_letto, c.motivo, c.lettere, c.nascita_proposta::text,
+            (select json_agg(json_build_object('id', f.id, 'nome', regexp_replace(f.percorso, '^.*/', '')) order by f.percorso)
+               from (select id, percorso from comune_file where cartella_id = c.id order by percorso limit 15) f) as file
+       from comune_cartelle c
       where studio_id = $1 and stato = 'in_attesa' and motivo is distinct from 'da_leggere' and (($2::text[] is null and medico ~* '^rap+orti') or cardinality($2::text[]) = 0 or medico = any($2) or medico = 'Lavori archivio DocuWare')
-      order by medico, nome_letto limit 8000`, [studioId, mediciScelti()]);
+      order by c.medico, c.nome_letto limit 8000`, [studioId, mediciScelti()]);
   const recenti = await query<{ patient_id: string; cognome: string; nome: string; filename: string; data_lettera: string | null; quando: string; documento_id: string }>(
     `select c.patient_id, p.cognome, p.nome, d.filename, f.data_lettera::text, to_char(f.quando, 'YYYY-MM-DD"T"HH24:MI') as quando, f.documento_id
        from comune_file f join comune_cartelle c on c.id = f.cartella_id join patients p on p.id = c.patient_id join patient_documents d on d.id = f.documento_id
@@ -388,3 +392,21 @@ export async function scarta(studioId: string, userId: string, id: string): Prom
   const [c] = await query<{ id: string }>(`update comune_cartelle set stato = 'scartata', deciso_da = $3, deciso_il = now() where id = $1 and studio_id = $2 and stato = 'in_attesa' returning id`, [id, studioId, userId]);
   return c ? { ok: true } : err('Cartella non trovata, o già decisa.', 404);
 }
+
+// Un file della cartella comune, per guardarlo prima di decidere: il PDF com'è, il Word convertito in una pagina da
+// leggere (textutil). Si legge dal disco: non entra nella piattaforma. Nei log niente percorsi né nomi.
+export async function fileDaGuardare(studioId: string, id: string): Promise<{ corpo: Buffer; tipo: string } | { errore: string; stato: number }> {
+  const [f] = await query<{ percorso: string; medico: string }>(
+    `select f.percorso, c.medico from comune_file f join comune_cartelle c on c.id = f.cartella_id where f.id = $1 and f.studio_id = $2`, [id, studioId]);
+  if (!f) return err('File non trovato.', 404);
+  const base = f.medico === MEDICO_SCANSIONI ? path.dirname(radiceScansioni()) : radiceComune();
+  if (!base) return err('La cartella comune non è collegata.', 409);
+  const pieno = path.resolve(base, f.percorso);
+  if (!pieno.startsWith(path.resolve(base) + path.sep)) return err('File non valido.', 400);
+  const dati = await fs.readFile(pieno).catch(() => null);
+  if (!dati) return err('Il file non si legge: la cartella comune non è collegata, o il file è stato spostato.', 404);
+  if (/\.pdf$/i.test(pieno)) return { corpo: dati, tipo: 'application/pdf' };
+  const html = await htmlDi(dati, /\.docx$/i.test(pieno) ? 'docx' : 'doc');
+  return html ? { corpo: Buffer.from(html, 'utf-8'), tipo: 'text/html; charset=utf-8' } : err('Questo Word non si apre qui.', 415);
+}
+
