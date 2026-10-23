@@ -15,6 +15,12 @@ if (typeof NAV !== 'undefined') for (const r of ['secretary', 'assistant', 'doct
   const n = NAV[r]; if (n && !n.includes('imaging')) n.splice(n.indexOf('documents') + 1, 0, 'imaging');
 }
 (function () { const st = document.createElement('style'); st.textContent = `
+.rf-img-pzl { display:flex; flex-direction:column; gap:4px; max-height:min(46vh, 360px); overflow-y:auto; margin-top:8px; }
+.rf-img-pz { display:flex; justify-content:space-between; align-items:baseline; gap:10px; text-align:left; padding:8px 10px; border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--text); font:inherit; cursor:pointer; }
+.rf-img-pz:hover { border-color:var(--accent); }
+.rf-img-pz.scelto { border-color:var(--accent); background:var(--accent-soft, rgba(90,90,255,.08)); box-shadow:0 0 0 1px var(--accent) inset; }
+.rf-img-pz .n { font-weight:600; font-size:13.5px; }
+.rf-img-pz .d { font-size:12px; color:var(--text-2); white-space:nowrap; font-variant-numeric:tabular-nums; }
 .rf-img-corpo { display:grid; grid-template-columns: 148px 1fr; gap:16px; align-items:start; }
 @media (max-width: 900px) { .rf-img-corpo { grid-template-columns: 1fr; } }
 .rf-img-serie { display:flex; flex-direction:column; gap:8px; max-height:70vh; overflow:auto; padding-right:4px; }
@@ -294,16 +300,42 @@ async function rfImgAzione(corpo, messaggio) {
   } catch { toast('Piattaforma non raggiungibile'); return false; }
 }
 
+// A chi è l'esame: si scrive il nome (23.10.2026, dallo studio: «c'è l'elenco di 6000 pazienti e trovare quello che serve è
+// impossibile: voglio poter scrivere il nome»). Prima era una tendina con i primi 400: gli altri non c'erano nemmeno.
+// Il campo parte col nome scritto nel file; cognome, nome e data in qualunque ordine (rfPazFiltrati della pagina Pazienti).
 function rfImgAbbina(id) {
-  const paz = (RF.data && RF.data.patients ? RF.data.patients : []).filter(p => rfUuid(p.id));
-  const righe = paz.slice(0, 400).map(p => `<option value="${p.id}">${rfEsc(fullName(p))}${p.dob ? ` · ${rfEsc(p.dob)}` : ''}</option>`).join('');
-  openModal('A chi è questo esame', `<div class="field"><label>Paziente della cartella</label><select class="input" id="rf-img-paz"><option value="">— scegli —</option>${righe}</select></div>
+  const tutti = [RF.img.dati && RF.img.dati.esame, ...(RF.img.lista || []), ...(RF.img.trovati || [])].filter(Boolean);
+  const e = tutti.find(x => x.id === id) || {};
+  const nascita = e.paziente_nascita ? rfImgData(e.paziente_nascita) : '';
+  const daFile = String(e.paziente_dicom || '').replace(/[\^,]+/g, ' ').replace(/[0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+  let scelto = '';
+  const righe = (q) => {
+    const parole = String(q || '').trim();
+    if (parole.length < 2) return '<div class="caption" style="padding:8px 4px">Scrivi almeno due lettere del cognome o del nome.</div>';
+    const l = rfPazFiltrati(parole).filter(p => rfUuid(p.id));
+    // chi ha la stessa data di nascita del file va in cima
+    if (nascita) l.sort((x, y) => (y.dob === nascita) - (x.dob === nascita));
+    if (!l.length) return '<div class="caption" style="padding:8px 4px">Nessun paziente con queste parole. Prova solo il cognome, o la data di nascita (31.12.1950).</div>';
+    return l.slice(0, 30).map(p => `<button type="button" class="rf-img-pz${p.id === scelto ? ' scelto' : ''}" data-pz="${p.id}"><span class="n">${rfEsc(fullName(p))}</span><span class="d">${p.dob ? rfEsc(p.dob) : 'senza data di nascita'}${nascita && p.dob === nascita ? ' · <b>stessa data del file</b>' : ''}</span></button>`).join('')
+      + (l.length > 30 ? `<div class="caption" style="padding:6px 4px">Altri ${l.length - 30}: scrivi qualcosa in più (il nome o la data di nascita).</div>` : '');
+  };
+  openModal('A chi è questo esame', `${e.paziente_dicom ? `<p class="caption" style="margin:0 0 8px">Nel file: «${rfEsc(e.paziente_dicom)}»${nascita ? `, nato/a ${rfEsc(nascita)}` : ''}</p>` : ''}
+    <div class="field"><label for="rf-img-q">Cerca il paziente</label><input class="input" id="rf-img-q" autocomplete="off" placeholder="Cognome, nome o data di nascita" value="${rfEsc(daFile)}"></div>
+    <div id="rf-img-pz" class="rf-img-pzl">${righe(daFile)}</div>
     <p class="caption mt-8">La piattaforma abbina da sola solo quando nome <b>e</b> data di nascita del file combaciano con una persona sola. Un omonimo non si indovina: lo decide chi guarda.</p>`,
     `<button class="btn" data-close>Annulla</button><button class="btn primary" id="rf-img-ok">Abbina</button>`);
+  const q = document.getElementById('rf-img-q'), lista = document.getElementById('rf-img-pz');
+  q.addEventListener('input', () => { lista.innerHTML = righe(q.value); });
+  q.focus(); q.setSelectionRange(q.value.length, q.value.length);
+  lista.addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-pz]'); if (!b) return;
+    scelto = b.dataset.pz;
+    lista.querySelectorAll('[data-pz]').forEach(x => x.classList.toggle('scelto', x === b));
+  });
+  lista.addEventListener('dblclick', (ev) => { if (ev.target.closest('[data-pz]')) document.getElementById('rf-img-ok').click(); });
   document.getElementById('rf-img-ok').onclick = async () => {
-    const pid = document.getElementById('rf-img-paz').value;
-    if (!pid) { toast('Scegli un paziente'); return; }
-    if (await rfImgAzione({ azione: 'abbina', id, patient_id: pid }, 'Esame abbinato')) {
+    if (!scelto) { toast('Scegli un paziente dalla lista'); return; }
+    if (await rfImgAzione({ azione: 'abbina', id, patient_id: scelto }, 'Esame abbinato')) {
       closeModal(); if (RF.img.aperto === id) await rfImgApri(id); else await rfImgCarica();
     }
   };

@@ -24,6 +24,8 @@ L'ordine dei pixel non è opinabile ed è quello del DICOM: prima la LUT di moda
 
 Un esame si aggancia da solo a una persona della cartella **solo se nome e data di nascita combaciano tutti e due, e una persona sola corrisponde**. Un omonimo senza data non si indovina: l'esame resta «da verificare» e lo abbina chi guarda.
 
+**Abbinare a mano** (23.10.2026, dallo studio: «c'è l'elenco di 6000 pazienti, trovare quello che serve è impossibile: voglio poter scrivere il nome»): la finestra «A chi è questo esame» ha un campo di ricerca al posto della tendina, che mostrava solo i primi 400 (gli altri non c'erano proprio). Cerca su tutti i pazienti con le regole della pagina Pazienti (cognome, nome, data in qualunque ordine), parte col nome scritto nel file e mette in cima chi ha la sua data di nascita; 30 risultati per volta, doppio clic per abbinare.
+
 Non è prudenza formale. Attaccare le immagini di qualcuno alla cartella di qualcun altro è il danno peggiore che questa pagina possa fare, e il generatore di prova contiene apposta due «Rossi Mario» con date diverse.
 
 ## Che cos'è, e che cosa non è

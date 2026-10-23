@@ -83,11 +83,12 @@ Parole: non si aggancia, non abbinato, perché, nome sbagliato, data di nascita 
 ## Come abbino un esame a un paziente?
 1. Apri l'esame dalla pagina «Immagini».
 2. In alto a destra premi «Abbina a un paziente».
-3. Nella finestra «A chi è questo esame», scegli il paziente dalla tendina «Paziente della cartella».
-4. Premi «Abbina».
+3. Nella finestra «A chi è questo esame», nel campo «Cerca il paziente» scrivi il cognome, il nome o la data di nascita (in qualunque ordine, per esempio «rossi mario» o «mario rossi 05.05.1955»). Il campo parte già col nome scritto nel file; correggilo se serve.
+4. Clicca il paziente giusto nella lista (si colora): chi ha la stessa data di nascita del file sta in cima, con la scritta «stessa data del file».
+5. Premi «Abbina» (oppure fai doppio clic sul paziente).
 L'esame passa nella cartella del paziente e compare nel suo riquadro «Immagini». Se il paziente non c'è ancora, crea prima la sua cartella da «Pazienti», poi torna qui.
-Limite: la tendina mostra al massimo 400 pazienti.
-Parole: abbinare, assegnare esame, collegare al paziente, agganciare, a chi è, mettere in cartella
+La ricerca guarda tutti i pazienti della cartella; la lista ne mostra 30 per volta: se sono di più, scrivi anche il nome o la data di nascita.
+Parole: abbinare, assegnare esame, cercare paziente, scrivere il nome, trovare paziente, lista pazienti, collegare al paziente, agganciare, a chi è, mettere in cartella
 
 ## Come cerco un esame vecchio?
 Di serie la pagina «Immagini» mostra solo gli esami degli ultimi 30 giorni. Per gli altri:
