@@ -33,8 +33,11 @@ const iso = (g: number, m: number, a: number): string | null => {
 export function nomeDaCartella(nome: string): { nome: string; nascita: string | null } {
   const grezzo = String(nome ?? '');
   nome = conPunti(grezzo);
-  // la data di nascita è l'ULTIMA data intera del nome («Rossi_Mario_12_05_2023_ECO_12_03_1950»: prima l'esame, poi la nascita)
-  const tutte = [...String(nome ?? '').matchAll(new RegExp(RX_DATA.source, 'g'))];
+  // La data di nascita è l'ULTIMA data intera scritta coi punti, le barre o i trattini («Rossi Mario (12.03.1950)»). Le
+  // date coi trattini bassi delle cartelle del Prof. Moccetti («Rossi_Mario_12nov2023_ECO_12_05_2019») sono di solito il
+  // giorno dell'esame (23.10.2026: in 71 cartelle su 95 lontane decenni dalla nascita): valgono solo per riconoscere,
+  // mai per dire «un'altra nascita» né per creare un paziente.
+  const tutte = [...grezzo.matchAll(new RegExp(RX_DATA.source, 'g'))];
   const m = tutte[tutte.length - 1];
   const nascita = m ? iso(Number(m[1]), Number(m[2]), Number(m[3])) : null;
   // «Cognome_Nome_12nov2023_ECO_…»: il nome sono le parole prima del primo pezzo con delle cifre
@@ -85,8 +88,9 @@ export function abbinaCartella(nomeCartella: string, date: Iterable<string>, paz
   const { nome } = nomeDaCartella(nomeCartella);
   const parole = slugNome(nome).split(' ').filter(Boolean);
   if (!parole.length) return { id: null, motivo: 'senza_nome' };
-  // Le date del nome della cartella valgono come quelle delle lettere (può essere la nascita o il giorno dell'esame).
-  const daNome = dateNelTesto(conPunti(nomeCartella));
+  // Le date del nome della cartella valgono come quelle delle lettere (può essere la nascita o il giorno dell'esame);
+  // dire «un'altra nascita» lo possono solo quelle scritte coi punti (non le date coi trattini bassi: esami).
+  const daNome = dateNelTesto(conPunti(nomeCartella)), daNomeNascita = dateNelTesto(nomeCartella);
   const nasc = (p: Paz) => (p.data_nascita ?? '').slice(0, 10);
   let stessoNome: Paz[], viste: Set<string>;
   if (parole.length >= 2) {
@@ -106,9 +110,9 @@ export function abbinaCartella(nomeCartella: string, date: Iterable<string>, paz
   // dallo studio: «quelli che carico a mano hanno nome e cognome identici alle cartelle di ReferralFlow, solo invertiti;
   // se c'è solo un nome non caricarlo»). Non se il nome della cartella porta un'altra data di nascita, e mai col solo
   // cognome (qui si arriva solo con almeno due parole).
-  if (parole.length >= 2 && !daNome.length) { const solo = unaPersona(stessoNome); if (solo) return { id: solo.id, motivo: 'abbinato' }; }
+  if (parole.length >= 2 && !daNomeNascita.length) { const solo = unaPersona(stessoNome); if (solo) return { id: solo.id, motivo: 'abbinato' }; }
   if (stessoNome.length > 1) return { id: null, motivo: 'omonimi' };
-  return { id: null, motivo: daNome.length ? 'nascita_diversa' : 'nascita_non_trovata' };
+  return { id: null, motivo: daNomeNascita.length ? 'nascita_diversa' : 'nascita_non_trovata' };
 }
 
 // Le cartelle cartacee scansionate (DocuWare, 22.10.2026): «123456_Cognome_Nome.pdf», il numero è quello della cartella.

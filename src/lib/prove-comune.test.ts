@@ -152,7 +152,7 @@ test('comune: le lettere sciolte — il nome dal nome del file', () => {
 });
 
 test('comune: le cartelle del Prof. Moccetti — data coi trattini bassi, codici e iniziali via', () => {
-  assert.deepEqual(nomeDaCartella('Prova_Alda_12A3456_M_12_03_1950'), { nome: 'Prova Alda', nascita: '1950-03-12' });
+  assert.deepEqual(nomeDaCartella('Prova_Alda_12A3456_M_12_03_1950'), { nome: 'Prova Alda', nascita: null });   // coi trattini bassi: non è la nascita
   assert.deepEqual(abbinaCartella('Prova_Alda_12A3456_M_12_03_1950', [], P), { id: 'a', motivo: 'abbinato' });
   assert.equal(nomeDaCartella('D Prova Alda').nome, 'D Prova Alda');      // la parola di una lettera di un cognome resta
   assert.deepEqual(abbinaCartella('D Prova Ada', ['1960-01-01'], [{ id: 'd', cognome: "D'Prova", nome: 'Ada', data_nascita: '1960-01-01' }]), { id: 'd', motivo: 'abbinato' });
@@ -160,8 +160,9 @@ test('comune: le cartelle del Prof. Moccetti — data coi trattini bassi, codici
 });
 
 test('comune: Prof. Moccetti — il nome prima del codice, la nascita è l’ultima data', () => {
-  assert.deepEqual(nomeDaCartella('Prova_Alda_12nov2023_ECO_12_03_1950'), { nome: 'Prova Alda', nascita: '1950-03-12' });
-  assert.deepEqual(nomeDaCartella('Prova_Alda_12_05_2023_ECO_12_03_1950'), { nome: 'Prova Alda', nascita: '1950-03-12' });
+  assert.deepEqual(nomeDaCartella('Prova_Alda_12nov2023_ECO_12_03_1950'), { nome: 'Prova Alda', nascita: null });
+  assert.deepEqual(abbinaCartella('Prova_Alda_12_05_2019_ECO', [], P), { id: 'a', motivo: 'abbinato' });   // la data d'esame non dice «altra nascita»
+  assert.deepEqual(nomeDaCartella('Prova Alda 01.06.2024 (12.03.1950)'), { nome: 'Prova Alda', nascita: '1950-03-12' });
   assert.deepEqual(dividiNome('Prova_Alda_12nov2023_ECO_12_03_1950'), { cognome: 'Prova', nome: 'Alda' });
   assert.deepEqual(nomeDaCartella('Prova Alda (12.03.1950)'), { nome: 'Prova Alda', nascita: '1950-03-12' });
 });
