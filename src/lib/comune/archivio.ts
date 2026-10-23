@@ -48,7 +48,7 @@ export const PUO_COMUNE = {
 } as const;
 export const puoComune = (ruolo: string | null | undefined, cosa: keyof typeof PUO_COMUNE): boolean => !!ruolo && (PUO_COMUNE[cosa] as readonly string[]).includes(ruolo);
 
-type Paz = { id: string; cognome: string; nome: string; data_nascita: string | null; numero?: string | null };
+type Paz = { id: string; cognome: string; nome: string; data_nascita: string | null; numero?: string | null; peso?: number };
 type Cartella = { id: string; percorso: string; stato: string; patient_id: string | null; date_lette: string[]; motivo: string | null; nascita_proposta: string | null };
 type Noto = { dimensione: string; modificato: Date; stato: string; sha256: string | null; documento_id: string | null };
 
@@ -99,7 +99,14 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number; sc
     const lotto = opzioni.lotto ?? LOTTO, fermo = opzioni.fermoMs ?? FERMO_MS;
     const cartelle = new Map((await query<Cartella>(`select id, percorso, stato, patient_id, date_lette, motivo, nascita_proposta::text from comune_cartelle where studio_id = $1`, [studioId])).map((c) => [c.percorso, c]));
     const noti = new Map<string, Noto>((await query<Noto & { percorso: string }>(`select percorso, dimensione::text, modificato, stato, sha256, documento_id from comune_file where studio_id = $1`, [studioId])).map((f) => [f.percorso, f]));
-    const pazienti = await query<Paz>(`select id, cognome, nome, data_nascita::text, numero from patients where studio_id = $1`, [studioId]);
+    // il «peso» sceglie fra due schede della stessa persona (unaPersona): numero di MediOnline, documenti, appuntamenti
+    const pazienti = await query<Paz>(
+      `select p.id, p.cognome, p.nome, p.data_nascita::text, p.numero,
+              (case when p.numero is not null then 1000 else 0 end + coalesce(d.n, 0) + coalesce(a.n, 0))::int as peso
+         from patients p
+         left join (select patient_id, count(*) as n from patient_documents where studio_id = $1 group by 1) d on d.patient_id = p.id
+         left join (select patient_id, count(*) as n from appointments where studio_id = $1 group by 1) a on a.patient_id = p.id
+        where p.studio_id = $1`, [studioId]);
     const nomi = new Set(pazienti.map((p) => slugNome(`${p.cognome} ${p.nome}`)));
     const { trovate: cartelleTrovate, sciolte, sciolti } = await cartellePazienti(base, nomi, mediciScelti());
     r.sciolte = sciolte;

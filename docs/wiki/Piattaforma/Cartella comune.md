@@ -36,6 +36,8 @@ nasce un paziente (a mano, da un'importazione) la cartella si riabbina al giro d
   («Rossi Mario, coronarografia del …») non basta. `COMUNE_CREA_PAZIENTI=0` lo spegne.
 - La pagina conta i pazienti creati e le cartelle col nome quasi uguale.
 
+**La stessa persona due volte nell'anagrafica** (23.10.2026, dallo studio: «ogni tanto nome e cognome vengono invertiti»): nell'anagrafica importata da MediOnline alcune persone ci sono due volte, una con cognome e nome scambiati, con la stessa data di nascita (il 23.10.2026: 6 coppie così). Non sono omonimi (`unaPersona`): si usa la scheda più viva (numero di MediOnline, documenti, appuntamenti). I doppioni restano da unire a mano.
+
 Se no la cartella **aspetta** («da assegnare») col perché: nessun paziente con quel nome, la data non si trova, un'altra
 data, omonimi. Dalla pagina: scegli il paziente (proposti quelli col cognome nel nome della cartella), **crealo** (con la
 data di nascita trovata accanto a «nato/a» o al nome, da controllare), o **non caricare**. Assegnata, le sue lettere

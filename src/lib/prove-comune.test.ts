@@ -1,7 +1,7 @@
 // Le lettere della cartella comune (22.10.2026): regole pure. Nomi e date INVENTATI.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { abbinaCartella, abbinaScansione, cartellaDiPaziente, categoriaDi, dividiNome, nascitaSicura, nomeDaFileSciolto, nomeDaScansione, quasiStesso, dataDaNomeFile, dateNelTesto, formatoLettera, nascitaProposta, nomeDaCartella, stessaLettera, tocca } from './comune/regole';
+import { unaPersona, abbinaCartella, abbinaScansione, cartellaDiPaziente, categoriaDi, dividiNome, nascitaSicura, nomeDaFileSciolto, nomeDaScansione, quasiStesso, dataDaNomeFile, dateNelTesto, formatoLettera, nascitaProposta, nomeDaCartella, stessaLettera, tocca } from './comune/regole';
 
 const P = [
   { id: 'a', cognome: 'Prova', nome: 'Alda', data_nascita: '1950-03-12' },
@@ -160,4 +160,14 @@ test('comune: Prof. Moccetti — il nome prima del codice, la nascita è l’ult
   assert.deepEqual(nomeDaCartella('Prova_Alda_12_05_2023_ECO_12_03_1950'), { nome: 'Prova Alda', nascita: '1950-03-12' });
   assert.deepEqual(dividiNome('Prova_Alda_12nov2023_ECO_12_03_1950'), { cognome: 'Prova', nome: 'Alda' });
   assert.deepEqual(nomeDaCartella('Prova Alda (12.03.1950)'), { nome: 'Prova Alda', nascita: '1950-03-12' });
+});
+
+test('comune: la stessa persona due volte (cognome e nome scambiati, stessa nascita) non è un omonimo', () => {
+  const D = [{ id: 'x', cognome: 'Prova', nome: 'Alda', data_nascita: '1950-03-12', peso: 3 }, { id: 'y', cognome: 'Alda', nome: 'Prova', data_nascita: '1950-03-12', peso: 1003 },
+    { id: 'z', cognome: 'Doppi', nome: 'Ugo', data_nascita: '1940-01-01' }, { id: 'w', cognome: 'Ugo', nome: 'Doppi', data_nascita: '1970-05-05' }];
+  assert.deepEqual(abbinaCartella('Prova Alda', ['1950-03-12'], D), { id: 'y', motivo: 'abbinato' });          // la scheda più viva
+  assert.deepEqual(abbinaCartella('Alda Prova (12.03.1950)', [], D), { id: 'y', motivo: 'abbinato' });
+  assert.deepEqual(abbinaCartella('Doppi Ugo', ['1940-01-01', '1970-05-05'], D), { id: null, motivo: 'omonimi' });   // persone diverse
+  assert.equal(quasiStesso('Prova Alda Maria', ['1950-03-12'], D), 'y');
+  assert.equal(unaPersona([]), null);
 });

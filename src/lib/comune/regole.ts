@@ -5,7 +5,19 @@
 // lettera dal nome del file, quando un PDF è la stessa lettera di un Word. Niente I/O.
 import { slugNome } from '../imaging-ordina';
 
-type Paz = { id: string; cognome: string; nome: string; data_nascita: string | null; numero?: string | null };
+type Paz = { id: string; cognome: string; nome: string; data_nascita: string | null; numero?: string | null; peso?: number };
+
+// La stessa persona due volte nell'anagrafica (23.10.2026, dallo studio: «ogni tanto nome e cognome sono invertiti»: la
+// stessa persona c'è due volte, una con cognome e nome scambiati, con la stessa data di nascita): non sono omonimi.
+// Stesse parole del nome E stessa nascita → una persona sola; si usa la scheda più «viva» (numero di MediOnline,
+// documenti, appuntamenti: `peso`), a parità la prima. Persone diverse restano omonimi.
+export function unaPersona(c: Paz[]): Paz | null {
+  if (c.length === 1) return c[0];
+  if (!c.length) return null;
+  const k = (p: Paz) => `${slugNome(`${p.cognome} ${p.nome}`)}|${(p.data_nascita ?? '').slice(0, 10)}`;
+  if (!c[0].data_nascita || c.some((p) => k(p) !== k(c[0]))) return null;
+  return [...c].sort((a, b) => (b.peso ?? 0) - (a.peso ?? 0))[0];
+}
 
 const RX_DATA = /(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})/;
 // «Rossi_Mario_12_03_1950» (le cartelle del Prof. Moccetti): la data scritta coi trattini bassi vale come coi punti.
@@ -86,8 +98,8 @@ export function abbinaCartella(nomeCartella: string, date: Iterable<string>, paz
     viste = new Set(daNome);
   }
   if (!stessoNome.length) return { id: null, motivo: 'nessuno' };
-  const conNascita = stessoNome.filter((p) => nasc(p) && viste.has(nasc(p)));
-  if (conNascita.length === 1) return { id: conNascita[0].id, motivo: 'abbinato' };
+  const conNascita = stessoNome.filter((p) => nasc(p) && viste.has(nasc(p))), uno = unaPersona(conNascita);
+  if (uno) return { id: uno.id, motivo: 'abbinato' };
   if (conNascita.length > 1 || stessoNome.length > 1) return { id: null, motivo: 'omonimi' };
   return { id: null, motivo: daNome.length ? 'nascita_diversa' : 'nascita_non_trovata' };
 }
@@ -114,7 +126,8 @@ export function abbinaScansione(file: string, date: Iterable<string>, pazienti: 
   const stesso = pazienti.filter((p) => slugNome(p.cognome) === parole[0]);
   if (!stesso.length) return { id: null, motivo: 'nessuno' };
   const c = stesso.filter((p) => p.data_nascita && viste.has(p.data_nascita.slice(0, 10)));
-  return c.length === 1 ? { id: c[0].id, motivo: 'abbinato' } : { id: null, motivo: c.length > 1 ? 'omonimi' : 'nascita_non_trovata' };
+  const uno = unaPersona(c);
+  return uno ? { id: uno.id, motivo: 'abbinato' } : { id: null, motivo: c.length > 1 ? 'omonimi' : 'nascita_non_trovata' };
 }
 
 // Le lettere sciolte (23.10.2026, dallo studio: «nella cartella Rapporti Moccetti c'era un file non in una cartella di
@@ -137,7 +150,7 @@ export function quasiStesso(nomeCartella: string, date: Iterable<string>, pazien
     const nasc = (p.data_nascita ?? '').slice(0, 10);
     return pp.length >= 2 && !!nasc && viste.has(nasc) && (pp.every((w) => fp.includes(w)) || fp.every((w) => pp.includes(w)));
   });
-  return c.length === 1 ? c[0].id : null;
+  return unaPersona(c)?.id ?? null;
 }
 
 // Cognome e nome dal nome della cartella («Cognome Nome», come lo studio le nomina): la prima parola è il cognome,
