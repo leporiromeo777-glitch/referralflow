@@ -80,6 +80,7 @@ function onRoute() {
 window.addEventListener('hashchange', onRoute);
 
 /* ---------- Shell ---------- */
+let rfRenderUltima = '';
 function render() {
   const app = $('#app');
   app.classList.toggle('with-ai', state.aiOpen);
@@ -90,8 +91,14 @@ function render() {
   renderSidebar(); renderTopbar(); renderSafetyBar(); renderStatusbar(); renderMobileNav(); renderAIPanel();
   if (typeof renderDocViewer === 'function') renderDocViewer();
   const page = PAGES[state.route] || PAGES.home;
-  $('#content').innerHTML = `<div class="page">${page()}</div>`;
-  $('#content').scrollTop = 0;
+  // In cima solo quando si cambia pagina (23.10.2026, dallo studio: «ogni volta che schiaccio un pulsante mi porta in
+  // cima, deve rimanere lì»): ridisegnando la stessa pagina restano dove erano la pagina e i riquadri che scorrono.
+  const contenuto = $('#content'), stessa = rfRenderUltima === location.hash, era = contenuto.scrollTop;
+  const riquadri = stessa ? [...contenuto.querySelectorAll('[id]')].filter(el => el.scrollTop > 0 || el.scrollLeft > 0).map(el => [el.id, el.scrollTop, el.scrollLeft]) : [];
+  contenuto.innerHTML = `<div class="page">${page()}</div>`;
+  contenuto.scrollTop = stessa ? era : 0;
+  for (const [id, t, l] of riquadri) { const el = document.getElementById(id); if (el && contenuto.contains(el)) { el.scrollTop = t; el.scrollLeft = l; } }
+  rfRenderUltima = location.hash;
   bindCommon($('#content'));
   if (typeof ainBind === 'function') ainBind($('#content'));
   if (typeof anonBind === 'function') anonBind($('#content'));

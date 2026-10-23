@@ -66,3 +66,6 @@ Tutte le 34 pagine più revisione, scheda paziente, documento della giornata e f
 | Documento delle procedure nel pannello laterale (290 px) | titolo schiacciato a 100 px, «Stampa» fuori dal bordo | titolo e tasti su due righe quando non c'è spazio |
 
 **Regole che ne escono**: niente selettori larghi come `.card .num` nelle regole per telefono; una barra di tasti deve poter andare a capo; una finestra non è mai più alta dello schermo; ciò che scorre in una pagina a tutta altezza lascia spazio al menu a pillola. Il contenitore che scorre è `main.content`, non la pagina: chi controlla «a fondo pagina» deve scorrere quello.
+
+## Lo scorrimento resta (23.10.2026)
+Dallo studio: «ogni volta che schiaccio un pulsante in ReferralFlow mi porta in cima, deve rimanere lì». `render()` (`public/prototipo/app.js`) ridisegna la pagina a ogni azione: torna in cima **solo quando cambia la pagina** (l'indirizzo dopo `#`); ridisegnando la stessa pagina restano dove erano la pagina e i riquadri che scorrono (quelli con un `id`). Un riquadro nuovo che scorre va scritto con un `id`, se no torna in cima.
