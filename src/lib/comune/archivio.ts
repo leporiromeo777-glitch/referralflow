@@ -52,7 +52,7 @@ type Paz = { id: string; cognome: string; nome: string; data_nascita: string | n
 type Cartella = { id: string; percorso: string; stato: string; patient_id: string | null; date_lette: string[]; motivo: string | null; nascita_proposta: string | null };
 type Noto = { dimensione: string; modificato: Date; stato: string; sha256: string | null; documento_id: string | null };
 
-export type EsitoGiro = { scansioni: number; scansioni_restano: boolean; creati: number; sciolte: number; cartelle: number; nuovi: number; caricati: number; doppioni: number; in_attesa: number; non_letti: number; abbinate: number; restano: boolean; cartella?: 'assente'; gia_in_corso?: boolean };
+export type EsitoGiro = { scartate: number; scansioni: number; scansioni_restano: boolean; creati: number; sciolte: number; cartelle: number; nuovi: number; caricati: number; doppioni: number; in_attesa: number; non_letti: number; abbinate: number; restano: boolean; cartella?: 'assente'; gia_in_corso?: boolean };
 
 async function caricaDocumento(studioId: string, patientId: string, medico: string, f: SulDisco, dati: Buffer, dataLettera: string | null, prima: { documento_id: string | null } | null, scansione = false): Promise<string> {
   let corpo = dati, nome = f.nome, formato: Formato = f.formato;
@@ -85,7 +85,7 @@ async function caricaDocumento(studioId: string, patientId: string, medico: stri
 
 let inCorso = false;
 export async function giroComune(opzioni: { lotto?: number; fermoMs?: number; scansioni?: boolean } = {}): Promise<EsitoGiro> {
-  const r: EsitoGiro = { scansioni: 0, scansioni_restano: false, creati: 0, sciolte: 0, cartelle: 0, nuovi: 0, caricati: 0, doppioni: 0, in_attesa: 0, non_letti: 0, abbinate: 0, restano: false };
+  const r: EsitoGiro = { scartate: 0, scansioni: 0, scansioni_restano: false, creati: 0, sciolte: 0, cartelle: 0, nuovi: 0, caricati: 0, doppioni: 0, in_attesa: 0, non_letti: 0, abbinate: 0, restano: false };
   if (inCorso) return { ...r, gia_in_corso: true };
   inCorso = true;
   let giroId: string | null = null, studioId = '';
@@ -155,6 +155,13 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number; sc
         r.abbinate++;
         return { ...c, stato: 'abbinata', patient_id: id, motivo, date_lette: date };
       }
+      // Un nome solo (solo il cognome o solo il nome) che non si abbina: scartato, non resta da assegnare (23.10.2026,
+      // dallo studio: «quelli con un solo nome o un solo cognome li voglio scartati»).
+      if (slugNome(nomeDaCartella(nomeCartella).nome).split(' ').filter((w) => w.length >= 2).length < 2) {
+        await query(`update comune_cartelle set stato = 'scartata', motivo = 'un_nome_solo', date_lette = $2 where id = $1`, [c.id, date]);
+        r.scartate++;
+        return { ...c, stato: 'scartata', motivo: 'un_nome_solo', date_lette: date };
+      }
       if (a.motivo !== c.motivo || date.length !== c.date_lette.length || (proposta && !c.nascita_proposta))
         await query(`update comune_cartelle set motivo = $2, date_lette = $3, nascita_proposta = coalesce(nascita_proposta, $4::date) where id = $1`, [c.id, a.motivo, date, proposta]);
       return { ...c, motivo: a.motivo, date_lette: date, nascita_proposta: c.nascita_proposta ?? proposta };
@@ -174,6 +181,7 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number; sc
       // Una cartella che aspettava si riabbina con le date già lette (un paziente nato dopo, un'importazione).
       if (c.stato === 'in_attesa' && c.motivo !== 'da_leggere') {
         c = await decidi(c, nomeCartella, c.date_lette, c.nascita_proposta, null, scansione?.nome ?? null, !!sciolto); cartelle.set(rel, c);
+        if (c.stato === 'scartata') continue;
       }
       const sulDisco = scansione ? [scansione] : sciolto ? [sciolto] : await lettereSulDisco(base, rel);
       // Centinaia di lettere in una cartella sola che non porta il nome di un paziente conosciuto: è un archivio.
@@ -254,7 +262,7 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number; sc
         const dataLettera = dataDaNomeFile(l.f.nome);
         r.nuovi++;
         if (!l.dati) { await segna(l.f, 'non_letto', { motivo: l.f.dimensione ? 'troppo_grande' : 'vuoto' }); r.non_letti++; continue; }
-        if (c.stato !== 'abbinata') { await segna(l.f, 'in_attesa', { sha: l.sha, data: dataLettera }); r.in_attesa++; continue; }
+        if (c.stato !== 'abbinata') { await segna(l.f, 'in_attesa', { sha: l.sha, data: dataLettera }); if (c.stato !== 'scartata') r.in_attesa++; continue; }
         const prima = noti.get(l.f.rel);
         if (prima?.stato === 'caricato' && prima.sha256 === l.sha) { await segna(l.f, 'caricato', { sha: l.sha, doc: prima.documento_id, data: dataLettera }); continue; }
         if (caricatiSha.has(l.sha) && !prima?.documento_id) { await segna(l.f, 'doppione', { sha: l.sha, motivo: 'stesso_file' }); r.doppioni++; continue; }
@@ -275,7 +283,7 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number; sc
       `update comune_giri set finito = now(), cartelle = $2, nuovi = $3, caricati = $4, doppioni = $5, in_attesa = $6, non_letti = $7, abbinate = $8, restano = $9, sciolte = $10 where id = $1`,
       [giroId, r.cartelle, r.nuovi, r.caricati, r.doppioni, r.in_attesa, r.non_letti, r.abbinate, r.restano, r.sciolte]);
     scansioniRestano = r.scansioni_restano;
-    if (r.nuovi || r.abbinate) console.log(`[comune] lettere: nuove ${r.nuovi} · caricate ${r.caricati} · doppioni ${r.doppioni} · da assegnare ${r.in_attesa} · non lette ${r.non_letti} · cartelle abbinate ${r.abbinate}${r.creati ? ` · pazienti creati ${r.creati}` : ''}${r.scansioni ? ` · scansioni caricate ${r.scansioni}` : ''}${r.restano ? ' · ne restano' : ''}${r.scansioni_restano ? ' · restano scansioni' : ''}`);
+    if (r.nuovi || r.abbinate) console.log(`[comune] lettere: nuove ${r.nuovi} · caricate ${r.caricati} · doppioni ${r.doppioni} · da assegnare ${r.in_attesa} · non lette ${r.non_letti} · cartelle abbinate ${r.abbinate}${r.creati ? ` · pazienti creati ${r.creati}` : ''}${r.scartate ? ` · scartate (un nome solo) ${r.scartate}` : ''}${r.scansioni ? ` · scansioni caricate ${r.scansioni}` : ''}${r.restano ? ' · ne restano' : ''}${r.scansioni_restano ? ' · restano scansioni' : ''}`);
     return r;
   } catch (e: any) {
     if (giroId) await query(`update comune_giri set finito = now(), errore = $2, restano = true where id = $1`, [giroId, String(e?.code ?? e?.name ?? 'errore').slice(0, 60)]).catch(() => null);
