@@ -989,3 +989,10 @@ file dal 2002, la richiesta parlava degli «ultimi anni») e le lettere sciolte 
 Poco dopo, dallo studio: «fai il tutto solo dei rapporti di Marco Moccetti» → si legge **solo «Rapporti_Moccetti»** (`COMUNE_MEDICI`); le altre cartelle dei medici (Prof. Moccetti compreso), gli esami e le convocazioni restano fuori.
 Poi: «quelli che non ci sono su ReferralFlow creali». Deciso: se un paziente ha il nome quasi uguale (un secondo nome in più o in meno) e la stessa data di nascita nelle lettere, si usa la sua scheda (niente doppione); se no il paziente nasce da solo, ma solo con una data di nascita sicura (nel nome della cartella, accanto a «nato/a il», o da sola subito dopo il nome, e prima della lettera). Senza, la cartella aspetta con la data proposta.
 Poi: «ci sono dei documenti vecchi su MediOnline, i pazienti dalla A alla F scansionati fino al 2024: puoi prenderle?» → non dal robot di MediOnline (resta in sola lettura dell'agenda), ma dalla cartella comune «Lavori archivio DocuWare», dove le stesse scansioni ci sono (1541 PDF): «metti anche quelle». Deciso: il numero nel nome del file è il N° di MediOnline, e numero + nome bastano a riconoscere la scansione; se no la regola di sempre. Le scansioni pesano: poche per giro, sera, notte e fine settimana, dietro la coda dell'OCR.
+
+## Dittafono: i comandi prendono la lettera che si sta guardando — 23.10.2026
+Con le cartelle cartacee scansionate fra i documenti, «la più recente» e l'elenco delle lettere si riempivano di pezzi di
+tutto. Proposta: analizzare di notte le scansioni (Dividi) e mostrare solo i pezzi di tipo lettera. Lo studio: «non avrebbe
+più senso che per i comandi prenda la lettera che sta guardando in quel momento?». Deciso così: il medico sfoglia (anche la
+scansione intera) e tasti e comandi prendono la lettera alla pagina in vista; niente analisi notturna delle scansioni.
+

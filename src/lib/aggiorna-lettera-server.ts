@@ -71,13 +71,13 @@ function formaSalvata(p: any, testo: string): FormaBozza | null {
   return { grassetti: grassetti.map((g) => { const m = g.etichetta ? modelloFamiglia(famigliaDi(g.testo)) : null; return m ? { ...g, modello: m } : g; }), presenti, spento: !!f.spento, fonte: f.fonte ?? null };
 }
 
-const fmt = (d: Date | string) => new Intl.DateTimeFormat('it-CH', { timeZone: 'Europe/Zurich', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d));
+export const fmt = (d: Date | string) => new Intl.DateTimeFormat('it-CH', { timeZone: 'Europe/Zurich', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d));
 const stessaData = (quando: Date, d: DataCercata) => {
   const [g, m, a] = fmt(quando).split('.').map(Number);
   return a === d.a && (!d.m || m === d.m) && (!d.g || g === d.g);
 };
 
-async function testoDelFile(storageKey: string, filename: string): Promise<string[]> {
+export async function testoDelFile(storageKey: string, filename: string): Promise<string[]> {
   const { body } = await getFile(storageKey);
   const n = filename.toLowerCase();
   if (n.endsWith('.txt')) return [body.toString('utf-8')];

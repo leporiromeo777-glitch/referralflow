@@ -62,8 +62,11 @@ export async function POST(req: NextRequest) {
   const numero = Number.isInteger(b?.numero) && b.numero >= 1 && b.numero <= 500 ? Number(b.numero) : null;
   // il ripiego del «fino a» (22.10.2026): dove fermarsi se la parte chiesta nella lettera non c'è
   const ripiego = comando !== 'fino' ? [] : (Array.isArray(b?.ripiego) ? (b.ripiego as unknown[]) : [b?.ripiego]).map(String).filter((k): k is ParteLettera => (PARTI_LETTERA as readonly string[]).includes(k)).slice(0, 4);
-  const r = await eseguiComando(session.studioId, session.id, paziente, comando, comando === 'fino' ? parti.slice(0, 1) : parti, esclusa, numero, ripiego);
-  console.log(`[dittafono-comando] ${comando}${parti.length ? ` parti=${parti.join('+')}` : ''}${esclusa ? ' esclusa' : ''}${numero !== null ? ` numero=${numero}` : ''} → ${'errore' in r ? `niente (${r.errore.replace(/:.*/, '').slice(0, 60)})` : `ok fonte=${r.apri.tipo} pdf=${r.apri.pdf ? 'sì' : 'no'} caratteri=${r.testo.length} mancanti=${r.mancanti.length}`}`);
+  // la lettera che il medico sta guardando (23.10.2026): il documento aperto accanto al foglio e la pagina in vista
+  const docGuardato = typeof b?.documento === 'string' && /^[0-9a-f-]{36}$/i.test(b.documento) ? b.documento : null;
+  const guardata = docGuardato ? { documento: docGuardato, pagina: Number.isInteger(b?.pagina) && b.pagina >= 1 && b.pagina <= 5000 ? Number(b.pagina) : 1 } : null;
+  const r = await eseguiComando(session.studioId, session.id, paziente, comando, comando === 'fino' ? parti.slice(0, 1) : parti, esclusa, guardata ? null : numero, ripiego, guardata);
+  console.log(`[dittafono-comando] ${comando}${parti.length ? ` parti=${parti.join('+')}` : ''}${esclusa ? ' esclusa' : ''}${numero !== null ? ` numero=${numero}` : ''}${guardata ? ' lettera guardata' : ''} → ${'errore' in r ? `niente (${r.errore.replace(/:.*/, '').slice(0, 60)})` : `ok fonte=${r.apri?.tipo ?? "guardata"} pdf=${r.apri?.pdf ? 'sì' : 'no'} caratteri=${r.testo.length} mancanti=${r.mancanti.length}`}`);
   return 'errore' in r ? NextResponse.json({ errore: r.errore }, { status: 404, headers: { 'Cache-Control': 'no-store' } })
     : NextResponse.json({ testo: r.testo, fonte: r.fonte, data: r.data, cosa: r.cosa, mancanti: r.mancanti, apri: r.apri, saluto: r.saluto ?? '', indice: r.indice, totale: r.totale }, { headers: { 'Cache-Control': 'no-store' } });
 }

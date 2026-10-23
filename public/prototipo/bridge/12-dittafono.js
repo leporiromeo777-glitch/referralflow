@@ -289,14 +289,32 @@ async function rfDitComandoCerca() {
   if (RFComandi.trova(el.value, 0)) rfDitComandoProgramma();      // ce n'è un altro
 }
 // Chiede il pezzo al server e lo mette al posto della frase (o, dal tasto, dove sta il cursore).
+// Che cosa c'è aperto accanto al foglio: { numero } per una lettera numerata, { documento, pagina } per un documento.
+function rfDitGuardata() {
+  const f = RF.dit.fonte; if (!f) return null;
+  if (Number.isInteger(f.indice)) return { numero: f.indice + 1 };
+  if (f.tipo === 'documento' && f.id && (f.pdf || f.docx)) return { documento: f.id, pagina: f.pdf ? rfDitPaginaVista() : 1 };
+  return null;
+}
+// La pagina che si vede di più nel riquadro accanto al foglio.
+function rfDitPaginaVista() {
+  const box = document.getElementById('rf-dit-fonte-corpo'); if (!box) return 1;
+  const r = box.getBoundingClientRect(); let meglio = null, quanto = 0;
+  for (const el of box.querySelectorAll('[data-pagina]')) { const q = el.getBoundingClientRect(); const h = Math.min(q.bottom, r.bottom) - Math.max(q.top, r.top); if (h > quanto) { quanto = h; meglio = el; } }
+  return meglio ? Number(meglio.dataset.pagina) : (RF.dit.fonte && RF.dit.fonte.da) || 1;
+}
 async function rfDitComandoEsegui(comando, da, a, frase, parti, soloApri, esclusa, numero, ripiego) {
   const d = RF.dit, paz = rfFoglioPazId(), cosa = (comando === 'parti' ? 'quella parte della lettera' : 'la lettera') + (numero ? ` numero ${numero}` : '');
   const riprova = ' <a href="javascript:void 0" onclick="rfDitComandoRiprova()">Riprova</a>';
   const fallito = (perche, motivo) => { d.cmdFallito = frase || ''; rfDitComandoStato(`<span style="color:#b3261e">${rfEsc(perche)}</span>${frase ? riprova : ''}`); if (typeof toast === 'function') toast(perche); if (motivo) rfDitComandoDice({ motivo }); };
   if (!paz) { fallito('Comando capito, ma manca il paziente: sceglilo dall’elenco nel campo «Paziente», poi «Riprova».', 'senza_paziente'); return; }
-  d.cmdInCorso = true; rfDitComandoStato('Cerco ' + cosa + ' nella cartella del paziente…');
+  // La lettera che il medico sta guardando (23.10.2026, dallo studio): se accanto al foglio è aperta una lettera numerata,
+  // quella; se è aperto un documento (anche la cartella scansionata intera), la lettera alla pagina in vista.
+  const guardata = !numero ? rfDitGuardata() : null;
+  if (!numero && guardata && guardata.numero) numero = guardata.numero;
+  d.cmdInCorso = true; rfDitComandoStato('Cerco ' + (guardata && guardata.documento ? `la lettera a pagina ${guardata.pagina} del documento aperto` : cosa) + '…');
   try {
-    const r = await fetch('/api/prototipo/dittafono/comando', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comando, parti: parti || [], esclusa: !!esclusa, paziente: paz, numero: numero || null, ripiego: ripiego || [] }) });
+    const r = await fetch('/api/prototipo/dittafono/comando', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ comando, parti: parti || [], esclusa: !!esclusa, paziente: paz, ...(guardata && guardata.documento ? { documento: guardata.documento, pagina: guardata.pagina } : {}), numero: numero || null, ripiego: ripiego || [] }) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.testo) { fallito(j.errore || 'Non riesco a prendere ' + cosa + '.'); return; }
     // «Aprimi…», «fammi vedere…»: la frase si toglie, la lettera si apre accanto, nel foglio non entra niente.
@@ -351,7 +369,7 @@ function rfDitFonteHtml() {
   const md = 'onmousedown="event.preventDefault()"';      // i tasti non tolgono il cursore dal foglio: Dragon continua a scriverci
   const frecce = Number.isInteger(f.indice) && f.totale > 1
     ? `<button class="btn sm" ${md} onclick="rfDitLettera(${f.indice + 1})" ${f.indice + 1 >= f.totale ? 'disabled' : ''} title="La lettera prima (più vecchia)" aria-label="Lettera più vecchia">‹</button><span class="caption rf-dit-fonte-pos">n. ${f.indice + 1} di ${f.totale}</span><button class="btn sm" ${md} onclick="rfDitLettera(${f.indice - 1})" ${f.indice <= 0 ? 'disabled' : ''} title="La lettera dopo (più recente)" aria-label="Lettera più recente">›</button>` : '';
-  return `<div class="rf-dit-fonte-bar">${frecce}<b class="rf-dit-fonte-nome" title="${rfEsc(f.titolo || '')}">${rfEsc(f.titolo || 'Lettera')}</b>${rfDitZoomHtml('fonte')}<button class="btn sm" ${md} onclick="rfDitFonteChiudi()" aria-label="Chiudi la lettera" title="${rfFoglioPazId() ? 'Chiudi la lettera e torna alla cartella' : 'Chiudi'}">✕</button></div><div class="rf-dit-fonte-corpo" id="rf-dit-fonte-corpo"></div>`;
+  return `<div class="rf-dit-fonte-bar">${frecce}<b class="rf-dit-fonte-nome" title="${rfEsc(f.titolo || '')}">${rfEsc(f.titolo || 'Lettera')}</b>${!Number.isInteger(f.indice) && f.tipo === 'documento' && f.pdf ? '<span class="caption" id="rf-dit-fonte-pag" title="I tasti e i comandi a voce prendono la lettera a questa pagina"></span>' : ''}${rfDitZoomHtml('fonte')}<button class="btn sm" ${md} onclick="rfDitFonteChiudi()" aria-label="Chiudi la lettera" title="${rfFoglioPazId() ? 'Chiudi la lettera e torna alla cartella' : 'Chiudi'}">✕</button></div><div class="rf-dit-fonte-corpo" id="rf-dit-fonte-corpo"></div>`;
 }
 // Tab scrive una tabulazione nel foglio, non passa al campo dopo (22.10.2026, dallo studio: «si deve poter schiacciare
 // tab, per la tabella dei dosaggi della terapia»). Maiuscolo+Tab esce dal foglio come prima. Il Word la tiene come
@@ -496,6 +514,14 @@ function rfDitScorriAttacca(box) {
   box.addEventListener('touchend', () => { y0 = null; }, { passive: true });
 }
 // La striscia in fondo (o in cima) che si riempie mentre si spinge: dice quale lettera si sta per aprire.
+// Con un documento aperto: nella barra, quale pagina prendono i comandi (si aggiorna scorrendo).
+function rfDitPaginaSegna(box) {
+  const et = document.getElementById('rf-dit-fonte-pag'); if (!et || box.dataset.pag) return;
+  box.dataset.pag = '1';
+  let t = 0; const metti = () => { const e = document.getElementById('rf-dit-fonte-pag'); if (e) e.textContent = `i comandi: pagina ${rfDitPaginaVista()}`; };
+  box.addEventListener('scroll', () => { clearTimeout(t); t = setTimeout(metti, 120); }, { passive: true });
+  metti();
+}
 // Sta sopra la lettera (nella colonna, non dentro ciò che scorre: se no allungherebbe la pagina e il fondo si sposterebbe).
 function rfDitScorriSegno(box, verso, quanto) {
   const host = box.parentElement; if (!host) return;
@@ -531,17 +557,28 @@ async function rfDitFonteDisegna() {
     }
     const attuale = () => RF.dit.fonte === f && box.dataset.fatto === chiave && box.isConnected;
     if (!attuale()) return;
-    // le pagine della lettera (in una cartella scansionata solo le sue); un file intero fino a dodici pagine
-    const n = f.pdfDoc.numPages, da = Math.min(n, Math.max(1, f.da || 1)), a = Math.min(n, Math.max(da, f.da ? (f.a || f.da) : 12));
-    const larga = Math.max(200, box.clientWidth - 16) * z, dpr = Math.min(2, window.devicePixelRatio || 1), tele = [];
-    for (let i = da; i <= a; i++) {
-      const p = await f.pdfDoc.getPage(i), v1 = p.getViewport({ scale: 1 }), v = p.getViewport({ scale: larga / v1.width * dpr }), c = document.createElement('canvas');
+    // le pagine della lettera (in una cartella scansionata solo le sue); un documento intero TUTTO (23.10.2026: la cartella
+    // scansionata si sfoglia fino in fondo e i comandi prendono la lettera alla pagina in vista), disegnato man mano
+    const n = f.pdfDoc.numPages, da = Math.min(n, Math.max(1, f.da || 1)), a = f.da ? Math.min(n, Math.max(da, f.a || f.da)) : n;
+    const larga = Math.max(200, box.clientWidth - 16) * z, dpr = Math.min(2, window.devicePixelRatio || 1);
+    const disegna = async (i, c) => {
+      const p = await f.pdfDoc.getPage(i), v1 = p.getViewport({ scale: 1 }), v = p.getViewport({ scale: larga / v1.width * dpr });
       c.width = Math.floor(v.width); c.height = Math.floor(v.height); c.style.width = `${Math.floor(v.width / dpr)}px`; c.style.height = `${Math.floor(v.height / dpr)}px`;
       await p.render({ canvas: c, canvasContext: c.getContext('2d'), viewport: v }).promise;
-      if (!attuale()) return;
-      tele.push(c);
+    };
+    if (a - da < 12) {
+      const tele = [];
+      for (let i = da; i <= a; i++) { const c = document.createElement('canvas'); c.dataset.pagina = String(i); await disegna(i, c); if (!attuale()) return; tele.push(c); }
+      box.innerHTML = ''; tele.forEach(c => box.appendChild(c)); rfDitScorriDopo(box);
+    } else {
+      // tante pagine: segnaposto della misura giusta, e ogni pagina si disegna quando si avvicina
+      const v1 = (await f.pdfDoc.getPage(da)).getViewport({ scale: 1 }), alta = Math.floor((larga / v1.width) * v1.height);
+      box.innerHTML = '';
+      const vista = new IntersectionObserver((voci) => { for (const x of voci) if (x.isIntersecting && !x.target.dataset.fatta) { x.target.dataset.fatta = '1'; void disegna(Number(x.target.dataset.pagina), x.target).catch(() => {}); } }, { root: box, rootMargin: '1200px 0px' });
+      for (let i = da; i <= a; i++) { const c = document.createElement('canvas'); c.dataset.pagina = String(i); c.style.width = `${Math.floor(larga)}px`; c.style.height = `${alta}px`; box.appendChild(c); vista.observe(c); }
+      rfDitScorriDopo(box);
     }
-    box.innerHTML = ''; tele.forEach(c => box.appendChild(c)); rfDitScorriDopo(box);
+    if (!Number.isInteger(f.indice) && f.tipo === 'documento') rfDitPaginaSegna(box);
   } catch (_) { if (RF.dit.fonte === f) { testo(); rfDitScorriDopo(box); } }      // il file non si apre qui: resta il testo della lettera
 }
 // Una lettera Word disegnata com'è (15.10.2026, dallo studio: «mi apre un testo, non la lettera vera»): per un referto
@@ -934,7 +971,7 @@ function rfDitComandoDaTasto(parte) {
   if (d.stato === 'registra') { toast('Lascia prima il tasto per dettare, poi premi il comando'); return; }
   const el = document.getElementById('rf-dit-testo'); if (!el || d.cmdInCorso) return;
   const qui = typeof d.cursore === 'number' && d.cursore <= el.value.length ? d.cursore : el.value.length;
-  const numero = d.fonte && Number.isInteger(d.fonte.indice) ? d.fonte.indice + 1 : 1;
+  const numero = d.fonte && Number.isInteger(d.fonte.indice) ? d.fonte.indice + 1 : rfDitGuardata() ? null : 1;      // un documento aperto: la pagina in vista
   // «Fino ad allergie e intolleranze» (22.10.2026): tutta la lettera dall'inizio fino alle allergie e intolleranze
   // comprese; se non ci sono, fino alle comorbidità; se non ci sono neanche quelle, fino ai fattori di rischio.
   if (parte === 'fino_allergie') { void rfDitComandoEsegui('fino', qui, qui, '', ['allergie'], false, false, numero, ['comorbidita', 'frcv']); return; }

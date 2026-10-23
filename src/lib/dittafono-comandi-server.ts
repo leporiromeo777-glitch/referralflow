@@ -1,5 +1,8 @@
 import 'server-only';
-import { lettereDelPazienteScelto } from './aggiorna-lettera-server';
+import { pulisciScansione } from './aggiorna-lettera';
+import { fmt, lettereDelPazienteScelto, testoDelFile } from './aggiorna-lettera-server';
+import { lettereNellePagine } from './cerca-in-cartella';
+import { etichettaDocumento } from './referti-allegato-blocco';
 import { logDocumento } from './cartella';
 import { query } from './db';
 import { corpoDellaLettera, finoAlPiuLontano, letteraFinoA, NOME_PARTE, partiDellaLettera, salutoDellaLettera, type Comando, type ParteLettera } from './dittafono-comandi';
@@ -16,7 +19,7 @@ import { corpoDellaLettera, finoAlPiuLontano, letteraFinoA, NOME_PARTE, partiDel
 export type DaAprire = { tipo: 'referto' | 'documento' | 'pagine'; id: string; pdf: boolean; docx: boolean; da: number | null; a: number | null; testo: string };
 // `saluto`: il saluto in testa alla lettera, quando si prende dall'inizio (lettera intera, «fino a…»).
 // `indice`/`totale` (21.10.2026): dove sta quella lettera fra le lettere del paziente, dalla più recente — per le frecce.
-export type EsitoComando = { ok: true; testo: string; fonte: string; data: string; cosa: string; mancanti: string[]; apri: DaAprire; saluto?: string; indice: number; totale: number } | { errore: string };
+export type EsitoComando = { ok: true; testo: string; fonte: string; data: string; cosa: string; mancanti: string[]; apri: DaAprire | null; saluto?: string; indice?: number; totale?: number } | { errore: string };
 const TETTO = 20000;
 
 // `numero` (21.10.2026): «la lettera numero 2» — la seconda dalla più recente, come numerata accanto al foglio. Con il
@@ -24,19 +27,47 @@ const TETTO = 20000;
 // `ripiego` (22.10.2026): col «fino a…», le parti a cui fermarsi se nella lettera quella chiesta non c'è — il tasto «fino
 // alle allergie e intolleranze» si ferma alle comorbidità quando le allergie non ci sono, e ai fattori di rischio quando
 // non ci sono neanche le comorbidità. Si prende sempre fino alla più lontana di quelle che ci sono.
-export async function eseguiComando(studioId: string, userId: string | null, patientId: string, comando: Comando, parti: ParteLettera[] = [], esclusa = false, numero: number | null = null, ripiego: ParteLettera[] = []): Promise<EsitoComando> {
+// LA LETTERA CHE IL MEDICO STA GUARDANDO (23.10.2026, dallo studio: «non avrebbe più senso che per i comandi prenda la
+// lettera che sta guardando in quel momento?»). Accanto al foglio è aperto un documento qualunque — anche la cartella
+// cartacea scansionata intera, con dentro lettere, ECG, laboratori — e il medico è alla pagina N: la lettera è quella che
+// contiene la pagina N (dalla pagina con la data in testa fino alla prossima lettera), non «la più recente».
+type Lettera = { testo: string; fonte: { tipo: 'referto' | 'documento' | 'pagine'; id: string; etichetta: string; data: string; da?: number; a?: number } };
+export async function letteraAllaPagina(studioId: string, patientId: string, documentoId: string, pagina: number): Promise<Lettera | { errore: string }> {
+  const [d] = await query<{ id: string; filename: string; nota: string | null; storage_key: string }>(
+    `select id, filename, nota, storage_key from patient_documents where id = $1 and patient_id = $2 and studio_id = $3`, [documentoId, patientId, studioId]);
+  if (!d) return { errore: 'Il documento aperto non è di questo paziente.' };
+  const n = d.filename.toLowerCase();
+  if (!/\.(pdf|docx|txt)$/.test(n)) return { errore: 'Da questo documento i comandi non leggono il testo (serve un PDF o un Word).' };
+  let pagine: string[];
+  try { pagine = await testoDelFile(d.storage_key, d.filename); } catch { return { errore: 'Il documento aperto non si legge.' }; }
+  const nome = etichettaDocumento(d) || d.filename;
+  if (!n.endsWith('.pdf')) return { testo: pagine.join('\n'), fonte: { tipo: 'documento', id: d.id, etichetta: nome, data: '' } };
+  const p = Math.min(pagine.length, Math.max(1, Math.round(pagina) || 1));
+  const tratto = lettereNellePagine(pagine).find((x) => x.pagina_da <= p && p <= x.pagina_a);
+  const da = tratto?.pagina_da ?? p, a = tratto?.pagina_a ?? Math.min(pagine.length, p + 1);
+  const testo = pulisciScansione(pagine.slice(da - 1, a).join('\n'));
+  if (testo.replace(/\s+/g, '').length < 80) return { errore: `A pagina ${p} non trovo testo: se è una scansione, il Mac non l'ha ancora letta (OCR). Riprova più tardi, o apri una lettera numerata.` };
+  return { testo, fonte: { tipo: 'pagine', id: d.id, etichetta: `${nome}, ${da === a ? `p. ${da}` : `pp. ${da}–${a}`}`, data: tratto?.data ? fmt(tratto.data) : '', da, a } };
+}
+
+export async function eseguiComando(studioId: string, userId: string | null, patientId: string, comando: Comando, parti: ParteLettera[] = [], esclusa = false, numero: number | null = null, ripiego: ParteLettera[] = [], guardata: { documento: string; pagina: number } | null = null): Promise<EsitoComando> {
   const [p] = await query<{ cognome: string; nome: string }>('select cognome, nome from patients where id = $1 and studio_id = $2', [patientId, studioId]);
   if (!p) return { errore: 'Paziente non trovato.' };
-  const lettere = await lettereDelPazienteScelto(studioId, patientId, `${p.cognome} ${p.nome}`.trim());
+  let lettere: Lettera[];
+  if (guardata) {
+    const l = await letteraAllaPagina(studioId, patientId, guardata.documento, guardata.pagina);
+    if ('errore' in l) return l;
+    lettere = [l]; numero = 1;
+  } else lettere = await lettereDelPazienteScelto(studioId, patientId, `${p.cognome} ${p.nome}`.trim());
   if (!lettere.length) return { errore: 'Nella cartella di questo paziente non trovo lettere.' };
   if (numero !== null && !lettere[numero - 1]) return { errore: `Non c’è la lettera numero ${numero}: questo paziente ne ha ${lettere.length}${lettere.length === 1 ? '' : ' (da 1, la più recente, a ' + lettere.length + ')'}.` };
   const scelta = numero !== null ? lettere[numero - 1] : lettere[0];
-  const quale = numero !== null ? `la lettera numero ${numero}` : 'la lettera più recente';
+  const quale = guardata ? 'la lettera che stai guardando' : numero !== null ? `la lettera numero ${numero}` : 'la lettera più recente';
   const letta = async (l: (typeof lettere)[number]) => {
     if (l.fonte.tipo !== 'referto') await logDocumento(l.fonte.id, 'lettura', { studioId, userId: userId ?? undefined, dettaglio: 'dittafono, comando a voce' }).catch(() => {});
   };
-  const daAprire = (l: (typeof lettere)[number]) => apriDi(studioId, l);
-  const dove = (l: (typeof lettere)[number]) => ({ indice: lettere.indexOf(l), totale: lettere.length });
+  const daAprire = async (l: (typeof lettere)[number]) => (guardata ? null : apriDi(studioId, l));
+  const dove = (l: (typeof lettere)[number]) => (guardata ? {} : { indice: lettere.indexOf(l), totale: lettere.length });
   if (comando === 'lettera_recente') {
     const l = scelta;
     const testo = corpoDellaLettera(l.testo).slice(0, TETTO);
