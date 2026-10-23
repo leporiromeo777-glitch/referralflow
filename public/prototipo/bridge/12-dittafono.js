@@ -65,7 +65,7 @@
 .rf-dit-cart-n { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft, rgba(79,110,247,.12)); color: var(--accent-text, var(--accent)); font-size: 12px; display: inline-flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; }
 .rf-dit-cart-voce .num { flex: none; width: 76px; color: var(--text-2); font-variant-numeric: tabular-nums; }
 .rf-dit-fonte-bar .rf-dit-fonte-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
-.rf-dit-fonte-corpo { flex: 1; min-height: 60vh; overflow: auto; padding: 8px; background: var(--surface-2, #eef0ec); }
+.rf-dit-fonte-corpo { flex: 1; min-height: 60vh; overflow: auto; overscroll-behavior: contain; padding: 8px; background: var(--surface-2, #eef0ec); }
 .rf-dit-scorri-segno { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); width: min(320px, 80%); z-index: 3; pointer-events: none; height: 26px; border-radius: 13px; overflow: hidden; background: var(--surface, #fff); box-shadow: 0 1px 6px rgba(0,0,0,.15); display: flex; align-items: center; justify-content: center; font-size: 12px; }
 .rf-dit-scorri-segno.su { top: 52px; bottom: auto; }
 .rf-dit-scorri-segno span { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent-soft, rgba(79,110,247,.18)); }
@@ -494,23 +494,26 @@ function rfDitScorriAttacca(box) {
   box.dataset.scorri = '1';
   let spinta = 0, ultima = 0, verso = 0, y0 = null;
   const pronta = () => { const f = RF.dit.fonte; return f && Number.isInteger(f.indice) && f.totale > 1 && !RF.dit.cambioLettera ? f : null; };
+  // true = la spinta è nostra: la pagina sotto non deve scorrere (23.10.2026, dallo studio: arrivati in fondo alla lettera,
+  // continuando a scorrere per passare alla prossima, scendeva anche tutta la pagina).
   const spingi = (dy) => {
-    const f = pronta(); if (!f) return;
+    const f = pronta(); if (!f) return false;
     const fondo = box.scrollTop + box.clientHeight >= box.scrollHeight - 2, cima = box.scrollTop <= 0;
     const v = dy > 0 && fondo && f.indice + 1 < f.totale ? 1 : dy < 0 && cima && f.indice > 0 ? -1 : 0;
     const ora = Date.now();
     if (!v || v !== verso || ora - ultima > 700) spinta = 0;
     verso = v; ultima = ora;
-    if (!v) { rfDitScorriSegno(box, 0, 0); return; }
+    if (!v) { rfDitScorriSegno(box, 0, 0); return false; }
     spinta += Math.abs(dy);
     rfDitScorriSegno(box, v, Math.min(1, spinta / RF_DIT_SPINTA));
-    if (spinta < RF_DIT_SPINTA) return;
+    if (spinta < RF_DIT_SPINTA) return true;
     spinta = 0; RF.dit.cambioLettera = true; RF.dit.scorriVerso = v;
     void rfDitLettera(f.indice + v).finally(() => { setTimeout(() => { RF.dit.cambioLettera = false; }, 400); });
+    return true;
   };
-  box.addEventListener('wheel', (e) => spingi(e.deltaMode === 1 ? e.deltaY * 30 : e.deltaY), { passive: true });
+  box.addEventListener('wheel', (e) => { if (spingi(e.deltaMode === 1 ? e.deltaY * 30 : e.deltaY) || (RF.dit.cambioLettera && pronta() === null && RF.dit.fonte)) e.preventDefault(); }, { passive: false });
   box.addEventListener('touchstart', (e) => { y0 = e.touches[0] ? e.touches[0].clientY : null; }, { passive: true });
-  box.addEventListener('touchmove', (e) => { if (y0 === null || !e.touches[0]) return; const y = e.touches[0].clientY; spingi((y0 - y) * 1.5); y0 = y; }, { passive: true });
+  box.addEventListener('touchmove', (e) => { if (y0 === null || !e.touches[0]) return; const y = e.touches[0].clientY; if (spingi((y0 - y) * 1.5)) e.preventDefault(); y0 = y; }, { passive: false });
   box.addEventListener('touchend', () => { y0 = null; }, { passive: true });
 }
 // La striscia in fondo (o in cima) che si riempie mentre si spinge: dice quale lettera si sta per aprire.
