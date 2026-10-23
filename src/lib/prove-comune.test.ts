@@ -41,7 +41,7 @@ test('comune: le date del testo, anche con l’anno a due cifre e con gli spazi'
 test('comune: abbinamento severo — nome della cartella E data di nascita, una persona sola', () => {
   assert.deepEqual(abbinaCartella('Prova Alda', ['1950-03-12', '2024-05-01'], P), { id: 'a', motivo: 'abbinato' });
   assert.deepEqual(abbinaCartella('Alda Prova', ['1950-03-12'], P), { id: 'a', motivo: 'abbinato' });        // ordine qualunque
-  assert.deepEqual(abbinaCartella('Prova Alda', ['2024-05-01'], P), { id: null, motivo: 'nascita_non_trovata' });
+  assert.deepEqual(abbinaCartella('Prova Alda', ['2024-05-01'], P), { id: 'a', motivo: 'abbinato' });          // nome e cognome identici, una persona sola: basta (23.10.2026)
   assert.deepEqual(abbinaCartella('Prova Alda (12.03.1950)', [], P), { id: 'a', motivo: 'abbinato' });       // data nel nome
   assert.deepEqual(abbinaCartella('Prova Alda (01.01.1999)', [], P), { id: null, motivo: 'nascita_diversa' });
   assert.deepEqual(abbinaCartella('Prova Alda 01.06.2024', ['1950-03-12'], P), { id: 'a', motivo: 'abbinato' }); // data dell'esame nel nome, nascita nel testo
@@ -49,7 +49,9 @@ test('comune: abbinamento severo — nome della cartella E data di nascita, una 
   assert.deepEqual(abbinaCartella('Doppi Ugo', ['1940-01-01', '1970-05-05'], P), { id: null, motivo: 'omonimi' });
   assert.deepEqual(abbinaCartella('Doppi Ugo', [], P), { id: null, motivo: 'omonimi' });
   assert.deepEqual(abbinaCartella('Ignoto Mario', ['1950-03-12'], P), { id: null, motivo: 'nessuno' });
-  assert.deepEqual(abbinaCartella('Senza Data', ['1950-03-12'], P), { id: null, motivo: 'nascita_non_trovata' });
+  assert.deepEqual(abbinaCartella('Senza Data', ['1950-03-12'], P), { id: 'e', motivo: 'abbinato' });
+  assert.deepEqual(abbinaCartella('Data Senza', [], P), { id: 'e', motivo: 'abbinato' });                         // invertiti
+  assert.deepEqual(abbinaCartella('Prova', [], P), { id: null, motivo: 'senza_nome' });                          // un nome solo: no
   assert.deepEqual(abbinaCartella('Prova 12.03.1950', [], P), { id: 'a', motivo: 'abbinato' });              // solo cognome + data intera
   assert.deepEqual(abbinaCartella('Prova', ['1950-03-12'], P), { id: null, motivo: 'senza_nome' });          // solo cognome: non basta la data nel testo
   assert.deepEqual(abbinaCartella('Finti Bruno Carlo', ['1961-11-02'], P), { id: 'b', motivo: 'abbinato' });
@@ -124,7 +126,7 @@ test('comune: le scansioni DocuWare — nome dal file, cognome solo con la nasci
   assert.equal(nomeDaScansione('123456_De Prova_Mario.pdf'), 'De Prova Mario');
   assert.equal(nomeDaScansione('123456_Prova.pdf'), 'Prova');
   assert.deepEqual(abbinaScansione('123456_Prova_Alda.pdf', ['1950-03-12'], P), { id: 'a', motivo: 'abbinato' });
-  assert.deepEqual(abbinaScansione('123456_Prova_Alda.pdf', [], P), { id: null, motivo: 'nascita_non_trovata' });
+  assert.deepEqual(abbinaScansione('123456_Prova_Alda.pdf', [], P), { id: 'a', motivo: 'abbinato' });
   assert.deepEqual(abbinaScansione('123456_Prova.pdf', ['1950-03-12'], P), { id: 'a', motivo: 'abbinato' });   // solo cognome + nascita nel testo
   assert.deepEqual(abbinaScansione('123456_Prova.pdf', ['2001-01-01'], P), { id: null, motivo: 'nascita_non_trovata' });
   assert.deepEqual(abbinaScansione('123456_Doppi.pdf', ['1940-01-01', '1970-05-05'], P), { id: null, motivo: 'omonimi' });
@@ -137,7 +139,8 @@ test('comune: la scansione riconosciuta dal numero di MediOnline E dal nome, anc
   assert.deepEqual(abbinaScansione('123456_Numer.pdf', [], Q), { id: 'n', motivo: 'abbinato' });          // solo cognome, ma col numero
   assert.deepEqual(abbinaScansione('777_Altro_Ugo.pdf', [], Q), { id: 'm', motivo: 'abbinato' });          // zeri davanti
   assert.notEqual(abbinaScansione('123456_Prova_Alda.pdf', [], Q).id, 'n');                                 // numero di un altro: no
-  assert.equal(abbinaScansione('999999_Numer_Ada.pdf', [], Q).id, null);                                    // numero sconosciuto, niente data
+  assert.equal(abbinaScansione('999999_Numer_Ada.pdf', [], Q).id, 'n');                                     // numero sconosciuto: basta nome e cognome identici
+  assert.equal(abbinaScansione('999999_Numer.pdf', [], Q).id, null);                                        // col solo cognome, senza numero né data: no
 });
 
 test('comune: le lettere sciolte — il nome dal nome del file', () => {

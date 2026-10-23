@@ -172,7 +172,7 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number; sc
       if (c.stato === 'scartata' || c.stato === 'non_paziente') continue;
       r.cartelle++;
       // Una cartella che aspettava si riabbina con le date già lette (un paziente nato dopo, un'importazione).
-      if (c.stato === 'in_attesa' && c.motivo !== 'da_leggere' && (c.date_lette.length || c.nascita_proposta)) {
+      if (c.stato === 'in_attesa' && c.motivo !== 'da_leggere') {
         c = await decidi(c, nomeCartella, c.date_lette, c.nascita_proposta, null, scansione?.nome ?? null, !!sciolto); cartelle.set(rel, c);
       }
       const sulDisco = scansione ? [scansione] : sciolto ? [sciolto] : await lettereSulDisco(base, rel);

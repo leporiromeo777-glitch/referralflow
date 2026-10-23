@@ -101,7 +101,13 @@ export function abbinaCartella(nomeCartella: string, date: Iterable<string>, paz
   if (!stessoNome.length) return { id: null, motivo: 'nessuno' };
   const conNascita = stessoNome.filter((p) => nasc(p) && viste.has(nasc(p))), uno = unaPersona(conNascita);
   if (uno) return { id: uno.id, motivo: 'abbinato' };
-  if (conNascita.length > 1 || stessoNome.length > 1) return { id: null, motivo: 'omonimi' };
+  if (conNascita.length > 1) return { id: null, motivo: 'omonimi' };
+  // Nome e cognome IDENTICI (in qualunque ordine) a una persona sola bastano anche senza la data di nascita (23.10.2026,
+  // dallo studio: «quelli che carico a mano hanno nome e cognome identici alle cartelle di ReferralFlow, solo invertiti;
+  // se c'è solo un nome non caricarlo»). Non se il nome della cartella porta un'altra data di nascita, e mai col solo
+  // cognome (qui si arriva solo con almeno due parole).
+  if (parole.length >= 2 && !daNome.length) { const solo = unaPersona(stessoNome); if (solo) return { id: solo.id, motivo: 'abbinato' }; }
+  if (stessoNome.length > 1) return { id: null, motivo: 'omonimi' };
   return { id: null, motivo: daNome.length ? 'nascita_diversa' : 'nascita_non_trovata' };
 }
 
