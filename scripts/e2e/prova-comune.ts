@@ -52,6 +52,9 @@ const pazienti: string[] = [];
     await fs.writeFile(R('Rapporti_Prova', 'Provacom Alda', '24 05 12 Provacom Alda.pdf'), '%PDF-1.4\n%prova\n');       // il PDF del Word
     await word(R('Rapporti_Prova', 'Provacom Alda', 'L0001.doc'), lettera('Provacom Alda', '12.03.1950', 'Lettera vecchia.'), 'doc');
     await fs.writeFile(R('Rapporti_Prova', 'Provacom Alda', '~$ provacom.docx'), 'blocco di Word');
+    // Lettere sciolte, fuori da una cartella di paziente: una col nome (e una parola in più), una col codice.
+    await word(R('Rapporti_Prova', '24 03 01 Provacom Alda ecocardio.docx'), lettera('Provacom Alda', '12.03.1950', 'Lettera sciolta.'));
+    await word(R('Rapporti_Prova', 'L9999.doc'), lettera('Provacom Alda', '12.03.1950', 'Codice.'), 'doc');
     // Più in profondità, la data di nascita nel nome della cartella: un referto d'esame.
     await word(R('Esami_Prova', 'Esami 2015', 'Provacom Alda (12.03.1950)', 'eco.docx'), lettera('Provacom Alda', '', 'Esame di secondo livello.'));
     // Sconosciuta con la data di nascita accanto a «nato il»: il paziente nasce da solo.
@@ -74,7 +77,7 @@ const pazienti: string[] = [];
     const non = await fetch(URL); verifica(non.status === 401, `senza sessione: 401 (${non.status})`);
     const g1 = await manda({ azione: 'controlla' });
     verifica(g1.j.scansioni === 3, `tre scansioni caricate (una dal numero di MediOnline, senza data) (${g1.j.scansioni})`);
-    verifica(g1.stato === 200 && g1.j.caricati === 9, `primo controllo: 9 caricate (6 lettere, 3 scansioni) (${g1.stato} ${JSON.stringify({ c: g1.j.caricati, d: g1.j.doppioni, a: g1.j.in_attesa, n: g1.j.nuovi, cr: g1.j.creati })})`);
+    verifica(g1.stato === 200 && g1.j.caricati === 10, `primo controllo: 10 caricate (7 lettere, una sciolta; 3 scansioni) (${g1.stato} ${JSON.stringify({ c: g1.j.caricati, d: g1.j.doppioni, a: g1.j.in_attesa, n: g1.j.nuovi, cr: g1.j.creati })})`);
     verifica(g1.j.doppioni === 1, `il PDF del Word saltato come doppione (${g1.j.doppioni})`);
     verifica(g1.j.in_attesa === 2, `una lettera senza data e una scansione col cognome che non c'è aspettano (${g1.j.in_attesa})`);
     verifica(g1.j.creati === 2, `due pazienti creati dalla cartella (${g1.j.creati})`);
@@ -82,7 +85,8 @@ const pazienti: string[] = [];
     verifica(nati.length === 2 && nati[0].nome === 'Bruno' && nati[0].nascita === '1955-07-04' && nati[1].nome === 'Alda Seconda' && nati[1].nascita === '1990-01-01', `i pazienti nuovi con cognome, nome e nascita giusti (${nati.map((x) => `${x.nome} ${x.nascita}`).join(', ')})`);
     const docs = await query<{ id: string; filename: string; categoria: string; giorno: string; nota: string; cartella: string | null }>(
       `select id, filename, categoria, to_char(uploaded_at, 'YYYY-MM-DD') as giorno, nota, cartella from patient_documents where patient_id = $1 order by filename`, [p.id]);
-    verifica(docs.length === 6, `sei documenti nella cartella del paziente: anche la cartella col nome quasi uguale e due scansioni (${docs.length})`);
+    verifica(docs.length === 7, `sette documenti nella cartella del paziente: anche la cartella col nome quasi uguale, la lettera sciolta e due scansioni (${docs.length})`);
+    verifica(docs.some((d) => d.filename === '24 03 01 Provacom Alda ecocardio.docx' && d.cartella === '01_Rapporti') && !docs.some((d) => d.filename.startsWith('L9999')), 'la lettera sciolta col nome entra, quella col codice no');
     const [{ n: nNum }] = await query<{ n: number }>(`select count(*)::int as n from patient_documents where patient_id = $1`, [pn.id]);
     verifica(nNum === 1, `la scansione col numero di MediOnline nella cartella giusta (${nNum})`);
     const scans = docs.filter((d) => d.nota === 'cartella cartacea scansionata (DocuWare)');
@@ -100,9 +104,9 @@ const pazienti: string[] = [];
     const ign = attesa.find((x: any) => x.nome_letto === 'Senzadata Carlo');
     verifica(attesa.some((x: any) => x.medico === 'Lavori archivio DocuWare' && x.nome_letto === 'Scancom' && x.motivo === 'nessuno'), 'la scansione col solo cognome sconosciuto aspetta (non si crea)');
     verifica(st.stato === 200 && !!ign && ign.motivo === 'nessuno' && !ign.nascita_proposta && attesa.length === 2, `senza una data di nascita la cartella aspetta (${ign?.motivo}, ${attesa.length})`);
-    verifica(st.j.conti?.creati === 2 && st.j.conti?.quasi === 1, `conteggi: 2 creati, 1 col nome quasi uguale (${st.j.conti?.creati}, ${st.j.conti?.quasi})`);
+    verifica(st.j.conti?.creati === 2 && st.j.conti?.quasi === 2, `conteggi: 2 creati, 2 col nome quasi uguale (la cartella e la lettera sciolta) (${st.j.conti?.creati}, ${st.j.conti?.quasi})`);
     verifica((st.j.non_pazienti || []).some((x: any) => /Vecchie/.test(x.percorso)), 'l’archivio lasciato fuori');
-    verifica(st.j.recenti?.length === 9 && st.j.conti?.caricati === 9, `ultimi sette giorni: 9 (${st.j.recenti?.length})`);
+    verifica(st.j.recenti?.length === 10 && st.j.conti?.caricati === 10, `ultimi sette giorni: 10 (${st.j.recenti?.length})`);
 
     const g2 = await manda({ azione: 'controlla' });
     verifica(g2.j.nuovi === 0 && g2.j.caricati === 0, `secondo controllo: niente di nuovo, niente doppioni (${g2.j.nuovi})`);
@@ -112,7 +116,7 @@ const pazienti: string[] = [];
     await word(R('Rapporti_Prova', 'Provacom Alda', '24 05 12 Provacom Alda.docx'), lettera('Provacom Alda', '12.03.1950', 'Corretta il giorno dopo.'));
     const g3 = await manda({ azione: 'controlla' });
     const [dopo] = await query<{ storage_key: string; n: number }>(`select storage_key, (select count(*)::int from patient_documents where patient_id = $2) as n from patient_documents where id = $1`, [d1!.id, p.id]);
-    verifica(g3.j.caricati === 1 && dopo.n === 6 && dopo.storage_key !== prima.storage_key, `lettera cambiata: lo stesso documento col file nuovo (${g3.j.caricati}, ${dopo.n})`);
+    verifica(g3.j.caricati === 1 && dopo.n === 7 && dopo.storage_key !== prima.storage_key, `lettera cambiata: lo stesso documento col file nuovo (${g3.j.caricati}, ${dopo.n})`);
 
     // Crea il paziente dalla cartella che aspetta: le sue lettere entrano.
     const cr = await manda({ azione: 'crea_cartella', id: ign.id, cognome: 'Senzadata', nome: 'Carlo', data_nascita: '04.07.1956' });

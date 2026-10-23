@@ -18,7 +18,7 @@ con ReferralFlow, le lettere vanno nei pazienti, con un controllo giornaliero di
   macOS (dittafono e aggiornamento della lettera leggono solo quello).
 - **Archivi**: una cartella con più di 250 lettere che non porta il nome di un paziente conosciuto non è di un paziente
   (lettere nominate con un codice, dal 2002): resta fuori, elencata in fondo alla pagina.
-- **Lettere sciolte** in un contenitore (cartelle per giorno o per anno): per ora non si caricano, la pagina dice quante.
+- **Lettere sciolte** (23.10.2026, dallo studio: «nella cartella Rapporti Moccetti c'era un file non in una cartella di paziente, e nei documenti non c'è»): un file direttamente nella cartella del medico o in un contenitore (per giorno, per anno) è un'**unità a sé**, col nome dal nome del file (`nomeDaFileSciolto`: «24 05 12 Rossi Mario ecocardio.docx» → «Rossi Mario ecocardio»). Si riconosce con nome e data di nascita nel testo, o col nome quasi uguale (le parole in più) e la stessa nascita; **mai un paziente creato** da un nome di file. Un file nominato con un codice («L1234.doc») resta fuori. In Rapporti_Moccetti il 23.10.2026: 2629 sciolte, 639 col codice, 1354 riconosciute, 353 col nome quasi uguale, 283 da assegnare.
 
 ## Di chi è una cartella
 Regola severa di sempre: **nome della cartella E data di nascita, una persona sola** (`abbinaCartella`). La data viene

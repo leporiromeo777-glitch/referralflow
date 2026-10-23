@@ -14,8 +14,9 @@ const dirs = (voci: import('node:fs').Dirent[]) => voci.filter((x) => x.isDirect
 // COMUNE_MEDICI, nomi separati da virgola; vuoto = tutte.
 export const mediciScelti = (): string[] => (process.env.COMUNE_MEDICI ?? 'Rapporti_Moccetti').split(',').map((x) => x.trim()).filter(Boolean);
 
-export async function cartellePazienti(base: string, nomi: Set<string>, solo: string[] = []): Promise<{ trovate: Trovata[]; medici: string[]; sciolte: number }> {
+export async function cartellePazienti(base: string, nomi: Set<string>, solo: string[] = []): Promise<{ trovate: Trovata[]; medici: string[]; sciolte: number; sciolti: (SulDisco & { medico: string })[] }> {
   const trovate: Trovata[] = [];
+  const sciolti: (SulDisco & { medico: string })[] = [];
   let sciolte = 0;
   const medici = dirs(await fs.readdir(base, { withFileTypes: true })).filter((m) => !solo.length || solo.includes(m));
   const giro = async (rel: string, medico: string, prof: number) => {
@@ -23,12 +24,17 @@ export async function cartellePazienti(base: string, nomi: Set<string>, solo: st
     const sotto = dirs(voci);
     const nome = path.basename(rel);
     if (prof >= 2 && cartellaDiPaziente(nome, sotto.length > 0, nomi)) { trovate.push({ rel, nome, medico }); return; }
-    // Lettere sciolte in un contenitore (cartelle per giorno, per anno): per ora restano fuori, si contano.
-    if (prof >= 2) sciolte += voci.filter((v) => v.isFile() && formatoLettera(v.name)).length;
+    // Lettere sciolte in un contenitore (nella cartella del medico, per giorno, per anno): ognuna è un'unità a sé (23.10.2026).
+    for (const v of voci) {
+      const formato = v.isFile() ? formatoLettera(v.name) : null;
+      if (!formato) continue;
+      sciolte++;
+      try { const st = await fs.stat(path.join(base, rel, v.name)); sciolti.push({ rel: path.join(rel, v.name), nome: v.name, formato, dimensione: st.size, modificato: st.mtime, medico }); } catch { /* sparito */ }
+    }
     if (prof < 6) for (const s of sotto) await giro(path.join(rel, s), medico, prof + 1);
   };
   for (const m of medici) await giro(m, m, 1);
-  return { trovate, medici, sciolte };
+  return { trovate, medici, sciolte, sciolti };
 }
 
 // Le scansioni DocuWare: un PDF per paziente, in qualche sottocartella. `rel` comincia col nome della cartella delle

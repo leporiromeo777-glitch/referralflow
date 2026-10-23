@@ -107,6 +107,14 @@ export function abbinaScansione(file: string, date: Iterable<string>, pazienti: 
   return c.length === 1 ? { id: c[0].id, motivo: 'abbinato' } : { id: null, motivo: c.length > 1 ? 'omonimi' : 'nascita_non_trovata' };
 }
 
+// Le lettere sciolte (23.10.2026, dallo studio: «nella cartella Rapporti Moccetti c'era un file non in una cartella di
+// paziente, e nei documenti non c'è»): il nome viene dal nome del file, «24 05 12 Rossi Mario.docx» → «Rossi Mario»
+// (la data davanti e le cifre via; le parole in più, «ecocardio», restano e le gestisce il nome quasi uguale).
+export function nomeDaFileSciolto(file: string): string {
+  return String(file ?? '').replace(/\.[A-Za-z0-9]{1,5}$/, '').replace(/^\s*\d{2,4}[ ._-]\d{1,2}[ ._-]\d{1,2}(?!\d)/, ' ')
+    .replace(/[_()\[\],;]+/g, ' ').replace(/\d+/g, ' ').replace(/\s+-\s+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 // Il nome quasi uguale (22.10.2026): nessuno ha il nome intero della cartella, ma UN paziente ha un nome contenuto nel
 // suo o che lo contiene (un secondo nome in più o in meno, almeno cognome e nome) e la sua data di nascita è scritta
 // nelle lettere. È la stessa persona: si usa la scheda che c'è, non se ne crea un'altra.

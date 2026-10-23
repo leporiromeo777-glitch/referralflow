@@ -9,7 +9,7 @@ import { riabbinaPazienti } from '../pazienti-abbina';
 import { validaAnagrafica } from '../pazienti-import';
 import { deleteFile, putFile } from '../storage';
 import { slugNome } from '../imaging-ordina';
-import { abbinaCartella, abbinaScansione, categoriaDi, dividiNome, nascitaSicura, nomeDaScansione, quasiStesso, dataDaNomeFile, dateNelTesto, MAX_LETTERE_PAZIENTE, nascitaProposta, nomeDaCartella, radice, stessaLettera, tocca, type Formato } from './regole';
+import { abbinaCartella, abbinaScansione, categoriaDi, dividiNome, nascitaSicura, nomeDaFileSciolto, nomeDaScansione, quasiStesso, dataDaNomeFile, dateNelTesto, MAX_LETTERE_PAZIENTE, nascitaProposta, nomeDaCartella, radice, stessaLettera, tocca, type Formato } from './regole';
 import { cartellePazienti, lettereSulDisco, mediciScelti, scansioniSulDisco, type SulDisco } from './scopri';
 import { docxDaDoc, ocrPrimePagine, testoDi } from './testo';
 
@@ -101,10 +101,17 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number; sc
     const noti = new Map<string, Noto>((await query<Noto & { percorso: string }>(`select percorso, dimensione::text, modificato, stato, sha256, documento_id from comune_file where studio_id = $1`, [studioId])).map((f) => [f.percorso, f]));
     const pazienti = await query<Paz>(`select id, cognome, nome, data_nascita::text, numero from patients where studio_id = $1`, [studioId]);
     const nomi = new Set(pazienti.map((p) => slugNome(`${p.cognome} ${p.nome}`)));
-    const { trovate: cartelleTrovate, sciolte } = await cartellePazienti(base, nomi, mediciScelti());
+    const { trovate: cartelleTrovate, sciolte, sciolti } = await cartellePazienti(base, nomi, mediciScelti());
     r.sciolte = sciolte;
-    type Unita = { rel: string; nome: string; medico: string; base: string; scansione?: SulDisco };
+    type Unita = { rel: string; nome: string; medico: string; base: string; scansione?: SulDisco; sciolto?: SulDisco };
     const trovate: Unita[] = cartelleTrovate.map((t) => ({ ...t, base }));
+    // Le lettere sciolte: ognuna un'unità come una cartella, col nome dal nome del file. Mai un paziente creato da un
+    // nome di file (ci sono parole in più): solo nome e data di nascita, o il nome quasi uguale con la stessa nascita.
+    // Un file nominato con un codice («L1234.doc») non dice di chi è: resta fuori, contato fra le sciolte.
+    for (const f of sciolti) {
+      const nome = nomeDaFileSciolto(f.nome);
+      if (slugNome(nome).split(' ').filter((w) => w.length >= 2).length >= 2) trovate.push({ rel: f.rel, nome, medico: f.medico, base, sciolto: f });
+    }
     // Le scansioni: ogni PDF è un'unità come una cartella, col nome dal nome del file.
     const rs = opzioni.scansioni === false ? '' : radiceScansioni();
     if (rs) {
@@ -117,14 +124,14 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number; sc
     // Di chi è la cartella: regola severa; se il nome non c'è in ReferralFlow, il nome quasi uguale con la stessa nascita,
     // o il paziente nuovo (22.10.2026, dallo studio: «quelli che non ci sono su ReferralFlow creali») — solo con una data
     // di nascita sicura (nel nome della cartella, o `nascitaSicura` nelle lettere appena lette). Senza, aspetta con la proposta.
-    const decidi = async (c: Cartella, nomeCartella: string, date: string[], proposta: string | null, sicura: string | null = null, fileScansione: string | null = null): Promise<Cartella> => {
+    const decidi = async (c: Cartella, nomeCartella: string, date: string[], proposta: string | null, sicura: string | null = null, fileScansione: string | null = null, nonCreare = false): Promise<Cartella> => {
       const a = fileScansione ? abbinaScansione(fileScansione, date, pazienti) : abbinaCartella(nomeCartella, date, pazienti);
       let id = a.id, motivo: string | null = null;
       if (!id && a.motivo === 'nessuno' && creaPazienti()) {
         id = quasiStesso(nomeCartella, date, pazienti);
         if (id) motivo = 'nome_quasi';
         const nascita = nomeDaCartella(nomeCartella).nascita ?? sicura;
-        const diviso = dividiNome(nomeCartella);
+        const diviso = nonCreare ? null : dividiNome(nomeCartella);
         if (!id && nascita && diviso && Number(nascita.slice(0, 4)) < new Date().getFullYear()) {
           const [gia] = await query<{ id: string }>(
             `select id from patients where studio_id = $1 and lower(btrim(cognome)) = lower($2) and lower(btrim(nome)) = lower($3) and data_nascita = $4::date limit 1`,
@@ -145,7 +152,7 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number; sc
       return { ...c, motivo: a.motivo, date_lette: date, nascita_proposta: c.nascita_proposta ?? proposta };
     };
 
-    for (const { rel, nome: nomeCartella, medico, base, scansione } of trovate) {
+    for (const { rel, nome: nomeCartella, medico, base, scansione, sciolto } of trovate) {
       let c = cartelle.get(rel);
       if (!c) {
         [c] = await query<Cartella>(
@@ -158,11 +165,11 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number; sc
       r.cartelle++;
       // Una cartella che aspettava si riabbina con le date già lette (un paziente nato dopo, un'importazione).
       if (c.stato === 'in_attesa' && c.motivo !== 'da_leggere' && (c.date_lette.length || c.nascita_proposta)) {
-        c = await decidi(c, nomeCartella, c.date_lette, c.nascita_proposta, null, scansione?.nome ?? null); cartelle.set(rel, c);
+        c = await decidi(c, nomeCartella, c.date_lette, c.nascita_proposta, null, scansione?.nome ?? null, !!sciolto); cartelle.set(rel, c);
       }
-      const sulDisco = scansione ? [scansione] : await lettereSulDisco(base, rel);
+      const sulDisco = scansione ? [scansione] : sciolto ? [sciolto] : await lettereSulDisco(base, rel);
       // Centinaia di lettere in una cartella sola che non porta il nome di un paziente conosciuto: è un archivio.
-      if (!scansione && sulDisco.length > MAX_LETTERE_PAZIENTE && c.stato !== 'abbinata' && !nomi.has(slugNome(nomeDaCartella(nomeCartella).nome))) {
+      if (!scansione && !sciolto && sulDisco.length > MAX_LETTERE_PAZIENTE && c.stato !== 'abbinata' && !nomi.has(slugNome(nomeDaCartella(nomeCartella).nome))) {
         await query(`update comune_cartelle set stato = 'non_paziente', motivo = 'archivio', lettere = $2 where id = $1`, [c.id, sulDisco.length]);
         r.cartelle--; continue;
       }
@@ -204,7 +211,7 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number; sc
         const proposta = c.nascita_proposta ?? letture.map((l) => nascitaProposta(l.testo, nomeDaCartella(nomeCartella).nome)).find(Boolean) ?? null;
         const primaLettera = sulDisco.map((f) => dataDaNomeFile(f.nome) ?? f.modificato.toISOString().slice(0, 10)).sort()[0] ?? null;
         const sicura = letture.map((l) => nascitaSicura(l.testo, nomeDaCartella(nomeCartella).nome, primaLettera)).find(Boolean) ?? null;
-        c = await decidi(c, nomeCartella, dateLette, sicura ?? proposta, sicura, scansione?.nome ?? null);
+        c = await decidi(c, nomeCartella, dateLette, sicura ?? proposta, sicura, scansione?.nome ?? null, !!sciolto);
         cartelle.set(rel, c);
       } else {
         await query(`update comune_cartelle set date_lette = $2 where id = $1`, [c.id, dateLette]);

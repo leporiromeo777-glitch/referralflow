@@ -1,7 +1,7 @@
 // Le lettere della cartella comune (22.10.2026): regole pure. Nomi e date INVENTATI.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { abbinaCartella, abbinaScansione, cartellaDiPaziente, categoriaDi, dividiNome, nascitaSicura, nomeDaScansione, quasiStesso, dataDaNomeFile, dateNelTesto, formatoLettera, nascitaProposta, nomeDaCartella, stessaLettera, tocca } from './comune/regole';
+import { abbinaCartella, abbinaScansione, cartellaDiPaziente, categoriaDi, dividiNome, nascitaSicura, nomeDaFileSciolto, nomeDaScansione, quasiStesso, dataDaNomeFile, dateNelTesto, formatoLettera, nascitaProposta, nomeDaCartella, stessaLettera, tocca } from './comune/regole';
 
 const P = [
   { id: 'a', cognome: 'Prova', nome: 'Alda', data_nascita: '1950-03-12' },
@@ -138,4 +138,12 @@ test('comune: la scansione riconosciuta dal numero di MediOnline E dal nome, anc
   assert.deepEqual(abbinaScansione('777_Altro_Ugo.pdf', [], Q), { id: 'm', motivo: 'abbinato' });          // zeri davanti
   assert.notEqual(abbinaScansione('123456_Prova_Alda.pdf', [], Q).id, 'n');                                 // numero di un altro: no
   assert.equal(abbinaScansione('999999_Numer_Ada.pdf', [], Q).id, null);                                    // numero sconosciuto, niente data
+});
+
+test('comune: le lettere sciolte — il nome dal nome del file', () => {
+  assert.equal(nomeDaFileSciolto('24 05 12 Prova Alda.docx'), 'Prova Alda');
+  assert.equal(nomeDaFileSciolto('24.05.12 Prova Alda ecocardio.doc'), 'Prova Alda ecocardio');
+  assert.equal(nomeDaFileSciolto('Prova_Alda_2.docx'), 'Prova Alda');
+  assert.equal(nomeDaFileSciolto('L1234.doc'), 'L');
+  assert.equal(quasiStesso(nomeDaFileSciolto('24 05 12 Prova Alda ecocardio.docx'), ['1950-03-12'], P), 'a');
 });
