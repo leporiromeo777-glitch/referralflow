@@ -10,15 +10,18 @@ export type Trovata = { rel: string; nome: string; medico: string };
 
 const dirs = (voci: import('node:fs').Dirent[]) => voci.filter((x) => x.isDirectory() && !x.name.startsWith('.') && !x.name.startsWith('~')).map((x) => x.name).sort();
 
-// Quali cartelle di medico si leggono (22.10.2026, dallo studio: «fai il tutto solo dei rapporti di Marco Moccetti»):
-// COMUNE_MEDICI, nomi separati da virgola; vuoto = tutte.
-export const mediciScelti = (): string[] => (process.env.COMUNE_MEDICI ?? 'Rapporti_Moccetti').split(',').map((x) => x.trim()).filter(Boolean);
+// Quali cartelle di medico si leggono. Il 22.10.2026 solo «Rapporti_Moccetti»; dal 23.10.2026 (dallo studio: «sincronizza
+// anche i rapporti degli altri medici, una cartella sola del paziente dove convergono i rapporti di tutti») TUTTE le
+// cartelle «Rapporti_…» (anche «Rappporti …»). COMUNE_MEDICI, nomi separati da virgola, sceglie a mano; vuota = tutte.
+export const RX_RAPPORTI = /^rap+orti/i;
+export const mediciScelti = (): string[] | null => (process.env.COMUNE_MEDICI === undefined ? null : process.env.COMUNE_MEDICI.split(',').map((x) => x.trim()).filter(Boolean));
+export const medicoScelto = (m: string, scelti: string[] | null): boolean => (scelti === null ? RX_RAPPORTI.test(m) : !scelti.length || scelti.includes(m));
 
-export async function cartellePazienti(base: string, nomi: Set<string>, solo: string[] = []): Promise<{ trovate: Trovata[]; medici: string[]; sciolte: number; sciolti: (SulDisco & { medico: string })[] }> {
+export async function cartellePazienti(base: string, nomi: Set<string>, solo: string[] | null = []): Promise<{ trovate: Trovata[]; medici: string[]; sciolte: number; sciolti: (SulDisco & { medico: string })[] }> {
   const trovate: Trovata[] = [];
   const sciolti: (SulDisco & { medico: string })[] = [];
   let sciolte = 0;
-  const medici = dirs(await fs.readdir(base, { withFileTypes: true })).filter((m) => !solo.length || solo.includes(m));
+  const medici = dirs(await fs.readdir(base, { withFileTypes: true })).filter((m) => medicoScelto(m, solo));
   const giro = async (rel: string, medico: string, prof: number) => {
     let voci; try { voci = await fs.readdir(path.join(base, rel), { withFileTypes: true }); } catch { return; }
     const sotto = dirs(voci);

@@ -132,7 +132,8 @@ export async function giroComune(opzioni: { lotto?: number; fermoMs?: number; sc
         if (id) motivo = 'nome_quasi';
         const nascita = nomeDaCartella(nomeCartella).nascita ?? sicura;
         const diviso = nonCreare ? null : dividiNome(nomeCartella);
-        if (!id && nascita && diviso && Number(nascita.slice(0, 4)) < new Date().getFullYear()) {
+        // una data di nascita da adulto (non il giorno di un esame scritto nel nome della cartella)
+        if (!id && nascita && diviso && Number(nascita.slice(0, 4)) <= new Date().getFullYear() - 10) {
           const [gia] = await query<{ id: string }>(
             `select id from patients where studio_id = $1 and lower(btrim(cognome)) = lower($2) and lower(btrim(nome)) = lower($3) and data_nascita = $4::date limit 1`,
             [studioId, diviso.cognome, diviso.nome, nascita]);
@@ -319,17 +320,17 @@ export async function stato(studioId: string) {
             (select count(*)::int from comune_file where studio_id = $1 and stato = 'caricato') as caricati,
             (select count(*)::int from comune_file where studio_id = $1 and stato = 'doppione') as doppioni,
             (select count(*)::int from comune_file where studio_id = $1 and stato = 'non_letto') as non_letti
-       from comune_cartelle where studio_id = $1 and (cardinality($2::text[]) = 0 or medico = any($2) or medico = 'Lavori archivio DocuWare')`, [studioId, mediciScelti()]);
+       from comune_cartelle where studio_id = $1 and (($2::text[] is null and medico ~* '^rap+orti') or cardinality($2::text[]) = 0 or medico = any($2) or medico = 'Lavori archivio DocuWare')`, [studioId, mediciScelti()]);
   const attesa = await query<{ id: string; percorso: string; medico: string; nome_letto: string; motivo: string | null; lettere: number; nascita_proposta: string | null }>(
     `select id, percorso, medico, nome_letto, motivo, lettere, nascita_proposta::text from comune_cartelle
-      where studio_id = $1 and stato = 'in_attesa' and motivo is distinct from 'da_leggere' and (cardinality($2::text[]) = 0 or medico = any($2) or medico = 'Lavori archivio DocuWare')
+      where studio_id = $1 and stato = 'in_attesa' and motivo is distinct from 'da_leggere' and (($2::text[] is null and medico ~* '^rap+orti') or cardinality($2::text[]) = 0 or medico = any($2) or medico = 'Lavori archivio DocuWare')
       order by medico, nome_letto limit 8000`, [studioId, mediciScelti()]);
   const recenti = await query<{ patient_id: string; cognome: string; nome: string; filename: string; data_lettera: string | null; quando: string; documento_id: string }>(
     `select c.patient_id, p.cognome, p.nome, d.filename, f.data_lettera::text, to_char(f.quando, 'YYYY-MM-DD"T"HH24:MI') as quando, f.documento_id
        from comune_file f join comune_cartelle c on c.id = f.cartella_id join patients p on p.id = c.patient_id join patient_documents d on d.id = f.documento_id
       where f.studio_id = $1 and f.stato = 'caricato' and f.quando > now() - interval '7 days' order by f.quando desc limit 150`, [studioId]);
   const nonPazienti = await query<{ id: string; percorso: string }>(
-    `select id, percorso from comune_cartelle where studio_id = $1 and stato = 'non_paziente' and (cardinality($2::text[]) = 0 or medico = any($2) or medico = 'Lavori archivio DocuWare') order by percorso limit 50`, [studioId, mediciScelti()]);
+    `select id, percorso from comune_cartelle where studio_id = $1 and stato = 'non_paziente' and (($2::text[] is null and medico ~* '^rap+orti') or cardinality($2::text[]) = 0 or medico = any($2) or medico = 'Lavori archivio DocuWare') order by percorso limit 50`, [studioId, mediciScelti()]);
   return { radice: radiceComune(), medici: mediciScelti(), collegata, giri, conti, attesa, recenti, non_pazienti: nonPazienti };
 }
 

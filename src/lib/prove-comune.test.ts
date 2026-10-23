@@ -147,3 +147,17 @@ test('comune: le lettere sciolte — il nome dal nome del file', () => {
   assert.equal(nomeDaFileSciolto('L1234.doc'), 'L');
   assert.equal(quasiStesso(nomeDaFileSciolto('24 05 12 Prova Alda ecocardio.docx'), ['1950-03-12'], P), 'a');
 });
+
+test('comune: le cartelle del Prof. Moccetti — data coi trattini bassi, codici e iniziali via', () => {
+  assert.deepEqual(nomeDaCartella('Prova_Alda_12A3456_M_12_03_1950'), { nome: 'Prova Alda', nascita: '1950-03-12' });
+  assert.deepEqual(abbinaCartella('Prova_Alda_12A3456_M_12_03_1950', [], P), { id: 'a', motivo: 'abbinato' });
+  assert.equal(nomeDaCartella('Prova A.').nome, 'Prova');
+  assert.equal(cartellaDiPaziente('Ignoto_Mario_12_03_1950', true, new Set()), true);
+});
+
+test('comune: Prof. Moccetti — il nome prima del codice, la nascita è l’ultima data', () => {
+  assert.deepEqual(nomeDaCartella('Prova_Alda_12nov2023_ECO_12_03_1950'), { nome: 'Prova Alda', nascita: '1950-03-12' });
+  assert.deepEqual(nomeDaCartella('Prova_Alda_12_05_2023_ECO_12_03_1950'), { nome: 'Prova Alda', nascita: '1950-03-12' });
+  assert.deepEqual(dividiNome('Prova_Alda_12nov2023_ECO_12_03_1950'), { cognome: 'Prova', nome: 'Alda' });
+  assert.deepEqual(nomeDaCartella('Prova Alda (12.03.1950)'), { nome: 'Prova Alda', nascita: '1950-03-12' });
+});

@@ -8,6 +8,8 @@ import { slugNome } from '../imaging-ordina';
 type Paz = { id: string; cognome: string; nome: string; data_nascita: string | null; numero?: string | null };
 
 const RX_DATA = /(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})/;
+// «Rossi_Mario_12_03_1950» (le cartelle del Prof. Moccetti): la data scritta coi trattini bassi vale come coi punti.
+const conPunti = (s: string) => String(s ?? '').replace(/(?<!\d)(\d{1,2})_(\d{1,2})_(\d{2}|\d{4})(?!\d)/g, '$1.$2.$3');
 const iso = (g: number, m: number, a: number): string | null => {
   if (!(a >= 1900 && a <= 2100 && m >= 1 && m <= 12 && g >= 1 && g <= 31)) return null;
   const d = new Date(Date.UTC(a, m - 1, g));
@@ -17,10 +19,18 @@ const iso = (g: number, m: number, a: number): string | null => {
 // Dal nome della cartella: il nome della persona (senza date, numeri, parentesi, trattini bassi) e la data di
 // nascita se c'è («Rossi Mario (12.03.1950)»).
 export function nomeDaCartella(nome: string): { nome: string; nascita: string | null } {
-  const m = String(nome ?? '').match(RX_DATA);
+  const grezzo = String(nome ?? '');
+  nome = conPunti(grezzo);
+  // la data di nascita è l'ULTIMA data intera del nome («Rossi_Mario_12_05_2023_ECO_12_03_1950»: prima l'esame, poi la nascita)
+  const tutte = [...String(nome ?? '').matchAll(new RegExp(RX_DATA.source, 'g'))];
+  const m = tutte[tutte.length - 1];
   const nascita = m ? iso(Number(m[1]), Number(m[2]), Number(m[3])) : null;
-  const pulito = String(nome ?? '').replace(RX_DATA, ' ').replace(/[_()\[\]]+/g, ' ').replace(/\d+/g, ' ')
-    .replace(/\s+-\s+/g, ' ').replace(/\s+/g, ' ').trim();
+  // «Cognome_Nome_12nov2023_ECO_…»: il nome sono le parole prima del primo pezzo con delle cifre
+  const pezzi = grezzo.split(/[_\s]+/).filter(Boolean), primaCifra = pezzi.findIndex((x) => /\d/.test(x));
+  if (grezzo.includes('_') && primaCifra >= 2) nome = pezzi.slice(0, primaCifra).join(' ');
+  // via date, cifre, codici e iniziali di una lettera sola («Rossi M.», «12A3456»): restano cognome e nome
+  const pulito = String(nome ?? '').replace(new RegExp(RX_DATA.source, 'g'), ' ').replace(/[_()\[\]]+/g, ' ').replace(/\d+/g, ' ')
+    .replace(/\s+-\s+/g, ' ').split(/\s+/).filter((w) => w.replace(/[.'’-]/g, '').length >= 2).join(' ').trim();
   return { nome: pulito, nascita };
 }
 
@@ -31,7 +41,7 @@ export function nomeDaCartella(nome: string): { nome: string; nascita: string | 
 export function cartellaDiPaziente(nome: string, haSottocartelle: boolean, nomi: Set<string>): boolean {
   const n = nomeDaCartella(nome);
   const parole = slugNome(n.nome).split(' ').filter((p) => p.length >= 2);
-  const conData = !!n.nascita || dateNelTesto(nome).length > 0;
+  const conData = !!n.nascita || dateNelTesto(conPunti(nome)).length > 0;
   if (parole.length >= 2) return nomi.has(slugNome(n.nome)) || conData || !haSottocartelle;
   return parole.length === 1 && conData;
 }
@@ -63,7 +73,7 @@ export function abbinaCartella(nomeCartella: string, date: Iterable<string>, paz
   const parole = slugNome(nome).split(' ').filter(Boolean);
   if (!parole.length) return { id: null, motivo: 'senza_nome' };
   // Le date del nome della cartella valgono come quelle delle lettere (può essere la nascita o il giorno dell'esame).
-  const daNome = dateNelTesto(nomeCartella);
+  const daNome = dateNelTesto(conPunti(nomeCartella));
   const nasc = (p: Paz) => (p.data_nascita ?? '').slice(0, 10);
   let stessoNome: Paz[], viste: Set<string>;
   if (parole.length >= 2) {
@@ -121,7 +131,7 @@ export function nomeDaFileSciolto(file: string): string {
 export function quasiStesso(nomeCartella: string, date: Iterable<string>, pazienti: Paz[]): string | null {
   const fp = slugNome(nomeDaCartella(nomeCartella).nome).split(' ').filter(Boolean);
   if (fp.length < 2) return null;
-  const viste = new Set([...date, ...dateNelTesto(nomeCartella)]);
+  const viste = new Set([...date, ...dateNelTesto(conPunti(nomeCartella))]);
   const c = pazienti.filter((p) => {
     const pp = slugNome(`${p.cognome} ${p.nome}`).split(' ').filter(Boolean);
     const nasc = (p.data_nascita ?? '').slice(0, 10);

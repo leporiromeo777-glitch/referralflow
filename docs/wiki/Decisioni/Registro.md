@@ -995,4 +995,4 @@ Con le cartelle cartacee scansionate fra i documenti, «la più recente» e l'el
 tutto. Proposta: analizzare di notte le scansioni (Dividi) e mostrare solo i pezzi di tipo lettera. Lo studio: «non avrebbe
 più senso che per i comandi prenda la lettera che sta guardando in quel momento?». Deciso così: il medico sfoglia (anche la
 scansione intera) e tasti e comandi prendono la lettera alla pagina in vista; niente analisi notturna delle scansioni.
-
+Poi (23.10.2026): «sincronizza anche i rapporti degli altri medici per creare una cartella singola di un solo paziente dove convergono tutti i rapporti dei medici» → tutte le cartelle «Rapporti_…», stesse regole; ogni paziente ha una scheda sola con le lettere di tutti i medici.
