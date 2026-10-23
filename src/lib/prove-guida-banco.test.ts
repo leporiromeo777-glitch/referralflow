@@ -13,6 +13,7 @@ for (const [cartella, peso] of [['Guida', 1], ['Piattaforma', 0.6], ['Catena', 0
 const ix = indicizza(pezzi);
 
 const BANCO: [string, RegExp][] = [
+  ['dove lascio una nota alle colleghe aiuto medico?', /Agenda e giornata.*nota/],
   ['come confermo un referto?', /Referti/],
   ['come scarico il word della lettera', /Referti/],
   ['il microfono non viene trovato', /Dittafono|Problemi/],

@@ -92,12 +92,14 @@ PAGES.home = () => {
             <div class="rf-or-acc scorre" style="margin-top:10px">${c.righe}</div></div>`;
         })()}
 `;
+  // le note degli aiuti medici (23.10.2026), 23-note.js
+  const NOTE = typeof rfNoteCard === 'function' && (ruolo === 'assistant' || ruolo === 'tech_admin') ? rfNoteCard() : '';
   const PROFILO = {
     doctor: { occhiello: 'La tua giornata', caselle: ['appuntamenti', 'daDettare', 'referti', 'richiami'], tasti: tasto('#/dittafono', 'mic', 'Dittafono') + tasto('#/agenda', 'agenda', 'Agenda') + aiGiornata, hero: true, sx: [TODO], dx: [SALE] },
-    assistant: { occhiello: 'Le sale e i pazienti di oggi', caselle: ['appuntamenti', 'visti', 'richiami'], tasti: tasto('#/agenda', 'agenda', 'Agenda') + tasto('#/sale', 'agenda', 'Sale') + tasto('#/dittafono', 'mic', 'Dittafono'), hero: true, sx: [SALE, TODO], dx: [ACC] },
+    assistant: { occhiello: 'Le sale e i pazienti di oggi', caselle: ['appuntamenti', 'visti', 'richiami'], tasti: tasto('#/agenda', 'agenda', 'Agenda') + tasto('#/sale', 'agenda', 'Sale') + tasto('#/dittafono', 'mic', 'Dittafono'), hero: true, sx: [SALE, TODO], dx: [NOTE, ACC] },
     secretary: { occhiello: 'La giornata dello studio', caselle: ['appuntamenti', 'referti', 'daDettare', 'urgenti', 'richiami', 'ritardo'], tasti: tasto('#/agenda', 'agenda', 'Agenda') + tasto('#/reports', 'reports', 'Referti') + aiGiornata, hero: true, sx: [TODO, SALE], dx: [ACC] },
     org_admin: { occhiello: 'Lo studio oggi', caselle: ['appuntamenti', 'referti', 'ritardo', 'urgenti', 'richiami', 'daDettare'], tasti: tasto('#/fatturazione', 'stats', 'Da fatturare') + tasto('#/administration', 'admin', 'Amministrazione') + tasto('#/reports', 'reports', 'Referti'), hero: false, sx: [TODO, SALE], dx: [ACC] },
-    tech_admin: { occhiello: 'Tutta la piattaforma', caselle: ['appuntamenti', 'referti', 'daDettare', 'urgenti', 'richiami', 'ritardo'], tasti: tasto('#/agenda', 'agenda', 'Agenda') + tasto('#/reports', 'reports', 'Referti') + tasto('#/administration', 'admin', 'Amministrazione') + aiGiornata, hero: true, sx: [TODO, SALE], dx: [ACC] },
+    tech_admin: { occhiello: 'Tutta la piattaforma', caselle: ['appuntamenti', 'referti', 'daDettare', 'urgenti', 'richiami', 'ritardo'], tasti: tasto('#/agenda', 'agenda', 'Agenda') + tasto('#/reports', 'reports', 'Referti') + tasto('#/administration', 'admin', 'Amministrazione') + aiGiornata, hero: true, sx: [TODO, SALE], dx: [NOTE, ACC] },
   };
   const PR = PROFILO[ruolo] || PROFILO.secretary;
   return `

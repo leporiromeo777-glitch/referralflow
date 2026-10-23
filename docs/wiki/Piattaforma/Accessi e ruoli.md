@@ -1,6 +1,6 @@
 ---
 tipo: piattaforma
-aggiornata: 2026-10-20
+aggiornata: 2026-10-23
 ---
 # Accessi e ruoli
 
@@ -49,6 +49,8 @@ Le regole più fini delle singole rotte restano: misurare sulle immagini è di m
 
 **Dentro la pagina Sale e l'Accoglienza** (8.10.2026, `src/lib/orchestrazione/ruoli.ts`, applicato dal server): chi sta coi pazienti — segreteria, medico, **aiuto medico**, amministrazione — guarda lo stato e il piano e **registra ciò che succede**: arrivato, in sala d'attesa, chiamato, in preparazione, pronto, in visita, uscito, anche scrivendolo a parole nel riquadro Accoglienza. I comandi che **cambiano il piano** (blocca, sala fuori servizio, medico resta, priorità), rifare il piano del mattino e accettare una proposta restano a segreteria, medico e amministrazione; i parametri all'amministrazione; le durate a medico e amministrazione. Il tecnico non registra niente sui pazienti. Fino all'8.10.2026 l'aiuto medico vedeva la pagina Sale ma il server gli rifiutava tutto, compresi «in preparazione» e «pronto», che sono il suo lavoro.
 
-**Home per ruolo** (`PAGES.home` nel ponte, stessi blocchi composti diversamente): medico «La tua giornata» (prossimo paziente, visti da dettare → Dittafono, referti, richiami, cose da fare, sale); aiuto medico «Le sale e i pazienti di oggi» (sale, accoglienza, prossimo paziente); segreteria «La giornata dello studio» (tutti i numeri, cose da fare, accoglienza); amministrazione «Lo studio oggi» (numeri, Da fatturare, Amministrazione); tecnico «Tutta la piattaforma». Le caselle e i tasti verso sezioni non del ruolo non compaiono.
+**Home per ruolo** (`PAGES.home` nel ponte, stessi blocchi composti diversamente): medico «La tua giornata» (prossimo paziente, visti da dettare → Dittafono, referti, richiami, cose da fare, sale); aiuto medico «Le sale e i pazienti di oggi» (sale, accoglienza, prossimo paziente, **Note**); segreteria «La giornata dello studio» (tutti i numeri, cose da fare, accoglienza); amministrazione «Lo studio oggi» (numeri, Da fatturare, Amministrazione); tecnico «Tutta la piattaforma». Le caselle e i tasti verso sezioni non del ruolo non compaiono.
+
+**Note degli aiuti medici** (23.10.2026, dallo studio: «nella home dell'aiuto medico una sezione note che vedono tutte tra di loro»): una bacheca per studio nella home dell'aiuto medico (e del tecnico), tabella `note_bacheca` (migrazione 101), rotta `/api/prototipo/note` che accetta solo `assistente` e `tecnico` (gli altri 403). Chiunque la veda scrive e segna «Fatta»/«Riapri»; «Togli» solo chi l'ha scritta (o il tecnico). Le fatte restano visibili sette giorni. Si ridisegna solo la lista, ogni 30 secondi con la home aperta: chi scrive non perde il testo e la pagina non salta (`bridge/23-note.js`). Il testo non va mai nei log.
 
 Prove: `src/lib/prove-permessi.test.ts` e il blocco «chi vede che cosa» di `npm run test:e2e` (menu e 403 ruolo per ruolo sul database demo).

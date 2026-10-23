@@ -9,9 +9,19 @@ La home è la prima pagina dopo l'accesso. Nel menu a sinistra si chiama «Home�
 - In alto c'è il saluto, la data, quanti appuntamenti ci sono oggi, quanti medici sono in agenda e quante cose ci sono da fare.
 - Ogni ruolo ha la sua home: il medico vede «La tua giornata», l'aiuto medico «Le sale e i pazienti di oggi», la segreteria «La giornata dello studio», l'amministrazione «Lo studio oggi», il tecnico «Tutta la piattaforma».
 - Sotto ci sono le caselle con i numeri, il riquadro «Prossimo paziente», la lista «Da fare adesso», il riquadro «Sale e medici» e il riquadro «Accoglienza».
+- Nella home dell'aiuto medico (e del tecnico) c'è anche il riquadro «Note», a destra sopra l'Accoglienza: le note che gli aiuti medici si lasciano tra loro.
 - In alto a destra ci sono i tasti per le pagine che usi di più (per esempio «Agenda», «Dittafono», «Referti»).
 La pagina si aggiorna da sola ogni due minuti.
 Parole: home, oggi, pagina iniziale, cruscotto, giornata, prima pagina, panoramica, riepilogo, dashboard
+
+## Come lascio una nota alle altre aiuto medico?
+Nella home dell'aiuto medico c'è il riquadro «Note», a destra sopra l'Accoglienza. Le note le vedono tutti gli aiuti medici dello studio (e il tecnico); medici, segreteria e amministrazione no.
+- Scrivi nel campo «Scrivi una nota per le colleghe…» e schiaccia «Aggiungi nota» (oppure ⌘ + Invio sul Mac, Ctrl + Invio sul PC).
+- Sotto ogni nota c'è chi l'ha scritta e quando («oggi 14:30», «ieri 9:10»).
+- Quando la cosa è fatta, schiaccia «Fatta»: la nota passa in fondo, barrata, sotto «Fatte negli ultimi sette giorni», con chi l'ha segnata. «Riapri» la rimette tra quelle aperte. Dopo sette giorni le note fatte non si vedono più.
+- «Togli» cancella la nota per tutti: c'è solo sotto le note che hai scritto tu, e chiede conferma.
+- Le note delle colleghe compaiono da sole entro mezzo minuto, senza ricaricare la pagina. Quello che stai scrivendo non si perde.
+Parole: note, nota, bacheca, messaggio alle colleghe, aiuto medico, promemoria, lasciare un messaggio, appunti, comunicazioni, fatta, togliere nota
 
 ## Che cosa vogliono dire i numeri in cima alla home?
 Sono caselle cliccabili: un clic apre la pagina giusta.

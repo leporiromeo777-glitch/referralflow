@@ -1009,3 +1009,8 @@ codice dell'interfaccia e dalla wiki) più tutta la documentazione tecnica (Piat
 seconda fonte; Cleo sceglie a ogni domanda i pezzi che c'entrano e risponde da lì, col modello locale. Una wiki e non un
 grafo: si legge e si corregge come il resto, e chi cambia qualcosa di visibile aggiorna la guida (CLAUDE.md).
 
+## Note degli aiuti medici nella home — 23.10.2026
+Dallo studio: «voglio che inserisci nella home dell'aiuto medico una sezione note che vedono tutte tra di loro». Deciso: un
+riquadro «Note» nella home dell'aiuto medico, una bacheca per studio (migrazione 101). Le vedono solo aiuti medici e
+tecnico (il tecnico vede tutto); segnare «Fatta» lo può ciascuno, togliere una nota solo chi l'ha scritta. Le fatte
+spariscono dopo sette giorni dalla vista, non dal database.
